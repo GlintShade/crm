@@ -132,6 +132,7 @@
         v-model="doc"
         @updateField="updateField"
       />
+      <TasksSection doctype="CRM Deal" :docname="dealId" />
       <div
         v-if="sections.data"
         class="flex flex-1 flex-col justify-between overflow-hidden"
@@ -346,7 +347,6 @@ import Email2Icon from '@/components/Icons/Email2Icon.vue'
 import CommentIcon from '@/components/Icons/CommentIcon.vue'
 import DetailsIcon from '@/components/Icons/DetailsIcon.vue'
 import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
-import TaskIcon from '@/components/Icons/TaskIcon.vue'
 import NoteIcon from '@/components/Icons/NoteIcon.vue'
 import WhatsAppIcon from '@/components/Icons/WhatsAppIcon.vue'
 import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
@@ -365,6 +365,7 @@ import Link from '@/components/Controls/Link.vue'
 import Section from '@/components/CollapsibleSection.vue'
 import SidePanelLayout from '@/components/SidePanelLayout.vue'
 import SLASection from '@/components/SLASection.vue'
+import TasksSection from '@/components/TasksSection.vue'
 import CustomActions from '@/components/CustomActions.vue'
 import {
   openWebsite,
@@ -579,11 +580,6 @@ const tabs = computed(() => {
       name: 'Calls',
       label: __('Calls'),
       icon: PhoneIcon,
-    },
-    {
-      name: 'Tasks',
-      label: __('Tasks'),
-      icon: TaskIcon,
     },
     {
       name: 'Notes',
