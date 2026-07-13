@@ -114,6 +114,7 @@ const links = [
     label: 'Leads',
     icon: LeadsIcon,
     to: 'Leads',
+    condition: () => !window.hide_leads, // VOLTEO
   },
   {
     label: 'Deals',
@@ -153,7 +154,7 @@ const allViews = computed(() => {
       name: 'All Views',
       hideLabel: true,
       opened: true,
-      views: links,
+      views: links.filter((link) => (link.condition ? link.condition() : true)), // VOLTEO
     },
   ]
   if (getPublicViews().length) {

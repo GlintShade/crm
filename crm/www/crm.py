@@ -47,6 +47,8 @@ def get_boot():
 			"demo_data_created": frappe.db.get_default("crm_demo_data_created") == "1",
 			"is_fc_site": is_fc_site(),
 			"show_sales_hierarchy_banner": frappe.db.count("CRM Lead") > 0,
+			# VOLTEO: hide the Leads nav for users without CRM Lead read access (e.g. D2D reps)
+			"hide_leads": not frappe.has_permission("CRM Lead", "read"),
 			"translated_doctypes": get_translated_doctypes(),
 			"translated_messages": get_messages_for_boot(),
 			"timezone": {

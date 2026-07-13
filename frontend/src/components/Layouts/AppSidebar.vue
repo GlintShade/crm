@@ -228,6 +228,7 @@ const links = [
     label: 'Leads',
     icon: LeadsIcon,
     to: 'Leads',
+    condition: () => !window.hide_leads, // VOLTEO
   },
   {
     label: 'Deals',

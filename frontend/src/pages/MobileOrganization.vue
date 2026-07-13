@@ -454,11 +454,6 @@ function getContactRowObject(contact) {
 
 const dealColumns = [
   {
-    label: __('Organization'),
-    key: 'organization',
-    width: '11rem',
-  },
-  {
     label: __('Amount'),
     key: 'annual_revenue',
     align: 'right',

@@ -202,12 +202,12 @@ router.beforeEach(async (to, from, next) => {
 
     let defaultView = getDefaultView()
     if (!defaultView) {
-      next({ name: 'Leads' })
+      next({ name: window.hide_leads ? 'Deals' : 'Leads' }) // VOLTEO
       return
     }
 
     let { route_name, type, name, is_standard } = defaultView
-    route_name = route_name || 'Leads'
+    route_name = route_name || (window.hide_leads ? 'Deals' : 'Leads') // VOLTEO
 
     if (name && !is_standard) {
       next({

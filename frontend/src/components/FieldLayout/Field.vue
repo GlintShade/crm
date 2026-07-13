@@ -155,6 +155,7 @@
       :options="getOptions(field.options)"
       :placeholder="getPlaceholder(field)"
       :disabled="Boolean(field.read_only)"
+      :allowCustomValue="Boolean(field.allowCustomValue)"
       @update:modelValue="(v) => fieldChange(v, field, data)"
     />
     <TimePicker

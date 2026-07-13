@@ -512,11 +512,6 @@ function getDealRowObject(deal) {
 
 const dealColumns = [
   {
-    label: __('Organization'),
-    key: 'organization',
-    width: '11rem',
-  },
-  {
     label: __('Amount'),
     key: 'deal_value',
     align: 'right',
