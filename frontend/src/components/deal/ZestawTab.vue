@@ -1,39 +1,32 @@
 <!--
-  Zestaw tab (Szansa view) — shows the Kalkulator build behind this deal.
-  Phase 1: reads the linked `Volteo Oferta` (single product + params) and renders it
-  as a TYP / NAZWA / ILOŚĆ table. Phase 2 will replace this with a full itemized BOM
-  (separate battery/inverter lines + extras: podnośnik, modernizacja rozdzielnicy,
-  bilansowanie, operator).
+  Zestaw tab (Szansa view) — the build behind this deal.
+  Prefers the itemized BOM (CRM Deal.custom_zestaw -> Volteo Zestaw Item) when it
+  exists; otherwise falls back to the linked Volteo Oferta (single product + params).
+  The full BOM is populated once the D2D calculator lands (Phase 2+); until then the
+  BOM child table is editable on the deal form and this tab reflects it.
 -->
 <template>
   <div class="flex flex-1 flex-col overflow-y-auto p-5">
     <div class="mx-auto w-full max-w-3xl">
-      <div
-        v-if="oferta.loading"
-        class="py-16 text-center text-base text-ink-gray-5"
-      >
+      <div v-if="loading" class="py-16 text-center text-base text-ink-gray-5">
         {{ __('Ładowanie…') }}
       </div>
 
       <div
-        v-else-if="!o"
+        v-else-if="!rows.length"
         class="flex flex-col items-center justify-center gap-3 py-16 text-center"
       >
         <ZestawIcon class="h-10 w-10 text-ink-gray-4" />
-        <div class="text-lg font-medium text-ink-gray-7">
-          {{ __('Brak zestawu') }}
-        </div>
+        <div class="text-lg font-medium text-ink-gray-7">{{ __('Brak zestawu') }}</div>
         <div class="max-w-md text-sm text-ink-gray-5">
-          {{ __('Ta szansa nie ma jeszcze zestawu. Zestaw pojawi się po wygenerowaniu oferty w Kalkulatorze klienta.') }}
+          {{ __('Ta szansa nie ma jeszcze zestawu. Zestaw pojawi się po wygenerowaniu oferty w Kalkulatorze lub po dodaniu pozycji do zestawu na szansie.') }}
         </div>
       </div>
 
       <div v-else>
         <div class="mb-4 flex items-center justify-between">
-          <div class="text-lg font-semibold text-ink-gray-8">
-            {{ __('Zestaw') }}
-          </div>
-          <Badge variant="subtle" theme="gray" size="sm" :label="o.name" />
+          <div class="text-lg font-semibold text-ink-gray-8">{{ __('Zestaw') }}</div>
+          <Badge v-if="ofertaName" variant="subtle" theme="gray" size="sm" :label="ofertaName" />
         </div>
 
         <div class="overflow-hidden rounded-lg border border-outline-gray-2">
@@ -46,11 +39,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr
-                v-for="(row, i) in rows"
-                :key="i"
-                class="border-t border-outline-gray-1"
-              >
+              <tr v-for="(row, i) in rows" :key="i" class="border-t border-outline-gray-1">
                 <td class="px-4 py-2.5 text-ink-gray-6">{{ row.typ }}</td>
                 <td class="px-4 py-2.5 text-ink-gray-8">{{ row.nazwa || '—' }}</td>
                 <td class="px-4 py-2.5 text-right text-ink-gray-6">{{ row.ilosc || '' }}</td>
@@ -59,9 +48,7 @@
           </table>
         </div>
 
-        <p class="mt-3 text-xs text-ink-gray-4">
-          {{ __('Podgląd na podstawie oferty z Kalkulatora. Pełny wykaz komponentów (BOM) — wkrótce.') }}
-        </p>
+        <p class="mt-3 text-xs text-ink-gray-4">{{ caption }}</p>
       </div>
     </div>
   </div>
@@ -76,22 +63,28 @@ const props = defineProps({
   dealId: { type: String, required: true },
 })
 
+// Itemized BOM (preferred), from the deal's custom_zestaw child table.
+const bom = createResource({
+  url: 'frappe.client.get_list',
+  params: {
+    doctype: 'Volteo Zestaw Item',
+    filters: { parenttype: 'CRM Deal', parentfield: 'custom_zestaw', parent: props.dealId },
+    fields: ['typ', 'nazwa', 'ilosc'],
+    order_by: 'idx asc',
+    limit_page_length: 200,
+  },
+  auto: true,
+})
+
+// Fallback: the linked Oferta (single product + params).
 const oferta = createResource({
   url: 'frappe.client.get_list',
   params: {
     doctype: 'Volteo Oferta',
     filters: { deal: props.dealId },
     fields: [
-      'name',
-      'product_brand',
-      'product_model',
-      'capacity_kwh',
-      'inverter_power_kw',
-      'warranty_years',
-      'installation_type',
-      'pv_power_kwp',
-      'tariff_type',
-      'subsidy_pln',
+      'name', 'product_brand', 'product_model', 'capacity_kwh', 'inverter_power_kw',
+      'warranty_years', 'installation_type', 'pv_power_kwp', 'tariff_type', 'subsidy_pln',
     ],
     order_by: 'creation desc',
     limit_page_length: 1,
@@ -99,14 +92,17 @@ const oferta = createResource({
   auto: true,
 })
 
+const loading = computed(() => bom.loading || oferta.loading)
+const bomRows = computed(() => bom.data || [])
 const o = computed(() => oferta.data?.[0] || null)
+const ofertaName = computed(() => (bomRows.value.length ? null : o.value?.name || null))
 
 function plnFmt(val) {
   const n = Math.round(Number(val) || 0)
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' zł'
 }
 
-const rows = computed(() => {
+const ofertaRows = computed(() => {
   const d = o.value
   if (!d) return []
   const product = [d.product_brand, d.product_model].filter(Boolean).join(' ')
@@ -121,4 +117,11 @@ const rows = computed(() => {
     { typ: 'Gwarancja', nazwa: d.warranty_years ? d.warranty_years + ' lat' : '', ilosc: '' },
   ]
 })
+
+const rows = computed(() => (bomRows.value.length ? bomRows.value : ofertaRows.value))
+const caption = computed(() =>
+  bomRows.value.length
+    ? __('Wykaz komponentów (BOM) zestawu.')
+    : __('Podgląd na podstawie oferty z Kalkulatora. Pełny wykaz komponentów (BOM) — wkrótce.'),
+)
 </script>
