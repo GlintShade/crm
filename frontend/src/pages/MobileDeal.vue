@@ -213,6 +213,10 @@
             </SidePanelLayout>
           </div>
         </div>
+        <ZestawTab v-else-if="tab.name === 'Zestaw'" :deal-id="dealId" />
+        <FakturyTab v-else-if="tab.name === 'Faktury'" :deal-id="dealId" />
+        <MontazTab v-else-if="tab.name === 'Montaz'" :deal-id="dealId" />
+        <AudytTab v-else-if="tab.name === 'Audyt'" :deal-id="dealId" />
         <Activities
           v-else
           v-model:reload="reload"
@@ -283,6 +287,14 @@ import ArrowUpRightIcon from '@/components/Icons/ArrowUpRightIcon.vue'
 import SuccessIcon from '@/components/Icons/SuccessIcon.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import Activities from '@/components/Activities/Activities.vue'
+import ZestawIcon from '@/components/Icons/ZestawIcon.vue'
+import FakturyIcon from '@/components/Icons/FakturyIcon.vue'
+import MontazIcon from '@/components/Icons/MontazIcon.vue'
+import AudytIcon from '@/components/Icons/AudytIcon.vue'
+import ZestawTab from '@/components/deal/ZestawTab.vue'
+import FakturyTab from '@/components/deal/FakturyTab.vue'
+import MontazTab from '@/components/deal/MontazTab.vue'
+import AudytTab from '@/components/deal/AudytTab.vue'
 import OrganizationModal from '@/components/Modals/OrganizationModal.vue'
 import LostReasonModal from '@/components/Modals/LostReasonModal.vue'
 import AssignTo from '@/components/AssignTo.vue'
@@ -424,61 +436,23 @@ usePageMeta(() => {
   }
 })
 
+// Curated Polish Szansa tabs (mobile). Keep Details (field panel), then mirror the
+// desktop set: Pliki reuses Attachments, Historia reuses Activity (native `name`,
+// Polish `label`); Zestaw/Faktury/Montaż/Audyt are custom panels.
 const tabs = computed(() => {
   let tabOptions = [
     {
       name: 'Details',
-      label: __('Details'),
+      label: __('Dane'),
       icon: DetailsIcon,
       condition: () => isMobileView.value,
     },
-    {
-      name: 'Activity',
-      label: __('Activity'),
-      icon: ActivityIcon,
-    },
-    {
-      name: 'Emails',
-      label: __('Emails'),
-      icon: EmailIcon,
-    },
-    {
-      name: 'Comments',
-      label: __('Comments'),
-      icon: CommentIcon,
-    },
-    {
-      name: 'Data',
-      label: __('Data'),
-      icon: DetailsIcon,
-    },
-    {
-      name: 'Calls',
-      label: __('Calls'),
-      icon: PhoneIcon,
-      condition: () => callEnabled.value,
-    },
-    {
-      name: 'Tasks',
-      label: __('Tasks'),
-      icon: TaskIcon,
-    },
-    {
-      name: 'Notes',
-      label: __('Notes'),
-      icon: NoteIcon,
-    },
-    {
-      name: 'Attachments',
-      label: __('Attachments'),
-      icon: AttachmentIcon,
-    },
-    {
-      name: 'WhatsApp',
-      label: __('WhatsApp'),
-      icon: WhatsAppIcon,
-      condition: () => whatsappEnabled.value,
-    },
+    { name: 'Zestaw', label: __('Zestaw'), icon: ZestawIcon },
+    { name: 'Attachments', label: __('Pliki'), icon: AttachmentIcon },
+    { name: 'Faktury', label: __('Faktury'), icon: FakturyIcon },
+    { name: 'Montaz', label: __('Montaż'), icon: MontazIcon },
+    { name: 'Activity', label: __('Historia'), icon: ActivityIcon },
+    { name: 'Audyt', label: __('Audyt'), icon: AudytIcon },
   ]
   return tabOptions.filter((tab) => (tab.condition ? tab.condition() : true))
 })

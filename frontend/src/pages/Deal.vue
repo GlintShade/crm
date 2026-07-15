@@ -16,6 +16,15 @@
         v-if="document.actions?.length"
         :actions="document.actions"
       />
+      <Button
+        :label="__('Przejdź do klienta')"
+        iconLeft="user"
+        :disabled="!primaryContactName"
+        :tooltip="
+          primaryContactName ? '' : __('Ta szansa nie ma przypisanego klienta')
+        "
+        @click="goToClient"
+      />
       <AssignTo v-model="assignees.data" doctype="CRM Deal" :docname="dealId" />
       <Dropdown
         v-if="doc && document.statuses"
@@ -43,8 +52,9 @@
       :tabs="tabs"
       class="flex flex-1 overflow-hidden flex-col [&_[role='tab']]:px-0 [&_[role='tab']]:shrink-0 [&_[role='tablist']]:px-5 [&_[role='tablist']::-webkit-scrollbar]:h-0 [&_[role='tablist']]:min-h-[45px] [&_[role='tablist']]:gap-7.5 [&_[role='tabpanel']:not([hidden])]:flex [&_[role='tabpanel']:not([hidden])]:grow"
     >
-      <template #tab-panel>
+      <template #tab-panel="{ tab }">
         <Activities
+          v-if="NATIVE_TABS.includes(tab.name)"
           ref="activities"
           v-model:reload="reload"
           v-model:tabIndex="tabIndex"
@@ -54,6 +64,10 @@
           @beforeSave="beforeStatusChange"
           @afterSave="reloadResources"
         />
+        <ZestawTab v-else-if="tab.name === 'Zestaw'" :deal-id="dealId" />
+        <FakturyTab v-else-if="tab.name === 'Faktury'" :deal-id="dealId" />
+        <MontazTab v-else-if="tab.name === 'Montaz'" :deal-id="dealId" />
+        <AudytTab v-else-if="tab.name === 'Audyt'" :deal-id="dealId" />
       </template>
     </Tabs>
     <Resizer side="right" class="flex flex-col justify-between border-l">
@@ -356,6 +370,14 @@ import SuccessIcon from '@/components/Icons/SuccessIcon.vue'
 import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import Activities from '@/components/Activities/Activities.vue'
+import ZestawIcon from '@/components/Icons/ZestawIcon.vue'
+import FakturyIcon from '@/components/Icons/FakturyIcon.vue'
+import MontazIcon from '@/components/Icons/MontazIcon.vue'
+import AudytIcon from '@/components/Icons/AudytIcon.vue'
+import ZestawTab from '@/components/deal/ZestawTab.vue'
+import FakturyTab from '@/components/deal/FakturyTab.vue'
+import MontazTab from '@/components/deal/MontazTab.vue'
+import AudytTab from '@/components/deal/AudytTab.vue'
 import OrganizationModal from '@/components/Modals/OrganizationModal.vue'
 import LostReasonModal from '@/components/Modals/LostReasonModal.vue'
 import AssignTo from '@/components/AssignTo.vue'
@@ -554,49 +576,32 @@ usePageMeta(() => {
   }
 })
 
+// Native tab names still handled by the shared <Activities> component (used for
+// Pliki=Attachments and Historia=Activity below; the rest are dropped from the
+// curated Szansa view but kept here so the branch stays correct if re-added).
+const NATIVE_TABS = [
+  'Activity',
+  'Emails',
+  'Comments',
+  'Data',
+  'Calls',
+  'Notes',
+  'Attachments',
+  'WhatsApp',
+]
+
+// Curated Polish Szansa tabs. Pliki reuses the native Attachments view and
+// Historia reuses the native Activity feed (keep their native `name` so
+// <Activities> renders them; only the visible `label` is Polish). Zestaw /
+// Faktury / Montaż / Audyt are custom panels (see the #tab-panel branch).
 const tabs = computed(() => {
   let tabOptions = [
-    {
-      name: 'Activity',
-      label: __('Activity'),
-      icon: ActivityIcon,
-    },
-    {
-      name: 'Emails',
-      label: __('Emails'),
-      icon: EmailIcon,
-    },
-    {
-      name: 'Comments',
-      label: __('Comments'),
-      icon: CommentIcon,
-    },
-    {
-      name: 'Data',
-      label: __('Data'),
-      icon: DetailsIcon,
-    },
-    {
-      name: 'Calls',
-      label: __('Calls'),
-      icon: PhoneIcon,
-    },
-    {
-      name: 'Notes',
-      label: __('Notes'),
-      icon: NoteIcon,
-    },
-    {
-      name: 'Attachments',
-      label: __('Attachments'),
-      icon: AttachmentIcon,
-    },
-    {
-      name: 'WhatsApp',
-      label: __('WhatsApp'),
-      icon: WhatsAppIcon,
-      condition: () => whatsappEnabled.value,
-    },
+    { name: 'Zestaw', label: __('Zestaw'), icon: ZestawIcon },
+    { name: 'Attachments', label: __('Pliki'), icon: AttachmentIcon },
+    { name: 'Faktury', label: __('Faktury'), icon: FakturyIcon },
+    { name: 'Montaz', label: __('Montaż'), icon: MontazIcon },
+    { name: 'Activity', label: __('Historia'), icon: ActivityIcon },
+    { name: 'Audyt', label: __('Audyt'), icon: AudytIcon },
   ]
   return tabOptions.filter((tab) => (tab.condition ? tab.condition() : true))
 })
@@ -708,6 +713,17 @@ const dealContacts = createResource({
 })
 
 if (!dealContacts.data) dealContacts.fetch()
+
+// "Przejdź do klienta" — route to the deal's primary (or first) contact.
+const primaryContactName = computed(() => {
+  const list = dealContacts.data || []
+  return (list.find((c) => c.is_primary) || list[0])?.name || null
+})
+
+function goToClient() {
+  if (!primaryContactName.value) return
+  router.push({ name: 'Contact', params: { contactId: primaryContactName.value } })
+}
 
 function triggerCall() {
   let primaryContact = dealContacts.data?.find((c) => c.is_primary)
