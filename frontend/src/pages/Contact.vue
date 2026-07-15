@@ -133,6 +133,7 @@
           <component :is="tab.icon" v-if="tab.icon" class="h-5" />
           {{ __(tab.label) }}
           <Badge
+            v-if="tab.count !== undefined"
             class="group-hover:bg-surface-gray-10"
             :class="[selected ? 'bg-surface-gray-10' : 'bg-gray-600']"
             variant="solid"
@@ -144,14 +145,20 @@
         </button>
       </template>
       <template #tab-panel="{ tab }">
-        <DealsListView
-          v-if="tab.label === 'Deals' && rows.length"
-          class="mt-4"
-          :rows="rows"
-          :columns="columns"
-          :options="{ selectable: false, showTooltip: false }"
+        <template v-if="tab.label === 'Deals'">
+          <DealsListView
+            v-if="rows.length"
+            class="mt-4"
+            :rows="rows"
+            :columns="columns"
+            :options="{ selectable: false, showTooltip: false }"
+          />
+          <EmptyState v-else :icon="tab.icon" name="Deals" />
+        </template>
+        <KalkulatorTab
+          v-else-if="tab.label === 'Kalkulator'"
+          :contact="contact.doc"
         />
-        <EmptyState v-if="!rows.length" :icon="tab.icon" name="Deals" />
       </template>
     </Tabs>
   </div>
@@ -178,7 +185,9 @@ import LayoutHeader from '@/components/LayoutHeader.vue'
 import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
 import CameraIcon from '@/components/Icons/CameraIcon.vue'
 import DealsIcon from '@/components/Icons/DealsIcon.vue'
+import KalkulatorIcon from '@/components/Icons/KalkulatorIcon.vue'
 import DealsListView from '@/components/ListViews/DealsListView.vue'
+import KalkulatorTab from '@/components/KalkulatorTab.vue'
 import CustomActions from '@/components/CustomActions.vue'
 import { validateIsImageFile, setupCustomizations } from '@/utils'
 import { timestampCell } from '@/composables/useTimelinePreferences'
@@ -297,6 +306,11 @@ const tabs = [
     label: 'Deals',
     icon: DealsIcon,
     count: computed(() => deals.data?.length),
+  },
+  {
+    label: 'Kalkulator',
+    icon: KalkulatorIcon,
+    // no count badge for the Kalkulator tab
   },
 ]
 

@@ -106,13 +106,14 @@
     >
       <template #tab-item="{ tab, selected }">
         <button
-          v-if="tab.name == 'Deals'"
+          v-if="tab.name == 'Deals' || tab.name == 'Kalkulator'"
           class="group flex items-center gap-2 border-b border-transparent py-2.5 text-base text-ink-gray-5 duration-300 ease-in-out hover:text-ink-gray-9 !px-4"
           :class="{ 'text-ink-gray-9': selected }"
         >
           <component :is="tab.icon" v-if="tab.icon" class="h-5" />
           {{ __(tab.label) }}
           <Badge
+            v-if="tab.count !== undefined"
             class="group-hover:bg-surface-gray-10"
             :class="[selected ? 'bg-surface-gray-10' : 'bg-gray-600']"
             variant="solid"
@@ -153,6 +154,10 @@
             <div>{{ __('No {0} found', [__(tab.label.toLowerCase())]) }}</div>
           </div>
         </div>
+        <KalkulatorTab
+          v-else-if="tab.label === 'Kalkulator'"
+          :contact="contact.doc"
+        />
       </template>
     </Tabs>
   </div>
@@ -166,7 +171,9 @@ import DetailsIcon from '@/components/Icons/DetailsIcon.vue'
 import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
 import CameraIcon from '@/components/Icons/CameraIcon.vue'
 import DealsIcon from '@/components/Icons/DealsIcon.vue'
+import KalkulatorIcon from '@/components/Icons/KalkulatorIcon.vue'
 import DealsListView from '@/components/ListViews/DealsListView.vue'
+import KalkulatorTab from '@/components/KalkulatorTab.vue'
 import { validateIsImageFile } from '@/utils'
 import { timestampCell } from '@/composables/useTimelinePreferences'
 import { getView } from '@/utils/view'
@@ -302,6 +309,11 @@ const tabs = [
     label: __('Deals'),
     icon: h(DealsIcon, { class: 'h-4 w-4' }),
     count: computed(() => deals.data?.length),
+  },
+  {
+    name: 'Kalkulator',
+    label: __('Kalkulator'),
+    icon: h(KalkulatorIcon, { class: 'h-4 w-4' }),
   },
 ]
 
