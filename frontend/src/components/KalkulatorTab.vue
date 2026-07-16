@@ -19,13 +19,6 @@
       </div>
 
       <template v-if="flow !== 'done'">
-        <!-- Klient (read-only — pulled from the client record) -->
-        <div class="voff-clientbar">
-          <span class="voff-clientbar-label">Oferta dla klienta</span>
-          <span class="voff-clientbar-name">{{ clientName || '—' }}</span>
-          <span v-if="clientMeta" class="voff-clientbar-meta">{{ clientMeta }}</span>
-        </div>
-
         <!-- Wariant -->
         <section class="voff-card">
           <h2>Rodzaj instalacji</h2>
@@ -235,11 +228,6 @@ const voivodeshipPrefill = (() => {
   return VOIVODESHIPS.indexOf(w) !== -1 ? w : ''
 })()
 
-// Client data is read-only and taken straight from the contact record.
-const clientName = computed(
-  () => c.full_name || [c.first_name, c.last_name].filter(Boolean).join(' ').trim(),
-)
-const clientMeta = computed(() => [c.mobile_no, c.email_id].filter(Boolean).join(' · '))
 
 // --- Selections ------------------------------------------------------------
 const sel = reactive({
@@ -487,32 +475,6 @@ function extractErrorMessage(err) {
   font-size: 16px;
   font-weight: 600;
   margin: 0 0 14px 0;
-}
-.voff-clientbar {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 6px 12px;
-  background: #f5f7ff;
-  border: 1px solid #dbe1f5;
-  border-radius: 10px;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-}
-.voff-clientbar-label {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: #6b7280;
-}
-.voff-clientbar-name {
-  font-size: 16px;
-  font-weight: 700;
-  color: #122566;
-}
-.voff-clientbar-meta {
-  font-size: 13px;
-  color: #6b7280;
 }
 .voff-subhead {
   color: #374151;
