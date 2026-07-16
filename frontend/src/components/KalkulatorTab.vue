@@ -19,47 +19,12 @@
       </div>
 
       <template v-if="flow !== 'done'">
-        <!-- Dane klienta -->
-        <section class="voff-card">
-          <h2>Dane klienta</h2>
-          <div class="voff-grid2">
-            <div class="voff-field">
-              <label>Imię*</label>
-              <input v-model="form.firstName" type="text" />
-            </div>
-            <div class="voff-field">
-              <label>Nazwisko</label>
-              <input v-model="form.lastName" type="text" />
-            </div>
-            <div class="voff-field">
-              <label>Telefon*</label>
-              <input v-model="form.phone" type="tel" />
-            </div>
-            <div class="voff-field">
-              <label>E-mail</label>
-              <input v-model="form.email" type="email" />
-            </div>
-            <div class="voff-field">
-              <label>Adres instalacji</label>
-              <input v-model="form.address" type="text" />
-            </div>
-            <div class="voff-field">
-              <label>Miejscowość</label>
-              <input v-model="form.city" type="text" />
-            </div>
-            <div class="voff-field">
-              <label>Kod pocztowy</label>
-              <input v-model="form.postal" type="text" />
-            </div>
-            <div class="voff-field">
-              <label>Województwo</label>
-              <select v-model="form.voivodeship">
-                <option value="">-- wybierz --</option>
-                <option v-for="w in VOIVODESHIPS" :key="w" :value="w">{{ w }}</option>
-              </select>
-            </div>
-          </div>
-        </section>
+        <!-- Klient (read-only — pulled from the client record) -->
+        <div class="voff-clientbar">
+          <span class="voff-clientbar-label">Oferta dla klienta</span>
+          <span class="voff-clientbar-name">{{ clientName || '—' }}</span>
+          <span v-if="clientMeta" class="voff-clientbar-meta">{{ clientMeta }}</span>
+        </div>
 
         <!-- Wariant -->
         <section class="voff-card">
@@ -270,16 +235,11 @@ const voivodeshipPrefill = (() => {
   return VOIVODESHIPS.indexOf(w) !== -1 ? w : ''
 })()
 
-const form = reactive({
-  firstName: c.first_name || '',
-  lastName: c.last_name || '',
-  phone: c.mobile_no || '',
-  email: c.email_id || '',
-  address: composeAddress(),
-  city: c.custom_miasto || '',
-  postal: c.custom_kod_pocztowy || '',
-  voivodeship: voivodeshipPrefill,
-})
+// Client data is read-only and taken straight from the contact record.
+const clientName = computed(
+  () => c.full_name || [c.first_name, c.last_name].filter(Boolean).join(' ').trim(),
+)
+const clientMeta = computed(() => [c.mobile_no, c.email_id].filter(Boolean).join(' · '))
 
 // --- Selections ------------------------------------------------------------
 const sel = reactive({
@@ -383,9 +343,7 @@ const items = computed(() => {
   return out
 })
 
-const canGenerate = computed(
-  () => !!form.firstName.trim() && !!form.phone.trim() && items.value.length > 0,
-)
+const canGenerate = computed(() => !!c.name && items.value.length > 0)
 
 // --- Live pricing (server-side; debounced) ---------------------------------
 let calcTimer = null
@@ -426,14 +384,15 @@ async function runGenerate() {
   generating.value = true
   try {
     const result = await call('volteo_quote_generate', {
-      first_name: form.firstName.trim(),
-      last_name: form.lastName.trim(),
-      phone: form.phone.trim(),
-      email: form.email.trim(),
-      install_address: form.address.trim(),
-      install_city: form.city.trim(),
-      install_postal_code: form.postal.trim(),
-      voivodeship: form.voivodeship,
+      contact: c.name || '',
+      first_name: c.first_name || '',
+      last_name: c.last_name || '',
+      phone: c.mobile_no || '',
+      email: c.email_id || '',
+      install_address: composeAddress(),
+      install_city: c.custom_miasto || '',
+      install_postal_code: c.custom_kod_pocztowy || '',
+      voivodeship: voivodeshipPrefill,
       variant: sel.variant,
       operator: sel.operator,
       kierunek: sel.kierunek,
@@ -528,6 +487,32 @@ function extractErrorMessage(err) {
   font-size: 16px;
   font-weight: 600;
   margin: 0 0 14px 0;
+}
+.voff-clientbar {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  background: #f5f7ff;
+  border: 1px solid #dbe1f5;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+.voff-clientbar-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #6b7280;
+}
+.voff-clientbar-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #122566;
+}
+.voff-clientbar-meta {
+  font-size: 13px;
+  color: #6b7280;
 }
 .voff-subhead {
   color: #374151;
