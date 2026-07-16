@@ -63,13 +63,25 @@
               size="sm"
             />
           </div>
+          <div v-else-if="column.key === 'custom_opiekun'">
+            <Avatar
+              v-if="item.full_name"
+              class="flex items-center"
+              :image="item.user_image"
+              :label="item.full_name"
+              size="sm"
+            />
+          </div>
           <div v-else-if="column.key === 'mobile_no' && item">
             <PhoneIcon class="h-4 w-4" />
           </div>
         </template>
         <template #default="{ label }">
           <div
-            v-if="['modified', 'creation'].includes(column.key)"
+            v-if="
+              ['modified', 'creation'].includes(column.key) &&
+              column.type !== 'Date'
+            "
             class="truncate text-base"
             @click="
               (event) =>

@@ -70,6 +70,7 @@ import EmptyState from '@/components/ListViews/EmptyState.vue'
 import ViewControls from '@/components/ViewControls.vue'
 import { getMeta } from '@/stores/meta'
 import { organizationsStore } from '@/stores/organizations.js'
+import { usersStore } from '@/stores/users'
 import { formatDate } from '@/utils'
 import { timestampCell } from '@/composables/useTimelinePreferences'
 import { ref, computed } from 'vue'
@@ -77,6 +78,7 @@ import { ref, computed } from 'vue'
 const { getFormattedPercent, getFormattedFloat, getFormattedCurrency } =
   getMeta('Contact')
 const { getOrganization } = organizationsStore()
+const { getUser } = usersStore()
 
 const showContactModal = ref(false)
 
@@ -107,7 +109,9 @@ const rows = computed(() => {
       if (
         fieldType &&
         ['Date', 'Datetime'].includes(fieldType) &&
-        !['modified', 'creation'].includes(row)
+        // VOLTEO: allow a Date-typed creation/modified through (date-only);
+        // only Datetime creation/modified is left to the timestampCell branch below.
+        !(['modified', 'creation'].includes(row) && fieldType !== 'Date')
       ) {
         _rows[row] = formatDate(contact[row], '', true, fieldType == 'Datetime')
       }
@@ -135,7 +139,18 @@ const rows = computed(() => {
           label: contact.company_name,
           logo: getOrganization(contact.company_name)?.organization_logo,
         }
-      } else if (['modified', 'creation'].includes(row)) {
+      } else if (row == 'custom_opiekun') {
+        // VOLTEO: render the opiekun (Link->User) as avatar + full name
+        _rows[row] = {
+          label:
+            contact.custom_opiekun && getUser(contact.custom_opiekun).full_name,
+          ...(contact.custom_opiekun && getUser(contact.custom_opiekun)),
+        }
+      } else if (
+        ['modified', 'creation'].includes(row) &&
+        // VOLTEO: a Date-typed creation column keeps the plain date set above.
+        fieldType !== 'Date'
+      ) {
         _rows[row] = timestampCell(contact[row])
       }
     })
