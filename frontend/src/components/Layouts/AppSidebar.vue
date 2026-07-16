@@ -244,11 +244,13 @@ const links = [
     label: 'Organizations',
     icon: OrganizationsIcon,
     to: 'Organizations',
+    condition: () => false, // VOLTEO
   },
   {
     label: 'Notes',
     icon: NoteIcon,
     to: 'Notes',
+    condition: () => false, // VOLTEO
   },
   {
     label: 'Tasks',
@@ -259,6 +261,7 @@ const links = [
     label: 'Call Logs',
     icon: PhoneIcon,
     to: 'Call Logs',
+    condition: () => false, // VOLTEO
   },
 ]
 
