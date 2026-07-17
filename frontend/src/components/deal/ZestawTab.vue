@@ -68,6 +68,9 @@ const bom = createResource({
   url: 'frappe.client.get_list',
   params: {
     doctype: 'Volteo Zestaw Item',
+    // Parent DOCTYPE NAME required by check_parent_permission() for child-table
+    // get_list calls — distinct from filters.parent below, which is the deal ID.
+    parent: 'CRM Deal',
     filters: { parenttype: 'CRM Deal', parentfield: 'custom_zestaw', parent: props.dealId },
     fields: ['typ', 'nazwa', 'ilosc'],
     order_by: 'idx asc',
