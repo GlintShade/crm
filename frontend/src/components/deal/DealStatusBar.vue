@@ -23,10 +23,23 @@
         />
       </div>
       <div class="mt-2 flex items-center justify-between gap-2">
-        <div class="flex min-w-0 items-center gap-1.5 text-base text-ink-gray-8">
-          <IndicatorIcon :class="isLost ? '!text-red-600' : currentStatus.color" />
-          <span class="truncate">{{ statusLabel(currentStatus.name) }}</span>
-        </div>
+        <Dropdown :options="dropdownOptions">
+          <template #default="{ open }">
+            <button
+              type="button"
+              class="-mx-1 flex min-w-0 items-center gap-1.5 rounded px-1 py-0.5 text-base text-ink-gray-8 transition-colors duration-150"
+              :class="open ? 'bg-surface-gray-3' : 'hover:bg-surface-gray-3'"
+            >
+              <IndicatorIcon :class="isLost ? '!text-red-600' : currentStatus.color" />
+              <span class="truncate">{{ statusLabel(currentStatus.name) }}</span>
+              <span
+                class="size-3.5 shrink-0 text-ink-gray-5"
+                :class="open ? 'lucide-chevron-up' : 'lucide-chevron-down'"
+                aria-hidden="true"
+              />
+            </button>
+          </template>
+        </Dropdown>
         <Badge
           v-if="isLost"
           :label="__('Przegrana')"
@@ -47,7 +60,7 @@
 import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
 import { isTranslatable } from '@/utils'
 import { statusesStore } from '@/stores/statuses'
-import { Badge } from 'frappe-ui'
+import { Badge, Dropdown } from 'frappe-ui'
 import { ref, computed } from 'vue'
 
 // Full, literal Tailwind class strings — required so the JIT scanner (which
@@ -79,7 +92,7 @@ const props = defineProps({
   triggerStatusChange: { type: Function, required: true },
 })
 
-const { dealStatuses, getDealStatus } = statusesStore()
+const { dealStatuses, getDealStatus, statusOptions } = statusesStore()
 
 const busy = ref(false)
 
@@ -132,15 +145,31 @@ function statusLabel(name) {
   return name
 }
 
-async function onSegmentClick(stage) {
+// Guards both the segmented-track click and the dropdown-selection click
+// below against firing a second status change while one is in flight.
+async function changeStatus(name) {
   if (busy.value) return
-  if (!isLost.value && stage.name === currentStatus.value?.name) return
 
   busy.value = true
   try {
-    await props.triggerStatusChange(stage.name)
+    await props.triggerStatusChange(name)
   } finally {
     busy.value = false
   }
 }
+
+async function onSegmentClick(stage) {
+  if (!isLost.value && stage.name === currentStatus.value?.name) return
+  await changeStatus(stage.name)
+}
+
+// All deal statuses (including Lost/"Przegrana"), each with its own
+// color-coded IndicatorIcon dot — deliberately NOT scoped to the doc's
+// customStatuses restriction the header dropdown (Deal.vue ~L29-45,
+// MobileDeal.vue ~L29-45) applies, since this row is meant to offer every
+// status, Przegrana included. statusOptions('deal', [], ...) with an empty
+// statuses list falls through to every CRM Deal Status.
+const dropdownOptions = computed(() =>
+  statusesLoaded.value ? statusOptions('deal', [], changeStatus) : [],
+)
 </script>
