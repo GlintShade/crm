@@ -74,7 +74,7 @@
               @click="reopenAudyt"
             />
             <Button
-              v-if="!locked && !legacyVariant"
+              v-if="!locked && variantDef"
               variant="solid"
               :label="__('Zatwierdź audyt')"
               :disabled="!complete || submitting"
@@ -168,16 +168,16 @@
               />
             </div>
           </section>
-        </template>
 
-        <div>
-          <FormControl
-            type="textarea"
-            :label="__('Uwagi technika')"
-            :disabled="readOnly"
-            v-model="form.uwagi"
-          />
-        </div>
+          <div>
+            <FormControl
+              type="textarea"
+              :label="__('Uwagi technika')"
+              :disabled="readOnly"
+              v-model="form.uwagi"
+            />
+          </div>
+        </template>
       </div>
     </div>
   </div>
