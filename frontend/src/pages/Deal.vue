@@ -71,6 +71,10 @@
       </template>
     </Tabs>
     <Resizer side="right" class="flex flex-col justify-between border-l">
+      <DealStatusBar
+        :status="doc.status"
+        :triggerStatusChange="triggerStatusChange"
+      />
       <div
         class="flex h-[45px] cursor-copy items-center border-b px-5 py-2.5 text-lg-medium text-ink-gray-9"
         @click="copyToClipboard(dealId)"
@@ -378,6 +382,7 @@ import ZestawTab from '@/components/deal/ZestawTab.vue'
 import FakturyTab from '@/components/deal/FakturyTab.vue'
 import MontazTab from '@/components/deal/MontazTab.vue'
 import AudytTab from '@/components/deal/AudytTab.vue'
+import DealStatusBar from '@/components/deal/DealStatusBar.vue'
 import OrganizationModal from '@/components/Modals/OrganizationModal.vue'
 import LostReasonModal from '@/components/Modals/LostReasonModal.vue'
 import AssignTo from '@/components/AssignTo.vue'
