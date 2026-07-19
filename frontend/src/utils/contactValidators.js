@@ -95,3 +95,10 @@ export function validatePhone(v) {
   if (value.length !== 9) return 'Numer telefonu musi zawierać 9 cyfr.'
   return null
 }
+
+/** Format a valid 9-digit phone number as "+48 XXX XXX XXX"; returns the input unchanged (stringified) when it isn't exactly 9 digits, so partial/invalid input is never mangled. */
+export function formatPhone(v) {
+  const d = normalizePhone(v)
+  if (d.length !== 9) return v == null ? '' : String(v)
+  return `+48 ${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6, 9)}`
+}

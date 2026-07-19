@@ -138,6 +138,7 @@ import {
   validatePhone,
   normalizePesel,
   normalizePhone,
+  formatPhone,
 } from '@/utils/contactValidators'
 
 const props = defineProps({
@@ -292,6 +293,17 @@ const debouncedDupCheck = {
 function onBlur(field) {
   touched[field] = true
   serverFieldError[field] = null
+
+  // Auto-format a valid phone number on blur only — never mid-typing, and
+  // never when invalid (so the inline error shows against what was typed).
+  if (
+    field === 'mobile_no' &&
+    !isEmpty(_contact.doc.mobile_no) &&
+    !validatePhone(_contact.doc.mobile_no)
+  ) {
+    _contact.doc.mobile_no = formatPhone(_contact.doc.mobile_no)
+  }
+
   if (!DUP_BACKEND_FIELD[field]) return
   if (formatErrors.value[field] || isEmpty(_contact.doc[field])) {
     resetDupStatus(field)
