@@ -1,13 +1,18 @@
 <!--
   VOLTEO: explicit "Klient" (Contact) create form — replaces the generic
   FieldLayout/Quick-Entry-driven layout with a hard-coded, inline-validated
-  form for exactly the 5 fields the business cares about at creation time:
-  Imię, Nazwisko, PESEL, E-mail, Telefon. `custom_opiekun` is intentionally
-  never rendered here (reps are auto-assigned server-side). See
-  contactValidators.js for the pure format validators; duplicate checks for
-  PESEL/E-mail/Telefon go through the `volteo_contact_duplicate_check`
-  Server Script API, mirroring the `call(name, params)` convention used by
-  KalkulatorTab.vue / AudytTab.vue.
+  form for the fields the business cares about at creation time: Imię,
+  Nazwisko, PESEL, E-mail, Telefon, plus an inline address section (Kod
+  pocztowy / Miasto / Ulica / Nr domu / Nr mieszkania) — all required except
+  the apartment number. `custom_opiekun` is intentionally never rendered here
+  (reps are auto-assigned server-side). See contactValidators.js for the pure
+  format validators; duplicate checks for PESEL/E-mail/Telefon go through the
+  `volteo_contact_duplicate_check` Server Script API, mirroring the
+  `call(name, params)` convention used by KalkulatorTab.vue / AudytTab.vue.
+  Kod pocztowy autofills Miasto/gmina/powiat/województwo on blur via the
+  `volteo_postal_lookup` API (silent on failure); the derived gmina/powiat/
+  województwo fields are not rendered — the After-Save sync hook persists
+  everything into a linked Address record from these Contact fields.
 -->
 <template>
   <Dialog v-model:open="show" :size="'xl'">
@@ -102,6 +107,66 @@
               {{ __('sprawdzanie…') }}
             </div>
           </div>
+
+          <div class="pt-2">
+            <div class="mb-3 h-px border-t border-outline-gray-2"></div>
+            <div class="text-sm-medium text-ink-gray-5">{{ __('Adres') }}</div>
+          </div>
+
+          <div>
+            <FormControl
+              type="text"
+              :label="__('Kod pocztowy')"
+              required
+              v-model="_contact.doc.custom_kod_pocztowy"
+              :error="fieldError('custom_kod_pocztowy')"
+              @blur="onBlur('custom_kod_pocztowy')"
+            />
+          </div>
+
+          <div>
+            <FormControl
+              type="text"
+              :label="__('Miasto')"
+              required
+              v-model="_contact.doc.custom_miasto"
+              :error="fieldError('custom_miasto')"
+              @blur="onBlur('custom_miasto')"
+            />
+          </div>
+
+          <div>
+            <FormControl
+              type="text"
+              :label="__('Ulica')"
+              required
+              v-model="_contact.doc.custom_ulica"
+              :error="fieldError('custom_ulica')"
+              @blur="onBlur('custom_ulica')"
+            />
+          </div>
+
+          <div class="flex gap-4">
+            <div class="flex-1">
+              <FormControl
+                type="text"
+                :label="__('Nr domu')"
+                required
+                v-model="_contact.doc.custom_nr_domu"
+                :error="fieldError('custom_nr_domu')"
+                @blur="onBlur('custom_nr_domu')"
+              />
+            </div>
+            <div class="flex-1">
+              <FormControl
+                type="text"
+                :label="__('Nr mieszkania')"
+                v-model="_contact.doc.custom_nr_mieszkania"
+                :error="fieldError('custom_nr_mieszkania')"
+                @blur="onBlur('custom_nr_mieszkania')"
+              />
+            </div>
+          </div>
         </div>
 
         <ErrorMessage v-if="error" class="mt-6" :message="__(error)" />
@@ -124,7 +189,6 @@
 
 <script setup>
 import { useDocument } from '@/data/document'
-import { useDoctypeModal } from '@/composables/doctypeModal'
 import { useTelemetry } from 'frappe-ui/frappe'
 import { call, createResource } from 'frappe-ui'
 import { useDebounceFn } from '@vueuse/core'
@@ -163,6 +227,17 @@ const { document: _contact, triggerOnBeforeCreate } = useDocument('Contact')
 // E-mail / Telefon additionally run a server-side duplicate check.
 const FIELDS = ['first_name', 'last_name', 'custom_pesel', 'email_id', 'mobile_no']
 
+// Inline address section — required except the apartment number. No format
+// validators (required-only); the linked Address record itself is created
+// server-side by the After-Save sync hook from these fields.
+const ADDRESS_REQUIRED = [
+  'custom_kod_pocztowy',
+  'custom_miasto',
+  'custom_ulica',
+  'custom_nr_domu',
+]
+const ADDRESS_FIELDS = [...ADDRESS_REQUIRED, 'custom_nr_mieszkania']
+
 const DUP_BACKEND_FIELD = {
   custom_pesel: 'pesel',
   email_id: 'email',
@@ -181,6 +256,11 @@ const touched = reactive({
   custom_pesel: false,
   email_id: false,
   mobile_no: false,
+  custom_kod_pocztowy: false,
+  custom_miasto: false,
+  custom_ulica: false,
+  custom_nr_domu: false,
+  custom_nr_mieszkania: false,
 })
 
 // Server-side error surfaced by the Before-Save guard (backstop), mapped
@@ -290,7 +370,7 @@ const debouncedDupCheck = {
   mobile_no: useDebounceFn(() => performDuplicateCheck('mobile_no'), 400),
 }
 
-function onBlur(field) {
+async function onBlur(field) {
   touched[field] = true
   serverFieldError[field] = null
 
@@ -302,6 +382,34 @@ function onBlur(field) {
     !validatePhone(_contact.doc.mobile_no)
   ) {
     _contact.doc.mobile_no = formatPhone(_contact.doc.mobile_no)
+  }
+
+  // Postal-code autofill — mirrors the existing CRM Form Script. A failed or
+  // no-match lookup must never block the user, so all errors are silent.
+  if (
+    field === 'custom_kod_pocztowy' &&
+    /^\d{2}-\d{3}$/.test(String(_contact.doc.custom_kod_pocztowy ?? '').trim())
+  ) {
+    try {
+      const r = await call('volteo_postal_lookup', {
+        pincode: _contact.doc.custom_kod_pocztowy.trim(),
+      })
+      if (r && r.found) {
+        const cities = r.cities && r.cities.length
+          ? r.cities
+          : r.miejscowosc
+            ? [r.miejscowosc]
+            : []
+        if (cities.length === 1 && isEmpty(_contact.doc.custom_miasto)) {
+          _contact.doc.custom_miasto = cities[0]
+        }
+        if (r.wojewodztwo) _contact.doc.custom_wojewodztwo = r.wojewodztwo
+        if (r.powiat) _contact.doc.custom_powiat = r.powiat
+        if (r.gmina) _contact.doc.custom_gmina = r.gmina
+      }
+    } catch (e) {
+      /* silent — lookup failure must not block the user */
+    }
   }
 
   if (!DUP_BACKEND_FIELD[field]) return
@@ -319,7 +427,7 @@ watch(() => _contact.doc.email_id, () => resetDupStatus('email_id'))
 watch(() => _contact.doc.mobile_no, () => resetDupStatus('mobile_no'))
 
 const hasMissingRequired = computed(() =>
-  FIELDS.some((f) => isEmpty(_contact.doc[f])),
+  [...FIELDS, ...ADDRESS_REQUIRED].some((f) => isEmpty(_contact.doc[f])),
 )
 const hasFormatError = computed(() =>
   FIELDS.some((f) => !!formatErrors.value[f]),
@@ -386,7 +494,7 @@ const insertContact = createResource({
 
 async function createContact() {
   error.value = null
-  FIELDS.forEach((f) => (touched[f] = true))
+  ;[...FIELDS, ...ADDRESS_FIELDS].forEach((f) => (touched[f] = true))
 
   if (!canSubmit.value) return
 
@@ -430,26 +538,4 @@ onMounted(() => {
   _contact.doc = {}
   Object.assign(_contact.doc, props.contact.data || props.contact)
 })
-
-// Address capture is not part of the explicit 5-field create form (kept out
-// per spec — PESEL/E-mail/Telefon/Imię/Nazwisko are the priority). The
-// Quick-Entry-driven "Edit Fields Layout" affordance that used to expose an
-// address create/edit picker is gone along with the dynamic FieldLayout, so
-// this helper is currently unused from the template — left in place, wired
-// to useDoctypeModal, so an "Add address" affordance can be reintroduced on
-// this form later without re-deriving the Address-modal plumbing.
-const { showModal } = useDoctypeModal()
-
-function showAddressModal(_address) {
-  showModal({
-    name: _address || null,
-    doctype: 'Address',
-    callbacks: {
-      afterInsert: (d) => {
-        capture('address_created')
-        _contact.doc.address = d.name
-      },
-    },
-  })
-}
 </script>
