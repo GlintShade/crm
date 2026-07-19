@@ -55,6 +55,11 @@ export function normalizePesel(v) {
  */
 const PESEL_WEIGHTS = [1, 3, 7, 9, 1, 3, 7, 9, 1, 3]
 
+// PESEL control-digit checksum — disabled 2026-07-19 per request (too strict for
+// current data). Flip to true (and re-deploy) to re-enable. Must match the backend
+// guard flag `pesel_checksum_enabled` in ops/crm-contact-validation.py.
+const PESEL_CHECKSUM_ENABLED = false
+
 export function validatePesel(v) {
   if (isBlank(v)) return null
   const value = normalizePesel(v)
@@ -62,6 +67,8 @@ export function validatePesel(v) {
   if (value.length !== 11 || !/^\d{11}$/.test(value)) {
     return 'Numer PESEL musi składać się z 11 cyfr.'
   }
+
+  if (!PESEL_CHECKSUM_ENABLED) return null
 
   const digits = value.split('').map(Number)
   const total = PESEL_WEIGHTS.reduce((sum, w, i) => sum + digits[i] * w, 0)
