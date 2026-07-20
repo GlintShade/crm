@@ -117,7 +117,7 @@ const links = [
     condition: () => !window.hide_leads, // VOLTEO
   },
   {
-    label: 'Deals',
+    label: 'Umowy',
     icon: DealsIcon,
     to: 'Deals',
   },
