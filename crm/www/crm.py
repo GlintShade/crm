@@ -49,6 +49,8 @@ def get_boot():
 			"show_sales_hierarchy_banner": frappe.db.count("CRM Lead") > 0,
 			# VOLTEO: hide the Leads nav for users without CRM Lead read access (e.g. D2D reps)
 			"hide_leads": not frappe.has_permission("CRM Lead", "read"),
+			# VOLTEO: expose invoice-add capability so the Faktury tab can hide its add button for reps
+			"can_create_faktura": frappe.has_permission("Volteo Faktura", "create"),
 			"translated_doctypes": get_translated_doctypes(),
 			"translated_messages": get_messages_for_boot(),
 			"timezone": {

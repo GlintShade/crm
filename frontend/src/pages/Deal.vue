@@ -605,7 +605,7 @@ const tabs = computed(() => {
     { name: 'Attachments', label: __('Pliki'), icon: AttachmentIcon },
     { name: 'Faktury', label: __('Faktury'), icon: FakturyIcon },
     { name: 'Montaz', label: __('Montaż'), icon: MontazIcon },
-    { name: 'Activity', label: __('Historia'), icon: ActivityIcon },
+    { name: 'Activity', label: __('Aktywność'), icon: ActivityIcon },
     { name: 'Audyt', label: __('Audyt'), icon: AudytIcon },
   ]
   return tabOptions.filter((tab) => (tab.condition ? tab.condition() : true))

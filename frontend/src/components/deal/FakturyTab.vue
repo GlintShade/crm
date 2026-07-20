@@ -8,6 +8,7 @@
       <div class="flex items-center justify-between">
         <div class="text-lg font-semibold text-ink-gray-8">{{ __('Faktury') }}</div>
         <Button
+          v-if="canCreate"
           :label="showForm ? __('Anuluj') : __('Dodaj fakturę')"
           :iconLeft="showForm ? 'x' : 'plus'"
           @click="showForm = !showForm"
@@ -15,7 +16,7 @@
       </div>
 
       <!-- Add form -->
-      <div v-if="showForm" class="rounded-lg border border-outline-gray-2 p-4">
+      <div v-if="showForm && canCreate" class="rounded-lg border border-outline-gray-2 p-4">
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormControl type="text" :label="__('Numer faktury')" v-model="draft.numer" />
           <FormControl type="select" :label="__('Typ')" :options="['', 'Proforma', 'VAT', 'Zaliczkowa', 'Końcowa']" v-model="draft.typ" />
@@ -95,6 +96,7 @@ const props = defineProps({
 
 const showForm = ref(false)
 const saving = ref(false)
+const canCreate = computed(() => !!window.can_create_faktura)
 
 function emptyDraft() {
   return {
@@ -119,6 +121,7 @@ const fakturies = createResource({
 const rows = computed(() => fakturies.data || [])
 
 async function addFaktura() {
+  if (!canCreate.value) return
   if (!draft.numer.trim()) return
   saving.value = true
   try {
