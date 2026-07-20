@@ -605,6 +605,11 @@ def remove_assignments(doctype: str, name: str, assignees: str | list, ignore_pe
 
 
 @frappe.whitelist()
+def can_delete(doctype: str) -> bool:
+	return bool(frappe.has_permission(doctype, ptype="delete"))
+
+
+@frappe.whitelist()
 def get_assigned_users(doctype: str, name: str | int, default_assigned_to: str | None = None):
 	assigned_users = frappe.get_all(
 		"ToDo",

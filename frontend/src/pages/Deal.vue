@@ -98,51 +98,6 @@
               {{ title }}
             </div>
           </Tooltip>
-          <div class="flex gap-1.5">
-            <Button
-              v-if="callEnabled"
-              :tooltip="__('Make a Call')"
-              :icon="PhoneIcon"
-              @click="triggerCall"
-            />
-
-            <Button
-              :tooltip="__('Send an Email')"
-              :icon="Email2Icon"
-              @click="
-                doc.email
-                  ? openEmailBox()
-                  : toast.error(
-                      __('Please set an email address to send emails'),
-                    )
-              "
-            />
-
-            <Button
-              :tooltip="__('Go to Website')"
-              :icon="LinkIcon"
-              @click="
-                doc.website
-                  ? openWebsite(doc.website)
-                  : toast.error(__('Please set a website to visit'))
-              "
-            />
-
-            <Button
-              :tooltip="__('Attach a File')"
-              :icon="AttachmentIcon"
-              @click="showFilesUploader = true"
-            />
-
-            <Button
-              v-if="canDelete"
-              :tooltip="__('Delete')"
-              variant="subtle"
-              icon="lucide-trash-2"
-              theme="red"
-              @click="deleteDeal"
-            />
-          </div>
         </div>
       </div>
       <SLASection

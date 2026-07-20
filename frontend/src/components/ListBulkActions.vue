@@ -37,7 +37,7 @@ import { setupListCustomizations } from '@/utils'
 import { globalStore } from '@/stores/global'
 import { useTelemetry } from 'frappe-ui/frappe'
 import { call, toast } from 'frappe-ui'
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 const props = defineProps({
@@ -51,6 +51,21 @@ const props = defineProps({
     }),
   },
 })
+
+const canDeleteDoctype = ref(false)
+
+function fetchCanDeleteDoctype() {
+  if (!props.doctype) {
+    canDeleteDoctype.value = false
+    return
+  }
+  call('crm.api.doc.can_delete', { doctype: props.doctype }).then((value) => {
+    canDeleteDoctype.value = Boolean(value)
+  })
+}
+
+fetchCanDeleteDoctype()
+watch(() => props.doctype, fetchCanDeleteDoctype)
 
 const list = defineModel({ type: Object })
 
@@ -172,7 +187,7 @@ function bulkActions(selections, unselectAll) {
     })
   }
 
-  if (!props.options.hideDelete) {
+  if (!props.options.hideDelete && canDeleteDoctype.value) {
     actions.push({
       label: __('Delete'),
       onClick: () => deleteValues(selections, unselectAll),

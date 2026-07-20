@@ -40,7 +40,7 @@
           <h2>Komponenty (zestaw)</h2>
 
           <div class="voff-field">
-            <label>Typ instalacji</label>
+            <label>Rodzaj konstrukcji</label>
             <select v-model="sel.installType">
               <option value="">-- wybierz --</option>
               <option v-for="c in byKat('Typ instalacji')" :key="c.name" :value="c.name">{{ compLabel(c) }}</option>
