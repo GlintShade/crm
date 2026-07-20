@@ -135,12 +135,14 @@ permission_query_conditions = {
 	"CRM Lead": "crm.permissions.org_hierarchy.get_lead_permission_query_conditions",
 	"CRM Deal": "crm.permissions.org_hierarchy.get_deal_permission_query_conditions",
 	"Contact": "crm.permissions.contact_visibility.get_contact_permission_query_conditions",
+	"Volteo Faktura": "crm.permissions.faktura_visibility.get_faktura_permission_query_conditions",
 }
 
 has_permission = {
 	"CRM Lead": "crm.permissions.org_hierarchy.has_lead_permission",
 	"CRM Deal": "crm.permissions.org_hierarchy.has_deal_permission",
 	"Contact": "crm.permissions.contact_visibility.has_contact_permission",
+	"Volteo Faktura": "crm.permissions.faktura_visibility.has_faktura_permission",
 }
 
 # DocType Class
