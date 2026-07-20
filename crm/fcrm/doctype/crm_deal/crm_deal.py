@@ -284,9 +284,9 @@ class CRMDeal(Document):
 				"width": "11rem",
 			},
 			{
-				"label": "Annual Revenue",
+				"label": "Kwota",
 				"type": "Currency",
-				"key": "annual_revenue",
+				"key": "deal_value",
 				"align": "right",
 				"width": "9rem",
 			},
@@ -325,7 +325,7 @@ class CRMDeal(Document):
 		rows = [
 			"name",
 			"organization",
-			"annual_revenue",
+			"deal_value",
 			"status",
 			"email",
 			"currency",
@@ -345,7 +345,7 @@ class CRMDeal(Document):
 		return {
 			"column_field": "status",
 			"title_field": "organization",
-			"kanban_fields": '["annual_revenue", "email", "mobile_no", "_assign", "modified"]',
+			"kanban_fields": '["deal_value", "email", "mobile_no", "_assign", "modified"]',
 		}
 
 
