@@ -67,31 +67,39 @@ def get_deal_activities(name: str):
 
 	for version in docinfo.versions:
 		data = json.loads(version.data)
+
+		# Frappe records custom_zestaw (BOM) child-table row adds/removes/
+		# edits under 'added' / 'removed' / 'row_changed' -- NOT under
+		# 'changed' (simple field diffs), which is all the rest of this loop
+		# reads. A real BOM edit's Version can carry BOTH 'row_changed' AND
+		# 'changed' at once (e.g. editing a zestaw row alongside a plain deal
+		# field), so this must run unconditionally for every version, BEFORE
+		# the `if not data.get("changed")` gate below -- gating it on that
+		# check (as this code previously did) silently dropped exactly that
+		# case. See extract_zestaw_version_summary for the diff-shape
+		# assumptions.
+		zestaw = extract_zestaw_version_summary(data)
+		if zestaw:
+			activities.append(
+				{
+					"name": f"volteo-zestaw-{name}-{version.creation}",
+					"activity_type": "volteo_linked",
+					"creation": version.creation,
+					"owner": version.owner,
+					"is_lead": False,
+					"data": {
+						"source": "custom_zestaw",
+						"label": _("Zestaw"),
+						"title": None,
+						"action": "changed",
+						"doc_name": name,
+						"summary": zestaw["summary"],
+						"text": zestaw["text"],
+					},
+				}
+			)
+
 		if not data.get("changed"):
-			# This loop only reads data['changed'] (simple field diffs).
-			# Frappe records custom_zestaw (BOM) child-table row adds /
-			# removes / edits under 'added' / 'removed' / 'row_changed'
-			# instead, so those versions were being silently dropped here.
-			# Recover them defensively (see extract_zestaw_version_summary).
-			zestaw_summary = extract_zestaw_version_summary(data)
-			if zestaw_summary:
-				activities.append(
-					{
-						"name": f"volteo-zestaw-{name}-{version.creation}",
-						"activity_type": "volteo_linked",
-						"creation": version.creation,
-						"owner": version.owner,
-						"is_lead": False,
-						"data": {
-							"source": "custom_zestaw",
-							"label": _("Zestaw"),
-							"title": None,
-							"action": "changed",
-							"doc_name": name,
-							"summary": zestaw_summary,
-						},
-					}
-				)
 			continue
 
 		if change := data.get("changed")[0]:
@@ -353,9 +361,18 @@ def get_lead_activities(name: str):
 # ---------------------------------------------------------------------------
 
 VOLTEO_LINKED_SOURCES = [
-	{"doctype": "Volteo Faktura", "label": _("Faktura"), "link_field": "deal"},
-	{"doctype": "Volteo Montaz Update", "label": _("Montaż"), "link_field": "deal"},
-	{"doctype": "Volteo Audyt", "label": _("Audyt"), "link_field": "deal"},
+	# "text_fields" are the extra fields fetched (defensively -- only if the
+	# live meta actually has them) to compose data["text"] (FIX G). Volteo
+	# Audyt has no fixed field name here; its candidates are resolved
+	# dynamically against meta in get_volteo_linked_activities below.
+	{"doctype": "Volteo Faktura", "label": _("Faktura"), "link_field": "deal", "text_fields": ["numer", "status"]},
+	{
+		"doctype": "Volteo Montaz Update",
+		"label": _("Montaż"),
+		"link_field": "deal",
+		"text_fields": ["typ", "tekst"],
+	},
+	{"doctype": "Volteo Audyt", "label": _("Audyt"), "link_field": "deal", "text_fields": []},
 ]
 
 CUSTOM_ZESTAW_FIELDNAME = "custom_zestaw"
@@ -390,9 +407,23 @@ def get_volteo_linked_activities(name: str):
 			title_field = meta.title_field
 			track_changes = bool(meta.track_changes)
 
+			# Extra fields needed to compose data["text"] (FIX G), resolved
+			# defensively against the live meta -- a configured field that
+			# doesn't actually exist on this site's doctype is silently
+			# dropped rather than blowing up the frappe.get_list() call below.
+			if dt == "Volteo Audyt":
+				# No fixed field name is guaranteed here; probe for the most
+				# meaningful Select fields this doctype tends to carry.
+				text_fieldnames = [fn for fn in ("rodzaj_instalacji", "status") if meta.get_field(fn)]
+			else:
+				text_fieldnames = [fn for fn in (source.get("text_fields") or []) if meta.get_field(fn)]
+
 			fields = ["name", "owner", "creation", "modified"]
 			if title_field and title_field not in fields:
 				fields.append(title_field)
+			for fieldname in text_fieldnames:
+				if fieldname not in fields:
+					fields.append(fieldname)
 
 			records = frappe.get_list(
 				dt,
@@ -446,6 +477,7 @@ def get_volteo_linked_activities(name: str):
 							"title": title,
 							"action": "added",
 							"doc_name": rec.name,
+							"text": compose_volteo_linked_text(dt, "added", rec),
 						},
 					}
 				)
@@ -500,6 +532,7 @@ def get_volteo_linked_activities(name: str):
 								"action": "changed",
 								"doc_name": rec.name,
 								"summary": summary,
+								"text": compose_volteo_linked_text(dt, "changed", rec, summary),
 							},
 						}
 					)
@@ -511,6 +544,63 @@ def get_volteo_linked_activities(name: str):
 					continue
 
 	return linked_activities
+
+
+def compose_volteo_linked_text(dt: str, action: str, rec: dict, summary: str | None = None):
+	"""Compose the authoritative Polish display string for a volteo_linked
+	activity's data["text"] (FIX G) -- rendered as-is (impersonal, gray) after
+	the bold actor name in the Deal Activities feed, replacing the old
+	frontend label/action/title/summary stitching.
+
+	`rec` is the per-source record dict fetched in get_volteo_linked_activities
+	(carries whichever text-field names were resolved against that doctype's
+	live meta -- a field simply absent from `rec` reads back as None via
+	.get(), never a KeyError). `summary` is the changed-fields summary already
+	computed by summarize_version_changes for 'changed' events (None/unused
+	for 'added').
+
+	Defensive end-to-end: any lookup issue is swallowed and None returned, so
+	the caller falls back to a generic label-based string instead of breaking
+	the feed.
+	"""
+	try:
+		if dt == "Volteo Faktura":
+			numer = rec.get("numer")
+			status = rec.get("status")
+			if action == "added":
+				text = _("dodano fakturę {0}").format(numer or "—")
+				if status:
+					text += " (" + status + ")"
+				return text
+			text = _("zaktualizowano fakturę {0}").format(numer or "—")
+			if summary:
+				text += " — " + summary
+			return text
+
+		if dt == "Volteo Montaz Update":
+			typ = rec.get("typ")
+			tekst = (rec.get("tekst") or "").strip()
+			snippet = tekst[:80] + "…" if len(tekst) > 80 else tekst
+			text = _("dodano wpis montażu: {0}").format(typ or "—")
+			if snippet:
+				text += " — „" + snippet + "”"
+			return text
+
+		if dt == "Volteo Audyt":
+			if action == "added":
+				field_value = rec.get("rodzaj_instalacji") or rec.get("status")
+				text = _("dodano audyt")
+				if field_value:
+					text += ": " + field_value
+				return text
+			text = _("zaktualizowano audyt")
+			if summary:
+				text += " — " + summary
+			return text
+	except Exception:
+		return None
+
+	return None
 
 
 def summarize_version_changes(data: dict, fields_map: dict):
@@ -553,19 +643,32 @@ def summarize_version_changes(data: dict, fields_map: dict):
 
 
 def extract_zestaw_version_summary(data: dict):
-	"""Best-effort summary for custom_zestaw (BOM) child-table row activity
-	found in a CRM Deal Version diff.
+	"""Best-effort summary + display text for custom_zestaw (BOM) child-table
+	row activity found in a CRM Deal Version diff (FIX H).
 
 	The version loop in get_deal_activities() above only reads data['changed']
-	(simple field diffs) and skips any version lacking that key — which
-	silently drops custom_zestaw row add/remove/edit versions, since Frappe
-	records those under 'added' / 'removed' / 'row_changed' instead. This
-	defensively scans all three for custom_zestaw entries. NOTE: this repo has
-	no vendored frappe/document.py to confirm the exact diff key names against
-	source, so the shape is assumed from documented Frappe version-diff
-	behaviour; if it doesn't match on the live site, this returns None and the
-	version is silently dropped exactly as it was before this change — never
-	an error.
+	(simple field diffs); Frappe records custom_zestaw row add/remove/edit
+	activity under 'added' / 'removed' / 'row_changed' instead, so this scans
+	all three for custom_zestaw entries. Confirmed against a live probe:
+
+	  - 'row_changed' entries look like
+	    ["custom_zestaw", <row_index>, "<row_name>", [["typ", old, new], ...]]
+	    -- counted by entry[0] == CUSTOM_ZESTAW_FIELDNAME.
+	  - 'added' / 'removed' shapes weren't directly confirmed by the probe;
+	    the entry[0] == CUSTOM_ZESTAW_FIELDNAME check is a reasonable guess
+	    mirrored from 'row_changed' and kept defensive -- if it doesn't match
+	    a given site's actual shape, those counts are simply 0 rather than an
+	    error. Child fields are typ / nazwa / ilosc.
+
+	Returns None if the version carries no recognisable custom_zestaw
+	activity (caller should skip it entirely), otherwise a dict:
+	  {"summary": "zmieniono 2 poz., dodano 1 poz.", "text": "zmieniono zestaw (BOM): zmieniono 2 poz., dodano 1 poz."}
+	'summary' is the Polish, comma-joined "dodano/usunięto/zmieniono N poz."
+	string (kept as data["summary"] for backward compatibility). 'text' is
+	the authoritative data["text"] display string (FIX G): 'summary' prefixed
+	with a single verb -- "dodano zestaw (BOM): " for a pure addition,
+	"usunięto zestaw (BOM): " for a pure removal, "zmieniono zestaw (BOM): "
+	otherwise (any row_changed activity, or a mix of adds/removes).
 	"""
 	try:
 		if not isinstance(data, dict):
@@ -594,7 +697,19 @@ def extract_zestaw_version_summary(data: dict):
 		if changed:
 			parts.append(_("zmieniono {0} poz.").format(changed))
 
-		return ", ".join(parts) if parts else None
+		if not parts:
+			return None
+
+		summary = ", ".join(parts)
+
+		if added and not removed and not changed:
+			verb = _("dodano zestaw (BOM): ")
+		elif removed and not added and not changed:
+			verb = _("usunięto zestaw (BOM): ")
+		else:
+			verb = _("zmieniono zestaw (BOM): ")
+
+		return {"summary": summary, "text": verb + summary}
 	except Exception:
 		return None
 

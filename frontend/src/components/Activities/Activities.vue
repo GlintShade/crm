@@ -240,24 +240,7 @@
                   getUser(activity.owner).full_name
                 }}</span>
                 <span class="text-ink-gray-5 font-normal">
-                  {{ activity.data?.label }}:
-                  {{
-                    activity.data?.action == 'changed'
-                      ? __('zaktualizowano')
-                      : __('dodano')
-                  }}
-                </span>
-                <span
-                  v-if="activity.data?.title"
-                  class="max-w-xs truncate font-medium text-ink-gray-8"
-                >
-                  {{ activity.data.title }}
-                </span>
-                <span
-                  v-if="activity.data?.summary"
-                  class="text-ink-gray-5 font-normal max-w-xs truncate"
-                >
-                  ({{ activity.data.summary }})
+                  {{ activity.data?.text || activity.data?.label }}
                 </span>
               </div>
               <div class="ml-auto whitespace-nowrap">
