@@ -68,6 +68,30 @@ def get_deal_activities(name: str):
 	for version in docinfo.versions:
 		data = json.loads(version.data)
 		if not data.get("changed"):
+			# This loop only reads data['changed'] (simple field diffs).
+			# Frappe records custom_zestaw (BOM) child-table row adds /
+			# removes / edits under 'added' / 'removed' / 'row_changed'
+			# instead, so those versions were being silently dropped here.
+			# Recover them defensively (see extract_zestaw_version_summary).
+			zestaw_summary = extract_zestaw_version_summary(data)
+			if zestaw_summary:
+				activities.append(
+					{
+						"name": f"volteo-zestaw-{name}-{version.creation}",
+						"activity_type": "volteo_linked",
+						"creation": version.creation,
+						"owner": version.owner,
+						"is_lead": False,
+						"data": {
+							"source": "custom_zestaw",
+							"label": _("Zestaw"),
+							"title": None,
+							"action": "changed",
+							"doc_name": name,
+							"summary": zestaw_summary,
+						},
+					}
+				)
 			continue
 
 		if change := data.get("changed")[0]:
@@ -167,6 +191,7 @@ def get_deal_activities(name: str):
 	notes = notes + get_linked_notes(name) + get_linked_calls(name).get("notes", [])
 	tasks = tasks + get_linked_tasks(name) + get_linked_calls(name).get("tasks", [])
 	attachments = attachments + get_attachments("CRM Deal", name)
+	activities = activities + get_volteo_linked_activities(name)
 
 	activities.sort(key=lambda x: x["creation"], reverse=True)
 	activities = handle_multiple_versions(activities)
@@ -313,6 +338,265 @@ def get_lead_activities(name: str):
 	activities = handle_multiple_versions(activities)
 
 	return activities, calls, notes, tasks, attachments
+
+
+# ---------------------------------------------------------------------------
+# Linked-record activity aggregation (Volteo fix #4d)
+#
+# The Deal "Aktywność" timeline only reflects the CRM Deal's own docinfo
+# (its comments/communications/version log). This section folds in events
+# from the deal's linked Volteo records — Faktura, Montaż updates, Audyt —
+# plus custom_zestaw (BOM) child-table edits (handled inline in the version
+# loop above via extract_zestaw_version_summary). Every source below is
+# independently defensive: a missing doctype/field on a fresh site, or an
+# unrecognised Version payload, can never break the rest of get_deal_activities().
+# ---------------------------------------------------------------------------
+
+VOLTEO_LINKED_SOURCES = [
+	{"doctype": "Volteo Faktura", "label": _("Faktura"), "link_field": "deal"},
+	{"doctype": "Volteo Montaz Update", "label": _("Montaż"), "link_field": "deal"},
+	{"doctype": "Volteo Audyt", "label": _("Audyt"), "link_field": "deal"},
+]
+
+CUSTOM_ZESTAW_FIELDNAME = "custom_zestaw"
+
+
+def get_volteo_linked_activities(name: str):
+	"""Creation + change events for the deal's linked Volteo records.
+
+	Record visibility uses frappe.get_list (permission-respecting) so a user
+	only sees linked records they're actually allowed to read — important for
+	Volteo Faktura, which carries its own deal-scoped read restriction (the
+	cross-rep invoice-leak fix in the immediately preceding commit). The
+	per-record Version lookup below uses frappe.get_all instead: the Version
+	doctype has no per-role permission model of its own, gating already
+	happened at the record-read step above, and this mirrors how the deal's
+	own docinfo.versions are fetched elsewhere in this file.
+	"""
+	linked_activities = []
+
+	for source in VOLTEO_LINKED_SOURCES:
+		dt = source["doctype"]
+		label = source["label"]
+		link_field = source["link_field"]
+		track_changes = False
+		title_field = None
+
+		try:
+			if not frappe.db.exists("DocType", dt):
+				continue
+
+			meta = frappe.get_meta(dt)
+			title_field = meta.title_field
+			track_changes = bool(meta.track_changes)
+
+			fields = ["name", "owner", "creation", "modified"]
+			if title_field and title_field not in fields:
+				fields.append(title_field)
+
+			records = frappe.get_list(
+				dt,
+				filters={link_field: name},
+				fields=fields,
+				order_by="creation asc",
+				limit_page_length=200,
+				ignore_permissions=False,
+			)
+		except Exception:
+			frappe.log_error(
+				title="Volteo linked activities: failed to list source",
+				message=f"doctype={dt}\n{frappe.get_traceback()}",
+			)
+			continue
+
+		fields_map = {}
+		if track_changes:
+			try:
+				fields_map = {
+					field.fieldname: (field.label or field.fieldname) for field in meta.fields
+				}
+			except Exception:
+				fields_map = {}
+
+		for rec in records:
+			title = None
+			try:
+				if title_field:
+					val = rec.get(title_field)
+					# A title_field whose value equals the record's own name
+					# (e.g. Volteo Audyt: autoname "field:deal", title_field
+					# "deal" — the title would just repeat the current deal's
+					# id) isn't a useful title; leave it unset instead.
+					if val and str(val) != rec.name:
+						title = val
+			except Exception:
+				title = None
+
+			try:
+				linked_activities.append(
+					{
+						"name": f"volteo-{dt}-{rec.name}",
+						"activity_type": "volteo_linked",
+						"creation": rec.creation,
+						"owner": rec.owner,
+						"is_lead": False,
+						"data": {
+							"source": dt,
+							"label": label,
+							"title": title,
+							"action": "added",
+							"doc_name": rec.name,
+						},
+					}
+				)
+			except Exception:
+				frappe.log_error(
+					title="Volteo linked activities: failed to build creation event",
+					message=f"doctype={dt} record={rec.name}\n{frappe.get_traceback()}",
+				)
+				continue
+
+			if not track_changes:
+				continue
+
+			try:
+				versions = frappe.get_all(
+					"Version",
+					filters={"ref_doctype": dt, "docname": rec.name},
+					fields=["owner", "creation", "data"],
+					order_by="creation asc",
+					limit_page_length=50,
+				)
+			except Exception:
+				frappe.log_error(
+					title="Volteo linked activities: failed to list versions",
+					message=f"doctype={dt} record={rec.name}\n{frappe.get_traceback()}",
+				)
+				continue
+
+			for version in versions:
+				try:
+					summary = None
+					try:
+						vdata = json.loads(version.data)
+						summary = summarize_version_changes(vdata, fields_map)
+					except Exception:
+						summary = None  # unrecognised payload -> still emit a generic event below
+
+					if summary == "":
+						continue  # genuine no-op version, skip it
+
+					linked_activities.append(
+						{
+							"name": f"volteo-{dt}-{rec.name}-{version.creation}",
+							"activity_type": "volteo_linked",
+							"creation": version.creation,
+							"owner": version.owner,
+							"is_lead": False,
+							"data": {
+								"source": dt,
+								"label": label,
+								"title": title,
+								"action": "changed",
+								"doc_name": rec.name,
+								"summary": summary,
+							},
+						}
+					)
+				except Exception:
+					frappe.log_error(
+						title="Volteo linked activities: failed to build change event",
+						message=f"doctype={dt} record={rec.name}\n{frappe.get_traceback()}",
+					)
+					continue
+
+	return linked_activities
+
+
+def summarize_version_changes(data: dict, fields_map: dict):
+	"""Compact one-line summary of changed field labels from a Version.data
+	diff dict (the same 'changed': [[fieldname, old, new], ...] shape parsed
+	by the deal/lead version loops above).
+
+	Returns "" for a genuine no-op version (caller should skip it) or a
+	summary string. The caller treats its own json-parse failure separately
+	(kept as None) so it can still emit a generic 'changed' event per spec.
+	"""
+	if not isinstance(data, dict):
+		return ""
+
+	labels = []
+	for change in data.get("changed") or []:
+		if not change:
+			continue
+		fieldname = change[0] if len(change) > 0 else None
+		old_value = change[1] if len(change) > 1 else None
+		new_value = change[2] if len(change) > 2 else None
+		if not fieldname or (not old_value and not new_value):
+			continue
+		labels.append(fields_map.get(fieldname) or fieldname)
+
+	if not labels:
+		return ""
+
+	seen = []
+	for field_label in labels:
+		if field_label not in seen:
+			seen.append(field_label)
+
+	shown = seen[:5]
+	summary = ", ".join(shown)
+	extra = len(seen) - len(shown)
+	if extra > 0:
+		summary += " " + _("+{0} more").format(extra)
+	return summary
+
+
+def extract_zestaw_version_summary(data: dict):
+	"""Best-effort summary for custom_zestaw (BOM) child-table row activity
+	found in a CRM Deal Version diff.
+
+	The version loop in get_deal_activities() above only reads data['changed']
+	(simple field diffs) and skips any version lacking that key — which
+	silently drops custom_zestaw row add/remove/edit versions, since Frappe
+	records those under 'added' / 'removed' / 'row_changed' instead. This
+	defensively scans all three for custom_zestaw entries. NOTE: this repo has
+	no vendored frappe/document.py to confirm the exact diff key names against
+	source, so the shape is assumed from documented Frappe version-diff
+	behaviour; if it doesn't match on the live site, this returns None and the
+	version is silently dropped exactly as it was before this change — never
+	an error.
+	"""
+	try:
+		if not isinstance(data, dict):
+			return None
+
+		def rows_for(entries):
+			count = 0
+			for entry in entries or []:
+				if not entry or entry[0] != CUSTOM_ZESTAW_FIELDNAME:
+					continue
+				rows = entry[1] if len(entry) > 1 else None
+				count += len(rows) if isinstance(rows, list) else 1
+			return count
+
+		added = rows_for(data.get("added"))
+		removed = rows_for(data.get("removed"))
+		changed = sum(
+			1 for entry in (data.get("row_changed") or []) if entry and entry[0] == CUSTOM_ZESTAW_FIELDNAME
+		)
+
+		parts = []
+		if added:
+			parts.append(_("dodano {0} poz.").format(added))
+		if removed:
+			parts.append(_("usunięto {0} poz.").format(removed))
+		if changed:
+			parts.append(_("zmieniono {0} poz.").format(changed))
+
+		return ", ".join(parts) if parts else None
+	except Exception:
+		return None
 
 
 def get_attachments(doctype: str, name: str):

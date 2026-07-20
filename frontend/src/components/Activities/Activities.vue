@@ -228,6 +228,44 @@
             </div>
           </div>
           <div
+            v-else-if="activity.activity_type == 'volteo_linked'"
+            :id="activity.name"
+            class="mb-4 flex flex-col gap-2 py-1.5"
+          >
+            <div class="flex items-center justify-stretch gap-2 text-base">
+              <div
+                class="inline-flex items-center flex-wrap gap-1.5 text-ink-gray-8 font-medium"
+              >
+                <span class="font-medium">{{
+                  getUser(activity.owner).full_name
+                }}</span>
+                <span class="text-ink-gray-5 font-normal">
+                  {{ activity.data?.label }}:
+                  {{
+                    activity.data?.action == 'changed'
+                      ? __('zaktualizowano')
+                      : __('dodano')
+                  }}
+                </span>
+                <span
+                  v-if="activity.data?.title"
+                  class="max-w-xs truncate font-medium text-ink-gray-8"
+                >
+                  {{ activity.data.title }}
+                </span>
+                <span
+                  v-if="activity.data?.summary"
+                  class="text-ink-gray-5 font-normal max-w-xs truncate"
+                >
+                  ({{ activity.data.summary }})
+                </span>
+              </div>
+              <div class="ml-auto whitespace-nowrap">
+                <TimelineTimestamp :date="activity.creation" />
+              </div>
+            </div>
+          </div>
+          <div
             v-else-if="
               activity.activity_type == 'incoming_call' ||
               activity.activity_type == 'outgoing_call'
@@ -645,7 +683,8 @@ const activities = computed(() => {
     if (
       activity.activity_type == 'incoming_call' ||
       activity.activity_type == 'outgoing_call' ||
-      activity.activity_type == 'communication'
+      activity.activity_type == 'communication' ||
+      activity.activity_type == 'volteo_linked'
     )
       return
 
@@ -793,6 +832,9 @@ function timelineIcon(activity_type, is_lead) {
       break
     case 'attachment_log':
       icon = AttachmentIcon
+      break
+    case 'volteo_linked':
+      icon = DetailsIcon
       break
     default:
       icon = DotIcon
