@@ -124,7 +124,7 @@ const ofertaRows = computed(() => {
 const rows = computed(() => (bomRows.value.length ? bomRows.value : ofertaRows.value))
 const caption = computed(() =>
   bomRows.value.length
-    ? __('Wykaz komponentów (BOM) zestawu.')
-    : __('Podgląd na podstawie oferty z Kalkulatora. Pełny wykaz komponentów (BOM) — wkrótce.'),
+    ? __('Wykaz komponentów zestawu.')
+    : __('Podgląd na podstawie oferty z Kalkulatora. Pełny wykaz komponentów — wkrótce.'),
 )
 </script>
