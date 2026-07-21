@@ -543,6 +543,37 @@ def get_volteo_linked_activities(name: str):
 					)
 					continue
 
+	try:
+		if frappe.db.exists("Volteo Audyt", name):
+			comments = frappe.get_all(
+				"Comment",
+				filters={"reference_doctype": "Volteo Audyt", "reference_name": name,
+						 "comment_type": ["in", ["Comment", "Info"]]},
+				fields=["name", "owner", "creation", "content", "comment_type"],
+				order_by="creation asc", limit_page_length=200,
+			)
+			for c in comments:
+				raw = frappe.utils.strip_html(c.get("content") or "").strip()
+				if not raw:
+					continue
+				if c.get("comment_type") == "Info":
+					text = raw  # transition log message, already human Polish
+				else:
+					snippet = raw[:80] + "…" if len(raw) > 80 else raw
+					text = _("komentarz do audytu: „{0}”").format(snippet)
+				linked_activities.append({
+					"name": f"volteo-audyt-comment-{c['name']}",
+					"activity_type": "volteo_linked",
+					"creation": c["creation"],
+					"owner": c["owner"],
+					"is_lead": False,
+					"data": {"source": "Volteo Audyt", "label": _("Audyt"),
+							 "title": None, "action": "comment", "doc_name": name, "text": text},
+				})
+	except Exception:
+		frappe.log_error(title="Volteo linked activities: audyt comments failed",
+						 message=f"deal={name}\n{frappe.get_traceback()}")
+
 	return linked_activities
 
 
