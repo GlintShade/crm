@@ -139,10 +139,22 @@ permission_query_conditions = {
 }
 
 has_permission = {
-	"CRM Lead": "crm.permissions.org_hierarchy.has_lead_permission",
-	"CRM Deal": "crm.permissions.org_hierarchy.has_deal_permission",
-	"Contact": "crm.permissions.contact_visibility.has_contact_permission",
+	"CRM Lead": [
+		"crm.permissions.org_hierarchy.has_lead_permission",
+		"crm.permissions.delete_lockdown.block_nonadmin_delete",
+	],
+	"CRM Deal": [
+		"crm.permissions.org_hierarchy.has_deal_permission",
+		"crm.permissions.delete_lockdown.block_nonadmin_delete",
+	],
+	"Contact": [
+		"crm.permissions.contact_visibility.has_contact_permission",
+		"crm.permissions.delete_lockdown.block_nonadmin_delete",
+	],
 	"Volteo Faktura": "crm.permissions.faktura_visibility.has_faktura_permission",
+	"FCRM Note": "crm.permissions.delete_lockdown.block_nonadmin_delete",
+	"CRM Task": "crm.permissions.delete_lockdown.block_nonadmin_delete",
+	"CRM Organization": "crm.permissions.delete_lockdown.block_nonadmin_delete",
 }
 
 # DocType Class
