@@ -2,8 +2,15 @@
   Audyt tab (Szansa view) — variant-driven technical audit form, 1:1 with the
   deal (Volteo Audyt, name == dealId). The whole form (sections/fields/photo
   slots) is server-driven via `volteo_audyt_requirements`, keyed by the chosen
-  `rodzaj_instalacji`. Draft state autosaves (debounced for fields, immediate
-  for photos); submit locks the record server-side.
+  `rodzaj_instalacji`.
+
+  3-stage workflow:
+    Szkic (draft, editable by rep/admin) →
+    Weryfikacja (submitted, read-only) →
+    Zatwierdzony (approved, read-only).
+  Draft state autosaves (debounced for fields, immediate for photos). The rep
+  submits Szkic→Weryfikacja; back office (can_review) approves / sends back via
+  status control. A native Comment thread is available once the audit exists.
 -->
 <template>
   <div class="flex flex-1 flex-col overflow-y-auto p-5">
@@ -45,48 +52,75 @@
         </div>
       </div>
 
-      <!-- Audit form (draft, legacy-variant, or locked) -->
+      <!-- Audit form (draft / verification / approved) -->
       <div v-else class="flex flex-col gap-6">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div class="flex items-center gap-3">
-            <div class="text-lg font-semibold text-ink-gray-8">{{ __('Audyt techniczny') }}</div>
-            <Badge
-              :theme="locked ? 'green' : 'amber'"
-              variant="subtle"
-              size="sm"
-              :label="locked ? __('Zatwierdzony') : __('Szkic')"
-            />
+        <div class="flex flex-col gap-2">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+              <div class="text-lg font-semibold text-ink-gray-8">{{ __('Audyt techniczny') }}</div>
+              <Badge
+                :theme="badgeTheme"
+                variant="subtle"
+                size="sm"
+                :label="status"
+              />
+            </div>
+            <div class="flex items-center gap-3">
+              <span v-if="!readOnly && saveState === 'saving'" class="text-xs text-ink-gray-4">
+                {{ __('Zapisywanie…') }}
+              </span>
+              <span v-else-if="!readOnly && saveState === 'saved'" class="text-xs text-ink-green-6">
+                {{ __('Zapisano') }} ✓
+              </span>
+              <span v-else-if="!readOnly && saveState === 'error'" class="text-xs text-ink-red-6">
+                {{ __('Błąd zapisu') }}
+              </span>
+
+              <!-- Rep: submit draft to verification -->
+              <Button
+                v-if="requirements.is_rep && isDraft"
+                variant="solid"
+                :label="__('Prześlij audyt do weryfikacji')"
+                :disabled="!complete || submitting"
+                :loading="submitting"
+                @click="submitAudyt"
+              />
+
+              <!-- Back office: status control -->
+              <template v-if="canReview">
+                <template v-if="isReview">
+                  <Button
+                    variant="solid"
+                    theme="green"
+                    :label="__('Zatwierdź audyt')"
+                    :loading="statusUpdating"
+                    @click="setStatus('Zatwierdzony')"
+                  />
+                  <Button
+                    :label="__('Odeślij do poprawek')"
+                    :loading="statusUpdating"
+                    @click="setStatus('Szkic')"
+                  />
+                </template>
+                <Button
+                  v-else-if="isApproved"
+                  :label="__('Przywróć do edycji')"
+                  :loading="statusUpdating"
+                  @click="setStatus('Szkic')"
+                />
+              </template>
+            </div>
           </div>
-          <div class="flex items-center gap-3">
-            <span v-if="!readOnly && saveState === 'saving'" class="text-xs text-ink-gray-4">
-              {{ __('Zapisywanie…') }}
-            </span>
-            <span v-else-if="!readOnly && saveState === 'saved'" class="text-xs text-ink-green-6">
-              {{ __('Zapisano') }} ✓
-            </span>
-            <span v-else-if="!readOnly && saveState === 'error'" class="text-xs text-ink-red-6">
-              {{ __('Błąd zapisu') }}
-            </span>
-            <Button
-              v-if="locked && requirements.can_reopen"
-              :label="__('Przywróć do edycji')"
-              :loading="reopening"
-              @click="reopenAudyt"
-            />
-            <Button
-              v-if="!locked && variantDef"
-              variant="solid"
-              :label="__('Zatwierdź audyt')"
-              :disabled="!complete || submitting"
-              :loading="submitting"
-              @click="submitAudyt"
-            />
+
+          <!-- Submit helper — draft not yet complete -->
+          <div v-if="isDraft && !complete" class="text-xs text-ink-amber-6">
+            {{ __('Musisz wypełnić wszystkie wymagane pola i zdjęcia, aby przesłać audyt do weryfikacji.') }}
           </div>
         </div>
 
-        <!-- Locked banner -->
+        <!-- Approved banner -->
         <div
-          v-if="locked"
+          v-if="isApproved"
           class="rounded-lg border border-outline-green-3 bg-surface-green-2 px-4 py-3 text-sm text-ink-green-8"
         >
           {{
@@ -167,6 +201,35 @@
                 @change="(url) => onPhotoChange(slot.key, url)"
               />
             </div>
+
+            <!-- Additional (optional) photos -->
+            <div v-if="editable || zdjeciaDodatkowe.length" class="mt-5">
+              <div class="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">
+                {{ __('Zdjęcia dodatkowe (opcjonalne, maks. 5)') }}
+              </div>
+              <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <AudytPhotoSlot
+                  v-for="(url, idx) in zdjeciaDodatkowe"
+                  :key="'extra-' + idx + '-' + url"
+                  :label="__('Zdjęcie dodatkowe')"
+                  :value="url"
+                  doctype="Volteo Audyt"
+                  :docname="dealId"
+                  :disabled="readOnly"
+                  @change="(u) => onExtraPhotoChange(idx, u)"
+                />
+                <AudytPhotoSlot
+                  v-if="editable && zdjeciaDodatkowe.length < 5"
+                  :key="'extra-new-' + zdjeciaDodatkowe.length"
+                  :label="__('Zdjęcie dodatkowe')"
+                  :value="null"
+                  doctype="Volteo Audyt"
+                  :docname="dealId"
+                  :disabled="false"
+                  @change="onExtraPhotoAdd"
+                />
+              </div>
+            </div>
           </section>
 
           <div>
@@ -178,6 +241,52 @@
             />
           </div>
         </template>
+
+        <!-- Comment thread (available once the audit exists — all users) -->
+        <section class="border-t border-outline-gray-2 pt-6">
+          <div class="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-gray-5">
+            {{ __('Komentarze') }}
+          </div>
+
+          <div
+            v-if="commentsResource.data && commentsResource.data.length"
+            class="flex flex-col gap-3"
+          >
+            <div
+              v-for="c in commentsResource.data"
+              :key="c.name"
+              class="rounded-lg border border-outline-gray-2 bg-surface-gray-1 px-3 py-2"
+            >
+              <div class="mb-1 flex items-center justify-between gap-2">
+                <span class="text-xs font-medium text-ink-gray-7">
+                  {{ c.comment_by || c.comment_email }}
+                </span>
+                <span class="text-xs text-ink-gray-4">{{ fmtDate(c.creation) }}</span>
+              </div>
+              <div class="whitespace-pre-wrap text-sm text-ink-gray-7">
+                {{ commentText(c.content) }}
+              </div>
+            </div>
+          </div>
+          <div v-else class="text-sm text-ink-gray-5">{{ __('Brak komentarzy.') }}</div>
+
+          <div class="mt-3 flex flex-col gap-2">
+            <FormControl
+              type="textarea"
+              :placeholder="__('Napisz komentarz…')"
+              v-model="newComment"
+            />
+            <div>
+              <Button
+                variant="solid"
+                :label="__('Dodaj komentarz')"
+                :disabled="!newComment.trim() || posting"
+                :loading="posting"
+                @click="postComment"
+              />
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   </div>
@@ -199,12 +308,15 @@ const props = defineProps({
 let saveTimer = null
 let lastSavedFieldsPayload = ''
 
-// --- Requirements (server-driven form definition) ---------------------------
+// --- Requirements (server-driven form definition + permissions) -------------
 const requirements = reactive({
   variants: [],
   matrix: {},
-  locked_status: 'Zatwierdzony',
-  can_reopen: false,
+  statuses: [],
+  is_rep: false,
+  is_backend: false,
+  is_admin: false,
+  can_review: false,
   can_edit: true,
 })
 const reqLoading = ref(true)
@@ -219,8 +331,11 @@ async function loadRequirements() {
     const data = await call('volteo_audyt_requirements')
     requirements.variants = data?.variants || []
     requirements.matrix = data?.matrix || {}
-    requirements.locked_status = data?.locked_status || 'Zatwierdzony'
-    requirements.can_reopen = !!data?.can_reopen
+    requirements.statuses = data?.statuses || []
+    requirements.is_rep = !!data?.is_rep
+    requirements.is_backend = !!data?.is_backend
+    requirements.is_admin = !!data?.is_admin
+    requirements.can_review = !!data?.can_review
     requirements.can_edit = data?.can_edit !== false
   } catch (err) {
     reqError.value = extractErrorMessage(err)
@@ -259,19 +374,33 @@ const audyt = createResource({
 
 const row = computed(() => audyt.data?.[0] || null)
 const exists = computed(() => !!row.value?.name)
-const locked = computed(() => exists.value && row.value?.status === requirements.locked_status)
-const readOnly = computed(() => locked.value || !requirements.can_edit)
+
+// --- Status / permission state ----------------------------------------------
+const status = computed(() => row.value?.status || 'Szkic')
+const isDraft = computed(() => status.value === 'Szkic')
+const isReview = computed(() => status.value === 'Weryfikacja')
+const isApproved = computed(() => status.value === 'Zatwierdzony')
+
+// Fields/photos are editable ONLY in Szkic, and only by rep/admin (can_edit).
+const editable = computed(() => requirements.can_edit && isDraft.value)
+const readOnly = computed(() => !editable.value)
+const canReview = computed(() => !!requirements.can_review)
+
+const badgeTheme = computed(() =>
+  isApproved.value ? 'green' : isReview.value ? 'blue' : 'amber',
+)
 
 // --- Local editable state ----------------------------------------------------
 const form = reactive({ rodzaj_instalacji: '', uwagi: '' })
 const zdjecia = reactive({})
+const zdjeciaDodatkowe = ref([])
 const hydrating = ref(true)
 const saveState = ref('idle') // idle | saving | saved | error
 
 const newVariant = ref('') // bound to the "create audit" picker only
 const creating = ref(false)
 const submitting = ref(false)
-const reopening = ref(false)
+const statusUpdating = ref(false)
 
 const { trackOldFile, processPendingDeletions } = useAttachments('Volteo Audyt', props.dealId)
 
@@ -312,6 +441,18 @@ function hydrateForm(r) {
       }
     } catch (e) {
       // malformed JSON on the row — start from an empty map rather than crash
+    }
+  }
+
+  zdjeciaDodatkowe.value = []
+  if (r?.zdjecia_dodatkowe_json) {
+    try {
+      const parsed = JSON.parse(r.zdjecia_dodatkowe_json)
+      if (Array.isArray(parsed)) {
+        zdjeciaDodatkowe.value = parsed.filter((u) => typeof u === 'string' && u)
+      }
+    } catch (e) {
+      // malformed JSON — start from an empty list rather than crash
     }
   }
 
@@ -410,7 +551,43 @@ async function onPhotoChange(key, fileUrl) {
   }
 }
 
-// --- Create / submit / reopen -------------------------------------------------
+// --- Additional photos (immediate save, immutable list updates) --------------
+async function persistExtraPhotos(prevList) {
+  try {
+    await call('frappe.client.set_value', {
+      doctype: 'Volteo Audyt',
+      name: props.dealId,
+      fieldname: { zdjecia_dodatkowe_json: JSON.stringify(zdjeciaDodatkowe.value) },
+    })
+    processPendingDeletions()
+  } catch (err) {
+    zdjeciaDodatkowe.value = prevList
+    toast.error(extractErrorMessage(err))
+  }
+}
+
+async function onExtraPhotoChange(index, fileUrl) {
+  if (readOnly.value) return
+  const prevList = zdjeciaDodatkowe.value
+  const oldUrl = prevList[index] || null
+  trackOldFile(oldUrl, fileUrl)
+  const nextList = fileUrl
+    ? prevList.map((u, i) => (i === index ? fileUrl : u))
+    : prevList.filter((_, i) => i !== index)
+  zdjeciaDodatkowe.value = nextList
+  await persistExtraPhotos(prevList)
+}
+
+async function onExtraPhotoAdd(fileUrl) {
+  if (readOnly.value || !fileUrl) return
+  if (zdjeciaDodatkowe.value.length >= 5) return
+  const prevList = zdjeciaDodatkowe.value
+  trackOldFile(null, fileUrl)
+  zdjeciaDodatkowe.value = [...prevList, fileUrl]
+  await persistExtraPhotos(prevList)
+}
+
+// --- Create / submit / status -------------------------------------------------
 watch(newVariant, (v) => {
   if (v) createAudyt(v)
 })
@@ -422,7 +599,7 @@ async function createAudyt(variant) {
       doc: {
         doctype: 'Volteo Audyt',
         deal: props.dealId,
-        status: 'Niekompletny',
+        status: 'Szkic',
         rodzaj_instalacji: variant,
       },
     })
@@ -440,7 +617,7 @@ async function submitAudyt() {
   submitting.value = true
   try {
     await call('volteo_audyt_submit', { deal: props.dealId })
-    toast.success(__('Audyt zatwierdzony'))
+    toast.success(__('Audyt przesłany do weryfikacji'))
     await audyt.reload()
   } catch (err) {
     toast.error(extractErrorMessage(err))
@@ -449,16 +626,65 @@ async function submitAudyt() {
   }
 }
 
-async function reopenAudyt() {
-  reopening.value = true
+async function setStatus(s) {
+  if (statusUpdating.value) return
+  statusUpdating.value = true
   try {
-    await call('volteo_audyt_reopen', { deal: props.dealId })
-    toast.success(__('Audyt przywrócony do edycji'))
+    await call('volteo_audyt_set_status', { deal: props.dealId, status: s })
+    toast.success(__('Status audytu zaktualizowany'))
     await audyt.reload()
   } catch (err) {
     toast.error(extractErrorMessage(err))
   } finally {
-    reopening.value = false
+    statusUpdating.value = false
+  }
+}
+
+// --- Comments ----------------------------------------------------------------
+const commentsResource = createResource({
+  url: 'frappe.client.get_list',
+  params: {
+    doctype: 'Comment',
+    filters: {
+      reference_doctype: 'Volteo Audyt',
+      reference_name: props.dealId,
+      comment_type: 'Comment',
+    },
+    fields: ['name', 'comment_by', 'comment_email', 'content', 'creation'],
+    order_by: 'creation asc',
+    limit_page_length: 200,
+  },
+  auto: true,
+})
+
+const newComment = ref('')
+const posting = ref(false)
+
+async function postComment() {
+  const text = newComment.value.trim()
+  if (!text || posting.value) return
+  posting.value = true
+  try {
+    await call('volteo_audyt_comment', { deal: props.dealId, text })
+    newComment.value = ''
+    await commentsResource.reload()
+  } catch (err) {
+    toast.error(extractErrorMessage(err))
+  } finally {
+    posting.value = false
+  }
+}
+
+// Comment content may contain HTML — render it as plain text. DOMParser with
+// text/html neither executes scripts nor loads resources, so extracting
+// textContent is a safe way to strip markup.
+function commentText(html) {
+  if (!html) return ''
+  try {
+    const doc = new DOMParser().parseFromString(String(html), 'text/html')
+    return (doc.body.textContent || '').trim()
+  } catch (e) {
+    return String(html).replace(/<[^>]*>/g, '').trim()
   }
 }
 
