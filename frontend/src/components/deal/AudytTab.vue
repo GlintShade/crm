@@ -61,7 +61,7 @@
               <Badge
                 :theme="badgeTheme"
                 variant="subtle"
-                size="sm"
+                size="lg"
                 :label="status"
               />
             </div>
@@ -129,6 +129,14 @@
               fmtDate(row?.zatwierdzony_dnia),
             ])
           }}
+        </div>
+
+        <!-- Verification (Weryfikacja) banner -->
+        <div
+          v-if="isReview"
+          class="rounded-lg border border-outline-blue-2 bg-surface-blue-2 px-4 py-3 text-sm text-ink-blue-8"
+        >
+          {{ __('Audyt oczekuje na weryfikację przez back office — pola są zablokowane do czasu decyzji.') }}
         </div>
 
         <!-- Legacy variant banner -->
@@ -231,15 +239,6 @@
               </div>
             </div>
           </section>
-
-          <div>
-            <FormControl
-              type="textarea"
-              :label="__('Uwagi technika')"
-              :disabled="readOnly"
-              v-model="form.uwagi"
-            />
-          </div>
         </template>
 
         <!-- Comment thread (available once the audit exists — all users) -->

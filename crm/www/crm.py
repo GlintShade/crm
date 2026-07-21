@@ -51,6 +51,11 @@ def get_boot():
 			"hide_leads": not frappe.has_permission("CRM Lead", "read"),
 			# VOLTEO: expose invoice-add capability so the Faktury tab can hide its add button for reps
 			"can_create_faktura": frappe.has_permission("Volteo Faktura", "create"),
+			# VOLTEO: restricted D2D rep (used to hide rep-only-forbidden UI affordances)
+			"volteo_is_rep": (
+				"Volteo D2D Sales" in frappe.get_roles()
+				and not (set(frappe.get_roles()) & {"System Manager", "Volteo Core Admin", "Volteo Backend"})
+			),
 			"translated_doctypes": get_translated_doctypes(),
 			"translated_messages": get_messages_for_boot(),
 			"timezone": {

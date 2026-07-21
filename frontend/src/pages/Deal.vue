@@ -603,13 +603,16 @@ const showContactModal = ref(false)
 const _contact = ref({})
 
 function contactOptions(contact) {
-  let options = [
-    {
+  let options = []
+
+  // VOLTEO: restricted D2D reps must not remove a contact from a deal.
+  if (!window.volteo_is_rep) {
+    options.push({
       label: __('Remove'),
       icon: 'trash-2',
       onClick: () => removeContact(contact.name),
-    },
-  ]
+    })
+  }
 
   if (!contact.is_primary) {
     options.push({

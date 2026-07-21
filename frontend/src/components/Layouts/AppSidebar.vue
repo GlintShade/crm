@@ -102,7 +102,7 @@
         </template>
       </SidebarLink>
       <SidebarLink
-        v-if="true"
+        v-if="false"
         :label="__('Help')"
         :isCollapsed="isSidebarCollapsed"
         @click="
@@ -549,6 +549,9 @@ onMounted(async () => {
   })
 
   setUp(filteredSteps)
+  // VOLTEO: setUp() opens the HelpModal when onboarding is incomplete —
+  // never auto-show the "Getting started" onboarding panel.
+  showHelpModal.value = false
 })
 
 // help center
