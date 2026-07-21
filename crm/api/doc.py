@@ -606,6 +606,10 @@ def remove_assignments(doctype: str, name: str, assignees: str | list, ignore_pe
 
 @frappe.whitelist()
 def can_delete(doctype: str) -> bool:
+	from crm.permissions.delete_lockdown import LOCKED_DELETE_DOCTYPES, is_delete_admin
+
+	if doctype in LOCKED_DELETE_DOCTYPES and not is_delete_admin(frappe.session.user):
+		return False
 	return bool(frappe.has_permission(doctype, ptype="delete"))
 
 

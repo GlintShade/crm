@@ -86,7 +86,7 @@
           :afterUpgrade="() => capture('upgrade_plan_from_trial_banner')"
         />
         <GettingStartedBanner
-          v-if="!isOnboardingStepsCompleted"
+          v-if="false"
           :isSidebarCollapsed="isSidebarCollapsed"
         />
       </div>
@@ -102,7 +102,7 @@
         </template>
       </SidebarLink>
       <SidebarLink
-        v-if="isOnboardingStepsCompleted"
+        v-if="true"
         :label="__('Help')"
         :isCollapsed="isSidebarCollapsed"
         @click="

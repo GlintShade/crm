@@ -24,16 +24,25 @@ import frappe
 
 DELETE_ADMIN_ROLES = {"System Manager", "Volteo Core Admin"}
 
+LOCKED_DELETE_DOCTYPES = {
+	"CRM Deal",
+	"CRM Lead",
+	"FCRM Note",
+	"CRM Task",
+	"CRM Organization",
+	"Contact",
+}
+
+
+def is_delete_admin(user=None):
+	user = user or frappe.session.user
+	if user == "Administrator":
+		return True
+	return bool(DELETE_ADMIN_ROLES & set(frappe.get_roles(user)))
+
 
 def block_nonadmin_delete(doc, ptype, user=None):
 	if ptype != "delete":
 		return None
 
-	user = user or frappe.session.user
-	if user == "Administrator":
-		return True
-
-	if DELETE_ADMIN_ROLES & set(frappe.get_roles(user)):
-		return True
-
-	return False
+	return True if is_delete_admin(user) else False
