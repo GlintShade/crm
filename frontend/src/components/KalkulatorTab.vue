@@ -5,8 +5,11 @@
   falownik/bateria/konstrukcja + a handful of extras (kabel, spółdzielnia,
   ulga termomodernizacyjna, okres finansowania, wpłata własna, narzut), sees
   a live price-free config summary + Suma netto/VAT/brutto (+ subsidy/rata
-  block for indywidualny clients), and on "Generuj ofertę" creates a Szansa
-  (Deal) + Volteo Oferta + Zestaw BOM + PDF.
+  block for indywidualny clients), and on "Generuj ofertę" creates ONLY a
+  Szansa (CRM Deal) — the base record carrying the config, the client-facing
+  quote (netto/brutto/dotacja/ulga/raty) and the Zestaw BOM. No separate
+  Volteo Oferta record and no PDF are created here; sending the offer/PDF is
+  a later action from within the Deal.
 
   ZERO pricing math happens in this file. Company component prices, subsidy
   rules, margins and PMT installments are computed server-side only:
@@ -247,10 +250,9 @@
 
       <!-- Sukces -->
       <section v-else class="voff-card">
-        <h2>Oferta utworzona</h2>
+        <h2>Szansa utworzona</h2>
         <p>{{ successSummary }}</p>
         <a class="voff-btn voff-btn-primary" :href="dealHref" target="_blank" rel="noopener">Otwórz szansę w CRM</a>
-        <button class="voff-btn voff-btn-accent" @click="downloadPdf">Pobierz PDF</button>
         <button class="voff-btn voff-btn-ghost" @click="resetFlow">Nowa oferta</button>
       </section>
     </div>
@@ -386,9 +388,6 @@ const summary = reactive({
 
 const successSummary = ref('')
 const dealHref = ref('#')
-const resultPdfUrl = ref(null)
-const resultPdfPending = ref(false)
-const resultOferta = ref('')
 
 // --- Completeness gate (mirrors the server-side validation) -----------------
 const isComplete = computed(() => {
@@ -495,12 +494,8 @@ async function runGenerate() {
       annual_consumption_kwh: sel.consumption || 0,
     })
     successSummary.value =
-      'Szansa ' + result.deal + ' oraz oferta ' + result.oferta +
-      ' zostały utworzone. Suma brutto: ' + plnFmt(result.brutto) + '.'
+      'Szansa ' + result.deal + ' została utworzona. Suma brutto: ' + plnFmt(result.brutto) + '.'
     dealHref.value = '/crm/deals/' + result.deal
-    resultPdfUrl.value = result.pdf_url
-    resultPdfPending.value = result.pdf_pending
-    resultOferta.value = result.oferta
     flow.value = 'done'
   } catch (err) {
     errorMsg.value = extractErrorMessage(err)
@@ -512,20 +507,6 @@ async function runGenerate() {
 function resetFlow() {
   flow.value = 'idle'
   successSummary.value = ''
-}
-
-function downloadPdf() {
-  if (resultPdfUrl.value) {
-    window.open(resultPdfUrl.value, '_blank')
-  } else if (resultPdfPending.value) {
-    window.open(
-      '/api/method/frappe.utils.print_format.download_pdf?doctype=Volteo%20Oferta&name=' +
-        encodeURIComponent(resultOferta.value) +
-        '&format=' +
-        encodeURIComponent('Volteo Oferta PDF'),
-      '_blank',
-    )
-  }
 }
 
 // --- Helpers -----------------------------------------------------------------
