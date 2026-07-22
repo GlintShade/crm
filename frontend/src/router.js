@@ -198,7 +198,11 @@ router.beforeEach(async (to, from, next) => {
     next({ name: 'Not Permitted' })
   } else if (to.name === 'Home' && isLoggedIn) {
     const { views, getDefaultView } = viewsStore()
-    await views.promise
+    try {
+      await views.promise
+    } catch (e) {
+      console.error('[router] views fetch failed; proceeding with defaults', e)
+    }
 
     let defaultView = getDefaultView()
     if (!defaultView) {
@@ -240,7 +244,11 @@ router.beforeEach(async (to, from, next) => {
     !to.query?.view
   ) {
     const { views, standardViews, getDefaultView } = viewsStore()
-    await views.promise
+    try {
+      await views.promise
+    } catch (e) {
+      console.error('[router] views fetch failed; proceeding with defaults', e)
+    }
 
     const viewType = to.params?.viewType ?? ''
     const standardViewTypes = ['list', 'kanban', 'group_by']

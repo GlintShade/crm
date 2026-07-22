@@ -150,7 +150,15 @@
             </div>
             <div class="voff-field">
               <label>Narzut (PLN)</label>
-              <input v-model.number="sel.narzut" type="number" min="0" max="7000" step="1" />
+              <input
+                v-model.number="sel.narzut"
+                type="number"
+                min="0"
+                max="7000"
+                step="1"
+                @blur="sel.narzut = Math.min(7000, Math.max(0, Number(sel.narzut) || 0))"
+              />
+              <div v-if="!narzutValid" class="voff-hint" style="color:#c0392b">Narzut musi być w zakresie 0–7000 zł.</div>
             </div>
           </div>
 
@@ -390,7 +398,12 @@ const isComplete = computed(() => {
   return true
 })
 
-const canGenerate = computed(() => isComplete.value && !!c.name)
+const narzutValid = computed(() => {
+  const n = Number(sel.narzut)
+  return !isNaN(n) && n >= 0 && n <= 7000
+})
+
+const canGenerate = computed(() => isComplete.value && !!c.name && narzutValid.value)
 
 function buildCalcPayload() {
   return {
