@@ -23,6 +23,9 @@ COUNT_NAME = (
 
 @frappe.whitelist()
 def sort_options(doctype: str):
+	if not frappe.has_permission(doctype, "read"):
+		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
+
 	fields = frappe.get_meta(doctype).fields
 	fields = [field for field in fields if field.fieldtype not in no_value_fields]
 	fields = [
@@ -53,6 +56,9 @@ def sort_options(doctype: str):
 
 @frappe.whitelist()
 def get_filterable_fields(doctype: str):
+	if not frappe.has_permission(doctype, "read"):
+		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
+
 	allowed_fieldtypes = [
 		"Check",
 		"Data",
@@ -111,6 +117,9 @@ def get_filterable_fields(doctype: str):
 
 @frappe.whitelist()
 def get_group_by_fields(doctype: str):
+	if not frappe.has_permission(doctype, "read"):
+		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
+
 	allowed_fieldtypes = [
 		"Check",
 		"Data",
@@ -162,6 +171,9 @@ def get_group_by_fields(doctype: str):
 
 @frappe.whitelist()
 def get_quick_filters(doctype: str, cached: bool = True):
+	if not frappe.has_permission(doctype, "read"):
+		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
+
 	meta = frappe.get_meta(doctype, cached)
 	quick_filters = []
 
@@ -269,6 +281,9 @@ def get_data(
 	view: str | dict | None = None,
 	default_filters: dict | None = None,
 ):
+	if not frappe.has_permission(doctype, "read"):
+		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
+
 	custom_view = False
 	filters = frappe._dict(filters)
 	rows = frappe.parse_json(rows or "[]")
@@ -636,6 +651,9 @@ def get_assigned_users(doctype: str, name: str | int, default_assigned_to: str |
 
 @frappe.whitelist()
 def get_fields(doctype: str, allow_all_fieldtypes: bool = False):
+	if not frappe.has_permission(doctype, "read"):
+		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
+
 	not_allowed_fieldtypes = [*list(frappe.model.no_value_fields), "Read Only"]
 	if allow_all_fieldtypes:
 		not_allowed_fieldtypes = []
@@ -685,6 +703,9 @@ def getCounts(d, doctype):
 
 @frappe.whitelist()
 def get_linked_docs_of_document(doctype: str, docname: str):
+	if not frappe.has_permission(doctype, "read", docname):
+		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
+
 	try:
 		doc = frappe.get_doc(doctype, docname)
 	except frappe.DoesNotExistError:

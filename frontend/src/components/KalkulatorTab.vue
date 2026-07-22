@@ -1,14 +1,22 @@
 <!--
   Volteo Kalkulator — D2D "build a quote" tab in the Contact (Klient) view.
 
-  The rep manually builds an installation from catalog components (wariant +
-  magazyn / inwerter / panele + extras), sets a narzut (margin — kwotowy / procentowy)
-  and a VAT band (8 / 23 %), sees a live Suma netto / VAT / Suma brutto / Narzut,
-  and on "Generuj ofertę" creates a Szansa (Deal) + Volteo Oferta + Zestaw BOM.
+  The rep picks a client type, installation variant, producent (cascaded),
+  falownik/bateria/konstrukcja + a handful of extras (kabel, spółdzielnia,
+  ulga termomodernizacyjna, okres finansowania, wpłata własna, narzut), sees
+  a live price-free config summary + Suma netto/VAT/brutto (+ subsidy/rata
+  block for indywidualny clients), and on "Generuj ofertę" creates a Szansa
+  (Deal) + Volteo Oferta + Zestaw BOM + PDF.
 
-  Company component prices are NEVER sent to the browser: the dropdowns come from
-  `volteo_quote_components` (names only) and all pricing is computed server-side by
-  `volteo_quote_calc` / `volteo_quote_generate`, which return only aggregates.
+  ZERO pricing math happens in this file. Company component prices, subsidy
+  rules, margins and PMT installments are computed server-side only:
+  - `volteo_quote_components` returns component NAMES + non-secret tags
+    (kategoria/producent/sigen_typ/moc_kw/pojemnosc_kwh) — never a price.
+  - `volteo_quote_calc` / `volteo_quote_generate` take the user's selections
+    (ids/enums/numbers the rep chose) and return only price AGGREGATES.
+  - The optional `breakdown` (cost/margin decomposition) is only ever present
+    in the response for admins (`is_admin: true`); this component never
+    computes it, it only conditionally renders what the server already sent.
 -->
 <template>
   <div class="flex flex-1 flex-col overflow-y-auto">
@@ -19,6 +27,22 @@
       </div>
 
       <template v-if="flow !== 'done'">
+        <!-- Typ klienta -->
+        <section class="voff-card">
+          <h2>Typ klienta</h2>
+          <div class="voff-variants">
+            <button
+              v-for="opt in TYP_KLIENTA_OPTIONS"
+              :key="opt.value"
+              class="voff-variant"
+              :class="{ 'voff-variant-active': sel.typKlienta === opt.value }"
+              @click="sel.typKlienta = opt.value"
+            >
+              {{ opt.label }}
+            </button>
+          </div>
+        </section>
+
         <!-- Wariant -->
         <section class="voff-card">
           <h2>Rodzaj instalacji</h2>
@@ -35,127 +59,120 @@
           </div>
         </section>
 
-        <!-- Komponenty -->
+        <!-- Konfiguracja -->
         <section class="voff-card">
-          <h2>Komponenty (zestaw)</h2>
+          <h2>Konfiguracja</h2>
 
           <div class="voff-field">
-            <label>Rodzaj konstrukcji</label>
-            <select v-model="sel.installType">
+            <label>Producent</label>
+            <div class="voff-variants">
+              <button
+                v-for="p in producentOptions"
+                :key="p"
+                class="voff-variant"
+                :class="{ 'voff-variant-active': sel.producent === p }"
+                @click="sel.producent = p"
+              >
+                {{ p }}
+              </button>
+            </div>
+          </div>
+
+          <div class="voff-field">
+            <label>Falownik</label>
+            <select v-model="sel.falownik">
               <option value="">-- wybierz --</option>
-              <option v-for="c in byKat('Typ instalacji')" :key="c.name" :value="c.name">{{ compLabel(c) }}</option>
+              <option v-for="c in falownikOptions" :key="c.name" :value="c.name">{{ compLabel(c) }}</option>
             </select>
           </div>
 
-          <template v-if="showPV">
+          <div v-if="hasBat" class="voff-field">
+            <label>Magazyn energii</label>
+            <select v-model="sel.bateria">
+              <option value="">-- wybierz --</option>
+              <option v-for="c in bateriaOptions" :key="c.name" :value="c.name">{{ compLabel(c) }}</option>
+            </select>
+          </div>
+
+          <template v-if="hasPv">
             <div class="voff-grid2">
               <div class="voff-field">
-                <label>Panel PV</label>
-                <select v-model="sel.panel">
-                  <option value="">-- wybierz --</option>
-                  <option v-for="c in byKat('Panel PV')" :key="c.name" :value="c.name">{{ compLabel(c) }}</option>
+                <label>Moc instalacji PV</label>
+                <select v-model.number="sel.mocPvKw">
+                  <option :value="null">-- wybierz --</option>
+                  <option v-for="o in mocOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
                 </select>
               </div>
               <div class="voff-field">
-                <label>Liczba modułów</label>
-                <input v-model.number="sel.liczbaModulow" type="number" min="0" step="1" />
-                <div v-if="suggestedModules" class="voff-hint">
-                  Sugerowana ilość: {{ suggestedModules }}
-                  <button class="voff-link" @click="sel.liczbaModulow = suggestedModules">Ustaw</button>
-                </div>
+                <label>Konstrukcja</label>
+                <select v-model="sel.konstrukcja">
+                  <option value="">-- wybierz --</option>
+                  <option v-for="c in konstrukcjaOptions" :key="c.name" :value="c.name">{{ compLabel(c) }}</option>
+                </select>
               </div>
             </div>
           </template>
 
-          <div class="voff-field">
-            <label>Inwerter</label>
-            <select v-model="sel.inverter">
-              <option value="">-- wybierz --</option>
-              <option v-for="c in byKat('Inwerter')" :key="c.name" :value="c.name">{{ compLabel(c) }}</option>
-            </select>
-          </div>
-
-          <div v-if="showBattery" class="voff-field">
-            <label>Magazyn energii</label>
-            <select v-model="sel.battery">
-              <option value="">-- wybierz --</option>
-              <option v-for="c in byKat('Magazyn energii')" :key="c.name" :value="c.name">{{ compLabel(c) }}</option>
-            </select>
-          </div>
-
-          <!-- Dodatki -->
-          <h3 class="voff-subhead">Dodatki</h3>
-          <div v-if="showPV" class="voff-grid2">
+          <div class="voff-grid2">
             <div class="voff-field">
-              <label>Optymalizatory</label>
-              <select v-model="sel.optymalizator">
-                <option value="">-- brak --</option>
-                <option v-for="c in byKat('Optymalizator')" :key="c.name" :value="c.name">{{ compLabel(c) }}</option>
+              <label>Dodatkowy kabel (m)</label>
+              <input v-model.number="sel.kabelM" type="number" min="0" step="1" />
+            </div>
+            <div class="voff-field">
+              <label>Spółdzielnia energetyczna</label>
+              <select v-model="sel.spoldzielnia">
+                <option value="Nie">Nie</option>
+                <option value="Tak">Tak</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="voff-grid2">
+            <div class="voff-field">
+              <label>Ulga termomodernizacyjna</label>
+              <select v-model.number="sel.ulgaPct">
+                <option :value="12">12%</option>
+                <option :value="19">19%</option>
               </select>
             </div>
             <div class="voff-field">
-              <label>Ilość (szt)</label>
-              <input v-model.number="sel.optSzt" type="number" min="0" step="1" />
+              <label>Okres finansowania (lat)</label>
+              <select v-model.number="sel.okresLat">
+                <option v-for="n in 10" :key="n" :value="n">{{ n }}</option>
+              </select>
             </div>
           </div>
-          <div class="voff-field">
-            <label>Dodatkowy kabel do falownika (m)</label>
-            <input v-model.number="sel.kabelM" type="number" min="0" step="1" />
-          </div>
-          <div class="voff-checkboxes">
-            <label><input type="checkbox" v-model="sel.podnosnik" /> Podnośnik / zwyżka</label>
-            <label><input type="checkbox" v-model="sel.modernizacja" /> Modernizacja rozdzielnicy</label>
-            <label><input type="checkbox" v-model="sel.bilansowanie" /> Bilansowanie energii SaveUP</label>
+
+          <div class="voff-grid2">
+            <div class="voff-field">
+              <label>Wpłata własna (PLN)</label>
+              <input v-model.number="sel.wplataWlasna" type="number" min="0" step="1" />
+            </div>
+            <div class="voff-field">
+              <label>Narzut (PLN)</label>
+              <input v-model.number="sel.narzut" type="number" min="0" max="7000" step="1" />
+            </div>
           </div>
 
-          <h3 class="voff-subhead">Dane energetyczne</h3>
+          <h3 class="voff-subhead">Dane energetyczne (opcjonalne)</h3>
           <div class="voff-grid2">
             <div class="voff-field">
               <label>Operator energetyczny</label>
               <select v-model="sel.operator">
                 <option value="">-- wybierz --</option>
-                <option v-for="c in byKat('Operator')" :key="c.name" :value="c.nazwa">{{ c.nazwa }}</option>
+                <option v-for="c in operatorOptions" :key="c.name" :value="c.nazwa">{{ c.nazwa }}</option>
               </select>
             </div>
             <div class="voff-field">
               <label>Kierunek montażu</label>
               <select v-model="sel.kierunek">
                 <option value="">-- wybierz --</option>
-                <option v-for="c in byKat('Kierunek montażu')" :key="c.name" :value="c.nazwa">{{ c.nazwa }}</option>
+                <option v-for="c in kierunekOptions" :key="c.name" :value="c.nazwa">{{ c.nazwa }}</option>
               </select>
-            </div>
-            <div class="voff-field">
-              <label>Moc instalacji PV (kWp)</label>
-              <input v-model.number="sel.pvPower" type="number" min="0" step="0.1" />
             </div>
             <div class="voff-field">
               <label>Roczne zużycie (kWh)</label>
               <input v-model.number="sel.consumption" type="number" min="0" step="1" />
-            </div>
-          </div>
-        </section>
-
-        <!-- Narzut + VAT -->
-        <section class="voff-card">
-          <h2>Narzut i VAT</h2>
-          <div class="voff-grid2">
-            <div class="voff-field">
-              <label>Rodzaj narzutu</label>
-              <select v-model="sel.narzutTyp">
-                <option value="kwotowy">Kwotowy (PLN)</option>
-                <option value="procentowy">Procentowy (%)</option>
-              </select>
-            </div>
-            <div class="voff-field">
-              <label>Wysokość narzutu {{ sel.narzutTyp === 'procentowy' ? '(%)' : '(PLN)' }}</label>
-              <input v-model.number="sel.narzutValue" type="number" min="0" step="1" />
-            </div>
-            <div class="voff-field">
-              <label>Stawka VAT</label>
-              <select v-model="sel.vatRate">
-                <option value="8">8% (do 300 m²)</option>
-                <option value="23">23% (powyżej 300 m²)</option>
-              </select>
             </div>
           </div>
         </section>
@@ -170,14 +187,45 @@
               <span class="voff-bom-ilosc">×{{ formatQty(ln.ilosc) }}</span>
             </div>
           </div>
-          <div v-else class="voff-hint">Wybierz komponenty, aby zobaczyć wycenę.</div>
+          <div v-else class="voff-hint">Uzupełnij konfigurację, aby zobaczyć wycenę.</div>
 
-          <div class="voff-summary">
-            <div class="voff-summary-row"><span>Suma netto</span><span>{{ plnFmt(summary.netto) }}</span></div>
-            <div class="voff-summary-row"><span>Narzut</span><span>{{ plnFmt(summary.narzut) }}</span></div>
-            <div class="voff-summary-row"><span>VAT ({{ sel.vatRate }}%)</span><span>{{ plnFmt(summary.vat) }}</span></div>
-            <div class="voff-summary-row voff-summary-total"><span>Suma brutto</span><span>{{ plnFmt(summary.brutto) }}</span></div>
-          </div>
+          <template v-if="summary.lines.length">
+            <div class="voff-summary">
+              <div class="voff-summary-row"><span>Suma netto</span><span>{{ plnFmt(summary.netto) }}</span></div>
+              <div class="voff-summary-row"><span>VAT ({{ summary.vat_rate }}%)</span><span>{{ plnFmt(summary.vat) }}</span></div>
+              <div class="voff-summary-row voff-summary-total"><span>Suma brutto</span><span>{{ plnFmt(summary.brutto) }}</span></div>
+            </div>
+
+            <div v-if="sel.typKlienta === 'indywidualny'" class="voff-summary">
+              <div class="voff-summary-row"><span>Dotacja Mój Prąd</span><span>− {{ plnFmt(summary.dotacja) }}</span></div>
+              <div class="voff-summary-row"><span>Cena po dotacji</span><span>{{ plnFmt(summary.cena_po_dotacji) }}</span></div>
+              <div class="voff-summary-row"><span>Ulga termo. ({{ sel.ulgaPct }}%)</span><span>− {{ plnFmt(summary.ulga) }}</span></div>
+              <div class="voff-summary-row voff-summary-total"><span>Cena po uldze</span><span>{{ plnFmt(summary.cena_po_uldze) }}</span></div>
+              <div class="voff-summary-row">
+                <span>Rata ({{ sel.okresLat }} lat)</span>
+                <span>{{ plnFmt(summary.raty.brutto) }} / {{ plnFmt(summary.raty.po_dotacji) }} / {{ plnFmt(summary.raty.po_uldze) }} zł/mies.</span>
+              </div>
+            </div>
+
+            <div v-if="summary.is_admin && summary.breakdown" class="voff-admin-panel">
+              <h3 class="voff-subhead voff-admin-title">Rozbicie kosztów (tylko administrator)</h3>
+              <div class="voff-summary-row"><span>Falownik</span><span>{{ plnFmt(summary.breakdown.k_falownik) }}</span></div>
+              <div class="voff-summary-row"><span>Bateria</span><span>{{ plnFmt(summary.breakdown.k_bateria) }}</span></div>
+              <div class="voff-summary-row"><span>Panele</span><span>{{ plnFmt(summary.breakdown.k_panele) }}</span></div>
+              <div class="voff-summary-row"><span>Konstrukcja</span><span>{{ plnFmt(summary.breakdown.k_konstrukcja) }}</span></div>
+              <div class="voff-summary-row"><span>Montaż PV</span><span>{{ plnFmt(summary.breakdown.k_montaz_pv) }}</span></div>
+              <div class="voff-summary-row"><span>Montaż magazynu</span><span>{{ plnFmt(summary.breakdown.k_montaz_mag) }}</span></div>
+              <div class="voff-summary-row"><span>Akcesoria</span><span>{{ plnFmt(summary.breakdown.k_akcesoria) }}</span></div>
+              <div class="voff-summary-row"><span>Kabel</span><span>{{ plnFmt(summary.breakdown.k_kabel) }}</span></div>
+              <div class="voff-summary-row"><span>Spółdzielnia</span><span>{{ plnFmt(summary.breakdown.k_spoldzielnia) }}</span></div>
+              <div class="voff-summary-row"><span>Sterownik</span><span>{{ plnFmt(summary.breakdown.k_sterownik) }}</span></div>
+              <div class="voff-summary-row voff-summary-total"><span>Koszt bazowy (net_base)</span><span>{{ plnFmt(summary.breakdown.net_base) }}</span></div>
+              <div class="voff-summary-row"><span>Marża ProEnergy</span><span>{{ plnFmt(summary.breakdown.marza_proenergy) }}</span></div>
+              <div class="voff-summary-row"><span>Marża SPS</span><span>{{ plnFmt(summary.breakdown.marza_sps) }}</span></div>
+              <div class="voff-summary-row"><span>Bonus liderki</span><span>{{ plnFmt(summary.breakdown.bonus_liderki) }}</span></div>
+              <div class="voff-summary-row"><span>Kilometrówka</span><span>{{ plnFmt(summary.breakdown.kilometrowka) }}</span></div>
+            </div>
+          </template>
 
           <button
             class="voff-btn voff-btn-accent"
@@ -216,6 +264,21 @@ const VOIVODESHIPS = [
   'wielkopolskie', 'zachodniopomorskie',
 ]
 const VARIANTS = ['Fotowoltaika', 'Fotowoltaika + Magazyn', 'Magazyn energii']
+const TYP_KLIENTA_OPTIONS = [
+  { value: 'indywidualny', label: 'Indywidualny' },
+  { value: 'biznesowy', label: 'Biznesowy' },
+]
+
+// Moc PV dropdown: 3.0–20.0 kW in 0.5 steps, label shows panel count (kW * 2).
+// This is a display-label helper only — no cost/price is derived here.
+const mocOptions = (() => {
+  const out = []
+  for (let tenths = 30; tenths <= 200; tenths += 5) {
+    const kw = tenths / 10
+    out.push({ value: kw, label: `${kw} kW (${Math.round(kw * 2)} paneli)` })
+  }
+  return out
+})()
 
 // --- Prefill client data from the current contact --------------------------
 const c = props.contact || {}
@@ -228,48 +291,52 @@ const voivodeshipPrefill = (() => {
   return VOIVODESHIPS.indexOf(w) !== -1 ? w : ''
 })()
 
-
-// --- Selections ------------------------------------------------------------
+// --- Selections --------------------------------------------------------------
 const sel = reactive({
+  typKlienta: 'indywidualny',
   variant: 'Fotowoltaika + Magazyn',
-  installType: '',
-  panel: '',
-  liczbaModulow: 0,
-  inverter: '',
-  battery: '',
-  optymalizator: '',
-  optSzt: 0,
+  producent: '',
+  falownik: '',
+  bateria: '',
+  mocPvKw: null,
+  konstrukcja: '',
   kabelM: 0,
-  podnosnik: false,
-  modernizacja: false,
-  bilansowanie: false,
+  spoldzielnia: 'Nie',
+  ulgaPct: 19,
+  okresLat: 5,
+  wplataWlasna: 0,
+  narzut: 0,
   operator: '',
   kierunek: '',
-  pvPower: null,
   consumption: null,
-  narzutTyp: 'kwotowy',
-  narzutValue: 0,
-  vatRate: '8',
 })
 
-const showPV = computed(() => sel.variant === 'Fotowoltaika' || sel.variant === 'Fotowoltaika + Magazyn')
-const showBattery = computed(() => sel.variant === 'Fotowoltaika + Magazyn' || sel.variant === 'Magazyn energii')
+const hasPv = computed(() => sel.variant === 'Fotowoltaika' || sel.variant === 'Fotowoltaika + Magazyn')
+const hasBat = computed(() => sel.variant === 'Fotowoltaika + Magazyn' || sel.variant === 'Magazyn energii')
 
-// --- Catalog (names only — no prices ever fetched) --------------------------
+// Cascade: PV-only forces FoxESS; PV+Magazyn / Magazyn only offer Sigenergy/Deye.
+const producentOptions = computed(() => (sel.variant === 'Fotowoltaika' ? ['FoxESS'] : ['Sigenergy', 'Deye']))
+
+watch(
+  () => sel.variant,
+  () => {
+    if (!producentOptions.value.includes(sel.producent)) sel.producent = producentOptions.value[0]
+    if (!hasPv.value) { sel.mocPvKw = null; sel.konstrukcja = '' }
+    if (!hasBat.value) sel.bateria = ''
+  },
+  { immediate: true },
+)
+
+// Reset downstream picks whenever producent changes (cascade rule).
+watch(
+  () => sel.producent,
+  () => { sel.falownik = ''; sel.bateria = '' },
+)
+
+// --- Catalog (names + non-secret tags only — no prices ever fetched) -------
 const catMap = reactive({})
 function byKat(kat) {
   return catMap[kat] || []
-}
-function firstId(kat) {
-  const list = catMap[kat] || []
-  return list.length ? list[0].name : ''
-}
-function findComp(name) {
-  for (const k in catMap) {
-    const hit = (catMap[k] || []).find((x) => x.name === name)
-    if (hit) return hit
-  }
-  return null
 }
 function compLabel(x) {
   return [x.nazwa, x.model].filter(Boolean).join(' ')
@@ -290,11 +357,24 @@ async function loadComponents() {
 }
 loadComponents()
 
-// --- Flow / result state ---------------------------------------------------
+const falownikOptions = computed(() => byKat('Falownik').filter((x) => x.producent === sel.producent))
+const bateriaOptions = computed(() => byKat('Magazyn energii').filter((x) => x.producent === sel.producent))
+const konstrukcjaOptions = computed(() => byKat('Konstrukcja'))
+const operatorOptions = computed(() => byKat('Operator'))
+const kierunekOptions = computed(() => byKat('Kierunek montazu'))
+
+// --- Flow / result state ----------------------------------------------------
 const flow = ref('idle') // idle | done
 const generating = ref(false)
 const errorMsg = ref('')
-const summary = reactive({ netto: 0, vat: 0, brutto: 0, narzut: 0, lines: [] })
+const summary = reactive({
+  netto: 0, vat: 0, brutto: 0, narzut: 0, vat_rate: 0,
+  dotacja: 0, cena_po_dotacji: 0, ulga: 0, cena_po_uldze: 0,
+  raty: { brutto: 0, po_dotacji: 0, po_uldze: 0 },
+  lines: [],
+  is_admin: false,
+  breakdown: null,
+})
 
 const successSummary = ref('')
 const dealHref = ref('#')
@@ -302,76 +382,92 @@ const resultPdfUrl = ref(null)
 const resultPdfPending = ref(false)
 const resultOferta = ref('')
 
-// --- Derived ---------------------------------------------------------------
-const suggestedModules = computed(() => {
-  const panel = findComp(sel.panel)
-  const w = panel && Number(panel.moc_w)
-  const kwp = Number(sel.pvPower)
-  if (!w || !kwp) return 0
-  return Math.ceil((kwp * 1000) / w)
+// --- Completeness gate (mirrors the server-side validation) -----------------
+const isComplete = computed(() => {
+  if (!sel.typKlienta || !sel.variant || !sel.producent || !sel.falownik) return false
+  if (hasPv.value && (!sel.mocPvKw || !sel.konstrukcja)) return false
+  if (hasBat.value && !sel.bateria) return false
+  return true
 })
 
-const items = computed(() => {
-  const out = []
-  if (sel.installType) out.push({ component: sel.installType, qty: 1 })
-  if (showPV.value && sel.panel && Number(sel.liczbaModulow) > 0)
-    out.push({ component: sel.panel, qty: Number(sel.liczbaModulow) })
-  if (sel.inverter) out.push({ component: sel.inverter, qty: 1 })
-  if (showBattery.value && sel.battery) out.push({ component: sel.battery, qty: 1 })
-  if (showPV.value && sel.optymalizator && Number(sel.optSzt) > 0)
-    out.push({ component: sel.optymalizator, qty: Number(sel.optSzt) })
-  const kabel = firstId('Kabel')
-  if (Number(sel.kabelM) > 0 && kabel) out.push({ component: kabel, qty: Number(sel.kabelM) })
-  const pod = firstId('Podnośnik')
-  if (sel.podnosnik && pod) out.push({ component: pod, qty: 1 })
-  const mod = firstId('Modernizacja rozdzielnicy')
-  if (sel.modernizacja && mod) out.push({ component: mod, qty: 1 })
-  const bil = firstId('Bilansowanie SaveUP')
-  if (sel.bilansowanie && bil) out.push({ component: bil, qty: 1 })
-  return out
-})
+const canGenerate = computed(() => isComplete.value && !!c.name)
 
-const canGenerate = computed(() => !!c.name && items.value.length > 0)
+function buildCalcPayload() {
+  return {
+    typ_klienta: sel.typKlienta,
+    variant: sel.variant,
+    producent: sel.producent,
+    falownik: sel.falownik || '',
+    bateria: hasBat.value ? sel.bateria || '' : '',
+    konstrukcja: hasPv.value ? sel.konstrukcja || '' : '',
+    moc_pv_kw: hasPv.value ? Number(sel.mocPvKw) || 0 : 0,
+    kabel_m: Number(sel.kabelM) || 0,
+    spoldzielnia: sel.spoldzielnia,
+    ulga_pct: Number(sel.ulgaPct),
+    okres_lat: Number(sel.okresLat),
+    wplata_wlasna: Number(sel.wplataWlasna) || 0,
+    narzut: Number(sel.narzut) || 0,
+  }
+}
 
-// --- Live pricing (server-side; debounced) ---------------------------------
+function clearSummary() {
+  summary.netto = 0; summary.vat = 0; summary.brutto = 0; summary.narzut = 0; summary.vat_rate = 0
+  summary.dotacja = 0; summary.cena_po_dotacji = 0; summary.ulga = 0; summary.cena_po_uldze = 0
+  summary.raty.brutto = 0; summary.raty.po_dotacji = 0; summary.raty.po_uldze = 0
+  summary.lines = []
+  summary.is_admin = false
+  summary.breakdown = null
+}
+
+// --- Live pricing (server-side; debounced) ----------------------------------
 let calcTimer = null
 watch(
-  () => [items.value, sel.narzutTyp, sel.narzutValue, sel.vatRate],
+  () => [
+    sel.typKlienta, sel.variant, sel.producent, sel.falownik, sel.bateria,
+    sel.mocPvKw, sel.konstrukcja, sel.kabelM, sel.spoldzielnia, sel.ulgaPct,
+    sel.okresLat, sel.wplataWlasna, sel.narzut,
+  ],
   () => {
     if (calcTimer) clearTimeout(calcTimer)
     calcTimer = setTimeout(runCalc, 350)
   },
-  { deep: true },
 )
 
 async function runCalc() {
-  if (!items.value.length) {
-    summary.netto = 0; summary.vat = 0; summary.brutto = 0; summary.narzut = 0; summary.lines = []
+  if (!isComplete.value) {
+    clearSummary()
     return
   }
   try {
-    const data = await call('volteo_quote_calc', {
-      items: JSON.stringify(items.value),
-      narzut_typ: sel.narzutTyp,
-      narzut_value: sel.narzutValue || 0,
-      vat_rate: sel.vatRate,
-    })
+    const data = await call('volteo_quote_calc', buildCalcPayload())
     summary.netto = data.netto || 0
     summary.vat = data.vat || 0
     summary.brutto = data.brutto || 0
     summary.narzut = data.narzut || 0
+    summary.vat_rate = data.vat_rate || 0
+    summary.dotacja = data.dotacja || 0
+    summary.cena_po_dotacji = data.cena_po_dotacji || 0
+    summary.ulga = data.ulga || 0
+    summary.cena_po_uldze = data.cena_po_uldze || 0
+    summary.raty.brutto = (data.raty && data.raty.brutto) || 0
+    summary.raty.po_dotacji = (data.raty && data.raty.po_dotacji) || 0
+    summary.raty.po_uldze = (data.raty && data.raty.po_uldze) || 0
     summary.lines = data.lines || []
+    summary.is_admin = !!data.is_admin
+    summary.breakdown = data.is_admin ? data.breakdown || null : null
   } catch (err) {
+    clearSummary()
     errorMsg.value = extractErrorMessage(err)
   }
 }
 
-// --- Generate --------------------------------------------------------------
+// --- Generate ----------------------------------------------------------------
 async function runGenerate() {
   errorMsg.value = ''
   generating.value = true
   try {
     const result = await call('volteo_quote_generate', {
+      ...buildCalcPayload(),
       contact: c.name || '',
       first_name: c.first_name || '',
       last_name: c.last_name || '',
@@ -381,15 +477,9 @@ async function runGenerate() {
       install_city: c.custom_miasto || '',
       install_postal_code: c.custom_kod_pocztowy || '',
       voivodeship: voivodeshipPrefill,
-      variant: sel.variant,
       operator: sel.operator,
       kierunek: sel.kierunek,
-      pv_power_kwp: sel.pvPower || 0,
       annual_consumption_kwh: sel.consumption || 0,
-      items: JSON.stringify(items.value),
-      narzut_typ: sel.narzutTyp,
-      narzut_value: sel.narzutValue || 0,
-      vat_rate: sel.vatRate,
     })
     successSummary.value =
       'Szansa ' + result.deal + ' oraz oferta ' + result.oferta +
@@ -425,7 +515,7 @@ function downloadPdf() {
   }
 }
 
-// --- Helpers ---------------------------------------------------------------
+// --- Helpers -----------------------------------------------------------------
 function plnFmt(val) {
   const n = Math.round(Number(val) || 0)
   const s = n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
@@ -512,15 +602,6 @@ function extractErrorMessage(err) {
   box-sizing: border-box;
   background: #ffffff;
   color: #1a1a1a;
-}
-.voff-checkboxes label {
-  display: block;
-  font-size: 14px;
-  color: #374151;
-  margin-bottom: 6px;
-}
-.voff-checkboxes input {
-  margin-right: 6px;
 }
 .voff-variants {
   display: flex;
@@ -620,6 +701,17 @@ function extractErrorMessage(err) {
   border-top: 1px solid #e5e7eb;
   margin-top: 6px;
   padding-top: 10px;
+}
+.voff-admin-panel {
+  border: 1px dashed #b45309;
+  background: #fffbeb;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+}
+.voff-admin-title {
+  color: #92400e;
+  margin-top: 0;
 }
 .voff-banner {
   padding: 12px 16px;
