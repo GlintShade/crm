@@ -1,289 +1,270 @@
 <!--
-  Volteo Kalkulator — D2D "build a quote" tab in the Contact (Klient) view.
-
-  The rep picks a client type, installation variant, producent (cascaded),
-  falownik/bateria/konstrukcja + a handful of extras (kabel, spółdzielnia,
-  ulga termomodernizacyjna, okres finansowania, wpłata własna, narzut), sees
-  a live price-free config summary + Suma netto/VAT/brutto (+ subsidy/rata
-  block for indywidualny clients), and on "Generuj ofertę" creates ONLY a
-  Szansa (CRM Deal) — the base record carrying the config, the client-facing
-  quote (netto/brutto/dotacja/ulga/raty) and the Zestaw BOM. No separate
-  Volteo Oferta record and no PDF are created here; sending the offer/PDF is
-  a later action from within the Deal.
-
-  ZERO pricing math happens in this file. Company component prices, subsidy
-  rules, margins and PMT installments are computed server-side only:
-  - `volteo_quote_components` returns component NAMES + non-secret tags
-    (kategoria/producent/sigen_typ/moc_kw/pojemnosc_kwh) — never a price.
-  - `volteo_quote_calc` / `volteo_quote_generate` take the user's selections
-    (ids/enums/numbers the rep chose) and return only price AGGREGATES.
-  - The optional `breakdown` (cost/margin decomposition) is only ever present
-    in the response for admins (`is_admin: true`); this component never
-    computes it, it only conditionally renders what the server already sent.
-
-  Layout: two-pane — the "Konfiguracja" form on the left, a sticky "Wycena"
-  panel on the right so the live quote never scrolls out of view. An energy
-  card near the top lets the rep type Roczne zużycie and one-click assemble
-  a full Sigenergy TP2 PV+Magazyn config from it ("Ustaw z zużycia") — a
-  suggestion only, it never applies itself, and every field stays editable
-  afterwards.
+  Volteo Kalkulator — native-styled quote builder tab in the Klient view.
+  Styled to match the CRM's frappe-ui design system exactly.
+  ZERO pricing math in this file — all computed server-side.
 -->
 <template>
   <div class="flex flex-1 flex-col overflow-y-auto">
-    <div class="voff-wrap">
-      <div v-if="errorMsg" class="voff-banner voff-banner-error">
+    <div class="mx-auto w-full max-w-[1180px] px-4 py-3">
+      <div v-if="errorMsg" class="mb-2.5 flex items-center justify-between rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
         <span>{{ errorMsg }}</span>
-        <button class="voff-banner-close" @click="errorMsg = ''">×</button>
+        <button class="ml-2 text-base font-bold leading-none" @click="errorMsg = ''">×</button>
       </div>
 
       <template v-if="flow !== 'done'">
-        <!-- Rodzaj instalacji + Typ klienta -->
-        <section class="voff-card">
-          <div class="voff-top-row">
+        <div class="grid grid-cols-[1fr_auto_1fr] items-start gap-x-6 gap-y-0 pb-3">
+          <div class="flex flex-col gap-2.5">
             <div>
-              <h2>Rodzaj instalacji</h2>
-              <div class="voff-variants">
+              <div class="mb-1 text-sm font-medium text-ink-gray-5">Rodzaj instalacji</div>
+              <div class="flex flex-wrap gap-1.5">
                 <button
-                  v-for="v in VARIANTS"
-                  :key="v"
-                  class="voff-variant"
-                  :class="{ 'voff-variant-active': sel.variant === v }"
+                  v-for="v in VARIANTS" :key="v"
+                  class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
+                  :class="sel.variant === v
+                    ? 'border-gray-900 bg-gray-900 text-white'
+                    : 'border-transparent bg-gray-100 text-gray-600 hover:bg-gray-200'"
                   @click="sel.variant = v"
-                >
-                  {{ v }}
-                </button>
+                >{{ v }}</button>
               </div>
             </div>
             <div>
-              <h2>Typ klienta</h2>
-              <div class="voff-variants">
+              <div class="mb-1 text-sm font-medium text-ink-gray-5">Typ klienta</div>
+              <div class="flex flex-wrap gap-1.5">
                 <button
-                  v-for="opt in TYP_KLIENTA_OPTIONS"
-                  :key="opt.value"
-                  class="voff-variant"
-                  :class="{ 'voff-variant-active': sel.typKlienta === opt.value }"
+                  v-for="opt in TYP_KLIENTA_OPTIONS" :key="opt.value"
+                  class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
+                  :class="sel.typKlienta === opt.value
+                    ? 'border-gray-900 bg-gray-900 text-white'
+                    : 'border-transparent bg-gray-100 text-gray-600 hover:bg-gray-200'"
                   @click="sel.typKlienta = opt.value"
-                >
-                  {{ opt.label }}
-                </button>
+                >{{ opt.label }}</button>
               </div>
             </div>
           </div>
-        </section>
 
-        <!-- Zużycie energii — auto-assembly suggestion -->
-        <section class="voff-card voff-energy-card">
-          <h2>Zużycie energii</h2>
-          <div class="voff-field voff-energy-field">
-            <label>Roczne zużycie (kWh)</label>
-            <input v-model.number="sel.consumption" type="number" min="0" step="1" />
+          <div class="min-w-[180px] max-w-[240px]">
+            <div class="mb-1 text-sm font-medium text-ink-gray-5">Roczne zużycie (kWh)</div>
+            <input
+              v-model.number="sel.consumption" type="number" min="0" step="1"
+              class="h-7 w-full rounded border border-gray-200 bg-gray-100 px-2 text-base text-gray-800 outline-none transition-colors hover:bg-gray-200 focus:border-gray-400 focus:bg-white focus:shadow-sm"
+            />
+            <div v-if="sel.consumption > 0" class="mt-1 text-xs leading-relaxed text-gray-500">
+              Sug. moc: <span class="font-medium text-gray-700">{{ suggestedKwp }} kW</span>
+              · magazyn: <span class="font-medium text-gray-700">{{ suggestedStorage }} kWh</span>
+              <button type="button" class="ml-1 font-medium text-blue-600 hover:underline" @click="applyFromConsumption">Ustaw</button>
+            </div>
           </div>
-          <div v-if="sel.consumption > 0" class="voff-suggestion">
-            <span class="voff-suggestion-text">
-              Sugerowana moc: {{ suggestedKwp }} kW ({{ suggestedKwp * 2 }} paneli) · magazyn:
-              {{ suggestedStorage }} kWh
-            </span>
-            <button type="button" class="voff-btn voff-btn-ghost" @click="applyFromConsumption">
-              Ustaw z zużycia
-            </button>
+
+          <div class="flex flex-col gap-2">
+            <div>
+              <div class="mb-0.5 text-sm text-ink-gray-5">Operator energetyczny</div>
+              <select v-model="sel.operator" class="kalk-select">
+                <option value="">—</option>
+                <option v-for="c in operatorOptions" :key="c.name" :value="c.nazwa">{{ c.nazwa }}</option>
+              </select>
+            </div>
+            <div>
+              <div class="mb-0.5 text-sm text-ink-gray-5">Kierunek montażu</div>
+              <select v-model="sel.kierunek" class="kalk-select">
+                <option value="">—</option>
+                <option v-for="c in kierunekOptions" :key="c.name" :value="c.nazwa">{{ c.nazwa }}</option>
+              </select>
+            </div>
           </div>
-        </section>
+        </div>
 
-        <!-- Konfiguracja (left) + Wycena (sticky right) -->
-        <div class="voff-split">
-          <section class="voff-card voff-left">
-            <h2>Konfiguracja</h2>
+        <div class="h-px bg-gray-200"></div>
 
-            <div class="voff-field">
-              <label>Producent</label>
-              <div class="voff-variants">
+        <div class="mt-3 grid items-start gap-4" style="grid-template-columns: minmax(0, 1.55fr) minmax(270px, 1fr)">
+          <div>
+            <div class="mb-2 text-base font-semibold text-ink-gray-9">Konfiguracja</div>
+
+            <div class="mb-2">
+              <div class="mb-1 text-sm text-ink-gray-5">Producent</div>
+              <div class="flex flex-wrap gap-1.5">
                 <button
-                  v-for="p in producentOptions"
-                  :key="p"
-                  class="voff-variant"
-                  :class="{ 'voff-variant-active': sel.producent === p }"
+                  v-for="p in producentOptions" :key="p"
+                  class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
+                  :class="sel.producent === p
+                    ? 'border-gray-900 bg-gray-900 text-white'
+                    : 'border-transparent bg-gray-100 text-gray-600 hover:bg-gray-200'"
                   @click="sel.producent = p"
-                >
-                  {{ p }}
-                </button>
+                >{{ p }}</button>
               </div>
             </div>
 
-            <div class="voff-grid2">
-              <div class="voff-field">
-                <label>Falownik</label>
-                <select v-model="sel.falownik">
+            <div class="grid grid-cols-2 gap-x-3 gap-y-2">
+              <div>
+                <div class="mb-0.5 text-sm text-ink-gray-5">Falownik</div>
+                <select v-model="sel.falownik" class="kalk-select">
                   <option value="">-- wybierz --</option>
                   <option v-for="c in falownikOptions" :key="c.name" :value="c.name">{{ compLabel(c) }}</option>
                 </select>
               </div>
 
-              <div v-if="hasBat" class="voff-field">
-                <label>Magazyn energii</label>
-                <select v-model="sel.bateria">
+              <div v-if="hasBat">
+                <div class="mb-0.5 text-sm text-ink-gray-5">Magazyn energii</div>
+                <select v-model="sel.bateria" class="kalk-select">
                   <option value="">-- wybierz --</option>
                   <option v-for="c in bateriaOptions" :key="c.name" :value="c.name">{{ compLabel(c) }}</option>
                 </select>
               </div>
 
               <template v-if="hasPv">
-                <div class="voff-field">
-                  <label>Moc instalacji PV</label>
-                  <select v-model.number="sel.mocPvKw">
+                <div>
+                  <div class="mb-0.5 text-sm text-ink-gray-5">Moc instalacji PV</div>
+                  <select v-model.number="sel.mocPvKw" class="kalk-select">
                     <option :value="null">-- wybierz --</option>
                     <option v-for="o in mocOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
                   </select>
                 </div>
-                <div class="voff-field">
-                  <label>Konstrukcja</label>
-                  <select v-model="sel.konstrukcja">
+                <div>
+                  <div class="mb-0.5 text-sm text-ink-gray-5">Konstrukcja</div>
+                  <select v-model="sel.konstrukcja" class="kalk-select">
                     <option value="">-- wybierz --</option>
                     <option v-for="c in konstrukcjaOptions" :key="c.name" :value="c.name">{{ compLabel(c) }}</option>
                   </select>
                 </div>
               </template>
 
-              <div class="voff-field">
-                <label>Dodatkowy kabel (m)</label>
-                <input v-model.number="sel.kabelM" type="number" min="0" step="1" />
+              <div>
+                <div class="mb-0.5 text-sm text-ink-gray-5">Dodatkowy kabel (m)</div>
+                <input v-model.number="sel.kabelM" type="number" min="0" step="1" class="kalk-input" />
               </div>
-              <div class="voff-field">
-                <label>Spółdzielnia energetyczna</label>
-                <select v-model="sel.spoldzielnia">
+              <div>
+                <div class="mb-0.5 text-sm text-ink-gray-5">Spółdzielnia energetyczna</div>
+                <select v-model="sel.spoldzielnia" class="kalk-select">
                   <option value="Nie">Nie</option>
                   <option value="Tak">Tak</option>
                 </select>
               </div>
 
-              <div class="voff-field">
-                <label>Ulga termomodernizacyjna</label>
-                <select v-model.number="sel.ulgaPct">
+              <div>
+                <div class="mb-0.5 text-sm text-ink-gray-5">Ulga termomodernizacyjna</div>
+                <select v-model.number="sel.ulgaPct" class="kalk-select">
                   <option :value="12">12%</option>
                   <option :value="19">19%</option>
                 </select>
               </div>
-              <div class="voff-field">
-                <label>Okres finansowania (lat)</label>
-                <select v-model.number="sel.okresLat">
+              <div>
+                <div class="mb-0.5 text-sm text-ink-gray-5">Okres finansowania (lat)</div>
+                <select v-model.number="sel.okresLat" class="kalk-select">
                   <option v-for="n in 10" :key="n" :value="n">{{ n }}</option>
                 </select>
               </div>
 
-              <div class="voff-field">
-                <label>Wpłata własna (PLN)</label>
-                <input v-model.number="sel.wplataWlasna" type="number" min="0" step="1" />
+              <div>
+                <div class="mb-0.5 text-sm text-ink-gray-5">Wpłata własna (PLN)</div>
+                <input v-model.number="sel.wplataWlasna" type="number" min="0" step="1" class="kalk-input" />
               </div>
-              <div class="voff-field">
-                <label>Narzut (PLN)</label>
+              <div>
+                <div class="mb-0.5 text-sm text-ink-gray-5">Narzut (PLN)</div>
                 <input
-                  v-model.number="sel.narzut"
-                  type="number"
-                  min="0"
-                  max="7000"
-                  step="1"
+                  v-model.number="sel.narzut" type="number" min="0" max="7000" step="1"
+                  class="kalk-input"
                   @blur="sel.narzut = Math.min(7000, Math.max(0, Number(sel.narzut) || 0))"
                 />
-                <div v-if="!narzutValid" class="voff-hint" style="color:#c0392b">Narzut musi być w zakresie 0–7000 zł.</div>
+                <div v-if="!narzutValid" class="mt-0.5 text-xs text-red-600">Narzut musi być w zakresie 0–7000 zł.</div>
               </div>
             </div>
+          </div>
 
-            <div class="voff-grp">
-              <h3 class="voff-subhead">Dane energetyczne (opcjonalne)</h3>
-              <div class="voff-grid2">
-                <div class="voff-field">
-                  <label>Operator energetyczny</label>
-                  <select v-model="sel.operator">
-                    <option value="">-- wybierz --</option>
-                    <option v-for="c in operatorOptions" :key="c.name" :value="c.nazwa">{{ c.nazwa }}</option>
-                  </select>
-                </div>
-                <div class="voff-field">
-                  <label>Kierunek montażu</label>
-                  <select v-model="sel.kierunek">
-                    <option value="">-- wybierz --</option>
-                    <option v-for="c in kierunekOptions" :key="c.name" :value="c.nazwa">{{ c.nazwa }}</option>
-                  </select>
-                </div>
+          <div class="sticky top-3">
+            <div class="mb-2 text-base font-semibold text-ink-gray-9">Wycena</div>
+
+            <div v-if="summary.lines.length" class="mb-2">
+              <div
+                v-for="(ln, i) in summary.lines" :key="i"
+                class="flex items-center gap-2 border-t border-gray-100 py-1.5 text-sm first:border-t-0"
+              >
+                <span class="min-w-[88px] text-ink-gray-5">{{ ln.typ }}</span>
+                <span class="flex-1 text-ink-gray-8">{{ ln.nazwa }}</span>
+                <span class="tabular-nums text-ink-gray-7">×{{ formatQty(ln.ilosc) }}</span>
               </div>
             </div>
-          </section>
+            <div v-else class="mb-2 text-sm text-ink-gray-5">Uzupełnij konfigurację, aby zobaczyć wycenę.</div>
 
-          <aside class="voff-quote">
-            <section class="voff-card voff-quote-card">
-              <h2>Wycena</h2>
-              <div v-if="summary.lines.length" class="voff-bom">
-                <div v-for="(ln, i) in summary.lines" :key="i" class="voff-bom-row">
-                  <span class="voff-bom-typ">{{ ln.typ }}</span>
-                  <span class="voff-bom-nazwa">{{ ln.nazwa }}</span>
-                  <span class="voff-bom-ilosc">×{{ formatQty(ln.ilosc) }}</span>
+            <template v-if="summary.lines.length">
+              <div class="rounded-lg border border-gray-200 bg-gray-50 p-2.5">
+                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
+                  <span>Suma netto</span><span>{{ plnFmt(summary.netto) }}</span>
                 </div>
-              </div>
-              <div v-else class="voff-hint voff-quote-empty">Uzupełnij konfigurację, aby zobaczyć wycenę.</div>
+                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
+                  <span>VAT ({{ summary.vat_rate }}%)</span><span>{{ plnFmt(summary.vat) }}</span>
+                </div>
+                <div class="mt-1 flex justify-between border-t border-gray-200 pt-1.5 text-base font-semibold tabular-nums text-ink-gray-9">
+                  <span>Suma brutto</span><span>{{ plnFmt(summary.brutto) }}</span>
+                </div>
 
-              <template v-if="summary.lines.length">
-                <div class="voff-summary">
-                  <div class="voff-summary-row"><span>Suma netto</span><span>{{ plnFmt(summary.netto) }}</span></div>
-                  <div class="voff-summary-row"><span>VAT ({{ summary.vat_rate }}%)</span><span>{{ plnFmt(summary.vat) }}</span></div>
-                  <div class="voff-summary-row voff-summary-total"><span>Suma brutto</span><span>{{ plnFmt(summary.brutto) }}</span></div>
-
-                  <div v-if="sel.typKlienta === 'indywidualny'" class="voff-summary-sub">
-                    <div class="voff-summary-row"><span>Dotacja Mój Prąd</span><span>− {{ plnFmt(summary.dotacja) }}</span></div>
-                    <div class="voff-summary-row"><span>Cena po dotacji</span><span>{{ plnFmt(summary.cena_po_dotacji) }}</span></div>
-                    <div class="voff-summary-row"><span>Ulga termo. ({{ sel.ulgaPct }}%)</span><span>− {{ plnFmt(summary.ulga) }}</span></div>
-                    <div class="voff-summary-row voff-summary-total"><span>Cena po uldze</span><span>{{ plnFmt(summary.cena_po_uldze) }}</span></div>
-                    <div class="voff-summary-row">
+                <template v-if="sel.typKlienta === 'indywidualny'">
+                  <div class="mt-1.5 border-t border-dashed border-gray-300 pt-1.5">
+                    <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
+                      <span>Dotacja Mój Prąd</span><span>− {{ plnFmt(summary.dotacja) }}</span>
+                    </div>
+                    <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
+                      <span>Cena po dotacji</span><span>{{ plnFmt(summary.cena_po_dotacji) }}</span>
+                    </div>
+                    <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
+                      <span>Ulga termo. ({{ sel.ulgaPct }}%)</span><span>− {{ plnFmt(summary.ulga) }}</span>
+                    </div>
+                    <div class="mt-1 flex justify-between border-t border-gray-200 pt-1.5 text-base font-semibold tabular-nums text-ink-gray-9">
+                      <span>Cena po uldze</span><span>{{ plnFmt(summary.cena_po_uldze) }}</span>
+                    </div>
+                    <div class="mt-0.5 flex justify-between py-0.5 text-xs tabular-nums text-ink-gray-5">
                       <span>Rata ({{ sel.okresLat }} lat)</span>
-                      <span>{{ plnFmt(summary.raty.brutto) }} / {{ plnFmt(summary.raty.po_dotacji) }} / {{ plnFmt(summary.raty.po_uldze) }} zł/mies.</span>
+                      <span>{{ plnFmt(summary.raty.brutto) }} / {{ plnFmt(summary.raty.po_dotacji) }} / {{ plnFmt(summary.raty.po_uldze) }} /mies.</span>
                     </div>
                   </div>
-                </div>
-              </template>
-
-              <button
-                class="voff-btn voff-btn-accent voff-gen"
-                :disabled="!canGenerate || generating"
-                @click="runGenerate"
-              >
-                {{ generating ? 'Generuję ofertę…' : 'Generuj ofertę' }}
-              </button>
-
-              <div v-if="summary.is_admin && summary.breakdown" class="voff-admin-panel">
-                <h3 class="voff-subhead voff-admin-title">Rozbicie kosztów (tylko administrator)</h3>
-                <div class="voff-summary-row"><span>Falownik</span><span>{{ plnFmt(summary.breakdown.k_falownik) }}</span></div>
-                <div class="voff-summary-row"><span>Bateria</span><span>{{ plnFmt(summary.breakdown.k_bateria) }}</span></div>
-                <div class="voff-summary-row"><span>Panele</span><span>{{ plnFmt(summary.breakdown.k_panele) }}</span></div>
-                <div class="voff-summary-row"><span>Konstrukcja</span><span>{{ plnFmt(summary.breakdown.k_konstrukcja) }}</span></div>
-                <div class="voff-summary-row"><span>Montaż PV</span><span>{{ plnFmt(summary.breakdown.k_montaz_pv) }}</span></div>
-                <div class="voff-summary-row"><span>Montaż magazynu</span><span>{{ plnFmt(summary.breakdown.k_montaz_mag) }}</span></div>
-                <div class="voff-summary-row"><span>Akcesoria</span><span>{{ plnFmt(summary.breakdown.k_akcesoria) }}</span></div>
-                <div class="voff-summary-row"><span>Kabel</span><span>{{ plnFmt(summary.breakdown.k_kabel) }}</span></div>
-                <div class="voff-summary-row"><span>Spółdzielnia</span><span>{{ plnFmt(summary.breakdown.k_spoldzielnia) }}</span></div>
-                <div class="voff-summary-row"><span>Sterownik</span><span>{{ plnFmt(summary.breakdown.k_sterownik) }}</span></div>
-                <div class="voff-summary-row voff-summary-total"><span>Koszt bazowy (net_base)</span><span>{{ plnFmt(summary.breakdown.net_base) }}</span></div>
-                <div class="voff-summary-row"><span>Marża ProEnergy</span><span>{{ plnFmt(summary.breakdown.marza_proenergy) }}</span></div>
-                <div class="voff-summary-row"><span>Marża SPS</span><span>{{ plnFmt(summary.breakdown.marza_sps) }}</span></div>
-                <div class="voff-summary-row"><span>Bonus liderki</span><span>{{ plnFmt(summary.breakdown.bonus_liderki) }}</span></div>
-                <div class="voff-summary-row"><span>Kilometrówka</span><span>{{ plnFmt(summary.breakdown.kilometrowka) }}</span></div>
+                </template>
               </div>
-            </section>
-          </aside>
+            </template>
+
+            <Button
+              class="mt-2 w-full"
+              variant="solid"
+              :disabled="!canGenerate || generating"
+              @click="runGenerate"
+            >
+              {{ generating ? 'Generuję ofertę…' : 'Generuj ofertę' }}
+            </Button>
+
+            <div v-if="summary.is_admin && summary.breakdown" class="mt-2.5 rounded-lg border border-dashed border-amber-300 bg-amber-50 p-2.5">
+              <div class="mb-1.5 text-xs font-semibold uppercase tracking-wider text-amber-700">Rozbicie kosztów (administrator)</div>
+              <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Falownik</span><span>{{ plnFmt(summary.breakdown.k_falownik) }}</span></div>
+              <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Bateria</span><span>{{ plnFmt(summary.breakdown.k_bateria) }}</span></div>
+              <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Panele</span><span>{{ plnFmt(summary.breakdown.k_panele) }}</span></div>
+              <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Konstrukcja</span><span>{{ plnFmt(summary.breakdown.k_konstrukcja) }}</span></div>
+              <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Montaż PV</span><span>{{ plnFmt(summary.breakdown.k_montaz_pv) }}</span></div>
+              <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Montaż magazynu</span><span>{{ plnFmt(summary.breakdown.k_montaz_mag) }}</span></div>
+              <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Akcesoria</span><span>{{ plnFmt(summary.breakdown.k_akcesoria) }}</span></div>
+              <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Kabel</span><span>{{ plnFmt(summary.breakdown.k_kabel) }}</span></div>
+              <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Spółdzielnia</span><span>{{ plnFmt(summary.breakdown.k_spoldzielnia) }}</span></div>
+              <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Sterownik</span><span>{{ plnFmt(summary.breakdown.k_sterownik) }}</span></div>
+              <div class="mt-1 flex justify-between border-t border-amber-200 pt-1 text-sm font-semibold tabular-nums text-ink-gray-9"><span>Koszt bazowy (net_base)</span><span>{{ plnFmt(summary.breakdown.net_base) }}</span></div>
+              <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Marża ProEnergy</span><span>{{ plnFmt(summary.breakdown.marza_proenergy) }}</span></div>
+              <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Marża SPS</span><span>{{ plnFmt(summary.breakdown.marza_sps) }}</span></div>
+              <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Bonus liderki</span><span>{{ plnFmt(summary.breakdown.bonus_liderki) }}</span></div>
+              <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Kilometrówka</span><span>{{ plnFmt(summary.breakdown.kilometrowka) }}</span></div>
+            </div>
+          </div>
         </div>
       </template>
 
-      <!-- Sukces -->
-      <section v-else class="voff-card">
-        <h2>Szansa utworzona</h2>
-        <p>{{ successSummary }}</p>
-        <a class="voff-btn voff-btn-primary" :href="dealHref" target="_blank" rel="noopener">Otwórz szansę w CRM</a>
-        <button class="voff-btn voff-btn-ghost" @click="resetFlow">Nowa oferta</button>
-      </section>
+      <div v-else class="py-4">
+        <div class="mb-2 text-base font-semibold text-ink-gray-9">Szansa utworzona</div>
+        <p class="mb-3 text-sm text-ink-gray-7">{{ successSummary }}</p>
+        <div class="flex gap-2">
+          <a class="inline-flex items-center rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800" :href="dealHref" target="_blank" rel="noopener">Otwórz szansę w CRM</a>
+          <Button variant="ghost" @click="resetFlow">Nowa oferta</Button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, watch, nextTick } from 'vue'
-import { call } from 'frappe-ui'
+import { call, Button } from 'frappe-ui'
 
 const props = defineProps({
   contact: { type: Object, default: () => ({}) },
@@ -625,264 +606,34 @@ function extractErrorMessage(err) {
 </script>
 
 <style scoped>
-.voff-wrap {
-  max-width: 1180px;
+.kalk-input,
+.kalk-select {
+  height: 28px;
   width: 100%;
-  margin: 0 auto;
-  padding: 12px 12px 24px;
-}
-.voff-card {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 14px 16px;
-  margin-bottom: 10px;
-  box-shadow: 0 1px 2px rgba(18, 37, 102, 0.04);
-}
-.voff-card h2 {
-  color: #122566;
+  border-radius: 0.25rem;
+  border: 1px solid #e5e5e5;
+  background: #f5f5f5;
+  padding: 0 8px;
   font-size: 14px;
-  font-weight: 650;
-  margin: 0 0 8px 0;
-}
-.voff-subhead {
-  color: #374151;
-  font-size: 11px;
-  font-weight: 650;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin: 0 0 8px 0;
-}
-
-/* Rodzaj instalacji + Typ klienta, side by side */
-.voff-top-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px 16px;
-}
-
-/* Segmented button rows (Rodzaj instalacji / Typ klienta / Producent) —
-   uniform size everywhere they appear. */
-.voff-variants {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.voff-variant {
-  flex: 0 0 auto;
-  min-width: 120px;
-  padding: 7px 12px;
-  border: 1px solid #d8dce3;
-  border-radius: 6px;
-  background: #ffffff;
-  color: #3f4757;
-  font-size: 12.5px;
-  font-weight: 600;
+  color: #383838;
+  outline: none;
+  transition: background-color 0.15s, border-color 0.15s;
   cursor: pointer;
 }
-.voff-variant-active {
-  border-color: #122566;
-  background: #122566;
-  color: #ffffff;
+.kalk-input { cursor: text; }
+.kalk-input:hover,
+.kalk-select:hover {
+  background: #ededed;
 }
-
-/* Zużycie energii card */
-.voff-energy-field {
-  max-width: 320px;
-}
-.voff-energy-field input {
-  font-size: 14px;
-  padding: 8px 10px;
-}
-.voff-suggestion {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px 16px;
-  margin-top: 4px;
-  padding-top: 8px;
-  border-top: 1px solid #e5e7eb;
-}
-.voff-suggestion-text {
-  font-size: 12px;
-  color: #374151;
-}
-
-/* Two-pane split: Konfiguracja (left) / sticky Wycena (right) */
-.voff-split {
-  display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(320px, 1fr);
-  gap: 16px;
-  align-items: start;
+.kalk-input:focus,
+.kalk-select:focus {
+  border-color: #a3a3a3;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 @media (max-width: 880px) {
-  .voff-split { grid-template-columns: 1fr; }
-  .voff-top-row { grid-template-columns: 1fr; }
-  .voff-quote { position: static; }
-}
-
-.voff-grid2 {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 12px;
-}
-@media (max-width: 560px) {
-  .voff-grid2 { grid-template-columns: 1fr; }
-}
-.voff-field {
-  margin-bottom: 8px;
-  display: flex;
-  flex-direction: column;
-}
-.voff-field label {
-  font-size: 11.5px;
-  color: #3f4757;
-  margin-bottom: 3px;
-}
-.voff-field input,
-.voff-field select {
-  padding: 6px 8px;
-  border: 1px solid #d8dce3;
-  border-radius: 6px;
-  font-size: 13px;
-  width: 100%;
-  box-sizing: border-box;
-  background: #ffffff;
-  color: #1a2233;
-}
-.voff-grp {
-  border-top: 1px solid #e5e7eb;
-  margin-top: 4px;
-  padding-top: 8px;
-}
-
-.voff-btn {
-  display: inline-block;
-  padding: 8px 14px;
-  border-radius: 6px;
-  border: none;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  margin: 2px 4px 2px 0;
-  text-decoration: none;
-  text-align: center;
-}
-.voff-btn-primary { background: #122566; color: #ffffff; }
-.voff-btn-accent { background: #c0ee2e; color: #122566; }
-.voff-btn-ghost { background: #f3f4f6; color: #374151; }
-.voff-btn-disabled,
-.voff-btn:disabled {
-  background: #e5e7eb;
-  color: #9ca3af;
-  cursor: not-allowed;
-}
-.voff-hint {
-  font-size: 12px;
-  color: #6b7280;
-  margin-top: 4px;
-}
-
-/* Sticky Wycena panel — warm quote totals per the approved mockup */
-.voff-quote {
-  position: sticky;
-  top: 16px;
-}
-.voff-quote-card {
-  padding: 0;
-  overflow: hidden;
-}
-.voff-quote-card h2 {
-  padding: 10px 14px 0;
-}
-.voff-quote-empty {
-  padding: 0 14px 14px;
-}
-.voff-bom {
-  padding: 4px 14px 8px;
-}
-.voff-bom-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 0;
-  font-size: 12px;
-  border-top: 1px solid #f0f1f4;
-}
-.voff-bom-row:first-child { border-top: none; }
-.voff-bom-typ { color: #7a8394; min-width: 100px; }
-.voff-bom-nazwa { color: #1a2233; flex: 1; }
-.voff-bom-ilosc { color: #3f4757; font-variant-numeric: tabular-nums; }
-
-.voff-summary {
-  background: #fbf5e6;
-  border-top: 1px solid #eadfc2;
-  padding: 10px 14px;
-}
-.voff-summary-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12.5px;
-  color: #3f4757;
-  padding: 2px 0;
-  font-variant-numeric: tabular-nums;
-}
-.voff-summary-total {
-  font-size: 15px;
-  font-weight: 700;
-  color: #122566;
-  border-top: 1px solid #eadfc2;
-  margin-top: 4px;
-  padding-top: 6px;
-}
-.voff-summary-sub {
-  border-top: 1px dashed #eadfc2;
-  margin-top: 6px;
-  padding-top: 6px;
-}
-
-.voff-gen {
-  display: block;
-  width: calc(100% - 28px);
-  margin: 2px 14px 14px;
-  padding: 9px;
-}
-.voff-gen:hover:not(:disabled) { background: #a9d626; }
-
-.voff-admin-panel {
-  border: 1px dashed #b45309;
-  background: #fffbeb;
-  border-radius: 8px;
-  padding: 8px 12px;
-  margin: 0 14px 14px;
-}
-.voff-admin-title {
-  color: #92400e;
-  margin-top: 0;
-}
-
-.voff-banner {
-  padding: 8px 12px;
-  border-radius: 8px;
-  margin-bottom: 10px;
-  font-size: 13px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.voff-banner-error {
-  background: #fef2f2;
-  color: #991b1b;
-  border: 1px solid #fecaca;
-}
-.voff-banner-close {
-  background: none;
-  border: none;
-  color: inherit;
-  cursor: pointer;
-  font-weight: bold;
-  font-size: 16px;
-  line-height: 1;
+  .grid[style*="1.55fr"] { grid-template-columns: 1fr !important; }
+  .grid-cols-\[1fr_auto_1fr\] { grid-template-columns: 1fr !important; }
+  .sticky { position: static; }
 }
 </style>
