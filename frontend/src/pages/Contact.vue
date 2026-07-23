@@ -12,13 +12,61 @@
         v-if="contact._actions?.length"
         :actions="contact._actions"
       />
+      <Button
+        :label="__('Dane klienta')"
+        iconLeft="sidebar"
+        @click="toggleDetails"
+      />
     </template>
   </LayoutHeader>
   <div v-if="contact.doc" ref="parentRef" class="flex h-full">
+    <Tabs
+      v-model="tabIndex"
+      as="div"
+      :tabs="tabs"
+      class="flex flex-1 overflow-hidden flex-col [&_[role='tab']]:px-0 [&_[role='tab']]:shrink-0 [&_[role='tablist']]:px-5 [&_[role='tablist']::-webkit-scrollbar]:h-0 [&_[role='tablist']]:min-h-[45px] [&_[role='tablist']]:gap-7.5 [&_[role='tabpanel']:not([hidden])]:flex [&_[role='tabpanel']:not([hidden])]:grow"
+    >
+      <template #tab-item="{ tab, selected }">
+        <button
+          class="group flex items-center gap-2 border-b border-transparent py-2.5 text-base text-ink-gray-5 duration-300 ease-in-out hover:text-ink-gray-9"
+          :class="{ 'text-ink-gray-9': selected }"
+        >
+          <component :is="tab.icon" v-if="tab.icon" class="h-5" />
+          {{ __(tab.label) }}
+          <Badge
+            v-if="tab.count !== undefined"
+            class="group-hover:bg-surface-gray-10"
+            :class="[selected ? 'bg-surface-gray-10' : 'bg-gray-600']"
+            variant="solid"
+            theme="gray"
+            size="sm"
+          >
+            {{ tab.count }}
+          </Badge>
+        </button>
+      </template>
+      <template #tab-panel="{ tab }">
+        <template v-if="tab.label === 'Deals'">
+          <DealsListView
+            v-if="rows.length"
+            class="mt-4"
+            :rows="rows"
+            :columns="columns"
+            :options="{ selectable: false, showTooltip: false }"
+          />
+          <EmptyState v-else :icon="tab.icon" name="Deals" />
+        </template>
+        <KalkulatorTab
+          v-else-if="tab.label === 'Kalkulator'"
+          :contact="contact.doc"
+        />
+      </template>
+    </Tabs>
     <Resizer
-      v-if="contact.doc"
+      v-if="showDetails"
       :parent="$refs.parentRef"
-      class="flex h-full flex-col overflow-hidden border-r"
+      side="right"
+      class="flex h-full flex-col overflow-hidden border-l"
     >
       <div class="border-b">
         <FileUploader
@@ -119,48 +167,6 @@
         />
       </div>
     </Resizer>
-    <Tabs
-      v-model="tabIndex"
-      as="div"
-      :tabs="tabs"
-      class="flex flex-1 overflow-hidden flex-col [&_[role='tab']]:px-0 [&_[role='tab']]:shrink-0 [&_[role='tablist']]:px-5 [&_[role='tablist']::-webkit-scrollbar]:h-0 [&_[role='tablist']]:min-h-[45px] [&_[role='tablist']]:gap-7.5 [&_[role='tabpanel']:not([hidden])]:flex [&_[role='tabpanel']:not([hidden])]:grow"
-    >
-      <template #tab-item="{ tab, selected }">
-        <button
-          class="group flex items-center gap-2 border-b border-transparent py-2.5 text-base text-ink-gray-5 duration-300 ease-in-out hover:text-ink-gray-9"
-          :class="{ 'text-ink-gray-9': selected }"
-        >
-          <component :is="tab.icon" v-if="tab.icon" class="h-5" />
-          {{ __(tab.label) }}
-          <Badge
-            v-if="tab.count !== undefined"
-            class="group-hover:bg-surface-gray-10"
-            :class="[selected ? 'bg-surface-gray-10' : 'bg-gray-600']"
-            variant="solid"
-            theme="gray"
-            size="sm"
-          >
-            {{ tab.count }}
-          </Badge>
-        </button>
-      </template>
-      <template #tab-panel="{ tab }">
-        <template v-if="tab.label === 'Deals'">
-          <DealsListView
-            v-if="rows.length"
-            class="mt-4"
-            :rows="rows"
-            :columns="columns"
-            :options="{ selectable: false, showTooltip: false }"
-          />
-          <EmptyState v-else :icon="tab.icon" name="Deals" />
-        </template>
-        <KalkulatorTab
-          v-else-if="tab.label === 'Kalkulator'"
-          :contact="contact.doc"
-        />
-      </template>
-    </Tabs>
   </div>
   <ErrorPage
     v-else-if="errorTitle"
@@ -286,6 +292,28 @@ usePageMeta(() => {
   }
 })
 const showDeleteLinkedDocModal = ref(false)
+
+const CONTACT_DETAILS_STORAGE_KEY = 'crm-contact-details-open'
+
+function getStoredShowDetails() {
+  try {
+    let stored = localStorage.getItem(CONTACT_DETAILS_STORAGE_KEY)
+    return stored === null ? true : stored === 'true'
+  } catch (e) {
+    return true
+  }
+}
+
+const showDetails = ref(getStoredShowDetails())
+
+function toggleDetails() {
+  showDetails.value = !showDetails.value
+  try {
+    localStorage.setItem(CONTACT_DETAILS_STORAGE_KEY, showDetails.value)
+  } catch (e) {
+    // ignore storage errors (e.g. private browsing / disabled storage)
+  }
+}
 
 async function deleteContact() {
   showDeleteLinkedDocModal.value = true
