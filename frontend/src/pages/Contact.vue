@@ -19,7 +19,7 @@
       />
     </template>
   </LayoutHeader>
-  <div v-if="contact.doc" ref="parentRef" class="flex h-full">
+  <div v-if="contact.doc" ref="parentRef" class="flex h-full relative">
     <Tabs
       v-model="tabIndex"
       as="div"
@@ -62,12 +62,30 @@
         />
       </template>
     </Tabs>
+    <!-- Floating expand button (visible when panel is collapsed) -->
+    <button
+      v-if="!showDetails"
+      class="absolute right-0 top-1/2 -translate-y-1/2 z-20 flex h-[26px] w-[26px] -translate-x-1/2 cursor-pointer items-center justify-center rounded-full border border-gray-300 bg-white shadow-sm hover:bg-gray-50"
+      @click="toggleDetails"
+      :title="__('Pokaż dane klienta')"
+    >
+      <svg viewBox="0 0 16 16" class="h-3.5 w-3.5 text-gray-600"><path d="M10 3l-5 5 5 5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
     <Resizer
       v-if="showDetails"
       :parent="$refs.parentRef"
       side="right"
-      class="flex h-full flex-col overflow-hidden border-l"
+      class="flex h-full flex-col overflow-visible border-l"
     >
+      <div class="relative flex h-full flex-col overflow-hidden">
+        <!-- Floating collapse button on the panel's left border -->
+        <button
+          class="absolute -left-[13px] top-1/2 z-20 flex h-[26px] w-[26px] -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-gray-300 bg-white shadow-sm hover:bg-gray-50"
+          @click="toggleDetails"
+          :title="__('Ukryj dane klienta')"
+        >
+          <svg viewBox="0 0 16 16" class="h-3.5 w-3.5 text-gray-600"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
       <div class="border-b">
         <FileUploader
           :validateFile="validateIsImageFile"
@@ -165,6 +183,7 @@
           :docname="contact.doc.name"
           @reload="sections.reload"
         />
+      </div>
       </div>
     </Resizer>
   </div>
