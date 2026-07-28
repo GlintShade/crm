@@ -4,18 +4,19 @@
       <template #left-header>
         <ViewBreadcrumbs routeName="Kalkulator" />
       </template>
-      <template #right-header>
+    </LayoutHeader>
+
+    <KalkulatorTab :contact="contactDoc">
+      <template #client-picker>
         <Link
           doctype="Contact"
           v-model="selectedContact"
-          class="w-56"
+          class="w-full"
           variant="outline"
           :placeholder="__('Wybierz klienta…')"
         />
       </template>
-    </LayoutHeader>
-
-    <KalkulatorTab :contact="contactDoc" />
+    </KalkulatorTab>
   </div>
 </template>
 

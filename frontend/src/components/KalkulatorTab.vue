@@ -12,21 +12,22 @@
       </div>
 
       <template v-if="flow !== 'done'">
-        <div class="grid grid-cols-[1fr_auto_1fr] items-start gap-x-6 gap-y-0 pb-3">
-          <div class="flex flex-col gap-2.5">
-            <div>
-              <div class="mb-1 text-sm font-medium text-ink-gray-5">Rodzaj instalacji</div>
-              <div class="flex flex-wrap gap-1.5">
-                <button
-                  v-for="v in VARIANTS" :key="v"
-                  class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
-                  :class="sel.variant === v
-                    ? 'border-gray-900 bg-gray-900 text-white'
-                    : 'border-transparent bg-gray-100 text-gray-600 hover:bg-gray-200'"
-                  @click="sel.variant = v"
-                >{{ v }}</button>
-              </div>
+        <div class="pb-3">
+          <div>
+            <div class="mb-1 text-sm font-medium text-ink-gray-5">Rodzaj instalacji</div>
+            <div class="flex flex-wrap gap-1.5">
+              <button
+                v-for="v in VARIANTS" :key="v"
+                class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
+                :class="sel.variant === v
+                  ? 'border-gray-900 bg-gray-900 text-white'
+                  : 'border-transparent bg-gray-100 text-gray-600 hover:bg-gray-200'"
+                @click="sel.variant = v"
+              >{{ v }}</button>
             </div>
+          </div>
+
+          <div class="mt-2.5 grid grid-cols-2 gap-x-6 gap-y-2.5 kalk-row2">
             <div>
               <div class="mb-1 text-sm font-medium text-ink-gray-5">Typ klienta</div>
               <div class="flex flex-wrap gap-1.5">
@@ -40,35 +41,18 @@
                 >{{ opt.label }}</button>
               </div>
             </div>
-          </div>
 
-          <div class="min-w-[180px] max-w-[240px]">
-            <div class="mb-1 text-sm font-medium text-ink-gray-5">Roczne zużycie (kWh)</div>
-            <input
-              v-model.number="sel.consumption" type="number" min="0" step="1"
-              class="h-7 w-full rounded border border-gray-200 bg-gray-100 px-2 text-base text-gray-800 outline-none transition-colors hover:bg-gray-200 focus:border-gray-400 focus:bg-white focus:shadow-sm"
-            />
-            <div v-if="sel.consumption > 0" class="mt-1 text-xs leading-relaxed text-gray-500">
-              Sug. moc: <span class="font-medium text-gray-700">{{ suggestedKwp }} kW</span>
-              · magazyn: <span class="font-medium text-gray-700">{{ suggestedStorage }} kWh</span>
-              <button type="button" class="ml-1 font-medium text-blue-600 hover:underline" @click="applyFromConsumption">Ustaw</button>
-            </div>
-          </div>
-
-          <div class="flex flex-col gap-2">
-            <div>
-              <div class="mb-0.5 text-sm text-ink-gray-5">Operator energetyczny</div>
-              <select v-model="sel.operator" class="kalk-select">
-                <option value="">—</option>
-                <option v-for="c in operatorOptions" :key="c.name" :value="c.nazwa">{{ c.nazwa }}</option>
-              </select>
-            </div>
-            <div>
-              <div class="mb-0.5 text-sm text-ink-gray-5">Kierunek montażu</div>
-              <select v-model="sel.kierunek" class="kalk-select">
-                <option value="">—</option>
-                <option v-for="c in kierunekOptions" :key="c.name" :value="c.nazwa">{{ c.nazwa }}</option>
-              </select>
+            <div class="max-w-[240px]">
+              <div class="mb-1 text-sm font-medium text-ink-gray-5">Roczne zużycie (kWh)</div>
+              <input
+                v-model.number="sel.consumption" type="number" min="0" step="1"
+                class="h-7 w-full rounded border border-gray-200 bg-gray-100 px-2 text-base text-gray-800 outline-none transition-colors hover:bg-gray-200 focus:border-gray-400 focus:bg-white focus:shadow-sm"
+              />
+              <div v-if="sel.consumption > 0" class="mt-1 text-xs leading-relaxed text-gray-500">
+                Sug. moc: <span class="font-medium text-gray-700">{{ suggestedKwp }} kW</span>
+                · magazyn: <span class="font-medium text-gray-700">{{ suggestedStorage }} kWh</span>
+                <button type="button" class="ml-1 font-medium text-blue-600 hover:underline" @click="applyFromConsumption">Ustaw</button>
+              </div>
             </div>
           </div>
         </div>
@@ -126,7 +110,11 @@
                   </select>
                 </div>
               </template>
+            </div>
 
+            <div class="my-2.5 h-px bg-gray-200"></div>
+
+            <div class="grid grid-cols-2 gap-x-3 gap-y-2">
               <div>
                 <div class="mb-0.5 text-sm text-ink-gray-5">Dodatkowy kabel (m)</div>
                 <input v-model.number="sel.kabelM" type="number" min="0" step="1" class="kalk-input" />
@@ -139,6 +127,25 @@
                 </select>
               </div>
 
+              <div>
+                <div class="mb-0.5 text-sm text-ink-gray-5">Operator energetyczny</div>
+                <select v-model="sel.operator" class="kalk-select">
+                  <option value="">—</option>
+                  <option v-for="c in operatorOptions" :key="c.name" :value="c.nazwa">{{ c.nazwa }}</option>
+                </select>
+              </div>
+              <div>
+                <div class="mb-0.5 text-sm text-ink-gray-5">Kierunek montażu</div>
+                <select v-model="sel.kierunek" class="kalk-select">
+                  <option value="">—</option>
+                  <option v-for="c in kierunekOptions" :key="c.name" :value="c.nazwa">{{ c.nazwa }}</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="my-2.5 h-px bg-gray-200"></div>
+
+            <div class="grid grid-cols-2 gap-x-3 gap-y-2">
               <div>
                 <div class="mb-0.5 text-sm text-ink-gray-5">Ulga termomodernizacyjna</div>
                 <select v-model.number="sel.ulgaPct" class="kalk-select">
@@ -157,8 +164,21 @@
                 <div class="mb-0.5 text-sm text-ink-gray-5">Wpłata własna (PLN)</div>
                 <input v-model.number="sel.wplataWlasna" type="number" min="0" step="1" class="kalk-input" />
               </div>
-              <div>
-                <div class="mb-0.5 text-sm text-ink-gray-5">Narzut (PLN)</div>
+            </div>
+          </div>
+
+          <div class="sticky top-3">
+            <div class="mb-2.5">
+              <button
+                type="button"
+                class="flex w-full items-center justify-between rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-sm font-medium text-ink-gray-7 transition-colors hover:bg-gray-100"
+                @click="showNarzut = !showNarzut"
+              >
+                <span>{{ showNarzut ? 'Ukryj ustawienia niestandardowe' : 'Pokaż ustawienia niestandardowe' }}</span>
+                <FeatherIcon :name="showNarzut ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 text-ink-gray-5" />
+              </button>
+              <div v-if="showNarzut" class="mt-1.5">
+                <div class="mb-0.5 text-sm text-ink-gray-5">Wysokość narzutu</div>
                 <input
                   v-model.number="sel.narzut" type="number" min="0" max="7000" step="1"
                   class="kalk-input"
@@ -167,9 +187,7 @@
                 <div v-if="!narzutValid" class="mt-0.5 text-xs text-red-600">Narzut musi być w zakresie 0–7000 zł.</div>
               </div>
             </div>
-          </div>
 
-          <div class="sticky top-3">
             <div class="mb-2 text-base font-semibold text-ink-gray-9">Wycena</div>
 
             <div v-if="summary.lines.length" class="mb-2">
@@ -219,6 +237,11 @@
               </div>
             </template>
 
+            <div v-if="$slots['client-picker']" class="mb-2">
+              <div class="mb-0.5 text-sm text-ink-gray-5">Klient</div>
+              <slot name="client-picker" />
+            </div>
+
             <Button
               class="mt-2 w-full"
               variant="solid"
@@ -228,7 +251,7 @@
               {{ generating ? 'Generuję ofertę…' : 'Generuj ofertę' }}
             </Button>
 
-            <div v-if="!c.name" class="mt-1 text-center text-xs text-ink-gray-5">
+            <div v-if="!c.name" class="mt-1 text-center text-xs text-red-600">
               Wybierz klienta, aby wygenerować ofertę.
             </div>
 
@@ -268,7 +291,7 @@
 
 <script setup>
 import { ref, reactive, computed, watch, nextTick } from 'vue'
-import { call, Button } from 'frappe-ui'
+import { call, Button, FeatherIcon } from 'frappe-ui'
 
 const props = defineProps({
   contact: { type: Object, default: () => ({}) },
@@ -458,6 +481,9 @@ const summary = reactive({
 const successSummary = ref('')
 const dealHref = ref('#')
 
+// --- Narzut disclosure (collapsed by default; hidden while client is watching) ---
+const showNarzut = ref(false)
+
 // --- Completeness gate (mirrors the server-side validation) -----------------
 const isComplete = computed(() => {
   if (!sel.typKlienta || !sel.variant || !sel.producent || !sel.falownik) return false
@@ -637,7 +663,7 @@ function extractErrorMessage(err) {
 }
 @media (max-width: 880px) {
   .grid[style*="1.55fr"] { grid-template-columns: 1fr !important; }
-  .grid-cols-\[1fr_auto_1fr\] { grid-template-columns: 1fr !important; }
+  .kalk-row2 { grid-template-columns: 1fr !important; }
   .sticky { position: static; }
 }
 </style>
