@@ -15,9 +15,9 @@
         <div class="kalk-split grid items-start gap-x-5" style="grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr)">
 
           <div>
-            <div class="pb-3">
+            <div class="pb-2.5">
               <div>
-                <div class="mb-1 text-sm font-medium text-ink-gray-5">Rodzaj instalacji</div>
+                <div class="mb-0.5 text-sm text-ink-gray-5">Rodzaj instalacji</div>
                 <div class="flex flex-wrap gap-1.5">
                   <button
                     v-for="v in VARIANTS" :key="v"
@@ -30,9 +30,9 @@
                 </div>
               </div>
 
-              <div class="mt-2.5 grid grid-cols-2 gap-x-6 gap-y-2.5 kalk-row2">
+              <div class="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 kalk-row2">
                 <div>
-                  <div class="mb-1 text-sm font-medium text-ink-gray-5">Typ klienta</div>
+                  <div class="mb-0.5 text-sm text-ink-gray-5">Typ klienta</div>
                   <div class="flex flex-wrap gap-1.5">
                     <button
                       v-for="opt in TYP_KLIENTA_OPTIONS" :key="opt.value"
@@ -45,11 +45,11 @@
                   </div>
                 </div>
 
-                <div class="max-w-[240px]">
-                  <div class="mb-1 text-sm font-medium text-ink-gray-5">Roczne zużycie (kWh)</div>
+                <div>
+                  <div class="mb-0.5 text-sm text-ink-gray-5">Roczne zużycie (kWh)</div>
                   <input
                     v-model.number="sel.consumption" type="number" min="0" step="1"
-                    class="h-7 w-full rounded border border-gray-200 bg-gray-100 px-2 text-base text-gray-800 outline-none transition-colors hover:bg-gray-200 focus:border-gray-400 focus:bg-white focus:shadow-sm"
+                    class="kalk-input"
                   />
                   <div v-if="sel.consumption > 0" class="mt-1 text-xs leading-relaxed text-gray-500">
                     Sug. moc: <span class="font-medium text-gray-700">{{ suggestedKwp }} kW</span>
@@ -62,7 +62,7 @@
 
             <div class="h-px bg-gray-200"></div>
 
-            <div class="mt-3">
+            <div class="mt-2.5">
               <div class="mb-2 text-base font-semibold text-ink-gray-9">Konfiguracja</div>
 
               <div class="mb-2">
