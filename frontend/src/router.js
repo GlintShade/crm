@@ -37,6 +37,11 @@ const routes = [
     component: () => import('@/pages/Dashboard.vue'),
   },
   {
+    path: '/kalkulator',
+    name: 'Kalkulator',
+    component: () => import('@/pages/Kalkulator.vue'),
+  },
+  {
     alias: '/leads',
     path: '/leads/view/:viewType?',
     name: 'Leads',

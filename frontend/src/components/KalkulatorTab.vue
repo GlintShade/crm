@@ -228,6 +228,10 @@
               {{ generating ? 'Generuję ofertę…' : 'Generuj ofertę' }}
             </Button>
 
+            <div v-if="!c.name" class="mt-1 text-center text-xs text-ink-gray-5">
+              Wybierz klienta, aby wygenerować ofertę.
+            </div>
+
             <div v-if="summary.is_admin && summary.breakdown" class="mt-2.5 rounded-lg border border-dashed border-amber-300 bg-amber-50 p-2.5">
               <div class="mb-1.5 text-xs font-semibold uppercase tracking-wider text-amber-700">Rozbicie kosztów (administrator)</div>
               <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Falownik</span><span>{{ plnFmt(summary.breakdown.k_falownik) }}</span></div>
@@ -294,15 +298,15 @@ const mocOptions = (() => {
 })()
 
 // --- Prefill client data from the current contact --------------------------
-const c = props.contact || {}
+const c = computed(() => props.contact || {})
 function composeAddress() {
-  const parts = [c.custom_ulica, c.custom_nr_domu].filter(Boolean).join(' ').trim()
-  return c.custom_nr_mieszkania ? parts + '/' + c.custom_nr_mieszkania : parts
+  const parts = [c.value.custom_ulica, c.value.custom_nr_domu].filter(Boolean).join(' ').trim()
+  return c.value.custom_nr_mieszkania ? parts + '/' + c.value.custom_nr_mieszkania : parts
 }
-const voivodeshipPrefill = (() => {
-  const w = (c.custom_wojewodztwo || '').toLowerCase().trim()
+const voivodeshipPrefill = computed(() => {
+  const w = (c.value.custom_wojewodztwo || '').toLowerCase().trim()
   return VOIVODESHIPS.indexOf(w) !== -1 ? w : ''
-})()
+})
 
 // --- Selections --------------------------------------------------------------
 const sel = reactive({
@@ -467,7 +471,7 @@ const narzutValid = computed(() => {
   return !isNaN(n) && n >= 0 && n <= 7000
 })
 
-const canGenerate = computed(() => isComplete.value && !!c.name && narzutValid.value)
+const canGenerate = computed(() => isComplete.value && !!c.value.name && narzutValid.value)
 
 function buildCalcPayload() {
   return {
@@ -545,15 +549,15 @@ async function runGenerate() {
   try {
     const result = await call('volteo_quote_generate', {
       ...buildCalcPayload(),
-      contact: c.name || '',
-      first_name: c.first_name || '',
-      last_name: c.last_name || '',
-      phone: c.mobile_no || '',
-      email: c.email_id || '',
+      contact: c.value.name || '',
+      first_name: c.value.first_name || '',
+      last_name: c.value.last_name || '',
+      phone: c.value.mobile_no || '',
+      email: c.value.email_id || '',
       install_address: composeAddress(),
-      install_city: c.custom_miasto || '',
-      install_postal_code: c.custom_kod_pocztowy || '',
-      voivodeship: voivodeshipPrefill,
+      install_city: c.value.custom_miasto || '',
+      install_postal_code: c.value.custom_kod_pocztowy || '',
+      voivodeship: voivodeshipPrefill.value,
       operator: sel.operator,
       kierunek: sel.kierunek,
       annual_consumption_kwh: sel.consumption || 0,
