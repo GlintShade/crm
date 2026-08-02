@@ -1,8 +1,13 @@
 import base64
 import json
+import time
 
 import frappe
 import requests
+
+CONNECT_TIMEOUT = 10
+READ_TIMEOUT = 30
+UPLOAD_READ_TIMEOUT = 120
 
 
 class AutentiClient:
@@ -11,6 +16,11 @@ class AutentiClient:
 	PRODUCTION_URL = "https://api.autenti.com/api/v2"
 	SANDBOX_URL = "https://api.accept.autenti.net/api/v2"
 	USER_AGENT = "VolteoCRM/1.0 (Frappe; +https://volteo.pl)"
+	DEFAULT_TIMEOUT = (CONNECT_TIMEOUT, READ_TIMEOUT)
+	UPLOAD_TIMEOUT = (CONNECT_TIMEOUT, UPLOAD_READ_TIMEOUT)
+
+	TOKEN_FALLBACK_EXPIRY = 3600
+	TOKEN_EXPIRY_MARGIN = 60
 
 	def __init__(self):
 		"""Read credentials from Volteo Autenti Settings doctype."""
@@ -24,10 +34,11 @@ class AutentiClient:
 		self.username = settings.username
 		self.password = settings.get_password("password")
 		self._token = None
+		self._token_expires_at = 0.0
 
 	def _get_token(self):
 		"""OAuth2 password grant — get bearer token."""
-		if self._token:
+		if self._token and time.monotonic() < self._token_expires_at:
 			return self._token
 		resp = requests.post(
 			f"{self.base_url}/auth/token",
@@ -39,25 +50,34 @@ class AutentiClient:
 				"password": self.password,
 			},
 			headers={"Content-Type": "application/x-www-form-urlencoded", "User-Agent": self.USER_AGENT},
+			timeout=self.DEFAULT_TIMEOUT,
 		)
 		resp.raise_for_status()
-		self._token = resp.json()["access_token"]
+		token_data = resp.json()
+		if not isinstance(token_data, dict) or "access_token" not in token_data:
+			frappe.throw("Autenti token request failed: expected an access_token in the response")
+		self._token = token_data["access_token"]
+		expires_in = token_data.get("expires_in", self.TOKEN_FALLBACK_EXPIRY)
+		self._token_expires_at = time.monotonic() + expires_in - self.TOKEN_EXPIRY_MARGIN
 		return self._token
 
 	def _headers(self):
 		return {"Authorization": f"Bearer {self._get_token()}", "User-Agent": self.USER_AGENT}
 
-	def _request(self, method, path, **kwargs):
+	def _request(self, method, path, timeout=DEFAULT_TIMEOUT, **kwargs):
 		"""Make an authenticated API request, raising on non-2xx."""
 		url = f"{self.base_url}{path}"
-		resp = requests.request(method, url, headers=self._headers(), **kwargs)
+		resp = requests.request(method, url, headers=self._headers(), timeout=timeout, **kwargs)
 		resp.raise_for_status()
 		return resp
 
 	def create_document_process(self, title: str) -> str:
 		"""Create a new document process and return its id."""
 		resp = self._request("POST", "/document-processes", json={"title": title})
-		return resp.json()["id"]
+		response_data = resp.json()
+		if not isinstance(response_data, dict) or "id" not in response_data:
+			frappe.throw("Autenti create_document_process failed: expected an id in the response")
+		return response_data["id"]
 
 	def add_party(
 		self,
@@ -80,7 +100,9 @@ class AutentiClient:
 				{
 					"constrainedActions": ["ACTION:SIGNATURE_APPLICATION"],
 					"classifiers": ["CONSTRAINT-UNIQUE_TYPE:SIGNATURE_TYPE"],
-					"attributes": {"requiredClassifiers": [f"SIGNATURE_PROVIDER-SIGNATURE_TYPE:{signature_type}"]},
+					"attributes": {
+						"requiredClassifiers": [f"SIGNATURE_PROVIDER-SIGNATURE_TYPE:{signature_type}"]
+					},
 				}
 			],
 		}
@@ -91,12 +113,14 @@ class AutentiClient:
 		files = {
 			"fileMeta": (
 				None,
-				json.dumps({"fileName": filename, "filePurpose": "SOURCE_FILE", "mimeType": "application/pdf"}),
+				json.dumps(
+					{"fileName": filename, "filePurpose": "SOURCE_FILE", "mimeType": "application/pdf"}
+				),
 				"application/json",
 			),
 			"file": (filename, pdf_bytes, "application/pdf"),
 		}
-		self._request("POST", f"/document-processes/{doc_id}/files", files=files)
+		self._request("POST", f"/document-processes/{doc_id}/files", files=files, timeout=self.UPLOAD_TIMEOUT)
 
 	def send(self, doc_id: str) -> None:
 		"""Send the document process to its parties."""
@@ -104,7 +128,11 @@ class AutentiClient:
 			json.dumps({"classifiers": ["EVENT_CLASSIFIER-UNIQUE_TYPE:DOCUMENT_SENT"]}).encode("utf-8")
 		).decode("ascii")
 		headers = {**self._headers(), "X-ASSERTION": assertion}
-		resp = requests.post(f"{self.base_url}/document-processes/{doc_id}/actions", headers=headers)
+		resp = requests.post(
+			f"{self.base_url}/document-processes/{doc_id}/actions",
+			headers=headers,
+			timeout=self.DEFAULT_TIMEOUT,
+		)
 		resp.raise_for_status()
 
 	def get_status(self, doc_id: str) -> dict:
@@ -119,6 +147,6 @@ class AutentiClient:
 
 	def download_file(self, file_url: str) -> bytes:
 		"""Download a file from its absolute URL."""
-		resp = requests.get(file_url, headers=self._headers())
+		resp = requests.get(file_url, headers=self._headers(), timeout=self.DEFAULT_TIMEOUT)
 		resp.raise_for_status()
 		return resp.content
