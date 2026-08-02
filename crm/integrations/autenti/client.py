@@ -1,6 +1,7 @@
 import base64
 import json
 import time
+import urllib.parse
 
 import frappe
 import requests
@@ -73,7 +74,7 @@ class AutentiClient:
 
 	def create_document_process(self, title: str) -> str:
 		"""Create a new document process and return its id."""
-		resp = self._request("POST", "/document-processes", json={"title": title})
+		resp = self._request("POST", "/document-processes", json={"title": title, "processLanguage": "pl"})
 		response_data = resp.json()
 		if not isinstance(response_data, dict) or "id" not in response_data:
 			frappe.throw("Autenti create_document_process failed: expected an id in the response")
@@ -94,8 +95,8 @@ class AutentiClient:
 				"firstName": first_name,
 				"lastName": last_name,
 				"contacts": [{"type": "CONTACT-TYPE:EMAIL", "attributes": {"email": email}}],
-				"role": role,
 			},
+			"role": role,
 			"constraints": [
 				{
 					"constrainedActions": ["ACTION:SIGNATURE_APPLICATION"],
@@ -114,7 +115,7 @@ class AutentiClient:
 			"fileMeta": (
 				None,
 				json.dumps(
-					{"fileName": filename, "filePurpose": "SOURCE_FILE", "mimeType": "application/pdf"}
+					{"filename": filename, "filePurpose": "SOURCE_FILE", "mimeType": "application/pdf"}
 				),
 				"application/json",
 			),
@@ -122,10 +123,22 @@ class AutentiClient:
 		}
 		self._request("POST", f"/document-processes/{doc_id}/files", files=files, timeout=self.UPLOAD_TIMEOUT)
 
-	def send(self, doc_id: str) -> None:
-		"""Send the document process to its parties."""
+	def _perform_action(self, doc_id: str, event_classifier: str) -> list:
+		"""
+		Perform a document process action (send/withdraw) via the challenge/response
+		assertion protocol: the X-ASSERTION header answers the action-selection
+		challenge by naming the desired event classifier. No request body is sent.
+		"""
 		assertion = base64.b64encode(
-			json.dumps({"classifiers": ["EVENT_CLASSIFIER-UNIQUE_TYPE:DOCUMENT_SENT"]}).encode("utf-8")
+			json.dumps(
+				{
+					"classifiers": [
+						"CHALLENGE_CLASSIFIER-UNIQUE_TYPE:ACTION_SELECTION",
+						"CHALLENGE_CLASSIFIER-USER_INTERACTION_TYPE:SELECTION",
+					],
+					"attributes": {"selectedIds": [event_classifier]},
+				}
+			).encode("utf-8")
 		).decode("ascii")
 		headers = {**self._headers(), "X-ASSERTION": assertion}
 		resp = requests.post(
@@ -134,6 +147,15 @@ class AutentiClient:
 			timeout=self.DEFAULT_TIMEOUT,
 		)
 		resp.raise_for_status()
+		return resp.json()
+
+	def send(self, doc_id: str) -> list:
+		"""Send the document process to its parties."""
+		return self._perform_action(doc_id, "EVENT_CLASSIFIER-UNIQUE_TYPE:DOCUMENT_SENT")
+
+	def withdraw(self, doc_id: str) -> list:
+		"""Withdraw the document process."""
+		return self._perform_action(doc_id, "EVENT_CLASSIFIER-UNIQUE_TYPE:DOCUMENT_WITHDRAWAL")
 
 	def get_status(self, doc_id: str) -> dict:
 		"""Return the current status of a document process."""
@@ -141,12 +163,67 @@ class AutentiClient:
 		return resp.json()
 
 	def get_document_files(self, doc_id: str) -> list:
-		"""Return the files attached to a document process."""
+		"""
+		Return the files attached to a document process. The API responds with
+		newline-delimited JSON (Content-Type: application/stream+json), not a
+		JSON array, so it must be parsed line by line.
+		"""
 		resp = self._request("GET", f"/document-processes/{doc_id}/files")
-		return resp.json()
+		return [json.loads(line) for line in resp.text.splitlines() if line.strip()]
 
-	def download_file(self, file_url: str) -> bytes:
-		"""Download a file from its absolute URL."""
-		resp = requests.get(file_url, headers=self._headers(), timeout=self.DEFAULT_TIMEOUT)
-		resp.raise_for_status()
+	def get_signed_file_id(self, doc_id: str) -> str | None:
+		"""
+		Return the id of the signed output file for a document process, if any.
+		Prefers a fully SIGNED_CONTENT_FILE, falls back to a
+		PARTIALLY_SIGNED_CONTENT_FILE, then to any other non-source file that
+		is verifiably a PDF (via mimeType, or the filename extension when
+		mimeType is missing).
+
+		CONTENT_ARCHIVE is a ZIP bundle, not a PDF, and must never be picked
+		by the fallback — doing so would silently save a ZIP as
+		"<oferta>-podpisana.pdf". This filePurpose only materialises once a
+		document process reaches COMPLETED, so it is invisible during
+		pre-signature testing and can't be caught by testing earlier stages.
+
+		Returns None when no qualifying file exists yet; the caller already
+		handles None by logging and leaving the status transition intact.
+		"""
+
+		def _is_pdf(file_entry: dict) -> bool:
+			mime_type = file_entry.get("mimeType")
+			if mime_type is not None:
+				return mime_type == "application/pdf"
+			filename = file_entry.get("filename") or ""
+			return filename.lower().endswith(".pdf")
+
+		files = self.get_document_files(doc_id)
+		candidates = [f for f in files if f.get("filePurpose") != "SOURCE_FILE"]
+		if not candidates:
+			return None
+
+		signed = next((f for f in candidates if f.get("filePurpose") == "SIGNED_CONTENT_FILE"), None)
+		if signed:
+			return signed.get("id")
+
+		partially_signed = next(
+			(f for f in candidates if f.get("filePurpose") == "PARTIALLY_SIGNED_CONTENT_FILE"), None
+		)
+		if partially_signed:
+			return partially_signed.get("id")
+
+		pdf_fallback = next((f for f in candidates if _is_pdf(f)), None)
+		return pdf_fallback.get("id") if pdf_fallback else None
+
+	def download_file_content(self, doc_id: str, file_id: str) -> bytes:
+		"""
+		Download a file's raw bytes by its id. File ids may contain '/'
+		(e.g. "FILE-DTBS:.../DTBS"), so the id must be percent-encoded before
+		being placed in the URL path.
+		"""
+		encoded_file_id = urllib.parse.quote(file_id, safe="")
+		resp = self._request(
+			"GET",
+			f"/document-processes/{doc_id}/files/{encoded_file_id}/content",
+			timeout=self.UPLOAD_TIMEOUT,
+		)
 		return resp.content
