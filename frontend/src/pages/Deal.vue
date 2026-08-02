@@ -67,6 +67,7 @@
         <ZestawTab v-else-if="tab.name === 'Zestaw'" :deal-id="dealId" />
         <FakturyTab v-else-if="tab.name === 'Faktury'" :deal-id="dealId" />
         <MontazTab v-else-if="tab.name === 'Montaz'" :deal-id="dealId" />
+        <OfertaTab v-else-if="tab.name === 'Oferta'" :deal-id="dealId" />
         <AudytTab v-else-if="tab.name === 'Audyt'" :deal-id="dealId" />
       </template>
     </Tabs>
@@ -333,10 +334,12 @@ import ZestawIcon from '@/components/Icons/ZestawIcon.vue'
 import FakturyIcon from '@/components/Icons/FakturyIcon.vue'
 import MontazIcon from '@/components/Icons/MontazIcon.vue'
 import AudytIcon from '@/components/Icons/AudytIcon.vue'
+import OfertaIcon from '@/components/Icons/OfertaIcon.vue'
 import ZestawTab from '@/components/deal/ZestawTab.vue'
 import FakturyTab from '@/components/deal/FakturyTab.vue'
 import MontazTab from '@/components/deal/MontazTab.vue'
 import AudytTab from '@/components/deal/AudytTab.vue'
+import OfertaTab from '@/components/deal/OfertaTab.vue'
 import DealStatusBar from '@/components/deal/DealStatusBar.vue'
 import OrganizationModal from '@/components/Modals/OrganizationModal.vue'
 import LostReasonModal from '@/components/Modals/LostReasonModal.vue'
@@ -557,6 +560,7 @@ const NATIVE_TABS = [
 const tabs = computed(() => {
   let tabOptions = [
     { name: 'Zestaw', label: __('Zestaw'), icon: ZestawIcon },
+    { name: 'Oferta', label: __('Oferta'), icon: OfertaIcon },
     { name: 'Attachments', label: __('Pliki'), icon: AttachmentIcon },
     { name: 'Faktury', label: __('Faktury'), icon: FakturyIcon },
     { name: 'Montaz', label: __('Montaż'), icon: MontazIcon },
