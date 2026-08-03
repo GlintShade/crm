@@ -76,7 +76,19 @@ def volteo_cp_pozycje() -> dict[str, Any]:
 		}
 		for wiersz in wiersze
 	]
-	return {"pozycje": pozycje}
+	stale = frappe.db.get_singles_dict("Volteo CP Stale")
+	# Udostępniamy wyłącznie heurystyki formularza, aby nie ujawnić prowizji ani innych stałych.
+	# None oznacza brak automatycznego obliczania i umożliwia ręczne wprowadzenie.
+	return {
+		"pozycje": pozycje,
+		"mnozniki": {
+			"elewacja": stale.get("mnoznik_elewacja"),
+			"strop": stale.get("mnoznik_strop"),
+			"dach": stale.get("mnoznik_dach"),
+			"okna": stale.get("mnoznik_okna"),
+		},
+		"m2_na_drzwi": stale.get("m2_na_drzwi"),
+	}
 
 
 @frappe.whitelist()
