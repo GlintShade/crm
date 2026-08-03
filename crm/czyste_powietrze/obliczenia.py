@@ -14,6 +14,10 @@ class CPPozycjaNieaktywna(CPBlad):
 	"""Wybrana pozycja katalogowa nie jest dostępna."""
 
 
+class CPNiedozwolonaKombinacja(CPBlad):
+	"""Wybrana kombinacja danych programu lub dodatków jest niedozwolona."""
+
+
 _POZIOMY = ("podstawowy", "podwyzszony", "najwyzszy")
 _STANDARDY = ("do80", "od80do140", "powyzej140")
 _PRACE_TERMO = ("elewacja", "strop", "dach", "okna", "drzwi")
@@ -192,8 +196,12 @@ def oblicz_oferte(
 
 	limit_termo = limity[(poziom, standard)]
 	status_limitu = limit_termo.get("status")
-	if status_limitu not in ("kwota", "nie_dotyczy", "do_ustalenia"):
+	if status_limitu not in ("kwota", "brak_dotacji", "niedozwolone", "do_ustalenia"):
 		_blad("Nieznany status limitu termomodernizacji.")
+	if status_limitu == "niedozwolone":
+		raise CPNiedozwolonaKombinacja(
+			"Wybrana kombinacja poziomu dofinansowania i standardu budynku jest niedozwolona."
+		)
 	if "kwota" not in limit_termo:
 		_blad("Brak kwoty limitu termomodernizacji.")
 	kwota_limitu = None if limit_termo["kwota"] is None else _decimal(limit_termo["kwota"], "kwota limitu")
@@ -207,22 +215,38 @@ def oblicz_oferte(
 	termo_linie: list[dict[str, Any]] = []
 
 	kod_zrodla = wejscie.get("zrodlo_ciepla")
-	if kod_zrodla is not None:
-		pozycja = _pozycja(kod_zrodla, katalog)
-		_sprawdz_kategorie(pozycja, "zrodlo", kod_zrodla)
-		zrodlo_linie.append(_linia(kod_zrodla, pozycja, poziom, _JEDEN, vat))
+	if kod_zrodla is not None and kod_zrodla not in ("pompa_ciepla", "pellet", "zgazowujacy"):
+		if kod_zrodla == "cwu":
+			raise CPNiedozwolonaKombinacja("CWU nie może być wybranym źródłem ciepła.")
+		_blad(f"Nieznane źródło ciepła {kod_zrodla}.")
+
+	czy_cwu = wejscie.get("cwu", False)
+	if czy_cwu and kod_zrodla not in ("pellet", "zgazowujacy"):
+		raise CPNiedozwolonaKombinacja("CWU jest niedozwolone dla wybranego źródła ciepła.")
 
 	typ_grzejnikow = wejscie.get("typ_grzejnikow")
+	ilosc_grzejnikow = _ZERO
 	if typ_grzejnikow is not None:
 		if typ_grzejnikow not in ("grzejnik", "grzejnik_co"):
 			_blad("Nieznany typ grzejnika.")
 		ilosc_grzejnikow = _decimal(wejscie.get("ilosc_grzejnikow"), "ilosc_grzejnikow")
 		if ilosc_grzejnikow < _ZERO:
 			_blad("Liczba grzejników nie może być ujemna.")
-		if ilosc_grzejnikow > _ZERO:
-			pozycja = _pozycja(typ_grzejnikow, katalog)
-			_sprawdz_kategorie(pozycja, "co", typ_grzejnikow)
-			co_linie.append(_linia(typ_grzejnikow, pozycja, poziom, ilosc_grzejnikow, vat))
+		if ilosc_grzejnikow > _ZERO and kod_zrodla != "pompa_ciepla":
+			raise CPNiedozwolonaKombinacja("Grzejniki są dozwolone wyłącznie dla pompy ciepła.")
+
+	if kod_zrodla is not None:
+		pozycja = _pozycja(kod_zrodla, katalog)
+		_sprawdz_kategorie(pozycja, "zrodlo", kod_zrodla)
+		zrodlo_linie.append(_linia(kod_zrodla, pozycja, poziom, _JEDEN, vat))
+	if czy_cwu:
+		pozycja = _pozycja("cwu", katalog)
+		_sprawdz_kategorie(pozycja, "zrodlo", "cwu")
+		zrodlo_linie.append(_linia("cwu", pozycja, poziom, _JEDEN, vat))
+	if ilosc_grzejnikow > _ZERO:
+		pozycja = _pozycja(typ_grzejnikow, katalog)
+		_sprawdz_kategorie(pozycja, "co", typ_grzejnikow)
+		co_linie.append(_linia(typ_grzejnikow, pozycja, poziom, ilosc_grzejnikow, vat))
 
 	powierzchnia = _decimal(wejscie.get("powierzchnia_m2"), "powierzchnia_m2")
 	if powierzchnia < _ZERO:
@@ -256,6 +280,10 @@ def oblicz_oferte(
 			)
 		)
 
+	if termo_linie and status_limitu == "brak_dotacji":
+		for linia in termo_linie:
+			linia["dotacja"] = _kwota(_ZERO)
+			linia["_dotacja"] = _ZERO
 	if termo_linie and status_limitu == "do_ustalenia":
 		raise CPDaneNiekompletne("Limit termomodernizacji jest jeszcze do ustalenia.")
 

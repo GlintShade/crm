@@ -2,7 +2,12 @@ import copy
 import unittest
 from decimal import Decimal
 
-from crm.czyste_powietrze.obliczenia import CPDaneNiekompletne, CPPozycjaNieaktywna, oblicz_oferte
+from crm.czyste_powietrze.obliczenia import (
+	CPDaneNiekompletne,
+	CPNiedozwolonaKombinacja,
+	CPPozycjaNieaktywna,
+	oblicz_oferte,
+)
 
 KATALOG = {
 	"pompa_ciepla": {
@@ -96,13 +101,13 @@ KATALOG = {
 	"dach": {
 		"kategoria": "termo",
 		"jednostka": "m2",
-		"cena_netto": "300",
-		"dotacja": {"podstawowy": "110", "podwyzszony": "193", "najwyzszy": "275"},
+		"cena_netto": "220",
+		"dotacja": {"podstawowy": "88", "podwyzszony": "154", "najwyzszy": "220"},
 		"limit_dotacji": {"podstawowy": None, "podwyzszony": None, "najwyzszy": None},
 		"prowizja": "10",
-		"koszt_proenergy": "220",
+		"koszt_proenergy": "120",
 		"koszt_staly": "0",
-		"aktywny": False,
+		"aktywny": True,
 	},
 	"okna": {
 		"kategoria": "termo",
@@ -129,14 +134,14 @@ KATALOG = {
 }
 
 LIMITY = {
-	("podstawowy", "do80"): {"status": "do_ustalenia", "kwota": None},
+	("podstawowy", "do80"): {"status": "brak_dotacji", "kwota": None},
 	("podstawowy", "od80do140"): {"status": "kwota", "kwota": "19200"},
 	("podstawowy", "powyzej140"): {"status": "kwota", "kwota": "33200"},
-	("podwyzszony", "do80"): {"status": "do_ustalenia", "kwota": None},
+	("podwyzszony", "do80"): {"status": "brak_dotacji", "kwota": None},
 	("podwyzszony", "od80do140"): {"status": "kwota", "kwota": "33600"},
 	("podwyzszony", "powyzej140"): {"status": "kwota", "kwota": "58100"},
-	("najwyzszy", "do80"): {"status": "do_ustalenia", "kwota": None},
-	("najwyzszy", "od80do140"): {"status": "nie_dotyczy", "kwota": None},
+	("najwyzszy", "do80"): {"status": "niedozwolone", "kwota": None},
+	("najwyzszy", "od80do140"): {"status": "niedozwolone", "kwota": None},
 	("najwyzszy", "powyzej140"): {"status": "kwota", "kwota": "83000"},
 }
 
@@ -156,6 +161,7 @@ def _wejscie(poziom: str = "podstawowy", standard: str = "powyzej140") -> dict[s
 		"poziom": poziom,
 		"standard": standard,
 		"zrodlo_ciepla": "pompa_ciepla",
+		"cwu": False,
 		"typ_grzejnikow": None,
 		"ilosc_grzejnikow": 0,
 		"powierzchnia_m2": "120",
@@ -214,30 +220,90 @@ class TestObliczenia(unittest.TestCase):
 	def test_f_do_ustalenia_z_praca(self: "TestObliczenia") -> None:
 		wejscie = _wejscie(standard="do80")
 		wejscie["prace"]["elewacja"]["wybrana"] = True
+		limity = copy.deepcopy(LIMITY)
+		limity[("podstawowy", "do80")] = {"status": "do_ustalenia", "kwota": None}
 		with self.assertRaises(CPDaneNiekompletne):
-			self.policz(wejscie)
+			oblicz_oferte(wejscie, _katalog(), limity, copy.deepcopy(STALE))
 
 	def test_g_do_ustalenia_bez_pracy(self: "TestObliczenia") -> None:
 		wynik = self.policz(_wejscie(standard="do80"))
 		self.assertEqual(wynik["wklad_wlasny"], Decimal("23936.00"))
 		self.assertEqual(wynik["dotacja_ograniczona_o"], Decimal("0.00"))
 
-	def test_h_nie_dotyczy_bez_limitu(self: "TestObliczenia") -> None:
+	def test_h_niedozwolona_kombinacja(self: "TestObliczenia") -> None:
 		wejscie = _wejscie("najwyzszy", "od80do140")
 		wejscie["zrodlo_ciepla"] = None
 		wejscie["prace"]["elewacja"]["wybrana"] = True
-		wynik = self.policz(wejscie)
-		self.assertEqual(wynik["wklad_wlasny"], Decimal("8232.00"))
-		self.assertEqual(wynik["dotacja_ograniczona_o"], Decimal("0.00"))
+		with self.assertRaises(CPNiedozwolonaKombinacja):
+			self.policz(wejscie)
 
 	def test_i_nieaktywna_pozycja(self: "TestObliczenia") -> None:
 		wejscie = _wejscie()
-		wejscie["prace"]["dach"]["wybrana"] = True
+		wejscie["prace"]["okna"]["wybrana"] = True
+		katalog = _katalog()
+		katalog["okna"]["aktywny"] = False
 		with self.assertRaises(CPPozycjaNieaktywna):
+			oblicz_oferte(wejscie, katalog, copy.deepcopy(LIMITY), copy.deepcopy(STALE))
+
+	def test_m_piec_i_cwu(self: "TestObliczenia") -> None:
+		wejscie = _wejscie()
+		wejscie["zrodlo_ciepla"] = "pellet"
+		wejscie["cwu"] = True
+		wynik = self.policz(wejscie)
+		self.assertEqual(wynik["wklad_wlasny"], Decimal("32740.00"))
+		self.assertEqual(wynik["prowizja_handlowa"], Decimal("5000.00"))
+		self.assertEqual(wynik["wewnetrzne"]["koszt_calkowity"], Decimal("27000.00"))
+
+	def test_n_pompa_i_cwu_niedozwolone(self: "TestObliczenia") -> None:
+		wejscie = _wejscie()
+		wejscie["cwu"] = True
+		with self.assertRaises(CPNiedozwolonaKombinacja):
 			self.policz(wejscie)
 
+	def test_o_piec_i_grzejniki_niedozwolone(self: "TestObliczenia") -> None:
+		wejscie = _wejscie()
+		wejscie["zrodlo_ciepla"] = "pellet"
+		wejscie["typ_grzejnikow"] = "grzejnik"
+		wejscie["ilosc_grzejnikow"] = 5
+		with self.assertRaises(CPNiedozwolonaKombinacja):
+			self.policz(wejscie)
+
+	def test_p_najwyzszy_do80_niedozwolone_bez_prac(self: "TestObliczenia") -> None:
+		with self.assertRaises(CPNiedozwolonaKombinacja):
+			self.policz(_wejscie("najwyzszy", "do80"))
+
+	def test_q_najwyzszy_od80do140_niedozwolone_bez_prac(self: "TestObliczenia") -> None:
+		with self.assertRaises(CPNiedozwolonaKombinacja):
+			self.policz(_wejscie("najwyzszy", "od80do140"))
+
+	def test_r_brak_dotacji_dla_termo(self: "TestObliczenia") -> None:
+		wejscie = _wejscie(standard="do80")
+		wejscie["powierzchnia_m2"] = "100"
+		wejscie["zrodlo_ciepla"] = None
+		wejscie["prace"]["elewacja"]["wybrana"] = True
+		wynik = self.policz(wejscie)
+		self.assertEqual(wynik["wklad_wlasny"], Decimal("45360.00"))
+		self.assertEqual(wynik["dotacja_ograniczona_o"], Decimal("0.00"))
+		self.assertEqual(wynik["linie"][0]["dotacja"], Decimal("0.00"))
+
+	def test_s_dach_stawki_jak_strop(self: "TestObliczenia") -> None:
+		wejscie = _wejscie()
+		wejscie["powierzchnia_m2"] = "100"
+		wejscie["zrodlo_ciepla"] = None
+		wejscie["prace"]["dach"]["wybrana"] = True
+		wynik = self.policz(wejscie)
+		self.assertEqual(wynik["wklad_wlasny"], Decimal("19448.00"))
+
+	def test_t_piec_i_zero_grzejnikow(self: "TestObliczenia") -> None:
+		wejscie = _wejscie()
+		wejscie["zrodlo_ciepla"] = "pellet"
+		wejscie["typ_grzejnikow"] = "grzejnik"
+		wejscie["ilosc_grzejnikow"] = 0
+		wynik = self.policz(wejscie)
+		self.assertEqual([linia["kod"] for linia in wynik["linie"]], ["pellet"])
+
 	def test_manualna_powierzchnia_i_drzwi_liczone_na_sztuki(self: "TestObliczenia") -> None:
-		wejscie = _wejscie("najwyzszy", "od80do140")
+		wejscie = _wejscie("podstawowy", "od80do140")
 		wejscie["zrodlo_ciepla"] = None
 		wejscie["prace"]["okna"] = {"wybrana": True, "m2": "30"}
 		wejscie["prace"]["drzwi"] = {"wybrana": True, "ilosc": 2}
