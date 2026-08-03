@@ -19,7 +19,7 @@
         <ZestawIcon class="h-10 w-10 text-ink-gray-4" />
         <div class="text-lg font-medium text-ink-gray-7">{{ __('Brak zestawu') }}</div>
         <div class="max-w-md text-sm text-ink-gray-5">
-          {{ __('Ta szansa nie ma jeszcze zestawu. Zestaw pojawi się po wygenerowaniu oferty w Kalkulatorze lub po dodaniu pozycji do zestawu na szansie.') }}
+          {{ __('Ta szansa nie ma jeszcze zestawu. Zestaw pojawi się po wygenerowaniu oferty w Kalkulatorze fotowoltaicznym lub po dodaniu pozycji do zestawu na szansie.') }}
         </div>
       </div>
 
@@ -125,6 +125,6 @@ const rows = computed(() => (bomRows.value.length ? bomRows.value : ofertaRows.v
 const caption = computed(() =>
   bomRows.value.length
     ? __('Wykaz komponentów zestawu.')
-    : __('Podgląd na podstawie oferty z Kalkulatora. Pełny wykaz komponentów — wkrótce.'),
+    : __('Podgląd na podstawie oferty z Kalkulatora fotowoltaicznego. Pełny wykaz komponentów — wkrótce.'),
 )
 </script>

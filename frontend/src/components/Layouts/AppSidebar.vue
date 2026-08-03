@@ -237,7 +237,7 @@ const links = [
     to: 'Deals',
   },
   {
-    label: 'Kalkulator',
+    label: 'Kalkulator fotowoltaiczny',
     icon: KalkulatorIcon,
     to: 'Kalkulator',
   },

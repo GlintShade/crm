@@ -155,7 +155,7 @@
           </div>
         </div>
         <KalkulatorTab
-          v-else-if="tab.label === 'Kalkulator'"
+          v-else-if="tab.name === 'Kalkulator'"
           :contact="contact.doc"
         />
       </template>
@@ -312,7 +312,7 @@ const tabs = [
   },
   {
     name: 'Kalkulator',
-    label: __('Kalkulator'),
+    label: __('Kalkulator fotowoltaiczny'),
     icon: h(KalkulatorIcon, { class: 'h-4 w-4' }),
   },
 ]
