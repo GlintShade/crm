@@ -168,6 +168,7 @@ import SquareAsterisk from '@/components/Icons/SquareAsterisk.vue'
 import LeadsIcon from '@/components/Icons/LeadsIcon.vue'
 import DealsIcon from '@/components/Icons/DealsIcon.vue'
 import KalkulatorIcon from '@/components/Icons/KalkulatorIcon.vue'
+import KalkulatorCPIcon from '@/components/Icons/KalkulatorCPIcon.vue'
 import ContactsIcon from '@/components/Icons/ContactsIcon.vue'
 import OrganizationsIcon from '@/components/Icons/OrganizationsIcon.vue'
 import NoteIcon from '@/components/Icons/NoteIcon.vue'
@@ -240,6 +241,11 @@ const links = [
     label: 'Kalkulator fotowoltaiczny',
     icon: KalkulatorIcon,
     to: 'Kalkulator',
+  },
+  {
+    label: 'Kalkulator Czyste Powietrze',
+    icon: KalkulatorCPIcon,
+    to: 'KalkulatorCzystePowietrze',
   },
   {
     label: 'Contacts',

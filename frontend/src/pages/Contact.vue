@@ -60,6 +60,10 @@
           v-else-if="tab.label === 'Kalkulator fotowoltaiczny'"
           :contact="contact.doc"
         />
+        <KalkulatorCPTab
+          v-else-if="tab.label === 'Kalkulator Czyste Powietrze'"
+          :contact="contact.doc"
+        />
       </template>
     </Tabs>
     <!-- Floating expand button (visible when panel is collapsed) -->
@@ -211,8 +215,10 @@ import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
 import CameraIcon from '@/components/Icons/CameraIcon.vue'
 import DealsIcon from '@/components/Icons/DealsIcon.vue'
 import KalkulatorIcon from '@/components/Icons/KalkulatorIcon.vue'
+import KalkulatorCPIcon from '@/components/Icons/KalkulatorCPIcon.vue'
 import DealsListView from '@/components/ListViews/DealsListView.vue'
 import KalkulatorTab from '@/components/KalkulatorTab.vue'
+import KalkulatorCPTab from '@/components/KalkulatorCPTab.vue'
 import CustomActions from '@/components/CustomActions.vue'
 import { validateIsImageFile, setupCustomizations } from '@/utils'
 import { timestampCell } from '@/composables/useTimelinePreferences'
@@ -358,6 +364,10 @@ const tabs = [
     label: 'Kalkulator fotowoltaiczny',
     icon: KalkulatorIcon,
     // no count badge for the Kalkulator tab
+  },
+  {
+    label: 'Kalkulator Czyste Powietrze',
+    icon: KalkulatorCPIcon,
   },
 ]
 

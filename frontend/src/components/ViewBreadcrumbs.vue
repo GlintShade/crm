@@ -9,7 +9,7 @@
           : 'text-ink-gray-7',
       ]"
     >
-      {{ routeName === 'Deals' ? __('Umowy') : routeName === 'Kalkulator' ? __('Kalkulator fotowoltaiczny') : __(routeName) }}
+      {{ routeName === 'Deals' ? __('Umowy') : routeName === 'Kalkulator' ? __('Kalkulator fotowoltaiczny') : routeName === 'KalkulatorCzystePowietrze' ? __('Kalkulator Czyste Powietrze') : __(routeName) }}
     </router-link>
     <span
       v-if="viewControls && viewControls.viewsDropdownOptions"

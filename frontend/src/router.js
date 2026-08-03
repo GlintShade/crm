@@ -42,6 +42,11 @@ const routes = [
     component: () => import('@/pages/Kalkulator.vue'),
   },
   {
+    path: '/kalkulator-czyste-powietrze',
+    name: 'KalkulatorCzystePowietrze',
+    component: () => import('@/pages/KalkulatorCzystePowietrze.vue'),
+  },
+  {
     alias: '/leads',
     path: '/leads/view/:viewType?',
     name: 'Leads',
