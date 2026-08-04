@@ -23,8 +23,6 @@ import {
   FeatherIcon,
 } from 'frappe-ui'
 
-import { telemetryPlugin } from 'frappe-ui/frappe'
-
 let globalComponents = {
   Button,
   TextInput,
@@ -50,7 +48,10 @@ app.use(translationPlugin)
 for (let key in globalComponents) {
   app.component(key, globalComponents[key])
 }
-app.use(telemetryPlugin, { app_name: 'crm' })
+// frappe-ui's telemetryPlugin was removed: this backend has no
+// frappe.utils.telemetry.pulse.client.boot_config endpoint (417 on every load, logged as a
+// traceback in the console), and telemetry is disabled server-side (Pulse and PostHog both
+// off, no credentials configured). Do not re-add it.
 
 app.config.globalProperties.$dialog = createDialog
 

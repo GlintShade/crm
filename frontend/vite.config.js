@@ -21,6 +21,9 @@ export default defineConfig(async ({ mode }) => {
           name: 'Frappe CRM',
           short_name: 'Frappe CRM',
           start_url: '/crm',
+          // The manifest is served from /assets/crm/frontend/, so the inferred scope
+          // would be that directory and would not cover start_url; scope must be explicit.
+          scope: '/crm',
           description:
             'Modern & 100% Open-source CRM tool to supercharge your sales operations',
           icons: [
