@@ -173,7 +173,7 @@
             </div>
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div
-                v-for="f in sec.fields"
+                v-for="f in visibleFields(sec)"
                 :key="f.fieldname"
                 :class="[
                   'rounded',
@@ -199,7 +199,7 @@
             </div>
             <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
               <AudytPhotoSlot
-                v-for="slot in variantDef.photo_slots"
+                v-for="slot in visiblePhotoSlots"
                 :key="slot.key"
                 :label="slot.label"
                 :value="zdjecia[slot.key] || null"
@@ -471,7 +471,9 @@ function fieldOk(f) {
 
 const requiredFields = computed(() => {
   if (!variantDef.value) return []
-  return (variantDef.value.sections || []).flatMap((s) => s.fields || []).filter((f) => f.required)
+  return (variantDef.value.sections || [])
+    .flatMap((s) => s.fields || [])
+    .filter((f) => f.required && depOk(f))
 })
 const fieldsTotal = computed(() => requiredFields.value.length)
 const fieldsDone = computed(() => requiredFields.value.filter((f) => fieldOk(f)).length)
@@ -483,7 +485,27 @@ const photoSlots = computed(() => variantDef.value?.photo_slots || [])
 function isPhotoRequired(slot) {
   return slot.required === undefined || !!slot.required
 }
-const requiredPhotoSlots = computed(() => photoSlots.value.filter(isPhotoRequired))
+
+// Brak `depends_on` (obecnie wdrożona macierz serwerowa) = element zawsze widoczny.
+// Odwrócenie tego ukryłoby po cichu wszystkie dzisiejsze pola i zdjęcia.
+function depOk(item) {
+  const dep = item.depends_on
+  if (!dep) return true
+  return form[dep.fieldname] === dep.value
+}
+
+// Vue 3: `v-if` na tym samym węźle co `v-for` liczy się PRZED powstaniem
+// zmiennej pętli (odwrotnie niż w Vue 2) — `depOk(f)` wywalałoby renderowanie
+// z TypeError, bo `f` jeszcze by nie istniało. Filtrujemy więc w skrypcie i w
+// szablonie robimy tylko `v-for="f in visibleFields(sec)"`, bez `v-if`.
+function visibleFields(sec) {
+  return (sec.fields || []).filter(depOk)
+}
+
+// Ukrytych wartości nie czyścimy: usunięcie zdjęcia oznaczałoby usunięcie pliku przez useAttachments/trackOldFile,
+// a backend pomija ukryte elementy przy walidacji, więc wartości przetrwają przełączanie zależności.
+const visiblePhotoSlots = computed(() => photoSlots.value.filter(depOk))
+const requiredPhotoSlots = computed(() => visiblePhotoSlots.value.filter(isPhotoRequired))
 const photosTotal = computed(() => requiredPhotoSlots.value.length)
 const photosDone = computed(() => requiredPhotoSlots.value.filter((s) => !!zdjecia[s.key]).length)
 
