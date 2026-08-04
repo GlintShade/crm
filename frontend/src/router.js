@@ -16,8 +16,11 @@ async function shouldCapturePersona() {
   })
   if (captured) return false
   // The wizard only feeds telemetry; skip it entirely if the user opted out.
+  // This backend has no frappe.utils.telemetry.pulse.client.boot_config endpoint, so the
+  // call is expected to fail (417); guard it so that failure degrades to "not enabled"
+  // instead of rejecting and breaking routing.
   const { enabled } =
-    (await call('frappe.utils.telemetry.pulse.client.boot_config')) || {}
+    (await call('frappe.utils.telemetry.pulse.client.boot_config').catch(() => null)) || {}
   return !!enabled
 }
 
