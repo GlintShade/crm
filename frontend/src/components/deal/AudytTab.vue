@@ -203,6 +203,7 @@
                 :key="slot.key"
                 :label="slot.label"
                 :value="zdjecia[slot.key] || null"
+                :optional="!isPhotoRequired(slot)"
                 doctype="Volteo Audyt"
                 :docname="dealId"
                 :disabled="readOnly"
@@ -476,8 +477,15 @@ const fieldsTotal = computed(() => requiredFields.value.length)
 const fieldsDone = computed(() => requiredFields.value.filter((f) => fieldOk(f)).length)
 
 const photoSlots = computed(() => variantDef.value?.photo_slots || [])
-const photosTotal = computed(() => photoSlots.value.length)
-const photosDone = computed(() => photoSlots.value.filter((s) => !!zdjecia[s.key]).length)
+// A slot with no `required` key at all (the currently deployed server matrix)
+// is treated as required for backward compatibility — inverting this would
+// silently turn every existing mandatory photo optional on the live site.
+function isPhotoRequired(slot) {
+  return slot.required === undefined || !!slot.required
+}
+const requiredPhotoSlots = computed(() => photoSlots.value.filter(isPhotoRequired))
+const photosTotal = computed(() => requiredPhotoSlots.value.length)
+const photosDone = computed(() => requiredPhotoSlots.value.filter((s) => !!zdjecia[s.key]).length)
 
 const complete = computed(
   () =>

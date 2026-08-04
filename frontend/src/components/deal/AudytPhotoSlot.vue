@@ -15,7 +15,7 @@
       @click="showUploader = true"
     >
       <span class="lucide-camera size-6" aria-hidden="true" />
-      <span class="px-2 text-center text-xs">{{ label }}</span>
+      <span class="px-2 text-center text-xs">{{ displayLabel }}</span>
     </button>
 
     <!-- Empty + disabled -->
@@ -24,7 +24,7 @@
       class="flex aspect-[4/3] w-full flex-col items-center justify-center gap-1 rounded-lg border border-outline-gray-2 bg-surface-gray-1 text-ink-gray-4"
     >
       <span class="text-lg">—</span>
-      <span class="px-2 text-center text-xs">{{ label }}</span>
+      <span class="px-2 text-center text-xs">{{ displayLabel }}</span>
     </div>
 
     <!-- Filled -->
@@ -61,7 +61,7 @@
     </div>
 
     <div v-if="value" class="truncate text-center text-xs text-ink-gray-5">
-      {{ label }}
+      {{ displayLabel }}
     </div>
 
     <FilesUploader
@@ -86,11 +86,16 @@ const props = defineProps({
   doctype: { type: String, required: true },
   docname: { type: String, required: true },
   disabled: { type: Boolean, default: false },
+  optional: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['change'])
 
 const showUploader = ref(false)
+
+const displayLabel = computed(() =>
+  props.optional ? `${props.label} ${__('(opcjonalne)')}` : props.label,
+)
 
 const uploaderOptions = computed(() => ({
   folder: 'Home/Attachments',
