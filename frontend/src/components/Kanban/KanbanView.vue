@@ -63,6 +63,7 @@
                 </template>
               </Dropdown>
               <Button
+                v-if="options.onNewClick"
                 icon="lucide-plus"
                 variant="ghost"
                 @click="options.onNewClick(column)"

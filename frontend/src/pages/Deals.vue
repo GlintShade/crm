@@ -37,7 +37,7 @@
         params: { dealId: row.name },
         query: { view: route.query.view, viewType: route.params.viewType },
       }),
-      onNewClick: (column) => onNewClick(column),
+      onNewClick: isRestrictedRep ? null : (column) => onNewClick(column),
     }"
     @update="(data) => viewControls.updateKanbanSettings(data)"
     @loadMore="(columnName) => viewControls.loadMoreKanban(columnName)"
@@ -489,9 +489,6 @@ function parseRows(rows, columns = []) {
 }
 
 function onNewClick(column) {
-  // VOLTEO: restricted D2D reps must not create deals from the kanban "+" either.
-  if (isRestrictedRep) return
-
   let column_field = deals.value.params.column_field
 
   if (column_field) {
