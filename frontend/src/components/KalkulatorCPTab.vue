@@ -229,7 +229,17 @@
               {{ __('Uzupełnij konfigurację, aby zobaczyć wycenę.') }}
             </div>
 
-            <!-- Miejsce na przycisk generowania oferty, gdy ścieżka zapisu będzie dostępna. -->
+            <Button
+              class="mt-2 w-full"
+              variant="solid"
+              :disabled="!canCreateDeal || creatingDeal"
+              @click="runCreateDeal"
+            >
+              {{ creatingDeal ? __('Tworzę szansę…') : __('Utwórz szansę') }}
+            </Button>
+            <div v-if="hasResult && !contactSelected" class="mt-1 text-center text-xs text-red-600">
+              {{ __('Wybierz klienta, aby utworzyć szansę.') }}
+            </div>
           </div>
         </div>
       </div>
@@ -238,8 +248,9 @@
 </template>
 
 <script setup>
-import { call } from 'frappe-ui'
+import { Button, call, toast } from 'frappe-ui'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   POZIOMY,
   PRACE_M2,
@@ -254,9 +265,11 @@ import {
   pustyFormularz,
 } from '@/utils/cpForm'
 
-defineProps({
+const props = defineProps({
   contact: { type: Object, default: () => ({}) },
 })
+
+const router = useRouter()
 
 const form = reactive(pustyFormularz())
 const loading = ref(true)
@@ -300,6 +313,15 @@ const drzwiArea = computed(() => drzwiM2(form.prace.drzwi.ilosc, m2NaDrzwi.value
 const restrictionAmount = computed(() => Number(result.dotacja_ograniczona_o) || 0)
 const hasResult = computed(() => resultReady.value)
 const hasInternal = computed(() => Object.prototype.hasOwnProperty.call(result, 'wewnetrzne'))
+
+// --- Tworzenie szansy --------------------------------------------------------
+// `hasResult` już odzwierciedla kompletność formularza: staje się prawdziwe
+// dopiero, gdy serwer zaakceptuje wycenę (patrz runCalc niżej), więc nie
+// duplikujemy tu logiki walidacji formularza.
+const c = computed(() => props.contact || {})
+const contactSelected = computed(() => Boolean(c.value.name))
+const canCreateDeal = computed(() => hasResult.value && contactSelected.value)
+const creatingDeal = ref(false)
 
 function setStandard(standard) {
   form.standard = standard
@@ -400,6 +422,22 @@ async function runCalc() {
     if (request !== calcRequest) return
     clearResult()
     errorMsg.value = opisBledu(error)
+  }
+}
+
+async function runCreateDeal() {
+  if (!canCreateDeal.value || creatingDeal.value) return
+  creatingDeal.value = true
+  try {
+    const data = await call('crm.api.czyste_powietrze.volteo_cp_create_deal', {
+      wejscie: buildWejscie(form),
+      contact: c.value.name,
+    })
+    router.push({ name: 'Deal', params: { dealId: data.deal } })
+  } catch (error) {
+    toast.error(opisBledu(error))
+  } finally {
+    creatingDeal.value = false
   }
 }
 
