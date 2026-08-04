@@ -21,16 +21,13 @@ single-doc reads.
 
 import frappe
 
-from crm.permissions.org_hierarchy import _in_hierarchy, _team_mem_query, hierarchy_enabled
+from crm.permissions.org_hierarchy import BYPASS_ROLES, _in_hierarchy, _team_mem_query, hierarchy_enabled
 
 OPIEKUN_FIELD = "custom_opiekun"
 
-# Volteo Backend / Volteo Core Admin sit atop the Sales Hierarchy tree, but
-# demo clients are all owned by Administrator -- who is NOT a tree node -- so
-# subtree membership alone would hide those contacts from them. Bypass by
-# role instead, same as System Manager. Administrator itself is handled
-# explicitly below, matching org_hierarchy.
-BYPASS_ROLES = {"System Manager", "Volteo Backend", "Volteo Core Admin"}
+# BYPASS_ROLES is defined in org_hierarchy.py (shared with CRM Lead / CRM
+# Deal scoping) so the two modules can't drift apart on which roles see
+# everything.
 
 
 def _conditions(user: str | None):

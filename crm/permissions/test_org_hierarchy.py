@@ -12,7 +12,21 @@ from crm.permissions.org_hierarchy import (
 )
 from crm.tests import CRMTestCase as FrappeTestCase
 
-TEST_USERS = ("manager@hier.test", "rep1@hier.test", "rep2@hier.test", "outsider@hier.test")
+TEST_USERS = (
+	"manager@hier.test",
+	"rep1@hier.test",
+	"rep2@hier.test",
+	"outsider@hier.test",
+	"backend@hier.test",
+	"backendintree@hier.test",
+	"coreadmin@hier.test",
+	"coreadminintree@hier.test",
+)
+
+# Bypass roles under test. Created in setUpClass (guarded) and removed in
+# tearDownClass so the suite is self-cleaning on a fresh site as well as one
+# where ops/crm-setup.py has already seeded them.
+BYPASS_TEST_ROLES = ("Volteo Backend", "Volteo Core Admin")
 
 
 class TestOrgHierarchy(FrappeTestCase):
@@ -20,23 +34,37 @@ class TestOrgHierarchy(FrappeTestCase):
 	Hierarchy structure used in tests:
 	  manager@hier.test  (root)
 	  ├── rep1@hier.test
-	  └── rep2@hier.test
-	  outsider@hier.test  (not in the hierarchy)
+	  ├── rep2@hier.test
+	  ├── backendintree@hier.test    (Volteo Backend, leaf)
+	  └── coreadminintree@hier.test  (Volteo Core Admin, leaf)
+	  outsider@hier.test    (not in the hierarchy)
+	  backend@hier.test     (Volteo Backend, not in the hierarchy)
+	  coreadmin@hier.test   (Volteo Core Admin, not in the hierarchy)
 	"""
 
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
+		# Volteo Backend / Volteo Core Admin are normally seeded by
+		# ops/crm-setup.py, but a fresh test site won't have them yet.
+		cls._roles_created = [ensure_role(role) for role in BYPASS_TEST_ROLES]
+
 		# Create test users
 		make_user("manager@hier.test", roles=["Sales Manager"])
 		make_user("rep1@hier.test", roles=["Sales User"])
 		make_user("rep2@hier.test", roles=["Sales User"])
 		make_user("outsider@hier.test", roles=["Sales User"])
+		make_user("backend@hier.test", roles=["Volteo Backend"])
+		make_user("backendintree@hier.test", roles=["Volteo Backend"])
+		make_user("coreadmin@hier.test", roles=["Volteo Core Admin"])
+		make_user("coreadminintree@hier.test", roles=["Volteo Core Admin"])
 
 		# Build hierarchy
 		mgr = make_hierarchy_node("manager@hier.test", is_group=1)
 		make_hierarchy_node("rep1@hier.test", reports_to=mgr.name)
 		make_hierarchy_node("rep2@hier.test", reports_to=mgr.name)
+		make_hierarchy_node("backendintree@hier.test", reports_to=mgr.name)
+		make_hierarchy_node("coreadminintree@hier.test", reports_to=mgr.name)
 		rebuild_tree("CRM Sales Hierarchy")
 
 		settings = frappe.get_single("FCRM Settings")
@@ -54,6 +82,9 @@ class TestOrgHierarchy(FrappeTestCase):
 		for email in TEST_USERS:
 			frappe.db.delete("CRM Sales Hierarchy", {"user": email})
 			frappe.delete_doc("User", email, force=True, ignore_permissions=True)
+		for role, created in zip(BYPASS_TEST_ROLES, cls._roles_created, strict=True):
+			if created:
+				frappe.delete_doc("Role", role, force=True, ignore_permissions=True)
 		frappe.db.commit()  # nosemgrep: persist teardown cleanup of committed fixtures
 		super().tearDownClass()
 
@@ -132,6 +163,59 @@ class TestOrgHierarchy(FrappeTestCase):
 		self.assertFalse(has_deal_permission(deal, "read", "rep1@hier.test"))
 
 	# ------------------------------------------------------------------
+	# Bypass roles (Volteo Backend / Volteo Core Admin) -- production bug:
+	# backend@demo.volteo.pl saw only 13 of 16 CRM Deals because the 3
+	# invisible ones were owned by Administrator, who has no tree node.
+	# ------------------------------------------------------------------
+
+	def test_backend_outside_tree_sees_deal_owned_by_unrelated_user(self):
+		# Exact shape of the production hole: a backoffice user with no node
+		# in the Sales Hierarchy must still see a deal owned by someone they
+		# have no tree relationship with at all.
+		deal = make_deal("outsider@hier.test")
+		self.assertTrue(has_deal_permission(deal, "read", "backend@hier.test"))
+
+	def test_backend_in_tree_still_sees_deal_outside_subtree(self):
+		# backendintree is a leaf under manager, alongside rep1/rep2. The
+		# deal owner (outsider) is outside that subtree entirely -- subtree
+		# scoping alone would hide it. The role bypass must win regardless.
+		deal = make_deal("outsider@hier.test")
+		self.assertTrue(has_deal_permission(deal, "read", "backendintree@hier.test"))
+
+	def test_coreadmin_outside_tree_sees_deal_owned_by_unrelated_user(self):
+		deal = make_deal("outsider@hier.test")
+		self.assertTrue(has_deal_permission(deal, "read", "coreadmin@hier.test"))
+
+	def test_coreadmin_in_tree_still_sees_deal_outside_subtree(self):
+		deal = make_deal("outsider@hier.test")
+		self.assertTrue(has_deal_permission(deal, "read", "coreadminintree@hier.test"))
+
+	def test_bypass_role_sees_lead_not_owned_by_them(self):
+		# Covers the single-doc path (has_lead_permission), not just the
+		# list query -- a bypass user must be able to open the record, not
+		# merely see it listed.
+		lead = make_lead("outsider@hier.test")
+		self.assertTrue(has_lead_permission(lead, "read", "backend@hier.test"))
+		self.assertTrue(has_lead_permission(lead, "read", "coreadmin@hier.test"))
+
+	def test_bypass_role_sees_deal_not_owned_by_them(self):
+		deal = make_deal("outsider@hier.test")
+		self.assertTrue(has_deal_permission(deal, "read", "backend@hier.test"))
+		self.assertTrue(has_deal_permission(deal, "read", "coreadmin@hier.test"))
+
+	def test_query_conditions_empty_for_bypass_role(self):
+		self.assertFalse(get_lead_permission_query_conditions("backend@hier.test"))
+		self.assertFalse(get_lead_permission_query_conditions("coreadmin@hier.test"))
+
+	def test_regression_plain_sales_user_in_tree_still_scoped_to_subtree(self):
+		# Guard against a future BYPASS_ROLES change accidentally widening
+		# who sees everything: an ordinary Sales User rep who happens to be
+		# in the tree must still be blind to a deal owned outside their
+		# subtree.
+		deal = make_deal("outsider@hier.test")
+		self.assertFalse(has_deal_permission(deal, "read", "rep1@hier.test"))
+
+	# ------------------------------------------------------------------
 	# Permission query conditions
 	# ------------------------------------------------------------------
 
@@ -178,6 +262,18 @@ def delete_test_documents():
 	frappe.db.delete("ToDo", {"allocated_to": ("in", TEST_USERS)})
 	frappe.db.delete("CRM Deal", {"deal_owner": ("in", TEST_USERS)})
 	frappe.db.delete("CRM Lead", {"lead_owner": ("in", TEST_USERS)})
+
+
+def ensure_role(role_name: str) -> bool:
+	"""Create `role_name` if missing (matching ops/crm-setup.py's ROLES
+	convention: desk_access=1). Returns True iff this call created it, so
+	the caller only tears down roles it actually created."""
+	if frappe.db.exists("Role", role_name):
+		return False
+	frappe.get_doc({"doctype": "Role", "role_name": role_name, "desk_access": 1}).insert(
+		ignore_permissions=True
+	)
+	return True
 
 
 def make_user(email, roles=None):

@@ -30,12 +30,11 @@ single-doc reads.
 
 import frappe
 
-from crm.permissions.org_hierarchy import get_deal_permission_query_conditions
+from crm.permissions.org_hierarchy import BYPASS_ROLES, get_deal_permission_query_conditions
 
-# Volteo Backend / Volteo Core Admin sit atop the Sales Hierarchy tree; bypass
-# by role, same as System Manager. Administrator itself is handled explicitly
-# below, matching org_hierarchy and contact_visibility.
-BYPASS_ROLES = {"System Manager", "Volteo Backend", "Volteo Core Admin"}
+# BYPASS_ROLES is defined in org_hierarchy.py (shared with CRM Lead / CRM
+# Deal / Contact scoping) so the modules can't drift apart on which roles
+# see everything.
 
 
 def get_faktura_permission_query_conditions(user=None):

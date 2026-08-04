@@ -9,6 +9,14 @@ _OWNER_FIELD = {
 	"CRM Deal": "deal_owner",
 }
 
+# Roles that see every lead/deal regardless of their position in the Sales
+# Hierarchy. Backoffice and Core Admin must reconcile work across both business
+# lines, including records owned by users who have no node in the tree (notably
+# Administrator). Parking them atop the tree only approximates this and silently
+# hides such records, so the bypass is declared by role instead.
+# contact_visibility.py imports this set so both scopers stay in step.
+BYPASS_ROLES = {"System Manager", "Volteo Core Admin", "Volteo Backend"}
+
 
 def hierarchy_enabled() -> bool:
 	return bool(frappe.db.get_single_value("FCRM Settings", "enable_sales_hierarchy"))
@@ -21,8 +29,8 @@ def _permission_query_conditions(user: str | None, doctype: str):
 	if user == "Administrator":
 		return ""
 
-	roles = frappe.get_roles(user)
-	if "System Manager" in roles:
+	roles = set(frappe.get_roles(user))
+	if roles & BYPASS_ROLES:
 		return ""
 
 	in_tree = hierarchy_enabled() and _in_hierarchy(user)
@@ -77,8 +85,8 @@ def _has_permission(doc, ptype, user, doctype: str) -> bool | None:
 	if user == "Administrator":
 		return True
 
-	roles = frappe.get_roles(user)
-	if "System Manager" in roles:
+	roles = set(frappe.get_roles(user))
+	if roles & BYPASS_ROLES:
 		return True
 
 	if ptype == "create" or not doc.name:
