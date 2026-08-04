@@ -9,6 +9,7 @@
         :actions="dealsListView.customListActions"
       />
       <Button
+        v-if="!isRestrictedRep"
         variant="solid"
         :label="__('Create')"
         iconLeft="plus"
@@ -36,7 +37,7 @@
         params: { dealId: row.name },
         query: { view: route.query.view, viewType: route.params.viewType },
       }),
-      onNewClick: (column) => onNewClick(column),
+      onNewClick: isRestrictedRep ? null : (column) => onNewClick(column),
     }"
     @update="(data) => viewControls.updateKanbanSettings(data)"
     @loadMore="(columnName) => viewControls.loadMoreKanban(columnName)"
@@ -286,6 +287,8 @@ const route = useRoute()
 
 const dealsListView = ref(null)
 const showDealModal = ref(false)
+// VOLTEO: restricted D2D reps must not create deals from the list view.
+const isRestrictedRep = window.volteo_is_rep
 
 const defaults = reactive({})
 

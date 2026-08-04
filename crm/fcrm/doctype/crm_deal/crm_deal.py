@@ -77,6 +77,22 @@ class CRMDeal(Document):
 		website: DF.Data | None
 	# end: auto-generated types
 
+	def autoname(self):
+		# Licznik `PRO-UMOWA-` jest wspólny dla wszystkich rodzajów umowy (jeden wiersz
+		# tabSeries) i NIE resetuje się rocznie — numer porządkowy jest więc globalnie
+		# unikalny na zawsze, a rok w nazwie jest wyłącznie informacyjny. Po 9999
+		# `getseries` naturalnie przechodzi na 5 cyfr. Nieudany insert zostawia dziurę
+		# w numeracji — to standardowe zachowanie `getseries`, nie obchodzimy go.
+		from frappe.model.naming import getseries
+
+		from crm.volteo_naming import SERIES_DIGITS, SERIES_KEY, code_for, format_deal_name
+
+		self.name = format_deal_name(
+			code_for(self.get("custom_rodzaj_umowy")),
+			frappe.utils.nowdate()[2:4],
+			getseries(SERIES_KEY, SERIES_DIGITS),
+		)
+
 	def before_validate(self):
 		self.set_sla()
 
@@ -298,6 +314,12 @@ class CRMDeal(Document):
 				"width": "10rem",
 			},
 			{
+				"label": "Rodzaj umowy",
+				"type": "Select",
+				"key": "custom_rodzaj_umowy",
+				"width": "10rem",
+			},
+			{
 				"label": "Email",
 				"type": "Data",
 				"key": "email",
@@ -327,6 +349,7 @@ class CRMDeal(Document):
 			"organization",
 			"deal_value",
 			"status",
+			"custom_rodzaj_umowy",
 			"email",
 			"currency",
 			"mobile_no",
