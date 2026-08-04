@@ -17,6 +17,7 @@ export default defineConfig({
         'src/utils/scriptHelpers.js',
         'src/utils/expressions.js',
         'src/utils/renderFieldLayoutDialog.js',
+        'src/utils/pvForm.js',
       ],
     },
   },

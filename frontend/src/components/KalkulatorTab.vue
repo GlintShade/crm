@@ -52,8 +52,15 @@
                     class="kalk-input"
                   />
                   <div v-if="sel.consumption > 0" class="mt-1 text-xs leading-relaxed text-gray-500">
-                    Sug. moc: <span class="font-medium text-gray-700">{{ suggestedKwp }} kW</span>
-                    · magazyn: <span class="font-medium text-gray-700">{{ suggestedStorage }} kWh</span>
+                    <template v-if="hasPv">
+                      Sug. moc: <span class="font-medium text-gray-700">{{ suggestedKwp }} kW</span>
+                    </template>
+                    <template v-if="hasPv && hasBat"> · </template>
+                    <template v-if="hasBat">
+                      <template v-if="!hasPv">Sug. magazyn: </template>
+                      <template v-else>magazyn: </template>
+                      <span class="font-medium text-gray-700">{{ suggestedStorage }} kWh</span>
+                    </template>
                     <button type="button" class="ml-1 font-medium text-blue-600 hover:underline" @click="applyFromConsumption">Ustaw</button>
                   </div>
                 </div>
@@ -298,6 +305,20 @@
 <script setup>
 import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { call, Button, FeatherIcon } from 'frappe-ui'
+import {
+  VARIANTS,
+  VARIANT_PV,
+  VARIANT_PV_BAT,
+  VARIANT_BAT,
+  variantHasPv,
+  variantHasBattery,
+  producentOptionsFor,
+  buildMocOptions,
+  suggestedKwp as suggestedKwpFor,
+  suggestedStorageKwh,
+  pickBySpec,
+  pickMounting,
+} from '@/utils/pvForm'
 
 const props = defineProps({
   contact: { type: Object, default: () => ({}) },
@@ -309,7 +330,6 @@ const VOIVODESHIPS = [
   'pomorskie', 'śląskie', 'świętokrzyskie', 'warmińsko-mazurskie',
   'wielkopolskie', 'zachodniopomorskie',
 ]
-const VARIANTS = ['Fotowoltaika', 'Fotowoltaika + Magazyn', 'Magazyn energii']
 const TYP_KLIENTA_OPTIONS = [
   { value: 'indywidualny', label: 'Indywidualny' },
   { value: 'biznesowy', label: 'Biznesowy' },
@@ -317,14 +337,7 @@ const TYP_KLIENTA_OPTIONS = [
 
 // Moc PV dropdown: 3.0–20.0 kW in 0.5 steps, label shows panel count (kW * 2).
 // This is a display-label helper only — no cost/price is derived here.
-const mocOptions = (() => {
-  const out = []
-  for (let tenths = 30; tenths <= 200; tenths += 5) {
-    const kw = tenths / 10
-    out.push({ value: kw, label: `${kw} kW (${Math.round(kw * 2)} paneli)` })
-  }
-  return out
-})()
+const mocOptions = buildMocOptions()
 
 // --- Prefill client data from the current contact --------------------------
 const c = computed(() => props.contact || {})
@@ -357,11 +370,11 @@ const sel = reactive({
   consumption: null,
 })
 
-const hasPv = computed(() => sel.variant === 'Fotowoltaika' || sel.variant === 'Fotowoltaika + Magazyn')
-const hasBat = computed(() => sel.variant === 'Fotowoltaika + Magazyn' || sel.variant === 'Magazyn energii')
+const hasPv = computed(() => variantHasPv(sel.variant))
+const hasBat = computed(() => variantHasBattery(sel.variant))
 
 // Cascade: PV-only forces FoxESS; PV+Magazyn / Magazyn only offer Sigenergy/Deye.
-const producentOptions = computed(() => (sel.variant === 'Fotowoltaika' ? ['FoxESS'] : ['Sigenergy', 'Deye']))
+const producentOptions = computed(() => producentOptionsFor(sel.variant))
 
 watch(
   () => sel.variant,
@@ -410,65 +423,82 @@ const operatorOptions = computed(() => byKat('Operator'))
 const kierunekOptions = computed(() => byKat('Kierunek montazu'))
 
 // --- Auto-assembly suggestion from Roczne zużycie ---------------------------
-// Mirrors the domain engine's sizing heuristic (display-only estimate — the
-// server remains the source of truth for pricing/BOM once fields are set).
-function roundHalf(x) {
-  return Math.round(x * 2) / 2
-}
-function clamp(v, lo, hi) {
-  return Math.min(hi, Math.max(lo, v))
-}
+// Sizing heuristics live in pvForm.js (display-only estimate — the server
+// remains the source of truth for pricing/BOM once fields are set).
+const suggestedKwp = computed(() => suggestedKwpFor(sel.consumption, sel.variant))
 
-const suggestedKwp = computed(() => {
-  const cons = Number(sel.consumption) || 0
-  if (cons <= 0) return 0
-  return clamp(roundHalf(cons / 1000), 3, 20) // ~1000 kWh/yr per kWp
-})
+// Storage sizing always uses the ×1.0 (PV+Magazyn) power suggestion, never the
+// ×1.4 PV-only oversizing — the oversize ratio is meant to push surplus PV
+// production to the grid, not to inflate the battery.
+const suggestedStorage = computed(() =>
+  suggestedStorageKwh(sel.consumption, suggestedKwpFor(sel.consumption, VARIANT_PV_BAT)),
+)
 
-const suggestedStorage = computed(() => {
-  const cons = Number(sel.consumption) || 0
-  const kwp = suggestedKwp.value
-  if (cons <= 0 || kwp <= 0) return 0
-  const daily = cons / 365
-  const surplus = Math.max(0, kwp * 4.5 - daily * 0.4) // 4.5 sun-hours, 40% day self-use
-  const nightNeed = daily * 0.6
-  return clamp(Math.ceil(Math.min(surplus, nightNeed) * 1.2), 10, 60) // 1.2 headroom
-})
-
-// "Ustaw z zużycia" — fills a full Sigenergy TP2 PV+Magazyn setup from the
-// suggestion. Never runs automatically; only on click. Everything stays
-// editable afterwards. Base fields (variant/producent) are set first, then
-// we await a tick so the cascade watchers above finish resetting downstream
-// fields BEFORE we set the dependent picks — otherwise they'd get clobbered.
+// "Ustaw z zużycia" — fills the configuration from the suggestion, respecting
+// the currently selected variant. Never runs automatically; only on click.
+// Everything stays editable afterwards. Base fields (variant/producent) are
+// set first, then we await a tick so the cascade watchers above finish
+// resetting downstream fields BEFORE we set the dependent picks — otherwise
+// they'd get clobbered.
 async function applyFromConsumption() {
-  const kwp = suggestedKwp.value
-  const storage = suggestedStorage.value
-  if (!kwp) return
+  if (sel.variant === VARIANT_PV_BAT) {
+    const kwp = suggestedKwp.value
+    const storage = suggestedStorage.value
+    if (!kwp) return
 
-  sel.variant = 'Fotowoltaika + Magazyn'
-  sel.producent = 'Sigenergy'
-  await nextTick()
+    sel.producent = 'Sigenergy'
+    await nextTick()
 
-  sel.mocPvKw = kwp
+    sel.mocPvKw = kwp
 
-  // Falownik: Sigenergy TP2, smallest moc_kw >= kwp, else largest TP2.
-  const tp2 = byKat('Falownik')
-    .filter((c) => c.producent === 'Sigenergy' && c.sigen_typ === 'TP2')
-    .sort((a, b) => Number(a.moc_kw) - Number(b.moc_kw))
-  const fal = tp2.find((c) => Number(c.moc_kw) >= kwp) || tp2[tp2.length - 1]
-  if (fal) sel.falownik = fal.name
+    // Falownik: Sigenergy TP2, smallest moc_kw >= kwp, else largest TP2.
+    const tp2 = byKat('Falownik').filter((c) => c.producent === 'Sigenergy' && c.sigen_typ === 'TP2')
+    const fal = pickBySpec(tp2, 'moc_kw', kwp)
+    if (fal) sel.falownik = fal.name
 
-  // Bateria: Sigenergy, smallest pojemnosc_kwh >= storage, else largest.
-  const bats = byKat('Magazyn energii')
-    .filter((c) => c.producent === 'Sigenergy')
-    .sort((a, b) => Number(a.pojemnosc_kwh) - Number(b.pojemnosc_kwh))
-  const bat = bats.find((c) => Number(c.pojemnosc_kwh) >= storage) || bats[bats.length - 1]
-  if (bat) sel.bateria = bat.name
+    // Bateria: Sigenergy, smallest pojemnosc_kwh >= storage, else largest.
+    const bats = byKat('Magazyn energii').filter((c) => c.producent === 'Sigenergy')
+    const bat = pickBySpec(bats, 'pojemnosc_kwh', storage)
+    if (bat) sel.bateria = bat.name
 
-  // Konstrukcja: prefer "…blacha", else first available.
-  const ks = byKat('Konstrukcja')
-  const k = ks.find((c) => (c.nazwa || '').toLowerCase().includes('blacha')) || ks[0]
-  if (k) sel.konstrukcja = k.name
+    // Konstrukcja: prefer "…blacha", else first available.
+    const k = pickMounting(byKat('Konstrukcja'))
+    if (k) sel.konstrukcja = k.name
+    return
+  }
+
+  if (sel.variant === VARIANT_PV) {
+    const kwp = suggestedKwp.value
+    if (!kwp) return
+
+    // producentOptionsFor forces FoxESS for PV-only.
+    sel.producent = 'FoxESS'
+    await nextTick()
+
+    sel.mocPvKw = kwp
+
+    // Falownik: FoxESS, smallest moc_kw >= kwp, else largest. No sigen_typ
+    // filter — FoxESS rows carry no such field.
+    const inverters = byKat('Falownik').filter((c) => c.producent === 'FoxESS')
+    const fal = pickBySpec(inverters, 'moc_kw', kwp)
+    if (fal) sel.falownik = fal.name
+
+    // Konstrukcja: prefer "…blacha", else first available.
+    const k = pickMounting(byKat('Konstrukcja'))
+    if (k) sel.konstrukcja = k.name
+    return
+  }
+
+  if (sel.variant === VARIANT_BAT) {
+    const storage = suggestedStorage.value
+    if (!storage) return
+
+    // Keep the currently selected producent — do not touch inverter,
+    // mocPvKw or mounting for a battery-only variant.
+    const bats = byKat('Magazyn energii').filter((c) => c.producent === sel.producent)
+    const bat = pickBySpec(bats, 'pojemnosc_kwh', storage)
+    if (bat) sel.bateria = bat.name
+  }
 }
 
 // --- Flow / result state ----------------------------------------------------
