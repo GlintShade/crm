@@ -7,10 +7,16 @@
   the server reports which fields are still missing (`brakujace`) rather than
   gating the save itself.
 
-  API (fixed interface, built by another agent in parallel):
-    volteo_umowa_get(deal)         -> {umowa|null, prefill, wyliczenia}
-    volteo_umowa_create(deal)      -> {umowa, prefill, wyliczenia}
-    volteo_umowa_save(deal, dane)  -> {umowa, prefill, wyliczenia}
+  API (fixed interface, built by another agent in parallel). These are
+  whitelisted methods in the fork (crm/api/umowa.py), NOT Server Scripts, so
+  every call() MUST use the full dotted path below — a bare command name
+  (e.g. 'volteo_umowa_get') resolves only via frappe.handler's globals(),
+  which Server Scripts populate automatically but whitelisted fork methods do
+  not. AudytTab.vue calls its Server Script endpoints by bare name, which is
+  why that pattern looks correct to copy here and silently isn't:
+    crm.api.umowa.volteo_umowa_get(deal)         -> {umowa|null, prefill, wyliczenia}
+    crm.api.umowa.volteo_umowa_create(deal)      -> {umowa, prefill, wyliczenia}
+    crm.api.umowa.volteo_umowa_save(deal, dane)  -> {umowa, prefill, wyliczenia}
       wyliczenia = { miejsce_montazu, pokrycie_dachowe, ppoz_wymagane,
                       kwota_kredytu_pln, brakujace_pola }
 
@@ -487,7 +493,7 @@ async function loadUmowa() {
   loading.value = true
   loadError.value = ''
   try {
-    const data = await call('volteo_umowa_get', { deal: props.dealId })
+    const data = await call('crm.api.umowa.volteo_umowa_get', { deal: props.dealId })
     umowa.value = data?.umowa || null
     prefill.value = data?.prefill || {}
     wyliczenia.value = data?.wyliczenia || {}
@@ -553,7 +559,7 @@ async function createUmowa() {
   if (creating.value) return
   creating.value = true
   try {
-    const data = await call('volteo_umowa_create', { deal: props.dealId })
+    const data = await call('crm.api.umowa.volteo_umowa_create', { deal: props.dealId })
     umowa.value = data?.umowa || null
     prefill.value = data?.prefill || {}
     wyliczenia.value = data?.wyliczenia || {}
@@ -581,7 +587,7 @@ async function saveForm() {
   saving.value = true
   saveState.value = 'saving'
   try {
-    const data = await call('volteo_umowa_save', {
+    const data = await call('crm.api.umowa.volteo_umowa_save', {
       deal: props.dealId,
       dane: buildPayload(),
     })
