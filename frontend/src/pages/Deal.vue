@@ -68,6 +68,7 @@
         <FakturyTab v-else-if="tab.name === 'Faktury'" :deal-id="dealId" />
         <MontazTab v-else-if="tab.name === 'Montaz'" :deal-id="dealId" />
         <AudytTab v-else-if="tab.name === 'Audyt'" :deal-id="dealId" />
+        <UmowaTab v-else-if="tab.name === 'Umowa'" :deal-id="dealId" />
       </template>
     </Tabs>
     <Resizer side="right" class="flex flex-col justify-between border-l">
@@ -333,10 +334,12 @@ import ZestawIcon from '@/components/Icons/ZestawIcon.vue'
 import FakturyIcon from '@/components/Icons/FakturyIcon.vue'
 import MontazIcon from '@/components/Icons/MontazIcon.vue'
 import AudytIcon from '@/components/Icons/AudytIcon.vue'
+import UmowaIcon from '@/components/Icons/UmowaIcon.vue'
 import ZestawTab from '@/components/deal/ZestawTab.vue'
 import FakturyTab from '@/components/deal/FakturyTab.vue'
 import MontazTab from '@/components/deal/MontazTab.vue'
 import AudytTab from '@/components/deal/AudytTab.vue'
+import UmowaTab from '@/components/deal/UmowaTab.vue'
 import DealStatusBar from '@/components/deal/DealStatusBar.vue'
 import OrganizationModal from '@/components/Modals/OrganizationModal.vue'
 import LostReasonModal from '@/components/Modals/LostReasonModal.vue'
@@ -553,7 +556,7 @@ const NATIVE_TABS = [
 // Curated Polish Szansa tabs. Pliki reuses the native Attachments view and
 // Historia reuses the native Activity feed (keep their native `name` so
 // <Activities> renders them; only the visible `label` is Polish). Zestaw /
-// Faktury / Montaż / Audyt are custom panels (see the #tab-panel branch).
+// Faktury / Montaż / Audyt / Umowa are custom panels (see the #tab-panel branch).
 const tabs = computed(() => {
   let tabOptions = [
     { name: 'Zestaw', label: __('Zestaw'), icon: ZestawIcon },
@@ -562,6 +565,7 @@ const tabs = computed(() => {
     { name: 'Montaz', label: __('Montaż'), icon: MontazIcon },
     { name: 'Activity', label: __('Aktywność'), icon: ActivityIcon },
     { name: 'Audyt', label: __('Audyt'), icon: AudytIcon },
+    { name: 'Umowa', label: __('Umowa'), icon: UmowaIcon },
   ]
   return tabOptions.filter((tab) => (tab.condition ? tab.condition() : true))
 })
