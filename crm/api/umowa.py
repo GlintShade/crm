@@ -269,6 +269,48 @@ def _decimal_lub_none(wartosc: Any) -> Decimal | None:
 		frappe.throw(_("Nieprawidłowa wartość kwoty."))
 
 
+def _propaguj_zgody(
+	deal_doc: "frappe.model.document.Document",
+	umowa_doc: "frappe.model.document.Document",
+) -> None:
+	"""Kopiuje zgody `zgoda_kontakt_telefoniczny`/`zgoda_dzialania_promocyjne` z `Volteo
+	Umowa` na podstawowy `Contact` szansy, żeby dało się filtrować/budować listę
+	kontaktów po zgodach — `Volteo Umowa` jest 1:1 z umową, więc bez tej kopii nie ma
+	na czym takiej listy zbudować. Najnowsza deklaracja nadpisuje poprzednią: nawet
+	gdy przedstawiciel odznaczy obie zgody, nadpisujemy nimi `Contact` — historyczny
+	fakt, że zgoda kiedyś była udzielona, zostaje zachowany na tym konkretnym
+	rekordzie `Volteo Umowa` i nie jest tu retroaktywnie zmieniany. Data i źródło
+	zgody są stemplowane WYŁĄCZNIE gdy przynajmniej jedna zgoda jest udzielona.
+	"""
+	try:
+		kontakt = _podstawowy_kontakt(deal_doc)
+		if not kontakt:
+			return
+
+		telefon = umowa_doc.get("zgoda_kontakt_telefoniczny")
+		marketing = umowa_doc.get("zgoda_dzialania_promocyjne")
+
+		aktualizacja: dict[str, Any] = {
+			"custom_zgoda_telefon": telefon,
+			"custom_zgoda_marketing": marketing,
+		}
+		if telefon or marketing:
+			aktualizacja["custom_zgoda_data"] = frappe.utils.nowdate()
+			aktualizacja["custom_zgoda_zrodlo"] = umowa_doc.name
+
+		# `Contact.custom_pesel` jest polem wymaganym (reqd=1), a wiele istniejących
+		# kontaktów powstało przed jego dodaniem i ma je puste — `.save()` na takim
+		# kontakcie wywaliłoby walidację pola wymaganego i zepsuło zapis CAŁEGO
+		# formularza umowy z powodu zupełnie niepowiązanego efektu ubocznego.
+		# `db.set_value` omija walidację dokumentu, więc jest tu bezpieczne.
+		frappe.db.set_value("Contact", kontakt, aktualizacja, update_modified=False)
+	except Exception:
+		# Utrata wypełnionego formularza umowy przez błąd w efekcie ubocznym (kopii
+		# zgód na Contact) byłaby gorszym skutkiem niż samo zalogowanie i pominięcie
+		# propagacji — zapis umowy musi się powieść niezależnie od jej wyniku.
+		frappe.log_error(frappe.get_traceback(), "Volteo Umowa: propagacja zgód do Contact")
+
+
 @frappe.whitelist()
 @rate_limit(limit=60, seconds=60)
 def volteo_umowa_get(deal: str) -> dict[str, Any]:
@@ -373,6 +415,8 @@ def volteo_umowa_save(deal: str, dane: dict[str, Any]) -> dict[str, Any]:
 		umowa_doc.save()
 	except Exception:
 		_blad_ogolny()
+
+	_propaguj_zgody(deal_doc, umowa_doc)
 
 	return {
 		"umowa": _umowa_do_dict(umowa_doc),
