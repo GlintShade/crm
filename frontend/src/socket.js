@@ -2,12 +2,19 @@ import { io } from 'socket.io-client'
 import { getCachedListResource, getCachedResource } from 'frappe-ui'
 
 export function initSocket() {
-  let socketio_port = window.socketio_port || 9000
   let host = window.location.hostname
   let siteName = window.site_name
-  let port = window.location.port ? `:${socketio_port}` : ''
-  let protocol = port ? 'http' : 'https'
-  let url = `${protocol}://${host}${port}/${siteName}`
+  // In the Vite dev server (port set, e.g. :8081) connect to the page's own
+  // origin so the socket goes through the dev proxy (which forwards
+  // `/socket.io/` upstream with `ws: true`). Going straight to
+  // `host:socketio_port` from the browser bypasses the proxy and the
+  // websocket upgrade dies before establishment. In production there is no
+  // port on the page URL, so we keep the original same-origin behaviour
+  // (no port, page protocol).
+  let isDevServer = !!window.location.port
+  let url = isDevServer
+    ? `${window.location.origin}/${siteName}`
+    : `${window.location.protocol}//${host}/${siteName}`
 
   let socket = io(url, {
     withCredentials: true,

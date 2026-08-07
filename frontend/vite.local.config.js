@@ -65,6 +65,20 @@ export default async (env) => {
         port: CRM_LOCAL_DEV_PORT,
         strictPort: true,
         proxy: {
+          // Socket.IO: the browser connects to the dev origin (same host:port
+          // as the page) and this proxies the websocket upstream to the
+          // realtime server on :9000. socket.js appends `/${siteName}` before
+          // `/socket.io/`, so match that optional prefix and strip it — the
+          // node server expects a bare `/socket.io/` path. `ws: true` is what
+          // actually lets the Upgrade: websocket handshake through (without
+          // this entry the upgrade dies with the connection closing before
+          // establishment, which is the console error this fixes).
+          '^/[^/]+/socket\\.io/': {
+            target: 'http://crm.localhost:9000',
+            ws: true,
+            changeOrigin: true,
+            rewrite: (p) => p.replace(/^\/[^/]+(?=\/socket\.io\/)/, ''),
+          },
           '^/(desk|app|login|api|assets|files|private)': {
             target: CRM_LOCAL_TARGET,
             ws: true,
