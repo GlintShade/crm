@@ -9,7 +9,14 @@ readme = "README.md"
 dynamic = ["version"]
 dependencies = [
     # "frappe~=15.0.0" # Installed and managed by bench.
-    "twilio==8.5.0"
+    "twilio==8.5.0",
+    "reportlab==4.2.5", # crm/volteo_umowa_render.py: rysuje warstwę danych na PDF-ie umowy
+    "pypdf>=5.1", # crm/volteo_umowa_render.py: czyta rozmiar strony oryginału i scala warstwę z nim.
+    # BEZ górnej granicy i BEZ twardego pinu celowo: pypdf jest dostarczane i
+    # używane przez sam Frappe (frappe/utils/pdf.py, print_format.py,
+    # print_utils.py; w obrazie zweryfikowano 6.13.3). Pin na starszą wersję
+    # zmusiłby pip do cofnięcia pypdf dla całego bencha, ryzykując zepsucie
+    # generowania PDF-ów w rdzeniu (np. ofert) przy zmianach API 5.x→6.x.
 ]
 
 [build-system]
