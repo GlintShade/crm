@@ -16,7 +16,7 @@ from typing import Any, NoReturn
 import frappe
 from frappe import _
 from frappe.rate_limiter import rate_limit
-from frappe.utils import cint
+from frappe.utils import cint, getdate
 
 from crm.api.czyste_powietrze import KALKULATOR_ROLE
 from crm.volteo_umowa import (
@@ -25,6 +25,8 @@ from crm.volteo_umowa import (
 	miejsce_i_pokrycie,
 	ppoz_wymagane,
 )
+from crm.volteo_umowa_pdf import POLA_KOMPONENTU, zbuduj_kontekst
+from crm.volteo_umowa_render import sciezka_wbudowanego_szablonu, zloz_umowe
 
 DOCTYPE = "Volteo Umowa"
 
@@ -100,6 +102,7 @@ _DANE_POLA_DOZWOLONE = [
 	"liczba_faz",
 	"osd",
 	"przekop_gruntowy",
+	"przekop_mb",
 	"istniejaca_pv",
 	"istniejaca_pv_moc_inwertera_kw",
 	"istniejaca_pv_moc_kwp",
@@ -114,6 +117,7 @@ _DANE_POLA_DOZWOLONE = [
 	"adres_montaz_nr_mieszkania",
 	"adres_montaz_kod",
 	"adres_montaz_miasto",
+	"dodatkowy_kabel",
 	"dodatkowy_kabel_m",
 	"zgoda_kontakt_telefoniczny",
 	"zgoda_dzialania_promocyjne",
@@ -166,6 +170,29 @@ def _sprawdz_dostep_do_szansy(deal: str, tryb: str) -> None:
 def _blad_ogolny() -> NoReturn:
 	frappe.log_error(frappe.get_traceback(), "Volteo Umowa: błąd formularza")
 	frappe.throw(_("Wystąpił błąd podczas zapisu formularza umowy."))
+
+
+def _blad_generowania_pdf() -> NoReturn:
+	frappe.log_error(frappe.get_traceback(), "Volteo Umowa: błąd generowania PDF")
+	frappe.throw(_("Wystąpił błąd podczas generowania PDF-u umowy. Spróbuj ponownie."))
+
+
+def _blad_brakujacego_szablonu() -> NoReturn:
+	"""Wbudowany szablon PDF-u (`crm/szablony/umowa_pv_me.pdf`) nie wczytał się z dysku.
+
+	To awaria WDROŻENIA (plik nie trafił do obrazu albo jest uszkodzony), nie
+	błąd użytkownika ani danych szansy — komunikat celowo nie sugeruje "spróbuj
+	ponownie" (to nie pomoże) i nie wygląda jak zwykły błąd generowania.
+	"""
+	frappe.log_error(frappe.get_traceback(), "Volteo Umowa: brak wbudowanego szablonu PDF")
+	frappe.throw(
+		_("Szablon PDF-u umowy nie jest dostępny w tej instalacji. Skontaktuj się z administratorem systemu.")
+	)
+
+
+def _blad_zapisu_pliku() -> NoReturn:
+	frappe.log_error(frappe.get_traceback(), "Volteo Umowa: błąd zapisu pliku PDF")
+	frappe.throw(_("PDF wygenerowano, ale nie udało się go zapisać. Spróbuj ponownie."))
 
 
 def _pobierz_umowe(deal: str) -> "frappe.model.document.Document | None":
@@ -423,3 +450,161 @@ def volteo_umowa_save(deal: str, dane: dict[str, Any]) -> dict[str, Any]:
 		"prefill": _prefill(deal_doc),
 		"wyliczenia": _wyliczenia(deal_doc, umowa_doc),
 	}
+
+
+_KOMPONENT_POLA = list(POLA_KOMPONENTU)
+"""Pola `Volteo Komponent` czytane dla PDF-u umowy. WYPROWADZONE z
+`crm.volteo_umowa_pdf.POLA_KOMPONENTU` — JEDYNEGO źródła prawdy o tym, czego
+`zbuduj_kontekst()` faktycznie potrzebuje — żeby ta lista i logika dopasowania
+komponentu (`_znajdz_komponent`, filtrująca po `kategoria`) nie mogły się już
+rozjechać tak jak 2026-08-06, gdy literał tu pomijał `kategoria` i żaden
+komponent nigdy się nie dopasowywał.
+
+Celowo BEZ `cena_jednostkowa_netto` (permlevel 1, wewnętrzna cena) — model
+tajemnicy kosztów: żadne pole kosztowe/marżowe/prowizyjne nie może trafić do
+kontekstu szablonu, niezależnie od tego, czy wywołujący użytkownik miałby
+techniczne uprawnienia je odczytać gdzie indziej."""
+assert "cena_jednostkowa_netto" not in _KOMPONENT_POLA, (
+	"Volteo Komponent.cena_jednostkowa_netto (permlevel 1, cena wewnętrzna) nie może "
+	"trafić do kontekstu PDF-u umowy — patrz model tajemnicy kosztów w docstringu wyżej."
+)
+
+
+def _aktywne_komponenty() -> list[dict[str, Any]]:
+	"""Wszystkie aktywne wiersze katalogu `Volteo Komponent`, tylko pola kliencie/techniczne.
+
+	`zbuduj_kontekst` sam dopasowuje wiersz do `deal.custom_falownik`/`custom_bateria`
+	po złożeniu `f"{nazwa} {model}"` (struktura doctype'u jest odwrotna do intuicji —
+	`nazwa` to producent, `model` to model) — tu tylko pobieramy pełną, aktywną listę.
+	"""
+	return frappe.get_all("Volteo Komponent", filters={"aktywny": 1}, fields=_KOMPONENT_POLA)
+
+
+def _wiersze_zestawu(deal_doc: "frappe.model.document.Document") -> list[dict[str, Any]]:
+	"""Spłaszcza wiersze `custom_zestaw` (typ/nazwa/ilość) do zwykłych dictów."""
+	return [
+		{"typ": wiersz.get("typ"), "nazwa": wiersz.get("nazwa"), "ilosc": wiersz.get("ilosc")}
+		for wiersz in deal_doc.get("custom_zestaw") or []
+	]
+
+
+def _usun_stare_pdfy_umowy(deal: str, nazwa_pliku: str) -> None:
+	"""Usuwa wszystkie wcześniejsze rekordy `File` z PDF-em umowy TEJ szansy.
+
+	Frappe nie nadpisuje pliku o istniejącej nazwie przy kolejnym `insert()` —
+	dokleja losowy sufiks tuż przed rozszerzeniem (`Umowa-PRO-PVME-26-1000.pdf`
+	→ `Umowa-PRO-PVME-26-1000e41034.pdf`). Dopasowanie po dokładnej nazwie
+	niczego by więc nie znalazło po drugim wywołaniu; zamiast tego dopasowujemy
+	PREFIKS `nazwa_pliku` bez rozszerzenia + dowolny sufiks + `.pdf`.
+
+	Bezpieczeństwo zakresu — filtr łączy TRZY warunki jednocześnie:
+	1. `attached_to_doctype == "CRM Deal"`,
+	2. `attached_to_name == deal` — żaden załącznik INNEJ szansy nie może zostać
+	   złapany, niezależnie od tego, jak nazywa się jego plik;
+	3. `file_name LIKE "<prefiks tej szansy>%.pdf"` — inne załączniki TEJ SAMEJ
+	   szansy (np. PDF faktury) mają inny prefiks nazwy (nie zaczynają się od
+	   `Umowa-<ta szansa>`) i nie pasują do wzorca, więc przeżywają.
+	Oba warunki (2) i (3) muszą być spełnione naraz, więc nawet plik o nazwie
+	pasującej do wzorca, ale podpięty pod inną szansę, nie zostanie ruszony.
+	Znaki `%`/`_` w nazwie szansy (nietypowe w naszym schemacie nazewnictwa, ale
+	teoretycznie możliwe) są eskejpowane, żeby nie działały jako wildcardy LIKE.
+
+	Usuwanie jest rekordem (`frappe.delete_doc`), nie tylko plikiem z dysku, żeby
+	nie zostawiać osieroconych wpisów `File`. Nieudane sprzątnięcie NIE MOŻE
+	zablokować wygenerowania nowego PDF-u — błąd trafia do `frappe.log_error`
+	i przetwarzanie idzie dalej.
+	"""
+	prefiks = nazwa_pliku[: -len(".pdf")]  # "Umowa-<szansa z myślnikami zamiast ukośników>"
+	wzorzec = prefiks.replace("%", r"\%").replace("_", r"\_") + "%.pdf"
+	stare_pliki = frappe.get_all(
+		"File",
+		filters={
+			"attached_to_doctype": "CRM Deal",
+			"attached_to_name": deal,
+			"file_name": ["like", wzorzec],
+		},
+		pluck="name",
+	)
+	for nazwa in stare_pliki:
+		try:
+			frappe.delete_doc("File", nazwa, ignore_permissions=True, delete_permanently=True)
+		except Exception:
+			frappe.log_error(title="volteo_umowa_pdf: nie udało się usunąć starego pliku PDF umowy")
+
+
+@frappe.whitelist()
+@rate_limit(limit=10, seconds=60)
+def volteo_umowa_pdf(deal: str) -> dict[str, Any]:
+	"""Generuje PDF umowy dla szansy sprzedaży i zapisuje go jako prywatny plik
+	podpięty do `CRM Deal`. Zwraca `{"file_url": ..., "file_name": ...}`.
+
+	Dokument PDF nie jest już odtwarzany w HTML — kontekst danych jest nakładany
+	jako warstwa na ORYGINALNY plik PDF od prawnika (wbudowany szablon
+	`crm/szablony/umowa_pv_me.pdf`), przez `crm.volteo_umowa_render.zloz_umowe`,
+	według współrzędnych z `crm.volteo_umowa_mapa`. Dzięki temu treść prawna,
+	układ i podział stron są dokładnie takie jak w oryginale.
+
+	Uprawnienia: ten sam gate co `volteo_umowa_get` (rola kalkulatora + `read` na
+	szansie) — generowanie PDF-u niczego nie zapisuje w `Volteo Umowa`, więc nie
+	wymaga `write`. Model tajemnicy kosztów/prowizji: do kontekstu trafiają
+	wyłącznie kwoty netto/brutto DLA KLIENTA (`deal_value`, `custom_netto`,
+	`wklad_wlasny_pln`, `kwota_kredytu_pln`) i dane techniczne — nigdy
+	`cena_jednostkowa_netto`, marże ani prowizje (patrz `_KOMPONENT_POLA`, które
+	jawnie pomija cenę wewnętrzną komponentu; `Volteo Kalkulator Stale` przekazujemy
+	w całości do `zbuduj_kontekst`, ale nakładanie na PDF czyta z kontekstu
+	wyłącznie pola `panel_*` — kosztowe/marżowe pola tej Single nigdy nie trafiają
+	na wydrukowaną stronę).
+
+	Brak rekordu `Volteo Umowa` dla szansy to normalny, oczekiwany stan (formularz
+	jeszcze niewypełniony) — zwracamy czytelny komunikat po polsku, nie wyjątek
+	techniczny. Brak/uszkodzenie wbudowanego szablonu PDF to natomiast awaria
+	wdrożenia (patrz `_blad_brakujacego_szablonu`), rozróżniana od zwykłego błędu
+	generowania osobnym, jednoznacznym komunikatem.
+	"""
+	_sprawdz_role()
+	_sprawdz_dostep_do_szansy(deal, "read")
+
+	umowa_doc = _pobierz_umowe(deal)
+	if umowa_doc is None:
+		frappe.throw(_("Najpierw wypełnij formularz informacji do umowy dla tej szansy sprzedaży."))
+
+	deal_doc = frappe.get_doc("CRM Deal", deal)
+	kontakt = _podstawowy_kontakt(deal_doc)
+
+	try:
+		szablon_pdf = sciezka_wbudowanego_szablonu().read_bytes()
+	except OSError:
+		_blad_brakujacego_szablonu()
+
+	try:
+		kontekst = zbuduj_kontekst(
+			umowa=umowa_doc.as_dict(),
+			deal={pole: deal_doc.get(pole) for pole in _DEAL_POLA_PREFILL},
+			kontakt=_dane_kontaktu(kontakt),
+			zestaw=_wiersze_zestawu(deal_doc),
+			komponenty=_aktywne_komponenty(),
+			stale=dict(frappe.db.get_singles_dict("Volteo Kalkulator Stale") or {}),
+			dzis=getdate(),
+		)
+		pdf_bytes = zloz_umowe(kontekst, szablon_pdf)
+	except Exception:
+		_blad_generowania_pdf()
+
+	nazwa_pliku = f"Umowa-{deal.replace('/', '-')}.pdf"
+	_usun_stare_pdfy_umowy(deal, nazwa_pliku)
+	try:
+		plik = frappe.get_doc(
+			{
+				"doctype": "File",
+				"file_name": nazwa_pliku,
+				"attached_to_doctype": "CRM Deal",
+				"attached_to_name": deal,
+				"is_private": 1,
+				"content": pdf_bytes,
+			}
+		)
+		plik.insert(ignore_permissions=True)
+	except Exception:
+		_blad_zapisu_pliku()
+
+	return {"file_url": plik.file_url, "file_name": plik.file_name}

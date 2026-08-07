@@ -17,6 +17,7 @@
     crm.api.umowa.volteo_umowa_get(deal)         -> {umowa|null, prefill, wyliczenia}
     crm.api.umowa.volteo_umowa_create(deal)      -> {umowa, prefill, wyliczenia}
     crm.api.umowa.volteo_umowa_save(deal, dane)  -> {umowa, prefill, wyliczenia}
+    crm.api.umowa.volteo_umowa_pdf(deal)         -> {file_url, file_name}
       wyliczenia = { miejsce_montazu, pokrycie_dachowe, ppoz_wymagane,
                       kwota_kredytu_pln, brakujace_pola }
 
@@ -96,6 +97,13 @@
             <span v-else-if="saveState === 'error'" class="text-xs text-ink-red-6">
               {{ __('Błąd zapisu') }}
             </span>
+            <Button
+              variant="outline"
+              :label="__('Generuj PDF umowy')"
+              :disabled="generatingPdf"
+              :loading="generatingPdf"
+              @click="generatePdf"
+            />
             <Button
               variant="solid"
               :label="__('Zapisz')"
@@ -384,10 +392,24 @@ const formSections = [
         required: true,
       },
       {
+        fieldname: 'przekop_mb',
+        label: __('Przekop gruntowy (mb)'),
+        type: 'number',
+        step: '1',
+        depends_on: { fieldname: 'przekop_gruntowy', value: 'Tak' },
+      },
+      {
+        fieldname: 'dodatkowy_kabel',
+        label: __('Dodatkowy kabel'),
+        type: 'select',
+        options: TAK_NIE,
+      },
+      {
         fieldname: 'dodatkowy_kabel_m',
         label: __('Dodatkowy kabel (m)'),
         type: 'number',
         step: '0.1',
+        depends_on: { fieldname: 'dodatkowy_kabel', value: 'Tak' },
       },
     ],
   },
@@ -607,6 +629,31 @@ async function saveForm() {
     toast.error(extractErrorMessage(err))
   } finally {
     saving.value = false
+  }
+}
+
+// --- Generate PDF ------------------------------------------------------------------
+// Server-side only: no cost/margin/commission data is available to this tab in the
+// first place, so there is nothing sensitive this call could leak client-side.
+const generatingPdf = ref(false)
+
+async function generatePdf() {
+  if (generatingPdf.value || !umowa.value) return
+  generatingPdf.value = true
+  try {
+    const data = await call('crm.api.umowa.volteo_umowa_pdf', { deal: props.dealId })
+    if (data?.file_url) {
+      // Private file served by Frappe under the caller's existing session cookie —
+      // a plain relative-URL open (not a fetch/download) is enough, same-origin.
+      window.open(data.file_url, '_blank')
+      toast.success(__('Wygenerowano PDF umowy'))
+    } else {
+      toast.error(__('Wystąpił błąd - spróbuj ponownie'))
+    }
+  } catch (err) {
+    toast.error(extractErrorMessage(err))
+  } finally {
+    generatingPdf.value = false
   }
 }
 
