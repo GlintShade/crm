@@ -362,9 +362,13 @@ const { reload: reloadView, getDefaultView, getView } = viewsStore()
 const { isManager } = usersStore()
 
 const list = defineModel({ type: Object, default: () => ({}) })
-const loadMore = defineModel('loadMore', { type: Boolean })
-const resizeColumn = defineModel('resizeColumn', { type: Boolean })
-const updatedPageCount = defineModel('updatedPageCount', { type: Boolean })
+// These are event counters, not booleans: pages emit them via `loadMore++`
+// (see Deals.vue / Notes.vue / CallLogs.vue / Tasks.vue), and the watchers
+// below only test truthiness. Declared Boolean, Vue warned on every emit
+// ("Expected Boolean, got Number"); Number matches actual usage.
+const loadMore = defineModel('loadMore', { type: Number })
+const resizeColumn = defineModel('resizeColumn', { type: Number })
+const updatedPageCount = defineModel('updatedPageCount', { type: Number })
 
 const route = useRoute()
 const router = useRouter()
