@@ -369,6 +369,91 @@ class TestObliczenia(unittest.TestCase):
 		self.assertEqual(wynik["wklad_wlasny"], Decimal("0.01"))
 		self.assertEqual(wynik["linie"][0]["netto"], Decimal("0.01"))
 
+	def test_wewnetrzne_linie_ilosc_i_kolejnosc_zgodna_z_liniami(self: "TestObliczenia") -> None:
+		wejscie = _wejscie()
+		wejscie["typ_grzejnikow"] = "grzejnik"
+		wejscie["ilosc_grzejnikow"] = 3
+		wejscie["prace"]["elewacja"] = {"wybrana": True, "m2": "50"}
+		wejscie["prace"]["drzwi"] = {"wybrana": True, "ilosc": 1}
+		wynik = self.policz(wejscie)
+		kody_publiczne = [linia["kod"] for linia in wynik["linie"]]
+		kody_wewnetrzne = [linia["kod"] for linia in wynik["wewnetrzne"]["linie"]]
+		self.assertEqual(kody_wewnetrzne, kody_publiczne)
+		self.assertEqual(len(wynik["wewnetrzne"]["linie"]), len(wynik["linie"]))
+
+	def test_wewnetrzne_linie_koszt_i_prowizja_spojne(self: "TestObliczenia") -> None:
+		wejscie = _wejscie()
+		wejscie["typ_grzejnikow"] = "grzejnik"
+		wejscie["ilosc_grzejnikow"] = 3
+		wejscie["prace"]["elewacja"] = {"wybrana": True, "m2": "50"}
+		wejscie["prace"]["drzwi"] = {"wybrana": True, "ilosc": 1}
+		wynik = self.policz(wejscie)
+		for linia in wynik["wewnetrzne"]["linie"]:
+			self.assertEqual(
+				linia["koszt"],
+				linia["ilosc_rozliczeniowa"] * linia["koszt_jednostkowy"] + linia["koszt_staly"],
+			)
+			self.assertEqual(linia["prowizja"], linia["ilosc_rozliczeniowa"] * linia["stawka_prowizji"])
+
+	def test_zysk_rowny_marza_minus_prowizja(self: "TestObliczenia") -> None:
+		wejscie = _wejscie()
+		wejscie["typ_grzejnikow"] = "grzejnik"
+		wejscie["ilosc_grzejnikow"] = 10
+		wynik = self.policz(wejscie)
+		wewnetrzne = wynik["wewnetrzne"]
+		self.assertEqual(wewnetrzne["prowizja_handlowa"], wynik["prowizja_handlowa"])
+		self.assertEqual(wewnetrzne["zysk"], wewnetrzne["marza"] - wewnetrzne["prowizja_handlowa"])
+
+	def test_drzwi_ilosc_rozliczeniowa_w_sztukach(self: "TestObliczenia") -> None:
+		wejscie = _wejscie("podstawowy", "od80do140")
+		wejscie["zrodlo_ciepla"] = None
+		wejscie["prace"]["drzwi"] = {"wybrana": True, "ilosc": 2}
+		wynik = self.policz(wejscie)
+		linia_drzwi = next(l for l in wynik["wewnetrzne"]["linie"] if l["kod"] == "drzwi")
+		self.assertEqual(linia_drzwi["ilosc_rozliczeniowa"], Decimal("2"))
+		self.assertEqual(linia_drzwi["jednostka_rozliczeniowa"], "szt")
+		# 2 szt. x koszt_proenergy=4500 + koszt_staly=0 = 9000
+		self.assertEqual(linia_drzwi["koszt"], Decimal("9000.00"))
+		# 2 szt. x prowizja=200 = 400
+		self.assertEqual(linia_drzwi["prowizja"], Decimal("400.00"))
+
+	def test_elewacja_koszt_staly_nie_skaluje_sie_z_powierzchnia(self: "TestObliczenia") -> None:
+		def policz_dla_m2(m2: str) -> dict[str, object]:
+			wejscie = _wejscie(standard="powyzej140")
+			wejscie["zrodlo_ciepla"] = None
+			wejscie["prace"]["elewacja"] = {"wybrana": True, "m2": m2}
+			return self.policz(wejscie)
+
+		wynik_a = policz_dla_m2("100")
+		wynik_b = policz_dla_m2("150")
+		linia_a = wynik_a["wewnetrzne"]["linie"][0]
+		linia_b = wynik_b["wewnetrzne"]["linie"][0]
+		self.assertEqual(linia_a["koszt_staly"], linia_b["koszt_staly"])
+		# koszt_jednostkowy=220, delta m2=50 -> delta kosztu wyłącznie z jednostkowego składnika
+		self.assertEqual(linia_b["koszt"] - linia_a["koszt"], Decimal("11000.00"))
+
+	def test_wynik_linie_nie_zawieraja_danych_kosztowych(self: "TestObliczenia") -> None:
+		wejscie = _wejscie()
+		wejscie["typ_grzejnikow"] = "grzejnik"
+		wejscie["ilosc_grzejnikow"] = 3
+		wejscie["prace"]["elewacja"] = {"wybrana": True, "m2": "50"}
+		wejscie["prace"]["okna"] = {"wybrana": True, "m2": "10"}
+		wejscie["prace"]["drzwi"] = {"wybrana": True, "ilosc": 1}
+		wynik = self.policz(wejscie)
+		zakazane_klucze = {
+			"koszt",
+			"prowizja",
+			"stawka_prowizji",
+			"koszt_jednostkowy",
+			"koszt_staly",
+			"ilosc_rozliczeniowa",
+			"jednostka_rozliczeniowa",
+		}
+		for linia in wynik["linie"]:
+			for klucz in linia:
+				self.assertFalse(klucz.startswith("_"), f"Klucz prywatny {klucz} przeciekł do wynik['linie']")
+				self.assertNotIn(klucz, zakazane_klucze)
+
 
 if __name__ == "__main__":
 	unittest.main()

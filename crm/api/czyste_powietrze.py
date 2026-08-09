@@ -135,6 +135,9 @@ def volteo_cp_calc(wejscie: dict[str, Any]) -> dict[str, Any]:
 		wynik, _limity = _wynik_kalkulatora(wejscie)
 		czy_moze_widziec_koszty = _czy_admin(role_uzytkownika)
 		if not czy_moze_widziec_koszty:
+			# Ten jeden pop celowo usuwa też rozbicie kosztów/prowizji per pozycja
+			# (wynik["wewnetrzne"]["linie"]) wprowadzone w obliczenia.py — wszystkie dane
+			# kosztowe żyją wyłącznie wewnątrz poddrzewa "wewnetrzne".
 			wynik.pop("wewnetrzne", None)
 		return wynik
 	except (CPNiedozwolonaKombinacja, CPPozycjaNieaktywna, CPDaneNiekompletne) as blad:

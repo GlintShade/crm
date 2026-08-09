@@ -100,12 +100,14 @@ def _linia(
 	vat: Decimal,
 	ilosc_rozliczeniowa: Decimal | None = None,
 	ilosc_wyswietlana: Decimal | None = None,
+	jednostka_rozliczeniowa: str | None = None,
 ) -> dict[str, Any]:
 	netto_jednostkowe, dotacja_jednostkowa, prowizja_jednostkowa, _ = _dane_stawki(pozycja, poziom, kod)
 	koszt_jednostkowy = _decimal(pozycja["koszt_proenergy"], f"koszt_proenergy:{kod}")
 	koszt_staly = _decimal(pozycja["koszt_staly"], f"koszt_staly:{kod}")
 	ilosc_rozliczeniowa = ilosc if ilosc_rozliczeniowa is None else ilosc_rozliczeniowa
 	ilosc_wyswietlana = ilosc if ilosc_wyswietlana is None else ilosc_wyswietlana
+	jednostka_rozliczeniowa = pozycja["jednostka"] if jednostka_rozliczeniowa is None else jednostka_rozliczeniowa
 
 	netto = ilosc * netto_jednostkowe
 	brutto = netto * vat
@@ -125,6 +127,11 @@ def _linia(
 		"_dotacja": max(_ZERO, dotacja),
 		"_prowizja": prowizja,
 		"_koszt": koszt,
+		"_koszt_jednostkowy": koszt_jednostkowy,
+		"_koszt_staly": koszt_staly,
+		"_stawka_prowizji": prowizja_jednostkowa,
+		"_ilosc_rozliczeniowa": ilosc_rozliczeniowa,
+		"_jednostka_rozliczeniowa": jednostka_rozliczeniowa,
 	}
 
 
@@ -166,10 +173,15 @@ def _powierzchnia_pracy(
 	return m2, None
 
 
+# Ostatnia linia obrony przed wyciekiem kosztów/prowizji do wynik["linie"]: usuwa KAŻDY klucz
+# zaczynający się od "_", niezależnie od tego, czy jest tu wymieniony po nazwie. Dzięki temu
+# nowe prywatne pole dopisane kiedyś do _linia() i zapomniane w tej liście i tak zostanie
+# wyczyszczone, zamiast po cichu przeciekło do widoku handlowca terenowego.
 def _zaokragl_wynik(linie: list[dict[str, Any]], wynik: dict[str, Any]) -> dict[str, Any]:
 	for linia in linie:
-		for pole in ("_netto", "_brutto", "_dotacja", "_prowizja", "_koszt"):
-			linia.pop(pole, None)
+		for pole in list(linia.keys()):
+			if pole.startswith("_"):
+				linia.pop(pole, None)
 	return wynik
 
 
@@ -268,6 +280,7 @@ def oblicz_oferte(
 		m2, liczba_drzwi = _powierzchnia_pracy(kod, praca, powierzchnia, stale)
 		ilosc_rozliczeniowa = liczba_drzwi if kod == "drzwi" else m2
 		ilosc_wyswietlana = liczba_drzwi if kod == "drzwi" and pozycja["jednostka"] == "szt" else m2
+		jednostka_rozliczeniowa = "szt" if kod == "drzwi" else None
 		termo_linie.append(
 			_linia(
 				kod,
@@ -277,6 +290,7 @@ def oblicz_oferte(
 				vat,
 				ilosc_rozliczeniowa=ilosc_rozliczeniowa,
 				ilosc_wyswietlana=ilosc_wyswietlana,
+				jednostka_rozliczeniowa=jednostka_rozliczeniowa,
 			)
 		)
 
@@ -316,15 +330,40 @@ def oblicz_oferte(
 	wklad_zrodlo = max(_ZERO, brutto_zrodlo - dotacja_zrodlo)
 	wklad_co = max(_ZERO, brutto_co - dotacja_co)
 	wklad_termo = max(_ZERO, brutto_termo - dotacja_termo)
+
+	# Rozbicie kosztów/prowizji per pozycja budowane PRZED czyszczeniem prywatnych pól przez
+	# _zaokragl_wynik. Żyje wyłącznie wewnątrz wynik["wewnetrzne"], bo crm/api/czyste_powietrze.py
+	# usuwa całe to poddrzewo dla nie-adminów jednym wynik.pop("wewnetrzne", None) — umieszczenie
+	# tych danych na wynik["linie"] ujawniłoby koszty i marże handlowcom terenowym.
+	linie_wewnetrzne = [
+		{
+			"kod": linia["kod"],
+			"ilosc_rozliczeniowa": linia["_ilosc_rozliczeniowa"],
+			"jednostka_rozliczeniowa": linia["_jednostka_rozliczeniowa"],
+			"netto": _kwota(linia["_netto"]),
+			"koszt": _kwota(linia["_koszt"]),
+			"koszt_jednostkowy": _kwota(linia["_koszt_jednostkowy"]),
+			"koszt_staly": _kwota(linia["_koszt_staly"]),
+			"stawka_prowizji": _kwota(linia["_stawka_prowizji"]),
+			"prowizja": _kwota(linia["_prowizja"]),
+		}
+		for linia in linie
+	]
+
+	prowizja_handlowa = _kwota(suma_prowizji)
+	marza = _kwota(suma_netto - koszt_calkowity)
 	wynik = {
 		"wklad_wlasny": _kwota(wklad_zrodlo + wklad_co + wklad_termo),
-		"prowizja_handlowa": _kwota(suma_prowizji),
+		"prowizja_handlowa": prowizja_handlowa,
 		"linie": linie,
 		"dotacja_laczna": _kwota(dotacja_zrodlo + dotacja_co + dotacja_termo),
 		"dotacja_ograniczona_o": _kwota(dotacja_ograniczona_o),
 		"wewnetrzne": {
 			"koszt_calkowity": _kwota(koszt_calkowity),
-			"marza": _kwota(suma_netto - koszt_calkowity),
+			"marza": marza,
+			"prowizja_handlowa": prowizja_handlowa,
+			"zysk": marza - prowizja_handlowa,
+			"linie": linie_wewnetrzne,
 		},
 	}
 	return _zaokragl_wynik(linie, wynik)
