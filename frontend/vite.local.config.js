@@ -64,6 +64,22 @@ export default async (env) => {
       server: {
         port: CRM_LOCAL_DEV_PORT,
         strictPort: true,
+        // Nasłuch dwustosowy. Bez `host` Vite bierze domyślny `localhost`, a Node
+        // od wersji 17 rozwiązuje nazwy w kolejności "verbatim" (`::1` przed
+        // `127.0.0.1`), więc serwer przypina się WYŁĄCZNIE do pętli IPv6. Safari
+        // trafia wtedy na `::1` i działa, ale przeglądarki na silniku Chromium
+        // (Opera, Chrome) idą dla `*.localhost` po IPv4 i dostają odmowę
+        // połączenia — objaw: "serwer lokalny nie działa" w jednej przeglądarce
+        // i działa w drugiej.
+        // `'::'` daje nasłuch dwustosowy (Node ma domyślnie `ipv6Only=false`),
+        // więc odpowiada zarówno `127.0.0.1`, jak i `[::1]`.
+        // NIE używać `'0.0.0.0'` ani `host: true` — dają nasłuch wyłącznie IPv4
+        // i zepsują Safari.
+        // Świadoma konsekwencja: `'::'` nasłuchuje na wszystkich interfejsach,
+        // więc port 8081 jest widoczny w sieci lokalnej. Nie zmienia to stanu
+        // bezpieczeństwa tego stosu — kontener `frontend` już publikuje
+        // `0.0.0.0:8080` i `[::]:8080` z dokładnie tymi samymi danymi.
+        host: '::',
         proxy: {
           // Socket.IO: the browser connects to the dev origin (same host:port
           // as the page) and this proxies the websocket upstream to the
