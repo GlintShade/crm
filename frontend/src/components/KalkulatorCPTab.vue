@@ -301,10 +301,37 @@
                     {{ formatQty(linia.iloscRozliczeniowa) }} {{ linia.jednostkaRozliczeniowa === 'szt' ? __('szt') : __('m²') }}
                   </td>
                   <td class="py-1.5 pr-2 text-right text-ink-gray-7">{{ plnFmt(linia.netto) }}</td>
-                  <td class="py-1.5 pr-2 text-right text-ink-gray-7">
-                    {{ plnFmt(linia.koszt) }}
-                    <div v-if="linia.kosztStaly > 0" class="text-xs text-ink-gray-5">
-                      {{ formatAmount(linia.kosztJednostkowy) }} × {{ formatQty(linia.iloscRozliczeniowa) }} + {{ formatAmount(linia.kosztStaly) }} {{ __('stałe') }}
+                  <td class="py-1.5 pr-2 text-right">
+                    <div class="flex flex-col items-end gap-1">
+                      <input
+                        :value="koszty[linia.kod]?.jednostkowy"
+                        type="text"
+                        inputmode="decimal"
+                        class="kalk-input kalk-input-koszt text-right"
+                        :class="{ 'kalk-input-nadpisany': linia.kosztJednostkowy !== linia.kosztJednostkowyKatalogowy }"
+                        :title="tytulNadpisania(linia.kosztJednostkowy, linia.kosztJednostkowyKatalogowy)"
+                        @input="koszty[linia.kod] = { ...koszty[linia.kod], jednostkowy: $event.target.value }"
+                      />
+                      <!-- Koszt stały renderujemy WYŁĄCZNIE dla pozycji, dla których katalog
+                           przewiduje niezerowy koszt stały (dziś: elewacja) — inaczej tabela
+                           zapełnia się dziesięcioma polami zer bez znaczenia. Dopisek pod polem
+                           jest widoczny na stałe, nie tylko w `title`, żeby było jasne bez
+                           najeżdżania myszą, że ta liczba dolicza się raz, nie razy ilość. -->
+                      <template v-if="linia.kosztStalyKatalogowy > 0">
+                        <input
+                          :value="koszty[linia.kod]?.staly"
+                          type="text"
+                          inputmode="decimal"
+                          class="kalk-input kalk-input-koszt-staly text-right"
+                          :class="{ 'kalk-input-nadpisany': linia.kosztStaly !== linia.kosztStalyKatalogowy }"
+                          :title="tytulNadpisania(linia.kosztStaly, linia.kosztStalyKatalogowy)"
+                          @input="koszty[linia.kod] = { ...koszty[linia.kod], staly: $event.target.value }"
+                        />
+                        <span class="text-[10px] leading-none text-ink-gray-5">{{ __('koszt stały — raz na ofertę') }}</span>
+                      </template>
+                      <div class="text-xs text-ink-gray-5">
+                        {{ formatAmount(linia.kosztJednostkowy) }} × {{ formatQty(linia.iloscRozliczeniowa) }}<template v-if="linia.kosztStalyKatalogowy > 0"> + {{ formatAmount(linia.kosztStaly) }}</template> = {{ plnFmt(linia.koszt) }}
+                      </div>
                     </div>
                   </td>
                   <td class="py-1.5 pr-2 text-right text-ink-gray-7">{{ plnFmt(linia.pula) }}</td>
@@ -314,6 +341,8 @@
                       type="text"
                       inputmode="decimal"
                       class="kalk-input kalk-input-stawka text-right"
+                      :class="{ 'kalk-input-nadpisany': linia.stawka !== linia.stawkaKatalogowa }"
+                      :title="tytulNadpisania(linia.stawka, linia.stawkaKatalogowa)"
                       @input="stawki[linia.kod] = $event.target.value"
                     />
                   </td>
@@ -373,8 +402,8 @@
           <button
             type="button"
             class="mt-2 rounded-md border border-transparent bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200"
-            @click="resetStawki"
-          >{{ __('Przywróć stawki katalogowe') }}</button>
+            @click="resetWartosci"
+          >{{ __('Przywróć wartości katalogowe') }}</button>
         </div>
       </div>
     </div>
@@ -402,6 +431,8 @@ import {
   przeliczPodzial,
   scalStawki,
   stawkiPoczatkowe,
+  scalKoszty,
+  kosztyPoczatkowe,
 } from '@/utils/cpMarza'
 
 const props = defineProps({
@@ -468,29 +499,47 @@ const hasResult = computed(() => resultReady.value)
 const hasInternal = computed(() => Boolean(result.wewnetrzne))
 
 // --- Modelowanie prowizji dla struktur sprzedażowych (administrator) --------
-// `stawki` PRZEŻYWA kolejne przeliczenia (scalStawki w runCalc scala je z
-// nowym cennikiem zamiast nadpisywać katalogowymi wartościami) — główny
-// scenariusz użycia to porównanie kilku konfiguracji formularza przy TYM
-// SAMYM cenniku partnerskim, więc reset na każdą zmianę formularza
-// unieważniałby narzędzie. Jedyny sposób na powrót do wartości katalogowych
-// to przycisk „Przywróć stawki katalogowe" (resetStawki niżej). To
-// piaskownica: nic stąd nie trafia do zapisu ani do dokumentu klienta.
+// `stawki` i `koszty` PRZEŻYWAJĄ kolejne przeliczenia (scalStawki/scalKoszty
+// w runCalc scalają je z nowym cennikiem zamiast nadpisywać katalogowymi
+// wartościami) — główny scenariusz użycia to porównanie kilku konfiguracji
+// formularza przy TYM SAMYM cenniku partnerskim, więc reset na każdą zmianę
+// formularza unieważniałby narzędzie. Jedyny sposób na powrót do wartości
+// katalogowych to przycisk „Przywróć wartości katalogowe" (resetWartosci
+// niżej). To piaskownica: nic stąd nie trafia do zapisu ani do dokumentu
+// klienta.
 const stawki = ref({})
+// `koszty[kod]` to `{ jednostkowy, staly }` — koszt stały jest edytowalny
+// tylko tam, gdzie katalog przewiduje go niezerowym (dziś: `elewacja`), ale
+// stan trzyma oba pola dla każdego kodu jednolicie; przeliczPodzial i tak
+// bierze katalogowe 0 dla pól, których administrator nigdy nie dotknął.
+const koszty = ref({})
 const sekcjaProwizjiRozwinieta = ref(true)
 // `razem.marzaProc` and `razem.zyskProc` are computed inside przeliczPodzial
 // itself (both as % of netto) so the component never re-derives the same
 // ratio by hand — see cpMarza.js.
 const podzial = computed(() =>
-  przeliczPodzial(result.wewnetrzne?.linie ?? [], stawki.value),
+  przeliczPodzial(result.wewnetrzne?.linie ?? [], stawki.value, koszty.value),
 )
 
-function resetStawki() {
+function resetWartosci() {
   if (!hasInternal.value) return
   stawki.value = stawkiPoczatkowe(result.wewnetrzne.linie)
+  koszty.value = kosztyPoczatkowe(result.wewnetrzne.linie)
 }
 
 function nazwaPozycji(kod) {
   return pozycje.value[kod]?.nazwa || kod
+}
+
+// Wskaźnik nadpisania: porównujemy WYLICZONE (sparsowane) wartości z
+// `podzial.linie`, nie surowy tekst inputa — administrator może wpisać
+// "3000" gdy katalog trzyma "3000.00" i to wciąż jest ta sama liczba, więc
+// nie ma czego podświetlać. Tytuł inputa pokazuje wartość katalogową, żeby
+// dało się wrócić do niej myślą bez klikania „Przywróć wartości katalogowe".
+function tytulNadpisania(aktualna, katalogowa) {
+  return aktualna !== katalogowa
+    ? __('Katalogowo: {0}', [plnFmt(katalogowa)])
+    : undefined
 }
 
 // --- Tworzenie szansy --------------------------------------------------------
@@ -547,11 +596,11 @@ function clearResult() {
   // the key would put us right back in a state where `hasOwnProperty` (if
   // anyone reintroduces it) can no longer see the property at all.
   result.wewnetrzne = null
-  // `stawki` is deliberately NOT reset here — `podzial` is a computed that
-  // reads `hasInternal`, so it collapses to an empty split on its own once
-  // `wewnetrzne` is gone. Wiping `stawki` too would defeat the "compare
-  // configurations against the same rate card" workflow the moment the form
-  // passes through a momentarily invalid state.
+  // `stawki`/`koszty` are deliberately NOT reset here — `podzial` is a
+  // computed that reads `hasInternal`, so it collapses to an empty split on
+  // its own once `wewnetrzne` is gone. Wiping them too would defeat the
+  // "compare configurations against the same rate card" workflow the moment
+  // the form passes through a momentarily invalid state.
 }
 
 function formatQty(value) {
@@ -619,6 +668,7 @@ async function runCalc() {
       result.wewnetrzne = data.wewnetrzne
       // Merge, never overwrite — see the comment above `stawki` declaration.
       stawki.value = scalStawki(stawki.value, data.wewnetrzne.linie)
+      koszty.value = scalKoszty(koszty.value, data.wewnetrzne.linie)
     } else if (hasInternal.value) {
       result.wewnetrzne = null
     }
@@ -701,6 +751,29 @@ onBeforeUnmount(() => {
   width: 84px;
   margin-left: auto;
 }
+.kalk-input-koszt {
+  width: 92px;
+  margin-left: auto;
+}
+.kalk-input-koszt-staly {
+  width: 92px;
+  margin-left: auto;
+}
+/* Wskaźnik nadpisania: pole, którego wartość różni się od katalogowej,
+   dostaje inne tło i obramowanie — po kilku wariantach ma być widać na
+   pierwszy rzut oka, które liczby są prawdziwe (katalogowe), a które
+   zmodelowane. Wartość katalogowa jest w atrybucie `title` na inpucie. */
+.kalk-input-nadpisany {
+  background: #fef3c7;
+  border-color: #d97706;
+}
+.kalk-input-nadpisany:hover {
+  background: #fde8a8;
+}
+.kalk-input-nadpisany:focus {
+  background: #fff;
+  border-color: #d97706;
+}
 .kalk-marza-scroll {
   overflow-x: auto;
 }
@@ -714,5 +787,7 @@ onBeforeUnmount(() => {
   .sticky { position: static; }
   .kalk-marza-table { min-width: 620px; }
   .kalk-input-stawka { width: 68px; }
+  .kalk-input-koszt { width: 76px; }
+  .kalk-input-koszt-staly { width: 76px; }
 }
 </style>
