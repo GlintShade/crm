@@ -223,6 +223,18 @@
                 <div class="mb-1.5 text-xs font-semibold uppercase tracking-wider text-amber-700">{{ __('Rozbicie kosztów (administrator)') }}</div>
                 <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>{{ __('Koszt całkowity') }}</span><span>{{ plnFmt(result.wewnetrzne.koszt_calkowity) }}</span></div>
                 <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>{{ __('Marża') }}</span><span>{{ plnFmt(result.wewnetrzne.marza) }}</span></div>
+                <!-- Prowizja/Zysk czytają z `podzial.razem`, NIE z `result.wewnetrzne`:
+                     to samo źródło co tabela niżej, żeby administrator nigdy nie
+                     zobaczył dwóch różnych liczb pod etykietą „Zysk" na raz — ten
+                     przyklejony blok jest live'owym streszczeniem, serwer liczy
+                     `wewnetrzne.prowizja_handlowa`/`wewnetrzne.zysk` tylko stawkami
+                     katalogowymi, więc po edycji stawki przez administratora byłyby
+                     nieaktualne. -->
+                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>{{ __('Prowizja') }}</span><span>{{ plnFmt(podzial.razem.prowizja) }}</span></div>
+                <div
+                  class="flex justify-between border-t border-amber-200 pt-1 text-sm font-semibold tabular-nums"
+                  :class="podzial.razem.zysk < 0 ? 'text-red-600' : 'text-amber-800'"
+                ><span>{{ __('Zysk') }}</span><span>{{ plnFmt(podzial.razem.zysk) }}</span></div>
               </div>
             </div>
             <div v-else-if="!errorMsg" class="text-sm text-ink-gray-5">
@@ -241,6 +253,128 @@
               {{ __('Wybierz klienta, aby utworzyć szansę.') }}
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Piaskownica: podział puli między prowizję struktury a zysk ProEnergy.
+           Widoczna wyłącznie dla administratora (hasInternal), bo tylko on
+           dostaje `wewnetrzne` z serwera — przeglądarka niczego tu nie ukrywa,
+           po prostu nie ma czego pokazać nie-administratorowi. Pełna
+           szerokość (poza wąską kolumną kalk-output), bo tabela ma 9 kolumn. -->
+      <div v-if="hasInternal && hasResult" class="mt-4 border-t border-gray-200 pt-4">
+        <div class="mb-2 flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <div class="text-base font-semibold text-ink-gray-9">
+              {{ __('Modelowanie prowizji dla struktur sprzedażowych (administrator)') }}
+            </div>
+            <div class="text-xs text-ink-gray-5">
+              {{ __('Zmiany poniżej są wyłącznie poglądowe — nic tutaj nie jest zapisywane ani nie trafia do oferty klienta.') }}
+            </div>
+          </div>
+          <button
+            type="button"
+            class="shrink-0 rounded-md border border-transparent bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200"
+            @click="sekcjaProwizjiRozwinieta = !sekcjaProwizjiRozwinieta"
+          >{{ sekcjaProwizjiRozwinieta ? __('Zwiń') : __('Rozwiń') }}</button>
+        </div>
+
+        <div v-show="sekcjaProwizjiRozwinieta">
+          <div class="kalk-marza-scroll">
+            <table class="kalk-marza-table w-full border-collapse text-sm">
+              <thead>
+                <tr class="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-ink-gray-5">
+                  <th class="py-1.5 pr-2">{{ __('Pozycja') }}</th>
+                  <th class="py-1.5 pr-2 text-right">{{ __('Ilość') }}</th>
+                  <th class="py-1.5 pr-2 text-right">{{ __('Netto') }}</th>
+                  <th class="py-1.5 pr-2 text-right">{{ __('Koszt') }}</th>
+                  <th class="py-1.5 pr-2 text-right">{{ __('Pula') }}</th>
+                  <th class="py-1.5 pr-2 text-right">{{ __('Stawka') }}</th>
+                  <th class="py-1.5 pr-2 text-right">{{ __('Prowizja') }}</th>
+                  <th class="py-1.5 pr-2 text-right">{{ __('Zysk') }}</th>
+                  <th class="py-1.5 text-right">{{ __('%') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="linia in podzial.linie" :key="linia.kod" class="border-b border-gray-100 tabular-nums">
+                  <td class="py-1.5 pr-2 text-ink-gray-8">{{ nazwaPozycji(linia.kod) }}</td>
+                  <td class="py-1.5 pr-2 text-right text-ink-gray-6">
+                    {{ formatQty(linia.iloscRozliczeniowa) }} {{ linia.jednostkaRozliczeniowa === 'szt' ? __('szt') : __('m²') }}
+                  </td>
+                  <td class="py-1.5 pr-2 text-right text-ink-gray-7">{{ plnFmt(linia.netto) }}</td>
+                  <td class="py-1.5 pr-2 text-right text-ink-gray-7">
+                    {{ plnFmt(linia.koszt) }}
+                    <div v-if="linia.kosztStaly > 0" class="text-xs text-ink-gray-5">
+                      {{ formatAmount(linia.kosztJednostkowy) }} × {{ formatQty(linia.iloscRozliczeniowa) }} + {{ formatAmount(linia.kosztStaly) }} {{ __('stałe') }}
+                    </div>
+                  </td>
+                  <td class="py-1.5 pr-2 text-right text-ink-gray-7">{{ plnFmt(linia.pula) }}</td>
+                  <td class="py-1.5 pr-2 text-right">
+                    <input
+                      :value="stawki[linia.kod]"
+                      type="text"
+                      inputmode="decimal"
+                      class="kalk-input kalk-input-stawka text-right"
+                      @input="stawki[linia.kod] = $event.target.value"
+                    />
+                  </td>
+                  <td class="py-1.5 pr-2 text-right text-ink-gray-7">{{ plnFmt(linia.prowizja) }}</td>
+                  <td class="py-1.5 pr-2 text-right font-medium" :class="linia.zysk < 0 ? 'text-red-600' : 'text-ink-gray-8'">
+                    {{ plnFmt(linia.zysk) }}
+                  </td>
+                  <td class="py-1.5 text-right text-ink-gray-6">{{ formatPercent(linia.zyskProc) }}</td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr class="border-t-2 border-gray-300 font-semibold tabular-nums">
+                  <td class="py-1.5 pr-2 text-ink-gray-9">{{ __('RAZEM') }}</td>
+                  <td class="py-1.5 pr-2"></td>
+                  <td class="py-1.5 pr-2 text-right">{{ plnFmt(podzial.razem.netto) }}</td>
+                  <td class="py-1.5 pr-2 text-right">{{ plnFmt(podzial.razem.koszt) }}</td>
+                  <td class="py-1.5 pr-2 text-right">{{ plnFmt(podzial.razem.pula) }}</td>
+                  <td class="py-1.5 pr-2"></td>
+                  <td class="py-1.5 pr-2 text-right">{{ plnFmt(podzial.razem.prowizja) }}</td>
+                  <td class="py-1.5 pr-2 text-right" :class="podzial.razem.zysk < 0 ? 'text-red-600' : ''">
+                    {{ plnFmt(podzial.razem.zysk) }}
+                  </td>
+                  <td class="py-1.5 text-right">{{ formatPercent(podzial.razem.zyskProc) }}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div class="mt-3 max-w-xs rounded-lg border border-gray-200 bg-gray-50 p-2.5 text-sm tabular-nums">
+            <div class="flex justify-between py-0.5 text-ink-gray-7">
+              <span>{{ __('Przychód netto') }}</span><span>{{ plnFmt(podzial.razem.netto) }}</span>
+            </div>
+            <div class="flex justify-between py-0.5 text-ink-gray-7">
+              <span>{{ __('− Koszt ProEnergy') }}</span><span>{{ plnFmt(podzial.razem.koszt) }}</span>
+            </div>
+            <div class="flex justify-between border-t border-gray-200 py-0.5 pt-1 font-medium text-ink-gray-8">
+              <span>{{ __('= Marża brutto') }}</span>
+              <span>{{ plnFmt(podzial.razem.pula) }} <span class="font-normal text-ink-gray-5">({{ formatPercent(podzial.razem.marzaProc) }} {{ __('netto') }})</span></span>
+            </div>
+            <div class="flex justify-between py-0.5 text-ink-gray-7">
+              <span>{{ __('− Prowizja struktury') }}</span><span>{{ plnFmt(podzial.razem.prowizja) }}</span>
+            </div>
+            <div
+              class="flex justify-between border-t border-gray-200 py-0.5 pt-1 font-semibold"
+              :class="podzial.razem.zysk < 0 ? 'text-red-600' : 'text-ink-gray-9'"
+            >
+              <span>{{ __('= ZYSK ProEnergy') }}</span>
+              <span>
+                {{ plnFmt(podzial.razem.zysk) }}
+                <span class="font-normal" :class="podzial.razem.zysk < 0 ? 'text-red-600' : 'text-ink-gray-5'">
+                  ({{ formatPercent(podzial.razem.zyskProc) }} {{ __('netto') }})
+                </span>
+              </span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            class="mt-2 rounded-md border border-transparent bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200"
+            @click="resetStawki"
+          >{{ __('Przywróć stawki katalogowe') }}</button>
         </div>
       </div>
     </div>
@@ -264,6 +398,11 @@ import {
   opisBledu,
   pustyFormularz,
 } from '@/utils/cpForm'
+import {
+  przeliczPodzial,
+  scalStawki,
+  stawkiPoczatkowe,
+} from '@/utils/cpMarza'
 
 const props = defineProps({
   contact: { type: Object, default: () => ({}) },
@@ -285,6 +424,10 @@ const result = reactive({
   dotacja_laczna: '',
   dotacja_ograniczona_o: '',
   linie: [],
+  // Klucz istnieje od startu (wartość `null`, nigdy `delete`) celowo — patrz
+  // komentarz przy `hasInternal` niżej: usuwanie i doczytywanie klucza przez
+  // `hasOwnProperty` na obiekcie `reactive` po cichu psuje reaktywność.
+  wewnetrzne: null,
 })
 
 const standardLabels = {
@@ -312,7 +455,43 @@ const workLabels = {
 const drzwiArea = computed(() => drzwiM2(form.prace.drzwi.ilosc, m2NaDrzwi.value))
 const restrictionAmount = computed(() => Number(result.dotacja_ograniczona_o) || 0)
 const hasResult = computed(() => resultReady.value)
-const hasInternal = computed(() => Object.prototype.hasOwnProperty.call(result, 'wewnetrzne'))
+// NIE używać tu `Object.prototype.hasOwnProperty.call(result, 'wewnetrzne')`.
+// `result` jest obiektem `reactive` (Proxy) — Vue śledzi zależności wyłącznie
+// przez pułapki `get`/`has`/`ownKeys`/`deleteProperty`; `hasOwnProperty`
+// wywołuje `[[GetOwnProperty]]` (pułapka `getOwnPropertyDescriptor`), której
+// `MutableReactiveHandler` NIE definiuje. Taki odczyt nie rejestruje żadnej
+// zależności, więc `computed` zostaje policzony raz i zamrożony na starcie —
+// dokładnie to się stało: pierwsze wywołanie (zawsze przy niekompletnym
+// formularzu, przez `clearResult()`) betonowało `false` na całą sesję, mimo
+// że serwer poprawnie zwracał `wewnetrzne`. Zwykły odczyt właściwości
+// (`result.wewnetrzne`) przechodzi przez pułapkę `get`, która JEST śledzona.
+const hasInternal = computed(() => Boolean(result.wewnetrzne))
+
+// --- Modelowanie prowizji dla struktur sprzedażowych (administrator) --------
+// `stawki` PRZEŻYWA kolejne przeliczenia (scalStawki w runCalc scala je z
+// nowym cennikiem zamiast nadpisywać katalogowymi wartościami) — główny
+// scenariusz użycia to porównanie kilku konfiguracji formularza przy TYM
+// SAMYM cenniku partnerskim, więc reset na każdą zmianę formularza
+// unieważniałby narzędzie. Jedyny sposób na powrót do wartości katalogowych
+// to przycisk „Przywróć stawki katalogowe" (resetStawki niżej). To
+// piaskownica: nic stąd nie trafia do zapisu ani do dokumentu klienta.
+const stawki = ref({})
+const sekcjaProwizjiRozwinieta = ref(true)
+// `razem.marzaProc` and `razem.zyskProc` are computed inside przeliczPodzial
+// itself (both as % of netto) so the component never re-derives the same
+// ratio by hand — see cpMarza.js.
+const podzial = computed(() =>
+  przeliczPodzial(result.wewnetrzne?.linie ?? [], stawki.value),
+)
+
+function resetStawki() {
+  if (!hasInternal.value) return
+  stawki.value = stawkiPoczatkowe(result.wewnetrzne.linie)
+}
+
+function nazwaPozycji(kod) {
+  return pozycje.value[kod]?.nazwa || kod
+}
 
 // --- Tworzenie szansy --------------------------------------------------------
 // `hasResult` już odzwierciedla kompletność formularza: staje się prawdziwe
@@ -364,7 +543,15 @@ function clearResult() {
   result.dotacja_laczna = ''
   result.dotacja_ograniczona_o = ''
   result.linie = []
-  if (hasInternal.value) delete result.wewnetrzne
+  // `= null`, never `delete` — see the comment above `hasInternal`. Deleting
+  // the key would put us right back in a state where `hasOwnProperty` (if
+  // anyone reintroduces it) can no longer see the property at all.
+  result.wewnetrzne = null
+  // `stawki` is deliberately NOT reset here — `podzial` is a computed that
+  // reads `hasInternal`, so it collapses to an empty split on its own once
+  // `wewnetrzne` is gone. Wiping `stawki` too would defeat the "compare
+  // configurations against the same rate card" workflow the moment the form
+  // passes through a momentarily invalid state.
 }
 
 function formatQty(value) {
@@ -379,6 +566,15 @@ function formatAmount(value) {
 
 function plnFmt(value) {
   return `${formatAmount(value)} zł`
+}
+
+// formatAmount rounds to whole złoty, which flattens the profit-margin
+// percentages in the commission-modeling section to e.g. "17%" vs "16,6%" —
+// not precise enough to tell "sustainable" from "barely positive" apart.
+function formatPercent(value) {
+  const number = Number(value)
+  const safe = Number.isFinite(number) ? number : 0
+  return `${safe.toFixed(1).replace('.', ',')}%`
 }
 
 function lineName(line) {
@@ -416,8 +612,16 @@ async function runCalc() {
     result.dotacja_ograniczona_o = data.dotacja_ograniczona_o
     result.linie = data.linie || []
     resultReady.value = true
-    if (Object.prototype.hasOwnProperty.call(data, 'wewnetrzne')) result.wewnetrzne = data.wewnetrzne
-    else if (hasInternal.value) delete result.wewnetrzne
+    // `data` is a plain object freshly parsed from the server response, not
+    // the `reactive` `result` — `hasOwnProperty` is safe here (see the
+    // comment above `hasInternal` for why it is NOT safe on `result`).
+    if (Object.prototype.hasOwnProperty.call(data, 'wewnetrzne')) {
+      result.wewnetrzne = data.wewnetrzne
+      // Merge, never overwrite — see the comment above `stawki` declaration.
+      stawki.value = scalStawki(stawki.value, data.wewnetrzne.linie)
+    } else if (hasInternal.value) {
+      result.wewnetrzne = null
+    }
   } catch (error) {
     if (request !== calcRequest) return
     clearResult()
@@ -493,10 +697,22 @@ onBeforeUnmount(() => {
   cursor: not-allowed;
   opacity: 0.65;
 }
+.kalk-input-stawka {
+  width: 84px;
+  margin-left: auto;
+}
+.kalk-marza-scroll {
+  overflow-x: auto;
+}
+.kalk-marza-table {
+  min-width: 760px;
+}
 @media (max-width: 880px) {
   .kalk-split { grid-template-columns: 1fr !important; }
   .kalk-row2 { grid-template-columns: 1fr !important; }
   .kalk-output { border-left: 0 !important; padding-left: 0 !important; margin-top: 0.75rem; }
   .sticky { position: static; }
+  .kalk-marza-table { min-width: 620px; }
+  .kalk-input-stawka { width: 68px; }
 }
 </style>
