@@ -2,6 +2,15 @@ export const POZIOMY = ['podstawowy', 'podwyzszony', 'najwyzszy']
 export const STANDARDY = ['do80', 'od80do140', 'powyzej140']
 export const ZRODLA = ['pompa_ciepla', 'pellet', 'zgazowujacy']
 export const PRACE_M2 = ['elewacja', 'strop', 'dach', 'okna']
+export const GOSPODARSTWA = ['jednoosobowe', 'wieloosobowe']
+export const PROGI_DOCHODU = ['niski', 'sredni', 'wysoki']
+// Progi z Programu Priorytetowego Czyste Powietrze (nabór od 2026-07-20), §8.2 pkt 2
+// i §8.3 pkt 2 — warunek brzmi „nie przekracza kwoty", więc granice są domknięte (≤).
+// Te liczby decydują o kwalifikacji prawnej klienta; nie zmieniać bez nowego regulaminu.
+export const PROGI_KWOTY = {
+  jednoosobowe: { niski: 1800, sredni: 3150 },
+  wieloosobowe: { niski: 1300, sredni: 2250 },
+}
 
 /**
  * Create the initial state of the Czyste Powietrze form.
@@ -11,13 +20,16 @@ export const PRACE_M2 = ['elewacja', 'strop', 'dach', 'okna']
  */
 export function pustyFormularz() {
   return {
-    poziom: null,
     standard: null,
+    gospodarstwo: null,
+    progDochodu: null,
     zrodlo: null,
+    zrodloWlaczone: false,
     cwu: false,
     typGrzejnikow: null,
     iloscGrzejnikow: 0,
     powierzchnia: '',
+    termoWlaczone: false,
     prace: {
       elewacja: { wybrana: false, reczne: false, m2: '' },
       strop: { wybrana: false, reczne: false, m2: '' },
@@ -29,16 +41,34 @@ export function pustyFormularz() {
 }
 
 /**
- * Return the subsidy levels available for an energy standard.
+ * Derive the subsidy level from household size and income bracket.
+ *
+ * Poziom przestaje być wyborem sprzedawcy — wynika wyłącznie z deklaracji
+ * klienta. Próg `wysoki` zawsze daje `podstawowy`, `sredni` zawsze daje
+ * `podwyzszony`, niezależnie od standardu budynku. `niski` przy standardzie
+ * `powyzej140` daje `najwyzszy`; przy niższym standardzie ten poziom nie
+ * jest osiągalny (wymaga budynku > 140 kWh/m²·rok, §8.3 pkt 1), więc funkcja
+ * oddaje `podwyzszony` — klient kwalifikujący się do progu `niski`
+ * (≤ 1800/1300 zł) mieści się też pod progiem `podwyzszony` (≤ 3150/2250 zł),
+ * więc ten poziom mu się faktycznie należy; nie jest to błąd ani przypadek.
  *
  * @param {string|null} standard - selected energy standard
- * @returns {string[]} available subsidy levels
+ * @param {string|null} gospodarstwo - household size
+ * @param {string|null} progDochodu - income bracket
+ * @returns {string|null} derived subsidy level, or null when not determinable
  */
-export function dostepnePoziomy(standard) {
-  if (standard === 'do80' || standard === 'od80do140') {
-    return POZIOMY.slice(0, 2)
+export function wyliczPoziom(standard, gospodarstwo, progDochodu) {
+  if (!gospodarstwo || !progDochodu) return null
+
+  if (progDochodu === 'wysoki') return 'podstawowy'
+  if (progDochodu === 'sredni') return 'podwyzszony'
+  if (progDochodu === 'niski') {
+    if (standard === 'powyzej140') return 'najwyzszy'
+    if (standard === 'do80' || standard === 'od80do140') return 'podwyzszony'
+    return null
   }
-  return POZIOMY.slice()
+
+  return null
 }
 
 /**
@@ -89,6 +119,12 @@ function roundM2(value) {
  * Calculate the automatically displayed area for an area-based work.
  * This does not replace the server-side calculation.
  *
+ * `okna` is a special case: windows scale off the derived facade area
+ * (powierzchnia × mnozniki.elewacja), never off the building's floor area
+ * directly and never off a manual `elewacja` override the user may have
+ * typed for the facade itself. This is a deliberate product decision — do
+ * not "simplify" it back to `powierzchnia × mnozniki.okna`.
+ *
  * @param {string} kod - work code
  * @param {string} powierzchnia - building area input
  * @param {object} mnozniki - backend-provided area multipliers
@@ -96,9 +132,17 @@ function roundM2(value) {
  */
 export function autoM2(kod, powierzchnia, mnozniki) {
   const area = parseNumber(powierzchnia)
-  const multiplier = parseNumber(mnozniki?.[kod])
+  if (area === null || area <= 0) return null
 
-  if (area === null || area <= 0 || multiplier === null) return null
+  if (kod === 'okna') {
+    const elewacja = parseNumber(mnozniki?.elewacja)
+    const oknaOdElewacji = parseNumber(mnozniki?.okna_od_elewacji)
+    if (elewacja === null || oknaOdElewacji === null) return null
+    return roundM2(area * elewacja * oknaOdElewacji)
+  }
+
+  const multiplier = parseNumber(mnozniki?.[kod])
+  if (multiplier === null) return null
   return roundM2(area * multiplier)
 }
 
@@ -132,6 +176,21 @@ function countOrZero(value) {
 }
 
 /**
+ * Coerce a form area to a non-negative decimal number.
+ * Area is a continuous quantity (e.g. 120.5 m²), unlike door counts, so
+ * fractional input is preserved rather than floored — this must not reuse
+ * `countOrZero`, which floors.
+ *
+ * @param {*} value - area input
+ * @returns {number} non-negative area
+ */
+function areaOrZero(value) {
+  const area = parseNumber(value)
+  if (area === null || area < 0) return 0
+  return area
+}
+
+/**
  * Return a manual area only when the work is explicitly in manual mode.
  *
  * @param {object} work - area work state
@@ -148,36 +207,53 @@ function manualM2(work) {
  * Build the payload accepted by the server's volteo_cp_calc method.
  * The returned payload is fresh and the form is never mutated.
  *
+ * `zrodloWlaczone` / `termoWlaczone` gate whether each scope reaches the
+ * server at all — turning a scope off zeroes/nulls it in the payload
+ * without touching the form's own state, so switching it back on restores
+ * exactly what the user had typed (see `pustyFormularz`/component toggle).
+ * `cwu` is no longer driven by `form.cwu`: it is simply whether the
+ * selected source allows it (pellet/zgazowujący), subject to the same
+ * scope gate — the rep can no longer opt out of it.
+ *
+ * `powierzchnia_m2` is always coerced through `areaOrZero`, even when no
+ * thermal work is selected — the server's `_decimal()` call is unconditional
+ * and throws on a blank string, so a source-only quote with an empty area
+ * field must still send `0`, not `''`.
+ *
  * @param {object} form - calculator form state
  * @returns {object} server input payload
  */
 export function buildWejscie(form) {
+  const zrodloWlaczone = Boolean(form.zrodloWlaczone)
+  const termoWlaczone = Boolean(form.termoWlaczone)
   const dodatki = dozwoloneDodatki(form.zrodlo)
   const prace = {}
 
   for (const kod of PRACE_M2) {
     const work = form.prace[kod]
     prace[kod] = {
-      wybrana: work.wybrana,
+      wybrana: termoWlaczone ? work.wybrana : false,
       m2: manualM2(work),
     }
   }
 
   prace.drzwi = {
-    wybrana: form.prace.drzwi.wybrana,
+    wybrana: termoWlaczone ? form.prace.drzwi.wybrana : false,
     ilosc: countOrZero(form.prace.drzwi.ilosc),
   }
 
   return {
-    poziom: form.poziom,
+    poziom: wyliczPoziom(form.standard, form.gospodarstwo, form.progDochodu),
     standard: form.standard,
-    zrodlo_ciepla: form.zrodlo,
-    cwu: dodatki.cwu ? Boolean(form.cwu) : false,
-    typ_grzejnikow: dodatki.grzejniki ? form.typGrzejnikow : null,
-    ilosc_grzejnikow: dodatki.grzejniki
+    gospodarstwo: form.gospodarstwo,
+    prog_dochodu: form.progDochodu,
+    zrodlo_ciepla: zrodloWlaczone ? form.zrodlo : null,
+    cwu: zrodloWlaczone ? dodatki.cwu : false,
+    typ_grzejnikow: zrodloWlaczone && dodatki.grzejniki ? form.typGrzejnikow : null,
+    ilosc_grzejnikow: zrodloWlaczone && dodatki.grzejniki
       ? countOrZero(form.iloscGrzejnikow)
       : 0,
-    powierzchnia_m2: form.powierzchnia,
+    powierzchnia_m2: areaOrZero(form.powierzchnia),
     prace,
   }
 }

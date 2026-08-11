@@ -13,164 +13,256 @@
 
       <div v-else class="kalk-split grid items-start gap-x-5" style="grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr)">
         <div>
-          <div class="mb-3">
-            <div class="mb-1 text-base font-semibold text-ink-gray-9">
-              {{ __('Standard docieplenia budynku') }}
-            </div>
-            <div class="flex flex-wrap gap-1.5">
-              <button
-                v-for="standard in STANDARDY"
-                :key="standard"
-                type="button"
-                class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
-                :class="form.standard === standard
-                  ? 'border-gray-900 bg-gray-900 text-white'
-                  : 'border-transparent bg-gray-100 text-gray-600 hover:bg-gray-200'"
-                @click="setStandard(standard)"
-              >{{ standardLabels[standard] }}</button>
-            </div>
-          </div>
-
-          <div class="mb-3">
-            <div class="mb-1 text-base font-semibold text-ink-gray-9">
-              {{ __('Poziom dotacji') }}
-            </div>
-            <div class="flex flex-wrap gap-1.5">
-              <button
-                v-for="poziom in dostepnePoziomy(form.standard)"
-                :key="poziom"
-                type="button"
-                class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
-                :class="form.poziom === poziom
-                  ? 'border-gray-900 bg-gray-900 text-white'
-                  : 'border-transparent bg-gray-100 text-gray-600 hover:bg-gray-200'"
-                @click="form.poziom = poziom"
-              >{{ poziomLabels[poziom] }}</button>
-            </div>
-          </div>
-
-          <div class="mb-3">
-            <div class="mb-1 text-base font-semibold text-ink-gray-9">
-              {{ __('Źródło ciepła') }}
-            </div>
-            <div class="flex flex-wrap gap-1.5">
-              <button
-                v-for="zrodlo in ZRODLA"
-                :key="zrodlo"
-                type="button"
-                class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-                :class="form.zrodlo === zrodlo
-                  ? 'border-gray-900 bg-gray-900 text-white'
-                  : 'border-transparent bg-gray-100 text-gray-600 hover:bg-gray-200'"
-                :disabled="!isActive(zrodlo)"
-                :title="isActive(zrodlo) ? '' : __('Pozycja chwilowo niedostępna')"
-                @click="setZrodlo(zrodlo)"
-              >{{ zrodloLabels[zrodlo] }}</button>
+          <div class="kalk-part">
+            <div class="kalk-part-heading mb-4 flex items-center gap-2 border-b border-gray-100 pb-2.5 text-lg font-bold text-ink-gray-9">
+              <span class="kalk-part-number">1</span>{{ __('Poziom dotacji') }}
             </div>
 
-            <div v-if="dozwoloneDodatki(form.zrodlo).grzejniki" class="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 kalk-row2">
-              <div>
-                <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Grzejniki') }}</div>
-                <select v-model="form.typGrzejnikow" class="kalk-select">
-                  <option :value="null">{{ __('— wybierz —') }}</option>
-                  <option value="grzejnik" :disabled="!isActive('grzejnik')">{{ __('Grzejniki') }}</option>
-                  <option value="grzejnik_co" :disabled="!isActive('grzejnik_co')">{{ __('Grzejniki + rury CO') }}</option>
-                </select>
+            <div class="mb-3">
+              <div class="mb-1.5 text-sm font-medium text-ink-gray-7">
+                {{ __('Standard docieplenia budynku') }}
               </div>
-              <div>
-                <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Ilość grzejników') }}</div>
-                <input v-model="form.iloscGrzejnikow" type="number" min="0" step="1" class="kalk-input" />
-              </div>
-            </div>
-            <label
-              v-if="dozwoloneDodatki(form.zrodlo).cwu"
-              class="mt-2 inline-flex cursor-pointer items-center gap-2 text-sm text-ink-gray-7"
-              :class="{ 'cursor-not-allowed opacity-60': !isActive('cwu') }"
-              :title="isActive('cwu') ? '' : __('Pozycja chwilowo niedostępna')"
-            >
-              <input v-model="form.cwu" type="checkbox" class="h-4 w-4 rounded border-gray-300" :disabled="!isActive('cwu')" />
-              <span>{{ __('Pompa ciepła do CWU (dodatek)') }}</span>
-            </label>
-          </div>
-
-          <div class="mb-3">
-            <div class="mb-1 text-base font-semibold text-ink-gray-9">
-              {{ __('Powierzchnia użytkowa (parter)') }}
-            </div>
-            <div class="text-sm text-ink-gray-5">{{ __('m²') }}</div>
-            <input v-model="form.powierzchnia" type="number" min="0" step="0.01" class="kalk-input mt-1" />
-          </div>
-
-          <div>
-            <div class="mb-1 text-base font-semibold text-ink-gray-9">
-              {{ __('Prace termomodernizacyjne') }}
-            </div>
-            <div
-              v-for="kod in PRACE_M2"
-              :key="kod"
-              class="border-t border-gray-100 py-2 first:border-t-0"
-            >
-              <div class="flex items-center gap-2">
-                <span class="w-20 shrink-0 text-sm text-ink-gray-7">{{ workLabels[kod] }}</span>
+              <div class="flex flex-wrap gap-1.5">
                 <button
+                  v-for="standard in STANDARDY"
+                  :key="standard"
                   type="button"
-                  class="rounded-md border px-2 py-1 text-xs font-medium transition-colors"
-                  :class="form.prace[kod].wybrana
+                  class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
+                  :class="form.standard === standard
                     ? 'border-gray-900 bg-gray-900 text-white'
                     : 'border-transparent bg-gray-100 text-gray-600 hover:bg-gray-200'"
-                  :disabled="!isActive(kod)"
-                  :title="isActive(kod) ? '' : __('Pozycja chwilowo niedostępna')"
-                  @click="form.prace[kod].wybrana = !form.prace[kod].wybrana"
-                >{{ form.prace[kod].wybrana ? __('TAK') : __('NIE') }}</button>
-                <input
-                  :value="areaValue(kod)"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  class="kalk-input flex-1"
-                  :disabled="!form.prace[kod].reczne || !isActive(kod)"
-                  @input="form.prace[kod].m2 = $event.target.value"
-                />
-                <button
-                  v-if="!form.prace[kod].reczne"
-                  type="button"
-                  class="shrink-0 text-xs font-medium text-blue-600 hover:underline disabled:text-gray-400 disabled:no-underline"
-                  :disabled="!isActive(kod)"
-                  @click="enableManual(kod)"
-                >{{ __('wprowadź ręcznie') }}</button>
-                <button
-                  v-else
-                  type="button"
-                  class="shrink-0 rounded bg-gray-100 px-1.5 py-1 text-xs text-gray-600 hover:bg-gray-200"
-                  @click="disableManual(kod)"
-                >{{ __('auto') }}</button>
+                  @click="form.standard = standard"
+                >{{ standardLabels[standard] }}</button>
               </div>
             </div>
 
-            <div class="border-t border-gray-100 py-2">
-              <div class="flex items-center gap-2">
-                <span class="w-20 shrink-0 text-sm text-ink-gray-7">{{ __('Drzwi') }}</span>
+            <div class="mb-3">
+              <div class="mb-1.5 text-sm font-medium text-ink-gray-7">
+                {{ __('Gospodarstwo') }}
+              </div>
+              <div class="flex flex-wrap gap-1.5">
                 <button
+                  v-for="g in GOSPODARSTWA"
+                  :key="g"
                   type="button"
-                  class="rounded-md border px-2 py-1 text-xs font-medium transition-colors"
-                  :class="form.prace.drzwi.wybrana
+                  class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
+                  :class="form.gospodarstwo === g
                     ? 'border-gray-900 bg-gray-900 text-white'
                     : 'border-transparent bg-gray-100 text-gray-600 hover:bg-gray-200'"
-                  :disabled="!isActive('drzwi')"
-                  :title="isActive('drzwi') ? '' : __('Pozycja chwilowo niedostępna')"
-                  @click="form.prace.drzwi.wybrana = !form.prace.drzwi.wybrana"
-                >{{ form.prace.drzwi.wybrana ? __('TAK') : __('NIE') }}</button>
-                <input
-                  v-if="form.prace.drzwi.wybrana"
-                  v-model="form.prace.drzwi.ilosc"
-                  type="number"
-                  min="0"
-                  step="1"
-                  class="kalk-input flex-1"
-                  :placeholder="__('ilość drzwi')"
-                  :disabled="!isActive('drzwi')"
-                />
-                <span v-if="form.prace.drzwi.wybrana && drzwiArea !== null" class="text-xs text-ink-gray-5">= {{ drzwiArea }} {{ __('m²') }}</span>
+                  @click="form.gospodarstwo = g"
+                >{{ gospodarstwoLabels[g] }}</button>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <div class="mb-1.5 text-sm font-medium text-ink-gray-7">
+                {{ __('Dochód na osobę (miesięcznie)') }}
+              </div>
+              <div class="flex flex-wrap gap-1.5">
+                <button
+                  v-for="prog in PROGI_DOCHODU"
+                  :key="prog"
+                  type="button"
+                  class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                  :class="form.progDochodu === prog
+                    ? 'border-gray-900 bg-gray-900 text-white'
+                    : 'border-transparent bg-gray-100 text-gray-600 hover:bg-gray-200'"
+                  :disabled="!form.gospodarstwo"
+                  @click="form.progDochodu = prog"
+                >{{ progDochoduLabel(prog) }}</button>
+              </div>
+              <div class="mt-1 text-xs text-ink-gray-5">
+                {{ __('Warunek dodatkowy: dochód roczny wnioskodawcy ≤ 135 000 zł.') }}
+              </div>
+            </div>
+
+            <div class="kalk-outcome mt-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5">
+              <div class="mb-1.5 text-sm font-medium text-ink-gray-7">
+                {{ __('Wyliczony poziom') }}
+              </div>
+              <span
+                v-if="poziomWyliczony"
+                class="inline-flex items-center rounded-md border border-gray-900 bg-gray-900 px-2.5 py-1 text-sm font-medium text-white"
+              >{{ poziomLabels[poziomWyliczony] }}</span>
+              <div v-else class="text-sm text-ink-gray-5">
+                {{ __('Uzupełnij standard budynku i dochód') }}
+              </div>
+              <div v-if="poziomObnizony" class="mt-1.5 text-xs text-ink-gray-5">
+                {{ __('Najwyższy poziom wymaga budynku powyżej 140 kWh/m²·rok. Przy tym standardzie obowiązuje poziom podwyższony.') }}
+              </div>
+            </div>
+          </div>
+
+          <div class="kalk-part">
+            <div class="kalk-part-heading mb-4 flex items-center justify-between gap-2 border-b border-gray-100 pb-2.5 text-lg font-bold text-ink-gray-9">
+              <div class="flex items-center gap-2">
+                <span class="kalk-part-number">2</span>{{ __('Źródło ciepła') }}
+              </div>
+              <button
+                type="button"
+                role="switch"
+                :aria-checked="form.zrodloWlaczone"
+                :aria-label="__('Źródło ciepła')"
+                class="kalk-switch shrink-0"
+                :class="form.zrodloWlaczone ? 'kalk-switch-on' : 'kalk-switch-off'"
+                @click="form.zrodloWlaczone = !form.zrodloWlaczone"
+              ><span class="kalk-switch-knob" /></button>
+            </div>
+
+            <div v-if="form.zrodloWlaczone">
+              <div class="mb-1.5 text-sm font-medium text-ink-gray-7">
+                {{ __('Rodzaj źródła') }}
+              </div>
+              <div class="flex flex-wrap gap-1.5">
+                <button
+                  v-for="zrodlo in ZRODLA"
+                  :key="zrodlo"
+                  type="button"
+                  class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                  :class="form.zrodlo === zrodlo
+                    ? 'border-gray-900 bg-gray-900 text-white'
+                    : 'border-transparent bg-gray-100 text-gray-600 hover:bg-gray-200'"
+                  :disabled="!isActive(zrodlo)"
+                  :title="isActive(zrodlo) ? '' : __('Pozycja chwilowo niedostępna')"
+                  @click="setZrodlo(zrodlo)"
+                >{{ zrodloLabels[zrodlo] }}</button>
+              </div>
+
+              <div v-if="dozwoloneDodatki(form.zrodlo).grzejniki" class="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 kalk-row2">
+                <div>
+                  <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Grzejniki') }}</div>
+                  <select v-model="form.typGrzejnikow" class="kalk-select">
+                    <option :value="null">{{ __('— wybierz —') }}</option>
+                    <option value="grzejnik" :disabled="!isActive('grzejnik')">{{ __('Grzejniki') }}</option>
+                    <option value="grzejnik_co" :disabled="!isActive('grzejnik_co')">{{ __('Grzejniki + rury CO') }}</option>
+                  </select>
+                </div>
+                <div>
+                  <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Ilość grzejników') }}</div>
+                  <input v-model="form.iloscGrzejnikow" type="number" min="0" step="1" class="kalk-input" />
+                </div>
+              </div>
+              <div v-if="dozwoloneDodatki(form.zrodlo).cwu" class="mt-2">
+                <label
+                  class="inline-flex items-center gap-2 text-sm text-ink-gray-7"
+                  :class="{ 'opacity-60': !isActive('cwu') }"
+                  :title="isActive('cwu') ? '' : __('Pozycja chwilowo niedostępna')"
+                >
+                  <input :checked="form.cwu" type="checkbox" class="h-4 w-4 rounded border-gray-300" disabled />
+                  <span>{{ __('Pompa ciepła do CWU') }}</span>
+                </label>
+                <div class="mt-0.5 pl-6 text-xs text-ink-gray-5">
+                  {{ __('Pozycja ujęta w zestawie standardowo.') }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="kalk-part">
+            <div class="kalk-part-heading mb-4 flex items-center justify-between gap-2 border-b border-gray-100 pb-2.5 text-lg font-bold text-ink-gray-9">
+              <div class="flex items-center gap-2">
+                <span class="kalk-part-number">3</span>{{ __('Termomodernizacja') }}
+              </div>
+              <button
+                type="button"
+                role="switch"
+                :aria-checked="form.termoWlaczone"
+                :aria-label="__('Termomodernizacja')"
+                class="kalk-switch shrink-0"
+                :class="form.termoWlaczone ? 'kalk-switch-on' : 'kalk-switch-off'"
+                @click="form.termoWlaczone = !form.termoWlaczone"
+              ><span class="kalk-switch-knob" /></button>
+            </div>
+
+            <div v-if="form.termoWlaczone">
+              <div class="mb-3">
+                <div class="mb-1.5 text-sm font-medium text-ink-gray-7">
+                  {{ __('Powierzchnia użytkowa (parter)') }}
+                </div>
+                <div class="text-sm text-ink-gray-5">{{ __('m²') }}</div>
+                <input v-model="form.powierzchnia" type="number" min="0" step="0.01" class="kalk-input mt-1" />
+                <div v-if="brakPowierzchni" class="mt-1 text-xs text-amber-700">
+                  {{ __('Podaj powierzchnię użytkową — bez niej metraże prac wyjdą zerowe.') }}
+                </div>
+              </div>
+
+              <div>
+                <div class="mb-1.5 text-sm font-medium text-ink-gray-7">
+                  {{ __('Prace termomodernizacyjne') }}
+                </div>
+                <div
+                  v-for="kod in PRACE_M2"
+                  :key="kod"
+                  class="border-t border-gray-100 py-2.5 transition-opacity first:border-t-0"
+                  :class="{ 'opacity-50': !form.prace[kod].wybrana }"
+                >
+                  <div class="flex items-center gap-2.5">
+                    <span class="w-24 shrink-0 text-sm font-medium text-ink-gray-7">{{ workLabels[kod] }}</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      :aria-checked="form.prace[kod].wybrana"
+                      :aria-label="workLabels[kod]"
+                      class="kalk-switch shrink-0"
+                      :class="form.prace[kod].wybrana ? 'kalk-switch-on' : 'kalk-switch-off'"
+                      :disabled="!isActive(kod)"
+                      :title="isActive(kod) ? '' : __('Pozycja chwilowo niedostępna')"
+                      @click="form.prace[kod].wybrana = !form.prace[kod].wybrana"
+                    ><span class="kalk-switch-knob" /></button>
+                    <input
+                      :value="areaValue(kod)"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      class="kalk-input flex-1"
+                      :disabled="!form.prace[kod].wybrana || !form.prace[kod].reczne || !isActive(kod)"
+                      @input="form.prace[kod].m2 = $event.target.value"
+                    />
+                    <button
+                      v-if="!form.prace[kod].reczne"
+                      type="button"
+                      class="shrink-0 text-xs font-medium text-blue-600 hover:underline disabled:text-gray-400 disabled:no-underline"
+                      :disabled="!form.prace[kod].wybrana || !isActive(kod)"
+                      @click="enableManual(kod)"
+                    >{{ __('wprowadź ręcznie') }}</button>
+                    <button
+                      v-else
+                      type="button"
+                      class="shrink-0 rounded bg-gray-100 px-1.5 py-1 text-xs text-gray-600 hover:bg-gray-200"
+                      @click="disableManual(kod)"
+                    >{{ __('auto') }}</button>
+                  </div>
+                </div>
+
+                <div
+                  class="border-t border-gray-100 py-2.5 transition-opacity"
+                  :class="{ 'opacity-50': !form.prace.drzwi.wybrana }"
+                >
+                  <div class="flex items-center gap-2.5">
+                    <span class="w-24 shrink-0 text-sm font-medium text-ink-gray-7">{{ __('Drzwi') }}</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      :aria-checked="form.prace.drzwi.wybrana"
+                      :aria-label="__('Drzwi')"
+                      class="kalk-switch shrink-0"
+                      :class="form.prace.drzwi.wybrana ? 'kalk-switch-on' : 'kalk-switch-off'"
+                      :disabled="!isActive('drzwi')"
+                      :title="isActive('drzwi') ? '' : __('Pozycja chwilowo niedostępna')"
+                      @click="form.prace.drzwi.wybrana = !form.prace.drzwi.wybrana"
+                    ><span class="kalk-switch-knob" /></button>
+                    <input
+                      v-model="form.prace.drzwi.ilosc"
+                      type="number"
+                      min="0"
+                      step="1"
+                      class="kalk-input flex-1"
+                      :placeholder="__('ilość drzwi')"
+                      :disabled="!form.prace.drzwi.wybrana || !isActive('drzwi')"
+                    />
+                    <span v-if="form.prace.drzwi.wybrana && drzwiArea !== null" class="text-xs text-ink-gray-5">= {{ drzwiArea }} {{ __('m²') }}</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -178,11 +270,6 @@
 
         <div class="kalk-output border-l border-gray-200 pl-5">
           <div class="sticky top-3">
-            <div v-if="$slots['client-picker']" class="mb-2.5">
-              <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Klient') }}</div>
-              <slot name="client-picker" />
-            </div>
-
             <div class="mb-2 text-base font-semibold text-ink-gray-9">{{ __('Wycena') }}</div>
             <div v-if="errorMsg" class="mb-2 rounded border border-red-200 bg-red-50 px-2.5 py-2 text-sm text-red-800">
               {{ errorMsg }}
@@ -205,18 +292,25 @@
                 {{ __('Dofinansowanie ograniczone limitem (−{0} zł)', [formatAmount(result.dotacja_ograniczona_o)]) }}
               </div>
 
-              <div v-if="result.linie.length" class="mb-2 overflow-hidden rounded-lg border border-gray-200">
-                <div class="border-b border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">
-                  {{ __('Pozycje') }}
+              <div
+                v-for="grupa in grupyZPozycjami"
+                :key="grupa.kod"
+                class="mb-2 overflow-hidden rounded-lg border border-gray-200"
+              >
+                <div class="flex justify-between border-b border-gray-200 bg-gray-50 px-2.5 py-1.5 text-sm font-semibold tabular-nums text-ink-gray-8">
+                  <span>{{ grupa.nazwa }}</span><span>{{ plnFmt(grupa.dotacja) }}</span>
                 </div>
-                <div v-for="(line, index) in result.linie" :key="index" class="border-b border-gray-100 px-2.5 py-2 last:border-b-0">
+                <div v-for="(line, index) in grupa.pozycje" :key="index" class="border-b border-gray-100 px-2.5 py-2 last:border-b-0">
                   <div class="mb-1 text-sm text-ink-gray-8">{{ lineName(line) }}</div>
                   <div class="flex justify-between gap-2 text-xs tabular-nums text-ink-gray-5">
                     <span>{{ formatQty(line.ilosc) }} {{ line.jednostka || '' }}</span>
                     <span>{{ __('brutto') }}: {{ plnFmt(line.brutto) }}</span>
-                    <span>{{ __('dotacja') }}: {{ plnFmt(line.dotacja) }}</span>
                   </div>
                 </div>
+              </div>
+
+              <div class="mb-2 text-xs text-ink-gray-5">
+                {{ __('To oferta wstępna o charakterze szacunkowym. Wiążące kwoty i zakres prac określi oferta właściwa, przygotowana po energetycznym audycie na miejscu.') }}
               </div>
 
               <div v-if="hasInternal" class="rounded-lg border border-dashed border-amber-300 bg-amber-50 p-2.5">
@@ -239,6 +333,11 @@
             </div>
             <div v-else-if="!errorMsg" class="text-sm text-ink-gray-5">
               {{ __('Uzupełnij konfigurację, aby zobaczyć wycenę.') }}
+            </div>
+
+            <div v-if="$slots['client-picker']" class="mb-2 mt-2">
+              <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Klient') }}</div>
+              <slot name="client-picker" />
             </div>
 
             <Button
@@ -415,17 +514,20 @@ import { Button, call, toast } from 'frappe-ui'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
+  GOSPODARSTWA,
   POZIOMY,
   PRACE_M2,
+  PROGI_DOCHODU,
+  PROGI_KWOTY,
   STANDARDY,
   ZRODLA,
   autoM2,
   buildWejscie,
   dozwoloneDodatki,
-  dostepnePoziomy,
   drzwiM2,
   opisBledu,
   pustyFormularz,
+  wyliczPoziom,
 } from '@/utils/cpForm'
 import {
   przeliczPodzial,
@@ -455,6 +557,7 @@ const result = reactive({
   dotacja_laczna: '',
   dotacja_ograniczona_o: '',
   linie: [],
+  grupy: [],
   // Klucz istnieje od startu (wartość `null`, nigdy `delete`) celowo — patrz
   // komentarz przy `hasInternal` niżej: usuwanie i doczytywanie klucza przez
   // `hasOwnProperty` na obiekcie `reactive` po cichu psuje reaktywność.
@@ -462,14 +565,18 @@ const result = reactive({
 })
 
 const standardLabels = {
-  do80: __('do 80 kWh/m²·rok'),
-  od80do140: __('80–140 kWh/m²·rok'),
+  do80: __('poniżej 80 kWh/m²·rok'),
+  od80do140: __('od 80 do 140 kWh/m²·rok'),
   powyzej140: __('powyżej 140 kWh/m²·rok'),
 }
 const poziomLabels = {
   [POZIOMY[0]]: __('Podstawowy'),
   [POZIOMY[1]]: __('Podwyższony'),
   [POZIOMY[2]]: __('Najwyższy'),
+}
+const gospodarstwoLabels = {
+  jednoosobowe: __('Jednoosobowe'),
+  wieloosobowe: __('Wieloosobowe'),
 }
 const zrodloLabels = {
   pompa_ciepla: __('Pompa ciepła'),
@@ -483,7 +590,57 @@ const workLabels = {
   okna: __('Okna'),
 }
 
+// Etykiety progów dochodowych czytane wyłącznie z PROGI_KWOTY — jedno
+// miejsce do edycji kwot. Dopóki gospodarstwo nie jest wybrane, pokazujemy
+// obie wartości (jednoosobowe / wieloosobowe) obok siebie, żeby przyciski
+// nie były puste; po wyborze gospodarstwa zostaje tylko właściwa liczba.
+function progDochoduLabel(prog) {
+  const gospodarstwa = form.gospodarstwo ? [form.gospodarstwo] : GOSPODARSTWA
+
+  if (prog === 'niski') {
+    const kwoty = gospodarstwa.map((g) => formatAmount(PROGI_KWOTY[g].niski))
+    return __('do {0} zł', [kwoty.join(' / ')])
+  }
+  if (prog === 'sredni') {
+    const zakresy = gospodarstwa.map(
+      (g) => `${formatAmount(PROGI_KWOTY[g].niski + 1)}–${formatAmount(PROGI_KWOTY[g].sredni)}`,
+    )
+    return __('{0} zł', [zakresy.join(' / ')])
+  }
+  const kwoty = gospodarstwa.map((g) => formatAmount(PROGI_KWOTY[g].sredni))
+  return __('ponad {0} zł', [kwoty.join(' / ')])
+}
+
 const drzwiArea = computed(() => drzwiM2(form.prace.drzwi.ilosc, m2NaDrzwi.value))
+// Poziom nie jest już stanem formularza — wynika z (standard, gospodarstwo,
+// progDochodu); czytamy te trzy pola formularza bezpośrednio jako właściwości
+// (nigdy przez `hasOwnProperty`), żeby computed pozostał reaktywny — patrz
+// komentarz przy `hasInternal` niżej o pułapce Proxy.
+const poziomWyliczony = computed(() =>
+  wyliczPoziom(form.standard, form.gospodarstwo, form.progDochodu),
+)
+// Informacja, że próg `niski` przy standardzie poniżej `powyzej140` zjeżdża
+// do `podwyzszony` zamiast `najwyzszy` — bez tego zdania spadek poziomu
+// wygląda jak błąd, nie jak celowa reguła programu.
+const poziomObnizony = computed(
+  () =>
+    form.progDochodu === 'niski' &&
+    Boolean(form.standard) &&
+    form.standard !== 'powyzej140',
+)
+// Ostrzeżenie pod polem powierzchni: `buildWejscie` cicho zamienia pustą
+// powierzchnię na 0 (patrz `areaOrZero` w cpForm.js), więc bez tej podpowiedzi
+// rep dostałby wycenione na zero metraże prac zamiast błędu. Czyta pola
+// formularza bezpośrednio jako właściwości (nigdy przez `hasOwnProperty`) —
+// patrz komentarz przy `hasInternal` niżej o pułapce Proxy, ten sam mechanizm
+// dotyczy `form`, bo to też obiekt `reactive`.
+const brakPowierzchni = computed(() => {
+  if (!form.termoWlaczone) return false
+  const maWybranaPraceOrDrzwi = Object.values(form.prace).some((work) => work.wybrana)
+  if (!maWybranaPraceOrDrzwi) return false
+  const area = Number(form.powierzchnia)
+  return !Number.isFinite(area) || area <= 0
+})
 const restrictionAmount = computed(() => Number(result.dotacja_ograniczona_o) || 0)
 const hasResult = computed(() => resultReady.value)
 // NIE używać tu `Object.prototype.hasOwnProperty.call(result, 'wewnetrzne')`.
@@ -497,6 +654,22 @@ const hasResult = computed(() => resultReady.value)
 // że serwer poprawnie zwracał `wewnetrzne`. Zwykły odczyt właściwości
 // (`result.wewnetrzne`) przechodzi przez pułapkę `get`, która JEST śledzona.
 const hasInternal = computed(() => Boolean(result.wewnetrzne))
+
+// Grupuje `result.linie` wg `line.grupa` (NIE wg `line.nazwa_kategorii` —
+// pozycja `cwu` ma kategorię `zrodlo`, ale trafia do grupy `co`, więc
+// grupowanie po kategorii pokazałoby ją w złym boksie). Czyta `result.grupy`
+// i `result.linie` bezpośrednio jako właściwości reaktywnego `result`, nigdy
+// przez `hasOwnProperty` — patrz komentarz przy `hasInternal` wyżej o
+// pułapce Proxy. Grupa bez pasujących pozycji nie trafia do wyniku, więc jej
+// boks po prostu się nie renderuje.
+const grupyZPozycjami = computed(() =>
+  result.grupy
+    .map((grupa) => ({
+      ...grupa,
+      pozycje: result.linie.filter((line) => line.grupa === grupa.kod),
+    }))
+    .filter((grupa) => grupa.pozycje.length > 0),
+)
 
 // --- Modelowanie prowizji dla struktur sprzedażowych (administrator) --------
 // `stawki` i `koszty` PRZEŻYWAJĄ kolejne przeliczenia (scalStawki/scalKoszty
@@ -551,19 +724,21 @@ const contactSelected = computed(() => Boolean(c.value.name))
 const canCreateDeal = computed(() => hasResult.value && contactSelected.value)
 const creatingDeal = ref(false)
 
-function setStandard(standard) {
-  form.standard = standard
-  if (!dostepnePoziomy(standard).includes(form.poziom)) form.poziom = null
-}
-
+// Clicking the already-selected source deselects it (form.zrodlo = null)
+// instead of leaving the rep stuck once a source is chosen — the dependent
+// add-on state is cleared exactly as it would be when switching sources.
 function setZrodlo(zrodlo) {
-  form.zrodlo = zrodlo
-  const dodatki = dozwoloneDodatki(zrodlo)
+  const next = form.zrodlo === zrodlo ? null : zrodlo
+  form.zrodlo = next
+  const dodatki = dozwoloneDodatki(next)
   if (!dodatki.grzejniki) {
     form.typGrzejnikow = null
     form.iloscGrzejnikow = 0
   }
-  if (!dodatki.cwu) form.cwu = false
+  // `form.cwu` no longer reflects a user choice — it always mirrors whether
+  // the selected source allows CWU (see buildWejscie's A4 contract), so the
+  // disabled checkbox rendered from it never drifts from the payload.
+  form.cwu = dodatki.cwu
 }
 
 function isActive(kod) {
@@ -592,6 +767,7 @@ function clearResult() {
   result.dotacja_laczna = ''
   result.dotacja_ograniczona_o = ''
   result.linie = []
+  result.grupy = []
   // `= null`, never `delete` — see the comment above `hasInternal`. Deleting
   // the key would put us right back in a state where `hasOwnProperty` (if
   // anyone reintroduces it) can no longer see the property at all.
@@ -644,8 +820,15 @@ watch(
 
 async function runCalc() {
   const request = ++calcRequest
-  const hasWork = Object.values(form.prace).some((work) => work.wybrana)
-  if (!form.poziom || !form.standard || !(form.zrodlo || form.cwu || hasWork)) {
+  // Strażnik musi liczyć zakres EFEKTYWNY, czyli to, co faktycznie wyśle
+  // buildWejscie — nie surowy stan formularza. Wyłączony przełącznik zeruje
+  // dany zakres w payloadzie, więc musi też zerować go tutaj, inaczej idzie
+  // zapytanie do serwera z payloadem, w którym wszystko jest wyzerowane.
+  // Celowo bez form.cwu: zawsze odzwierciedla wybrane form.zrodlo (patrz
+  // setZrodlo), więc osobny test byłby zbędny.
+  const hasWork = form.termoWlaczone && Object.values(form.prace).some((work) => work.wybrana)
+  const hasZrodlo = form.zrodloWlaczone && Boolean(form.zrodlo)
+  if (!poziomWyliczony.value || !form.standard || !(hasZrodlo || hasWork)) {
     clearResult()
     return
   }
@@ -660,6 +843,7 @@ async function runCalc() {
     result.dotacja_laczna = data.dotacja_laczna
     result.dotacja_ograniczona_o = data.dotacja_ograniczona_o
     result.linie = data.linie || []
+    result.grupy = data.grupy || []
     resultReady.value = true
     // `data` is a plain object freshly parsed from the server response, not
     // the `reactive` `result` — `hasOwnProperty` is safe here (see the
@@ -774,6 +958,86 @@ onBeforeUnmount(() => {
   background: #fff;
   border-color: #d97706;
 }
+.kalk-part-heading {
+  letter-spacing: -0.01em;
+}
+/* Card treatment: each `.kalk-part` (section) is its own bordered surface, so
+   the gap between cards does the separating instead of a thin divider rule —
+   this is the fix for "Poziom dotacji" section blending into the field labels
+   beneath it. Siblings get their spacing from `.kalk-part + .kalk-part`, so
+   the old `.kalk-part-divider` marker elements were removed from the template
+   entirely (no more divider rule to keep here). */
+.kalk-part {
+  border: 1px solid #e5e5e5;
+  border-radius: 0.75rem;
+  background: #fff;
+  padding: 1.25rem 1.25rem 1.375rem;
+}
+.kalk-part + .kalk-part {
+  margin-top: 1rem;
+}
+/* Small muted numeral chip in the section heading — a subtle sequencing cue
+   for a form that is meant to be worked top to bottom, not a heavy badge. */
+.kalk-part-number {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 9999px;
+  background: #f0f0f0;
+  color: #9ca3af;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+/* iOS-style TAK/NIE switch: colour AND knob position both carry the state
+   (owner decision) — green track + knob right = ON, black track + knob left
+   = OFF. Black for off is deliberate, never grey (grey stays reserved for
+   disabled inputs elsewhere in this file) and never red. One shared look
+   for every TAK/NIE toggle in this component instead of repeating a class
+   string at each of the four call sites. */
+.kalk-switch {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+  width: 40px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 9999px;
+  cursor: pointer;
+  vertical-align: middle;
+  transition: background-color 0.15s;
+}
+.kalk-switch-on {
+  background: #16a34a;
+}
+.kalk-switch-off {
+  background: #111827;
+}
+.kalk-switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.kalk-switch:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+.kalk-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s;
+}
+.kalk-switch-on .kalk-switch-knob {
+  transform: translateX(18px);
+}
 .kalk-marza-scroll {
   overflow-x: auto;
 }
@@ -785,6 +1049,7 @@ onBeforeUnmount(() => {
   .kalk-row2 { grid-template-columns: 1fr !important; }
   .kalk-output { border-left: 0 !important; padding-left: 0 !important; margin-top: 0.75rem; }
   .sticky { position: static; }
+  .kalk-part { padding: 1rem; }
   .kalk-marza-table { min-width: 620px; }
   .kalk-input-stawka { width: 68px; }
   .kalk-input-koszt { width: 76px; }

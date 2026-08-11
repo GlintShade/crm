@@ -41,6 +41,8 @@ def _stale() -> dict[str, Any]:
 		"mnoznik_dach": "1.3",
 		"mnoznik_okna": "0.15",
 		"m2_na_drzwi": "2",
+		"mnoznik_okna_od_elewacji": "0.10",
+		"udzial_dotacji_elewacja": "0.90",
 		"umowa_min": "ignored",
 	}
 
@@ -119,7 +121,23 @@ class TestMapowanie(unittest.TestCase):
 		self.assertIs(stale["vat_mnoznik"], vat)
 		self.assertEqual(stale["mnozniki"]["elewacja"], "1.4")
 		self.assertEqual(stale["m2_na_drzwi"], "2")
+		self.assertEqual(stale["mnoznik_okna_od_elewacji"], "0.10")
+		self.assertEqual(stale["udzial_dotacji_elewacja"], "0.90")
 		self.assertNotIn("umowa_min", stale)
+
+	def test_stale_missing_mnoznik_okna_od_elewacji_raises(self: "TestMapowanie") -> None:
+		dokument = _stale()
+		del dokument["mnoznik_okna_od_elewacji"]
+
+		with self.assertRaises(CPBladMapowania):
+			stale_z_dokumentu(dokument)
+
+	def test_stale_missing_udzial_dotacji_elewacja_raises(self: "TestMapowanie") -> None:
+		dokument = _stale()
+		del dokument["udzial_dotacji_elewacja"]
+
+		with self.assertRaises(CPBladMapowania):
+			stale_z_dokumentu(dokument)
 
 	def test_unknown_status_raises(self: "TestMapowanie") -> None:
 		wiersz = {

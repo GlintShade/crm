@@ -98,4 +98,9 @@ def stale_z_dokumentu(dokument: dict[str, Any]) -> dict[str, Any]:
 			"okna": _wymagane(dokument, "mnoznik_okna"),
 		},
 		"m2_na_drzwi": _wymagane(dokument, "m2_na_drzwi"),
+		# Klucze na poziomie głównym (nie w "mnozniki"), bo rdzeń czyta je właśnie stamtąd.
+		# Wymagane z _wymagane(): jeśli obraz wejdzie przed skryptem seedującym Single,
+		# ma to głośno wybuchnąć zamiast po cichu policzyć błędną cenę.
+		"mnoznik_okna_od_elewacji": _wymagane(dokument, "mnoznik_okna_od_elewacji"),
+		"udzial_dotacji_elewacja": _wymagane(dokument, "udzial_dotacji_elewacja"),
 	}

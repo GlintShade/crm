@@ -147,8 +147,14 @@ LIMITY = {
 
 STALE = {
 	"vat_mnoznik": "1.08",
-	"mnozniki": {"elewacja": "1.4", "strop": "0.9", "dach": "1.3", "okna": "0.15"},
+	# "elewacja" 1.4 -> 1.3: zmiana wprowadzona równolegle z tą zmianą (nowy seed).
+	# "okna" (0.15) zostaje w danych, ale nie jest już czytane w ścieżce automatycznej --
+	# zastąpione przez mnoznik_okna_od_elewacji niżej (powierzchnia okien liczy się teraz
+	# od fasady, nie od powierzchni użytkowej).
+	"mnozniki": {"elewacja": "1.3", "strop": "0.9", "dach": "1.3", "okna": "0.15"},
 	"m2_na_drzwi": "2",
+	"mnoznik_okna_od_elewacji": "0.10",
+	"udzial_dotacji_elewacja": "0.90",
 }
 
 
@@ -203,19 +209,34 @@ class TestObliczenia(unittest.TestCase):
 		wejscie["ilosc_grzejnikow"] = 15
 		wynik = self.policz(wejscie)
 		self.assertEqual(wynik["wklad_wlasny"], Decimal("44896.00"))
-		self.assertEqual(wynik["linie"][1]["dotacja"], Decimal("8200.00"))
+		grupa_co = next(g for g in wynik["grupy"] if g["kod"] == "co")
+		self.assertEqual(grupa_co["dotacja"], Decimal("8200.00"))
 
 	def test_e_wspolny_limit_termo_i_koszt_staly(self: "TestObliczenia") -> None:
+		# Wartości poniżej przeliczone dla mnoznik_elewacja=1.3 (nie 1.4) i redukcji dotacji
+		# elewacji do 90% powierzchni:
+		#   m2 elewacji = 100 x 1.3 = 130; m2 stropu = 100 x 0.9 = 90 (bez zmian).
+		#   netto_elewacja = 130 x 300 = 39000; brutto = 39000 x 1.08 = 42120.
+		#   netto_strop = 90 x 220 = 19800; brutto = 19800 x 1.08 = 21384.
+		#   brutto_termo = 42120 + 21384 = 63504.
+		#   dotacja_elewacja (90% x 130 = 117 m2 dotowane) = 117 x 110 = 12870.
+		#   dotacja_strop (bez redukcji) = 90 x 88 = 7920.
+		#   dotacja_termo_surowa = 12870 + 7920 = 20790, ograniczona limitem kwotowym 19200
+		#   -> dotacja_ograniczona_o = 20790 - 19200 = 1590.
+		#   wklad_termo = 63504 - 19200 = 44304 = wklad_wlasny (brak zrodla/co).
+		#   prowizja: elewacja 130 x 10 = 1300 (na PEŁNEJ powierzchni), strop 90 x 10 = 900
+		#   -> 2200 (prowizja NIE jest redukowana, tylko dotacja).
+		#   koszt: elewacja 130 x 220 + 3000 = 31600, strop 90 x 120 = 10800 -> 42400.
 		wejscie = _wejscie(standard="od80do140")
 		wejscie["powierzchnia_m2"] = "100"
 		wejscie["zrodlo_ciepla"] = None
 		wejscie["prace"]["elewacja"]["wybrana"] = True
 		wejscie["prace"]["strop"]["wybrana"] = True
 		wynik = self.policz(wejscie)
-		self.assertEqual(wynik["wklad_wlasny"], Decimal("47544.00"))
-		self.assertEqual(wynik["prowizja_handlowa"], Decimal("2300.00"))
-		self.assertEqual(wynik["dotacja_ograniczona_o"], Decimal("4120.00"))
-		self.assertEqual(wynik["wewnetrzne"]["koszt_calkowity"], Decimal("44600.00"))
+		self.assertEqual(wynik["wklad_wlasny"], Decimal("44304.00"))
+		self.assertEqual(wynik["prowizja_handlowa"], Decimal("2200.00"))
+		self.assertEqual(wynik["dotacja_ograniczona_o"], Decimal("1590.00"))
+		self.assertEqual(wynik["wewnetrzne"]["koszt_calkowity"], Decimal("42400.00"))
 
 	def test_f_do_ustalenia_z_praca(self: "TestObliczenia") -> None:
 		wejscie = _wejscie(standard="do80")
@@ -277,14 +298,20 @@ class TestObliczenia(unittest.TestCase):
 			self.policz(_wejscie("najwyzszy", "od80do140"))
 
 	def test_r_brak_dotacji_dla_termo(self: "TestObliczenia") -> None:
+		# m2 elewacji = 100 x mnoznik_elewacja(1.3) = 130 (było 140 przy mnożniku 1.4).
+		# netto = 130 x 300 = 39000; brutto = 39000 x 1.08 = 42120.
+		# dotacja wymuszona na 0 (status "brak_dotacji"), więc redukcja do 90% jest tu bez
+		# znaczenia -- linia["_dotacja"] jest nadpisywana na _ZERO niezależnie od wejścia.
+		# wklad_wlasny = brutto_termo - 0 = 42120.
 		wejscie = _wejscie(standard="do80")
 		wejscie["powierzchnia_m2"] = "100"
 		wejscie["zrodlo_ciepla"] = None
 		wejscie["prace"]["elewacja"]["wybrana"] = True
 		wynik = self.policz(wejscie)
-		self.assertEqual(wynik["wklad_wlasny"], Decimal("45360.00"))
+		self.assertEqual(wynik["wklad_wlasny"], Decimal("42120.00"))
 		self.assertEqual(wynik["dotacja_ograniczona_o"], Decimal("0.00"))
-		self.assertEqual(wynik["linie"][0]["dotacja"], Decimal("0.00"))
+		grupa_termo = next(g for g in wynik["grupy"] if g["kod"] == "termo")
+		self.assertEqual(grupa_termo["dotacja"], Decimal("0.00"))
 
 	def test_s_dach_stawki_jak_strop(self: "TestObliczenia") -> None:
 		wejscie = _wejscie()
@@ -351,7 +378,7 @@ class TestObliczenia(unittest.TestCase):
 		wynik = self.policz(_wejscie())
 		self.assertEqual(
 			set(wynik["linie"][0]),
-			{"kod", "nazwa_kategorii", "ilosc", "jednostka", "netto", "brutto", "dotacja"},
+			{"kod", "nazwa_kategorii", "grupa", "ilosc", "jednostka", "netto", "brutto"},
 		)
 		for kwota in ("wklad_wlasny", "prowizja_handlowa", "dotacja_laczna", "dotacja_ograniczona_o"):
 			self.assertIsInstance(wynik[kwota], Decimal)
@@ -448,11 +475,209 @@ class TestObliczenia(unittest.TestCase):
 			"koszt_staly",
 			"ilosc_rozliczeniowa",
 			"jednostka_rozliczeniowa",
+			# "dotacja" per pozycja jest wymyślona, gdy wiąże limit grupy -- usunięta
+			# w ramach przejścia na wynik["grupy"] (dotacja per grupa zakresu prac).
+			"dotacja",
 		}
 		for linia in wynik["linie"]:
 			for klucz in linia:
 				self.assertFalse(klucz.startswith("_"), f"Klucz prywatny {klucz} przeciekł do wynik['linie']")
 				self.assertNotIn(klucz, zakazane_klucze)
+
+	def test_grupy_sumuja_sie_dokladnie_do_dotacji_lacznej(self: "TestObliczenia") -> None:
+		"""Właściwość, na której opiera się cała ta zmiana: trzy kwoty grupowe muszą się
+		sumować DOKŁADNIE do dotacja_laczna, niezależnie od tego, czy limit grupy zadziałał."""
+		wejscie = _wejscie()
+		wejscie["typ_grzejnikow"] = "grzejnik"
+		wejscie["ilosc_grzejnikow"] = 15  # wiąże limit grupy "co"
+		wejscie["prace"]["elewacja"] = {"wybrana": True, "m2": "50"}
+		wynik = self.policz(wejscie)
+		suma_grup = sum((grupa["dotacja"] for grupa in wynik["grupy"]), Decimal("0"))
+		self.assertEqual(suma_grup, wynik["dotacja_laczna"])
+
+	def test_grupy_limit_termo_wiaze(self: "TestObliczenia") -> None:
+		"""Przypadek, w którym wiąże limit grupy termomodernizacji (dotacja_ograniczona_o > 0)."""
+		wejscie = _wejscie(standard="od80do140")
+		wejscie["powierzchnia_m2"] = "100"
+		wejscie["zrodlo_ciepla"] = None
+		wejscie["prace"]["elewacja"]["wybrana"] = True
+		wejscie["prace"]["strop"]["wybrana"] = True
+		wynik = self.policz(wejscie)
+		self.assertGreater(wynik["dotacja_ograniczona_o"], Decimal("0.00"))
+		self.assertEqual(len(wynik["grupy"]), 1)
+		grupa_termo = wynik["grupy"][0]
+		self.assertEqual(grupa_termo["kod"], "termo")
+		suma_grup = sum((grupa["dotacja"] for grupa in wynik["grupy"]), Decimal("0"))
+		self.assertEqual(suma_grup, wynik["dotacja_laczna"])
+
+	def test_grupy_cwu_bez_grzejnikow_trafia_do_co(self: "TestObliczenia") -> None:
+		"""cwu ma kategoria=zrodlo w katalogu (bo tak liczy się jej limit), ale w prezentacji
+		bez grzejników musi trafić do grupy "co", a "zrodlo" musi zostać z samym pelletem
+		(cwu wymaga wybranego źródła pellet/zgazowujący, więc "zrodlo" zawsze współistnieje)."""
+		wejscie = _wejscie()
+		wejscie["zrodlo_ciepla"] = "pellet"
+		wejscie["cwu"] = True
+		wynik = self.policz(wejscie)
+		grupy_wg_kodu = {grupa["kod"]: grupa for grupa in wynik["grupy"]}
+		self.assertIn("co", grupy_wg_kodu)
+		self.assertIn("zrodlo", grupy_wg_kodu)
+		self.assertNotIn("termo", grupy_wg_kodu)
+
+		pellet_pozycja = KATALOG["pellet"]
+		cwu_pozycja = KATALOG["cwu"]
+		# "zrodlo" zawiera wyłącznie pellet (cwu przeniesione do "co").
+		self.assertEqual(grupy_wg_kodu["zrodlo"]["netto"], Decimal(pellet_pozycja["cena_netto"]))
+		self.assertEqual(
+			grupy_wg_kodu["zrodlo"]["dotacja"], Decimal(pellet_pozycja["dotacja"]["podstawowy"])
+		)
+		# "co" zawiera wyłącznie cwu (brak grzejników w tym wejściu).
+		self.assertEqual(grupy_wg_kodu["co"]["netto"], Decimal(cwu_pozycja["cena_netto"]))
+		self.assertEqual(grupy_wg_kodu["co"]["dotacja"], Decimal(cwu_pozycja["dotacja"]["podstawowy"]))
+
+		suma_grup = sum((grupa["dotacja"] for grupa in wynik["grupy"]), Decimal("0"))
+		self.assertEqual(suma_grup, wynik["dotacja_laczna"])
+
+	def test_elewacja_dotacja_liczona_od_90_procent_powierzchni(self: "TestObliczenia") -> None:
+		"""Dotacja na elewację obejmuje tylko 90% powierzchni (okna zajmują resztę fasady),
+		ale netto/brutto/prowizja/koszt liczą się od PEŁNEJ powierzchni -- klient płaci za
+		całą ścianę, fundusz dotuje tylko jej część."""
+		wejscie = _wejscie(standard="powyzej140")
+		wejscie["zrodlo_ciepla"] = None
+		wejscie["prace"]["elewacja"] = {"wybrana": True, "m2": "100"}
+		wynik = self.policz(wejscie)
+		linia_wew = wynik["wewnetrzne"]["linie"][0]
+		linia_pub = wynik["linie"][0]
+		self.assertEqual(linia_wew["kod"], "elewacja")
+		# netto/brutto liczone od PEŁNEJ powierzchni (100 m2 x 300 zł, x1.08 VAT).
+		self.assertEqual(linia_pub["netto"], Decimal("30000.00"))
+		self.assertEqual(linia_pub["brutto"], Decimal("32400.00"))
+		# prowizja/koszt też liczone od pełnej powierzchni (100 m2), nie zredukowane.
+		self.assertEqual(linia_wew["prowizja"], Decimal("1000.00"))
+		self.assertEqual(linia_wew["koszt"], Decimal("25000.00"))
+		# dotacja pełnej powierzchni byłaby 100 x 110 = 11000; przy 90% powierzchni
+		# (90 m2 dotowane) -> 90 x 110 = 9900 -- limit kwotowy (33200) tego nie ogranicza.
+		grupa_termo = next(g for g in wynik["grupy"] if g["kod"] == "termo")
+		self.assertEqual(grupa_termo["dotacja"], Decimal("9900.00"))
+		self.assertEqual(wynik["dotacja_ograniczona_o"], Decimal("0.00"))
+
+	def test_okna_powierzchnia_automatyczna_liczona_od_elewacji(self: "TestObliczenia") -> None:
+		"""Automatyczna powierzchnia okien pochodzi teraz od powierzchni fasady, nie od
+		powierzchni użytkowej: 100 m2 x mnoznik_elewacja(1.3) x mnoznik_okna_od_elewacji(0.10)
+		= 13 m2 (dawniej byłoby 100 x mnoznik_okna(0.15) = 15 m2 -- ta ścieżka jest martwa)."""
+		wejscie = _wejscie(standard="powyzej140")
+		wejscie["powierzchnia_m2"] = "100"
+		wejscie["zrodlo_ciepla"] = None
+		wejscie["prace"]["okna"]["wybrana"] = True
+		wynik = self.policz(wejscie)
+		linia = next(l for l in wynik["wewnetrzne"]["linie"] if l["kod"] == "okna")
+		self.assertEqual(linia["ilosc_rozliczeniowa"], Decimal("13"))
+		linia_pub = next(l for l in wynik["linie"] if l["kod"] == "okna")
+		self.assertEqual(linia_pub["netto"], Decimal("19500.00"))  # 13 m2 x 1500 zł
+
+	def test_okna_manualne_m2_nadpisuje_automatyczna_powierzchnie(self: "TestObliczenia") -> None:
+		wejscie = _wejscie(standard="powyzej140")
+		wejscie["powierzchnia_m2"] = "100"
+		wejscie["zrodlo_ciepla"] = None
+		wejscie["prace"]["okna"] = {"wybrana": True, "m2": "20"}
+		wynik = self.policz(wejscie)
+		linia = next(l for l in wynik["wewnetrzne"]["linie"] if l["kod"] == "okna")
+		self.assertEqual(linia["ilosc_rozliczeniowa"], Decimal("20"))
+
+	def test_okna_automat_niezalezny_od_recznego_m2_elewacji(self: "TestObliczenia") -> None:
+		"""Baza dla automatycznej powierzchni okien to ZAWSZE wyliczona powierzchnia fasady
+		(powierzchnia_m2 x mnoznik_elewacja), niezależnie od ręcznej korekty m2 samej
+		elewacji -- świadoma decyzja produktowa (patrz komentarz w obliczenia.py przy
+		wyliczeniu powierzchnia_elewacji)."""
+		wejscie = _wejscie(standard="powyzej140")
+		wejscie["powierzchnia_m2"] = "100"
+		wejscie["zrodlo_ciepla"] = None
+		wejscie["prace"]["elewacja"] = {"wybrana": True, "m2": "999"}
+		wejscie["prace"]["okna"]["wybrana"] = True
+		wynik = self.policz(wejscie)
+		linia = next(l for l in wynik["wewnetrzne"]["linie"] if l["kod"] == "okna")
+		self.assertEqual(linia["ilosc_rozliczeniowa"], Decimal("13"))
+
+	def test_kazda_linia_ma_pole_grupa_a_cwu_trafia_do_co(self: "TestObliczenia") -> None:
+		wejscie = _wejscie()
+		wejscie["zrodlo_ciepla"] = "pellet"
+		wejscie["cwu"] = True
+		wynik = self.policz(wejscie)
+		for linia in wynik["linie"]:
+			self.assertIn("grupa", linia)
+		cwu_linia = next(l for l in wynik["linie"] if l["kod"] == "cwu")
+		self.assertEqual(cwu_linia["grupa"], "co")
+		self.assertEqual(cwu_linia["nazwa_kategorii"], "zrodlo")
+		pellet_linia = next(l for l in wynik["linie"] if l["kod"] == "pellet")
+		self.assertEqual(pellet_linia["grupa"], "zrodlo")
+		self.assertEqual(pellet_linia["nazwa_kategorii"], "zrodlo")
+
+	def test_grupy_suma_dotacji_zgodna_z_dotacja_laczna_przy_redukcji_elewacji(
+		self: "TestObliczenia",
+	) -> None:
+		"""Redukcja dotacji elewacji do 90% powierzchni nie psuje telescopującej sumy grup:
+		suma wynik["grupy"][*]["dotacja"] musi się nadal zgadzać co do grosza z
+		dotacja_laczna, tak jak przed tą zmianą."""
+		wejscie = _wejscie(standard="powyzej140")
+		wejscie["typ_grzejnikow"] = "grzejnik"
+		wejscie["ilosc_grzejnikow"] = 3
+		wejscie["prace"]["elewacja"] = {"wybrana": True, "m2": "77"}
+		wejscie["prace"]["strop"]["wybrana"] = True
+		wynik = self.policz(wejscie)
+		suma_grup = sum((grupa["dotacja"] for grupa in wynik["grupy"]), Decimal("0"))
+		self.assertEqual(suma_grup, wynik["dotacja_laczna"])
+
+	def test_drzwi_zero_ilosc_nie_daje_linii(self: "TestObliczenia") -> None:
+		"""Wybrane "drzwi" z ilością 0 nie generują pozycji na wycenie -- zerowa ilość i
+		tak wnosi zero do wszystkich sum, więc pominięcie usuwa tylko szum z dokumentu
+		(a dalej -- z BOM-u szansy, patrz crm/api/czyste_powietrze.py)."""
+		wejscie = _wejscie(standard="od80do140")
+		wejscie["zrodlo_ciepla"] = None
+		wejscie["prace"]["okna"] = {"wybrana": True, "m2": "10"}
+		wejscie["prace"]["drzwi"] = {"wybrana": True, "ilosc": 0}
+		wynik = self.policz(wejscie)
+		self.assertEqual([linia["kod"] for linia in wynik["linie"]], ["okna"])
+
+	def test_elewacja_zero_m2_nie_daje_linii(self: "TestObliczenia") -> None:
+		"""Praca liczona w m2 (nie tylko drzwi) z jawnym ręcznym m2=0 też nie daje linii --
+		ten sam warunek (m2 == 0) pokrywa oba przypadki, zgodnie z komentarzem w
+		obliczenia.py przy pętli prac termo."""
+		wejscie = _wejscie(standard="od80do140")
+		wejscie["zrodlo_ciepla"] = None
+		wejscie["prace"]["elewacja"] = {"wybrana": True, "m2": "0"}
+		wejscie["prace"]["strop"]["wybrana"] = True
+		wynik = self.policz(wejscie)
+		self.assertEqual([linia["kod"] for linia in wynik["linie"]], ["strop"])
+
+	def test_praca_z_dodatnia_iloscia_nadal_daje_linie(self: "TestObliczenia") -> None:
+		"""Strażnik przed nadmiernym pomijaniem: dodatnia ilość (drzwi i m2) musi nadal
+		wygenerować swoją linię."""
+		wejscie = _wejscie(standard="od80do140")
+		wejscie["zrodlo_ciepla"] = None
+		wejscie["prace"]["okna"] = {"wybrana": True, "m2": "10"}
+		wejscie["prace"]["drzwi"] = {"wybrana": True, "ilosc": 2}
+		wynik = self.policz(wejscie)
+		self.assertEqual({linia["kod"] for linia in wynik["linie"]}, {"okna", "drzwi"})
+
+	def test_wszystkie_prace_termo_zerowe_grupa_znika(self: "TestObliczenia") -> None:
+		"""Gdy każda wybrana praca termo ma zerową ilość/powierzchnię, grupa
+		"Termomodernizacja" w ogóle nie pojawia się w wynik["grupy"] -- tak samo jak grupa
+		bez żadnej wybranej pracy -- a suma grup nadal zgadza się dokładnie z
+		dotacja_laczna (właściwość telescopującego sumowania, patrz
+		test_grupy_sumuja_sie_dokladnie_do_dotacji_lacznej)."""
+		wejscie = _wejscie(standard="od80do140")
+		wejscie["prace"]["elewacja"] = {"wybrana": True, "m2": "0"}
+		wejscie["prace"]["strop"] = {"wybrana": True, "m2": "0"}
+		wejscie["prace"]["drzwi"] = {"wybrana": True, "ilosc": 0}
+		wynik = self.policz(wejscie)
+		self.assertNotIn("termo", {grupa["kod"] for grupa in wynik["grupy"]})
+		suma_grup = sum((grupa["dotacja"] for grupa in wynik["grupy"]), Decimal("0"))
+		self.assertEqual(suma_grup, wynik["dotacja_laczna"])
+
+	def test_golden_pompa_najwyzszy_powyzej140(self: "TestObliczenia") -> None:
+		"""Golden check projektu: pompa ciepła + najwyzszy + powyzej140 -> wklad_wlasny 2816.00,
+		niezmienione tą zmianą (przegrupowanie dotyczy wyłącznie prezentacji, nie liczb)."""
+		wynik = self.policz(_wejscie("najwyzszy"))
+		self.assertEqual(wynik["wklad_wlasny"], Decimal("2816.00"))
 
 
 if __name__ == "__main__":
