@@ -19,6 +19,7 @@ from frappe.rate_limiter import rate_limit
 from frappe.utils import cint, getdate
 
 from crm.api.czyste_powietrze import KALKULATOR_ROLE
+from crm.volteo_naming import code_for
 from crm.volteo_umowa import (
 	brakujace_pola,
 	kwota_kredytu,
@@ -26,7 +27,7 @@ from crm.volteo_umowa import (
 	ppoz_wymagane,
 )
 from crm.volteo_umowa_pdf import POLA_KOMPONENTU, zbuduj_kontekst
-from crm.volteo_umowa_render import sciezka_wbudowanego_szablonu, zloz_umowe
+from crm.volteo_umowa_render import SZABLONY, sciezka_wbudowanego_szablonu, zloz_umowe
 
 DOCTYPE = "Volteo Umowa"
 
@@ -184,8 +185,38 @@ def _blad_generowania_pdf() -> NoReturn:
 	frappe.throw(_("Wystąpił błąd podczas generowania PDF-u umowy. Spróbuj ponownie."))
 
 
+def _blad_rodzaju_umowy_bez_szablonu(rodzaj: str | None) -> NoReturn:
+	"""Rodzaj umowy szansy (`custom_rodzaj_umowy`) nie ma wbudowanego szablonu PDF-u
+	(`kod not in SZABLONY`) — to błąd DANYCH szansy (albo jej brak), nie awaria
+	wdrożenia, więc NIE loguje przez `frappe.log_error` i wymaga rozróżnienia w
+	komunikacie dwóch odrębnych sytuacji:
+
+	1. rodzaj pusty/nierozpoznany — przedstawiciel ma ustawić „Rodzaj umowy” na
+	   szansie na jedną z trzech obsługiwanych wartości;
+	2. rodzaj to „Czyste Powietrze” — ten PDF świadomie obsługuje wyłącznie
+	   umowy PV/magazyn (zob. `crm.volteo_umowa_render` — `CP` celowo nie ma
+	   wpisu w `SZABLONY`), więc komunikat mówi wprost, że to inny produkt,
+	   zamiast sugerować literówkę czy usterkę.
+	"""
+	if rodzaj == "Czyste Powietrze":
+		frappe.throw(
+			_(
+				"PDF umowy w tym miejscu obejmuje wyłącznie umowy Fotowoltaika / "
+				"Fotowoltaika + Magazyn / Magazyn energii — nie dotyczy Czyste Powietrze."
+			)
+		)
+	frappe.throw(
+		_(
+			"Ustaw „Rodzaj umowy” na szansie sprzedaży na jedną z wartości: "
+			"Fotowoltaika, Fotowoltaika + Magazyn, Magazyn energii — dopiero wtedy "
+			"można wygenerować PDF umowy."
+		)
+	)
+
+
 def _blad_brakujacego_szablonu() -> NoReturn:
-	"""Wbudowany szablon PDF-u (`crm/szablony/umowa_pv_me.pdf`) nie wczytał się z dysku.
+	"""Wbudowany szablon PDF-u (jeden z trzech: `crm/szablony/umowa_pv.pdf`,
+	`umowa_pv_me.pdf`, `umowa_me.pdf` — wg rodzaju umowy szansy) nie wczytał się z dysku.
 
 	To awaria WDROŻENIA (plik nie trafił do obrazu albo jest uszkodzony), nie
 	błąd użytkownika ani danych szansy — komunikat celowo nie sugeruje "spróbuj
@@ -546,10 +577,12 @@ def volteo_umowa_pdf(deal: str) -> dict[str, Any]:
 	podpięty do `CRM Deal`. Zwraca `{"file_url": ..., "file_name": ...}`.
 
 	Dokument PDF nie jest już odtwarzany w HTML — kontekst danych jest nakładany
-	jako warstwa na ORYGINALNY plik PDF od prawnika (wbudowany szablon
-	`crm/szablony/umowa_pv_me.pdf`), przez `crm.volteo_umowa_render.zloz_umowe`,
-	według współrzędnych z `crm.volteo_umowa_mapa`. Dzięki temu treść prawna,
-	układ i podział stron są dokładnie takie jak w oryginale.
+	jako warstwa na ORYGINALNY plik PDF od prawnika (jeden z trzech wbudowanych
+	szablonów w `crm/szablony/`, wybrany wg `custom_rodzaj_umowy` szansy przez
+	`crm.volteo_naming.code_for` i rejestr `crm.volteo_umowa_render.SZABLONY`),
+	przez `crm.volteo_umowa_render.zloz_umowe`, według współrzędnych z mapy
+	właściwej temu szablonowi. Dzięki temu treść prawna, układ i podział stron
+	są dokładnie takie jak w oryginale.
 
 	Uprawnienia: ten sam gate co `volteo_umowa_get` (rola kalkulatora + `read` na
 	szansie) — generowanie PDF-u niczego nie zapisuje w `Volteo Umowa`, więc nie
@@ -562,24 +595,31 @@ def volteo_umowa_pdf(deal: str) -> dict[str, Any]:
 	wyłącznie pola `panel_*` — kosztowe/marżowe pola tej Single nigdy nie trafiają
 	na wydrukowaną stronę).
 
-	Brak rekordu `Volteo Umowa` dla szansy to normalny, oczekiwany stan (formularz
-	jeszcze niewypełniony) — zwracamy czytelny komunikat po polsku, nie wyjątek
-	techniczny. Brak/uszkodzenie wbudowanego szablonu PDF to natomiast awaria
-	wdrożenia (patrz `_blad_brakujacego_szablonu`), rozróżniana od zwykłego błędu
-	generowania osobnym, jednoznacznym komunikatem.
+	Rodzaj umowy bez wbudowanego szablonu (pusty/nierozpoznany `custom_rodzaj_umowy`,
+	albo „Czyste Powietrze” — ten PDF obejmuje wyłącznie umowy PV/magazyn) odmawia
+	generowania OD RAZU, przed odczytem pliku szablonu (patrz
+	`_blad_rodzaju_umowy_bez_szablonu`) — celowo rozróżnione od braku rekordu
+	`Volteo Umowa` (formularz jeszcze niewypełniony, poniżej) i od braku/uszkodzenia
+	samego pliku szablonu na dysku (awaria wdrożenia, `_blad_brakujacego_szablonu`) —
+	trzy różne przyczyny, trzy różne, jednoznaczne komunikaty dla użytkownika.
 	"""
 	_sprawdz_role()
 	_sprawdz_dostep_do_szansy(deal, "read")
+
+	deal_doc = frappe.get_doc("CRM Deal", deal)
+	rodzaj_umowy = deal_doc.get("custom_rodzaj_umowy")
+	kod = code_for(rodzaj_umowy)
+	if kod not in SZABLONY:
+		_blad_rodzaju_umowy_bez_szablonu(rodzaj_umowy)
 
 	umowa_doc = _pobierz_umowe(deal)
 	if umowa_doc is None:
 		frappe.throw(_("Najpierw wypełnij formularz informacji do umowy dla tej szansy sprzedaży."))
 
-	deal_doc = frappe.get_doc("CRM Deal", deal)
 	kontakt = _podstawowy_kontakt(deal_doc)
 
 	try:
-		szablon_pdf = sciezka_wbudowanego_szablonu().read_bytes()
+		szablon_pdf = sciezka_wbudowanego_szablonu(kod).read_bytes()
 	except OSError:
 		_blad_brakujacego_szablonu()
 
@@ -593,7 +633,7 @@ def volteo_umowa_pdf(deal: str) -> dict[str, Any]:
 			stale=dict(frappe.db.get_singles_dict("Volteo Kalkulator Stale") or {}),
 			dzis=getdate(),
 		)
-		pdf_bytes = zloz_umowe(kontekst, szablon_pdf)
+		pdf_bytes = zloz_umowe(kontekst, szablon_pdf, kod)
 	except Exception:
 		_blad_generowania_pdf()
 

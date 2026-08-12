@@ -4,19 +4,28 @@
 """Generator PDF-u umowy: nakłada dane z kontekstu na ORYGINALNY plik PDF.
 
 Moduł celowo NIE odtwarza dokumentu w HTML — bierze gotowy plik dostarczony
-przez prawnika (`crm/szablony/umowa_pv_me.pdf`) i rysuje na nim wartości z
-`crm.volteo_umowa_pdf.zbuduj_kontekst()`, w miejscach opisanych przez
-`crm.volteo_umowa_mapa.MAPA`. Dzięki temu treść prawna, logo, stopka, fonty
-i podział stron są dokładnie takie jak w oryginale — bo to fizycznie ten sam
-plik, tylko z naniesioną warstwą.
+przez prawnika i rysuje na nim wartości z `crm.volteo_umowa_pdf.zbuduj_kontekst()`,
+w miejscach opisanych przez odpowiednią mapę współrzędnych. Dzięki temu treść
+prawna, logo, stopka, fonty i podział stron są dokładnie takie jak w
+oryginale — bo to fizycznie ten sam plik, tylko z naniesioną warstwą.
+
+Trzy rodzaje umowy mają TRZY osobne szablony PDF i TRZY osobne mapy
+współrzędnych (rejestr `SZABLONY` niżej): `PV` (Fotowoltaika), `ME` (Magazyn
+energii), `PVME` (Fotowoltaika + Magazyn). Wybór szablonu jest jawny — wołający
+(`crm/api/umowa.py`) przekazuje kod rodzaju umowy (te same kody, co
+`crm.volteo_naming.UMOWA_CODES`) do `zloz_umowe()`, tu nie ma żadnego
+domyślnego szablonu. „Czyste Powietrze” (`CP`) i nieznany/pusty rodzaj (`XX`)
+CELOWO nie mają wpisu w `SZABLONY` — ten PDF dotyczy wyłącznie umów PV/magazyn;
+brak klucza w rejestrze jest właśnie tym, co pozwala wołającemu odmówić
+generowania dla pozostałych rodzajów, zamiast po cichu użyć niewłaściwego
+szablonu.
 
 BEZPIECZNIK (dokument prawny podpisywany przez klienta): `zloz_umowe()`
-sprawdza sumę SHA-256 przekazanego szablonu względem `SHA256_SZABLONU` z
-`crm/volteo_umowa_mapa.py` i przerywa z czytelnym komunikatem przy
-niezgodności. Współrzędne w `MAPA` są skalibrowane WYŁĄCZNIE dla dokładnie
-jednej wersji pliku źródłowego — każda zmiana szablonu (nawet kosmetyczna)
-unieważnia je, więc lepsza jest głośna awaria niż dane naniesione w cudzą
-rubrykę.
+sprawdza sumę SHA-256 przekazanego szablonu względem `SZABLONY[kod].sha256`
+i przerywa z czytelnym komunikatem przy niezgodności. Współrzędne w każdej
+mapie są skalibrowane WYŁĄCZNIE dla dokładnie jednej wersji jednego pliku
+źródłowego — każda zmiana szablonu (nawet kosmetyczna) unieważnia je, więc
+lepsza jest głośna awaria niż dane naniesione w cudzą rubrykę.
 
 FONT: rejestrujemy Liberation Sans (metryka identyczna z Arialem, którym
 złożono oryginał). Wbudowane fonty base-14 reportlaba (Helvetica) używają
@@ -34,6 +43,7 @@ lokalnie poza wirtualnym środowiskiem użytym do testów (zob. raport zadania).
 import hashlib
 import io
 import warnings
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -44,10 +54,37 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen.canvas import Canvas
 
 from crm.volteo_umowa_mapa import MAPA, SHA256_SZABLONU, Pole
+from crm.volteo_umowa_mapa_me import LICZBA_STRON_ME, MAPA_ME, SHA256_SZABLONU_ME
+from crm.volteo_umowa_mapa_pv import LICZBA_STRON_PV, MAPA_PV, SHA256_SZABLONU_PV
 
-_NAZWA_SZABLONU: str = "umowa_pv_me.pdf"
-"""Nazwa pliku wbudowanego szablonu wewnątrz `crm/szablony/` — jedyne miejsce,
-które trzeba zmienić, gdyby nazwa pliku szablonu kiedyś się zmieniła."""
+
+@dataclass(frozen=True)
+class Szablon:
+	"""Jeden wbudowany szablon PDF-u umowy: plik + suma kontrolna + mapa współrzędnych.
+
+	`nazwa_pliku` jest tylko nazwą (bez katalogu) wewnątrz `crm/szablony/` —
+	`sciezka_wbudowanego_szablonu()` dokleja katalog. `sha256` i `mapa` muszą
+	pochodzić z TEJ SAMEJ kalibracji tego samego pliku (zob. bezpiecznik w
+	`_sprawdz_sume_kontrolna`); `liczba_stron` jest tu wyłącznie informacyjnie
+	(diagnostyka/testy), generator sam czyta liczbę stron z `PdfWriter`.
+	"""
+
+	nazwa_pliku: str
+	sha256: str
+	liczba_stron: int
+	mapa: tuple[Pole, ...]
+
+
+SZABLONY: dict[str, Szablon] = {
+	"PV": Szablon("umowa_pv.pdf", SHA256_SZABLONU_PV, LICZBA_STRON_PV, MAPA_PV),
+	"PVME": Szablon("umowa_pv_me.pdf", SHA256_SZABLONU, 18, MAPA),
+	"ME": Szablon("umowa_me.pdf", SHA256_SZABLONU_ME, LICZBA_STRON_ME, MAPA_ME),
+}
+"""Rejestr szablonów wg kodu rodzaju umowy (te same kody, co
+`crm.volteo_naming.UMOWA_CODES`: `PV`, `PVME`, `ME`). `CP` i `XX` są tu CELOWO
+nieobecne — ten generator PDF-u obsługuje wyłącznie umowy PV/magazyn; nieobecność
+klucza w tym słowniku jest właśnie mechanizmem, którym `crm/api/umowa.py` odmawia
+generowania dla „Czyste Powietrze” i nierozpoznanego/pustego rodzaju umowy."""
 
 _KOLOR_TEKSTU = HexColor("#1B1C1F")
 """Czerń dokumentu — zgodna z kolorem tekstu oryginału."""
@@ -81,37 +118,54 @@ _WIELOKROPEK: str = "…"
 dla osoby czytającej dokument, a nie wyglądało jak ucięte przez przypadek."""
 
 
-def sciezka_wbudowanego_szablonu() -> Path:
-	"""Zwraca ścieżkę do wbudowanego szablonu PDF-u umowy (`crm/szablony/umowa_pv_me.pdf`).
+def sciezka_wbudowanego_szablonu(kod: str) -> Path:
+	"""Zwraca ścieżkę do wbudowanego szablonu PDF-u umowy dla rodzaju umowy `kod`.
 
-	Wołający (np. `crm/api/umowa.py`) nie musi znać układu katalogów pakietu —
-	wystarczy przeczytać wskazany plik binarnie i przekazać jego zawartość do
-	`zloz_umowe()` jako `szablon_pdf`.
+	`kod` to kod z `crm.volteo_naming.UMOWA_CODES` (`PV`/`PVME`/`ME`). Wołający
+	(np. `crm/api/umowa.py`) nie musi znać układu katalogów pakietu ani nazwy
+	pliku szablonu — wystarczy przeczytać wskazany plik binarnie i przekazać
+	jego zawartość do `zloz_umowe()` jako `szablon_pdf`.
+
+	`kod` spoza `SZABLONY` (w tym `CP` i `XX`) rzuca `ValueError` z czytelnym
+	komunikatem po polsku — w praktyce do tego nie powinno dojść, bo
+	`crm/api/umowa.py` sprawdza `kod in SZABLONY` PRZED wywołaniem tej funkcji
+	i odmawia generowania wcześniej, własnym komunikatem dla użytkownika; ten
+	wyjątek jest więc drugą linią obrony (np. dla przyszłych wywołujących),
+	nie ścieżką, którą ma przejść normalny ruch.
 	"""
-	return Path(__file__).resolve().parent / "szablony" / _NAZWA_SZABLONU
+	if kod not in SZABLONY:
+		raise ValueError(
+			f"Nieznany kod rodzaju umowy: {kod!r}. Wbudowany szablon PDF-u istnieje "
+			f"wyłącznie dla kodów: {sorted(SZABLONY)}."
+		)
+	return Path(__file__).resolve().parent / "szablony" / SZABLONY[kod].nazwa_pliku
 
 
-def zloz_umowe(kontekst: dict[str, Any], szablon_pdf: bytes) -> bytes:
-	"""Nakłada `kontekst` na `szablon_pdf` i zwraca gotowy PDF w bajtach.
+def zloz_umowe(kontekst: dict[str, Any], szablon_pdf: bytes, kod: str) -> bytes:
+	"""Nakłada `kontekst` na `szablon_pdf` (szablon rodzaju umowy `kod`) i zwraca gotowy PDF w bajtach.
 
-	Kroki: (1) suma SHA-256 `szablon_pdf` musi się zgadzać z `SHA256_SZABLONU`
+	`kod` nie ma wartości domyślnej — wybór szablonu jest zawsze jawny, nigdy
+	dorozumiany, bo pomylenie szablonu w dokumencie prawnym byłoby cichym
+	uszkodzeniem umowy.
+
+	Kroki: (1) suma SHA-256 `szablon_pdf` musi się zgadzać z `SZABLONY[kod].sha256`
 	— w przeciwnym razie funkcja przerywa z czytelnym wyjątkiem, zamiast
 	nanieść dane w oparciu o nieaktualne współrzędne; (2) `szablon_pdf`
 	klonujemy bezpośrednio do `PdfWriter` (`clone_from=`), więc strony, na
 	których rysujemy, są od razu DOŁĄCZONE do writera — pypdf w wersji 6.x
 	oznacza jako przestarzały (i "niewiarygodny") wariant, w którym scala się
 	strony `PdfReader` PRZED dodaniem ich do writera przez `add_page()`; (3) dla
-	każdej strony, na której `MAPA` ma choć jedną pozycję, budujemy
+	każdej strony, na której `SZABLONY[kod].mapa` ma choć jedną pozycję, budujemy
 	jednostronicową warstwę `reportlab` (rozmiar strony brany z oryginału przez
 	`pypdf`, nie zakładany na sztywno) i scalamy ją z tą stroną (`merge_page`
 	— warstwa rysuje się NA WIERZCHU oryginału); (4) strony bez żadnej pozycji
-	w `MAPA` przechodzą bez zmian.
+	w mapie przechodzą bez zmian.
 
 	Nie mutuje `kontekst` ani `szablon_pdf` — obie wartości są tylko czytane.
 	"""
-	_sprawdz_sume_kontrolna(szablon_pdf)
+	_sprawdz_sume_kontrolna(szablon_pdf, kod)
 	nazwa_fontu = _zarejestruj_font()
-	pozycje_wg_strony = _pogrupuj_wg_strony(MAPA)
+	pozycje_wg_strony = _pogrupuj_wg_strony(SZABLONY[kod].mapa)
 
 	pisarz = PdfWriter(clone_from=io.BytesIO(szablon_pdf))
 
@@ -129,16 +183,22 @@ def zloz_umowe(kontekst: dict[str, Any], szablon_pdf: bytes) -> bytes:
 	return bufor_wyjsciowy.getvalue()
 
 
-def _sprawdz_sume_kontrolna(szablon_pdf: bytes) -> None:
+def _sprawdz_sume_kontrolna(szablon_pdf: bytes, kod: str) -> None:
 	"""Bezpiecznik: przerywa, gdy `szablon_pdf` nie jest bajt-w-bajt tym plikiem,
-	dla którego `crm/volteo_umowa_mapa.py` był mierzony."""
+	dla którego mapa współrzędnych `SZABLONY[kod].mapa` była mierzona.
+
+	Zakłada, że `kod` jest kluczem `SZABLONY` — `zloz_umowe()` woła tę funkcję
+	dopiero po tym, jak `sciezka_wbudowanego_szablonu(kod)` (albo sam wołający)
+	już by rzucił dla nieznanego kodu, więc `KeyError` tutaj sygnalizowałby błąd
+	programisty, nie błąd danych wejściowych."""
+	oczekiwany = SZABLONY[kod]
 	suma = hashlib.sha256(szablon_pdf).hexdigest()
-	if suma != SHA256_SZABLONU:
+	if suma != oczekiwany.sha256:
 		raise ValueError(
-			"Szablon umowy PDF został zmieniony — mapa współrzędnych w "
-			"`crm/volteo_umowa_mapa.py` wymaga ponownego pomiaru. Generowanie "
+			f"Szablon umowy PDF dla rodzaju '{kod}' ({oczekiwany.nazwa_pliku}) został "
+			"zmieniony — mapa współrzędnych wymaga ponownego pomiaru. Generowanie "
 			"wstrzymane, żeby nie nanieść danych w niewłaściwe miejsca. "
-			f"Oczekiwana suma SHA-256: {SHA256_SZABLONU}, otrzymana: {suma}."
+			f"Oczekiwana suma SHA-256: {oczekiwany.sha256}, otrzymana: {suma}."
 		)
 
 

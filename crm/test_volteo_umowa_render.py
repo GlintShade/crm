@@ -19,6 +19,11 @@ jak i standardowy font systemowy macOS (`Arial.ttf` z `/System/Library/Fonts/
 Supplemental/`, obecny na każdym Macu, więc nie wymaga niczego poza systemem).
 Gdy żaden kandydat nie istnieje, testy renderujące są pomijane (`skipTest`) —
 nie fałszują wyniku podstawianiem niewalidnych bajtów jako TTF.
+
+Od zadania „umowa-szablony-typy” `zloz_umowe()`/`sciezka_wbudowanego_szablonu()`
+wymagają jawnego kodu rodzaju umowy (`"PV"`/`"PVME"`/`"ME"`) — testy end-to-end
+pętlą się po `crm.volteo_umowa_render.SZABLONY` (rejestrowi, nie po nazwach
+funkcji poszczególnych map), tak jak `crm/test_volteo_umowa_mapa.py`.
 """
 
 import hashlib
@@ -34,9 +39,10 @@ from unittest import mock
 from pypdf import PdfReader
 
 from crm import volteo_umowa_render as renderer
-from crm.volteo_umowa_mapa import SHA256_SZABLONU, Pole
+from crm.volteo_umowa_mapa import Pole
 from crm.volteo_umowa_pdf import zbuduj_kontekst
 from crm.volteo_umowa_render import (
+	SZABLONY,
 	_dopasuj_rozmiar,
 	_narysuj_warstwe_strony,
 	_przytnij,
@@ -44,8 +50,6 @@ from crm.volteo_umowa_render import (
 	sciezka_wbudowanego_szablonu,
 	zloz_umowe,
 )
-
-_LICZBA_STRON = 18
 
 _KANDYDACI_FONTU_TESTOWEGO: tuple[Path, ...] = (
 	# Ścieżki Debiana — te same, których szuka `_zarejestruj_font()` w module
@@ -101,6 +105,7 @@ def _umowa(**nadpisania: Any) -> dict[str, Any]:
 		"istniejaca_pv_producent_inwertera": "Fronius",
 		"zgoda_kontakt_telefoniczny": 1,
 		"zgoda_dzialania_promocyjne": 1,
+		"zgoda_realizacja_przed_odstapieniem": 1,
 	}
 	baza.update(nadpisania)
 	return baza
@@ -184,7 +189,9 @@ def _stale(**nadpisania: Any) -> dict[str, Any]:
 
 def _pelny_kontekst() -> dict[str, Any]:
 	"""Kontekst z WSZYSTKIMI polami wypełnionymi — żaden klucz nie wypada jako
-	pusty z powodu reguły "zero/brak = pustka" w `zbuduj_kontekst()`."""
+	pusty z powodu reguły "zero/brak = pustka" w `zbuduj_kontekst()`. Ten sam
+	kontekst nadaje się do wszystkich trzech szablonów: `zbuduj_kontekst()` nie
+	zna pojęcia "szablon", zawsze zwraca pełny zestaw kluczy."""
 	return zbuduj_kontekst(
 		_umowa(), _deal(), _kontakt(), _zestaw(), _komponenty(), _stale(), date(2026, 8, 6)
 	)
@@ -195,25 +202,56 @@ class TestSumaKontrolna(unittest.TestCase):
 	prawdziwego pliku TTF, bo `zloz_umowe()` przerywa wcześniej."""
 
 	def test_a_niezgodna_suma_rzuca_wyjatek_z_czytelnym_komunikatem(self: "TestSumaKontrolna") -> None:
+		# Kod dowolny — bezpiecznik sumy kontrolnej działa identycznie dla
+		# każdego wpisu `SZABLONY`; "PVME" wybrany jako reprezentatywny.
 		szablon_niepoprawny = b"to nie jest prawdziwy PDF szablonu umowy"
 		with self.assertRaises(ValueError) as kontekst_bledu:
-			zloz_umowe({}, szablon_niepoprawny)
+			zloz_umowe({}, szablon_niepoprawny, "PVME")
 		komunikat = str(kontekst_bledu.exception)
 		self.assertIn("SHA-256", komunikat)
-		self.assertIn("volteo_umowa_mapa.py", komunikat)
 		self.assertIn("wymaga ponownego pomiaru", komunikat)
 
 	def test_b_pusty_plik_tez_rzuca_ten_sam_czytelny_wyjatek(self: "TestSumaKontrolna") -> None:
 		with self.assertRaises(ValueError):
-			zloz_umowe({}, b"")
+			zloz_umowe({}, b"", "PVME")
 
-	def test_c_wbudowany_szablon_ma_zgodna_sume_ze_stala_mapy(self: "TestSumaKontrolna") -> None:
-		# Sanity check niezależny od reszty testów: gdyby ktoś podmienił plik w
-		# `crm/szablony/` bez przeliczenia `SHA256_SZABLONU`, ten test czerwienieje
-		# jako pierwszy — zanim jakikolwiek test renderujący zdąży się mylnie
-		# przepuścić przez bezpiecznik.
-		zawartosc = sciezka_wbudowanego_szablonu().read_bytes()
-		self.assertEqual(hashlib.sha256(zawartosc).hexdigest(), SHA256_SZABLONU)
+	def test_c_kazdy_wbudowany_szablon_ma_zgodna_sume_ze_swoja_mapa(self: "TestSumaKontrolna") -> None:
+		# Sanity check niezależny od reszty testów, dla WSZYSTKICH trzech
+		# szablonów: gdyby ktoś podmienił plik w `crm/szablony/` bez przeliczenia
+		# sumy w rejestrze `SZABLONY`, ten test czerwienieje jako pierwszy —
+		# zanim jakikolwiek test renderujący zdąży się mylnie przepuścić przez
+		# bezpiecznik.
+		for kod, szablon in SZABLONY.items():
+			with self.subTest(kod=kod):
+				zawartosc = sciezka_wbudowanego_szablonu(kod).read_bytes()
+				self.assertEqual(hashlib.sha256(zawartosc).hexdigest(), szablon.sha256)
+
+	def test_d_szablon_jednego_rodzaju_odrzucony_pod_kodem_innego_rodzaju(
+		self: "TestSumaKontrolna",
+	) -> None:
+		# Regresja przeciw pomyleniu szablonów: bajty PV podane pod kodem "ME"
+		# nie mogą przejść bezpiecznika tylko dlatego, że OBA są prawdziwymi,
+		# poprawnymi plikami PDF — suma kontrolna musi się zgadzać z DOKŁADNIE
+		# tym kodem, pod którym plik jest przekazywany. Komunikat ma nazwać
+		# oczekiwany (nie podany) szablon, żeby dało się od razu zdiagnozować
+		# pomyłkę.
+		bajty_pv = sciezka_wbudowanego_szablonu("PV").read_bytes()
+		with self.assertRaises(ValueError) as kontekst_bledu:
+			zloz_umowe({}, bajty_pv, "ME")
+		komunikat = str(kontekst_bledu.exception)
+		self.assertIn(SZABLONY["ME"].nazwa_pliku, komunikat)
+		self.assertIn("ME", komunikat)
+
+
+class TestSciezkaWbudowanegoSzablonu(unittest.TestCase):
+	def test_a_nieznany_kod_rzuca_wyjatek(self: "TestSciezkaWbudowanegoSzablonu") -> None:
+		with self.assertRaises(ValueError):
+			sciezka_wbudowanego_szablonu("CP")
+
+	def test_b_znane_kody_zwracaja_istniejace_pliki(self: "TestSciezkaWbudowanegoSzablonu") -> None:
+		for kod in SZABLONY:
+			with self.subTest(kod=kod):
+				self.assertTrue(sciezka_wbudowanego_szablonu(kod).is_file())
 
 
 class TestRejestracjaFontu(unittest.TestCase):
@@ -374,7 +412,7 @@ class TestRysowanieWarstwy(unittest.TestCase):
 
 
 class TestZlozUmowePelnyPipeline(unittest.TestCase):
-	"""Testy end-to-end przez publiczne `zloz_umowe()`, na prawdziwym szablonie
+	"""Testy end-to-end przez publiczne `zloz_umowe()`, na prawdziwych szablonach
 	z `crm/szablony/`. Wymagają prawdziwego pliku TTF (podmienianego przez
 	`_SCIEZKA_LIBERATION`) — bez niego pomijane."""
 
@@ -385,19 +423,24 @@ class TestZlozUmowePelnyPipeline(unittest.TestCase):
 		self._patch_fontu = mock.patch.object(renderer, "_SCIEZKA_LIBERATION", font)
 		self._patch_fontu.start()
 		self.addCleanup(self._patch_fontu.stop)
-		self._szablon = sciezka_wbudowanego_szablonu().read_bytes()
+		# Szablon PVME jest ścieżką "na żywo" (jedyna dotąd wdrożona w produkcji)
+		# — testy specyficzne dla PVME (test_a/b/c niżej) trzymają się go
+		# bezpośrednio, tak jak przed wprowadzeniem trzech szablonów; test
+		# pełnego pipeline'u dla WSZYSTKICH trzech (`test_d`) czyta swój
+		# szablon per-kod z `SZABLONY` w pętli.
+		self._szablon_pvme = sciezka_wbudowanego_szablonu("PVME").read_bytes()
 
 	def test_a_pusty_kontekst_ma_tyle_samo_stron_i_zero_naniesionego_tekstu(
 		self: "TestZlozUmowePelnyPipeline",
 	) -> None:
-		czytnik_oryginalu = PdfReader(io.BytesIO(self._szablon))
+		czytnik_oryginalu = PdfReader(io.BytesIO(self._szablon_pvme))
 		tekst_oryginalu = [strona.extract_text() for strona in czytnik_oryginalu.pages]
 
-		wynik_bajty = zloz_umowe({}, self._szablon)
+		wynik_bajty = zloz_umowe({}, self._szablon_pvme, "PVME")
 		czytnik_wyniku = PdfReader(io.BytesIO(wynik_bajty))
 
-		self.assertEqual(len(czytnik_wyniku.pages), _LICZBA_STRON)
-		self.assertEqual(len(czytnik_oryginalu.pages), _LICZBA_STRON)
+		self.assertEqual(len(czytnik_wyniku.pages), SZABLONY["PVME"].liczba_stron)
+		self.assertEqual(len(czytnik_oryginalu.pages), SZABLONY["PVME"].liczba_stron)
 		for indeks, (strona_oryg, strona_wynik) in enumerate(
 			zip(tekst_oryginalu, czytnik_wyniku.pages, strict=True)
 		):
@@ -407,9 +450,11 @@ class TestZlozUmowePelnyPipeline(unittest.TestCase):
 				f"Strona {indeks + 1}: pusty kontekst nie powinien zmieniać wyekstrahowanego tekstu",
 			)
 
-	def test_b_pelny_kontekst_ma_wartosci_na_wlasciwych_stronach(self: "TestZlozUmowePelnyPipeline") -> None:
+	def test_b_pelny_kontekst_ma_wartosci_na_wlasciwych_stronach_pvme(
+		self: "TestZlozUmowePelnyPipeline",
+	) -> None:
 		kontekst = _pelny_kontekst()
-		wynik_bajty = zloz_umowe(kontekst, self._szablon)
+		wynik_bajty = zloz_umowe(kontekst, self._szablon_pvme, "PVME")
 		strony = PdfReader(io.BytesIO(wynik_bajty)).pages
 		tekst_wg_strony = [strona.extract_text() for strona in strony]
 
@@ -446,7 +491,56 @@ class TestZlozUmowePelnyPipeline(unittest.TestCase):
 		# przypadkiem ominięty, gdy font JEST dostępny (w przeciwieństwie do
 		# `TestSumaKontrolna`, gdzie font nigdy nie wchodzi w grę).
 		with self.assertRaises(ValueError):
-			zloz_umowe(_pelny_kontekst(), b"nieprawidlowy szablon")
+			zloz_umowe(_pelny_kontekst(), b"nieprawidlowy szablon", "PVME")
+
+	def test_d_pelny_pipeline_dla_kazdego_szablonu(self: "TestZlozUmowePelnyPipeline") -> None:
+		# Test end-to-end dla WSZYSTKICH trzech szablonów: liczba stron wyniku,
+		# wartości kontekstu na oczekiwanych stronach (per szablon — treść i
+		# układ różnią się), i — kluczowe dla PV/ME — że wartość istotna
+		# wyłącznie dla DRUGIEGO produktu (bateria dla PV, panele dla ME) NIE
+		# pojawia się NIGDZIE w wyniku, bo dany szablon nie ma dla niej miejsca.
+		kontekst = _pelny_kontekst()
+		for kod, szablon in SZABLONY.items():
+			with self.subTest(kod=kod):
+				szablon_bajty = sciezka_wbudowanego_szablonu(kod).read_bytes()
+				wynik_bajty = zloz_umowe(kontekst, szablon_bajty, kod)
+				strony = PdfReader(io.BytesIO(wynik_bajty)).pages
+				self.assertEqual(len(strony), szablon.liczba_stron)
+				tekst_wg_strony = [strona.extract_text() for strona in strony]
+				pelny_tekst = "\n".join(tekst_wg_strony)
+
+				if kod == "PVME":
+					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[0])
+					self.assertIn(
+						kontekst["wynagrodzenie_brutto"].replace("\xa0", " "),
+						tekst_wg_strony[1].replace("\xa0", " "),
+					)
+					self.assertIn(kontekst["panel_producent_model"], tekst_wg_strony[4])
+					self.assertIn(kontekst["bateria_producent_model"], tekst_wg_strony[5])
+					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[17])
+				elif kod == "PV":
+					self.assertIn(
+						kontekst["wynagrodzenie_brutto"].replace("\xa0", " "),
+						tekst_wg_strony[0].replace("\xa0", " "),
+					)
+					self.assertIn(kontekst["powierzchnia_m2"], tekst_wg_strony[1])
+					self.assertIn(kontekst["panel_producent_model"], tekst_wg_strony[4])
+					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[13])
+					# Szablon PV nie ma Załącznika magazynu — wartość baterii nie
+					# ma gdzie się wydrukować, nigdzie na żadnej stronie.
+					self.assertNotIn(kontekst["bateria_producent_model"], pelny_tekst)
+				elif kod == "ME":
+					self.assertIn(
+						kontekst["wynagrodzenie_brutto"].replace("\xa0", " "),
+						tekst_wg_strony[1].replace("\xa0", " "),
+					)
+					self.assertIn(kontekst["bateria_producent_model"], tekst_wg_strony[4])
+					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[13])
+					# Szablon ME nie ma sekcji fotowoltaicznej — wartość panelu
+					# nie ma gdzie się wydrukować, nigdzie na żadnej stronie.
+					self.assertNotIn(kontekst["panel_producent_model"], pelny_tekst)
+				else:
+					self.fail(f"Nieoczekiwany kod w rejestrze SZABLONY: {kod!r}")
 
 
 if __name__ == "__main__":
