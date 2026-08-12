@@ -260,12 +260,13 @@ class TestRodzajIWyrownanie(unittest.TestCase):
 
 class TestWielokrotnePozycje(unittest.TestCase):
 	def test_a_dane_klienta_powtarzaja_sie_na_wielu_stronach(self: "TestWielokrotnePozycje") -> None:
-		# Imię i nazwisko klienta drukuje się w komparycji (str. 1), obu
-		# protokołach odbioru (str. 12, 15) i pełnomocnictwie (str. 18) —
-		# dokładnie tak jak opisuje docstring modułu. Regresja tego testu =
-		# ktoś przypadkiem usunął jedną z pozycji przy edycji mapy.
+		# Imię i nazwisko klienta drukuje się w komparycji (str. 1) i w
+		# pełnomocnictwie (str. 18) — protokoły odbioru (str. 12, 15) od b44
+		# są celowo puste (decyzja produktowa: wypełnia je instalator po
+		# montażu), więc dane klienta się tam już NIE powtarzają. Regresja
+		# tego testu = ktoś przypadkiem usunął/dodał pozycję przy edycji mapy.
 		strony = {pole.strona for pole in pozycje_dla("klient_imie_nazwisko")}
-		self.assertEqual(strony, {0, 11, 14, 17})
+		self.assertEqual(strony, {0, 17})
 
 	def test_b_zero_duplikatow_tej_samej_pozycji(self: "TestWielokrotnePozycje") -> None:
 		widziane: set[tuple[str, int, float, float]] = set()
@@ -273,6 +274,16 @@ class TestWielokrotnePozycje(unittest.TestCase):
 			klucz_pozycji = (pole.klucz, pole.strona, pole.x, pole.y)
 			self.assertNotIn(klucz_pozycji, widziane, f"Zduplikowana pozycja: {pole}")
 			widziane.add(klucz_pozycji)
+
+	def test_c_rodo_data_imie_nazwisko_jedna_pozycja_na_stronie_9(
+		self: "TestWielokrotnePozycje",
+	) -> None:
+		# Linia podpisu klienta na końcu Załącznika nr 4 (RODO) - jedna pozycja,
+		# strona 9 (indeks 8). Regresja tego testu = ktoś przesunął pozycję przy
+		# przyszłej edycji mapy, bez zauważenia że to zmienia stronę wydruku.
+		pozycje = pozycje_dla("rodo_data_imie_nazwisko")
+		self.assertEqual(len(pozycje), 1)
+		self.assertEqual(pozycje[0].strona, 8)
 
 
 class TestPoleDataclass(unittest.TestCase):

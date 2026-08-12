@@ -258,40 +258,13 @@ _STRONA_7: tuple[Pole, ...] = (
 )
 
 # ---------------------------------------------------------------------------
-# Strona 12 (indeks 11): Załącznik nr 6 — Protokół odbioru instalacji PV
-# (dane techniczne modułów i inwertera; strona 13 to lista szkoleniowa/zdjęć
-# wypełniana przez instalatora — bez pól z kontekstu; strona 14 to protokół
-# pomiarów, również bez pól z kontekstu)
+# Strona 9 (indeks 8): Załącznik nr 4 — klauzula RODO, linia podpisu klienta
+# ("Zamawiający" nad kreską, "data i podpis" pod nią). Kreska (pdftotext
+# -bbox): xMin=72.0 / xMax=233.223511 / yMax=268.633304; konwencja przeliczeń
+# jak w nagłówku modułu (x=xMin+3, y=842-yMax+2.5, maks=szerokość-6).
 # ---------------------------------------------------------------------------
-_STRONA_12: tuple[Pole, ...] = (
-	Pole("data_zawarcia", 11, 152.05, 682.81, "tekst", maks_szerokosc=79.09),
-	Pole("klient_imie_nazwisko", 11, 192.22, 638.6, "tekst", maks_szerokosc=327.11),
-	Pole("klient_adres", 11, 192.22, 615.45, "tekst", maks_szerokosc=327.11),
-	Pole("panel_moc_wp", 11, 228.2, 496.89, "tekst", maks_szerokosc=291.13),
-	Pole("panel_szt", 11, 228.2, 473.74, "tekst", maks_szerokosc=291.13),
-	Pole("moc_pv_kwp", 11, 228.2, 450.59, "tekst", maks_szerokosc=291.13),
-	Pole("panel_producent_model", 11, 228.2, 426.5, "tekst", maks_szerokosc=291.13),
-	Pole("inwerter_moc_kw", 11, 225.27, 178.06, "tekst", maks_szerokosc=294.06),
-	Pole("inwerter_szt", 11, 225.27, 154.91, "tekst", maks_szerokosc=294.06),
-	Pole("inwerter_producent_model", 11, 225.27, 131.76, "tekst", maks_szerokosc=294.06),
-)
-
-# ---------------------------------------------------------------------------
-# Strona 15 (indeks 14): Załącznik nr 7 — Protokół odbioru magazynu energii
-# (strona 16 kontynuuje tę samą tabelę numerami seryjnymi — bez pól z
-# kontekstu — i dodaje listę szkoleniową/zdjęć instalatora)
-# ---------------------------------------------------------------------------
-_STRONA_15: tuple[Pole, ...] = (
-	Pole("data_zawarcia", 14, 152.05, 682.81, "tekst", maks_szerokosc=79.09),
-	Pole("klient_imie_nazwisko", 14, 192.2, 638.6, "tekst", maks_szerokosc=327.13),
-	Pole("klient_adres", 14, 192.2, 615.45, "tekst", maks_szerokosc=327.13),
-	Pole("bateria_producent_model", 14, 228.2, 496.89, "tekst", maks_szerokosc=291.13),
-	Pole("bateria_moc_kw", 14, 228.2, 450.59, "tekst", maks_szerokosc=291.13),
-	Pole("bateria_pojemnosc_lacznie_kwh", 14, 228.2, 426.5, "tekst", maks_szerokosc=291.13),
-	Pole("bateria_szt", 14, 228.2, 392.38, "tekst", maks_szerokosc=291.13),
-	Pole("ist_pv_producent_inwertera", 14, 225.27, 168.11, "tekst", maks_szerokosc=294.06),
-	Pole("ist_pv_moc_inwertera_kw", 14, 225.27, 121.81, "tekst", maks_szerokosc=294.06),
-	Pole("ist_pv_moc_kwp", 14, 225.27, 98.66, "tekst", maks_szerokosc=294.06),
+_STRONA_9: tuple[Pole, ...] = (
+	Pole("rodo_data_imie_nazwisko", 8, 75.0, 575.87, "tekst", maks_szerokosc=155.22),
 )
 
 # ---------------------------------------------------------------------------
@@ -321,8 +294,7 @@ MAPA: tuple[Pole, ...] = (
 	+ _STRONA_5
 	+ _STRONA_6
 	+ _STRONA_7
-	+ _STRONA_12
-	+ _STRONA_15
+	+ _STRONA_9
 	+ _STRONA_18
 )
 """Pełna mapa: krotka wszystkich `Pole` na wszystkich stronach. Jeden klucz
@@ -330,18 +302,27 @@ kontekstu może wystąpić wielokrotnie (raz na każdej stronie, gdzie faktyczni
 jest drukowany) — generator ma narysować wartość we WSZYSTKICH pozycjach
 danego klucza, nie tylko w pierwszej."""
 
-# Strony 8, 9, 10, 11, 13, 14, 16, 17 (indeksy 7, 8, 9, 10, 12, 13, 15, 16) nie
-# zawierają żadnej pozycji z kontekstu `zbuduj_kontekst` — to statyczne
-# oświadczenia (RODO na str. 8-9), pouczenie o prawie do odstąpienia (str. 10),
-# pusty formularz odstąpienia do ewentualnego wypełnienia przez klienta w
-# przyszłości (str. 11), listy szkoleniowe/zdjęć i protokoły pomiarów
-# elektrycznych wypełniane przez instalatora przy montażu (str. 13, 14, 16,
-# 17) — żadna z tych wartości nie pochodzi z `Volteo Umowa`/`CRM Deal` w
-# chwili generowania PDF-u. Świadomie NIE ma tu bloków podpisów: protokoły
-# odbioru (str. 12-17) podpisuje instalator dopiero po montażu, a formularz
-# odstąpienia (str. 11) klient wypełnia tylko wtedy, gdy faktycznie odstępuje
-# od umowy — wydrukowanie tam naszego podpisu poświadczałoby coś, co się nie
-# wydarzyło (decyzja właściciela projektu, zob. raport zadania).
+# Strony 8, 10, 11, 12, 13, 14, 15, 16, 17 (indeksy 7, 9, 10, 11, 12, 13, 14,
+# 15, 16) nie zawierają żadnej pozycji z kontekstu `zbuduj_kontekst` — to
+# statyczne oświadczenia (RODO na str. 8, przy czym str. 9 — koniec tego
+# samego załącznika — od 2026-08-12 ma jedną pozycję podpisu, `_STRONA_9`
+# powyżej), pouczenie o prawie do odstąpienia (str. 10), pusty formularz
+# odstąpienia do ewentualnego wypełnienia przez klienta w przyszłości
+# (str. 11), Załącznik 6 — protokół odbioru instalacji PV (str. 12) i
+# Załącznik 7 — protokół odbioru magazynu energii (str. 15), oraz listy
+# szkoleniowe/zdjęć i protokoły pomiarów elektrycznych wypełniane przez
+# instalatora przy montażu (str. 13, 14, 16, 17) — żadna z tych wartości nie
+# pochodzi z `Volteo Umowa`/`CRM Deal` w chwili generowania PDF-u. Str. 12
+# i 15 miały do b44 dziesięć pól z góry wydrukowanych danych (dane klienta,
+# dane techniczne modułów/inwertera/baterii) — usunięte decyzją produktową
+# 2026-08-12: te dwa protokoły odbioru mają być CAŁKOWICIE puste, bo
+# wypełnia je ręcznie instalator dopiero po montażu, tak samo jak strony
+# 13/14/16/17, z którymi teraz są spójne. Świadomie NIE ma tu bloków
+# podpisów: protokoły odbioru (str. 12-17) podpisuje instalator dopiero po
+# montażu, a formularz odstąpienia (str. 11) klient wypełnia tylko wtedy, gdy
+# faktycznie odstępuje od umowy — wydrukowanie tam naszego podpisu
+# poświadczałoby coś, co się nie wydarzyło (decyzja właściciela projektu,
+# zob. raport zadania).
 
 
 def pozycje_dla(klucz: str) -> tuple[Pole, ...]:

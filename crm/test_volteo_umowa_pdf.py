@@ -501,6 +501,24 @@ class TestBateriaSztPojemnoscJedn(unittest.TestCase):
 		self.assertEqual(kontekst["bateria_szt"], "")
 		self.assertEqual(kontekst["bateria_pojemnosc_jedn_kwh"], "")
 
+	def test_g_moduly_rozne_pojemnosc_jedn_lista_przecinkowa(self: "TestBateriaSztPojemnoscJedn") -> None:
+		# Moduły o różnych pojemnościach (suma się zgadza, składniki różne) —
+		# zamiast pustki drukujemy listę po przecinku, żeby dokument pokazywał
+		# realny skład zestawu zamiast udawać jedną wspólną wartość.
+		komponenty = [
+			{
+				"kategoria": "Magazyn energii",
+				"nazwa": "Sigenergy",
+				"model": "21 kWh (6+6+9)",
+				"pojemnosc_kwh": Decimal("21.0"),
+				"gwarancja_lat": 0,
+			}
+		]
+		deal = _deal(custom_bateria="Sigenergy 21 kWh (6+6+9)")
+		kontekst = zbuduj_kontekst(_umowa(), deal, _kontakt(), _zestaw(), komponenty, _stale(), _DZIS)
+		self.assertEqual(kontekst["bateria_szt"], "3")
+		self.assertEqual(kontekst["bateria_pojemnosc_jedn_kwh"], "6,6,9")
+
 
 class TestBateriaKatalogDwanascieWierszy(unittest.TestCase):
 	"""Każdy z dwunastu rzeczywistych wierszy katalogu "Magazyn energii"
@@ -526,9 +544,11 @@ class TestBateriaKatalogDwanascieWierszy(unittest.TestCase):
 		self.assertEqual(kontekst["bateria_pojemnosc_jedn_kwh"], "6")
 
 	def test_b_sigenergy_15_6plus9(self: "TestBateriaKatalogDwanascieWierszy") -> None:
+		# Moduły różne (6+9) — lista przecinkowa zamiast pustki (user request,
+		# 2026-08-12): "6,9" pokazuje realny skład, nie udaje jednej wartości.
 		kontekst = self._kontekst_dla("Sigenergy", "15 kWh (6+9)", "15.0")
 		self.assertEqual(kontekst["bateria_szt"], "2")
-		self.assertEqual(kontekst["bateria_pojemnosc_jedn_kwh"], "")
+		self.assertEqual(kontekst["bateria_pojemnosc_jedn_kwh"], "6,9")
 
 	def test_c_sigenergy_18_9plus9(self: "TestBateriaKatalogDwanascieWierszy") -> None:
 		kontekst = self._kontekst_dla("Sigenergy", "18 kWh (9+9)", "18.0")
@@ -536,14 +556,16 @@ class TestBateriaKatalogDwanascieWierszy(unittest.TestCase):
 		self.assertEqual(kontekst["bateria_pojemnosc_jedn_kwh"], "9")
 
 	def test_d_sigenergy_21_6plus6plus9(self: "TestBateriaKatalogDwanascieWierszy") -> None:
+		# Moduły różne (6+6+9) — lista przecinkowa "6,6,9" (user request, 2026-08-12).
 		kontekst = self._kontekst_dla("Sigenergy", "21 kWh (6+6+9)", "21.0")
 		self.assertEqual(kontekst["bateria_szt"], "3")
-		self.assertEqual(kontekst["bateria_pojemnosc_jedn_kwh"], "")
+		self.assertEqual(kontekst["bateria_pojemnosc_jedn_kwh"], "6,6,9")
 
 	def test_e_sigenergy_24_6plus9plus9(self: "TestBateriaKatalogDwanascieWierszy") -> None:
+		# Moduły różne (6+9+9) — lista przecinkowa "6,9,9" (user request, 2026-08-12).
 		kontekst = self._kontekst_dla("Sigenergy", "24 kWh (6+9+9)", "24.0")
 		self.assertEqual(kontekst["bateria_szt"], "3")
-		self.assertEqual(kontekst["bateria_pojemnosc_jedn_kwh"], "")
+		self.assertEqual(kontekst["bateria_pojemnosc_jedn_kwh"], "6,9,9")
 
 	def test_f_sigenergy_27_9plus9plus9(self: "TestBateriaKatalogDwanascieWierszy") -> None:
 		kontekst = self._kontekst_dla("Sigenergy", "27 kWh (9+9+9)", "27.0")
@@ -639,15 +661,24 @@ class TestPpoz(unittest.TestCase):
 
 
 class TestKabel(unittest.TestCase):
+	"""`dodatkowy_kabel` (Select: Tak/Nie) jest właściwym źródłem prawdy, gdy
+	wypełniony — testy `test_d`..`test_k` pokrywają jego pełną tabelę prawdy.
+	Testy `test_a`..`test_c` pokrywają umowy sprzed wprowadzenia tego Select
+	(pole brakuje/puste/nierozpoznane), gdzie jedynym sygnałem pozostaje stara
+	heurystyka: dodatnia liczba metrów kabla = Tak."""
+
 	def test_a_kabel_dodatni_wlacza_tak(self: "TestKabel") -> None:
+		# Selektor nieobecny w ogóle (fixture bazowy nie ma klucza
+		# "dodatkowy_kabel") — legacy heurystyka metrów decyduje.
 		kontekst = _kontekst(dodatkowy_kabel_m=15)
 		self.assertTrue(kontekst["kabel_tak"])
 		self.assertFalse(kontekst["kabel_nie"])
 		self.assertEqual(kontekst["kabel_mb"], "15")
 
 	def test_b_kabel_zero_nie_zgaduje_nie(self: "TestKabel") -> None:
-		# Bez osobnej flagi Tak/Nie w schemacie nie da się odróżnić "klient nie
-		# potrzebuje kabla" od "pole jeszcze nie wypełnione" — obie kratki puste.
+		# Selektor nieobecny i metry zerowe — nie da się odróżnić "klient nie
+		# potrzebuje kabla" od "pole jeszcze nie wypełnione", więc obie kratki
+		# puste (legacy heurystyka, tak jak w test_a, tylko z zerem metrów).
 		kontekst = _kontekst(dodatkowy_kabel_m=0)
 		self.assertFalse(kontekst["kabel_tak"])
 		self.assertFalse(kontekst["kabel_nie"])
@@ -660,15 +691,92 @@ class TestKabel(unittest.TestCase):
 		self.assertFalse(kontekst["kabel_tak"])
 		self.assertEqual(kontekst["kabel_mb"], "")
 
+	def test_d_wybor_tak_z_metrami(self: "TestKabel") -> None:
+		kontekst = _kontekst(dodatkowy_kabel="Tak", dodatkowy_kabel_m=15)
+		self.assertTrue(kontekst["kabel_tak"])
+		self.assertFalse(kontekst["kabel_nie"])
+		self.assertEqual(kontekst["kabel_mb"], "15")
+
+	def test_e_wybor_tak_zero_metrow(self: "TestKabel") -> None:
+		# Jawne "Tak" wystarcza samo w sobie — zerowe metry nie cofają kratki,
+		# tylko zostawiają pole mb puste (kabel będzie, długość nieznana).
+		kontekst = _kontekst(dodatkowy_kabel="Tak", dodatkowy_kabel_m=0)
+		self.assertTrue(kontekst["kabel_tak"])
+		self.assertFalse(kontekst["kabel_nie"])
+		self.assertEqual(kontekst["kabel_mb"], "")
+
+	def test_f_wybor_tak_brak_pola_metrow(self: "TestKabel") -> None:
+		umowa = _umowa(dodatkowy_kabel="Tak")
+		del umowa["dodatkowy_kabel_m"]
+		kontekst = zbuduj_kontekst(umowa, _deal(), _kontakt(), _zestaw(), _komponenty(), _stale(), _DZIS)
+		self.assertTrue(kontekst["kabel_tak"])
+		self.assertFalse(kontekst["kabel_nie"])
+		self.assertEqual(kontekst["kabel_mb"], "")
+
+	def test_g_wybor_nie_zero_metrow(self: "TestKabel") -> None:
+		kontekst = _kontekst(dodatkowy_kabel="Nie", dodatkowy_kabel_m=0)
+		self.assertFalse(kontekst["kabel_tak"])
+		self.assertTrue(kontekst["kabel_nie"])
+		self.assertEqual(kontekst["kabel_mb"], "")
+
+	def test_h_wybor_nie_brak_metrow(self: "TestKabel") -> None:
+		umowa = _umowa(dodatkowy_kabel="Nie")
+		del umowa["dodatkowy_kabel_m"]
+		kontekst = zbuduj_kontekst(umowa, _deal(), _kontakt(), _zestaw(), _komponenty(), _stale(), _DZIS)
+		self.assertFalse(kontekst["kabel_tak"])
+		self.assertTrue(kontekst["kabel_nie"])
+		self.assertEqual(kontekst["kabel_mb"], "")
+
+	def test_i_wybor_nie_wygrywa_mimo_metrow(self: "TestKabel") -> None:
+		# Niespójny wpis (przedstawiciel zaznaczył "Nie", ale metry zostały w
+		# formularzu) — jawne "Nie" wygrywa, a metry są tłumione na wydruku, bo
+		# dokument prawny nie może sam sobie zaprzeczać.
+		kontekst = _kontekst(dodatkowy_kabel="Nie", dodatkowy_kabel_m=15)
+		self.assertFalse(kontekst["kabel_tak"])
+		self.assertTrue(kontekst["kabel_nie"])
+		self.assertEqual(kontekst["kabel_mb"], "")
+
+	def test_j_wybor_nieznany_string_legacy_metry_dodatnie(self: "TestKabel") -> None:
+		# Wartość spoza Tak/Nie (np. dane historyczne/uszkodzone) traktowana
+		# jak brak selektora — heurystyka metrów przejmuje decyzję.
+		kontekst = _kontekst(dodatkowy_kabel="Coś nieznanego", dodatkowy_kabel_m=15)
+		self.assertTrue(kontekst["kabel_tak"])
+		self.assertFalse(kontekst["kabel_nie"])
+		self.assertEqual(kontekst["kabel_mb"], "15")
+
+	def test_k_wybor_pusty_string_zero_metrow(self: "TestKabel") -> None:
+		kontekst = _kontekst(dodatkowy_kabel="", dodatkowy_kabel_m=0)
+		self.assertFalse(kontekst["kabel_tak"])
+		self.assertFalse(kontekst["kabel_nie"])
+		self.assertEqual(kontekst["kabel_mb"], "")
+
 
 class TestPrzekopMb(unittest.TestCase):
-	def test_a_brak_pola_w_dzisiejszym_schemacie_jest_pusty(self: "TestPrzekopMb") -> None:
+	def test_a_niewypelnione_pole_jest_puste(self: "TestPrzekopMb") -> None:
+		# Fixture bazowy nie ustawia "przekop_mb" — pole istnieje w schemacie
+		# (`ops/crm-umowa.py` + whitelist zapisu `crm/api/umowa.py`), ale bywa
+		# niewypełnione, więc defensywny odczyt `.get()` daje pustkę.
 		kontekst = _kontekst()
 		self.assertEqual(kontekst["przekop_mb"], "")
 
-	def test_b_defensywnie_czyta_pole_gdyby_kiedys_powstalo(self: "TestPrzekopMb") -> None:
+	def test_b_wypelnione_pole_jest_drukowane(self: "TestPrzekopMb") -> None:
 		kontekst = _kontekst(przekop_mb=25)
 		self.assertEqual(kontekst["przekop_mb"], "25")
+
+
+class TestRodo(unittest.TestCase):
+	"""`rodo_data_imie_nazwisko`: linia podpisu klienta na str. 9 (indeks 8,
+	koniec Załącznika nr 4 - klauzula RODO) - data zawarcia umowy + imię i
+	nazwisko klienta WIELKIMI literami, decyzja produktowa 2026-08-12."""
+
+	def test_a_data_i_imie_nazwisko_wielkimi_literami(self: "TestRodo") -> None:
+		kontekst = _kontekst()
+		self.assertEqual(kontekst["rodo_data_imie_nazwisko"], "06.08.2026, JAN KOWALSKI")
+
+	def test_b_brak_imienia_i_nazwiska_sama_data_bez_przecinka(self: "TestRodo") -> None:
+		kontakt = _kontakt(first_name="", last_name="")
+		kontekst = zbuduj_kontekst(_umowa(), _deal(), kontakt, _zestaw(), _komponenty(), _stale(), _DZIS)
+		self.assertEqual(kontekst["rodo_data_imie_nazwisko"], "06.08.2026")
 
 
 class TestZgody(unittest.TestCase):

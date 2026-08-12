@@ -432,6 +432,9 @@ class TestZlozUmowePelnyPipeline(unittest.TestCase):
 		# Strona 6 (indeks 5): Załącznik 1b — producent/model baterii.
 		self.assertIn(kontekst["bateria_producent_model"], tekst_wg_strony[5])
 
+		# Strona 9 (indeks 8): koniec Załącznika nr 4 (RODO) — linia podpisu klienta.
+		self.assertIn(kontekst["rodo_data_imie_nazwisko"], tekst_wg_strony[8])
+
 		# Strona 18 (indeks 17): Pełnomocnictwo OSD — PESEL i nazwisko ponownie.
 		self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[17])
 		self.assertIn(kontekst["klient_imie_nazwisko"], tekst_wg_strony[17])

@@ -157,6 +157,9 @@ def zbuduj_kontekst(
 
 	kabel_mb_dec = _sparsuj_decimal(umowa.get("dodatkowy_kabel_m"))
 	kabel_mb_puste = kabel_mb_dec is None or kabel_mb_dec == 0
+	kabel_wybor = umowa.get("dodatkowy_kabel")
+	kabel_tak_wybrano = _rowna(kabel_wybor, "Tak")
+	kabel_nie_wybrano = _rowna(kabel_wybor, "Nie")
 
 	klient_imie_nazwisko = _polacz(kontakt.get("first_name"), kontakt.get("last_name"))
 
@@ -210,23 +213,20 @@ def zbuduj_kontekst(
 		"ppoz_nie": ppoz_stan is False,
 		"przekop_tak": _rowna(umowa.get("przekop_gruntowy"), "Tak"),
 		"przekop_nie": _rowna(umowa.get("przekop_gruntowy"), "Nie"),
-		# Decyzja projektowa (poza kontraktem): schemat `Volteo Umowa`
-		# (`ops/crm-umowa.py`) w tej iteracji NIE MA pola na długość przekopu
-		# gruntowego w mb — jest tylko `przekop_gruntowy` (Tak/Nie) i osobne
-		# `dodatkowy_kabel_m` dla kabla. Czytamy `umowa["przekop_mb"]`
-		# defensywnie (klucza dziś nie ma, więc zawsze wyjdzie pusto) — gdy
-		# pole powstanie pod tą nazwą, zacznie działać bez zmian w tym pliku.
-		# Zgłosić właścicielowi schematu jako lukę do domknięcia w iteracji 2.
+		# `przekop_mb` istnieje w schemacie `Volteo Umowa` (`ops/crm-umowa.py`)
+		# i na whiteliście zapisu `crm/api/umowa.py`, ale może zostać
+		# niewypełnione przez przedstawiciela — odczyt jest więc defensywny
+		# (`.get()` na brakującym/pustym kluczu daje pustkę, nigdy wyjątek).
 		"przekop_mb": _liczba_calkowita(umowa.get("przekop_mb")),
-		"kabel_tak": not kabel_mb_puste,
-		# Decyzja projektowa: `dodatkowy_kabel_m` (Int) nie ma osobnej flagi
-		# Tak/Nie w schemacie — samo `0`/pusto nie pozwala odróżnić "klient
-		# NIE potrzebuje kabla" od "przedstawiciel jeszcze nie wypełnił".
-		# Zgodnie z regułą "nigdy nie zgadywać domyślnej opcji" `kabel_nie`
-		# zostaje `False` w obu tych przypadkach — tylko dodatnia długość
-		# w mb jednoznacznie włącza `kabel_tak`.
-		"kabel_nie": False,
-		"kabel_mb": "" if kabel_mb_puste else _liczba_calkowita(kabel_mb_dec),
+		# `dodatkowy_kabel` (Select: Tak/Nie) jest właściwym źródłem prawdy,
+		# gdy wypełniony — jawne "Nie" ZAWSZE wygrywa i tłumi metry na
+		# wydruku, nawet gdy `dodatkowy_kabel_m` ma dodatnią wartość (formularz
+		# niespójny): dokument prawny nie ma prawa sam sobie zaprzeczać.
+		# Gdy Select jest pusty/nierozpoznany (umowy sprzed jego wprowadzenia),
+		# wracamy do starej heurystyki: dodatnia liczba metrów = Tak.
+		"kabel_tak": kabel_tak_wybrano or (not kabel_nie_wybrano and not kabel_mb_puste),
+		"kabel_nie": kabel_nie_wybrano,
+		"kabel_mb": "" if (kabel_nie_wybrano or kabel_mb_puste) else _liczba_calkowita(kabel_mb_dec),
 		# Załącznik 1b
 		"bateria_producent_model": _tekst(bateria_nazwa),
 		"bateria_moc_kw": _liczba(_pole(bateria_komponent, "moc_kw")),
@@ -253,6 +253,14 @@ def zbuduj_kontekst(
 		# `.upper()` poprawnie zamienia polskie znaki (np. "ł"→"Ł").
 		"podpis_zamawiajacy": klient_imie_nazwisko.upper(),
 		"podpis_wykonawca": "PROENERGY",
+		# Linia podpisu klienta na str. 9 (koniec Załącznika nr 4 - klauzula
+		# RODO): "data i podpis" pod kreską — pre-drukowana data zawarcia umowy
+		# + imię i nazwisko klienta wielkimi literami, decyzja produktowa
+		# 2026-08-12. Brak nazwiska nigdy nie kasuje daty — tylko pomija
+		# przecinek, który by go poprzedzał.
+		"rodo_data_imie_nazwisko": ", ".join(
+			c for c in (_data_pl(dzis), klient_imie_nazwisko.upper()) if c
+		),
 	}
 
 
@@ -314,8 +322,9 @@ def _bateria_szt_i_pojemnosc_jedn(komponent: dict[str, Any] | None) -> tuple[str
 	   literowka w katalogu: "(6+6)" przy zapisanych 15 kWh) -> oba klucze
 	   puste, nigdy nie zgadujemy ktora wartosc jest bledna. Jesli suma sie
 	   zgadza i wszystkie skladniki sa rowne -> pojemnosc jednostkowa to ta
-	   wspolna wartosc; jesli skladniki sa rozne -> pojemnosc jednostkowa
-	   zostaje pusta (jedna liczba bylaby nieprawda w dokumencie prawnym).
+	   wspolna wartosc; jesli skladniki sa rozne -> pojemnosc jednostkowa to
+	   lista skladnikow po przecinku (np. "6,6,9"), zeby dokument pokazywal
+	   realny sklad zestawu zamiast udawac jedna wspolna wartosc.
 	3. Brak nawiasu w ogole (np. "12 kWh", "T-BAT 5.8kWh"): jesli string mimo
 	   to nie wyglada na zapis pojemnosci (nie zawiera "kWh") -> oba klucze
 	   puste (model nierozpoznawalny, nigdy nie zgadujemy). W przeciwnym razie
@@ -323,7 +332,13 @@ def _bateria_szt_i_pojemnosc_jedn(komponent: dict[str, Any] | None) -> tuple[str
 	   calkowita komponentu (albo puste, gdy ta jest sama pusta/zero).
 
 	Zwraca gotowe do wydruku stringi (przez `_liczba`/`_liczba_calkowita`),
-	nigdy surowe liczby.
+	nigdy surowe liczby. Uwaga do listy przecinkowej w regule 2: `_liczba`
+	renderuje polskie przecinki dziesietne, wiec hipotetyczny modul o
+	niecalkowitej pojemnosci bylby w takiej liscie wizualnie niejednoznaczny
+	("6,5,9" - dwie liczby czy trzy?); dzis wzorzec `_WZORZEC_MODULOW_BATERII`
+	dopasowuje wylacznie liczby calkowite w nawiasie, wiec format
+	przecinkowo-rozdzielany jest tu swiadoma decyzja produktowa (zyczenie
+	uzytkownika, 2026-08-12), nie ogolnym rozwiazaniem na przyszlosc.
 	"""
 	if komponent is None:
 		return "", ""
@@ -340,7 +355,7 @@ def _bateria_szt_i_pojemnosc_jedn(komponent: dict[str, Any] | None) -> tuple[str
 		szt = _liczba_calkowita(len(skladniki))
 		if all(s == skladniki[0] for s in skladniki):
 			return szt, _liczba(skladniki[0])
-		return szt, ""
+		return szt, ",".join(_liczba(s) for s in skladniki)
 
 	if "kwh" not in model.lower():
 		return "", ""
