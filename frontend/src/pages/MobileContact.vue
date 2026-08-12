@@ -318,7 +318,7 @@ const tabs = [
   },
   {
     name: 'Kalkulator',
-    label: __('Kalkulator fotowoltaiczny'),
+    label: __('Kalkulator OZE'),
     icon: h(KalkulatorIcon, { class: 'h-4 w-4' }),
   },
   {

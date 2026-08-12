@@ -57,7 +57,7 @@
           <EmptyState v-else :icon="tab.icon" name="Deals" />
         </template>
         <KalkulatorTab
-          v-else-if="tab.label === 'Kalkulator fotowoltaiczny'"
+          v-else-if="tab.label === 'Kalkulator OZE'"
           :contact="contact.doc"
         />
         <KalkulatorCPTab
@@ -361,7 +361,7 @@ const tabs = [
     count: computed(() => deals.data?.length),
   },
   {
-    label: 'Kalkulator fotowoltaiczny',
+    label: 'Kalkulator OZE',
     icon: KalkulatorIcon,
     // no count badge for the Kalkulator tab
   },
