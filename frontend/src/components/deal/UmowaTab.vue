@@ -230,7 +230,7 @@ const formSections = [
     fields: [
       {
         fieldname: 'adres_zam_jak_montaz',
-        label: __('Czy adres zamieszkania jest taki sam jak adres montażu?'),
+        label: __('Czy adres montażu jest taki sam jak adres zamieszkania?'),
         type: 'select',
         options: TAK_NIE,
         required: true,
