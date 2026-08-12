@@ -304,6 +304,7 @@
 
 <script setup>
 import { ref, reactive, computed, watch, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { call, Button, FeatherIcon } from 'frappe-ui'
 import {
   VARIANTS,
@@ -324,6 +325,8 @@ import { formatPln } from '@/utils/money'
 const props = defineProps({
   contact: { type: Object, default: () => ({}) },
 })
+
+const router = useRouter()
 
 const VOIVODESHIPS = [
   'dolnośląskie', 'kujawsko-pomorskie', 'lubelskie', 'lubuskie', 'łódzkie',
@@ -627,7 +630,7 @@ async function runGenerate() {
     })
     successSummary.value =
       'Szansa ' + result.deal + ' została utworzona. Suma brutto: ' + formatPln(result.brutto) + '.'
-    dealHref.value = '/crm/deals/' + result.deal
+    dealHref.value = router.resolve({ name: 'Deal', params: { dealId: result.deal } }).href
     flow.value = 'done'
   } catch (err) {
     errorMsg.value = extractErrorMessage(err)
