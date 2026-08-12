@@ -34,6 +34,15 @@
 // liczb nie trafia do zapisu ani do dokumentu, więc niedokładność float
 // jest tu akceptowalna. Nie przenoś tego wzorca do kodu, który zapisuje
 // kwoty.
+//
+// Kwoty w wynikowych wierszach i w `razem` są zaokrąglane do groszy przez
+// `roundPln` (patrz `@/utils/money`) DOPIERO na wyjściu z `przeliczPodzial`,
+// żeby to, co widzi administrator, sumowało się dokładnie — procenty
+// (`zyskProc`, `marzaProc`) zostają liczone z surowych, niezaokrąglonych
+// wartości. To wciąż wyłącznie zaokrąglenie do wyświetlenia; nic z tego nie
+// jest zapisywane.
+
+import { roundPln } from '@/utils/money'
 
 /**
  * Parse a commission rate typed by the administrator into a finite,
@@ -205,7 +214,11 @@ export function scalKoszty(poprzednieKoszty, linieWewnetrzne) {
  * @returns {{linie: Array<object>, razem: object}} per-line split and totals
  */
 export function przeliczPodzial(linieWewnetrzne, stawki, koszty) {
-  const linie = (linieWewnetrzne || []).map((linia) => {
+  // Dwie „widoki" na każdy wiersz: `publiczna` to kształt zwracany do
+  // komponentu (kwoty zaokrąglone do groszy), `surowa` niesie te same kwoty
+  // przed zaokrągleniem — potrzebne wyłącznie do policzenia procentów
+  // (zyskProc/marzaProc) tak, żeby te nie dziedziczyły błędu zaokrąglenia.
+  const obliczone = (linieWewnetrzne || []).map((linia) => {
     const netto = Number(linia.netto) || 0
     const iloscRozliczeniowa = Number(linia.ilosc_rozliczeniowa) || 0
     const stawkaKatalogowa = parsujStawke(linia.stawka_prowizji)
@@ -221,43 +234,86 @@ export function przeliczPodzial(linieWewnetrzne, stawki, koszty) {
       ? parsujKwote(nadpisanieKosztu.staly)
       : kosztStalyKatalogowy
 
-    const koszt = kosztJednostkowy * iloscRozliczeniowa + kosztStaly
-    const pula = netto - koszt
-    const prowizja = stawka * iloscRozliczeniowa
-    const zysk = pula - prowizja
-    const zyskProc = netto > 0 ? (zysk / netto) * 100 : 0
+    // Surowe (niezaokrąglone) wartości — patrz komentarz wyżej.
+    const kosztSurowy = kosztJednostkowy * iloscRozliczeniowa + kosztStaly
+    const pulaSurowa = netto - kosztSurowy
+    const prowizjaSurowa = stawka * iloscRozliczeniowa
+    const zyskSurowy = pulaSurowa - prowizjaSurowa
+
+    // Kwoty pieniężne zaokrąglamy do groszy DOPIERO na wyjściu, po
+    // wyliczeniu z pełnej precyzji — to jedyny sposób, żeby wiersz
+    // wyświetlony administratorowi (grosze) sumował się dokładnie do
+    // wyświetlanego wiersza „razem" poniżej (patrz `razem` niżej). Sam
+    // podział nadal jest czystym podglądem: nic z tego nie jest zapisywane.
+    // `netto` jest tu na równi z resztą: choć przychodzi z serwera (a nie
+    // jest liczony w tym pliku), to wyświetla się w tym samym wierszu co
+    // koszt/pula/prowizja/zysk, więc podlega tej samej regule — inaczej
+    // kolumna netto mogłaby nie sumować się do wiersza „razem".
+    const nettoZaokraglone = roundPln(netto)
+    const koszt = roundPln(kosztSurowy)
+    const pula = roundPln(pulaSurowa)
+    const prowizja = roundPln(prowizjaSurowa)
+    const zysk = roundPln(zyskSurowy)
+    // Procenty NIE są kwotami — liczymy je z surowych (niezaokrąglonych)
+    // wartości i nie zaokrąglamy tutaj w ogóle; komponent renderuje je z
+    // dokładnością do 1 miejsca po przecinku.
+    const zyskProc = netto > 0 ? (zyskSurowy / netto) * 100 : 0
 
     return {
-      kod: linia.kod,
-      iloscRozliczeniowa,
-      jednostkaRozliczeniowa: linia.jednostka_rozliczeniowa,
-      netto,
-      koszt,
-      kosztJednostkowy,
-      kosztStaly,
-      kosztJednostkowyKatalogowy,
-      kosztStalyKatalogowy,
-      stawka,
-      stawkaKatalogowa,
-      prowizja,
-      pula,
-      zysk,
-      zyskProc,
+      publiczna: {
+        kod: linia.kod,
+        iloscRozliczeniowa,
+        jednostkaRozliczeniowa: linia.jednostka_rozliczeniowa,
+        netto: nettoZaokraglone,
+        koszt,
+        kosztJednostkowy,
+        kosztStaly,
+        kosztJednostkowyKatalogowy,
+        kosztStalyKatalogowy,
+        stawka,
+        stawkaKatalogowa,
+        prowizja,
+        pula,
+        zysk,
+        zyskProc,
+      },
+      // Surowe wartości (przed zaokrągleniem) — wyłącznie do policzenia
+      // procentów niżej, żeby te nie dziedziczyły błędu zaokrąglenia kwoty.
+      surowa: { netto, pula: pulaSurowa, prowizja: prowizjaSurowa, zysk: zyskSurowy },
     }
   })
 
+  const linie = obliczone.map((x) => x.publiczna)
+
+  // Sumujemy już zaokrąglone wartości wierszy (netto/koszt/pula/prowizja/
+  // zysk), nie surowe — inaczej kolumna widoczna na ekranie (grosze) nie
+  // zgadzałaby się z wierszem „razem" o reszty float rzędu pojedynczych
+  // groszy. Każdy krok sumowania jest ponownie przepuszczony przez
+  // roundPln, bo suma wielu wartości już-po-groszu wciąż może zostawić
+  // binarną resztę w reprezentacji double (np. 10.13 + 10.13 w IEEE-754).
+  // `netto` jest w tym zbiorze na równi z resztą pól — jest wyświetlane w
+  // tym samym wierszu, więc `razem.netto` musi się sumować z tego, co
+  // administrator faktycznie widzi w kolumnie, a nie z surowej wartości
+  // serwera.
   const razem = linie.reduce(
     (acc, linia) => ({
-      netto: acc.netto + linia.netto,
-      koszt: acc.koszt + linia.koszt,
-      pula: acc.pula + linia.pula,
-      prowizja: acc.prowizja + linia.prowizja,
-      zysk: acc.zysk + linia.zysk,
+      netto: roundPln(acc.netto + linia.netto),
+      koszt: roundPln(acc.koszt + linia.koszt),
+      pula: roundPln(acc.pula + linia.pula),
+      prowizja: roundPln(acc.prowizja + linia.prowizja),
+      zysk: roundPln(acc.zysk + linia.zysk),
     }),
     { netto: 0, koszt: 0, pula: 0, prowizja: 0, zysk: 0 },
   )
-  razem.zyskProc = razem.netto > 0 ? (razem.zysk / razem.netto) * 100 : 0
-  razem.marzaProc = razem.netto > 0 ? (razem.pula / razem.netto) * 100 : 0
+
+  // Podobnie jak zyskProc na poziomie wiersza: procenty sumaryczne liczymy
+  // z surowych, niezaokrąglonych sum, nie z już zaokrąglonych
+  // `razem.zysk`/`razem.pula` powyżej.
+  const surowaSumaNetto = obliczone.reduce((suma, x) => suma + x.surowa.netto, 0)
+  const surowaSumaPuli = obliczone.reduce((suma, x) => suma + x.surowa.pula, 0)
+  const surowaSumaZysku = obliczone.reduce((suma, x) => suma + x.surowa.zysk, 0)
+  razem.zyskProc = surowaSumaNetto > 0 ? (surowaSumaZysku / surowaSumaNetto) * 100 : 0
+  razem.marzaProc = surowaSumaNetto > 0 ? (surowaSumaPuli / surowaSumaNetto) * 100 : 0
 
   return { linie, razem }
 }

@@ -121,6 +121,7 @@ _DANE_POLA_DOZWOLONE = [
 	"dodatkowy_kabel_m",
 	"zgoda_kontakt_telefoniczny",
 	"zgoda_dzialania_promocyjne",
+	"zgoda_realizacja_przed_odstapieniem",
 ]
 """Jedyne pola `Volteo Umowa`, jakie `volteo_umowa_save` przyjmuje od klienta.
 
@@ -132,12 +133,18 @@ jednorodzinnego: `typ_budynku` dopuszcza „Wielorodzinny” (§1.2 umowy — �
 budynku wielorodzinnym”), więc adres montażu czasem wymaga numeru mieszkania.
 `zgoda_kontakt_telefoniczny` i `zgoda_dzialania_promocyjne` to zgody RODO/marketingowe
 z Załącznika 2 — mają wagę prawną, patrz `_POLA_CHECKBOX` dla ich koercji.
+`zgoda_realizacja_przed_odstapieniem` to oświadczenie klienta z Załącznika nr 3
+(realizacja Umowy przed upływem ustawowego terminu na odstąpienie) — to warunek
+umowy, nie zgoda marketingowa, więc celowo NIE jest kopiowane na `Contact` przez
+`_propaguj_zgody` poniżej.
 """
 
 _POLA_KWOTOWE = frozenset({"wklad_wlasny_pln"})
 """Pola kwotowe wymagające konwersji przez `Decimal` zamiast surowego przypisania."""
 
-_POLA_CHECKBOX = frozenset({"zgoda_kontakt_telefoniczny", "zgoda_dzialania_promocyjne"})
+_POLA_CHECKBOX = frozenset(
+	{"zgoda_kontakt_telefoniczny", "zgoda_dzialania_promocyjne", "zgoda_realizacja_przed_odstapieniem"}
+)
 """Pola Check (0/1 Int) wymagające jawnej koercji przez `cint`, nigdy `bool()`.
 
 Pułapka: `bool("0")` daje `True` w Pythonie, więc string ``"0"`` przepuszczony bez

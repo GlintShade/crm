@@ -138,6 +138,15 @@ export const usersStore = defineStore('crm-users', () => {
     return getUser(email).role === 'Sales Manager' || isAdmin(email)
   }
 
+  // Volteo-specific admin role, distinct from the upstream `role` field
+  // (System Manager/Sales Manager/Sales User priority pick). Backed by
+  // `is_volteo_admin`, computed server-side in crm.api.session.get_users
+  // from the user's actual Has Role rows. System Manager also counts as
+  // admin here, same as isAdmin/isManager already do above.
+  function isVolteoAdmin(email) {
+    return isAdmin(email) || getUser(email).is_volteo_admin === true
+  }
+
   function isWebsiteUser(email) {
     return getUser(email).user_type === 'Website User'
   }
@@ -171,6 +180,7 @@ export const usersStore = defineStore('crm-users', () => {
     getUser,
     isAdmin,
     isManager,
+    isVolteoAdmin,
     isSalesUser,
     isTelephonyAgent,
     getUserRole,

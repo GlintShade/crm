@@ -121,6 +121,13 @@ def get_users(include_all: bool = False):
 					user.role = role
 					break
 
+		# Separate logical flag for the Volteo-specific admin role, kept apart
+		# from `user.role` (the upstream System Manager/Sales Manager/Sales
+		# User priority pick) so existing UI relying on `role` is untouched.
+		# "Volteo Core Admin" never appears in `role_priority`, so it would
+		# otherwise be invisible to the frontend.
+		user.is_volteo_admin = "Volteo Core Admin" in user.roles
+
 		user.is_telephony_agent = user.name in telephony_agents
 		user.language = user.language or system_language
 

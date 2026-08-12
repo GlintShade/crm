@@ -57,18 +57,18 @@
                   <td class="whitespace-nowrap px-3 py-2.5 text-ink-gray-8">{{ row.nazwa || '—' }}</td>
                   <td class="whitespace-nowrap px-3 py-2.5 text-right text-ink-gray-6">{{ iloscLabel(row) }}</td>
                   <td v-if="hasMoney" class="whitespace-nowrap px-3 py-2.5 text-right text-ink-gray-6">
-                    {{ row.netto ? plnFmt(row.netto) : '—' }}
+                    {{ row.netto ? formatPln(row.netto) : '—' }}
                   </td>
                   <td v-if="hasMoney" class="whitespace-nowrap px-3 py-2.5 text-right text-ink-gray-6">
-                    {{ row.brutto ? plnFmt(row.brutto) : '—' }}
+                    {{ row.brutto ? formatPln(row.brutto) : '—' }}
                   </td>
                 </tr>
               </tbody>
               <tfoot v-if="hasMoney">
                 <tr class="border-t border-outline-gray-2 bg-surface-gray-1 font-medium text-ink-gray-7">
                   <td colspan="3" class="whitespace-nowrap px-3 py-2.5 text-right">{{ __('Razem') }}</td>
-                  <td class="whitespace-nowrap px-3 py-2.5 text-right">{{ totalNetto ? plnFmt(totalNetto) : '—' }}</td>
-                  <td class="whitespace-nowrap px-3 py-2.5 text-right">{{ totalBrutto ? plnFmt(totalBrutto) : '—' }}</td>
+                  <td class="whitespace-nowrap px-3 py-2.5 text-right">{{ totalNetto ? formatPln(totalNetto) : '—' }}</td>
+                  <td class="whitespace-nowrap px-3 py-2.5 text-right">{{ totalBrutto ? formatPln(totalBrutto) : '—' }}</td>
                 </tr>
               </tfoot>
             </table>
@@ -83,16 +83,16 @@
         <div v-if="hasGroupSubsidy" class="mt-3 w-full rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-2.5 text-sm">
           <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Dotacja wg grup prac') }}</div>
           <div v-if="Number(dealFields.custom_cp_dotacja_zrodlo) > 0" class="flex justify-between py-0.5 text-ink-gray-7">
-            <span>{{ __('Źródło ciepła') }}</span><span>{{ plnFmt(dealFields.custom_cp_dotacja_zrodlo) }}</span>
+            <span>{{ __('Źródło ciepła') }}</span><span>{{ formatPln(dealFields.custom_cp_dotacja_zrodlo) }}</span>
           </div>
           <div v-if="Number(dealFields.custom_cp_dotacja_co) > 0" class="flex justify-between py-0.5 text-ink-gray-7">
-            <span>{{ __('Centralne Ogrzewanie i Ciepła Woda Użytkowa') }}</span><span>{{ plnFmt(dealFields.custom_cp_dotacja_co) }}</span>
+            <span>{{ __('Centralne Ogrzewanie i Ciepła Woda Użytkowa') }}</span><span>{{ formatPln(dealFields.custom_cp_dotacja_co) }}</span>
           </div>
           <div v-if="Number(dealFields.custom_cp_dotacja_termo) > 0" class="flex justify-between py-0.5 text-ink-gray-7">
-            <span>{{ __('Termomodernizacja') }}</span><span>{{ plnFmt(dealFields.custom_cp_dotacja_termo) }}</span>
+            <span>{{ __('Termomodernizacja') }}</span><span>{{ formatPln(dealFields.custom_cp_dotacja_termo) }}</span>
           </div>
           <div v-if="Number(dealFields.custom_estimated_subsidy_pln) > 0" class="flex justify-between border-t border-outline-gray-2 py-0.5 pt-1 font-medium text-ink-gray-8">
-            <span>{{ __('Razem') }}</span><span>{{ plnFmt(dealFields.custom_estimated_subsidy_pln) }}</span>
+            <span>{{ __('Razem') }}</span><span>{{ formatPln(dealFields.custom_estimated_subsidy_pln) }}</span>
           </div>
         </div>
 
@@ -114,7 +114,7 @@
           </div>
           <div class="flex justify-between py-0.5 text-ink-amber-8">
             <span>{{ __('Prowizja') }}</span>
-            <span class="font-medium">{{ plnFmt(dealFields.custom_cp_prowizja_handlowa) }}</span>
+            <span class="font-medium">{{ formatPln(dealFields.custom_cp_prowizja_handlowa) }}</span>
           </div>
         </div>
       </div>
@@ -126,6 +126,7 @@
 import ZestawIcon from '@/components/Icons/ZestawIcon.vue'
 import { Badge, createResource } from 'frappe-ui'
 import { computed } from 'vue'
+import { formatPln, roundPln } from '@/utils/money'
 
 const props = defineProps({
   dealId: { type: String, required: true },
@@ -194,11 +195,6 @@ const bomRows = computed(() => bom.data || [])
 const o = computed(() => oferta.data?.[0] || null)
 const ofertaName = computed(() => (bomRows.value.length ? null : o.value?.name || null))
 
-function plnFmt(val) {
-  const n = Math.round(Number(val) || 0)
-  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' zł'
-}
-
 // Polish UI renders the stored ASCII unit 'm2' as 'm²'; 'szt' renders as-is.
 function jednostkaLabel(jednostka) {
   return jednostka === 'm2' ? 'm²' : jednostka || ''
@@ -224,7 +220,7 @@ const ofertaRows = computed(() => {
     { typ: 'Typ instalacji', nazwa: d.installation_type, ilosc: '' },
     { typ: 'Moc instalacji PV', nazwa: d.pv_power_kwp ? d.pv_power_kwp + ' kWp' : '', ilosc: '' },
     { typ: 'Taryfa', nazwa: d.tariff_type, ilosc: '' },
-    { typ: 'Dotacja', nazwa: d.subsidy_pln ? plnFmt(d.subsidy_pln) : '', ilosc: '' },
+    { typ: 'Dotacja', nazwa: d.subsidy_pln ? formatPln(d.subsidy_pln) : '', ilosc: '' },
     { typ: 'Gwarancja', nazwa: d.warranty_years ? d.warranty_years + ' lat' : '', ilosc: '' },
   ]
 })
@@ -243,8 +239,11 @@ const caption = computed(() =>
 // '0 zł' noise. A single non-zero `brutto` anywhere in the zestaw is enough
 // to reveal both columns for every row.
 const hasMoney = computed(() => rows.value.some((row) => Number(row.brutto) > 0))
-const totalNetto = computed(() => rows.value.reduce((sum, row) => sum + (Number(row.netto) || 0), 0))
-const totalBrutto = computed(() => rows.value.reduce((sum, row) => sum + (Number(row.brutto) || 0), 0))
+// Sumujemy zaokrąglone wartości wierszy, nie surowe — każdy wiersz wyświetla
+// się już zaokrąglony do groszy, więc suma z surowych kwot potrafiłaby
+// widocznie nie zgadzać się z kolumną nad nią o grosz.
+const totalNetto = computed(() => rows.value.reduce((sum, row) => sum + roundPln(row.netto), 0))
+const totalBrutto = computed(() => rows.value.reduce((sum, row) => sum + roundPln(row.brutto), 0))
 
 // Group subsidy totals, fetched from the parent deal (see `dealSubsidy`
 // above). Read by value, never `hasOwnProperty` — `dealFields` guards against

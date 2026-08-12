@@ -211,6 +211,7 @@
 import UmowaIcon from '@/components/Icons/UmowaIcon.vue'
 import { Badge, Button, FormControl, call, toast } from 'frappe-ui'
 import { computed, onMounted, reactive, ref } from 'vue'
+import { formatPlnAmount } from '@/utils/money'
 
 const props = defineProps({
   dealId: { type: String, required: true },
@@ -340,6 +341,7 @@ const formSections = [
         fieldname: 'wklad_wlasny_pln',
         label: __('Wkład własny (PLN)'),
         type: 'number',
+        step: '0.01',
         required: true,
         depends_on: { fieldname: 'finansowanie', value: 'Kredyt + gotówka' },
       },
@@ -463,6 +465,13 @@ const formSections = [
         label: __('Zgoda na działania promocyjne'),
         type: 'checkbox',
       },
+      {
+        fieldname: 'zgoda_realizacja_przed_odstapieniem',
+        label: __(
+          'Wnoszę o realizację Umowy przed upływem terminu na odstąpienie (Załącznik nr 3)',
+        ),
+        type: 'checkbox',
+      },
     ],
   },
 ]
@@ -472,6 +481,12 @@ const formSections = [
 const allFieldnames = formSections.flatMap((s) => s.fields.map((f) => f.fieldname))
 const fieldLabelByName = new Map(
   formSections.flatMap((s) => s.fields.map((f) => [f.fieldname, f.label])),
+)
+// Wyprowadzone z formSections zamiast wpisanego na sztywno literału nazw pól —
+// kolejna kratka dodana do formularza automatycznie trafia do tego zbioru,
+// więc hydrateForm() nie może już po cichu pominąć konwersji na bool.
+const checkboxFieldnames = new Set(
+  formSections.flatMap((s) => s.fields.filter((f) => f.type === 'checkbox').map((f) => f.fieldname)),
 )
 
 // Vue 3: `v-if` on the same node as `v-for` is evaluated BEFORE the loop
@@ -540,7 +555,7 @@ function hydrateForm(u) {
   const p = prefill.value || {}
   allFieldnames.forEach((fn) => {
     const raw = u ? u[fn] : undefined
-    if (fn === 'zgoda_kontakt_telefoniczny' || fn === 'zgoda_dzialania_promocyjne') {
+    if (checkboxFieldnames.has(fn)) {
       form[fn] = !!raw
     } else {
       form[fn] = valueOr(raw, p[fn])
@@ -557,7 +572,7 @@ const kwotaKredytu = computed(() => {
   const wklad = Number(form.wklad_wlasny_pln) || 0
   return Math.max(0, dealValue - wklad)
 })
-const kwotaKredytuDisplay = computed(() => kwotaKredytu.value.toLocaleString('pl-PL'))
+const kwotaKredytuDisplay = computed(() => formatPlnAmount(kwotaKredytu.value))
 
 // Server-authoritative derived values. `null` means the chosen konstrukcja in
 // the calculator wasn't recognised — show a clear Polish note, not a blank gap.

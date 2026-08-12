@@ -4,12 +4,8 @@
     :columns="columns"
     :rows="rows"
     :options="{
-      getRowRoute: (row) => ({
-        name: 'Deal',
-        params: { dealId: row.name },
-        query: { view: route.query.view, viewType: route.params.viewType },
-      }),
-      selectable: options.selectable,
+      getRowRoute: dealRoute,
+      selectable: canSelectRows,
       showTooltip: options.showTooltip,
       resizeColumn: options.resizeColumn,
     }"
@@ -101,8 +97,18 @@
           </div>
         </template>
         <template #default="{ label }">
+          <div v-if="column.label === 'Szczegóły'" class="flex items-center">
+            <Button
+              variant="outline"
+              size="sm"
+              class="w-fit"
+              @click.stop.prevent="() => goToDeal(row)"
+            >
+              {{ __('Szczegóły') }}
+            </Button>
+          </div>
           <div
-            v-if="
+            v-else-if="
               [
                 'modified',
                 'creation',
@@ -193,7 +199,7 @@
         </template>
       </ListRowItem>
     </ListRows>
-    <ListSelectBanner>
+    <ListSelectBanner v-if="canSelectRows">
       <template #actions="{ selections, unselectAll }">
         <Dropdown
           :options="listBulkActionsRef.bulkActions(selections, unselectAll)"
@@ -237,8 +243,9 @@ import {
   Tooltip,
 } from 'frappe-ui'
 import { sessionStore } from '@/stores/session'
+import { usersStore } from '@/stores/users'
 import { ref, computed, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 defineProps({
   rows: { type: Array, required: true },
@@ -266,6 +273,7 @@ const emit = defineEmits([
 ])
 
 const route = useRoute()
+const router = useRouter()
 
 const pageLengthCount = defineModel({ type: Number })
 const list = defineModel('list', { type: Object })
@@ -275,6 +283,30 @@ function getLabel(label, column) {
   if (column.options && isTranslatable(column.options)) return __(label)
   return label
 }
+
+// Same destination the default row click already navigates to (see
+// getRowRoute below) — kept as one function so the "Szczegóły" button and
+// the row-level link never drift apart.
+function dealRoute(row) {
+  return {
+    name: 'Deal',
+    params: { dealId: row.name },
+    query: { view: route.query.view, viewType: route.params.viewType },
+  }
+}
+
+function goToDeal(row) {
+  router.push(dealRoute(row))
+}
+
+// Bulk actions (selection checkboxes + the select banner) are restricted to
+// administrative roles: System Manager (via isAdmin) and Volteo Core Admin
+// (the Volteo-specific admin role, folded into isVolteoAdmin). Volteo
+// Backend and Volteo D2D Sales deliberately do not get bulk actions — this
+// only hides the UI, the underlying bulk-action calls remain subject to
+// normal DocPerm checks.
+const { isVolteoAdmin } = usersStore()
+const canSelectRows = computed(() => isVolteoAdmin())
 
 const isLikeFilterApplied = computed(() => {
   return list.value.params?.filters?._liked_by ? true : false

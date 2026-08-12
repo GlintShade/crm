@@ -232,14 +232,22 @@ _STRONA_6: tuple[Pole, ...] = (
 
 # ---------------------------------------------------------------------------
 # Strona 7 (indeks 6): Załącznik nr 2 (zgody) i Załącznik nr 3 (oświadczenie
-# o realizacji przed terminem odstąpienia — ten drugi ma własną kratkę, ale
-# BEZ odpowiadającego jej klucza w `zbuduj_kontekst`; zob. raport zadania).
+# o realizacji przed terminem odstąpienia — od 2026-08-11 MA odpowiadający
+# klucz w `zbuduj_kontekst` (`zgoda_wczesniejsza_realizacja`); wcześniej
+# świadomie niezmapowany, zob. REVISIT.md, pozycja "Załącznik nr 3" (usunięta
+# po tej zmianie).
 # Kratki na tej stronie są mniejsze (10x10 pt, nie 15x15 jak gdzie indziej),
 # stąd inny offset (2,0 pt) i mniejszy `rozmiar` (8 pt) — zgodnie z oryginałem.
 # ---------------------------------------------------------------------------
 _STRONA_7: tuple[Pole, ...] = (
 	Pole("zgoda_telefon", 6, 77.0, 721.54, "kratka", wyrownanie="srodek", rozmiar=8.0),
 	Pole("zgoda_promocja", 6, 77.0, 681.87, "kratka", wyrownanie="srodek", rozmiar=8.0),
+	# Zmierzone (2026-08-11): glify “□” ze strumienia PDF mają x=72.00, y=720.95
+	# (Załącznik 2, zgoda 1), 681.28 (Załącznik 2, zgoda 2), 260.76 (Załącznik 3).
+	# Offset (+5.00, +0.59) identyczny na wszystkich trzech — dwie znane-dobre
+	# produkcyjnie + ta nowa — potwierdza y=261.35. Weryfikacja: kontrakt z
+	# zaznaczonym oświadczeniem wyda dokładnie dwa X na stronie przy y=721.54 i 261.35.
+	Pole("zgoda_wczesniejsza_realizacja", 6, 77.0, 261.35, "kratka", wyrownanie="srodek", rozmiar=8.0),
 	# Blok podpisów Załącznika 2 i (osobno, niżej na tej samej stronie) blok
 	# podpisów Załącznika 3 — oba mają WYŁĄCZNIE linię Zamawiającego, bez
 	# Wykonawcy (zob. render strony 7). Patrz uzasadnienie przy `_STRONA_4`.

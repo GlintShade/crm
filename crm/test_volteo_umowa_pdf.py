@@ -44,6 +44,7 @@ def _umowa(**nadpisania: Any) -> dict[str, Any]:
 		"istniejaca_pv_producent_inwertera": "",
 		"zgoda_kontakt_telefoniczny": 0,
 		"zgoda_dzialania_promocyjne": 0,
+		"zgoda_realizacja_przed_odstapieniem": 0,
 	}
 	baza.update(nadpisania)
 	return baza
@@ -114,7 +115,12 @@ def _stale(**nadpisania: Any) -> dict[str, Any]:
 		"panel_producent": _PLACEHOLDER_PRODUCENT,
 		"panel_model": _PLACEHOLDER_MODEL,
 		"panel_moc_wp": 0,
-		"panel_gwarancja_lat": 0,
+		# Data (tekstowe), nie Int — "nigdy nie ustawiono" odpowiada None, tak
+		# jak faktycznie zwraca `frappe.db.get_singles_dict` dla pustego pola
+		# tekstowego (w przeciwienstwie do Int/Currency, gdzie puste czyta się
+		# jako 0). Patrz `crm.api.umowa`, gdzie `stale` jest budowane właśnie z
+		# `get_singles_dict`.
+		"panel_gwarancja_lat": None,
 	}
 	baza.update(nadpisania)
 	return baza
@@ -129,8 +135,12 @@ def _kontekst(**nadpisania_umowa: Any) -> dict[str, Any]:
 
 class TestZeroZnaczyPustke(unittest.TestCase):
 	def test_a_gwarancja_zero_nie_jest_zero_lat(self: "TestZeroZnaczyPustke") -> None:
+		# panel_gwarancja_lat jest teraz polem tekstowym (Data), nie Int — jego
+		# semantyka "puste znaczy puste" jest pokryta osobno przez
+		# TestPanelGwarancjaTekst. inwerter/bateria zostaja tutaj bez zmian:
+		# to wciaz pola Int na Volteo Komponent, gdzie 0 nie moze wydrukowac
+		# sie jako "0 lat".
 		kontekst = _kontekst()
-		self.assertEqual(kontekst["panel_gwarancja_lat"], "")
 		self.assertEqual(kontekst["inwerter_gwarancja_lat"], "")
 		self.assertEqual(kontekst["bateria_gwarancja_lat"], "")
 
@@ -183,6 +193,28 @@ class TestPlaceholder(unittest.TestCase):
 	def test_d_niepowiazane_pole_placeholder_tez_znika(self: "TestPlaceholder") -> None:
 		kontekst = _kontekst(istniejaca_pv_producent_inwertera="PLACEHOLDER cokolwiek")
 		self.assertEqual(kontekst["ist_pv_producent_inwertera"], "")
+
+
+class TestPanelGwarancjaTekst(unittest.TestCase):
+	"""panel_gwarancja_lat stało się polem tekstowym (Data) — nosi teraz DWIE
+	gwarancje w jednym wpisie (np. "25/30": produktowa/liniowa mocy), więc
+	zamiast `_liczba_calkowita` przechodzi przez `_tekst`. Kontrakt `_tekst`:
+	`None` → "", placeholder → "", realna wartość przechodzi bez zmian."""
+
+	def test_a_puste_daje_pusty_string(self: "TestPanelGwarancjaTekst") -> None:
+		stale = _stale(panel_gwarancja_lat=None)
+		kontekst = zbuduj_kontekst(_umowa(), _deal(), _kontakt(), _zestaw(), _komponenty(), stale, _DZIS)
+		self.assertEqual(kontekst["panel_gwarancja_lat"], "")
+
+	def test_b_placeholder_daje_pusty_string(self: "TestPanelGwarancjaTekst") -> None:
+		stale = _stale(panel_gwarancja_lat="placeholder — do uzupelnienia")
+		kontekst = zbuduj_kontekst(_umowa(), _deal(), _kontakt(), _zestaw(), _komponenty(), stale, _DZIS)
+		self.assertEqual(kontekst["panel_gwarancja_lat"], "")
+
+	def test_c_realna_wartosc_przechodzi_bez_zmian(self: "TestPanelGwarancjaTekst") -> None:
+		stale = _stale(panel_gwarancja_lat="25/30")
+		kontekst = zbuduj_kontekst(_umowa(), _deal(), _kontakt(), _zestaw(), _komponenty(), stale, _DZIS)
+		self.assertEqual(kontekst["panel_gwarancja_lat"], "25/30")
 
 
 class TestFinansowanie(unittest.TestCase):
@@ -655,6 +687,20 @@ class TestZgody(unittest.TestCase):
 		del umowa["zgoda_kontakt_telefoniczny"]
 		kontekst = zbuduj_kontekst(umowa, _deal(), _kontakt(), _zestaw(), _komponenty(), _stale(), _DZIS)
 		self.assertFalse(kontekst["zgoda_telefon"])
+
+	def test_d_zalacznik_3_udzielona(self: "TestZgody") -> None:
+		kontekst = _kontekst(zgoda_realizacja_przed_odstapieniem=1)
+		self.assertTrue(kontekst["zgoda_wczesniejsza_realizacja"])
+
+	def test_e_zalacznik_3_zero_nieudzielona(self: "TestZgody") -> None:
+		kontekst = _kontekst(zgoda_realizacja_przed_odstapieniem=0)
+		self.assertFalse(kontekst["zgoda_wczesniejsza_realizacja"])
+
+	def test_f_zalacznik_3_brak_pola_nieudzielona(self: "TestZgody") -> None:
+		umowa = _umowa()
+		del umowa["zgoda_realizacja_przed_odstapieniem"]
+		kontekst = zbuduj_kontekst(umowa, _deal(), _kontakt(), _zestaw(), _komponenty(), _stale(), _DZIS)
+		self.assertFalse(kontekst["zgoda_wczesniejsza_realizacja"])
 
 
 class TestAdresyIDane(unittest.TestCase):

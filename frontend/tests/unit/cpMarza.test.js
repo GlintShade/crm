@@ -504,5 +504,175 @@ describe('Czyste Powietrze — modelowanie prowizji (cpMarza)', () => {
         expect(wynik[0].stawkaKatalogowa).toBe(3000)
       })
     })
+
+    describe('zaokrąglanie do groszy (grosze)', () => {
+      it('zaokrągla prowizję ułamkową: stawka 3.33 razy 7 sztuk daje dokładnie 23.31', () => {
+        const linia = {
+          kod: 'okna',
+          ilosc_rozliczeniowa: '7',
+          jednostka_rozliczeniowa: 'szt',
+          netto: '1000.00',
+          koszt: '500.00',
+          koszt_jednostkowy: '71.43', // 71.43 * 7 = 500.01, celowo nieokrągłe
+          koszt_staly: '0.00',
+          stawka_prowizji: '3.33',
+        }
+        const { linie: wynik } = przeliczPodzial([linia], { okna: 3.33 })
+        expect(wynik[0].prowizja).toBe(23.31)
+        // Każde pole pieniężne w wierszu ma dokładnie 2 miejsca po przecinku.
+        expect(wynik[0].koszt).toBe(500.01)
+      })
+
+      it('razem to suma już zaokrąglonych wierszy dla KAŻDEGO wyświetlanego pola (netto włącznie) — kolumna musi się sumować na ekranie', () => {
+        // Dwa wiersze z surowym netto 10.125 — każdy zaokrągla się osobno
+        // do 10.13 (widoczne w kolumnie), więc `razem.netto` MUSI być
+        // 10.13 + 10.13 = 20.26, nie zaokrągleniem surowej sumy
+        // (10.125 + 10.125 = 20.25 → 20.25). Gdyby `razem.netto` było
+        // 20.25, administrator widziałby dwa wiersze po "10,13" i wiersz
+        // „razem" na "20,25" — kolumna, która się nie sumuje. To jest
+        // dokładnie ta usterka, którą to zaokrąglanie ma wykluczyć.
+        const linie = [
+          {
+            kod: 'a',
+            ilosc_rozliczeniowa: '1',
+            jednostka_rozliczeniowa: 'szt',
+            netto: '10.125',
+            koszt: '0',
+            koszt_jednostkowy: '0',
+            koszt_staly: '0',
+            stawka_prowizji: '0',
+          },
+          {
+            kod: 'b',
+            ilosc_rozliczeniowa: '1',
+            jednostka_rozliczeniowa: 'szt',
+            netto: '10.125',
+            koszt: '0',
+            koszt_jednostkowy: '0',
+            koszt_staly: '0',
+            stawka_prowizji: '0',
+          },
+        ]
+        const { linie: wynik, razem } = przeliczPodzial(linie, { a: 0, b: 0 })
+        expect(wynik[0].netto).toBe(10.13)
+        expect(wynik[1].netto).toBe(10.13)
+        expect(wynik[0].pula).toBe(10.13)
+        expect(wynik[1].pula).toBe(10.13)
+        // Rekoncyliacja: `razem` jest osiągalne przez zsumowanie tego, co
+        // administrator faktycznie widzi w każdym wierszu — nie tylko dla
+        // pula/koszt/prowizja/zysk, ale też dla netto.
+        expect(razem.netto).toBe(20.26)
+        expect(razem.pula).toBe(20.26)
+        for (const pole of ['netto', 'koszt', 'pula', 'prowizja', 'zysk']) {
+          const sumaWyswietlanychWierszy = wynik.reduce((suma, linia) => suma + linia[pole], 0)
+          expect(razem[pole]).toBe(sumaWyswietlanychWierszy)
+        }
+      })
+
+      it('każde pole pieniężne wiersza jest dokładne co do grosza (brak reszt zmiennoprzecinkowych)', () => {
+        const linia = {
+          kod: 'okna',
+          ilosc_rozliczeniowa: '3',
+          jednostka_rozliczeniowa: 'm2',
+          netto: '100.10',
+          koszt: '30.30',
+          koszt_jednostkowy: '10.10',
+          koszt_staly: '0',
+          stawka_prowizji: '3.33',
+        }
+        const { linie: wynik } = przeliczPodzial([linia], { okna: 3.33 })
+        for (const pole of ['koszt', 'pula', 'prowizja', 'zysk']) {
+          const wartosc = wynik[0][pole]
+          expect(Number.isFinite(wartosc)).toBe(true)
+          // Pomnożenie przez 100 i zaokrąglenie do liczby całkowitej nie
+          // zmienia wartości — czyli faktycznie ma najwyżej 2 miejsca po
+          // przecinku, bez rozjazgotanego ogona (np. 30.299999999999997).
+          expect(Math.round(wartosc * 100)).toBe(wartosc * 100)
+        }
+      })
+
+      it('zysk pozostaje dokładny mimo reszt zmiennoprzecinkowych, gdy netto == koszt + prowizja policzone inną arytmetyką', () => {
+        // 0.1 + 0.2 - 0.3 === 5.551115123125783e-17 w IEEE-754 — klasyczna
+        // pułapka, którą ma obsłużyć roundPln (patrz money.js). Budujemy
+        // linię tak, żeby zysk wypadł jako różnica dwóch bliskich sobie
+        // wartości powstałych inną drogą arytmetyczną.
+        const linia = {
+          kod: 'test',
+          ilosc_rozliczeniowa: '1',
+          jednostka_rozliczeniowa: 'szt',
+          netto: '0.3',
+          koszt: '0.1',
+          koszt_jednostkowy: '0.1',
+          koszt_staly: '0',
+          stawka_prowizji: '0.2',
+        }
+        const { linie: wynik, razem } = przeliczPodzial([linia], { test: 0.2 })
+        expect(Number.isNaN(wynik[0].zysk)).toBe(false)
+        expect(Number.isNaN(razem.zysk)).toBe(false)
+        // Math.abs zamiast bezpośredniego toBe(0): resztka rzędu 1e-17 jest
+        // ujemna, więc roundPln zwraca tu -0, nie +0 — poprawnie co do
+        // wartości (-0 === 0, wyświetla się identycznie jako "0,00"), ale
+        // vitest/Jest `toBe` porównuje przez Object.is, który -0 i 0
+        // rozróżnia. To nie jest błąd roundPln, tylko własność IEEE-754.
+        expect(Math.abs(wynik[0].zysk)).toBe(0)
+        expect(Math.abs(razem.zysk)).toBe(0)
+      })
+
+      it('razem.zysk === razem.pula - razem.prowizja pozostaje dokładne po zaokrągleniu', () => {
+        const linie = [
+          {
+            kod: 'a',
+            ilosc_rozliczeniowa: '7',
+            jednostka_rozliczeniowa: 'szt',
+            netto: '1000.00',
+            koszt: '500.01',
+            koszt_jednostkowy: '71.43',
+            koszt_staly: '0.00',
+            stawka_prowizji: '3.33',
+          },
+          {
+            kod: 'b',
+            ilosc_rozliczeniowa: '3',
+            jednostka_rozliczeniowa: 'm2',
+            netto: '100.10',
+            koszt: '30.30',
+            koszt_jednostkowy: '10.10',
+            koszt_staly: '0',
+            stawka_prowizji: '3.33',
+          },
+        ]
+        const { linie: wynik, razem } = przeliczPodzial(linie, { a: 3.33, b: 3.33 })
+        expect(razem.zysk).toBe(razem.pula - razem.prowizja)
+        // Regresja: `razem.netto` musi być osiągalne dodając to, co
+        // administrator widzi w każdym wierszu netto na ekranie — nie
+        // przeliczeniem surowej sumy z serwera.
+        expect(razem.netto).toBe(wynik.reduce((suma, linia) => suma + linia.netto, 0))
+      })
+
+      it('parsujStawke/parsujKwote nie zaokrąglają wejścia — pełna precyzja wpisana przez administratora jest zachowana', () => {
+        expect(parsujStawke('3.336')).toBe(3.336)
+        expect(parsujKwote('71.4285')).toBe(71.4285)
+      })
+
+      it('zyskProc/marzaProc pozostają liczone z surowych proporcji (bez zaokrąglenia do 2 miejsc)', () => {
+        const linia = {
+          kod: 'okna',
+          ilosc_rozliczeniowa: '7',
+          jednostka_rozliczeniowa: 'szt',
+          netto: '1000.00',
+          koszt: '500.01',
+          koszt_jednostkowy: '71.43',
+          koszt_staly: '0.00',
+          stawka_prowizji: '3.33',
+        }
+        const { linie: wynik, razem } = przeliczPodzial([linia], { okna: 3.33 })
+        // Surowy zysk = 1000 - 500.01 - 23.31 = 476.68 (bez zaokrąglenia
+        // pośrednich kroków) — zyskProc liczony wprost z tej wartości, nie
+        // z już zaokrąglonego pola `zysk`.
+        const surowyZysk = 1000 - 71.43 * 7 - 3.33 * 7
+        expect(wynik[0].zyskProc).toBeCloseTo((surowyZysk / 1000) * 100, 10)
+        expect(razem.zyskProc).toBeCloseTo((surowyZysk / 1000) * 100, 10)
+      })
+    })
   })
 })

@@ -20,7 +20,7 @@ _LICZBA_STRON = 18
 
 # Klucze z kontekstu świadomie pominięte w `MAPA` — puste, bo szablon PDF-u nie ma
 # dla nich osobnego miejsca w tej wersji dokumentu. Każdy wpis wymaga uzasadnienia,
-# żeby brak pozycji nigdy nie był przeoczeniem. Aktualnie pusty: wszystkie 59 kluczy
+# żeby brak pozycji nigdy nie był przeoczeniem. Aktualnie pusty: wszystkie klucze
 # `zbuduj_kontekst` mają co najmniej jedną pozycję w `MAPA`.
 WYJATKI_BRAK_POZYCJI: frozenset[str] = frozenset()
 
@@ -57,6 +57,7 @@ def _umowa(**nadpisania: Any) -> dict[str, Any]:
 		"istniejaca_pv_producent_inwertera": "Fronius",
 		"zgoda_kontakt_telefoniczny": 1,
 		"zgoda_dzialania_promocyjne": 1,
+		"zgoda_realizacja_przed_odstapieniem": 1,
 	}
 	baza.update(nadpisania)
 	return baza

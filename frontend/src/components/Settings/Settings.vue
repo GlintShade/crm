@@ -58,6 +58,7 @@ import EmailTemplateIcon from '@/components/Icons/EmailTemplateIcon.vue'
 import SettingsIcon from '@/components/Icons/SettingsIcon.vue'
 import SettingsIcon2 from '@/components/Icons/SettingsIcon2.vue'
 import Users from '@/components/Settings/Users.vue'
+import VolteoUsers from '@/components/Settings/VolteoUsers.vue'
 import Hierarchy from '@/components/Settings/Hierarchy/Hierarchy.vue'
 import InviteUserPage from '@/components/Settings/InviteUserPage.vue'
 import ProfilePage from '@/components/Settings/Profile/ProfilePage.vue'
@@ -87,7 +88,7 @@ import AssignmentRulePage from './AssignmentRules/AssignmentRulePage.vue'
 import ShieldCheck from '~icons/lucide/shield-check'
 import SlaConfig from './Sla/SlaConfig.vue'
 
-const { isManager, getUser } = usersStore()
+const { isManager, isVolteoAdmin, getUser } = usersStore()
 
 const user = computed(() => getUser() || {})
 
@@ -160,8 +161,14 @@ const tabs = computed(() => {
           component: markRaw(Hierarchy),
           condition: () => isManager(),
         },
+        {
+          label: __('Konta Volteo'),
+          icon: 'user-plus',
+          component: markRaw(VolteoUsers),
+          condition: () => isVolteoAdmin(),
+        },
       ],
-      condition: () => isManager(),
+      condition: () => isManager() || isVolteoAdmin(),
     },
     {
       label: __('Email'),

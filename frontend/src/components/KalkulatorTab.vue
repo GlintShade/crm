@@ -171,7 +171,7 @@
 
                 <div>
                   <div class="mb-0.5 text-sm text-ink-gray-5">Wpłata własna (PLN)</div>
-                  <input v-model.number="sel.wplataWlasna" type="number" min="0" step="1" class="kalk-input" />
+                  <input v-model.number="sel.wplataWlasna" type="number" min="0" step="0.01" class="kalk-input" />
                 </div>
               </div>
             </div>
@@ -191,7 +191,7 @@
                 <div v-if="showNarzut" class="mt-1.5">
                   <div class="mb-0.5 text-sm text-ink-gray-5">Wysokość narzutu</div>
                   <input
-                    v-model.number="sel.narzut" type="number" min="0" max="7000" step="1"
+                    v-model.number="sel.narzut" type="number" min="0" max="7000" step="0.01"
                     class="kalk-input"
                     @blur="sel.narzut = Math.min(7000, Math.max(0, Number(sel.narzut) || 0))"
                   />
@@ -216,32 +216,32 @@
               <template v-if="summary.lines.length">
                 <div class="rounded-lg border border-gray-200 bg-gray-50 p-2.5">
                   <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
-                    <span>Suma netto</span><span>{{ plnFmt(summary.netto) }}</span>
+                    <span>Suma netto</span><span>{{ formatPln(summary.netto) }}</span>
                   </div>
                   <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
-                    <span>VAT ({{ summary.vat_rate }}%)</span><span>{{ plnFmt(summary.vat) }}</span>
+                    <span>VAT ({{ summary.vat_rate }}%)</span><span>{{ formatPln(summary.vat) }}</span>
                   </div>
                   <div class="mt-1 flex justify-between border-t border-gray-200 pt-1.5 text-base font-semibold tabular-nums text-ink-gray-9">
-                    <span>Suma brutto</span><span>{{ plnFmt(summary.brutto) }}</span>
+                    <span>Suma brutto</span><span>{{ formatPln(summary.brutto) }}</span>
                   </div>
 
                   <template v-if="sel.typKlienta === 'indywidualny'">
                     <div class="mt-1.5 border-t border-dashed border-gray-300 pt-1.5">
                       <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
-                        <span>Dotacja Mój Prąd</span><span>− {{ plnFmt(summary.dotacja) }}</span>
+                        <span>Dotacja Mój Prąd</span><span>− {{ formatPln(summary.dotacja) }}</span>
                       </div>
                       <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
-                        <span>Cena po dotacji</span><span>{{ plnFmt(summary.cena_po_dotacji) }}</span>
+                        <span>Cena po dotacji</span><span>{{ formatPln(summary.cena_po_dotacji) }}</span>
                       </div>
                       <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
-                        <span>Ulga termo. ({{ sel.ulgaPct }}%)</span><span>− {{ plnFmt(summary.ulga) }}</span>
+                        <span>Ulga termo. ({{ sel.ulgaPct }}%)</span><span>− {{ formatPln(summary.ulga) }}</span>
                       </div>
                       <div class="mt-1 flex justify-between border-t border-gray-200 pt-1.5 text-base font-semibold tabular-nums text-ink-gray-9">
-                        <span>Cena po uldze</span><span>{{ plnFmt(summary.cena_po_uldze) }}</span>
+                        <span>Cena po uldze</span><span>{{ formatPln(summary.cena_po_uldze) }}</span>
                       </div>
                       <div class="mt-0.5 flex justify-between py-0.5 text-xs tabular-nums text-ink-gray-5">
                         <span>Rata ({{ sel.okresLat }} lat)</span>
-                        <span>{{ plnFmt(summary.raty.brutto) }} / {{ plnFmt(summary.raty.po_dotacji) }} / {{ plnFmt(summary.raty.po_uldze) }} /mies.</span>
+                        <span>{{ formatPln(summary.raty.brutto) }} / {{ formatPln(summary.raty.po_dotacji) }} / {{ formatPln(summary.raty.po_uldze) }} /mies.</span>
                       </div>
                     </div>
                   </template>
@@ -268,21 +268,21 @@
 
               <div v-if="summary.is_admin && summary.breakdown" class="mt-2.5 rounded-lg border border-dashed border-amber-300 bg-amber-50 p-2.5">
                 <div class="mb-1.5 text-xs font-semibold uppercase tracking-wider text-amber-700">Rozbicie kosztów (administrator)</div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Falownik</span><span>{{ plnFmt(summary.breakdown.k_falownik) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Bateria</span><span>{{ plnFmt(summary.breakdown.k_bateria) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Panele</span><span>{{ plnFmt(summary.breakdown.k_panele) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Konstrukcja</span><span>{{ plnFmt(summary.breakdown.k_konstrukcja) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Montaż PV</span><span>{{ plnFmt(summary.breakdown.k_montaz_pv) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Montaż magazynu</span><span>{{ plnFmt(summary.breakdown.k_montaz_mag) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Akcesoria</span><span>{{ plnFmt(summary.breakdown.k_akcesoria) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Kabel</span><span>{{ plnFmt(summary.breakdown.k_kabel) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Spółdzielnia</span><span>{{ plnFmt(summary.breakdown.k_spoldzielnia) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Sterownik</span><span>{{ plnFmt(summary.breakdown.k_sterownik) }}</span></div>
-                <div class="mt-1 flex justify-between border-t border-amber-200 pt-1 text-sm font-semibold tabular-nums text-ink-gray-9"><span>Koszt bazowy (net_base)</span><span>{{ plnFmt(summary.breakdown.net_base) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Marża ProEnergy</span><span>{{ plnFmt(summary.breakdown.marza_proenergy) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Marża SPS</span><span>{{ plnFmt(summary.breakdown.marza_sps) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Bonus liderki</span><span>{{ plnFmt(summary.breakdown.bonus_liderki) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Kilometrówka</span><span>{{ plnFmt(summary.breakdown.kilometrowka) }}</span></div>
+                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Falownik</span><span>{{ formatPln(summary.breakdown.k_falownik) }}</span></div>
+                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Bateria</span><span>{{ formatPln(summary.breakdown.k_bateria) }}</span></div>
+                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Panele</span><span>{{ formatPln(summary.breakdown.k_panele) }}</span></div>
+                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Konstrukcja</span><span>{{ formatPln(summary.breakdown.k_konstrukcja) }}</span></div>
+                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Montaż PV</span><span>{{ formatPln(summary.breakdown.k_montaz_pv) }}</span></div>
+                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Montaż magazynu</span><span>{{ formatPln(summary.breakdown.k_montaz_mag) }}</span></div>
+                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Akcesoria</span><span>{{ formatPln(summary.breakdown.k_akcesoria) }}</span></div>
+                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Kabel</span><span>{{ formatPln(summary.breakdown.k_kabel) }}</span></div>
+                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Spółdzielnia</span><span>{{ formatPln(summary.breakdown.k_spoldzielnia) }}</span></div>
+                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Sterownik</span><span>{{ formatPln(summary.breakdown.k_sterownik) }}</span></div>
+                <div class="mt-1 flex justify-between border-t border-amber-200 pt-1 text-sm font-semibold tabular-nums text-ink-gray-9"><span>Koszt bazowy (net_base)</span><span>{{ formatPln(summary.breakdown.net_base) }}</span></div>
+                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Marża ProEnergy</span><span>{{ formatPln(summary.breakdown.marza_proenergy) }}</span></div>
+                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Marża SPS</span><span>{{ formatPln(summary.breakdown.marza_sps) }}</span></div>
+                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Bonus liderki</span><span>{{ formatPln(summary.breakdown.bonus_liderki) }}</span></div>
+                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Kilometrówka</span><span>{{ formatPln(summary.breakdown.kilometrowka) }}</span></div>
               </div>
             </div>
           </div>
@@ -319,6 +319,7 @@ import {
   pickBySpec,
   pickMounting,
 } from '@/utils/pvForm'
+import { formatPln } from '@/utils/money'
 
 const props = defineProps({
   contact: { type: Object, default: () => ({}) },
@@ -625,7 +626,7 @@ async function runGenerate() {
       annual_consumption_kwh: sel.consumption || 0,
     })
     successSummary.value =
-      'Szansa ' + result.deal + ' została utworzona. Suma brutto: ' + plnFmt(result.brutto) + '.'
+      'Szansa ' + result.deal + ' została utworzona. Suma brutto: ' + formatPln(result.brutto) + '.'
     dealHref.value = '/crm/deals/' + result.deal
     flow.value = 'done'
   } catch (err) {
@@ -641,11 +642,6 @@ function resetFlow() {
 }
 
 // --- Helpers -----------------------------------------------------------------
-function plnFmt(val) {
-  const n = Math.round(Number(val) || 0)
-  const s = n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
-  return s + ' zł'
-}
 function formatQty(q) {
   const n = Number(q) || 0
   return Number.isInteger(n) ? String(n) : String(n)

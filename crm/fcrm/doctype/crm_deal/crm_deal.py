@@ -289,22 +289,47 @@ class CRMDeal(Document):
 
 			self.db_set("exchange_rate", exchange_rate)
 
+	# Domyślny widok listy szans dostosowany do B2C (klienci to osoby fizyczne, nie firmy).
+	# `organization` zniknęło z kolumn: jest ukryte (hidden=1) i puste w każdej szansie,
+	# a `crm/api/doc.py:365-368` i tak wyrzuca ukryte kolumny w locie.
+	#
+	# Kolumny "Szczegóły" i "Szansa" celowo dzielą `key: "name"`. Powód: pętla w
+	# `crm/api/doc.py:356-358` dopisuje każdy klucz kolumny do listy pól SQL (`rows`),
+	# więc pseudo-klucz bez odpowiadającego pola w bazie wywaliłby zapytanie — przycisk
+	# "Szczegóły" (render po stronie Vue, osobne zadanie) musi więc siedzieć na
+	# realnym polu, a `name` jest identyfikatorem, do którego przycisk i tak nawiguje.
+	# Weryfikacja braku kolizji: `rows` już zawiera "name", więc obie kolumny trafiają
+	# w warunek `if column.get("key") not in rows` jako "already present" i klucz nie
+	# dubluje się w zapytaniu; `meta.get_field("name")` zwraca None (to nie DocField,
+	# tylko klucz główny), więc żadna z dwóch kolumn nie zostaje usunięta jako ukryta.
+	# Rozróżnienie renderowania obu kolumn robi etykieta, po stronie Vue.
 	@staticmethod
 	def default_list_data():
 		columns = [
 			{
-				"label": "Organization",
-				"type": "Link",
-				"key": "organization",
-				"options": "CRM Organization",
+				"label": "Szczegóły",
+				"type": "Data",
+				"key": "name",
+				"width": "7rem",
+			},
+			{
+				"label": "Klient",
+				"type": "Data",
+				"key": "lead_name",
 				"width": "11rem",
 			},
 			{
-				"label": "Kwota",
-				"type": "Currency",
-				"key": "deal_value",
-				"align": "right",
-				"width": "9rem",
+				"label": "Szansa",
+				"type": "Data",
+				"key": "name",
+				"width": "10rem",
+			},
+			{
+				"label": "Doradca",
+				"type": "Link",
+				"key": "deal_owner",
+				"options": "User",
+				"width": "10rem",
 			},
 			{
 				"label": "Status",
@@ -314,34 +339,22 @@ class CRMDeal(Document):
 				"width": "10rem",
 			},
 			{
-				"label": "Rodzaj umowy",
-				"type": "Select",
-				"key": "custom_rodzaj_umowy",
-				"width": "10rem",
-			},
-			{
-				"label": "Email",
-				"type": "Data",
-				"key": "email",
-				"width": "12rem",
-			},
-			{
-				"label": "Mobile No.",
+				"label": "Telefon",
 				"type": "Data",
 				"key": "mobile_no",
 				"width": "11rem",
 			},
 			{
-				"label": "Assigned To",
-				"type": "Text",
-				"key": "_assign",
-				"width": "10rem",
+				"label": "Mail",
+				"type": "Data",
+				"key": "email",
+				"width": "12rem",
 			},
 			{
-				"label": "Last Modified",
-				"type": "Datetime",
-				"key": "modified",
-				"width": "8rem",
+				"label": "Rodzaj",
+				"type": "Select",
+				"key": "custom_rodzaj_umowy",
+				"width": "10rem",
 			},
 		]
 		rows = [
@@ -360,6 +373,9 @@ class CRMDeal(Document):
 			"first_responded_on",
 			"modified",
 			"_assign",
+			"lead_name",
+			"first_name",
+			"last_name",
 		]
 		return {"columns": columns, "rows": rows}
 
@@ -367,7 +383,7 @@ class CRMDeal(Document):
 	def default_kanban_settings():
 		return {
 			"column_field": "status",
-			"title_field": "organization",
+			"title_field": "lead_name",
 			"kanban_fields": '["deal_value", "email", "mobile_no", "_assign", "modified"]',
 		}
 

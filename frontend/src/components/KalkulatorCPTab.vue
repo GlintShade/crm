@@ -278,18 +278,18 @@
               <div class="mb-2 rounded-lg border border-gray-200 bg-gray-50 p-2.5">
                 <div class="flex justify-between py-0.5 text-sm text-ink-gray-7">
                   <span>{{ __('Wkład własny beneficjenta') }}</span>
-                  <span class="text-xl font-semibold tabular-nums text-ink-gray-9">{{ plnFmt(result.wklad_wlasny) }}</span>
+                  <span class="text-xl font-semibold tabular-nums text-ink-gray-9">{{ formatPln(result.wklad_wlasny) }}</span>
                 </div>
                 <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
-                  <span>{{ __('Prowizja handlowa') }}</span><span>{{ plnFmt(result.prowizja_handlowa) }}</span>
+                  <span>{{ __('Prowizja handlowa') }}</span><span>{{ formatPln(result.prowizja_handlowa) }}</span>
                 </div>
                 <div class="flex justify-between border-t border-gray-200 pt-1.5 text-sm tabular-nums text-ink-gray-7">
-                  <span>{{ __('Dotacja łączna') }}</span><span>{{ plnFmt(result.dotacja_laczna) }}</span>
+                  <span>{{ __('Dotacja łączna') }}</span><span>{{ formatPln(result.dotacja_laczna) }}</span>
                 </div>
               </div>
 
               <div v-if="restrictionAmount > 0" class="mb-2 text-xs text-ink-gray-5">
-                {{ __('Dofinansowanie ograniczone limitem (−{0} zł)', [formatAmount(result.dotacja_ograniczona_o)]) }}
+                {{ __('Dofinansowanie ograniczone limitem (−{0} zł)', [formatPlnAmount(result.dotacja_ograniczona_o)]) }}
               </div>
 
               <div
@@ -298,13 +298,13 @@
                 class="mb-2 overflow-hidden rounded-lg border border-gray-200"
               >
                 <div class="flex justify-between border-b border-gray-200 bg-gray-50 px-2.5 py-1.5 text-sm font-semibold tabular-nums text-ink-gray-8">
-                  <span>{{ grupa.nazwa }}</span><span>{{ plnFmt(grupa.dotacja) }}</span>
+                  <span>{{ grupa.nazwa }}</span><span>{{ formatPln(grupa.dotacja) }}</span>
                 </div>
                 <div v-for="(line, index) in grupa.pozycje" :key="index" class="border-b border-gray-100 px-2.5 py-2 last:border-b-0">
                   <div class="mb-1 text-sm text-ink-gray-8">{{ lineName(line) }}</div>
                   <div class="flex justify-between gap-2 text-xs tabular-nums text-ink-gray-5">
                     <span>{{ formatQty(line.ilosc) }} {{ line.jednostka || '' }}</span>
-                    <span>{{ __('brutto') }}: {{ plnFmt(line.brutto) }}</span>
+                    <span>{{ __('brutto') }}: {{ formatPln(line.brutto) }}</span>
                   </div>
                 </div>
               </div>
@@ -315,8 +315,8 @@
 
               <div v-if="hasInternal" class="rounded-lg border border-dashed border-amber-300 bg-amber-50 p-2.5">
                 <div class="mb-1.5 text-xs font-semibold uppercase tracking-wider text-amber-700">{{ __('Rozbicie kosztów (administrator)') }}</div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>{{ __('Koszt całkowity') }}</span><span>{{ plnFmt(result.wewnetrzne.koszt_calkowity) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>{{ __('Marża') }}</span><span>{{ plnFmt(result.wewnetrzne.marza) }}</span></div>
+                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>{{ __('Koszt całkowity') }}</span><span>{{ formatPln(result.wewnetrzne.koszt_calkowity) }}</span></div>
+                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>{{ __('Marża') }}</span><span>{{ formatPln(result.wewnetrzne.marza) }}</span></div>
                 <!-- Prowizja/Zysk czytają z `podzial.razem`, NIE z `result.wewnetrzne`:
                      to samo źródło co tabela niżej, żeby administrator nigdy nie
                      zobaczył dwóch różnych liczb pod etykietą „Zysk" na raz — ten
@@ -324,11 +324,11 @@
                      `wewnetrzne.prowizja_handlowa`/`wewnetrzne.zysk` tylko stawkami
                      katalogowymi, więc po edycji stawki przez administratora byłyby
                      nieaktualne. -->
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>{{ __('Prowizja') }}</span><span>{{ plnFmt(podzial.razem.prowizja) }}</span></div>
+                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>{{ __('Prowizja') }}</span><span>{{ formatPln(podzial.razem.prowizja) }}</span></div>
                 <div
                   class="flex justify-between border-t border-amber-200 pt-1 text-sm font-semibold tabular-nums"
                   :class="podzial.razem.zysk < 0 ? 'text-red-600' : 'text-amber-800'"
-                ><span>{{ __('Zysk') }}</span><span>{{ plnFmt(podzial.razem.zysk) }}</span></div>
+                ><span>{{ __('Zysk') }}</span><span>{{ formatPln(podzial.razem.zysk) }}</span></div>
               </div>
             </div>
             <div v-else-if="!errorMsg" class="text-sm text-ink-gray-5">
@@ -399,7 +399,7 @@
                   <td class="py-1.5 pr-2 text-right text-ink-gray-6">
                     {{ formatQty(linia.iloscRozliczeniowa) }} {{ linia.jednostkaRozliczeniowa === 'szt' ? __('szt') : __('m²') }}
                   </td>
-                  <td class="py-1.5 pr-2 text-right text-ink-gray-7">{{ plnFmt(linia.netto) }}</td>
+                  <td class="py-1.5 pr-2 text-right text-ink-gray-7">{{ formatPln(linia.netto) }}</td>
                   <td class="py-1.5 pr-2 text-right">
                     <div class="flex flex-col items-end gap-1">
                       <input
@@ -429,11 +429,11 @@
                         <span class="text-[10px] leading-none text-ink-gray-5">{{ __('koszt stały — raz na ofertę') }}</span>
                       </template>
                       <div class="text-xs text-ink-gray-5">
-                        {{ formatAmount(linia.kosztJednostkowy) }} × {{ formatQty(linia.iloscRozliczeniowa) }}<template v-if="linia.kosztStalyKatalogowy > 0"> + {{ formatAmount(linia.kosztStaly) }}</template> = {{ plnFmt(linia.koszt) }}
+                        {{ formatPlnAmount(linia.kosztJednostkowy) }} × {{ formatQty(linia.iloscRozliczeniowa) }}<template v-if="linia.kosztStalyKatalogowy > 0"> + {{ formatPlnAmount(linia.kosztStaly) }}</template> = {{ formatPln(linia.koszt) }}
                       </div>
                     </div>
                   </td>
-                  <td class="py-1.5 pr-2 text-right text-ink-gray-7">{{ plnFmt(linia.pula) }}</td>
+                  <td class="py-1.5 pr-2 text-right text-ink-gray-7">{{ formatPln(linia.pula) }}</td>
                   <td class="py-1.5 pr-2 text-right">
                     <input
                       :value="stawki[linia.kod]"
@@ -445,9 +445,9 @@
                       @input="stawki[linia.kod] = $event.target.value"
                     />
                   </td>
-                  <td class="py-1.5 pr-2 text-right text-ink-gray-7">{{ plnFmt(linia.prowizja) }}</td>
+                  <td class="py-1.5 pr-2 text-right text-ink-gray-7">{{ formatPln(linia.prowizja) }}</td>
                   <td class="py-1.5 pr-2 text-right font-medium" :class="linia.zysk < 0 ? 'text-red-600' : 'text-ink-gray-8'">
-                    {{ plnFmt(linia.zysk) }}
+                    {{ formatPln(linia.zysk) }}
                   </td>
                   <td class="py-1.5 text-right text-ink-gray-6">{{ formatPercent(linia.zyskProc) }}</td>
                 </tr>
@@ -456,13 +456,13 @@
                 <tr class="border-t-2 border-gray-300 font-semibold tabular-nums">
                   <td class="py-1.5 pr-2 text-ink-gray-9">{{ __('RAZEM') }}</td>
                   <td class="py-1.5 pr-2"></td>
-                  <td class="py-1.5 pr-2 text-right">{{ plnFmt(podzial.razem.netto) }}</td>
-                  <td class="py-1.5 pr-2 text-right">{{ plnFmt(podzial.razem.koszt) }}</td>
-                  <td class="py-1.5 pr-2 text-right">{{ plnFmt(podzial.razem.pula) }}</td>
+                  <td class="py-1.5 pr-2 text-right">{{ formatPln(podzial.razem.netto) }}</td>
+                  <td class="py-1.5 pr-2 text-right">{{ formatPln(podzial.razem.koszt) }}</td>
+                  <td class="py-1.5 pr-2 text-right">{{ formatPln(podzial.razem.pula) }}</td>
                   <td class="py-1.5 pr-2"></td>
-                  <td class="py-1.5 pr-2 text-right">{{ plnFmt(podzial.razem.prowizja) }}</td>
+                  <td class="py-1.5 pr-2 text-right">{{ formatPln(podzial.razem.prowizja) }}</td>
                   <td class="py-1.5 pr-2 text-right" :class="podzial.razem.zysk < 0 ? 'text-red-600' : ''">
-                    {{ plnFmt(podzial.razem.zysk) }}
+                    {{ formatPln(podzial.razem.zysk) }}
                   </td>
                   <td class="py-1.5 text-right">{{ formatPercent(podzial.razem.zyskProc) }}</td>
                 </tr>
@@ -472,17 +472,17 @@
 
           <div class="mt-3 max-w-xs rounded-lg border border-gray-200 bg-gray-50 p-2.5 text-sm tabular-nums">
             <div class="flex justify-between py-0.5 text-ink-gray-7">
-              <span>{{ __('Przychód netto') }}</span><span>{{ plnFmt(podzial.razem.netto) }}</span>
+              <span>{{ __('Przychód netto') }}</span><span>{{ formatPln(podzial.razem.netto) }}</span>
             </div>
             <div class="flex justify-between py-0.5 text-ink-gray-7">
-              <span>{{ __('− Koszt ProEnergy') }}</span><span>{{ plnFmt(podzial.razem.koszt) }}</span>
+              <span>{{ __('− Koszt ProEnergy') }}</span><span>{{ formatPln(podzial.razem.koszt) }}</span>
             </div>
             <div class="flex justify-between border-t border-gray-200 py-0.5 pt-1 font-medium text-ink-gray-8">
               <span>{{ __('= Marża brutto') }}</span>
-              <span>{{ plnFmt(podzial.razem.pula) }} <span class="font-normal text-ink-gray-5">({{ formatPercent(podzial.razem.marzaProc) }} {{ __('netto') }})</span></span>
+              <span>{{ formatPln(podzial.razem.pula) }} <span class="font-normal text-ink-gray-5">({{ formatPercent(podzial.razem.marzaProc) }} {{ __('netto') }})</span></span>
             </div>
             <div class="flex justify-between py-0.5 text-ink-gray-7">
-              <span>{{ __('− Prowizja struktury') }}</span><span>{{ plnFmt(podzial.razem.prowizja) }}</span>
+              <span>{{ __('− Prowizja struktury') }}</span><span>{{ formatPln(podzial.razem.prowizja) }}</span>
             </div>
             <div
               class="flex justify-between border-t border-gray-200 py-0.5 pt-1 font-semibold"
@@ -490,7 +490,7 @@
             >
               <span>{{ __('= ZYSK ProEnergy') }}</span>
               <span>
-                {{ plnFmt(podzial.razem.zysk) }}
+                {{ formatPln(podzial.razem.zysk) }}
                 <span class="font-normal" :class="podzial.razem.zysk < 0 ? 'text-red-600' : 'text-ink-gray-5'">
                   ({{ formatPercent(podzial.razem.zyskProc) }} {{ __('netto') }})
                 </span>
@@ -536,6 +536,7 @@ import {
   scalKoszty,
   kosztyPoczatkowe,
 } from '@/utils/cpMarza'
+import { formatPln, formatPlnAmount } from '@/utils/money'
 
 const props = defineProps({
   contact: { type: Object, default: () => ({}) },
@@ -598,16 +599,16 @@ function progDochoduLabel(prog) {
   const gospodarstwa = form.gospodarstwo ? [form.gospodarstwo] : GOSPODARSTWA
 
   if (prog === 'niski') {
-    const kwoty = gospodarstwa.map((g) => formatAmount(PROGI_KWOTY[g].niski))
+    const kwoty = gospodarstwa.map((g) => formatPlnAmount(PROGI_KWOTY[g].niski))
     return __('do {0} zł', [kwoty.join(' / ')])
   }
   if (prog === 'sredni') {
     const zakresy = gospodarstwa.map(
-      (g) => `${formatAmount(PROGI_KWOTY[g].niski + 1)}–${formatAmount(PROGI_KWOTY[g].sredni)}`,
+      (g) => `${formatPlnAmount(PROGI_KWOTY[g].niski + 1)}–${formatPlnAmount(PROGI_KWOTY[g].sredni)}`,
     )
     return __('{0} zł', [zakresy.join(' / ')])
   }
-  const kwoty = gospodarstwa.map((g) => formatAmount(PROGI_KWOTY[g].sredni))
+  const kwoty = gospodarstwa.map((g) => formatPlnAmount(PROGI_KWOTY[g].sredni))
   return __('ponad {0} zł', [kwoty.join(' / ')])
 }
 
@@ -711,7 +712,7 @@ function nazwaPozycji(kod) {
 // dało się wrócić do niej myślą bez klikania „Przywróć wartości katalogowe".
 function tytulNadpisania(aktualna, katalogowa) {
   return aktualna !== katalogowa
-    ? __('Katalogowo: {0}', [plnFmt(katalogowa)])
+    ? __('Katalogowo: {0}', [formatPln(katalogowa)])
     : undefined
 }
 
@@ -784,18 +785,11 @@ function formatQty(value) {
   return Number.isFinite(number) ? String(number) : String(value || '')
 }
 
-function formatAmount(value) {
-  const number = Math.round(Number(value) || 0)
-  return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
-}
-
-function plnFmt(value) {
-  return `${formatAmount(value)} zł`
-}
-
-// formatAmount rounds to whole złoty, which flattens the profit-margin
-// percentages in the commission-modeling section to e.g. "17%" vs "16,6%" —
-// not precise enough to tell "sustainable" from "barely positive" apart.
+// Kwoty mają teraz zawsze dwa miejsca po przecinku (formatPlnAmount z
+// money.js), więc formatPercent trzyma własną, dodatkową precyzję (1 miejsce
+// po przecinku) tylko dlatego, że procent i złotówka to różne wielkości —
+// zaokrąglenie procentu do jedności zgubiłoby różnicę między "17%" a "16,6%",
+// czyli między "stabilną" a "ledwo dodatnią" marżą.
 function formatPercent(value) {
   const number = Number(value)
   const safe = Number.isFinite(number) ? number : 0

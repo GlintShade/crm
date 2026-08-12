@@ -153,6 +153,7 @@ def zbuduj_kontekst(
 	ppoz_stan = _stan_bool(umowa.get("ppoz_wymagane"))
 	zgoda_telefon_stan = _stan_bool(umowa.get("zgoda_kontakt_telefoniczny"))
 	zgoda_promocja_stan = _stan_bool(umowa.get("zgoda_dzialania_promocyjne"))
+	zgoda_wczesniejsza_realizacja_stan = _stan_bool(umowa.get("zgoda_realizacja_przed_odstapieniem"))
 
 	kabel_mb_dec = _sparsuj_decimal(umowa.get("dodatkowy_kabel_m"))
 	kabel_mb_puste = kabel_mb_dec is None or kabel_mb_dec == 0
@@ -189,7 +190,7 @@ def zbuduj_kontekst(
 		"panel_szt": _liczba_calkowita(deal.get("custom_panele")),
 		"moc_pv_kwp": _liczba(deal.get("custom_pv_power_kwp")),
 		"panel_producent_model": _polacz(stale.get("panel_producent"), stale.get("panel_model")),
-		"panel_gwarancja_lat": _liczba_calkowita(stale.get("panel_gwarancja_lat")),
+		"panel_gwarancja_lat": _tekst(stale.get("panel_gwarancja_lat")),
 		"inwerter_moc_kw": _liczba(_pole(falownik_komponent, "moc_kw")),
 		"inwerter_szt": _liczba_calkowita(falownik_ilosc),
 		"inwerter_producent_model": _tekst(falownik_nazwa),
@@ -243,6 +244,8 @@ def zbuduj_kontekst(
 		# Załącznik 2
 		"zgoda_telefon": zgoda_telefon_stan is True,
 		"zgoda_promocja": zgoda_promocja_stan is True,
+		# Załącznik 3
+		"zgoda_wczesniejsza_realizacja": zgoda_wczesniejsza_realizacja_stan is True,
 		# Bloki podpisów — Autenti dokleja jedno zbiorcze poświadczenie na
 		# końcu pliku (jeden podpis elektroniczny obejmujący całość), więc
 		# miejsca na podpis klienta w środku dokumentu wypełniamy za niego

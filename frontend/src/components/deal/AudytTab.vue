@@ -204,6 +204,7 @@
                 :label="slot.label"
                 :value="zdjecia[slot.key] || null"
                 :optional="!isPhotoRequired(slot)"
+                :allow-pdf="!!slot.pdf"
                 doctype="Volteo Audyt"
                 :docname="dealId"
                 :disabled="readOnly"
@@ -266,6 +267,17 @@
               <div class="whitespace-pre-wrap text-sm text-ink-gray-7">
                 {{ commentText(c.content) }}
               </div>
+              <div
+                v-if="commentAttachments[c.name]?.length"
+                class="mt-2 flex flex-wrap gap-2"
+              >
+                <AttachmentItem
+                  v-for="a in commentAttachments[c.name]"
+                  :key="a.name"
+                  :label="a.file_name || __('Załącznik')"
+                  :url="a.file_url"
+                />
+              </div>
             </div>
           </div>
           <div v-else class="text-sm text-ink-gray-5">{{ __('Brak komentarzy.') }}</div>
@@ -276,7 +288,42 @@
               :placeholder="__('Napisz komentarz…')"
               v-model="newComment"
             />
-            <div>
+            <div
+              v-if="newCommentAttachments.length"
+              class="flex flex-wrap gap-2"
+            >
+              <AttachmentItem
+                v-for="(a, idx) in newCommentAttachments"
+                :key="a.name"
+                :label="a.file_name || __('Załącznik')"
+              >
+                <template #suffix>
+                  <span
+                    class="lucide-x h-3.5"
+                    aria-hidden="true"
+                    @click.stop="removeNewCommentAttachment(idx)"
+                  />
+                </template>
+              </AttachmentItem>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <FileUploader
+                :upload-args="{
+                  doctype: 'Volteo Audyt',
+                  docname: dealId,
+                  private: true,
+                }"
+                @success="(f) => newCommentAttachments.push(f)"
+              >
+                <template #default="{ openFileSelector }">
+                  <Button
+                    :label="__('Dołącz plik')"
+                    variant="subtle"
+                    :iconLeft="AttachmentIcon"
+                    @click="openFileSelector()"
+                  />
+                </template>
+              </FileUploader>
               <Button
                 variant="solid"
                 :label="__('Dodaj komentarz')"
@@ -284,6 +331,9 @@
                 :loading="posting"
                 @click="postComment"
               />
+            </div>
+            <div class="text-xs text-ink-gray-5">
+              {{ __('Do komentarza możesz dołączyć zdjęcie lub plik.') }}
             </div>
           </div>
         </section>
@@ -293,10 +343,12 @@
 </template>
 
 <script setup>
+import AttachmentItem from '@/components/AttachmentItem.vue'
+import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
 import AudytIcon from '@/components/Icons/AudytIcon.vue'
 import AudytPhotoSlot from '@/components/deal/AudytPhotoSlot.vue'
 import { useAttachments } from '@/composables/useAttachments'
-import { Badge, Button, FormControl, call, createResource, toast } from 'frappe-ui'
+import { Badge, Button, FileUploader, FormControl, call, createResource, toast } from 'frappe-ui'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 
 const props = defineProps({
@@ -687,21 +739,78 @@ const commentsResource = createResource({
 })
 
 const newComment = ref('')
+const newCommentAttachments = ref([])
 const posting = ref(false)
 
+// reference_doctype='Volteo Audyt' works unchanged against the generic
+// crm.api.comment.add_comment — it's already generic over reference_doctype.
+// Trade-off vs. the old `volteo_audyt_comment` Server Script: that script
+// checked the comment author's role (admin/backoffice/deal owner) explicitly;
+// this path relies on `Comment` DocPerm instead, which Volteo D2D Sales and
+// Volteo Backend already hold read+create on — a real but slightly broader
+// gate (any role with Comment create rights, not just this deal's context).
 async function postComment() {
   const text = newComment.value.trim()
   if (!text || posting.value) return
   posting.value = true
   try {
-    await call('volteo_audyt_comment', { deal: props.dealId, text })
+    await call('crm.api.comment.add_comment', {
+      reference_doctype: 'Volteo Audyt',
+      reference_name: props.dealId,
+      content: text,
+      attachments: newCommentAttachments.value.map((f) => f.name),
+    })
     newComment.value = ''
+    newCommentAttachments.value = []
     await commentsResource.reload()
   } catch (err) {
     toast.error(extractErrorMessage(err))
   } finally {
     posting.value = false
   }
+}
+
+function removeNewCommentAttachment(idx) {
+  newCommentAttachments.value = newCommentAttachments.value.filter((_, i) => i !== idx)
+}
+
+// Attachments for the listed comments — a second, client-side query rather
+// than a backend change, since `frappe.client.get_list` on Comment cannot
+// join File. Keyed by comment name, mirroring how
+// crm/api/activities.py::get_attachments enriches comment rows server-side
+// for the main Activities timeline (not reused here — that helper isn't
+// whitelisted on its own and this stays a plain File query).
+const commentAttachments = reactive({})
+
+watch(
+  () => commentsResource.data,
+  (data) => loadCommentAttachments((data || []).map((c) => c.name)),
+)
+
+async function loadCommentAttachments(names) {
+  // Same clear-then-repopulate shape as hydrateForm()'s reactive maps above:
+  // build the new grouping as a plain object first, then sync it onto the
+  // reactive map in one go, rather than mutating grouped arrays in place.
+  let grouped = {}
+  if (names.length) {
+    try {
+      const files = await call('frappe.client.get_list', {
+        doctype: 'File',
+        filters: { attached_to_doctype: 'Comment', attached_to_name: ['in', names] },
+        fields: ['name', 'file_name', 'file_url', 'attached_to_name'],
+        limit_page_length: 0,
+      })
+      ;(files || []).forEach((f) => {
+        grouped[f.attached_to_name] = [...(grouped[f.attached_to_name] || []), f]
+      })
+    } catch (err) {
+      // Non-fatal — comments still render without their attachments rather
+      // than blocking the thread on a secondary query failing.
+      grouped = {}
+    }
+  }
+  Object.keys(commentAttachments).forEach((k) => delete commentAttachments[k])
+  Object.assign(commentAttachments, grouped)
 }
 
 // Comment content may contain HTML — render it as plain text. DOMParser with

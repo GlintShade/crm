@@ -89,6 +89,7 @@
 <script setup>
 import { Badge, Button, FormControl, FileUploader, call, createResource, toast } from 'frappe-ui'
 import { reactive, ref, computed } from 'vue'
+import { formatPln } from '@/utils/money'
 
 const props = defineProps({
   dealId: { type: String, required: true },
@@ -147,7 +148,6 @@ function statusTheme(status) {
 
 function plnFmt(val) {
   if (val == null || val === '') return '—'
-  const n = Math.round(Number(val) || 0)
-  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' zł'
+  return formatPln(val)
 }
 </script>
