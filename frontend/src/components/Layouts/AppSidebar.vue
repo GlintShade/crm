@@ -56,15 +56,23 @@
             </div>
           </template>
           <nav class="flex flex-col">
-            <SidebarLink
+            <template
               v-for="link in view.views"
-              :key="link.label"
-              :icon="link.icon"
-              :label="__(link.label)"
-              :to="link.to"
-              :isCollapsed="isSidebarCollapsed"
-              class="mx-2 my-[1.5px]"
-            />
+              :key="link.divider ? 'divider' : link.label"
+            >
+              <div
+                v-if="link.divider"
+                class="mx-2 my-1 h-px border-t border-outline-gray-2"
+              />
+              <SidebarLink
+                v-else
+                :icon="link.icon"
+                :label="__(link.label)"
+                :to="link.to"
+                :isCollapsed="isSidebarCollapsed"
+                class="mx-2 my-[1.5px]"
+              />
+            </template>
           </nav>
         </Section>
       </div>
@@ -227,10 +235,14 @@ const links = [
     to: 'Dashboard',
   },
   {
-    label: 'Leads',
-    icon: LeadsIcon,
-    to: 'Leads',
-    condition: () => !window.hide_leads, // VOLTEO
+    label: 'Tasks',
+    icon: TaskIcon,
+    to: 'Tasks',
+  },
+  {
+    label: 'Contacts',
+    icon: ContactsIcon,
+    to: 'Contacts',
   },
   {
     label: 'Umowy',
@@ -238,7 +250,10 @@ const links = [
     to: 'Deals',
   },
   {
-    label: 'Kalkulator fotowoltaiczny',
+    divider: true, // VOLTEO
+  },
+  {
+    label: 'Kalkulator OZE',
     icon: KalkulatorIcon,
     to: 'Kalkulator',
   },
@@ -248,9 +263,10 @@ const links = [
     to: 'KalkulatorCzystePowietrze',
   },
   {
-    label: 'Contacts',
-    icon: ContactsIcon,
-    to: 'Contacts',
+    label: 'Leads',
+    icon: LeadsIcon,
+    to: 'Leads',
+    condition: () => !window.hide_leads, // VOLTEO
   },
   {
     label: 'Organizations',
@@ -263,11 +279,6 @@ const links = [
     icon: NoteIcon,
     to: 'Notes',
     condition: () => false, // VOLTEO
-  },
-  {
-    label: 'Tasks',
-    icon: TaskIcon,
-    to: 'Tasks',
   },
   {
     label: 'Call Logs',
