@@ -6,11 +6,15 @@
 
   3-stage workflow:
     Szkic (draft, editable by rep/admin) →
-    Weryfikacja (submitted, read-only) →
-    Zatwierdzony (approved, read-only).
-  Draft state autosaves (debounced for fields, immediate for photos). The rep
-  submits Szkic→Weryfikacja; back office (can_review) approves / sends back via
-  status control. A native Comment thread is available once the audit exists.
+    Weryfikacja (submitted; back office/admin can edit fields in place while
+      the audit is under review) →
+    Zatwierdzony (approved, read-only; back office/admin may reopen it via
+      "Przywróć do edycji").
+  Autosave (debounced for fields, immediate for photos) runs both for the
+  rep's Szkic draft and for back office edits made during Weryfikacja. The
+  rep submits Szkic→Weryfikacja; back office (can_review) edits in place and
+  approves — there is no "send back for corrections" step anymore. A native
+  Comment thread is available once the audit exists.
 -->
 <template>
   <div class="flex flex-1 flex-col overflow-y-auto p-5">
@@ -88,20 +92,14 @@
 
               <!-- Back office: status control -->
               <template v-if="canReview">
-                <template v-if="isReview">
-                  <Button
-                    variant="solid"
-                    theme="green"
-                    :label="__('Zatwierdź audyt')"
-                    :loading="statusUpdating"
-                    @click="setStatus('Zatwierdzony')"
-                  />
-                  <Button
-                    :label="__('Odeślij do poprawek')"
-                    :loading="statusUpdating"
-                    @click="setStatus('Szkic')"
-                  />
-                </template>
+                <Button
+                  v-if="isReview"
+                  variant="solid"
+                  theme="green"
+                  :label="__('Zatwierdź audyt')"
+                  :loading="statusUpdating"
+                  @click="setStatus('Zatwierdzony')"
+                />
                 <Button
                   v-else-if="isApproved"
                   :label="__('Przywróć do edycji')"
@@ -136,7 +134,11 @@
           v-if="isReview"
           class="rounded-lg border border-outline-blue-2 bg-surface-blue-2 px-4 py-3 text-sm text-ink-blue-8"
         >
-          {{ __('Audyt oczekuje na weryfikację przez back office — pola są zablokowane do czasu decyzji.') }}
+          {{
+            canReview
+              ? __('Audyt w weryfikacji — możesz edytować pola bezpośrednio, a następnie zatwierdzić.')
+              : __('Audyt oczekuje na weryfikację przez back office — pola są zablokowane do czasu decyzji.')
+          }}
         </div>
 
         <!-- Legacy variant banner -->
@@ -433,10 +435,17 @@ const isDraft = computed(() => status.value === 'Szkic')
 const isReview = computed(() => status.value === 'Weryfikacja')
 const isApproved = computed(() => status.value === 'Zatwierdzony')
 
-// Fields/photos are editable ONLY in Szkic, and only by rep/admin (can_edit).
-const editable = computed(() => requirements.can_edit && isDraft.value)
-const readOnly = computed(() => !editable.value)
+// Back office/admin may approve, reopen an approved audit, and — now — edit
+// the audit in place while it sits in Weryfikacja.
 const canReview = computed(() => !!requirements.can_review)
+
+// Fields/photos are editable in Szkic by rep/admin (can_edit), and in
+// Weryfikacja by back office/admin (canReview) — a reviewer edits the audit
+// directly instead of sending it back to the rep for corrections.
+const editable = computed(
+  () => (requirements.can_edit && isDraft.value) || (canReview.value && isReview.value),
+)
+const readOnly = computed(() => !editable.value)
 
 const badgeTheme = computed(() =>
   isApproved.value ? 'green' : isReview.value ? 'blue' : 'amber',
