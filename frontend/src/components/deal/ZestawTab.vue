@@ -97,6 +97,93 @@
         </div>
 
         <!--
+          PV-line offer summary (Wycena) -- mirrors the "Dotacja wg grup prac"
+          box above, styled the same way, but for the fotowoltaika/magazyn
+          product lines instead of Czyste Powietrze. In practice this block
+          and the CP subsidy box above are mutually exclusive: a PV deal never
+          populates custom_cp_*, and a CP deal never populates custom_netto or
+          the calculator's deal_value, so no v-else coupling between the two
+          is needed -- `showWycena` and `hasGroupSubsidy` simply never agree.
+        -->
+        <div v-if="showWycena" class="mt-3 w-full rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-2.5 text-sm">
+          <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Wycena') }}</div>
+
+          <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Konfiguracja') }}</div>
+          <div v-if="wycenaFields.custom_typ_klienta" class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Typ klienta') }}</span><span>{{ wycenaFields.custom_typ_klienta }}</span>
+          </div>
+          <div v-if="wycenaFields.custom_producent" class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Producent') }}</span><span>{{ wycenaFields.custom_producent }}</span>
+          </div>
+          <div v-if="wycenaFields.custom_falownik" class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Falownik') }}</span><span>{{ wycenaFields.custom_falownik }}</span>
+          </div>
+          <div v-if="wycenaFields.custom_bateria" class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Magazyn energii') }}</span><span>{{ wycenaFields.custom_bateria }}</span>
+          </div>
+          <div v-if="Number(wycenaFields.custom_pojemnosc_kwh) > 0" class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Pojemność magazynu') }}</span><span>{{ wycenaFields.custom_pojemnosc_kwh }} kWh</span>
+          </div>
+          <div v-if="Number(wycenaFields.custom_panele) > 0" class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Liczba paneli') }}</span><span>{{ wycenaFields.custom_panele }}</span>
+          </div>
+          <div v-if="Number(wycenaFields.custom_pv_power_kwp) > 0" class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Moc instalacji PV') }}</span><span>{{ wycenaFields.custom_pv_power_kwp }} kWp</span>
+          </div>
+          <div v-if="wycenaFields.custom_konstrukcja" class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Konstrukcja') }}</span><span>{{ wycenaFields.custom_konstrukcja }}</span>
+          </div>
+          <div v-if="Number(wycenaFields.custom_kabel_m) > 0" class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Dodatkowy kabel') }}</span><span>{{ wycenaFields.custom_kabel_m }} m</span>
+          </div>
+
+          <div class="mb-1 mt-1 border-t border-outline-gray-2 pt-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Cena') }}</div>
+          <div class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Cena netto') }}</span><span>{{ formatPln(wycenaFields.custom_netto) }}</span>
+          </div>
+          <div class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('VAT') }}</span><span>{{ Number(wycenaFields.custom_vat_pct) }}%</span>
+          </div>
+          <div class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Cena brutto') }}</span><span class="font-medium text-ink-gray-8">{{ formatPln(wycenaFields.deal_value) }}</span>
+          </div>
+          <div class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Dotacja') }}</span><span>{{ formatPln(wycenaFields.custom_dotacja) }}</span>
+          </div>
+          <div class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Cena po dotacji') }}</span><span>{{ formatPln(wycenaFields.custom_cena_po_dotacji) }}</span>
+          </div>
+          <div v-if="Number(wycenaFields.custom_ulga_pct) > 0" class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Ulga termomodernizacyjna') }}</span><span>{{ wycenaFields.custom_ulga_pct }}% · {{ formatPln(wycenaFields.custom_ulga_kwota) }}</span>
+          </div>
+          <div v-if="Number(wycenaFields.custom_ulga_pct) > 0" class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Cena po uldze') }}</span><span>{{ formatPln(wycenaFields.custom_cena_po_uldze) }}</span>
+          </div>
+
+          <!--
+            No gotówka/kredyt label here on purpose (owner decision,
+            2026-08-13): the financing method lives on Volteo Umowa, filled
+            in on the Umowa tab, not derived from these calculator fields.
+          -->
+          <div class="mb-1 mt-1 border-t border-outline-gray-2 pt-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Finansowanie') }}</div>
+          <div class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Wpłata własna') }}</span><span>{{ formatPln(wycenaFields.custom_wplata_wlasna) }}</span>
+          </div>
+          <div v-if="Number(wycenaFields.custom_okres_lat) > 0" class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Okres kredytowania') }}</span><span>{{ wycenaFields.custom_okres_lat }} lat</span>
+          </div>
+          <div class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Rata brutto') }}</span><span>{{ formatPln(wycenaFields.custom_rata_brutto) }} /mies.</span>
+          </div>
+          <div class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Rata po dotacji') }}</span><span>{{ formatPln(wycenaFields.custom_rata_po_dotacji) }} /mies.</span>
+          </div>
+          <div v-if="Number(wycenaFields.custom_ulga_pct) > 0" class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Rata po uldze') }}</span><span>{{ formatPln(wycenaFields.custom_rata_po_uldze) }} /mies.</span>
+          </div>
+        </div>
+
+        <!--
           Sales commission — internal-only, permission-driven (see `hasCommission`
           below): the server strips this field for any role without permlevel-2
           read on CRM Deal, so a non-admin's dealSubsidy.data simply never has this
@@ -169,6 +256,46 @@ const dealSubsidy = createResource({
       // below treats "key absent" and "key present but 0" identically (both render
       // nothing), so this is safe to always request.
       'custom_cp_prowizja_handlowa',
+    ],
+  },
+  auto: true,
+})
+
+// PV-line offer financials, persisted on the deal by the PV calculator (see
+// crm-kalkulator-bom.py). Unlike dealSubsidy above, none of these fields
+// carry a permlevel restriction, so there is no admin-only branch here --
+// every role that can open this tab sees the same response.
+// custom_narzut (internal rep markup) is deliberately NOT fetched: it must
+// never reach this tab.
+const dealWycena = createResource({
+  url: 'frappe.client.get_value',
+  params: {
+    doctype: 'CRM Deal',
+    filters: props.dealId,
+    fieldname: [
+      'custom_rodzaj_umowy',
+      'custom_typ_klienta',
+      'custom_producent',
+      'custom_falownik',
+      'custom_bateria',
+      'custom_pojemnosc_kwh',
+      'custom_panele',
+      'custom_pv_power_kwp',
+      'custom_konstrukcja',
+      'custom_kabel_m',
+      'custom_netto',
+      'custom_vat_pct',
+      'deal_value',
+      'custom_dotacja',
+      'custom_cena_po_dotacji',
+      'custom_ulga_pct',
+      'custom_ulga_kwota',
+      'custom_cena_po_uldze',
+      'custom_wplata_wlasna',
+      'custom_okres_lat',
+      'custom_rata_brutto',
+      'custom_rata_po_dotacji',
+      'custom_rata_po_uldze',
     ],
   },
   auto: true,
@@ -278,4 +405,53 @@ const hasGroupSubsidy = computed(() =>
 // real zero at the SQL level -- so `> 0`, not a presence check, is what keeps
 // that case blank too instead of rendering a misleading "0 zł".
 const hasCommission = computed(() => Number(dealFields.value.custom_cp_prowizja_handlowa) > 0)
+
+// PV offer financials, fetched from the parent deal (see `dealWycena`
+// above). Same explicit-defaults pattern as `dealFields`: every key declared
+// up front so `Number(...)`/truthiness checks below stay well-defined before
+// the fetch resolves, and so nothing here ever reads via `hasOwnProperty`/`in`
+// on the resource's reactive `.data` (Vue's reactive proxy defines no
+// `getOwnPropertyDescriptor` trap, so that kind of read registers no
+// dependency and freezes a computed at its first evaluation -- see the
+// KalkulatorCPTab.vue admin-cost-panel bug referenced above). custom_ulga_pct
+// is a Data field holding a numeric-looking string (e.g. "19"), so its
+// default is `'0'`, not `0`.
+const wycenaFields = computed(() => ({
+  custom_rodzaj_umowy: '',
+  custom_typ_klienta: '',
+  custom_producent: '',
+  custom_falownik: '',
+  custom_bateria: '',
+  custom_pojemnosc_kwh: 0,
+  custom_panele: 0,
+  custom_pv_power_kwp: 0,
+  custom_konstrukcja: '',
+  custom_kabel_m: 0,
+  custom_netto: 0,
+  custom_vat_pct: 0,
+  deal_value: 0,
+  custom_dotacja: 0,
+  custom_cena_po_dotacji: 0,
+  custom_ulga_pct: '0',
+  custom_ulga_kwota: 0,
+  custom_cena_po_uldze: 0,
+  custom_wplata_wlasna: 0,
+  custom_okres_lat: 0,
+  custom_rata_brutto: 0,
+  custom_rata_po_dotacji: 0,
+  custom_rata_po_uldze: 0,
+  ...(dealWycena.data || {}),
+}))
+
+// PV-line product interest values only -- CP deals never populate
+// custom_rodzaj_umowy with one of these, so the box below stays hidden for
+// them. See "Product-line switch" in CLAUDE.md.
+const PV_RODZAJE = new Set(['Fotowoltaika', 'Fotowoltaika + Magazyn', 'Magazyn energii'])
+// Gated on rodzaj + a real priced amount, not just rodzaj: a PV deal that was
+// switched to that rodzaj before ever running the calculator has no netto/
+// deal_value yet and must render nothing rather than a box full of zeros.
+const showWycena = computed(() =>
+  PV_RODZAJE.has(wycenaFields.value.custom_rodzaj_umowy) &&
+  (Number(wycenaFields.value.custom_netto) > 0 || Number(wycenaFields.value.deal_value) > 0),
+)
 </script>
