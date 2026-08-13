@@ -795,6 +795,9 @@ async function createUmowa() {
     brakujace.value = extractBrakujace(data)
     if (umowa.value) hydrateForm(umowa.value)
     toast.success(__('Utworzono formularz umowy'))
+    // Refresh Autenti status so `umowa_exists` stops being stale — otherwise
+    // the "Podpisz umowę" button stays hidden until a full page reload.
+    await loadAutentiStatus()
   } catch (err) {
     toast.error(extractErrorMessage(err))
   } finally {
@@ -854,12 +857,16 @@ async function generatePdf() {
       // a plain relative-URL open (not a fetch/download) is enough, same-origin.
       window.open(data.file_url, '_blank')
       toast.success(__('Wygenerowano PDF umowy'))
-      // Let the Autenti send button appear immediately without waiting for a
-      // reload/poll cycle — new object, not a mutation, per the ref-replace
-      // convention used everywhere else in this file.
+      // Optimistic local flip so the Autenti send button can appear instantly
+      // without waiting for the reload below — new object, not a mutation,
+      // per the ref-replace convention used everywhere else in this file.
       if (autenti.value) {
         autenti.value = { ...autenti.value, pdf_exists: true }
       }
+      // Follow up with a real reload so `umowa_exists` (stale if this PDF was
+      // generated right after createUmowa() in the same session) and anything
+      // else in the payload get corrected too.
+      await loadAutentiStatus()
     } else {
       toast.error(__('Wystąpił błąd - spróbuj ponownie'))
     }
