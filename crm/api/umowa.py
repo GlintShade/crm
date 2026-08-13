@@ -19,6 +19,7 @@ from frappe.rate_limiter import rate_limit
 from frappe.utils import cint, getdate
 
 from crm.api.czyste_powietrze import KALKULATOR_ROLE
+from crm.integrations.autenti import logika as autenti_logika
 from crm.volteo_naming import code_for
 from crm.volteo_umowa import (
 	brakujace_pola,
@@ -616,6 +617,15 @@ def volteo_umowa_pdf(deal: str) -> dict[str, Any]:
 	if umowa_doc is None:
 		frappe.throw(_("Najpierw wypełnij formularz informacji do umowy dla tej szansy sprzedaży."))
 
+	# Umowa wysłana do podpisu (albo już podpisana) nie może zostać po cichu
+	# podmieniona nowym PDF-em — klient musiałby podpisać inne bajty niż te,
+	# które faktycznie widzi w Autenti. Po stanach terminalnych NIE-sukcesu
+	# (Odrzucona/Wygasła/Wycofana/Błąd) regenerowanie jest świadomie znów
+	# dozwolone: Autenti i tak trzyma własną kopię SOURCE_FILE tego, co już
+	# raz zostało wysłane, więc nadpisanie lokalnego PDF-u niczego tam nie zmienia.
+	if umowa_doc.get("autenti_status") in autenti_logika.SEND_BLOCKED_STATUSES:
+		frappe.throw(_("Umowa została wysłana do podpisu — nie można wygenerować nowego PDF-u."))
+
 	kontakt = _podstawowy_kontakt(deal_doc)
 
 	try:
@@ -637,7 +647,7 @@ def volteo_umowa_pdf(deal: str) -> dict[str, Any]:
 	except Exception:
 		_blad_generowania_pdf()
 
-	nazwa_pliku = f"Umowa-{deal.replace('/', '-')}.pdf"
+	nazwa_pliku = autenti_logika.nazwa_pliku_umowy(deal)
 	_usun_stare_pdfy_umowy(deal, nazwa_pliku)
 	try:
 		plik = frappe.get_doc(

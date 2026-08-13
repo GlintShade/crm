@@ -86,6 +86,13 @@
               size="lg"
               :label="recordStatus"
             />
+            <Badge
+              v-if="autentiEnabled && autentiBadgeEntry"
+              :theme="autentiBadgeEntry.theme"
+              variant="subtle"
+              size="lg"
+              :label="autentiBadgeEntry.label"
+            />
           </div>
           <div class="flex items-center gap-3">
             <span v-if="saveState === 'saving'" class="text-xs text-ink-gray-4">
@@ -97,6 +104,12 @@
             <span v-else-if="saveState === 'error'" class="text-xs text-ink-red-6">
               {{ __('Błąd zapisu') }}
             </span>
+            <Button
+              v-if="showAutentiSendButton"
+              variant="outline"
+              :label="autentiSendLabel"
+              @click="toggleAutentiConfirm"
+            />
             <Button
               variant="outline"
               :label="__('Generuj PDF umowy')"
@@ -111,6 +124,78 @@
               :loading="saving"
               @click="saveForm"
             />
+          </div>
+        </div>
+
+        <!-- Autenti timestamps — small muted line under the header/badges -->
+        <div
+          v-if="autentiEnabled && (autentiSentAtDisplay || autentiSignedAtDisplay)"
+          class="-mt-4 flex flex-wrap gap-3 text-xs text-ink-gray-4"
+        >
+          <span v-if="autentiSentAtDisplay">
+            {{ __('Wysłano') }}: {{ autentiSentAtDisplay }}
+          </span>
+          <span v-if="autentiSignedAtDisplay">
+            {{ __('Podpisano') }}: {{ autentiSignedAtDisplay }}
+          </span>
+        </div>
+
+        <!-- Autenti error — shown only for a failed send -->
+        <div
+          v-if="autentiEnabled && autentiStatus === 'Błąd' && autenti.error_message"
+          class="rounded-lg border border-outline-red-3 bg-surface-red-2 px-4 py-3 text-sm text-ink-red-8"
+        >
+          {{ autenti.error_message }}
+        </div>
+
+        <!-- Autenti signed PDF download -->
+        <div v-if="autentiEnabled && autentiStatus === 'Podpisana' && autenti.signed_pdf_file">
+          <Button
+            variant="outline"
+            :label="__('Pobierz podpisaną umowę')"
+            @click="openSignedPdf"
+          />
+        </div>
+
+        <!-- Autenti send confirmation — inline panel, not a modal -->
+        <div
+          v-if="showAutentiConfirm"
+          class="rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-4"
+        >
+          <div class="mb-2 text-sm font-medium text-ink-gray-8">
+            {{ __('Potwierdź wysyłkę do podpisu') }}
+          </div>
+
+          <div v-if="signerMissingEmail" class="mb-3 text-sm text-ink-red-5">
+            {{ __('Kontakt szansy nie ma adresu e-mail — uzupełnij go w CRM.') }}
+          </div>
+          <div v-else class="mb-3 text-sm text-ink-gray-6">
+            {{ __('Umowa zostanie wysłana do podpisu na adres') }}:
+            <span class="font-medium text-ink-gray-8">
+              {{ proposedSigner.full_name }} ({{ proposedSigner.email }})
+            </span>
+          </div>
+
+          <div
+            v-if="autenti.environment === 'Sandbox'"
+            class="mb-3 rounded-lg border border-outline-amber-3 bg-surface-amber-2 px-3 py-2 text-sm text-ink-amber-8"
+          >
+            {{
+              __(
+                'Środowisko testowe Autenti — podpis NIE jest prawnie wiążący, a e-mail do klienta przyjdzie z domeny testowej.',
+              )
+            }}
+          </div>
+
+          <div class="flex gap-2">
+            <Button
+              variant="solid"
+              :label="__('Wyślij')"
+              :loading="sendingAutenti"
+              :disabled="signerMissingEmail"
+              @click="confirmSendAutenti"
+            />
+            <Button variant="ghost" :label="__('Anuluj')" @click="toggleAutentiConfirm" />
           </div>
         </div>
 
@@ -210,8 +295,10 @@
 <script setup>
 import UmowaIcon from '@/components/Icons/UmowaIcon.vue'
 import { Badge, Button, FormControl, call, toast } from 'frappe-ui'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { formatPlnAmount } from '@/utils/money'
+import { formatDate } from '@/utils'
+import { badgeFor, canSend, isInFlight, sendButtonLabel } from '@/utils/autentiStatus'
 
 const props = defineProps({
   dealId: { type: String, required: true },
@@ -514,7 +601,24 @@ const brakujace = ref([])
 
 const form = reactive({})
 
-onMounted(loadUmowa)
+// --- Autenti e-signature state ----------------------------------------------------
+// Explicit `null` initial state (never a bare `reactive` key presence check —
+// see the CLAUDE.md note on the hasOwnProperty/reactive trap that froze the
+// CP admin panel). `autenti` is a plain ref holding the whole status payload
+// as returned by autenti_umowa_status; it is replaced wholesale (never
+// mutated in place) on every load/send so Vue always sees a fresh reference.
+const autenti = ref(null)
+const showAutentiConfirm = ref(false)
+const sendingAutenti = ref(false)
+let autentiPollInterval = null
+
+onMounted(() => {
+  loadUmowa()
+  loadAutentiStatus().then(() => {
+    if (isInFlight(autentiStatus.value)) startAutentiPolling()
+  })
+})
+onUnmounted(stopAutentiPolling)
 
 // The missing-fields list travels inside `wyliczenia.brakujace_pola` on
 // EVERY endpoint (get/create/save) — there is no top-level `brakujace` key.
@@ -591,6 +695,94 @@ const missingLabels = computed(() =>
 const recordStatus = computed(() => umowa.value?.status || 'Roboczy')
 const isKompletny = computed(() => recordStatus.value === 'Kompletny')
 
+// --- Autenti e-signature (derived) ------------------------------------------------
+// `enabled === false` (integration off) OR `autenti === null` (not loaded yet /
+// load failed) both mean: render NO signing UI at all — the feature must stay
+// completely invisible rather than show a half-broken control.
+const autentiEnabled = computed(() => autenti.value?.enabled === true)
+const autentiStatus = computed(() => autenti.value?.autenti_status || null)
+const autentiBadgeEntry = computed(() => badgeFor(autentiStatus.value))
+const autentiSendLabel = computed(() => sendButtonLabel(autentiStatus.value))
+// Gated on the status payload's OWN umowa_exists/pdf_exists (not the separate
+// umowa/generatingPdf state above) — that's what the backend contract says to
+// check, and it stays correct even if the two loads (umowa vs autenti status)
+// settle in different order.
+const showAutentiSendButton = computed(
+  () =>
+    autentiEnabled.value &&
+    !!autenti.value?.umowa_exists &&
+    !!autenti.value?.pdf_exists &&
+    canSend(autentiStatus.value),
+)
+const proposedSigner = computed(() => autenti.value?.proposed_signer || null)
+const signerMissingEmail = computed(() => !proposedSigner.value || !proposedSigner.value.email)
+const autentiSentAtDisplay = computed(() =>
+  autenti.value?.sent_at ? formatDate(autenti.value.sent_at, null, true, true) : '',
+)
+const autentiSignedAtDisplay = computed(() =>
+  autenti.value?.signed_at ? formatDate(autenti.value.signed_at, null, true, true) : '',
+)
+
+async function loadAutentiStatus() {
+  try {
+    const data = await call('crm.integrations.autenti.api.autenti_umowa_status', {
+      deal: props.dealId,
+    })
+    autenti.value = data || null
+  } catch (err) {
+    // Non-fatal and silent on purpose: this is a background status check for
+    // an optional feature, not a user-triggered action. Leaving `autenti`
+    // unset simply keeps the signing UI hidden, same as "integration
+    // disabled" — no toast for a control the rep hasn't touched.
+    console.error(err)
+  }
+}
+
+function startAutentiPolling() {
+  if (autentiPollInterval) return
+  autentiPollInterval = setInterval(async () => {
+    await loadAutentiStatus()
+    if (!isInFlight(autentiStatus.value)) stopAutentiPolling()
+  }, 30000)
+}
+
+function stopAutentiPolling() {
+  if (autentiPollInterval) {
+    clearInterval(autentiPollInterval)
+    autentiPollInterval = null
+  }
+}
+
+function toggleAutentiConfirm() {
+  showAutentiConfirm.value = !showAutentiConfirm.value
+}
+
+async function confirmSendAutenti() {
+  if (sendingAutenti.value || signerMissingEmail.value) return
+  sendingAutenti.value = true
+  try {
+    const data = await call('crm.integrations.autenti.api.autenti_send_umowa', {
+      deal: props.dealId,
+    })
+    autenti.value = autenti.value
+      ? { ...autenti.value, autenti_status: data?.autenti_status || 'Wysyłanie' }
+      : autenti.value
+    showAutentiConfirm.value = false
+    toast.success(__('Umowa wysłana do podpisu'))
+    startAutentiPolling()
+  } catch (err) {
+    toast.error(extractErrorMessage(err))
+  } finally {
+    sendingAutenti.value = false
+  }
+}
+
+function openSignedPdf() {
+  if (autenti.value?.signed_pdf_file) {
+    window.open(autenti.value.signed_pdf_file, '_blank')
+  }
+}
+
 // --- Create ----------------------------------------------------------------------
 async function createUmowa() {
   if (creating.value) return
@@ -662,6 +854,12 @@ async function generatePdf() {
       // a plain relative-URL open (not a fetch/download) is enough, same-origin.
       window.open(data.file_url, '_blank')
       toast.success(__('Wygenerowano PDF umowy'))
+      // Let the Autenti send button appear immediately without waiting for a
+      // reload/poll cycle — new object, not a mutation, per the ref-replace
+      // convention used everywhere else in this file.
+      if (autenti.value) {
+        autenti.value = { ...autenti.value, pdf_exists: true }
+      }
     } else {
       toast.error(__('Wystąpił błąd - spróbuj ponownie'))
     }
