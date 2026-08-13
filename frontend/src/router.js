@@ -171,7 +171,16 @@ router.beforeEach(async (to, from, next) => {
 
   if (isLoggedIn && !users.fetched) {
     try {
-      await users.promise
+      // VOLTEO: a prior attempt in this SPA session may have failed (e.g. backend
+      // restart window) and left users.promise settled/rejected forever — awaiting
+      // it again would resolve to the same failure without ever retrying. Reload
+      // instead so the store self-heals on the next navigation once the backend
+      // is back, without requiring a manual page refresh.
+      if (users.error) {
+        await users.reload()
+      } else {
+        await users.promise
+      }
     } catch (error) {
       console.error('Error loading users', error)
     }
@@ -207,7 +216,13 @@ router.beforeEach(async (to, from, next) => {
     }
   }
 
-  if (isLoggedIn && to.name !== 'Not Permitted' && !isCrmUser()) {
+  // VOLTEO: only redirect on a confirmed load of the users list. isCrmUser() reads
+  // users.data.crmUsers, which is indistinguishable between "genuinely not a CRM
+  // user" and "the users fetch failed" (e.g. backend restart window) — without the
+  // fetched guard a transient outage reads as a permission denial. If the fetch
+  // failed, fail open here: real authorization is enforced server-side, this guard
+  // is client-side convenience only.
+  if (isLoggedIn && to.name !== 'Not Permitted' && users.fetched && !isCrmUser()) {
     next({ name: 'Not Permitted' })
   } else if (to.name === 'Home' && isLoggedIn) {
     const { views, getDefaultView } = viewsStore()
