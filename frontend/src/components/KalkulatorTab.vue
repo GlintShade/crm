@@ -45,21 +45,18 @@
                   </div>
                 </div>
 
-                <div>
+                <!-- Battery-only has no PV to size, so this input (a PV-sizing
+                     parameter) is meaningless for that variant and is hidden. -->
+                <div v-if="hasPv">
                   <div class="mb-0.5 text-sm text-ink-gray-5">Roczne zużycie (kWh)</div>
                   <input
                     v-model.number="sel.consumption" type="number" min="0" step="1"
                     class="kalk-input"
                   />
                   <div v-if="sel.consumption > 0" class="mt-1 text-xs leading-relaxed text-gray-500">
-                    <template v-if="hasPv">
-                      Sug. moc: <span class="font-medium text-gray-700">{{ suggestedKwp }} kW</span>
-                    </template>
-                    <template v-if="hasPv && hasBat"> · </template>
+                    Sug. moc: <span class="font-medium text-gray-700">{{ suggestedKwp }} kW</span>
                     <template v-if="hasBat">
-                      <template v-if="!hasPv">Sug. magazyn: </template>
-                      <template v-else>magazyn: </template>
-                      <span class="font-medium text-gray-700">{{ suggestedStorage }} kWh</span>
+                       · magazyn: <span class="font-medium text-gray-700">{{ suggestedStorage }} kWh</span>
                     </template>
                     <button type="button" class="ml-1 font-medium text-blue-600 hover:underline" @click="applyFromConsumption">Ustaw</button>
                   </div>
@@ -143,7 +140,9 @@
                     <option v-for="c in operatorOptions" :key="c.name" :value="c.nazwa">{{ c.nazwa }}</option>
                   </select>
                 </div>
-                <div>
+                <!-- Battery-only has no roof install, so there is no mounting
+                     direction to choose for that variant. -->
+                <div v-if="hasPv">
                   <div class="mb-0.5 text-sm text-ink-gray-5">Kierunek montażu</div>
                   <select v-model="sel.kierunek" class="kalk-select">
                     <option value="">—</option>
@@ -310,7 +309,6 @@ import {
   VARIANTS,
   VARIANT_PV,
   VARIANT_PV_BAT,
-  VARIANT_BAT,
   variantHasPv,
   variantHasBattery,
   producentOptionsFor,
@@ -384,7 +382,7 @@ watch(
   () => sel.variant,
   () => {
     if (!producentOptions.value.includes(sel.producent)) sel.producent = producentOptions.value[0]
-    if (!hasPv.value) { sel.mocPvKw = null; sel.konstrukcja = '' }
+    if (!hasPv.value) { sel.mocPvKw = null; sel.konstrukcja = ''; sel.kierunek = ''; sel.consumption = null }
     if (!hasBat.value) sel.bateria = ''
   },
   { immediate: true },
@@ -493,16 +491,10 @@ async function applyFromConsumption() {
     return
   }
 
-  if (sel.variant === VARIANT_BAT) {
-    const storage = suggestedStorage.value
-    if (!storage) return
-
-    // Keep the currently selected producent — do not touch inverter,
-    // mocPvKw or mounting for a battery-only variant.
-    const bats = byKat('Magazyn energii').filter((c) => c.producent === sel.producent)
-    const bat = pickBySpec(bats, 'pojemnosc_kwh', storage)
-    if (bat) sel.bateria = bat.name
-  }
+  // Battery-only (VARIANT_BAT) has no consumption-based suggestion: the
+  // "Roczne zużycie" input that triggered this function is hidden entirely
+  // for that variant (owner decision 2026-08-13), so the rep picks the
+  // battery directly from the list instead.
 }
 
 // --- Flow / result state ----------------------------------------------------
