@@ -11,6 +11,10 @@ import {
   variantHasBattery,
   producentOptionsFor,
   buildMocOptions,
+  panelLabel,
+  buildMocOptionsForPanel,
+  snapMocToPanel,
+  pickMocForTarget,
   suggestedKwp,
   suggestedStorageKwh,
   pickBySpec,
@@ -198,6 +202,78 @@ describe('PV form logic', () => {
 
     it('returns undefined for an empty list', () => {
       expect(pickMounting([])).toBeUndefined()
+    })
+  })
+
+  describe('panelLabel', () => {
+    it('joins panel name and model and appends positive finite power', () => {
+      expect(panelLabel({ nazwa: 'AIKO', model: 'Neostar 2S+', moc_wp: 500 })).toBe(
+        'AIKO Neostar 2S+ (500 Wp)',
+      )
+      expect(panelLabel({ nazwa: 'AIKO' })).toBe('AIKO')
+      expect(panelLabel({})).toBe('')
+      expect(panelLabel(null)).toBe('')
+      expect(panelLabel({ nazwa: 'AIKO', moc_wp: 0 })).toBe('AIKO')
+    })
+  })
+
+  describe('buildMocOptionsForPanel', () => {
+    it('matches the legacy grid for 500 Wp panels', () => {
+      expect(buildMocOptionsForPanel(500).map((o) => o.value)).toEqual(
+        buildMocOptions().map((o) => o.value),
+      )
+      expect(buildMocOptionsForPanel(500)[0]).toEqual({
+        panele: 6,
+        value: 3,
+        label: '6 paneli — 3.00 kWp',
+      })
+      expect(buildMocOptionsForPanel(500).at(-1)).toMatchObject({
+        panele: 40,
+        value: 20,
+      })
+    })
+
+    it('builds integer panel counts for 450 Wp panels', () => {
+      const options = buildMocOptionsForPanel(450)
+      expect(options[0]).toEqual({ panele: 7, value: 3.15, label: '7 paneli — 3.15 kWp' })
+      expect(options.at(-1)).toEqual({
+        panele: 44,
+        value: 19.8,
+        label: '44 paneli — 19.80 kWp',
+      })
+    })
+
+    it.each([0, -1, null, undefined, NaN, '500'])(
+      'returns an empty list for invalid panel power %s',
+      (wp) => {
+        expect(buildMocOptionsForPanel(wp)).toEqual([])
+      },
+    )
+  })
+
+  describe('snapMocToPanel', () => {
+    it('snaps to the nearest panel-compatible power', () => {
+      expect(snapMocToPanel(10, 450)).toBe(9.9)
+      expect(snapMocToPanel(3.25, 500)).toBe(3)
+      expect(snapMocToPanel(1, 500)).toBe(3)
+      expect(snapMocToPanel(25, 500)).toBe(20)
+    })
+
+    it('returns null for invalid input or empty options', () => {
+      expect(snapMocToPanel(10, 0)).toBeNull()
+      expect(snapMocToPanel(null, 500)).toBeNull()
+    })
+  })
+
+  describe('pickMocForTarget', () => {
+    it('picks the first power meeting the target and clamps to the range', () => {
+      expect(pickMocForTarget(9.95, 450)).toBe(10.35)
+      expect(pickMocForTarget(3.0, 500)).toBe(3)
+      expect(pickMocForTarget(25, 450)).toBe(19.8)
+    })
+
+    it('returns null for empty options', () => {
+      expect(pickMocForTarget(10, 0)).toBeNull()
     })
   })
 })

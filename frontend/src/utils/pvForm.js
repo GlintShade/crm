@@ -163,3 +163,97 @@ export function pickMounting(list) {
     list[0]
   )
 }
+
+/**
+ * Buduje etykietę panelu z nazwą, modelem i mocą.
+ * Puste pola pomija, a moc dopisuje tylko dla dodatniej liczby skończonej.
+ *
+ * @param {object|null} row - dane panelu
+ * @returns {string} etykieta panelu
+ */
+export function panelLabel(row) {
+  if (!row) return ''
+
+  const parts = [row.nazwa, row.model].filter(Boolean)
+  const power = row.moc_wp
+  const suffix = Number.isFinite(power) && power > 0 ? ` (${power} Wp)` : ''
+  return `${parts.join(' ')}${suffix}`
+}
+
+/**
+ * Buduje listę mocy instalacji dopasowanych do mocy pojedynczego panelu.
+ * Liczbę paneli wyznacza z granic MOC_MIN_KW–MOC_MAX_KW.
+ *
+ * @param {number} wp - moc pojedynczego panelu w watach
+ * @returns {{value: number, label: string, panele: number}[]} opcje mocy PV
+ */
+export function buildMocOptionsForPanel(wp) {
+  if (!Number.isFinite(wp) || wp <= 0) return []
+
+  const out = []
+  const minPanels = Math.ceil((MOC_MIN_KW * 1000) / wp)
+  const maxPanels = Math.floor((MOC_MAX_KW * 1000) / wp)
+  if (
+    !Number.isFinite(minPanels) ||
+    !Number.isFinite(maxPanels) ||
+    minPanels > maxPanels
+  ) {
+    return []
+  }
+
+  for (let panele = minPanels; panele <= maxPanels; panele += 1) {
+    const value = (panele * wp) / 1000
+    out.push({
+      value,
+      label: `${panele} paneli — ${value.toFixed(2)} kWp`,
+      panele,
+    })
+  }
+  return out
+}
+
+/**
+ * Wybiera moc panelowej instalacji najbliższą podanej wartości.
+ * Przy takiej samej odległości wybiera niższą moc.
+ *
+ * @param {number} kwp - docelowa moc instalacji w kWp
+ * @param {number} wp - moc pojedynczego panelu w watach
+ * @returns {number|null} najbliższa dostępna moc lub null
+ */
+export function snapMocToPanel(kwp, wp) {
+  if (!Number.isFinite(kwp) || kwp <= 0) return null
+
+  const options = buildMocOptionsForPanel(wp)
+  if (options.length === 0) return null
+
+  let nearest = options[0].value
+  let distance = Math.abs(nearest - kwp)
+  for (const option of options.slice(1)) {
+    const optionDistance = Math.abs(option.value - kwp)
+    if (optionDistance < distance) {
+      nearest = option.value
+      distance = optionDistance
+    }
+  }
+  return nearest
+}
+
+/**
+ * Wybiera najmniejszą moc panelowej instalacji spełniającą cel.
+ * Jeśli cel przekracza dostępne moce, zwraca największą dostępną moc.
+ *
+ * @param {number} targetKwp - docelowa moc instalacji w kWp
+ * @param {number} wp - moc pojedynczego panelu w watach
+ * @returns {number|null} wybrana moc lub null
+ */
+export function pickMocForTarget(targetKwp, wp) {
+  if (!Number.isFinite(targetKwp) || targetKwp <= 0) return null
+
+  const options = buildMocOptionsForPanel(wp)
+  if (options.length === 0) return null
+
+  return (
+    options.find((option) => option.value >= targetKwp) ||
+    options[options.length - 1]
+  ).value
+}

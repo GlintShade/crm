@@ -106,9 +106,16 @@
 
                 <template v-if="hasPv">
                   <div>
+                    <div class="mb-0.5 text-sm text-ink-gray-5">Panel fotowoltaiczny</div>
+                    <select v-model="sel.panel" class="kalk-select">
+                      <option value="">-- wybierz --</option>
+                      <option v-for="c in panelOptions" :key="c.name" :value="c.name">{{ panelLabel(c) }}</option>
+                    </select>
+                  </div>
+                  <div>
                     <div class="mb-0.5 text-sm text-ink-gray-5">Moc instalacji PV</div>
-                    <select v-model.number="sel.mocPvKw" class="kalk-select">
-                      <option :value="null">-- wybierz --</option>
+                    <select v-model.number="sel.mocPvKw" class="kalk-select" :disabled="!sel.panel">
+                      <option :value="null">{{ sel.panel ? '-- wybierz --' : 'Najpierw wybierz panel' }}</option>
                       <option v-for="o in mocOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
                     </select>
                   </div>
@@ -324,7 +331,10 @@ import {
   variantHasPv,
   variantHasBattery,
   producentOptionsFor,
-  buildMocOptions,
+  panelLabel,
+  buildMocOptionsForPanel,
+  snapMocToPanel,
+  pickMocForTarget,
   suggestedKwp as suggestedKwpFor,
   suggestedStorageKwh,
   pickBySpec,
@@ -349,10 +359,6 @@ const TYP_KLIENTA_OPTIONS = [
   { value: 'biznesowy', label: 'Biznesowy' },
 ]
 
-// Moc PV dropdown: 3.0–20.0 kW in 0.5 steps, label shows panel count (kW * 2).
-// This is a display-label helper only — no cost/price is derived here.
-const mocOptions = buildMocOptions()
-
 // --- Prefill client data from the current contact --------------------------
 const c = computed(() => props.contact || {})
 function composeAddress() {
@@ -371,6 +377,7 @@ const sel = reactive({
   producent: '',
   falownik: '',
   bateria: '',
+  panel: '',
   mocPvKw: null,
   konstrukcja: '',
   kabelM: 0,
@@ -394,7 +401,7 @@ watch(
   () => sel.variant,
   () => {
     if (!producentOptions.value.includes(sel.producent)) sel.producent = producentOptions.value[0]
-    if (!hasPv.value) { sel.mocPvKw = null; sel.konstrukcja = ''; sel.kierunek = ''; sel.consumption = null }
+    if (!hasPv.value) { sel.panel = ''; sel.mocPvKw = null; sel.konstrukcja = ''; sel.kierunek = ''; sel.consumption = null }
     if (!hasBat.value) sel.bateria = ''
   },
   { immediate: true },
@@ -435,6 +442,36 @@ const bateriaOptions = computed(() => byKat('Magazyn energii').filter((x) => x.p
 const konstrukcjaOptions = computed(() => byKat('Konstrukcja'))
 const operatorOptions = computed(() => byKat('Operator'))
 const kierunekOptions = computed(() => byKat('Kierunek montazu'))
+const panelOptions = computed(() => byKat('Panel PV'))
+
+function panelMocWp(panelName) {
+  const p = panelOptions.value.find((x) => x.name === panelName)
+  return p ? Number(p.moc_wp) || 0 : 0
+}
+
+// Moc-PV dropdown is panel-dependent: the panel count the server derives is
+// round(moc_pv_kw * 1000 / moc_wp), so the client must only ever offer moc
+// values that came from buildMocOptionsForPanel() of the selected panel.
+const mocOptions = computed(() => {
+  const wp = panelMocWp(sel.panel)
+  return wp > 0 ? buildMocOptionsForPanel(wp) : []
+})
+
+// Changing the panel re-snaps an already-chosen moc to the new panel's grid;
+// clearing the panel clears the dependent moc pick (mirrors the variant-reset
+// convention above).
+watch(
+  () => sel.panel,
+  (newPanel) => {
+    if (!newPanel) {
+      sel.mocPvKw = null
+      return
+    }
+    if (sel.mocPvKw) {
+      sel.mocPvKw = snapMocToPanel(sel.mocPvKw, panelMocWp(newPanel))
+    }
+  },
+)
 
 // --- Auto-assembly suggestion from Roczne zużycie ---------------------------
 // Sizing heuristics live in pvForm.js (display-only estimate — the server
@@ -463,7 +500,11 @@ async function applyFromConsumption() {
     sel.producent = 'Sigenergy'
     await nextTick()
 
-    sel.mocPvKw = kwp
+    if (!sel.panel) {
+      const firstPanel = byKat('Panel PV')[0]
+      if (firstPanel) sel.panel = firstPanel.name
+    }
+    sel.mocPvKw = pickMocForTarget(kwp, panelMocWp(sel.panel))
 
     // Falownik: Sigenergy TP2, smallest moc_kw >= kwp, else largest TP2.
     const tp2 = byKat('Falownik').filter((c) => c.producent === 'Sigenergy' && c.sigen_typ === 'TP2')
@@ -489,7 +530,11 @@ async function applyFromConsumption() {
     sel.producent = 'FoxESS'
     await nextTick()
 
-    sel.mocPvKw = kwp
+    if (!sel.panel) {
+      const firstPanel = byKat('Panel PV')[0]
+      if (firstPanel) sel.panel = firstPanel.name
+    }
+    sel.mocPvKw = pickMocForTarget(kwp, panelMocWp(sel.panel))
 
     // Falownik: FoxESS, smallest moc_kw >= kwp, else largest. No sigen_typ
     // filter — FoxESS rows carry no such field.
@@ -531,7 +576,7 @@ const showNarzut = ref(true)
 // --- Completeness gate (mirrors the server-side validation) -----------------
 const isComplete = computed(() => {
   if (!sel.typKlienta || !sel.variant || !sel.producent || !sel.falownik) return false
-  if (hasPv.value && (!sel.mocPvKw || !sel.konstrukcja)) return false
+  if (hasPv.value && (!sel.panel || !sel.mocPvKw || !sel.konstrukcja)) return false
   if (hasBat.value && !sel.bateria) return false
   return true
 })
@@ -550,6 +595,7 @@ function buildCalcPayload() {
     producent: sel.producent,
     falownik: sel.falownik || '',
     bateria: hasBat.value ? sel.bateria || '' : '',
+    panel: hasPv.value ? sel.panel || '' : '',
     konstrukcja: hasPv.value ? sel.konstrukcja || '' : '',
     moc_pv_kw: hasPv.value ? Number(sel.mocPvKw) || 0 : 0,
     kabel_m: Number(sel.kabelM) || 0,
@@ -575,7 +621,7 @@ let calcTimer = null
 watch(
   () => [
     sel.typKlienta, sel.variant, sel.producent, sel.falownik, sel.bateria,
-    sel.mocPvKw, sel.konstrukcja, sel.kabelM, sel.spoldzielnia, sel.ulgaPct,
+    sel.panel, sel.mocPvKw, sel.konstrukcja, sel.kabelM, sel.spoldzielnia, sel.ulgaPct,
     sel.okresLat, sel.wplataWlasna, sel.narzut,
   ],
   () => {
