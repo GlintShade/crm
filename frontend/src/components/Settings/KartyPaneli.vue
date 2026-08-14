@@ -30,11 +30,20 @@
         v-for="karta in state.karty"
         :key="karta.name"
         class="flex flex-col gap-3 rounded-lg border p-4"
-        :class="karta.aktywny ? 'bg-surface-white' : 'bg-surface-gray-1 opacity-70'"
+        :class="
+          karta.aktywny
+            ? 'bg-surface-white border-outline-green-3'
+            : 'bg-surface-gray-1 opacity-70'
+        "
       >
         <div class="flex items-start justify-between gap-2">
           <div class="flex flex-col">
-            <div class="text-base-semibold">{{ karta.nazwa }}</div>
+            <div
+              class="text-base-semibold"
+              :class="karta.aktywny ? 'text-ink-gray-9' : 'text-ink-gray-8'"
+            >
+              {{ karta.nazwa }}
+            </div>
             <div class="text-p-sm text-ink-gray-6">{{ karta.model }}</div>
           </div>
           <div
@@ -67,7 +76,7 @@
           <Button
             :label="karta.aktywny ? __('Dezaktywuj') : __('Aktywuj')"
             :variant="karta.aktywny ? 'subtle' : 'solid'"
-            :theme="karta.aktywny ? 'gray' : 'green'"
+            :theme="karta.aktywny ? 'gray' : undefined"
             :loading="toggleAktywnosc.loading && togglingName === karta.name"
             @click="toggleCard(karta)"
           />

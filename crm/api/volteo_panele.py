@@ -41,8 +41,13 @@ Wzorzec zaczerpnięty z `crm.api.volteo_uzytkownicy`
 Bramka wejścia (`frappe.only_for`) jako pierwsza instrukcja każdej metody,
 komunikaty błędów po polsku przez `frappe.throw`, adnotacje typów na każdym
 parametrze (wymóg `require_type_annotated_api_methods`). Wartości liczbowe
-przychodzą z przeglądarki jako stringi — parsujemy przez `cint`/`flt` PRZED
-walidacją, nigdy nie polegamy na samej adnotacji typu.
+mogą przychodzić jako stringi (form-encoded, np. curl) LUB jako liczby JSON
+(fetch/`createResource` z ciałem `application/json` — dokładnie tak wysyła
+je `KartyPaneli.vue`) — adnotacje na polach liczbowych dopuszczają obie
+postaci (`str | int`, `str | float | int`), bo `require_type_annotated_api_methods`
+odrzuca żądanie na samej walidacji typu Pydantic, zanim ciało funkcji w
+ogóle się wykona. Parsujemy przez `cint`/`flt` PRZED walidacją biznesową,
+nigdy nie polegamy na samej adnotacji typu.
 """
 
 import frappe
@@ -126,11 +131,11 @@ def volteo_panele_lista() -> dict:
 def volteo_panel_zapisz(
 	nazwa: str,
 	model: str,
-	moc_wp: str,
-	cena_jednostkowa_netto: str,
+	moc_wp: str | int,
+	cena_jednostkowa_netto: str | float | int,
 	docname: str | None = None,
 	gwarancja_tekst: str | None = None,
-	sort: str | None = None,
+	sort: str | int | None = None,
 ) -> dict:
 	"""Tworzy nową kartę panelu PV lub aktualizuje istniejącą.
 
@@ -183,7 +188,7 @@ def volteo_panel_zapisz(
 
 
 @frappe.whitelist()
-def volteo_panel_aktywnosc(name: str, aktywny: int) -> dict:
+def volteo_panel_aktywnosc(name: str, aktywny: int | str) -> dict:
 	"""Przełącza dostępność karty panelu PV (`aktywny`), bez zmiany innych pól.
 
 	Karty nigdy nie są usuwane — to jedyna operacja rotacji dostępności.
