@@ -2,6 +2,7 @@ import {
   AUTENTI_BADGE,
   badgeFor,
   canSend,
+  groupRecipients,
   isInFlight,
   sendButtonLabel,
 } from '@/utils/autentiStatus'
@@ -102,6 +103,47 @@ describe('Autenti — status umowy (autentiStatus)', () => {
       ['Podpisana', 'Podpisz umowę'],
     ])('sendButtonLabel(%p) === %p (nieużywane w UI, ale bez wyjątku)', (status, expected) => {
       expect(sendButtonLabel(status)).toBe(expected)
+    })
+  })
+
+  describe('groupRecipients', () => {
+    const klient = { full_name: 'Jan Kowalski', email: 'jan@example.com', role: 'SIGNER' }
+    const prezes = { full_name: 'Anna Prezes', email: 'prezes@proenergy.pro', role: 'SIGNER' }
+    const handlowiec = {
+      full_name: 'Piotr Handlowiec',
+      email: 'piotr@proenergy.pro',
+      role: 'VIEWER',
+    }
+    const archiwum = { full_name: 'Archiwum', email: 'archiwum@proenergy.pro', role: 'VIEWER' }
+
+    it('dzieli listę na SIGNER i VIEWER, zachowując kolejność', () => {
+      const result = groupRecipients([klient, prezes, handlowiec, archiwum], null)
+      expect(result.signers).toEqual([klient, prezes])
+      expect(result.viewers).toEqual([handlowiec, archiwum])
+    })
+
+    it('działa z samymi podpisującymi (brak VIEWER)', () => {
+      const result = groupRecipients([klient], null)
+      expect(result.signers).toEqual([klient])
+      expect(result.viewers).toEqual([])
+    })
+
+    it.each([[null], [undefined], [[]]])(
+      'przy braku proposed_recipients (%p) wraca do proposed_signer jako jedynego SIGNER',
+      (recipients) => {
+        const fallback = { full_name: 'Jan Kowalski', email: 'jan@example.com' }
+        const result = groupRecipients(recipients, fallback)
+        expect(result.signers).toEqual([
+          { full_name: 'Jan Kowalski', email: 'jan@example.com', role: 'SIGNER' },
+        ])
+        expect(result.viewers).toEqual([])
+      },
+    )
+
+    it('zwraca puste grupy, gdy brak zarówno proposed_recipients jak i proposed_signer', () => {
+      const result = groupRecipients(null, null)
+      expect(result.signers).toEqual([])
+      expect(result.viewers).toEqual([])
     })
   })
 })

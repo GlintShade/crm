@@ -47,11 +47,71 @@ def tytul_dokumentu(signer_name: str | None) -> str:
 
 	Czytelny jako sprzedająca marka (ProEnergy), nie jako gołe id wewnętrzne.
 	Puste/`None` imię i nazwisko podpisującego daje tytuł bez myślnika — nie
-	"Umowa ProEnergy — " z pustym ogonem.
+	"Umowa ProEnergy - " z pustym ogonem.
 	"""
 	if not signer_name:
 		return "Umowa ProEnergy"
-	return f"Umowa ProEnergy — {signer_name}"
+	return f"Umowa ProEnergy - {signer_name}"
+
+
+def zbuduj_odbiorcow(
+	klient: dict[str, str | None] | None,
+	prezes: dict[str, str | None] | None,
+	handlowiec: dict[str, str | None] | None,
+	archiwum: dict[str, str | None] | None,
+) -> list[dict[str, str]]:
+	"""Buduje uporządkowaną listę odbiorców procesu dokumentu Autenti z czterech
+	kandydatów, w stałej kolejności: klient -> prezes -> handlowiec -> archiwum.
+
+	Każdy wejściowy słownik ma klucze `first_name`, `last_name`, `full_name`,
+	`email` (dowolny może brakować lub być pusty). `klient` i `prezes` stają się
+	SIGNER-ami, `handlowiec` i `archiwum` — VIEWER-ami. Każdy wynikowy wpis ma
+	klucze `first_name`, `last_name`, `full_name`, `email`, `role`, `zrodlo`
+	(`"klient"`/`"prezes"`/`"handlowiec"`/`"archiwum"`).
+
+	Kandydat jest pomijany, gdy jest `None` albo ma pusty/białoznakowy e-mail.
+	Deduplikacja jest po e-mailu, bez rozróżniania wielkości liter: późniejszy
+	duplikat jest odrzucany. Ponieważ kolejność wejść stawia obu SIGNER-ów przed
+	obu VIEWER-ami, SIGNER zawsze wygrywa z duplikatem VIEWER-a o tym samym
+	adresie — podpisujący nigdy nie zostaje po cichu zdegradowany do samego
+	podglądu.
+
+	Nie wymyśla brakujących imion/nazwisk — puste pozostają pustymi stringami;
+	to wywołujący decyduje, czy dla `archiwum` (typowo generyczny viewer)
+	podstawić nazwę zastępczą.
+	"""
+	kandydaci = (
+		(klient, "SIGNER", "klient"),
+		(prezes, "SIGNER", "prezes"),
+		(handlowiec, "VIEWER", "handlowiec"),
+		(archiwum, "VIEWER", "archiwum"),
+	)
+
+	odbiorcy: list[dict[str, str]] = []
+	widziane_emaile: set[str] = set()
+
+	for dane, rola, zrodlo in kandydaci:
+		if not dane:
+			continue
+		email = (dane.get("email") or "").strip()
+		if not email:
+			continue
+		klucz = email.lower()
+		if klucz in widziane_emaile:
+			continue
+		widziane_emaile.add(klucz)
+		odbiorcy.append(
+			{
+				"first_name": dane.get("first_name") or "",
+				"last_name": dane.get("last_name") or "",
+				"full_name": dane.get("full_name") or "",
+				"email": email,
+				"role": rola,
+				"zrodlo": zrodlo,
+			}
+		)
+
+	return odbiorcy
 
 
 def nazwa_pliku_umowy(deal: str) -> str:

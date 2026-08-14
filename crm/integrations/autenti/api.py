@@ -103,6 +103,59 @@ def _identyfikacja_podpisujacego(deal_doc: "frappe.model.document.Document") -> 
 	return {"first_name": first_name, "last_name": last_name, "full_name": full_name, "email": email}
 
 
+def _staly_podpisujacy(ustawienia: dict[str, Any]) -> dict[str, Any] | None:
+	"""Stały podpisujący (prezes) z `Volteo Autenti Settings` — SIGNER na każdej
+	umowie, obok klienta. Zwraca `None`, dopóki imię, nazwisko i e-mail nie są
+	wszystkie skompletowane w ustawieniach — częściowo wypełniony rekord nie
+	jest wystarczający, żeby dodać stronę do procesu dokumentu."""
+	first_name = (ustawienia.get("staly_podpisujacy_imie") or "").strip()
+	last_name = (ustawienia.get("staly_podpisujacy_nazwisko") or "").strip()
+	email = (ustawienia.get("staly_podpisujacy_email") or "").strip()
+	if not (first_name and last_name and email):
+		return None
+	full_name = f"{first_name} {last_name}".strip()
+	return {"first_name": first_name, "last_name": last_name, "full_name": full_name, "email": email}
+
+
+def _archiwum(ustawienia: dict[str, Any]) -> dict[str, Any] | None:
+	"""Stały adres archiwizacyjny z `Volteo Autenti Settings` — VIEWER na każdej
+	umowie. `first_name`/`last_name`/`full_name` są stałą etykietą ("Archiwum
+	ProEnergy"), bo widok Autenti wymaga jakiejś nazwy dla strony, a to nie jest
+	osoba. Zwraca `None`, gdy adres e-mail nie jest ustawiony."""
+	email = (ustawienia.get("wglad_archiwum_email") or "").strip()
+	if not email:
+		return None
+	return {
+		"first_name": "Archiwum",
+		"last_name": "ProEnergy",
+		"full_name": "Archiwum ProEnergy",
+		"email": email,
+	}
+
+
+def _handlowiec(user: str | None) -> dict[str, Any] | None:
+	"""Handlowiec — użytkownik CRM wysyłający umowę do podpisu — VIEWER na każdej
+	umowie. Przyjmuje `user` JAWNIE zamiast czytać `frappe.session.user`
+	bezpośrednio: w zadaniu w tle (`_autenti_send_umowa_job`) sesja workera nie
+	jest sesją wysyłającego, więc tożsamość musi zostać przekazana z żądania
+	HTTP (ten sam moment co stemplowanie `sent_by`), nie odczytana ponownie.
+
+	Zwraca `None` dla `Administrator`/`Guest`, brakującego e-maila, albo adresu
+	kończącego się na `@example.com` (brak realnej skrzynki) — takiego
+	handlowca pomijamy, zamiast dodawać martwego VIEWER-a do procesu.
+	"""
+	if not user or user in ("Administrator", "Guest"):
+		return None
+	user_doc = frappe.get_doc("User", user)
+	email = (user_doc.email or user or "").strip()
+	if not email or email.lower().endswith("@example.com"):
+		return None
+	first_name = (user_doc.first_name or "").strip()
+	last_name = (user_doc.last_name or "").strip()
+	full_name = (user_doc.full_name or "").strip() or f"{first_name} {last_name}".strip() or email
+	return {"first_name": first_name, "last_name": last_name, "full_name": full_name, "email": email}
+
+
 @frappe.whitelist()
 def autenti_is_enabled() -> dict[str, Any]:
 	"""Tani, bezstanowy check widoczności funkcji podpisu w UI. Bez gate'u dostępu do
@@ -128,6 +181,17 @@ def autenti_umowa_status(deal: str) -> dict[str, Any]:
 	deal_doc = frappe.get_doc("CRM Deal", deal)
 	identyfikacja = _identyfikacja_podpisujacego(deal_doc)
 
+	# Informacyjny podgląd pełnej listy odbiorców (klient/prezes/handlowiec/archiwum) —
+	# ten sam budulec co w `_autenti_send_umowa_job`, więc podgląd nigdy nie rozjeżdża
+	# się z tym, co faktycznie trafi do procesu dokumentu. Zwracany zawsze, gdy
+	# integracja jest włączona — także po wysyłce, wyłącznie informacyjnie.
+	proponowani_odbiorcy = logika.zbuduj_odbiorcow(
+		identyfikacja,
+		_staly_podpisujacy(ustawienia),
+		_handlowiec(frappe.session.user),
+		_archiwum(ustawienia),
+	)
+
 	return {
 		"enabled": True,
 		"environment": ustawienia.get("environment"),
@@ -145,6 +209,7 @@ def autenti_umowa_status(deal: str) -> dict[str, Any]:
 			if identyfikacja
 			else None
 		),
+		"proposed_recipients": proponowani_odbiorcy,
 	}
 
 
@@ -174,6 +239,19 @@ def autenti_send_umowa(deal: str) -> dict[str, Any]:
 	if not podpisujacy or not podpisujacy["email"]:
 		frappe.throw(_("Kontakt szansy nie ma adresu e-mail — uzupełnij go w CRM."))
 
+	ustawienia = _autenti_ustawienia()
+	if not _staly_podpisujacy(ustawienia) or not _archiwum(ustawienia):
+		# Prezes podpisuje KAŻDĄ umowę (patrz docstring modułu i specyfikacja) —
+		# ciche wysłanie bez niego byłoby defektem, nie tylko brakiem funkcji.
+		frappe.throw(_("Uzupełnij stałego podpisującego i adres archiwum w Ustawieniach Autenti."))
+
+	# Wysyłający jest przechwytywany TERAZ (żądanie HTTP, `frappe.session.user`
+	# wiarygodny) i przekazywany do joba jako jawny argument kolejki — job w
+	# tle działa w sesji workera, gdzie `frappe.session.user` nie jest już
+	# wysyłającym. To ten sam moment/źródło co stemplowanie `sent_by` niżej,
+	# celowo bez ponownego odczytu, żeby uniknąć wyścigu.
+	wysylajacy = frappe.session.user
+
 	# `frappe.db.set_value` zamiast `doc.save()` — nie ryzykujemy ścigania się
 	# z równoległym zapisem formularza umowy przez przedstawiciela w przeglądarce.
 	frappe.db.set_value(
@@ -183,7 +261,7 @@ def autenti_send_umowa(deal: str) -> dict[str, Any]:
 			"autenti_status": "Wysyłanie",
 			"signer_name": podpisujacy["full_name"],
 			"signer_email": podpisujacy["email"],
-			"sent_by": frappe.session.user,
+			"sent_by": wysylajacy,
 			"error_message": None,
 		},
 		update_modified=False,
@@ -195,15 +273,24 @@ def autenti_send_umowa(deal: str) -> dict[str, Any]:
 		queue="default",
 		timeout=300,
 		deal=deal,
+		wysylajacy=wysylajacy,
 	)
 
 	return {"autenti_status": "Wysyłanie"}
 
 
-def _autenti_send_umowa_job(deal: str) -> None:
+def _autenti_send_umowa_job(deal: str, wysylajacy: str | None = None) -> None:
 	"""Zadanie w tle: pobiera zapisany PDF umowy (NIGDY świeży render — patrz docstring
-	modułu) i wywołuje Autenti, żeby utworzyć proces dokumentu, dodać podpisującego,
-	wgrać plik i wysłać. Nie jest whitelisted — wywoływane wyłącznie przez
+	modułu) i wywołuje Autenti, żeby utworzyć proces dokumentu, dodać CZTERECH
+	odbiorców (klient + prezes jako SIGNER-zy, handlowiec + archiwum jako
+	VIEWER-zy — patrz `logika.zbuduj_odbiorcow`), wgrać plik i wysłać (podpis
+	równoległy: wszyscy odbiorcy są dodani przed jednym wywołaniem `send()`).
+	Status w CRM osiąga „Podpisana” dopiero, gdy zdalny proces jest COMPLETED,
+	czyli po podpisaniu przez OBU sygnatariuszy.
+
+	`wysylajacy` to id użytkownika CRM, który wykonał wysyłkę — przekazywane
+	jawnie z `autenti_send_umowa` (patrz jej docstring), bo sesja workera nie
+	jest sesją wysyłającego. Nie jest whitelisted — wywoływane wyłącznie przez
 	`frappe.enqueue` z `autenti_send_umowa`.
 	"""
 	umowa_doc = _pobierz_umowe(deal)
@@ -241,20 +328,47 @@ def _autenti_send_umowa_job(deal: str) -> None:
 			frappe.db.commit()
 			return
 
-		signature_type = _autenti_ustawienia().get("default_signature_type") or "BASIC"
+		ustawienia = _autenti_ustawienia()
+
+		# Defensywne powtórzenie bramki z `autenti_send_umowa`: ustawienia mogły się
+		# zmienić w oknie między akceptacją żądania a wykonaniem joba w tle. Job nie
+		# może rzucić do przeglądarki — jedyna droga to zapisany stan błędu.
+		prezes = _staly_podpisujacy(ustawienia)
+		archiwum = _archiwum(ustawienia)
+		if not prezes or not archiwum:
+			frappe.db.set_value(
+				DOCTYPE,
+				deal,
+				{
+					"autenti_status": "Błąd",
+					"error_message": "Brak stałego podpisującego lub adresu archiwum w Ustawieniach Autenti.",
+				},
+				update_modified=False,
+			)
+			frappe.db.commit()
+			return
+
+		handlowiec = _handlowiec(wysylajacy)
+		odbiorcy = logika.zbuduj_odbiorcow(podpisujacy, prezes, handlowiec, archiwum)
+
+		signature_type = ustawienia.get("default_signature_type") or "BASIC"
 		tytul = logika.tytul_dokumentu(podpisujacy["full_name"])
 
 		client = AutentiClient()
 		doc_id = client.create_document_process(title=tytul)
-		client.add_party(
-			doc_id,
-			# first_name/last_name pochodzą osobno z helpera kontaktu, nigdy z rozbicia
-			# pełnego imienia i nazwiska po spacji (zawodzi dla nazwisk wieloczłonowych).
-			first_name=podpisujacy["first_name"] or podpisujacy["full_name"],
-			last_name=podpisujacy["last_name"],
-			email=podpisujacy["email"],
-			signature_type=signature_type,
-		)
+		for odbiorca in odbiorcy:
+			# first_name/last_name pochodzą osobno z helpera kontaktu/ustawień/User,
+			# nigdy z rozbicia pełnego imienia i nazwiska po spacji (zawodzi dla
+			# nazwisk wieloczłonowych).
+			party_kwargs: dict[str, Any] = {
+				"first_name": odbiorca["first_name"] or odbiorca["full_name"],
+				"last_name": odbiorca["last_name"],
+				"email": odbiorca["email"],
+				"role": odbiorca["role"],
+			}
+			if odbiorca["role"] == "SIGNER":
+				party_kwargs["signature_type"] = signature_type
+			client.add_party(doc_id, **party_kwargs)
 		client.upload_file(doc_id, filename=logika.nazwa_pliku_umowy(deal), pdf_bytes=pdf_bytes)
 		client.send(doc_id)
 

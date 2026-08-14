@@ -8,6 +8,7 @@ from crm.integrations.autenti.logika import (
 	nazwa_pliku_podpisanego,
 	nazwa_pliku_umowy,
 	tytul_dokumentu,
+	zbuduj_odbiorcow,
 )
 
 
@@ -43,12 +44,14 @@ class TestAutentiLogika(unittest.TestCase):
 		self.assertFalse(mozna_wyslac("Coś nieznanego"))
 
 	def test_f_tytul_dokumentu_normalny(self: "TestAutentiLogika") -> None:
-		self.assertEqual(tytul_dokumentu("Jan Kowalski"), "Umowa ProEnergy — Jan Kowalski")
-		self.assertIn("—", tytul_dokumentu("Jan Kowalski"))
+		self.assertEqual(tytul_dokumentu("Jan Kowalski"), "Umowa ProEnergy - Jan Kowalski")
+		self.assertIn("-", tytul_dokumentu("Jan Kowalski"))
+		self.assertNotIn("—", tytul_dokumentu("Jan Kowalski"))
 
 	def test_g_tytul_dokumentu_puste_imie(self: "TestAutentiLogika") -> None:
 		self.assertEqual(tytul_dokumentu(None), "Umowa ProEnergy")
 		self.assertEqual(tytul_dokumentu(""), "Umowa ProEnergy")
+		self.assertNotIn("-", tytul_dokumentu(None))
 		self.assertNotIn("—", tytul_dokumentu(None))
 
 	def test_h_nazwa_pliku_umowy(self: "TestAutentiLogika") -> None:
@@ -58,6 +61,142 @@ class TestAutentiLogika(unittest.TestCase):
 		self.assertEqual(
 			nazwa_pliku_podpisanego("PRO/CP/26/0007"), "Umowa-PRO-CP-26-0007-podpisana.pdf"
 		)
+
+	def test_j_zbuduj_odbiorcow_pelny_komplet(self: "TestAutentiLogika") -> None:
+		klient = {
+			"first_name": "Jan",
+			"last_name": "Kowalski",
+			"full_name": "Jan Kowalski",
+			"email": "jan.kowalski@example.com",
+		}
+		prezes = {
+			"first_name": "Leszek",
+			"last_name": "Furmann",
+			"full_name": "Leszek Furmann",
+			"email": "l.furmann@proenergy.pro",
+		}
+		handlowiec = {
+			"first_name": "Grzegorz",
+			"last_name": "Furmann",
+			"full_name": "Grzegorz Furmann",
+			"email": "g.furmann@proenergy.pro",
+		}
+		archiwum = {
+			"first_name": "Archiwum",
+			"last_name": "ProEnergy",
+			"full_name": "Archiwum ProEnergy",
+			"email": "umowy@proenergy.pro",
+		}
+
+		wynik = zbuduj_odbiorcow(klient, prezes, handlowiec, archiwum)
+
+		self.assertEqual(len(wynik), 4)
+		self.assertEqual([o["zrodlo"] for o in wynik], ["klient", "prezes", "handlowiec", "archiwum"])
+		self.assertEqual([o["role"] for o in wynik], ["SIGNER", "SIGNER", "VIEWER", "VIEWER"])
+		for oczekiwany, otrzymany in zip(
+			(klient, prezes, handlowiec, archiwum), wynik, strict=True
+		):
+			self.assertEqual(otrzymany["first_name"], oczekiwany["first_name"])
+			self.assertEqual(otrzymany["last_name"], oczekiwany["last_name"])
+			self.assertEqual(otrzymany["full_name"], oczekiwany["full_name"])
+			self.assertEqual(otrzymany["email"], oczekiwany["email"])
+			self.assertEqual(set(otrzymany.keys()), {"first_name", "last_name", "full_name", "email", "role", "zrodlo"})
+
+	def test_k_zbuduj_odbiorcow_dedupe_klient_rowny_prezesowi(self: "TestAutentiLogika") -> None:
+		wspolny_email = "prezes@proenergy.pro"
+		klient = {
+			"first_name": "Leszek",
+			"last_name": "Furmann",
+			"full_name": "Leszek Furmann",
+			"email": wspolny_email,
+		}
+		prezes = {
+			"first_name": "Leszek",
+			"last_name": "Furmann",
+			"full_name": "Leszek Furmann",
+			"email": wspolny_email,
+		}
+
+		wynik = zbuduj_odbiorcow(klient, prezes, None, None)
+
+		self.assertEqual(len(wynik), 1)
+		self.assertEqual(wynik[0]["zrodlo"], "klient")
+		self.assertEqual(wynik[0]["role"], "SIGNER")
+
+	def test_l_zbuduj_odbiorcow_dedupe_handlowiec_rowny_klientowi(self: "TestAutentiLogika") -> None:
+		wspolny_email = "jan.kowalski@example.com"
+		klient = {
+			"first_name": "Jan",
+			"last_name": "Kowalski",
+			"full_name": "Jan Kowalski",
+			"email": wspolny_email,
+		}
+		handlowiec = {
+			"first_name": "Jan",
+			"last_name": "Kowalski",
+			"full_name": "Jan Kowalski",
+			"email": wspolny_email,
+		}
+
+		wynik = zbuduj_odbiorcow(klient, None, handlowiec, None)
+
+		self.assertEqual(len(wynik), 1)
+		self.assertEqual(wynik[0]["zrodlo"], "klient")
+		self.assertEqual(wynik[0]["role"], "SIGNER")
+
+	def test_m_zbuduj_odbiorcow_none_handlowiec_pomijany(self: "TestAutentiLogika") -> None:
+		klient = {
+			"first_name": "Jan",
+			"last_name": "Kowalski",
+			"full_name": "Jan Kowalski",
+			"email": "jan.kowalski@example.com",
+		}
+
+		wynik = zbuduj_odbiorcow(klient, None, None, None)
+
+		self.assertEqual(len(wynik), 1)
+		self.assertEqual(wynik[0]["zrodlo"], "klient")
+
+	def test_n_zbuduj_odbiorcow_pusty_email_archiwum_pomijany(self: "TestAutentiLogika") -> None:
+		klient = {
+			"first_name": "Jan",
+			"last_name": "Kowalski",
+			"full_name": "Jan Kowalski",
+			"email": "jan.kowalski@example.com",
+		}
+		archiwum_pusty = {
+			"first_name": "Archiwum",
+			"last_name": "ProEnergy",
+			"full_name": "Archiwum ProEnergy",
+			"email": "   ",
+		}
+
+		wynik = zbuduj_odbiorcow(klient, None, None, archiwum_pusty)
+
+		self.assertEqual(len(wynik), 1)
+		self.assertEqual(wynik[0]["zrodlo"], "klient")
+
+	def test_o_zbuduj_odbiorcow_dedupe_bez_rozroznienia_wielkosci_liter(
+		self: "TestAutentiLogika",
+	) -> None:
+		klient = {
+			"first_name": "Jan",
+			"last_name": "Kowalski",
+			"full_name": "Jan Kowalski",
+			"email": "Jan.Kowalski@Example.com",
+		}
+		handlowiec = {
+			"first_name": "Jan",
+			"last_name": "Kowalski",
+			"full_name": "Jan Kowalski",
+			"email": "jan.kowalski@example.com",
+		}
+
+		wynik = zbuduj_odbiorcow(klient, None, handlowiec, None)
+
+		self.assertEqual(len(wynik), 1)
+		self.assertEqual(wynik[0]["zrodlo"], "klient")
+		self.assertEqual(wynik[0]["email"], "Jan.Kowalski@Example.com")
 
 
 if __name__ == "__main__":
