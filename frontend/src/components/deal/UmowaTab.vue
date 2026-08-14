@@ -170,10 +170,31 @@
             {{ __('Kontakt szansy nie ma adresu e-mail — uzupełnij go w CRM.') }}
           </div>
           <div v-else class="mb-3 text-sm text-ink-gray-6">
-            {{ __('Umowa zostanie wysłana do podpisu na adres') }}:
-            <span class="font-medium text-ink-gray-8">
-              {{ proposedSigner.full_name }} ({{ proposedSigner.email }})
-            </span>
+            <div>{{ __('Umowa zostanie wysłana do:') }}</div>
+            <div v-if="recipientGroups.signers.length" class="mt-2">
+              <div class="text-xs font-medium uppercase tracking-wide text-ink-gray-5">
+                {{ __('Podpisują:') }}
+              </div>
+              <div
+                v-for="r in recipientGroups.signers"
+                :key="'signer-' + r.email"
+                class="font-medium text-ink-gray-8"
+              >
+                {{ r.full_name }} ({{ r.email }})
+              </div>
+            </div>
+            <div v-if="recipientGroups.viewers.length" class="mt-2">
+              <div class="text-xs font-medium uppercase tracking-wide text-ink-gray-5">
+                {{ __('Do wglądu:') }}
+              </div>
+              <div
+                v-for="r in recipientGroups.viewers"
+                :key="'viewer-' + r.email"
+                class="font-medium text-ink-gray-8"
+              >
+                {{ r.full_name }} ({{ r.email }})
+              </div>
+            </div>
           </div>
 
           <div
@@ -298,7 +319,7 @@ import { Badge, Button, FormControl, call, toast } from 'frappe-ui'
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { formatPlnAmount } from '@/utils/money'
 import { formatDate } from '@/utils'
-import { badgeFor, canSend, isInFlight, sendButtonLabel } from '@/utils/autentiStatus'
+import { badgeFor, canSend, groupRecipients, isInFlight, sendButtonLabel } from '@/utils/autentiStatus'
 
 const props = defineProps({
   dealId: { type: String, required: true },
@@ -716,6 +737,12 @@ const showAutentiSendButton = computed(
 )
 const proposedSigner = computed(() => autenti.value?.proposed_signer || null)
 const signerMissingEmail = computed(() => !proposedSigner.value || !proposedSigner.value.email)
+// Grouped SIGNER/VIEWER view of `proposed_recipients` for the confirm panel.
+// Falls back to `proposedSigner` alone when the backend hasn't shipped
+// `proposed_recipients` yet — see groupRecipients() for why.
+const recipientGroups = computed(() =>
+  groupRecipients(autenti.value?.proposed_recipients, proposedSigner.value),
+)
 const autentiSentAtDisplay = computed(() =>
   autenti.value?.sent_at ? formatDate(autenti.value.sent_at, null, true, true) : '',
 )

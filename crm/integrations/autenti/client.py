@@ -96,7 +96,13 @@ class AutentiClient:
 		role: str = "SIGNER",
 		signature_type: str = "BASIC",
 	) -> None:
-		"""Add a signing party to the document process."""
+		"""Add a party (signer or viewer) to the document process.
+
+		The `constraints` block pins the signature type for `ACTION:SIGNATURE_APPLICATION`
+		and only makes sense for a party that actually signs. It is included only when
+		`role == "SIGNER"` — sending it for a VIEWER risks a 400, since a viewer never
+		performs that action. SIGNER behavior is byte-identical to before.
+		"""
 		body = {
 			"party": {
 				"firstName": first_name,
@@ -104,7 +110,9 @@ class AutentiClient:
 				"contacts": [{"type": "CONTACT-TYPE:EMAIL", "attributes": {"email": email}}],
 			},
 			"role": role,
-			"constraints": [
+		}
+		if role == "SIGNER":
+			body["constraints"] = [
 				{
 					"constrainedActions": ["ACTION:SIGNATURE_APPLICATION"],
 					"classifiers": ["CONSTRAINT-UNIQUE_TYPE:SIGNATURE_TYPE"],
@@ -112,8 +120,7 @@ class AutentiClient:
 						"requiredClassifiers": [f"SIGNATURE_PROVIDER-SIGNATURE_TYPE:{signature_type}"]
 					},
 				}
-			],
-		}
+			]
 		self._request("POST", f"/document-processes/{doc_id}/parties", json=body)
 
 	def upload_file(self, doc_id: str, filename: str, pdf_bytes: bytes) -> None:

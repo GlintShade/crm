@@ -96,3 +96,32 @@ export function sendButtonLabel(status) {
   }
   return 'Podpisz umowę'
 }
+
+/**
+ * Groups the confirm panel's recipient list into signers and viewers.
+ *
+ * `recipients` is the new `proposed_recipients` payload (up to four entries:
+ * client + co-signer as SIGNER, sending rep + archive mailbox as VIEWER,
+ * already ordered/deduped/email-filtered server-side). When it's missing or
+ * empty — an old backend payload mid-rollout, before this endpoint gains the
+ * field — this falls back to treating `fallbackSigner` (the pre-existing
+ * `proposed_signer` shape, `{full_name, email}`) as the sole signer, so the
+ * confirm panel degrades to exactly what it rendered before this change
+ * instead of ever showing an empty recipients block.
+ *
+ * @param {Array<{full_name: string, email: string, role: string}>|null|undefined} recipients
+ * @param {{full_name: string, email: string}|null|undefined} fallbackSigner
+ * @returns {{signers: Array, viewers: Array}}
+ */
+export function groupRecipients(recipients, fallbackSigner) {
+  const list =
+    Array.isArray(recipients) && recipients.length
+      ? recipients
+      : fallbackSigner
+        ? [{ full_name: fallbackSigner.full_name, email: fallbackSigner.email, role: 'SIGNER' }]
+        : []
+  return {
+    signers: list.filter((r) => r.role === 'SIGNER'),
+    viewers: list.filter((r) => r.role === 'VIEWER'),
+  }
+}
