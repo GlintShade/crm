@@ -3,6 +3,7 @@ import { call } from 'frappe-ui'
 import { usersStore } from '@/stores/users'
 import { sessionStore } from '@/stores/session'
 import { viewsStore } from '@/stores/views'
+import { isStaleChunkError, shouldReload } from '@/utils/chunkReload'
 
 let personaChecked = false
 export const PERSONA_DONE_KEY = 'crm_persona_captured'
@@ -162,6 +163,59 @@ let router = createRouter({
   history: createWebHistory('/crm'),
   routes,
 })
+
+// --- Stale-chunk recovery -----------------------------------------------
+//
+// Every production deploy deletes the old hashed chunk files from the
+// server. A browser that still holds the OLD document — an open tab, or
+// the service worker's precached index.html (vite-plugin-pwa, autoUpdate)
+// — then lazy-loads a route chunk that no longer exists, the dynamic
+// import() rejects, and the user is stuck on a blank page. The fix is a
+// single reload to pick up the current document and chunk manifest.
+// `autoUpdate` only updates the service worker in the background; it does
+// not rescue a page that already failed to load a chunk.
+//
+// Loop protection is a time-based cooldown (60s), not a per-navigation
+// flag. A flag cleared on router.afterEach was tried and rejected: because
+// 'vite:preloadError' fires independently of navigation, a successful
+// navigation to an already-cached route can re-arm the guard while a
+// *different* lazy chunk (or the same one, offline) keeps failing in the
+// background — each clear immediately allows another reload, producing an
+// infinite loop. A sessionStorage timestamp cannot be shortened by any
+// sequence of navigations, so that loop is structurally impossible here:
+// at most one reload per STALE_CHUNK_RELOAD_COOLDOWN_MS, ever, in this
+// tab — while a later, unrelated deploy hours into a long session is
+// still repaired once the cooldown has long since elapsed.
+const STALE_CHUNK_RELOAD_KEY = 'crm_stale_chunk_reload'
+const STALE_CHUNK_RELOAD_COOLDOWN_MS = 60 * 1000
+
+function recoverFromStaleChunk(error) {
+  if (!isStaleChunkError(error)) return
+
+  // sessionStorage can throw in private browsing / restricted contexts;
+  // degrade to "never reload" rather than letting that break routing.
+  let storedValue
+  try {
+    storedValue = sessionStorage.getItem(STALE_CHUNK_RELOAD_KEY)
+  } catch {
+    return
+  }
+
+  if (!shouldReload(storedValue, Date.now(), STALE_CHUNK_RELOAD_COOLDOWN_MS)) return
+
+  try {
+    sessionStorage.setItem(STALE_CHUNK_RELOAD_KEY, String(Date.now()))
+  } catch {
+    // Couldn't record the timestamp — skip the reload rather than risk an
+    // unthrottled loop where every failure looks like "no recent reload".
+    return
+  }
+
+  window.location.reload()
+}
+
+router.onError(recoverFromStaleChunk)
+window.addEventListener('vite:preloadError', (event) => recoverFromStaleChunk(event.payload))
 
 router.beforeEach(async (to, from, next) => {
   router.previousRoute = from
