@@ -372,7 +372,7 @@ VOLTEO_LINKED_SOURCES = [
 		"link_field": "deal",
 		"text_fields": ["typ", "tekst"],
 	},
-	{"doctype": "Volteo Audyt", "label": _("Audyt"), "link_field": "deal", "text_fields": []},
+	{"doctype": "Volteo Audyt", "label": _("Audyt"), "link_field": "deal", "text_fields": [], "skip_version_fields": {"zdjecia_json", "zdjecia_dodatkowe_json", "weryfikacja_json"}},
 ]
 
 CUSTOM_ZESTAW_FIELDNAME = "custom_zestaw"
@@ -511,7 +511,9 @@ def get_volteo_linked_activities(name: str):
 					summary = None
 					try:
 						vdata = json.loads(version.data)
-						summary = summarize_version_changes(vdata, fields_map)
+						summary = summarize_version_changes(
+							vdata, fields_map, skip_fields=source.get("skip_version_fields")
+						)
 					except Exception:
 						summary = None  # unrecognised payload -> still emit a generic event below
 
@@ -550,7 +552,7 @@ def get_volteo_linked_activities(name: str):
 				filters={"reference_doctype": "Volteo Audyt", "reference_name": name,
 						 "comment_type": ["in", ["Comment", "Info"]]},
 				fields=["name", "owner", "creation", "content", "comment_type"],
-				order_by="creation asc", limit_page_length=200,
+				order_by="creation asc", limit_page_length=500,
 			)
 			for c in comments:
 				raw = frappe.utils.strip_html(c.get("content") or "").strip()
@@ -634,7 +636,7 @@ def compose_volteo_linked_text(dt: str, action: str, rec: dict, summary: str | N
 	return None
 
 
-def summarize_version_changes(data: dict, fields_map: dict):
+def summarize_version_changes(data: dict, fields_map: dict, skip_fields: set | None = None):
 	"""Compact one-line summary of changed field labels from a Version.data
 	diff dict (the same 'changed': [[fieldname, old, new], ...] shape parsed
 	by the deal/lead version loops above).
@@ -651,6 +653,8 @@ def summarize_version_changes(data: dict, fields_map: dict):
 		if not change:
 			continue
 		fieldname = change[0] if len(change) > 0 else None
+		if skip_fields and fieldname in skip_fields:
+			continue
 		old_value = change[1] if len(change) > 1 else None
 		new_value = change[2] if len(change) > 2 else None
 		if not fieldname or (not old_value and not new_value):
