@@ -38,6 +38,7 @@ _DEAL_POLA_PREFILL = [
 	"custom_netto",
 	"custom_pv_power_kwp",
 	"custom_panele",
+	"custom_panel",
 	"custom_falownik",
 	"custom_bateria",
 	"custom_pojemnosc_kwh",
@@ -509,14 +510,19 @@ assert "cena_jednostkowa_netto" not in _KOMPONENT_POLA, (
 )
 
 
-def _aktywne_komponenty() -> list[dict[str, Any]]:
-	"""Wszystkie aktywne wiersze katalogu `Volteo Komponent`, tylko pola kliencie/techniczne.
+def _komponenty_katalogu() -> list[dict[str, Any]]:
+	"""Zwraca wszystkie wiersze katalogu `Volteo Komponent`, tylko pola kliencie/techniczne.
+
+	Dezaktywacja karty jest rutynową rotacją dostępności, a nie usunięciem danych.
+	Zgodnie z konwencją wiersze katalogu nigdy nie są usuwane, więc historyczne deale
+	muszą nadal rozwiązywać swoje komponenty także po ich dezaktywacji.
 
 	`zbuduj_kontekst` sam dopasowuje wiersz do `deal.custom_falownik`/`custom_bateria`
-	po złożeniu `f"{nazwa} {model}"` (struktura doctype'u jest odwrotna do intuicji —
-	`nazwa` to producent, `model` to model) — tu tylko pobieramy pełną, aktywną listę.
+	/`custom_panel` po złożeniu `f"{nazwa} {model}"` (struktura doctype'u jest odwrotna
+	do intuicji — `nazwa` to producent, `model` to model) — tu tylko pobieramy pełną
+	listę katalogu.
 	"""
-	return frappe.get_all("Volteo Komponent", filters={"aktywny": 1}, fields=_KOMPONENT_POLA)
+	return frappe.get_all("Volteo Komponent", fields=_KOMPONENT_POLA)
 
 
 def _wiersze_zestawu(deal_doc: "frappe.model.document.Document") -> list[dict[str, Any]]:
@@ -639,7 +645,7 @@ def volteo_umowa_pdf(deal: str) -> dict[str, Any]:
 			deal={pole: deal_doc.get(pole) for pole in _DEAL_POLA_PREFILL},
 			kontakt=_dane_kontaktu(kontakt),
 			zestaw=_wiersze_zestawu(deal_doc),
-			komponenty=_aktywne_komponenty(),
+			komponenty=_komponenty_katalogu(),
 			stale=dict(frappe.db.get_singles_dict("Volteo Kalkulator Stale") or {}),
 			dzis=getdate(),
 		)

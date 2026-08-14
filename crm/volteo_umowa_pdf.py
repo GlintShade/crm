@@ -42,13 +42,16 @@ POLA_KOMPONENTU: tuple[str, ...] = (
 	"model",
 	"producent",
 	"moc_kw",
+	"moc_wp",
 	"pojemnosc_kwh",
 	"gwarancja_lat",
+	"gwarancja_tekst",
 )
 """JEDYNE źródło prawdy o polach `Volteo Komponent`, których ten moduł potrzebuje
 od wywołującego. `_znajdz_komponent()` poniżej dopasowuje wiersze po `kategoria`
 i sklejonym `nazwa`+`model`; `zbuduj_kontekst()` czyta z dopasowanego wiersza
-`moc_kw`/`gwarancja_lat`/`pojemnosc_kwh`. Wywołujący (dziś: `crm/api/umowa.py`
+`moc_kw`/`moc_wp`/`gwarancja_lat`/`gwarancja_tekst`/`pojemnosc_kwh`. Wywołujący
+(dziś: `crm/api/umowa.py`
 przy pobieraniu `frappe.get_all("Volteo Komponent", ...)`) MA pobierać z bazy
 DOKŁADNIE ten zestaw pól — ani mniej, ani więcej:
 
@@ -115,6 +118,17 @@ def zbuduj_kontekst(
 	bateria_nazwa = deal.get("custom_bateria")
 	bateria_komponent = _znajdz_komponent(komponenty, "Magazyn energii", bateria_nazwa)
 	bateria_szt, bateria_pojemnosc_jedn_kwh = _bateria_szt_i_pojemnosc_jedn(bateria_komponent)
+
+	panel_nazwa = deal.get("custom_panel")
+	panel_komponent = _znajdz_komponent(komponenty, "Panel PV", panel_nazwa)
+	if panel_komponent is None:
+		panel_moc_wp = _liczba_calkowita(stale.get("panel_moc_wp"))
+		panel_producent_model = _polacz(stale.get("panel_producent"), stale.get("panel_model"))
+		panel_gwarancja_lat = _tekst(stale.get("panel_gwarancja_lat"))
+	else:
+		panel_moc_wp = _liczba_calkowita(_pole(panel_komponent, "moc_wp"))
+		panel_producent_model = _tekst(panel_nazwa)
+		panel_gwarancja_lat = _tekst(_pole(panel_komponent, "gwarancja_tekst"))
 
 	miejsce_montazu, pokrycie_dachowe = miejsce_i_pokrycie(deal.get("custom_konstrukcja"))
 
@@ -189,11 +203,11 @@ def zbuduj_kontekst(
 		"pow_ponad_300": _rowna(powierzchnia_prog, "powyżej 300 m²"),
 		"powierzchnia_m2": _liczba(umowa.get("powierzchnia_m2")),
 		# Załącznik 1a
-		"panel_moc_wp": _liczba_calkowita(stale.get("panel_moc_wp")),
+		"panel_moc_wp": panel_moc_wp,
 		"panel_szt": _liczba_calkowita(deal.get("custom_panele")),
 		"moc_pv_kwp": _liczba(deal.get("custom_pv_power_kwp")),
-		"panel_producent_model": _polacz(stale.get("panel_producent"), stale.get("panel_model")),
-		"panel_gwarancja_lat": _tekst(stale.get("panel_gwarancja_lat")),
+		"panel_producent_model": panel_producent_model,
+		"panel_gwarancja_lat": panel_gwarancja_lat,
 		"inwerter_moc_kw": _liczba(_pole(falownik_komponent, "moc_kw")),
 		"inwerter_szt": _liczba_calkowita(falownik_ilosc),
 		"inwerter_producent_model": _tekst(falownik_nazwa),
@@ -279,7 +293,7 @@ def _znajdz_komponent(
 	Struktura `Volteo Komponent` jest odwrotna do intuicji: `nazwa` bywa
 	producentem (`"Sigenergy"`) a `model` resztą oznaczenia (`"TP2 6 kW"`) —
 	dopasowanie działa niezależnie od tego podziału, bo porównuje sklejony
-	string, dokładnie tak jak zapisano w `deal.custom_falownik`/`custom_bateria`.
+	string, dokładnie tak jak zapisano w `deal.custom_falownik`/`custom_bateria`/`custom_panel`.
 	Zwraca `None`, gdy nazwa docelowa jest pusta albo żaden wiersz nie pasuje.
 	"""
 	docelowa = _tekst(docelowa_nazwa)

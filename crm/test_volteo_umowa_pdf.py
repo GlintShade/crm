@@ -110,6 +110,19 @@ def _komponenty() -> list[dict[str, Any]]:
 	]
 
 
+def _panel_komponent(**nadpisania: Any) -> dict[str, Any]:
+	baza: dict[str, Any] = {
+		"kategoria": "Panel PV",
+		"nazwa": "JA Solar",
+		"model": "JAM54S31 425/MR",
+		"producent": "JA Solar",
+		"moc_wp": 425,
+		"gwarancja_tekst": "25/30",
+	}
+	baza.update(nadpisania)
+	return baza
+
+
 def _stale(**nadpisania: Any) -> dict[str, Any]:
 	baza: dict[str, Any] = {
 		"panel_producent": _PLACEHOLDER_PRODUCENT,
@@ -344,6 +357,66 @@ class TestDopasowanieKomponentu(unittest.TestCase):
 		self.assertEqual(kontekst["inwerter_moc_kw"], "")
 		self.assertEqual(kontekst["inwerter_szt"], "")
 		self.assertEqual(kontekst["inwerter_producent_model"], "")
+
+
+class TestPanelZDeal(unittest.TestCase):
+	@staticmethod
+	def _kontekst_panel(card: dict[str, Any], custom_panel: Any) -> dict[str, Any]:
+		deal = _deal(custom_panel=custom_panel)
+		return zbuduj_kontekst(_umowa(), deal, _kontakt(), _zestaw(), [card], _stale(), _DZIS)
+
+	def test_a_dane_panelu_z_karty_deala(self: "TestPanelZDeal") -> None:
+		card = _panel_komponent()
+		custom_panel = f"{card['nazwa']} {card['model']}"
+		kontekst = self._kontekst_panel(card, custom_panel)
+		self.assertEqual(kontekst["panel_producent_model"], custom_panel)
+		self.assertEqual(kontekst["panel_moc_wp"], "425")
+		self.assertEqual(kontekst["panel_gwarancja_lat"], "25/30")
+
+	def test_b_puste_lub_brakujace_custom_panel_zostawia_stale(self: "TestPanelZDeal") -> None:
+		stale = _stale(panel_producent="Trina", panel_model="Vertex S+", panel_moc_wp=435, panel_gwarancja_lat="25/30")
+		oczekiwany = zbuduj_kontekst(_umowa(), _deal(), _kontakt(), _zestaw(), [], stale, _DZIS)
+		for custom_panel in (None, ""):
+			with self.subTest(custom_panel=custom_panel):
+				kontekst = zbuduj_kontekst(
+					_umowa(), _deal(custom_panel=custom_panel), _kontakt(), _zestaw(), [], stale, _DZIS
+				)
+				self.assertEqual(
+					{k: kontekst[k] for k in ("panel_producent_model", "panel_moc_wp", "panel_gwarancja_lat")},
+					{k: oczekiwany[k] for k in ("panel_producent_model", "panel_moc_wp", "panel_gwarancja_lat")},
+				)
+
+	def test_c_dezaktywowana_karta_nadal_pasuje(self: "TestPanelZDeal") -> None:
+		card = _panel_komponent(aktywny=0)
+		custom_panel = f"{card['nazwa']} {card['model']}"
+		kontekst = self._kontekst_panel(card, custom_panel)
+		self.assertEqual(kontekst["panel_producent_model"], custom_panel)
+		self.assertEqual(kontekst["panel_moc_wp"], "425")
+
+	def test_d_zero_mocy_panelu_jest_puste(self: "TestPanelZDeal") -> None:
+		card = _panel_komponent(moc_wp=0)
+		custom_panel = f"{card['nazwa']} {card['model']}"
+		kontekst = self._kontekst_panel(card, custom_panel)
+		self.assertEqual(kontekst["panel_moc_wp"], "")
+		self.assertNotEqual(kontekst["panel_moc_wp"], "0")
+
+	def test_e_custom_panel_musi_byc_sklejeniem_nazwy_i_modelu(self: "TestPanelZDeal") -> None:
+		card = _panel_komponent(nazwa="Longi", model="Hi-MO 6 450 W", moc_wp=450)
+		custom_panel = f"{card['nazwa']} {card['model']}"
+		kontekst = self._kontekst_panel(card, custom_panel)
+		self.assertEqual(custom_panel, "Longi Hi-MO 6 450 W")
+		self.assertEqual(kontekst["panel_producent_model"], custom_panel)
+		self.assertEqual(kontekst["panel_moc_wp"], "450")
+
+	def test_f_niepasujacy_panel_wraca_do_stale(self: "TestPanelZDeal") -> None:
+		stale = _stale(panel_producent="Trina", panel_model="Vertex S+", panel_moc_wp=435, panel_gwarancja_lat="25/30")
+		kontekst = zbuduj_kontekst(
+			_umowa(), _deal(custom_panel="Nie ma takiego panelu"), _kontakt(), _zestaw(), [_panel_komponent()], stale, _DZIS
+		)
+		kontekst_stale = zbuduj_kontekst(_umowa(), _deal(), _kontakt(), _zestaw(), [], stale, _DZIS)
+		self.assertEqual(kontekst["panel_producent_model"], kontekst_stale["panel_producent_model"])
+		self.assertEqual(kontekst["panel_moc_wp"], kontekst_stale["panel_moc_wp"])
+		self.assertEqual(kontekst["panel_gwarancja_lat"], kontekst_stale["panel_gwarancja_lat"])
 
 
 class TestKontraktPolKomponentu(unittest.TestCase):
