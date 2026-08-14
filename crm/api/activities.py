@@ -552,7 +552,7 @@ def get_volteo_linked_activities(name: str):
 				filters={"reference_doctype": "Volteo Audyt", "reference_name": name,
 						 "comment_type": ["in", ["Comment", "Info"]]},
 				fields=["name", "owner", "creation", "content", "comment_type"],
-				order_by="creation asc", limit_page_length=500,
+				order_by="creation desc", limit_page_length=500,  # desc to keep newest rows; caller re-sorts for display
 			)
 			for c in comments:
 				raw = frappe.utils.strip_html(c.get("content") or "").strip()
