@@ -97,6 +97,7 @@
                   variant="solid"
                   theme="green"
                   :label="__('Zatwierdź audyt')"
+                  :disabled="!agg.allAccepted"
                   :loading="statusUpdating"
                   @click="setStatus('Zatwierdzony')"
                 />
@@ -110,9 +111,21 @@
             </div>
           </div>
 
+          <!-- Verification progress — only meaningful while under review -->
+          <div v-if="isReview" class="text-xs text-ink-gray-5">
+            {{ __('Zaakceptowano {0}/{1} elementów', [agg.accepted, agg.total]) }}<template v-if="agg.errors > 0"
+              >&nbsp;· {{ __('Błędy: {0}', [agg.errors]) }}</template
+            >
+          </div>
+
           <!-- Submit helper — draft not yet complete -->
           <div v-if="isDraft && !complete" class="text-xs text-ink-amber-6">
             {{ __('Musisz wypełnić wszystkie wymagane pola i zdjęcia, aby przesłać audyt do weryfikacji.') }}
+          </div>
+
+          <!-- Approve helper — review not yet fully accepted -->
+          <div v-if="canReview && isReview && !agg.allAccepted" class="text-xs text-ink-amber-6">
+            {{ __('Zatwierdzenie możliwe po zaakceptowaniu wszystkich elementów.') }}
           </div>
         </div>
 
@@ -179,7 +192,11 @@
                 :key="f.fieldname"
                 :class="[
                   'rounded',
-                  f.required && !fieldOk(f) ? 'ring-1 ring-outline-red-3' : '',
+                  isReview
+                    ? 'ring-2 ' + VERDICT_META[verdictStatusFor(fieldKey(f.fieldname))].ring
+                    : f.required && !fieldOk(f)
+                      ? 'ring-1 ring-outline-red-3'
+                      : '',
                 ]"
               >
                 <FormControl
@@ -191,6 +208,13 @@
                   :disabled="readOnly"
                   v-model="form[f.fieldname]"
                 />
+                <AudytVerdictControls
+                  :verdict="verdictFor(weryfikacja, fieldKey(f.fieldname))"
+                  :can-review="canReview"
+                  :busy="!!verdictBusy[fieldKey(f.fieldname)]"
+                  :show-controls="isReview"
+                  @set-verdict="(status, note) => setVerdict(fieldKey(f.fieldname), status, note)"
+                />
               </div>
             </div>
           </section>
@@ -200,18 +224,26 @@
               {{ __('Dokumentacja zdjęciowa') }} ({{ photosDone }}/{{ photosTotal }})
             </div>
             <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <AudytPhotoSlot
-                v-for="slot in visiblePhotoSlots"
-                :key="slot.key"
-                :label="slot.label"
-                :value="zdjecia[slot.key] || null"
-                :optional="!isPhotoRequired(slot)"
-                :allow-pdf="!!slot.pdf"
-                doctype="Volteo Audyt"
-                :docname="dealId"
-                :disabled="readOnly"
-                @change="(url) => onPhotoChange(slot.key, url)"
-              />
+              <div v-for="slot in visiblePhotoSlots" :key="slot.key" class="flex flex-col gap-1">
+                <AudytPhotoSlot
+                  :label="slot.label"
+                  :value="zdjecia[slot.key] || null"
+                  :optional="!isPhotoRequired(slot)"
+                  :allow-pdf="!!slot.pdf"
+                  doctype="Volteo Audyt"
+                  :docname="dealId"
+                  :disabled="readOnly"
+                  :verdict-status="isReview ? verdictStatusFor(photoKey(slot.key)) : null"
+                  @change="(url) => onPhotoChange(slot.key, url)"
+                />
+                <AudytVerdictControls
+                  :verdict="verdictFor(weryfikacja, photoKey(slot.key))"
+                  :can-review="canReview"
+                  :busy="!!verdictBusy[photoKey(slot.key)]"
+                  :show-controls="isReview"
+                  @set-verdict="(status, note) => setVerdict(photoKey(slot.key), status, note)"
+                />
+              </div>
             </div>
 
             <!-- Additional (optional) photos -->
@@ -349,7 +381,18 @@ import AttachmentItem from '@/components/AttachmentItem.vue'
 import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
 import AudytIcon from '@/components/Icons/AudytIcon.vue'
 import AudytPhotoSlot from '@/components/deal/AudytPhotoSlot.vue'
+import AudytVerdictControls from '@/components/deal/AudytVerdictControls.vue'
 import { useAttachments } from '@/composables/useAttachments'
+import {
+  VERDICT_META,
+  aggregate,
+  depOk as depOkUtil,
+  fieldKey,
+  parseWeryfikacja,
+  photoKey,
+  verdictFor,
+  visibleElements,
+} from '@/utils/audytWeryfikacja'
 import { Badge, Button, FileUploader, FormControl, call, createResource, toast } from 'frappe-ui'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 
@@ -361,6 +404,10 @@ const props = defineProps({
 // watcher so they're initialised before first use, no TDZ surprises). -------
 let saveTimer = null
 let lastSavedFieldsPayload = ''
+// Plain object twin of `lastSavedFieldsPayload`, kept for per-field diffing —
+// mirrorFieldResets() needs to know which field(s) actually changed in a
+// save, not just whether the whole payload changed.
+let lastSavedFieldsObj = {}
 
 // --- Requirements (server-driven form definition + permissions) -------------
 const requirements = reactive({
@@ -458,6 +505,38 @@ const zdjeciaDodatkowe = ref([])
 const hydrating = ref(true)
 const saveState = ref('idle') // idle | saving | saved | error
 
+// --- Per-element verification (Weryfikacja stage) ----------------------------
+// Sparse map keyed by `pole:<fieldname>` / `foto:<slotKey>` (see
+// audytWeryfikacja.js) — absence of a key means 'waiting'. Always replaced
+// wholesale (clear-all-then-Object.assign, same idiom `zdjecia`/`form` use
+// above) rather than mutated key-by-key, so nothing here ever reads
+// `hasOwnProperty` against this reactive object.
+const weryfikacja = reactive({})
+// One busy flag per element key, so a double-click on the same element's
+// button can't race two `volteo_audyt_set_verdict` calls; unrelated
+// elements stay independently clickable.
+const verdictBusy = reactive({})
+
+function replaceWeryfikacja(map) {
+  Object.keys(weryfikacja).forEach((k) => delete weryfikacja[k])
+  Object.assign(weryfikacja, map || {})
+}
+
+function dropWeryfikacjaKeys(keys) {
+  const toRemove = new Set(keys)
+  if (!toRemove.size) return
+  let changed = false
+  const filtered = {}
+  Object.entries(weryfikacja).forEach(([k, v]) => {
+    if (toRemove.has(k)) {
+      changed = true
+      return
+    }
+    filtered[k] = v
+  })
+  if (changed) replaceWeryfikacja(filtered)
+}
+
 const newVariant = ref('') // bound to the "create audit" picker only
 const creating = ref(false)
 const submitting = ref(false)
@@ -517,7 +596,14 @@ function hydrateForm(r) {
     }
   }
 
-  lastSavedFieldsPayload = JSON.stringify(currentFieldsPayload())
+  // Server is authoritative here too — no local diffing on hydrate, just
+  // load whatever the row currently carries (parseWeryfikacja already drops
+  // malformed entries).
+  replaceWeryfikacja(parseWeryfikacja(r?.weryfikacja_json))
+
+  const payload = currentFieldsPayload()
+  lastSavedFieldsObj = payload
+  lastSavedFieldsPayload = JSON.stringify(payload)
   nextTick(() => {
     hydrating.value = false
   })
@@ -547,12 +633,13 @@ function isPhotoRequired(slot) {
   return slot.required === undefined || !!slot.required
 }
 
-// Brak `depends_on` (obecnie wdrożona macierz serwerowa) = element zawsze widoczny.
-// Odwrócenie tego ukryłoby po cichu wszystkie dzisiejsze pola i zdjęcia.
+// Single client-side visibility implementation: delegates to the util so
+// AudytTab and the (already fully tested) audytWeryfikacja.js module can
+// never drift apart on what "visible" means. Brak `depends_on` (obecnie
+// wdrożona macierz serwerowa) = element zawsze widoczny — odwrócenie tego
+// ukryłoby po cichu wszystkie dzisiejsze pola i zdjęcia.
 function depOk(item) {
-  const dep = item.depends_on
-  if (!dep) return true
-  return form[dep.fieldname] === dep.value
+  return depOkUtil(item, form)
 }
 
 // Vue 3: `v-if` na tym samym węźle co `v-for` liczy się PRZED powstaniem
@@ -577,6 +664,15 @@ const complete = computed(
     photosDone.value === photosTotal.value,
 )
 
+// Every visible field + photo slot of the active variant, flattened — the
+// universe of elements a reviewer must accept during Weryfikacja.
+const elements = computed(() => visibleElements(variantDef.value, form))
+const agg = computed(() => aggregate(weryfikacja, elements.value))
+
+function verdictStatusFor(key) {
+  return verdictFor(weryfikacja, key).status
+}
+
 // --- Autosave (fields) --------------------------------------------------------
 function currentFieldsPayload() {
   const payload = { rodzaj_instalacji: form.rodzaj_instalacji || '', uwagi: form.uwagi || '' }
@@ -600,10 +696,38 @@ watch(
   { deep: true },
 )
 
+// Changing the variant swaps out the whole matrix (different fields/photo
+// slots entirely), so every existing verdict is stale the instant this
+// fires — mirrors the server's Before Save hook doing the same. Cleared
+// immediately (not debounced with the rest of the field save) since it
+// doesn't depend on the round trip succeeding.
+watch(
+  () => form.rodzaj_instalacji,
+  (val, oldVal) => {
+    if (hydrating.value || val === oldVal) return
+    if (Object.keys(weryfikacja).length) replaceWeryfikacja({})
+  },
+)
+
+// Mirrors the server's Before Save hook: a saved change to a field's value
+// resets that field's verdict back to waiting. We don't reload() to learn
+// this (that would rewrite `form` mid-edit and eat a reviewer's in-flight
+// keystrokes — see the "Never reload after a verdict" note on setVerdict
+// below), so we replicate the same rule locally from the before/after
+// payloads of the save that just succeeded.
+function mirrorFieldResets(previous, next) {
+  const changedFieldnames = Object.keys(next).filter(
+    (k) => k !== 'rodzaj_instalacji' && next[k] !== previous[k],
+  )
+  if (!changedFieldnames.length) return
+  dropWeryfikacjaKeys(changedFieldnames.map(fieldKey))
+}
+
 async function saveFields() {
   const payload = currentFieldsPayload()
   const payloadStr = JSON.stringify(payload)
   if (payloadStr === lastSavedFieldsPayload) return
+  const previousPayload = lastSavedFieldsObj
   saveState.value = 'saving'
   try {
     await call('frappe.client.set_value', {
@@ -611,6 +735,8 @@ async function saveFields() {
       name: props.dealId,
       fieldname: payload,
     })
+    if (isReview.value) mirrorFieldResets(previousPayload, payload)
+    lastSavedFieldsObj = payload
     lastSavedFieldsPayload = payloadStr
     saveState.value = 'saved'
   } catch (err) {
@@ -634,6 +760,10 @@ async function onPhotoChange(key, fileUrl) {
       fieldname: { zdjecia_json: JSON.stringify(zdjecia) },
     })
     processPendingDeletions()
+    // Mirrors the server's Before Save hook — a saved change to this slot's
+    // photo resets its verdict back to waiting (same rationale as
+    // mirrorFieldResets() above).
+    if (isReview.value) dropWeryfikacjaKeys([photoKey(key)])
   } catch (err) {
     if (oldUrl) zdjecia[key] = oldUrl
     else delete zdjecia[key]
@@ -727,6 +857,40 @@ async function setStatus(s) {
     toast.error(extractErrorMessage(err))
   } finally {
     statusUpdating.value = false
+  }
+}
+
+// --- Per-element verification (Weryfikacja stage) ----------------------------
+// Deliberately never calls audyt.reload() — a reload re-runs hydrateForm(),
+// which rewrites `form` from the row and would eat any keystrokes a
+// reviewer has typed since the last debounced field autosave (500ms). The
+// server response's `weryfikacja` map is authoritative on its own; we apply
+// it directly instead.
+async function setVerdict(elementKey, status, note) {
+  if (!canReview.value || verdictBusy[elementKey]) return
+  verdictBusy[elementKey] = true
+
+  // Snapshot before the optimistic write, so a failed call can roll back to
+  // exactly what was on screen — not to whatever the optimistic map became.
+  const before = { ...weryfikacja }
+  const optimistic = { ...before }
+  if (status === 'waiting') delete optimistic[elementKey]
+  else optimistic[elementKey] = { status, note: note || undefined }
+  replaceWeryfikacja(optimistic)
+
+  try {
+    const res = await call('volteo_audyt_set_verdict', {
+      deal: props.dealId,
+      element: elementKey,
+      verdict: status,
+      note: note || undefined,
+    })
+    replaceWeryfikacja(res?.weryfikacja || {})
+  } catch (err) {
+    replaceWeryfikacja(before)
+    toast.error(extractErrorMessage(err))
+  } finally {
+    verdictBusy[elementKey] = false
   }
 }
 
