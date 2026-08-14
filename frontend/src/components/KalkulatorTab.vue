@@ -15,7 +15,11 @@
         <div class="kalk-split grid items-start gap-x-5" style="grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr)">
 
           <div>
-            <div class="pb-2.5">
+            <div class="kalk-part">
+              <div class="kalk-part-heading mb-4 flex items-center gap-2 border-b border-gray-100 pb-2.5 text-lg font-bold text-ink-gray-9">
+                <span class="kalk-part-number">1</span>Instalacja
+              </div>
+
               <div>
                 <div class="mb-0.5 text-sm text-ink-gray-5">Rodzaj instalacji</div>
                 <div class="flex flex-wrap gap-1.5">
@@ -64,10 +68,10 @@
               </div>
             </div>
 
-            <div class="h-px bg-gray-200"></div>
-
-            <div class="mt-2.5">
-              <div class="mb-2 text-base font-semibold text-ink-gray-9">Konfiguracja</div>
+            <div class="kalk-part">
+              <div class="kalk-part-heading mb-4 flex items-center gap-2 border-b border-gray-100 pb-2.5 text-lg font-bold text-ink-gray-9">
+                <span class="kalk-part-number">2</span>Konfiguracja
+              </div>
 
               <div class="mb-2">
                 <div class="mb-1 text-sm text-ink-gray-5">Producent</div>
@@ -117,8 +121,12 @@
                   </div>
                 </template>
               </div>
+            </div>
 
-              <div class="my-2.5 h-px bg-gray-200"></div>
+            <div class="kalk-part">
+              <div class="kalk-part-heading mb-4 flex items-center gap-2 border-b border-gray-100 pb-2.5 text-lg font-bold text-ink-gray-9">
+                <span class="kalk-part-number">3</span>Montaż i przyłącze
+              </div>
 
               <div class="grid grid-cols-2 gap-x-3 gap-y-2">
                 <div>
@@ -150,8 +158,12 @@
                   </select>
                 </div>
               </div>
+            </div>
 
-              <div class="my-2.5 h-px bg-gray-200"></div>
+            <div class="kalk-part">
+              <div class="kalk-part-heading mb-4 flex items-center gap-2 border-b border-gray-100 pb-2.5 text-lg font-bold text-ink-gray-9">
+                <span class="kalk-part-number">4</span>Finansowanie
+              </div>
 
               <div class="grid grid-cols-2 gap-x-3 gap-y-2">
                 <div>
@@ -513,8 +525,8 @@ const summary = reactive({
 const successSummary = ref('')
 const dealHref = ref('#')
 
-// --- Narzut disclosure (collapsed by default; hidden while client is watching) ---
-const showNarzut = ref(false)
+// --- Narzut disclosure (open by default so reps see the narzut setting immediately; still manually collapsible) ---
+const showNarzut = ref(true)
 
 // --- Completeness gate (mirrors the server-side validation) -----------------
 const isComplete = computed(() => {
@@ -688,10 +700,34 @@ function extractErrorMessage(err) {
   background: #fff;
   box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
+/* Bordered cards make visual grouping clearer than thin divider rules; the
+   muted numeral chip is a non-interactive step/order indicator. */
+.kalk-part-heading { letter-spacing: -0.01em; }
+.kalk-part {
+  border: 1px solid #e5e5e5;
+  border-radius: 0.75rem;
+  background: #fff;
+  padding: 1.25rem 1.25rem 1.375rem;
+}
+.kalk-part + .kalk-part { margin-top: 1rem; }
+.kalk-part-number {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 9999px;
+  background: #f0f0f0;
+  color: #9ca3af;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
 @media (max-width: 880px) {
   .kalk-split { grid-template-columns: 1fr !important; }
   .kalk-row2 { grid-template-columns: 1fr !important; }
   .kalk-output { border-left: 0 !important; padding-left: 0 !important; margin-top: 0.75rem; }
   .sticky { position: static; }
+  .kalk-part { padding: 1rem; }
 }
 </style>
