@@ -59,6 +59,7 @@ import SettingsIcon from '@/components/Icons/SettingsIcon.vue'
 import SettingsIcon2 from '@/components/Icons/SettingsIcon2.vue'
 import Users from '@/components/Settings/Users.vue'
 import VolteoUsers from '@/components/Settings/VolteoUsers.vue'
+import KartyPaneli from '@/components/Settings/KartyPaneli.vue'
 import Hierarchy from '@/components/Settings/Hierarchy/Hierarchy.vue'
 import InviteUserPage from '@/components/Settings/InviteUserPage.vue'
 import ProfilePage from '@/components/Settings/Profile/ProfilePage.vue'
@@ -165,6 +166,12 @@ const tabs = computed(() => {
           label: __('Konta Volteo'),
           icon: 'user-plus',
           component: markRaw(VolteoUsers),
+          condition: () => isVolteoAdmin(),
+        },
+        {
+          label: __('Karty paneli'),
+          icon: 'sun',
+          component: markRaw(KartyPaneli),
           condition: () => isVolteoAdmin(),
         },
       ],
