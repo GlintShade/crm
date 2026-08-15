@@ -147,7 +147,11 @@
             <div
               v-for="f in visibleFields(sec.fields)"
               :key="f.fieldname"
-              :class="['rounded', missingSet.has(f.fieldname) ? 'ring-1 ring-outline-red-3' : '']"
+              :class="[
+                'rounded',
+                missingSet.has(f.fieldname) ? 'ring-1 ring-outline-red-3' : '',
+                f.fullWidth ? 'sm:col-span-3' : '',
+              ]"
             >
               <FormControl
                 :type="f.type"
@@ -157,6 +161,7 @@
                 :placeholder="f.placeholder"
                 :disabled="saving"
                 v-model="form[f.fieldname]"
+                @blur="onKwotaBlur(f)"
               />
             </div>
           </div>
@@ -178,7 +183,13 @@
             ><span class="kalk-switch-knob" /></button>
           </div>
 
-          <div v-if="form[grupa.wlaczone]" class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div
+            v-if="form[grupa.wlaczone]"
+            :class="[
+              'grid grid-cols-1 gap-4',
+              grupa.key === 'inne' ? 'sm:grid-cols-2' : 'sm:grid-cols-3',
+            ]"
+          >
             <div
               v-for="f in visibleFields(grupaPola[grupa.key])"
               :key="f.fieldname"
@@ -192,6 +203,7 @@
                 :placeholder="f.placeholder"
                 :disabled="saving"
                 v-model="form[f.fieldname]"
+                @blur="onKwotaBlur(f)"
               />
             </div>
           </div>
@@ -210,6 +222,7 @@ import {
   PREFILL_KEYS,
   TAK_NIE_OPCJE,
   WYKSZTALCENIE_OPCJE,
+  RODZAJ_DOKUMENTU_OPCJE,
   STAN_CYWILNY_OPCJE,
   PRACA_FORMA_OPCJE,
   PRACA_OKRES_OPCJE,
@@ -217,6 +230,7 @@ import {
   defaultForm,
   buildDane,
   hydrateFrom,
+  normalizujKwote,
 } from '@/utils/kredytForm'
 
 const props = defineProps({
@@ -234,8 +248,14 @@ const formSections = [
     fields: [
       { fieldname: 'miejsce_urodzenia', label: __('Miejsce urodzenia'), type: 'text' },
       {
-        fieldname: 'rodzaj_seria_numer_dokumentu',
-        label: __('Rodzaj, seria i numer dokumentu tożsamości'),
+        fieldname: 'rodzaj_dokumentu',
+        label: __('Rodzaj dokumentu'),
+        type: 'select',
+        options: RODZAJ_DOKUMENTU_OPCJE,
+      },
+      {
+        fieldname: 'seria_numer_dokumentu',
+        label: __('Seria i numer dokumentu tożsamości'),
         type: 'text',
       },
       { fieldname: 'data_wydania_dokumentu', label: __('Data wydania dokumentu'), type: 'date' },
@@ -331,7 +351,15 @@ const formSections = [
         inputmode: 'decimal',
         placeholder: '0,00',
       },
-      { fieldname: 'numer_rachunku', label: __('Numer rachunku'), type: 'text' },
+      {
+        fieldname: 'numer_rachunku',
+        label: __('Numer rachunku'),
+        type: 'text',
+        // Full-width — at the shared 1/3-column width the last digits of a
+        // 26-digit IBAN-style account number were getting visually cut off
+        // (owner feedback after click-testing).
+        fullWidth: true,
+      },
     ],
   },
 ]
@@ -408,7 +436,8 @@ const grupaPola = {
     },
     { fieldname: 'dzialalnosc_nip', label: __('NIP'), type: 'text' },
     { fieldname: 'dzialalnosc_nazwa', label: __('Nazwa działalności'), type: 'text' },
-    { fieldname: 'dzialalnosc_adres_telefon', label: __('Adres i telefon'), type: 'text' },
+    { fieldname: 'dzialalnosc_adres', label: __('Adres firmy'), type: 'text' },
+    { fieldname: 'dzialalnosc_telefon', label: __('Numer telefonu do firmy'), type: 'text' },
     { fieldname: 'dzialalnosc_od_kiedy', label: __('Od kiedy prowadzona'), type: 'date' },
     {
       fieldname: 'dzialalnosc_kwota_dochodu',
@@ -464,6 +493,15 @@ function depOk(form, item) {
 }
 function visibleFields(fields) {
   return (fields || []).filter((f) => depOk(form, f))
+}
+
+// Amount fields (inputmode: 'decimal') get their typed text normalized to
+// "123,45" on blur — owner feedback after click-testing: the rep should see
+// what was understood before saving, not just find out server-side. Every
+// non-amount field is a no-op here (inputmode check).
+function onKwotaBlur(f) {
+  if (f.inputmode !== 'decimal') return
+  form[f.fieldname] = normalizujKwote(form[f.fieldname])
 }
 
 // --- Load state --------------------------------------------------------------

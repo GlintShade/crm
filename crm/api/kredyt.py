@@ -50,7 +50,8 @@ DOCTYPE = "Volteo Kredyt"
 
 _DANE_POLA_DOZWOLONE = [
 	"miejsce_urodzenia",
-	"rodzaj_seria_numer_dokumentu",
+	"rodzaj_dokumentu",
+	"seria_numer_dokumentu",
 	"data_wydania_dokumentu",
 	"data_waznosci_dokumentu",
 	"adres_zameldowania_taki_sam",
@@ -89,7 +90,8 @@ _DANE_POLA_DOZWOLONE = [
 	"dzialalnosc_forma_inna",
 	"dzialalnosc_nip",
 	"dzialalnosc_nazwa",
-	"dzialalnosc_adres_telefon",
+	"dzialalnosc_adres",
+	"dzialalnosc_telefon",
 	"dzialalnosc_od_kiedy",
 	"dzialalnosc_kwota_dochodu",
 	"gospodarstwo_wlaczone",
@@ -174,7 +176,8 @@ osoby” nie ma sensu, mimo że jako kwota parsowałoby się poprawnie.
 
 _ETYKIETY_POL: dict[str, str] = {
 	"miejsce_urodzenia": "Miejsce urodzenia",
-	"rodzaj_seria_numer_dokumentu": "Rodzaj, seria i numer dokumentu tożsamości",
+	"rodzaj_dokumentu": "Rodzaj dokumentu tożsamości",
+	"seria_numer_dokumentu": "Seria i numer dokumentu tożsamości",
 	"data_wydania_dokumentu": "Data wydania dokumentu",
 	"data_waznosci_dokumentu": "Data ważności dokumentu",
 	"adres_zameldowania_taki_sam": "Adres zameldowania (taki sam jak zamieszkania)",
@@ -213,7 +216,8 @@ _ETYKIETY_POL: dict[str, str] = {
 	"dzialalnosc_forma_inna": "Inna forma opodatkowania (opis)",
 	"dzialalnosc_nip": "NIP działalności",
 	"dzialalnosc_nazwa": "Nazwa działalności",
-	"dzialalnosc_adres_telefon": "Adres i telefon działalności",
+	"dzialalnosc_adres": "Adres firmy",
+	"dzialalnosc_telefon": "Numer telefonu do firmy",
 	"dzialalnosc_od_kiedy": "Działalność — od kiedy",
 	"dzialalnosc_kwota_dochodu": "Kwota dochodu z działalności",
 	"gospodarstwo_wlaczone": "Dochód z gospodarstwa rolnego",
