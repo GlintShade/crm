@@ -16,7 +16,10 @@
     class="w-full border-b px-5 py-3"
     :class="mode === 'lost' ? 'bg-red-50' : 'bg-surface-white'"
   >
-    <div class="flex flex-wrap items-center gap-4">
+    <!-- Zawartość ograniczona do ~80% szerokości kontenera i wyśrodkowana;
+         na wąskich ekranach (mobile/wąskie okno) pełna szerokość, bo przy
+         6 węzłach CP ograniczenie do 80% zostawiłoby za mało miejsca. -->
+    <div class="mx-auto flex w-full max-w-full flex-wrap items-center gap-4 sm:max-w-[80%]">
       <!-- Stepper: węzły równo rozłożone na pełną szerokość, połączone linią -->
       <div class="flex flex-1 items-start overflow-x-auto">
         <template v-for="(step, i) in payload.steps" :key="i">
@@ -39,7 +42,7 @@
               <span v-else>{{ stepNumber(i) }}</span>
             </div>
             <div
-              class="max-w-20 truncate text-center text-xs"
+              class="w-24 whitespace-normal break-words text-center text-xs leading-tight"
               :class="nodeLabelClass(i)"
             >
               {{ __(step.status) }}
