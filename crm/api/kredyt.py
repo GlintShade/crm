@@ -404,26 +404,37 @@ def _wyczysc_nieaktywne_grupy_dochodu(kredyt_doc: "frappe.model.document.Documen
 				kredyt_doc.set(pole_grupy, None)
 
 
-def _usun_stare_pliki_kredytu(deal: str, nazwa_pliku: str) -> None:
+def _usun_stare_pliki_kredytu(deal: str, prefiks_nazwy: str) -> None:
 	"""Analogiczne do `crm.api.umowa._usun_stare_pdfy_umowy` — usuwa wszystkie
 	wcześniejsze rekordy `File` z PDF-em formularza kredytowego TEJ szansy.
 
 	Frappe nie nadpisuje pliku o istniejącej nazwie przy kolejnym `insert()` —
 	dokleja losowy sufiks tuż przed rozszerzeniem, więc dopasowanie po
 	dokładnej nazwie niczego by nie znalazło po drugim wywołaniu; zamiast tego
-	dopasowujemy PREFIKS `nazwa_pliku` bez rozszerzenia + dowolny sufiks + `.pdf`.
+	dopasowujemy PREFIKS + dowolny sufiks + `.pdf`.
+
+	`prefiks_nazwy` MUSI być bazową nazwą BEZ znacznika czasu
+	(`Formularz-kredytowy-<deal-z-myślnikami>`, bez `.pdf`) — NIE wolno go
+	wyprowadzać przez obcięcie `.pdf` z pełnej nazwy nowo generowanego pliku,
+	bo ta ma już doklejony znacznik czasu generacji (patrz `volteo_kredyt_pdf`)
+	i taki „prefiks” pasowałby wyłącznie do tego jednego, jeszcze nieistniejącego
+	pliku — sprzątanie nigdy nie znalazłoby żadnego starszego. Ten sam bazowy
+	prefiks pasuje przez LIKE zarówno do plików sprzed wprowadzenia znacznika
+	czasu, jak i do wszystkich poprzednich wygenerowanych z nim.
 
 	Bezpieczeństwo zakresu — filtr łączy TRZY warunki jednocześnie:
 	`attached_to_doctype == "CRM Deal"`, `attached_to_name == deal` (żaden
 	załącznik INNEJ szansy nie może zostać złapany) i `file_name LIKE
 	"<prefiks tej szansy>%.pdf"` (inne załączniki TEJ SAMEJ szansy, np. PDF
 	umowy, mają inny prefiks nazwy i nie pasują). Znaki `%`/`_` w nazwie
-	szansy są eskejpowane, żeby nie działały jako wildcardy LIKE. Nieudane
+	szansy są eskejpowane, żeby nie działały jako wildcardy LIKE. Wołający
+	uruchamia to PRZED insertem nowego pliku, więc świeżo wstawiony plik (jego
+	nazwa też pasuje do wzorca) nie istnieje jeszcze w bazie w momencie
+	dopasowania i nie może zostać przez pomyłkę skasowany. Nieudane
 	sprzątnięcie NIE MOŻE zablokować wygenerowania nowego PDF-u — błąd trafia
 	do `frappe.log_error` i przetwarzanie idzie dalej.
 	"""
-	prefiks = nazwa_pliku[: -len(".pdf")]  # "Formularz-kredytowy-<szansa z myślnikami zamiast ukośników>"
-	wzorzec = prefiks.replace("%", r"\%").replace("_", r"\_") + "%.pdf"
+	wzorzec = prefiks_nazwy.replace("%", r"\%").replace("_", r"\_") + "%.pdf"
 	stare_pliki = frappe.get_all(
 		"File",
 		filters={
@@ -620,8 +631,26 @@ def volteo_kredyt_pdf(deal: str) -> dict[str, Any]:
 	except Exception:
 		_blad_generowania_pdf()
 
-	nazwa_pliku = f"Formularz-kredytowy-{deal.replace('/', '-')}.pdf"
-	_usun_stare_pliki_kredytu(deal, nazwa_pliku)
+	# Nazwa MUSI zawierać znacznik czasu generacji, w odróżnieniu od `Volteo Umowa`
+	# (`crm.integrations.autenti.logika.nazwa_pliku_umowy`), która celowo ma STAŁĄ
+	# nazwę — bo dzieli ją z Autenti (wysyłka do e-podpisu odwołuje się do tego
+	# samego URL-a). Formularz kredytowy nie ma tego ograniczenia, a stała nazwa
+	# okazała się realnym defektem: zmierzony nagłówek odpowiedzi pliku to
+	# `Cache-Control: private,max-age=3600,stale-while-revalidate=86400`, więc pod
+	# STAŁYM URL-em (`/private/files/Formularz-kredytowy-<deal>.pdf`) przeglądarka
+	# przez godzinę serwowała pierwszy wygenerowany render mimo poprawnie
+	# przeliczonego, świeżego pliku po stronie backendu — właściciel zgłosił to
+	# jako "ponowne Generuj PDF pokazuje stary dokument" (sonda 2026-08-15).
+	prefiks_nazwy = f"Formularz-kredytowy-{deal.replace('/', '-')}"
+	nazwa_pliku = f"{prefiks_nazwy}-{frappe.utils.now_datetime().strftime('%Y%m%d-%H%M%S')}.pdf"
+	# Sprzątanie idzie PRZED insertem nowego pliku (niżej) i dopasowuje po
+	# `prefiks_nazwy` BEZ znacznika czasu — LIKE 'prefiks_nazwy%.pdf' obejmuje
+	# zarówno stare pliki sprzed tej zmiany (bez znacznika czasu), jak i
+	# wszystkie poprzednie z tej szansy WŁĄCZNIE ze znacznikiem czasu. Jeszcze
+	# nieistniejący `nazwa_pliku` (wstawiany dopiero niżej) też pasowałby do
+	# wzorca, ale kolejność — sprzątanie przed insertem — gwarantuje, że go
+	# nie skasuje.
+	_usun_stare_pliki_kredytu(deal, prefiks_nazwy)
 	try:
 		plik = frappe.get_doc(
 			{
