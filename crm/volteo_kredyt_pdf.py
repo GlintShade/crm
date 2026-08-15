@@ -39,8 +39,13 @@ _GRUPY_DOCHODU_NAZWY = frozenset(GRUPY_DOCHODU)
 # AUTORYTETEM dla dokładnej treści opcji Select poniżej jest transkrypcja
 # formularza PDF w `crm/volteo_kredyt_mapa.py` oraz schemat w
 # `ops/crm-kredyt.py` (potwierdzone przez orkiestratora 2026-08-15,
-# character-for-character). `praca_okres` jest WYJĄTKIEM — to nasz własny
-# Select, niezależny od formularza PDF, więc nie podlega tej transkrypcji.
+# character-for-character). Są DWA WYJĄTKI, niezależne od tej transkrypcji:
+# `praca_okres` to nasz własny Select, nigdy nie podlegał treści PDF-u;
+# `stan_cywilny` podlegał jej do 2026-08-15 włącznie, ale tego dnia właściciel
+# po click-teście świadomie NADPISAŁ wygląd wydruku własną, stałą listą
+# przechowywanych wartości (patrz stałe `STAN_*` niżej) — treść drukowanej
+# kratki na PDF-ie się NIE zmieniła (`crm/volteo_kredyt_mapa.py` niedotknięty),
+# zmieniło się tylko to, co zapisujemy w Select i porównujemy tutaj.
 # Porównania są dokładne (case-sensitive) wobec tych stałych.
 FORMA_UMOWA_O_PRACE = "Umowa o pracę"
 FORMA_UMOWA_ZLECENIE = "Umowa zlecenie"
@@ -60,10 +65,10 @@ WYKSZTALCENIE_SREDNIE = "średnie"
 WYKSZTALCENIE_ZAWODOWE = "zawodowe"
 WYKSZTALCENIE_PODSTAWOWE = "podstawowe/gimnazjalne"
 
-STAN_KAWALER_PANNA = "kawaler/panna"
+STAN_KAWALER_PANNA = "Kawaler/panna"
 STAN_ROZWIEDZIONY = "Rozwiedziony/a"
-STAN_MALZENSTWO_ROZDZIELNOSC = "W związku małżeńskim rozdzielność majątkowa"
-STAN_MALZENSTWO_WSPOLNOTA = "W związku małżeńskim wspólnota majątkowa"
+STAN_MALZENSTWO_ROZDZIELNOSC = "Małżeństwo - rozdzielność majątkowa"
+STAN_MALZENSTWO_WSPOLNOTA = "Małżeństwo - wspólnota majątkowa"
 STAN_WDOWIEC_WDOWA = "Wdowiec/wdowa"
 STAN_SEPARACJA = "Separacja"
 
@@ -214,12 +219,17 @@ def zbuduj_kontekst_kredytu(
 
 
 def _blok_dokument_i_zobowiazania(kredyt: dict[str, Any]) -> dict[str, str]:
-	"""Pola osobowe/dokumentu i zobowiązań finansowych — nigdy bramkowane grupą dochodu."""
+	"""Pola osobowe/dokumentu i zobowiązań finansowych — nigdy bramkowane grupą dochodu.
+
+	`rodzaj_seria_numer_dokumentu` (klucz kontekstu PDF-u, zamrożony w
+	`KLUCZE_KONTEKSTU` — mapa współrzędnych go nie zmienia) jest od 2026-08-15
+	SKŁADANY z dwóch osobnych pól rekordu (`rodzaj_dokumentu` +
+	`seria_numer_dokumentu`, dawniej jedno pole Data) — patrz `_polacz`."""
 	zameldowanie_inne = _rowna(kredyt.get("adres_zameldowania_taki_sam"), ADRES_NIE)
 	korespondencja_inna = _rowna(kredyt.get("adres_korespondencji_taki_sam"), ADRES_NIE)
 	return {
 		"miejsce_urodzenia": _tekst(kredyt.get("miejsce_urodzenia")),
-		"rodzaj_seria_numer_dokumentu": _tekst(kredyt.get("rodzaj_seria_numer_dokumentu")),
+		"rodzaj_seria_numer_dokumentu": _polacz(kredyt.get("rodzaj_dokumentu"), kredyt.get("seria_numer_dokumentu")),
 		"data_wydania_dokumentu": _data_pl(kredyt.get("data_wydania_dokumentu")),
 		"data_waznosci_dokumentu": _data_pl(kredyt.get("data_waznosci_dokumentu")),
 		"adres_zameldowania": _tekst(kredyt.get("adres_zameldowania")) if zameldowanie_inne else "",
@@ -355,7 +365,14 @@ _PUSTE_DZIALALNOSC: dict[str, str | bool] = {
 
 
 def _blok_dzialalnosc(kredyt: dict[str, Any]) -> dict[str, str | bool]:
-	"""Blok "działalność gospodarcza" — bramkowany `dzialalnosc_wlaczone`."""
+	"""Blok "działalność gospodarcza" — bramkowany `dzialalnosc_wlaczone`.
+
+	`dzialalnosc_adres_telefon` (klucz kontekstu PDF-u, zamrożony w
+	`KLUCZE_KONTEKSTU`) jest od 2026-08-15 SKŁADANY z dwóch osobnych pól
+	rekordu (`dzialalnosc_adres` + `dzialalnosc_telefon`, dawniej jedno pole
+	Data) przez `_polacz_adres_telefon` — w odróżnieniu od `_polacz` (spacja),
+	tu oba fragmenty łączy `", tel. "`, bo to jest format samego wydruku, nie
+	tylko separator dwóch stringów."""
 	if not _wlaczone(kredyt.get("dzialalnosc_wlaczone")):
 		return dict(_PUSTE_DZIALALNOSC)
 
@@ -367,7 +384,7 @@ def _blok_dzialalnosc(kredyt: dict[str, Any]) -> dict[str, str | bool]:
 		"dzialalnosc_forma_inna": _tekst(kredyt.get("dzialalnosc_forma_inna")) if _rowna(forma, FORMA_INNE) else "",
 		"dzialalnosc_nip": _tekst(kredyt.get("dzialalnosc_nip")),
 		"dzialalnosc_nazwa": _tekst(kredyt.get("dzialalnosc_nazwa")),
-		"dzialalnosc_adres_telefon": _tekst(kredyt.get("dzialalnosc_adres_telefon")),
+		"dzialalnosc_adres_telefon": _polacz_adres_telefon(kredyt.get("dzialalnosc_adres"), kredyt.get("dzialalnosc_telefon")),
 		"dzialalnosc_od_kiedy": _data_pl(kredyt.get("dzialalnosc_od_kiedy")),
 		"dzialalnosc_kwota_dochodu": _kwota(kredyt.get("dzialalnosc_kwota_dochodu")),
 	}
@@ -397,6 +414,17 @@ def _polacz(*czesci: Any, sep: str = " ") -> str:
 	"""Łączy niepuste, przefiltrowane przez `_tekst` fragmenty jednym separatorem (bez podwójnych spacji przy pustym fragmencie)."""
 	niepuste = [c for c in (_tekst(c) for c in czesci) if c]
 	return sep.join(niepuste)
+
+
+def _polacz_adres_telefon(adres: Any, telefon: Any) -> str:
+	"""Składa `dzialalnosc_adres_telefon` z dwóch osobnych pól rekordu (`dzialalnosc_adres`,
+	`dzialalnosc_telefon`) w format wydruku: oba obecne → `"<adres>, tel. <telefon>"`;
+	tylko jedno obecne → to jedno, bez etykiety `"tel."`; oba puste → `""`. Nigdy nie rzuca."""
+	adres_t = _tekst(adres)
+	telefon_t = _tekst(telefon)
+	if adres_t and telefon_t:
+		return f"{adres_t}, tel. {telefon_t}"
+	return adres_t or telefon_t
 
 
 def _rowna(wartosc: Any, wzorzec: str) -> bool:

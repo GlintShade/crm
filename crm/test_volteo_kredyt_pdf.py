@@ -97,7 +97,8 @@ def _kredyt(**nadpisania: Any) -> dict[str, Any]:
 	"""
 	baza: dict[str, Any] = {
 		"miejsce_urodzenia": "Warszawa",
-		"rodzaj_seria_numer_dokumentu": "Dowód osobisty ABC123456",
+		"rodzaj_dokumentu": "Dowód osobisty",
+		"seria_numer_dokumentu": "ABC123456",
 		"data_wydania_dokumentu": "2020-01-15",
 		"data_waznosci_dokumentu": "2030-01-15",
 		"adres_zameldowania_taki_sam": "Tak",
@@ -105,7 +106,7 @@ def _kredyt(**nadpisania: Any) -> dict[str, Any]:
 		"adres_korespondencji_taki_sam": "Tak",
 		"adres_korespondencji": "",
 		"wyksztalcenie": "wyższe",
-		"stan_cywilny": "kawaler/panna",
+		"stan_cywilny": "Kawaler/panna",
 		"liczba_osob_na_utrzymaniu": "0",
 		"kwota_800_plus": "0",
 		"dochod_wspolmalzonka": "0",
@@ -136,7 +137,8 @@ def _kredyt(**nadpisania: Any) -> dict[str, Any]:
 		"dzialalnosc_forma_inna": "",
 		"dzialalnosc_nip": "",
 		"dzialalnosc_nazwa": "",
-		"dzialalnosc_adres_telefon": "",
+		"dzialalnosc_adres": "",
+		"dzialalnosc_telefon": "",
 		"dzialalnosc_od_kiedy": "",
 		"dzialalnosc_kwota_dochodu": "",
 		"gospodarstwo_wlaczone": 0,
@@ -361,7 +363,8 @@ class TestGrupaWylaczonaZerujePola(unittest.TestCase):
 			dzialalnosc_forma_inna="Karta podatkowa",
 			dzialalnosc_nip="1112223334",
 			dzialalnosc_nazwa="Firma Jan Kowalski",
-			dzialalnosc_adres_telefon="Warszawa, 500600700",
+			dzialalnosc_adres="Warszawa",
+			dzialalnosc_telefon="500600700",
 			dzialalnosc_od_kiedy="2018-01-01",
 			dzialalnosc_kwota_dochodu="7000",
 		)
@@ -571,7 +574,7 @@ class TestWyksztalcenieKratki(unittest.TestCase):
 
 class TestStanCywilnyKratki(unittest.TestCase):
 	def test_a_kawaler_panna(self: "TestStanCywilnyKratki") -> None:
-		kontekst = _kontekst(stan_cywilny="kawaler/panna")
+		kontekst = _kontekst(stan_cywilny="Kawaler/panna")
 		self.assertTrue(kontekst["stan_kawaler_panna"])
 		for inny in (
 			"stan_rozwiedziony",
@@ -587,11 +590,11 @@ class TestStanCywilnyKratki(unittest.TestCase):
 		self.assertTrue(kontekst["stan_rozwiedziony"])
 
 	def test_c_malzenstwo_rozdzielnosc(self: "TestStanCywilnyKratki") -> None:
-		kontekst = _kontekst(stan_cywilny="W związku małżeńskim rozdzielność majątkowa")
+		kontekst = _kontekst(stan_cywilny="Małżeństwo - rozdzielność majątkowa")
 		self.assertTrue(kontekst["stan_malzenstwo_rozdzielnosc"])
 
 	def test_d_malzenstwo_wspolnota(self: "TestStanCywilnyKratki") -> None:
-		kontekst = _kontekst(stan_cywilny="W związku małżeńskim wspólnota majątkowa")
+		kontekst = _kontekst(stan_cywilny="Małżeństwo - wspólnota majątkowa")
 		self.assertTrue(kontekst["stan_malzenstwo_wspolnota"])
 
 	def test_e_wdowiec_wdowa(self: "TestStanCywilnyKratki") -> None:
@@ -625,6 +628,29 @@ class TestStanCywilnyKratki(unittest.TestCase):
 			"stan_separacja",
 		):
 			self.assertFalse(kontekst[k])
+
+	def test_i_stare_wartosci_sprzed_2026_08_15_juz_nie_pasuja(self: "TestStanCywilnyKratki") -> None:
+		# Owner override 2026-08-15: dawne stored value'y ("kawaler/panna" małą
+		# literą, "W związku małżeńskim ..." zamiast "Małżeństwo - ...") nie
+		# powinny już trafiać w żadną kratkę — inaczej cichy regres wsteczny
+		# odczytałby stary rekord jako "stan cywilny nieznany", nie jako błąd.
+		klucze = (
+			"stan_kawaler_panna",
+			"stan_rozwiedziony",
+			"stan_malzenstwo_rozdzielnosc",
+			"stan_malzenstwo_wspolnota",
+			"stan_wdowiec_wdowa",
+			"stan_separacja",
+		)
+		for stara_wartosc in (
+			"kawaler/panna",
+			"W związku małżeńskim rozdzielność majątkowa",
+			"W związku małżeńskim wspólnota majątkowa",
+		):
+			with self.subTest(stara_wartosc=stara_wartosc):
+				kontekst = _kontekst(stan_cywilny=stara_wartosc)
+				for k in klucze:
+					self.assertFalse(kontekst[k])
 
 
 class TestDaty(unittest.TestCase):
@@ -673,7 +699,8 @@ class TestBrakujacePolaBazowe(unittest.TestCase):
 			wynik,
 			[
 				"miejsce_urodzenia",
-				"rodzaj_seria_numer_dokumentu",
+				"rodzaj_dokumentu",
+				"seria_numer_dokumentu",
 				"data_wydania_dokumentu",
 				"data_waznosci_dokumentu",
 				"adres_zameldowania_taki_sam",
@@ -793,7 +820,8 @@ class TestBrakujacePolaGrupyDochodu(unittest.TestCase):
 			dzialalnosc_forma_opodatkowania="ryczałt",
 			dzialalnosc_nip="123",
 			dzialalnosc_nazwa="Firma",
-			dzialalnosc_adres_telefon="tel",
+			dzialalnosc_adres="adres",
+			dzialalnosc_telefon="tel",
 			dzialalnosc_od_kiedy="2020-01-01",
 			dzialalnosc_kwota_dochodu="5000",
 		)
@@ -806,7 +834,8 @@ class TestBrakujacePolaGrupyDochodu(unittest.TestCase):
 			dzialalnosc_forma_inna="",
 			dzialalnosc_nip="123",
 			dzialalnosc_nazwa="Firma",
-			dzialalnosc_adres_telefon="tel",
+			dzialalnosc_adres="adres",
+			dzialalnosc_telefon="tel",
 			dzialalnosc_od_kiedy="2020-01-01",
 			dzialalnosc_kwota_dochodu="5000",
 		)
@@ -831,6 +860,143 @@ class TestBrakujacePolaGrupyDochodu(unittest.TestCase):
 		self.assertIn("gospodarstwo_nip", wynik)
 		self.assertNotIn("emerytura_numer_swiadczenia", wynik)
 		self.assertNotIn("renta_numer_swiadczenia", wynik)
+
+
+class TestJoinRodzajSeriaNumerDokumentu(unittest.TestCase):
+	"""`rodzaj_seria_numer_dokumentu` (klucz kontekstu PDF-u, niezmieniony) jest od
+	2026-08-15 składany z dwóch osobnych pól rekordu — `rodzaj_dokumentu` i
+	`seria_numer_dokumentu` — spacją, przez `_polacz`."""
+
+	def test_a_oba_obecne_laczy_spacja(self: "TestJoinRodzajSeriaNumerDokumentu") -> None:
+		kontekst = _kontekst(rodzaj_dokumentu="Dowód osobisty", seria_numer_dokumentu="ABC123456")
+		self.assertEqual(kontekst["rodzaj_seria_numer_dokumentu"], "Dowód osobisty ABC123456")
+
+	def test_b_tylko_rodzaj_obecny(self: "TestJoinRodzajSeriaNumerDokumentu") -> None:
+		kontekst = _kontekst(rodzaj_dokumentu="Paszport", seria_numer_dokumentu="")
+		self.assertEqual(kontekst["rodzaj_seria_numer_dokumentu"], "Paszport")
+
+	def test_c_tylko_seria_numer_obecny(self: "TestJoinRodzajSeriaNumerDokumentu") -> None:
+		kontekst = _kontekst(rodzaj_dokumentu="", seria_numer_dokumentu="XYZ999888")
+		self.assertEqual(kontekst["rodzaj_seria_numer_dokumentu"], "XYZ999888")
+
+	def test_d_oba_puste_daje_pusty_string(self: "TestJoinRodzajSeriaNumerDokumentu") -> None:
+		kontekst = _kontekst(rodzaj_dokumentu="", seria_numer_dokumentu="")
+		self.assertEqual(kontekst["rodzaj_seria_numer_dokumentu"], "")
+
+	def test_e_oba_none_daje_pusty_string(self: "TestJoinRodzajSeriaNumerDokumentu") -> None:
+		kontekst = _kontekst(rodzaj_dokumentu=None, seria_numer_dokumentu=None)
+		self.assertEqual(kontekst["rodzaj_seria_numer_dokumentu"], "")
+
+
+class TestJoinDzialalnoscAdresTelefon(unittest.TestCase):
+	"""`dzialalnosc_adres_telefon` (klucz kontekstu PDF-u, niezmieniony) jest od
+	2026-08-15 składany z dwóch osobnych pól rekordu — `dzialalnosc_adres` i
+	`dzialalnosc_telefon` — w formacie `"<adres>, tel. <telefon>"`, przez
+	`_polacz_adres_telefon`. Wciąż bramkowany `dzialalnosc_wlaczone` jak
+	dotychczas."""
+
+	def test_a_oba_obecne_format_z_etykieta_tel(self: "TestJoinDzialalnoscAdresTelefon") -> None:
+		kontekst = _kontekst(
+			dzialalnosc_wlaczone=1,
+			dzialalnosc_adres="ul. Firmowa 1, Warszawa",
+			dzialalnosc_telefon="500600700",
+		)
+		self.assertEqual(kontekst["dzialalnosc_adres_telefon"], "ul. Firmowa 1, Warszawa, tel. 500600700")
+
+	def test_b_tylko_adres_obecny_bez_etykiety(self: "TestJoinDzialalnoscAdresTelefon") -> None:
+		kontekst = _kontekst(
+			dzialalnosc_wlaczone=1,
+			dzialalnosc_adres="ul. Firmowa 1, Warszawa",
+			dzialalnosc_telefon="",
+		)
+		self.assertEqual(kontekst["dzialalnosc_adres_telefon"], "ul. Firmowa 1, Warszawa")
+
+	def test_c_tylko_telefon_obecny_bez_etykiety(self: "TestJoinDzialalnoscAdresTelefon") -> None:
+		kontekst = _kontekst(
+			dzialalnosc_wlaczone=1,
+			dzialalnosc_adres="",
+			dzialalnosc_telefon="500600700",
+		)
+		self.assertEqual(kontekst["dzialalnosc_adres_telefon"], "500600700")
+
+	def test_d_oba_puste_daje_pusty_string(self: "TestJoinDzialalnoscAdresTelefon") -> None:
+		kontekst = _kontekst(dzialalnosc_wlaczone=1, dzialalnosc_adres="", dzialalnosc_telefon="")
+		self.assertEqual(kontekst["dzialalnosc_adres_telefon"], "")
+
+	def test_e_grupa_wylaczona_zeruje_mimo_wypelnionych_pol(self: "TestJoinDzialalnoscAdresTelefon") -> None:
+		kontekst = _kontekst(
+			dzialalnosc_wlaczone=0,
+			dzialalnosc_adres="ul. Firmowa 1, Warszawa",
+			dzialalnosc_telefon="500600700",
+		)
+		self.assertEqual(kontekst["dzialalnosc_adres_telefon"], "")
+
+
+class TestBrakujacePolaNoweNazwyPol(unittest.TestCase):
+	"""`brakujace_pola` po rozbiciu pól dokumentu i adresu firmy (feedback
+	właściciela 2026-08-15) — cztery nowe nazwy pól w miejsce dwóch starych."""
+
+	def test_a_rodzaj_dokumentu_i_seria_numer_puste_sa_brakujace(
+		self: "TestBrakujacePolaNoweNazwyPol",
+	) -> None:
+		dane = _kredyt(rodzaj_dokumentu="", seria_numer_dokumentu="")
+		wynik = brakujace_pola(dane)
+		self.assertIn("rodzaj_dokumentu", wynik)
+		self.assertIn("seria_numer_dokumentu", wynik)
+
+	def test_b_rodzaj_dokumentu_i_seria_numer_wypelnione_wystarcza(
+		self: "TestBrakujacePolaNoweNazwyPol",
+	) -> None:
+		dane = _kredyt(rodzaj_dokumentu="Dowód osobisty", seria_numer_dokumentu="ABC123456")
+		wynik = brakujace_pola(dane)
+		self.assertNotIn("rodzaj_dokumentu", wynik)
+		self.assertNotIn("seria_numer_dokumentu", wynik)
+
+	def test_c_jedno_z_pary_puste_nadal_brakujace(self: "TestBrakujacePolaNoweNazwyPol") -> None:
+		dane = _kredyt(rodzaj_dokumentu="Dowód osobisty", seria_numer_dokumentu="")
+		wynik = brakujace_pola(dane)
+		self.assertNotIn("rodzaj_dokumentu", wynik)
+		self.assertIn("seria_numer_dokumentu", wynik)
+
+	def test_d_dzialalnosc_adres_i_telefon_wymagane_gdy_grupa_wlaczona(
+		self: "TestBrakujacePolaNoweNazwyPol",
+	) -> None:
+		dane = _kredyt(
+			dzialalnosc_wlaczone=1,
+			dzialalnosc_forma_opodatkowania="ryczałt",
+			dzialalnosc_nip="123",
+			dzialalnosc_nazwa="Firma",
+			dzialalnosc_adres="",
+			dzialalnosc_telefon="",
+			dzialalnosc_od_kiedy="2020-01-01",
+			dzialalnosc_kwota_dochodu="5000",
+		)
+		wynik = brakujace_pola(dane)
+		self.assertIn("dzialalnosc_adres", wynik)
+		self.assertIn("dzialalnosc_telefon", wynik)
+
+	def test_e_dzialalnosc_adres_i_telefon_wypelnione_wystarcza(
+		self: "TestBrakujacePolaNoweNazwyPol",
+	) -> None:
+		dane = _kredyt(
+			dzialalnosc_wlaczone=1,
+			dzialalnosc_forma_opodatkowania="ryczałt",
+			dzialalnosc_nip="123",
+			dzialalnosc_nazwa="Firma",
+			dzialalnosc_adres="ul. Firmowa 1",
+			dzialalnosc_telefon="500600700",
+			dzialalnosc_od_kiedy="2020-01-01",
+			dzialalnosc_kwota_dochodu="5000",
+		)
+		self.assertEqual(brakujace_pola(dane), [])
+
+	def test_f_dzialalnosc_wylaczona_nie_wymaga_adresu_ani_telefonu(
+		self: "TestBrakujacePolaNoweNazwyPol",
+	) -> None:
+		dane = _kredyt(dzialalnosc_wlaczone=0, dzialalnosc_adres="", dzialalnosc_telefon="")
+		wynik = brakujace_pola(dane)
+		self.assertNotIn("dzialalnosc_adres", wynik)
+		self.assertNotIn("dzialalnosc_telefon", wynik)
 
 
 class TestKwotaPoprawna(unittest.TestCase):

@@ -41,7 +41,8 @@ GRUPY_DOCHODU: dict[str, tuple[str, ...]] = {
 		"dzialalnosc_forma_inna",
 		"dzialalnosc_nip",
 		"dzialalnosc_nazwa",
-		"dzialalnosc_adres_telefon",
+		"dzialalnosc_adres",
+		"dzialalnosc_telefon",
 		"dzialalnosc_od_kiedy",
 		"dzialalnosc_kwota_dochodu",
 	),
@@ -64,7 +65,8 @@ Kolejność kluczy jest deklaratywna i odpowiada kolejności, w jakiej
 
 _BAZA_WYMAGANE: tuple[str, ...] = (
 	"miejsce_urodzenia",
-	"rodzaj_seria_numer_dokumentu",
+	"rodzaj_dokumentu",
+	"seria_numer_dokumentu",
 	"data_wydania_dokumentu",
 	"data_waznosci_dokumentu",
 	"adres_zameldowania_taki_sam",
