@@ -14,6 +14,16 @@ Frontend woła `volteo_pipeline_get` po PEŁNEJ, kropkowanej ścieżce
 dla Server Scriptów; skopiowanie wzorca wywołania z innej zakładki (bez
 pełnej ścieżki) daje w runtime HTTP 417 mimo zielonych bramek lokalnych
 (patrz `crm.api.umowa` i historia z `AudytTab.vue`).
+
+Payload zwraca KSZTAŁT rurociągu (`steps`, `notes`) i osobno migawkę stanu
+serwera w chwili odpytania (`status`, `current_index`, `off_pipeline*`,
+`note`) — ta druga grupa pól zostaje z przyczyn diagnostycznych (sondy),
+ale front NIE czyta jej już do wyznaczenia bieżącego kroku: `resource.reload()`
+po zmianie statusu ściga się z zapisem samej tej zmiany (SAVE jeszcze
+w locie), więc serwer potrafi oddać STARY status i front rysowałby pasek
+jeden krok za późno. Bieżący indeks/tryb/notatka/odznaka liczą się teraz
+po stronie klienta z `props.status` (prawda kliencka, ustawiona przez
+dropdown natychmiast) i `notes`, patrz `frontend/src/utils/dealPipeline.js`.
 """
 
 from typing import Any
@@ -21,7 +31,7 @@ from typing import Any
 import frappe
 from frappe import _
 
-from crm.volteo_pipeline import is_forward, notatka_for, pipeline_for, step_index
+from crm.volteo_pipeline import NOTATKI, is_forward, notatka_for, pipeline_for, pipeline_key_for, step_index
 
 
 def _sprawdz_dostep_do_szansy(deal: str) -> None:
@@ -34,12 +44,23 @@ def _sprawdz_dostep_do_szansy(deal: str) -> None:
 
 @frappe.whitelist()
 def volteo_pipeline_get(deal: str) -> dict[str, Any]:
-	"""Zwraca kształt paska rurociągu dla szansy: kroki, indeks bieżącego statusu,
-	czy szansa jest POZA rurociągiem (przegrana/wygrana) i notatkę „co dalej”.
+	"""Zwraca KSZTAŁT paska rurociągu dla rodzaju umowy tej szansy (`steps`,
+	`notes`) plus migawkę stanu serwera w chwili odpytania (`status`,
+	`current_index`, `off_pipeline*`, `note`).
 
 	Pusty `steps` (rodzaj umowy szansy bez rurociągu — np. nieustawiony) jest
 	poprawną odpowiedzią, nie błędem: frontend ukrywa wtedy pasek zamiast go
 	renderować pusty.
+
+	Migawkowe pola (`status`, `current_index`, `off_pipeline`,
+	`off_pipeline_type`, `note`) zostają dla sond/diagnostyki i pozostają
+	poprawne w chwili odpytania — ale komponent paska już ich NIE używa do
+	wyznaczenia bieżącego kroku, bo `resource.reload()` po zmianie statusu
+	ściga się z zapisem samej tej zmiany i potrafi trafić na jeszcze-nie-
+	zacommitowany stary status (patrz moduł, nagłówek pliku). Bieżący
+	indeks/tryb/notatkę front liczy z `props.status` (klient) i `steps`/`notes`
+	(ten payload) — stąd `notes` jest jedynym NOWYM polem, którego front
+	faktycznie potrzebuje.
 	"""
 	_sprawdz_dostep_do_szansy(deal)
 
@@ -48,6 +69,9 @@ def volteo_pipeline_get(deal: str) -> dict[str, Any]:
 	rurociag = pipeline_for(rodzaj)
 	kroki = [{"status": nazwa, "index": indeks} for indeks, nazwa in enumerate(rurociag or ())]
 	biezacy_indeks = step_index(rodzaj, status)
+
+	klucz_rurociagu = pipeline_key_for(rodzaj)
+	notatki = dict(NOTATKI.get(klucz_rurociagu, {})) if klucz_rurociagu else {}
 
 	poza_rurociagiem = bool(rurociag) and biezacy_indeks == -1
 	typ_poza_rurociagiem = None
@@ -59,6 +83,7 @@ def volteo_pipeline_get(deal: str) -> dict[str, Any]:
 		"rodzaj": rodzaj,
 		"status": status,
 		"steps": kroki,
+		"notes": notatki,
 		"current_index": biezacy_indeks,
 		"off_pipeline": poza_rurociagiem,
 		"off_pipeline_type": typ_poza_rurociagiem,

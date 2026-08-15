@@ -1,4 +1,5 @@
 import {
+  currentIndexFor,
   bandMode,
   nodeState,
   nodeStateForMode,
@@ -13,66 +14,90 @@ const stepsPvMe = [
   { status: 'Umowa', index: 2 },
 ]
 
-function progressPayload(overrides = {}) {
+function shapePayload(overrides = {}) {
   return {
     rodzaj: 'Fotowoltaika + Magazyn',
-    status: 'Kalkulacja',
     steps: stepsPvMe,
-    current_index: 1,
-    off_pipeline: false,
-    off_pipeline_type: null,
-    note: 'Uzupełnij dane techniczne',
+    notes: { Kalkulacja: 'Uzupełnij dane techniczne' },
+    // Migawkowe pola z backendu — CELOWO rozjechane z tym, co niesie `status`
+    // przekazywany osobno w testach niżej, żeby dowieść, że funkcje ich nie czytają.
+    current_index: 99,
+    off_pipeline: true,
+    off_pipeline_type: 'Lost',
+    note: 'TA WARTOŚĆ NIE POWINNA NIGDY WYCIEC DO WYNIKU',
     ...overrides,
   }
 }
 
 describe('Pipeline dealu — logika węzłów paska etapów (dealPipeline)', () => {
+  describe('currentIndexFor', () => {
+    it('zwraca indeks statusu dopasowanego po step.status', () => {
+      expect(currentIndexFor(stepsPvMe, 'Nowy')).toBe(0)
+      expect(currentIndexFor(stepsPvMe, 'Kalkulacja')).toBe(1)
+      expect(currentIndexFor(stepsPvMe, 'Umowa')).toBe(2)
+    })
+
+    it.each([
+      [stepsPvMe, 'Nieznany status'],
+      [stepsPvMe, null],
+      [stepsPvMe, undefined],
+      [stepsPvMe, ''],
+      [[], 'Nowy'],
+      [undefined, 'Nowy'],
+      [null, 'Nowy'],
+    ])('zwraca -1 dla steps=%p, status=%p', (steps, status) => {
+      expect(currentIndexFor(steps, status)).toBe(-1)
+    })
+  })
+
   describe('bandMode — hidden', () => {
     it.each([
       [null, 'brak payloadu'],
       [undefined, 'undefined zamiast payloadu'],
-      [{ ...progressPayload(), steps: [] }, 'puste steps'],
-      [{ ...progressPayload(), steps: undefined }, 'brak pola steps'],
-      [{ status: 'Nowy' }, 'payload bez steps w ogóle'],
+      [{ ...shapePayload(), steps: [] }, 'puste steps'],
+      [{ ...shapePayload(), steps: undefined }, 'brak pola steps'],
+      [{ notes: {} }, 'payload bez steps w ogóle'],
     ])('zwraca "hidden" dla: %s (%s)', (payload) => {
-      expect(bandMode(payload)).toBe('hidden')
+      expect(bandMode(payload, 'Nowy', undefined)).toBe('hidden')
     })
   })
 
-  describe('bandMode — progress / won / lost / unknown', () => {
-    it('zwraca "progress" dla dealu wewnątrz pipeline\'u', () => {
-      expect(bandMode(progressPayload())).toBe('progress')
+  describe('bandMode — progress ignoruje migawkę payloadu (payload.current_index/off_pipeline* rozjechane z props.status)', () => {
+    it('zwraca "progress", gdy status jest w steps, mimo że payload.off_pipeline=true/current_index=99', () => {
+      const payload = shapePayload()
+      expect(bandMode(payload, 'Kalkulacja', undefined)).toBe('progress')
     })
 
-    it('zwraca "lost" gdy off_pipeline=true i off_pipeline_type="Lost"', () => {
-      const payload = progressPayload({
-        off_pipeline: true,
-        off_pipeline_type: 'Lost',
-        status: 'Utracona',
-      })
-      expect(bandMode(payload)).toBe('lost')
+    it('indeks bieżącego kroku liczy się z currentIndexFor(props.status), NIE z payload.current_index', () => {
+      const payload = shapePayload()
+      expect(currentIndexFor(payload.steps, 'Kalkulacja')).toBe(1)
+      expect(payload.current_index).toBe(99) // migawka rozjechana — dowód, że jest nieużywana
+    })
+  })
+
+  describe('bandMode — lost / won / unknown liczone z statusType, nie z payload.off_pipeline_type', () => {
+    it('zwraca "lost" gdy status poza steps i statusType==="Lost"', () => {
+      const payload = shapePayload({ off_pipeline_type: 'Won' }) // migawka celowo mówi co innego
+      expect(bandMode(payload, 'Utracona', 'Lost')).toBe('lost')
     })
 
-    it('zwraca "won" gdy off_pipeline=true i off_pipeline_type="Won"', () => {
-      const payload = progressPayload({
-        off_pipeline: true,
-        off_pipeline_type: 'Won',
-        status: 'Wygrana',
-      })
-      expect(bandMode(payload)).toBe('won')
+    it('zwraca "won" gdy status poza steps i statusType==="Won"', () => {
+      const payload = shapePayload({ off_pipeline_type: 'Lost' })
+      expect(bandMode(payload, 'Wygrana', 'Won')).toBe('won')
     })
 
-    it.each([[null], [undefined], ['CośInnego'], [''], ['Recycled']])(
-      'zwraca "unknown" gdy off_pipeline=true i off_pipeline_type=%p (obcy status)',
-      (offPipelineType) => {
-        const payload = progressPayload({
-          off_pipeline: true,
-          off_pipeline_type: offPipelineType,
-          status: 'Jakiś obcy status',
-        })
-        expect(bandMode(payload)).toBe('unknown')
+    it.each([[null], [undefined], ['CośInnego'], ['']])(
+      'zwraca "unknown" gdy status poza steps i statusType=%p',
+      (statusType) => {
+        const payload = shapePayload()
+        expect(bandMode(payload, 'Jakiś obcy status', statusType)).toBe('unknown')
       },
     )
+
+    it('undefined statusType (store jeszcze nie załadowany) daje "unknown" dla statusu spoza rurociągu', () => {
+      const payload = shapePayload()
+      expect(bandMode(payload, 'Przegrana', undefined)).toBe('unknown')
+    })
   })
 
   describe('nodeState', () => {
@@ -148,103 +173,92 @@ describe('Pipeline dealu — logika węzłów paska etapów (dealPipeline)', () 
   })
 
   describe('nextStepNote', () => {
-    it('zwraca notatkę w trybie progress', () => {
-      expect(nextStepNote(progressPayload({ note: 'Uzupełnij dane techniczne' }))).toBe(
-        'Uzupełnij dane techniczne',
-      )
+    it('zwraca notatkę z payload.notes[status] w trybie progress', () => {
+      const payload = shapePayload({ notes: { Kalkulacja: 'Uzupełnij dane techniczne' } })
+      expect(nextStepNote(payload, 'Kalkulacja', undefined)).toBe('Uzupełnij dane techniczne')
+    })
+
+    it('nigdy nie czyta migawkowego payload.note', () => {
+      const payload = shapePayload({
+        notes: { Kalkulacja: 'Notatka właściwa' },
+        note: 'Notatka migawkowa — nie powinna się pokazać',
+      })
+      expect(nextStepNote(payload, 'Kalkulacja', undefined)).toBe('Notatka właściwa')
     })
 
     it.each([[''], ['   '], [undefined], [null]])(
       'zwraca null dla pustej/białoznakowej/brakującej notatki (%p) w trybie progress',
       (note) => {
-        expect(nextStepNote(progressPayload({ note }))).toBeNull()
+        const payload = shapePayload({ notes: { Kalkulacja: note } })
+        expect(nextStepNote(payload, 'Kalkulacja', undefined)).toBeNull()
       },
     )
 
-    it('zwraca null w trybie "lost" nawet gdy note jest ustawione', () => {
-      const payload = progressPayload({
-        off_pipeline: true,
-        off_pipeline_type: 'Lost',
-        status: 'Utracona',
-        note: 'Ta notatka nie powinna się pokazać',
-      })
-      expect(nextStepNote(payload)).toBeNull()
+    it('zwraca null, gdy status nie ma wpisu w notes (brak notatki dla tego kroku)', () => {
+      const payload = shapePayload({ notes: {} })
+      expect(nextStepNote(payload, 'Kalkulacja', undefined)).toBeNull()
     })
 
-    it('zwraca null w trybie "won" nawet gdy note jest ustawione', () => {
-      const payload = progressPayload({
-        off_pipeline: true,
-        off_pipeline_type: 'Won',
-        status: 'Wygrana',
-        note: 'Ta notatka nie powinna się pokazać',
-      })
-      expect(nextStepNote(payload)).toBeNull()
+    it('zwraca null w trybie "lost" nawet gdy notes ma wpis dla statusu', () => {
+      const payload = shapePayload({ notes: { Utracona: 'Ta notatka nie powinna się pokazać' } })
+      expect(nextStepNote(payload, 'Utracona', 'Lost')).toBeNull()
     })
 
-    it('zwraca null w trybie "unknown" nawet gdy note jest ustawione', () => {
-      const payload = progressPayload({
-        off_pipeline: true,
-        off_pipeline_type: 'Recycled',
-        status: 'Obcy status',
-        note: 'Ta notatka nie powinna się pokazać',
-      })
-      expect(nextStepNote(payload)).toBeNull()
+    it('zwraca null w trybie "won" nawet gdy notes ma wpis dla statusu', () => {
+      const payload = shapePayload({ notes: { Wygrana: 'Ta notatka nie powinna się pokazać' } })
+      expect(nextStepNote(payload, 'Wygrana', 'Won')).toBeNull()
+    })
+
+    it('zwraca null w trybie "unknown" nawet gdy notes ma wpis dla statusu', () => {
+      const payload = shapePayload({ notes: { 'Obcy status': 'Ta notatka nie powinna się pokazać' } })
+      expect(nextStepNote(payload, 'Obcy status', 'Recycled')).toBeNull()
     })
 
     it('zwraca null w trybie "hidden" (brak payloadu)', () => {
-      expect(nextStepNote(null)).toBeNull()
-      expect(nextStepNote({ steps: [] })).toBeNull()
+      expect(nextStepNote(null, 'Nowy', undefined)).toBeNull()
+      expect(nextStepNote({ steps: [] }, 'Nowy', undefined)).toBeNull()
     })
   })
 
   describe('offPipelineBadge', () => {
     it('zwraca null w trybie "progress"', () => {
-      expect(offPipelineBadge(progressPayload())).toBeNull()
+      expect(offPipelineBadge(shapePayload(), 'Kalkulacja', undefined)).toBeNull()
     })
 
     it('zwraca null w trybie "hidden"', () => {
-      expect(offPipelineBadge(null)).toBeNull()
-      expect(offPipelineBadge({ steps: [] })).toBeNull()
+      expect(offPipelineBadge(null, 'Nowy', undefined)).toBeNull()
+      expect(offPipelineBadge({ steps: [] }, 'Nowy', undefined)).toBeNull()
     })
 
-    it('zwraca surowy status w trybie "lost"', () => {
-      const payload = progressPayload({
-        off_pipeline: true,
-        off_pipeline_type: 'Lost',
-        status: 'Utracona — cena',
-      })
-      expect(offPipelineBadge(payload)).toBe('Utracona — cena')
+    it('zwraca surowy status (props.status) w trybie "lost", NIE payload.status', () => {
+      const payload = shapePayload()
+      expect(offPipelineBadge(payload, 'Utracona — cena', 'Lost')).toBe('Utracona — cena')
     })
 
     it('zwraca surowy status w trybie "won"', () => {
-      const payload = progressPayload({
-        off_pipeline: true,
-        off_pipeline_type: 'Won',
-        status: 'Wygrana',
-      })
-      expect(offPipelineBadge(payload)).toBe('Wygrana')
+      const payload = shapePayload()
+      expect(offPipelineBadge(payload, 'Wygrana', 'Won')).toBe('Wygrana')
     })
 
     it('zwraca surowy status w trybie "unknown"', () => {
-      const payload = progressPayload({
-        off_pipeline: true,
-        off_pipeline_type: 'Recycled',
-        status: 'Status spoza znanych typów',
-      })
-      expect(offPipelineBadge(payload)).toBe('Status spoza znanych typów')
+      const payload = shapePayload()
+      expect(offPipelineBadge(payload, 'Status spoza znanych typów', 'Recycled')).toBe(
+        'Status spoza znanych typów',
+      )
     })
   })
 
   describe('brak mutacji payloadu', () => {
     it('żadna funkcja nie modyfikuje przekazanego obiektu payload', () => {
-      const payload = progressPayload()
+      const payload = shapePayload({ off_pipeline: false, off_pipeline_type: null })
       const kopia = JSON.parse(JSON.stringify(payload))
 
-      bandMode(payload)
-      nextStepNote(payload)
-      offPipelineBadge(payload)
-      nodeState(1, payload.current_index)
-      nodeStateForMode(bandMode(payload), 1, payload.current_index)
+      currentIndexFor(payload.steps, 'Kalkulacja')
+      bandMode(payload, 'Kalkulacja', undefined)
+      nextStepNote(payload, 'Kalkulacja', undefined)
+      offPipelineBadge(payload, 'Kalkulacja', undefined)
+      nodeState(1, currentIndexFor(payload.steps, 'Kalkulacja'))
+      nodeStateForMode(bandMode(payload, 'Kalkulacja', undefined), 1, 1)
       stepNumber(1)
 
       expect(payload).toEqual(kopia)

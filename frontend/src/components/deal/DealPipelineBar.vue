@@ -6,9 +6,10 @@
 
   Cała logika stanu (tryb paska, stan węzła, numer węzła, notatka "następny
   krok", odznaka poza pipeline'em) żyje w `utils/dealPipeline.js` — ten
-  komponent tylko renderuje payload zwrócony przez backend
-  (`crm.api.pipeline.volteo_pipeline_get`, WOŁANY PO PEŁNEJ KROPKOWANEJ
-  ŚCIEŻCE — gołe nazwy dają HTTP 417 w runtime dla API forka).
+  komponent tylko renderuje wynik na podstawie payloadu SERWERA (KSZTAŁT
+  rurociągu: `steps`/`notes`, z `crm.api.pipeline.volteo_pipeline_get`,
+  WOŁANY PO PEŁNEJ KROPKOWANEJ ŚCIEŻCE — gołe nazwy dają HTTP 417 w runtime
+  dla API forka) i `props.status` (prawda kliencka — patrz komentarz w <script>).
 -->
 <template>
   <div
@@ -35,7 +36,7 @@
               :class="nodeCircleClass(i)"
             >
               <span
-                v-if="nodeStateForMode(mode, i, payload.current_index) === 'done'"
+                v-if="nodeStateForMode(mode, i, currentIndex) === 'done'"
                 class="lucide-check size-3.5"
                 aria-hidden="true"
               />
@@ -72,10 +73,26 @@
   </div>
 </template>
 <script setup>
+// Dlaczego pasek NIGDY nie odświeża payloadu po zmianie `props.status`:
+// wcześniejsza wersja miała `watch(() => props.status, () => resource.reload())`
+// i to właśnie ono powodowało błąd „pasek o jeden krok za późno” — reload
+// odpytuje serwer, ale zapis TEJ SAMEJ zmiany statusu (SAVE wywołany z
+// dropdownu w nagłówku) jest wtedy jeszcze w locie; serwer potrafił oddać
+// STARY status i pasek renderował poprzedni krok aż do kolejnej zmiany.
+// Rozwiązanie: serwer (`volteo_pipeline_get`) dostarcza tylko KSZTAŁT
+// rurociągu (`steps`, `notes`) dla `rodzaj` — payload odświeżamy WYŁĄCZNIE,
+// gdy `rodzaj` się zmienia. Bieżący krok/tryb/notatkę/odznakę liczymy tu, w
+// komponencie, synchronicznie z `props.status` (jedyna prawda kliencka —
+// ustawiana przez dropdown natychmiast, bez czekania na round-trip) i z
+// `statusType` ze store'u statusów (już załadowanego przez inny widok tej
+// strony). Migawkowe pola payloadu (`current_index`, `off_pipeline*`, `note`,
+// `status`) zostają w odpowiedzi API dla sond, ale ten komponent ich nie czyta.
 import { Badge, createResource } from 'frappe-ui'
 import { computed, watch } from 'vue'
+import { statusesStore } from '@/stores/statuses'
 import {
   bandMode,
+  currentIndexFor,
   nodeStateForMode,
   stepNumber,
   nextStepNote,
@@ -88,21 +105,31 @@ const props = defineProps({
   rodzaj: { type: String, default: '' },
 })
 
+const { getDealStatus } = statusesStore()
+
 const resource = createResource({
   url: 'crm.api.pipeline.volteo_pipeline_get',
   params: { deal: props.dealId },
   auto: true,
 })
 
-// Zmiana statusu z dropdownu w nagłówku ORAZ automatyka po stronie serwera
-// (doc `status` jest realtime) — obie ścieżki muszą odświeżyć pasek.
-watch(() => props.status, () => resource.reload())
+// Kształt rurociągu zależy tylko od `rodzaj` — to jedyna zmiana, po której
+// warto odpytać serwer ponownie (np. zmiana linii produktowej na szansie).
 watch(() => props.rodzaj, () => resource.reload())
 
 const payload = computed(() => resource.data || null)
-const mode = computed(() => bandMode(payload.value))
-const note = computed(() => nextStepNote(payload.value))
-const badgeLabel = computed(() => offPipelineBadge(payload.value))
+
+// Null-safe na dwa sposoby: nieznany `props.status` (getDealStatus zwraca
+// undefined) i store statusów jeszcze niezaładowany (to samo zimne-wejście
+// zjawisko, które wywalało render w Deal.vue — patrz commit 46397328;
+// tu żaden odczyt nie rzuca, bo `?.type` na undefined daje po prostu undefined,
+// a bandMode/nextStepNote/offPipelineBadge traktują undefined statusType jako 'unknown').
+const statusType = computed(() => getDealStatus?.(props.status)?.type)
+
+const currentIndex = computed(() => currentIndexFor(payload.value?.steps, props.status))
+const mode = computed(() => bandMode(payload.value, props.status, statusType.value))
+const note = computed(() => nextStepNote(payload.value, props.status, statusType.value))
+const badgeLabel = computed(() => offPipelineBadge(payload.value, props.status, statusType.value))
 
 const badgeTheme = computed(() => {
   if (mode.value === 'lost') return 'red'
@@ -112,14 +139,14 @@ const badgeTheme = computed(() => {
 
 function connectorClass(index) {
   // Segment "ukończony" (zielony), jeśli węzeł PRZED nim jest już done.
-  const prevState = nodeStateForMode(mode.value, index - 1, payload.value?.current_index)
+  const prevState = nodeStateForMode(mode.value, index - 1, currentIndex.value)
   return prevState === 'done' || mode.value === 'won'
     ? 'bg-green-500'
     : 'bg-surface-gray-3'
 }
 
 function nodeCircleClass(index) {
-  const state = nodeStateForMode(mode.value, index, payload.value?.current_index)
+  const state = nodeStateForMode(mode.value, index, currentIndex.value)
   if (state === 'done') return 'bg-green-500 text-white'
   if (state === 'current') return 'bg-blue-500 text-white'
   if (state === 'future') return 'bg-surface-gray-3 text-ink-gray-6'
@@ -128,7 +155,7 @@ function nodeCircleClass(index) {
 }
 
 function nodeLabelClass(index) {
-  const state = nodeStateForMode(mode.value, index, payload.value?.current_index)
+  const state = nodeStateForMode(mode.value, index, currentIndex.value)
   if (state === 'current') return 'font-medium text-blue-600'
   if (state === 'done') return 'text-ink-gray-7'
   if (state === 'muted') return 'text-ink-gray-3'

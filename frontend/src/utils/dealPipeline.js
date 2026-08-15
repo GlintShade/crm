@@ -4,50 +4,71 @@
 // app runtime) so it can be unit-tested directly, same convention as
 // autentiStatus.js / cpForm.js / cpMarza.js / money.js.
 //
-// The backend (`crm.volteo_pipeline`) is the single source of truth for the
-// pipeline shape per `rodzaj` (which steps exist, their order, their
-// labels) and for the off-pipeline statuses ('Lost' / 'Won' / other). This
-// module never hardcodes a pipeline shape or a status name — it only reads
-// the payload's own `steps`, `current_index` and `off_pipeline*` fields and
-// derives display state from them.
+// The backend (`crm.volteo_pipeline`, via `crm.api.pipeline.volteo_pipeline_get`)
+// is the single source of truth for the pipeline SHAPE per `rodzaj` — which
+// steps exist, their order, their labels, and the "what's next" note per
+// status (`payload.steps`, `payload.notes`). It is deliberately NOT the
+// source of truth for the CURRENT step: `payload.current_index` (and the
+// other status-derived fields on the payload) are a snapshot taken at fetch
+// time, and the component only re-fetches the payload when `rodzaj` changes,
+// not on every status change — reloading on every status change is exactly
+// what raced the in-flight status SAVE and caused the pipeline band to lag
+// one step behind. Current step, mode, note and badge are derived HERE, at
+// call time, from the caller's own `status` (client truth, e.g. `props.status`
+// straight from the dropdown) and `statusType` (from the statuses store),
+// never from `payload.current_index` / `payload.off_pipeline*` / `payload.status`.
 
 /**
  * Payload kształtu (dostarczanego przez backend):
  * {
  *   rodzaj, status,
  *   steps: [{ status, index }, ...],
- *   current_index,
- *   off_pipeline,
- *   off_pipeline_type, // 'Lost' | 'Won' | null
- *   note,
+ *   notes: { [status]: noteText, ... },
+ *   current_index, off_pipeline, off_pipeline_type, note, // migawka — patrz wyżej, NIEUŻYWANE tutaj
  * }
  */
 
 /**
- * Wyznacza tryb renderowania całego paska etapów na podstawie payloadu.
+ * Wyznacza indeks statusu w krokach rurociągu.
+ *
+ * @param {Array<{status: string, index: number}>|null|undefined} steps
+ * @param {string|null|undefined} status
+ * @returns {number} indeks w `steps` (dopasowanie po `step.status`), albo -1 gdy brak/nie znaleziono.
+ */
+export function currentIndexFor(steps, status) {
+  if (!Array.isArray(steps) || steps.length === 0) return -1
+  if (!status) return -1
+  const znaleziony = steps.find((step) => step?.status === status)
+  return znaleziony ? znaleziony.index : -1
+}
+
+/**
+ * Wyznacza tryb renderowania całego paska etapów na podstawie payloadu
+ * (kształt), statusu (prawda kliencka) i typu tego statusu (ze store'u statusów).
  *
  * - 'hidden' — brak payloadu, albo `steps` puste/nieobecne (deal bez
  *   rodzaju albo z nierozpoznanym rodzajem — pasek się nie renderuje).
- * - 'lost' — deal poza pipeline'em, `off_pipeline_type === 'Lost'`.
- * - 'won' — deal poza pipeline'em, `off_pipeline_type === 'Won'`.
- * - 'unknown' — deal poza pipeline'em, ale z innym typem (obcy status spoza
- *   Lost/Won) — pasek renderuje się szaro z surową nazwą statusu.
- * - 'progress' — normalny przebieg wewnątrz pipeline'u.
+ * - 'progress' — `status` jest jednym z kroków rurociągu (niezależnie od
+ *   tego, co mówi migawkowe `payload.current_index` — ono jest nieużywane).
+ * - 'lost' — status POZA rurociągiem, `statusType === 'Lost'`.
+ * - 'won' — status POZA rurociągiem, `statusType === 'Won'`.
+ * - 'unknown' — status POZA rurociągiem, a `statusType` inny/nieznany
+ *   (obcy status spoza Lost/Won, albo store statusów jeszcze nie załadowany).
  *
- * @param {{steps?: Array, off_pipeline?: boolean, off_pipeline_type?: string|null}|null|undefined} payload
+ * @param {{steps?: Array, notes?: Object}|null|undefined} payload
+ * @param {string|null|undefined} status
+ * @param {string|null|undefined} statusType
  * @returns {'hidden'|'progress'|'won'|'lost'|'unknown'}
  */
-export function bandMode(payload) {
+export function bandMode(payload, status, statusType) {
   if (!payload) return 'hidden'
   if (!Array.isArray(payload.steps) || payload.steps.length === 0) return 'hidden'
 
-  if (payload.off_pipeline) {
-    if (payload.off_pipeline_type === 'Lost') return 'lost'
-    if (payload.off_pipeline_type === 'Won') return 'won'
-    return 'unknown'
-  }
+  if (currentIndexFor(payload.steps, status) >= 0) return 'progress'
 
-  return 'progress'
+  if (statusType === 'Lost') return 'lost'
+  if (statusType === 'Won') return 'won'
+  return 'unknown'
 }
 
 /**
@@ -96,14 +117,17 @@ export function stepNumber(index) {
 
 /**
  * Notatka o następnym kroku — pokazywana tylko w trybie 'progress'; pusty
- * lub sam biały znak traktowany jak brak notatki.
+ * lub sam biały znak traktowany jak brak notatki. Czyta `payload.notes[status]`
+ * (kształt, per rurociąg), NIE migawkowe `payload.note`.
  *
- * @param {{steps?: Array, off_pipeline?: boolean, off_pipeline_type?: string|null, note?: string|null}|null|undefined} payload
+ * @param {{steps?: Array, notes?: Object}|null|undefined} payload
+ * @param {string|null|undefined} status
+ * @param {string|null|undefined} statusType
  * @returns {string|null}
  */
-export function nextStepNote(payload) {
-  if (bandMode(payload) !== 'progress') return null
-  const note = payload.note
+export function nextStepNote(payload, status, statusType) {
+  if (bandMode(payload, status, statusType) !== 'progress') return null
+  const note = payload.notes?.[status]
   if (typeof note !== 'string') return null
   if (note.trim() === '') return null
   return note
@@ -113,13 +137,15 @@ export function nextStepNote(payload) {
  * Surowa nazwa statusu do pokazania w odznace paska poza pipeline'em
  * ('lost' / 'won' / 'unknown'); w trybie 'progress'/'hidden' brak odznaki.
  *
- * @param {{status?: string, steps?: Array, off_pipeline?: boolean, off_pipeline_type?: string|null}|null|undefined} payload
+ * @param {{steps?: Array, notes?: Object}|null|undefined} payload
+ * @param {string|null|undefined} status
+ * @param {string|null|undefined} statusType
  * @returns {string|null}
  */
-export function offPipelineBadge(payload) {
-  const mode = bandMode(payload)
+export function offPipelineBadge(payload, status, statusType) {
+  const mode = bandMode(payload, status, statusType)
   if (mode === 'lost' || mode === 'won' || mode === 'unknown') {
-    return payload.status
+    return status
   }
   return null
 }
