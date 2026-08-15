@@ -303,29 +303,55 @@ def _pobierz_kredyt(deal: str) -> "frappe.model.document.Document | None":
 	return None
 
 
+def _kontakt_surowy_i_prefill(
+	deal_doc: "frappe.model.document.Document",
+) -> tuple[dict[str, Any], dict[str, Any]]:
+	"""Jedno wywołanie `_dane_kontaktu` kontaktu podstawowego szansy, zwracające PARĘ
+	(surowy słownik, re-keyed `prefill`) z TEGO SAMEGO odczytu — reużywa
+	`crm.api.umowa._podstawowy_kontakt`/`_dane_kontaktu` (spacer po kontaktach szansy
+	+ odczyt `Contact Email`/`Contact Phone`) zamiast duplikować tę logikę.
+
+	Dwa niezależne wywołania `_dane_kontaktu` (jedno dla `prefill`, drugie dla
+	kontekstu PDF-u) mogłyby się rozjechać — stąd jeden odczyt, dwa kształty z
+	niego wyprowadzone. Surowy słownik ma klucze `_dane_kontaktu`
+	(`custom_pesel`, `first_name`, `last_name`, `mobile_no`, `email`,
+	`custom_kod_pocztowy`, `custom_miasto`, `custom_ulica`, `custom_nr_domu`,
+	`custom_nr_mieszkania`) — to kształt, jakiego oczekuje
+	`crm.volteo_kredyt_pdf.zbuduj_kontekst_kredytu`. `prefill` jest re-keyed na
+	nazwy pól formularza kredytowego (`pesel`, `imiona`, `nazwisko`, ...) — to
+	kształt, jakiego oczekuje przeglądarka i bramka kompletności kontaktu.
+	Mylenie tych dwóch kształtów to klasa błędu prefill-keying z 2026-08-05,
+	zaobserwowana ponownie na tym szwie sondą e2e 2026-08-15: przekazanie
+	re-keyed `prefill` zamiast surowego słownika do `zbuduj_kontekst_kredytu`
+	dawało pusty kontekst kontaktu w PDF-ie poza `email` — jedynym kluczem
+	wspólnym obu kształtów.
+	"""
+	kontakt = _podstawowy_kontakt(deal_doc)
+	surowe = _dane_kontaktu(kontakt)
+	prefill = {
+		"pesel": surowe.get("custom_pesel") or "",
+		"imiona": surowe.get("first_name") or "",
+		"nazwisko": surowe.get("last_name") or "",
+		"telefon": surowe.get("mobile_no") or "",
+		"email": surowe.get("email") or "",
+		"kod_pocztowy": surowe.get("custom_kod_pocztowy") or "",
+		"miejscowosc": surowe.get("custom_miasto") or "",
+		"ulica": surowe.get("custom_ulica") or "",
+		"nr_domu": surowe.get("custom_nr_domu") or "",
+		"nr_lokalu": surowe.get("custom_nr_mieszkania") or "",
+	}
+	return surowe, prefill
+
+
 def _prefill(deal_doc: "frappe.model.document.Document") -> dict[str, Any]:
 	"""Składa blok `prefill`: dane kontaktu podstawowego szansy, wyłącznie do
 	odczytu przez zakładkę (formularz kredytowy nigdy nie zapisuje z powrotem
-	do `Contact`). Reużywa `crm.api.umowa._podstawowy_kontakt`/`_dane_kontaktu`
-	(spacer po kontaktach szansy + odczyt `Contact Email`/`Contact Phone`) zamiast
-	duplikować tę logikę — jedyne co robimy tutaj to re-keying na nazwy pól
-	formularza kredytowego, inne niż nazwy pól `Volteo Umowa`, które `_dane_kontaktu`
-	natywnie zwraca.
+	do `Contact`). Cienki wrapper nad `_kontakt_surowy_i_prefill` — wywołujący,
+	którym nie zależy na surowym kształcie (np. `volteo_kredyt_get/create/save`),
+	dostaje tylko `prefill`.
 	"""
-	kontakt = _podstawowy_kontakt(deal_doc)
-	dane = _dane_kontaktu(kontakt)
-	return {
-		"pesel": dane.get("custom_pesel") or "",
-		"imiona": dane.get("first_name") or "",
-		"nazwisko": dane.get("last_name") or "",
-		"telefon": dane.get("mobile_no") or "",
-		"email": dane.get("email") or "",
-		"kod_pocztowy": dane.get("custom_kod_pocztowy") or "",
-		"miejscowosc": dane.get("custom_miasto") or "",
-		"ulica": dane.get("custom_ulica") or "",
-		"nr_domu": dane.get("custom_nr_domu") or "",
-		"nr_lokalu": dane.get("custom_nr_mieszkania") or "",
-	}
+	_, prefill = _kontakt_surowy_i_prefill(deal_doc)
+	return prefill
 
 
 def _kredyt_do_dict(kredyt_doc: "frappe.model.document.Document") -> dict[str, Any]:
@@ -558,7 +584,7 @@ def volteo_kredyt_pdf(deal: str) -> dict[str, Any]:
 		etykiety = ", ".join(_ETYKIETY_POL.get(pole, pole) for pole in braki)
 		frappe.throw(_("Formularz kredytowy jest niekompletny — uzupełnij pola: {0}.").format(etykiety))
 
-	prefill = _prefill(deal_doc)
+	kontakt_surowy, prefill = _kontakt_surowy_i_prefill(deal_doc)
 	brakujace_prefill = [klucz for klucz in _PREFILL_ETYKIETY if not prefill.get(klucz)]
 	if brakujace_prefill:
 		etykiety = ", ".join(_PREFILL_ETYKIETY[klucz] for klucz in brakujace_prefill)
@@ -575,9 +601,15 @@ def volteo_kredyt_pdf(deal: str) -> dict[str, Any]:
 		_blad_brakujacego_szablonu()
 
 	try:
+		# `kontakt` MUSI być surowym słownikiem `_dane_kontaktu` (klucze
+		# custom_pesel/first_name/last_name/mobile_no/email/custom_kod_pocztowy/
+		# custom_miasto/custom_ulica/custom_nr_domu/custom_nr_mieszkania), NIE
+		# re-keyed `prefill` (pesel/imiona/nazwisko/...) — wykryte sondą e2e
+		# 2026-08-15, klasa błędu prefill-keying z 2026-08-05: re-keyed prefill
+		# dawał pusty kontakt w PDF-ie poza `email` (jedyny wspólny klucz).
 		kontekst = zbuduj_kontekst_kredytu(
 			kredyt=_kredyt_do_dict(kredyt_doc),
-			kontakt=prefill,
+			kontakt=kontakt_surowy,
 			dzis=getdate(),
 		)
 		pdf_bytes = zloz_kredyt(kontekst, szablon_pdf)
