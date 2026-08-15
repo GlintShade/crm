@@ -18,6 +18,7 @@ export default defineConfig({
         'src/utils/expressions.js',
         'src/utils/renderFieldLayoutDialog.js',
         'src/utils/pvForm.js',
+        'src/utils/kredytForm.js',
       ],
     },
   },

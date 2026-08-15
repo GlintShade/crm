@@ -76,6 +76,7 @@
         <MontazTab v-else-if="tab.name === 'Montaz'" :deal-id="dealId" />
         <AudytTab v-else-if="tab.name === 'Audyt'" :deal-id="dealId" />
         <UmowaTab v-else-if="tab.name === 'Umowa'" :deal-id="dealId" />
+        <KredytTab v-else-if="tab.name === 'Kredyt'" :deal-id="dealId" />
       </template>
     </Tabs>
     <Resizer side="right" class="flex flex-col justify-between border-l">
@@ -325,11 +326,13 @@ import FakturyIcon from '@/components/Icons/FakturyIcon.vue'
 import MontazIcon from '@/components/Icons/MontazIcon.vue'
 import AudytIcon from '@/components/Icons/AudytIcon.vue'
 import UmowaIcon from '@/components/Icons/UmowaIcon.vue'
+import KredytIcon from '@/components/Icons/KredytIcon.vue'
 import ZestawTab from '@/components/deal/ZestawTab.vue'
 import FakturyTab from '@/components/deal/FakturyTab.vue'
 import MontazTab from '@/components/deal/MontazTab.vue'
 import AudytTab from '@/components/deal/AudytTab.vue'
 import UmowaTab from '@/components/deal/UmowaTab.vue'
+import KredytTab from '@/components/deal/KredytTab.vue'
 import DealPipelineBar from '@/components/deal/DealPipelineBar.vue'
 import DealNextStepNote from '@/components/deal/DealNextStepNote.vue'
 import OrganizationModal from '@/components/Modals/OrganizationModal.vue'
@@ -543,7 +546,20 @@ const NATIVE_TABS = [
 // Historia reuses the native Activity feed (keep their native `name` so
 // <Activities> renders them; only the visible `label` is Polish). Zestaw /
 // Faktury / Montaż / Audyt / Umowa are custom panels (see the #tab-panel branch).
+// Mirrors OZE_RODZAJE in crm/volteo_pipeline.py — the Kredyt tab (credit
+// application for the bank/leasing partner) only makes sense for the PV/
+// storage product lines, never for Czyste Powietrze (subsidy, not credit).
+const OZE_RODZAJE = new Set(['Fotowoltaika', 'Fotowoltaika + Magazyn', 'Magazyn energii'])
+
 const tabs = computed(() => {
+  // First use of the tabs `condition` hook (see the filter below): a tab
+  // entry may carry `condition: () => boolean` to appear only for some
+  // deals. useActiveTabManager restores the active tab by NAME (it looks up
+  // `tabs.value.findIndex(t => t.name.toLowerCase() === storedName)`, not by
+  // raw array index, and recomputes on every `tabs` change via its
+  // `watch(tabs, ...)`), so a conditionally-appearing tab is safe to place
+  // anywhere in this array — it does not shift any other tab's restored
+  // position.
   let tabOptions = [
     { name: 'Zestaw', label: __('Zestaw'), icon: ZestawIcon },
     { name: 'Attachments', label: __('Pliki'), icon: AttachmentIcon },
@@ -552,6 +568,12 @@ const tabs = computed(() => {
     { name: 'Activity', label: __('Aktywność'), icon: ActivityIcon },
     { name: 'Audyt', label: __('Audyt'), icon: AudytIcon },
     { name: 'Umowa', label: __('Umowa'), icon: UmowaIcon },
+    {
+      name: 'Kredyt',
+      label: __('Kredyt'),
+      icon: KredytIcon,
+      condition: () => OZE_RODZAJE.has(doc.value?.custom_rodzaj_umowy),
+    },
   ]
   return tabOptions.filter((tab) => (tab.condition ? tab.condition() : true))
 })
