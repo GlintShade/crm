@@ -36,20 +36,35 @@ w prawej), inaczej niż umowy (akapity + podkreślenia). Trzy rodzaje pozycji:
    ``x = xMin(linii) + 3``, ``y = 842 - yMax(linii) + 2,5``, ``maks_szerokosc =
    szerokość(linii) - 6``.
 
-3. **Kratka** (``☐``/``□``): wszystkie kratki w tym szablonie mają jednolitą
-   wysokość glifu 13,41 pt (zmierzone `pdftotext -bbox`, patrz `build_map.py`
-   w raporcie zadania), ale glif ``□`` jest wyraźnie mniejszy w środku niż
-   jego 13,41-punktowa obwódka — domyślny ``rozmiar=10.0`` dawał znak „X"
-   za wysoki na kratkę (feedback właściciela po pierwszym wydruku PDF-u).
-   Każda kratka w tej mapie ma więc jawne ``rozmiar=8.0`` (ta sama wartość co
-   „standardowa" mała kratka w `volteo_umowa_mapa.py`), a ``y`` jest liczone
-   nie od ``yMax(glifu)`` z offsetem, tylko WPROST z pionowego środka kratki:
-   ``y = 842 - (yMin(glifu)+yMax(glifu))/2 - 0,36*rozmiar`` — ``0,36*rozmiar``
-   to przybliżony offset od linii bazowej do pionowego środka wielkiej litery
-   „X" (cap-height ≈ 0,72 em, więc połowa to ≈0,36 em), tak żeby narysowany
-   znak wypadł wyśrodkowany w kratce, a nie przy jej górnej krawędzi. ``x``
-   jest środkiem kratki w poziomie (generator ma wyśrodkować znak „X"
-   względem tego punktu, ``wyrownanie="srodek"``).
+3. **Kratka** (``☐``/``□``): domyślny ``rozmiar=10.0`` dawał znak „X" za
+   wysoki na kratkę (feedback właściciela #1, po pierwszym wydruku PDF-u).
+   Naprawione jawnym ``rozmiar=8.0`` na każdej kratce (ta sama wartość co
+   „standardowa" mała kratka w `volteo_umowa_mapa.py`) — rozmiar samego X był
+   wtedy już dobry, ale pierwsza wersja tej naprawy (feedback #1) liczyła
+   pionowe centrowanie od ``yMin``/``yMax`` GLIFU zmierzonego `pdftotext
+   -bbox` (13,41 pt — patrz `build_map.py` w raporcie zadania), traktując to
+   jako wysokość samej kratki. To było błędne założenie: ``pdftotext -bbox``
+   podaje ZEWNĘTRZNY prostokąt przydziału znaku (character advance box), NIE
+   rozmiar narysowanego kwadratu ☐. Zrenderowano PDF w 600 dpi i zmierzono
+   RZECZYWISTY widoczny kwadrat metodą spójnych składowych (connected-
+   component labeling na progowanym rastrze) na 8 reprezentatywnych kratkach
+   rozsianych po obu stronach z kratkami (str. 1 i 2) — wysokość/szerokość
+   wyszły JEDNOLICIE ``5,40 pt`` (nie 13,41 pt), a przesunięcie widocznego
+   kwadratu względem zmierzonego przez `pdftotext` ``yMin`` glifu wyszło
+   równie jednolite: ``+5,32 pt`` od góry / ``-2,685 pt`` od ``yMax`` (feedback
+   właściciela #2 — X był systematycznie ok. 2 pt za wysoko, co dokładnie
+   zgadza się z centrowaniem względem 13,41 pt zamiast rzeczywistych 5,40 pt).
+   Każda kratka poniżej ma więc ``y`` policzone z NAPRAWDĘ zmierzonego środka:
+   ``y = 842 - srodek_widocznego_kwadratu_od_gory - 0,36*rozmiar`` —
+   ``0,36*rozmiar`` to przybliżony offset od linii bazowej do pionowego
+   środka wielkiej litery „X" (cap-height ≈ 0,72 em, połowa ≈0,36 em). Po tej
+   poprawce zmierzona (tą samą metodą spójnych składowych + różnica renderu
+   względem pustego szablonu, żeby odizolować tylko atrament „X") asymetria
+   góra/dół wyszła ≤0,72 pt na wszystkich 8 próbkach — poniżej progu
+   dostrzegalności, nie warto dalej dostrajać. ``x`` jest środkiem kratki w
+   poziomie (środek zmierzonego GLIFU pokrywa się ze środkiem widocznego
+   kwadratu w poziomie — tej współrzędnej ta poprawka nie dotyczy; generator
+   ma wyśrodkować znak „X" względem tego punktu, ``wyrownanie="srodek"``).
 
 Wszystkie współrzędne w ``MAPA_KREDYT`` zostały policzone SKRYPTEM
 (`pdftotext -bbox` dla tekstu/kropkowanych linii i glifów kratek; `pdfminer.six`
@@ -139,27 +154,27 @@ _STRONA_1: tuple[Pole, ...] = (
     # Pytanie „CZY ADRES ZAMIESZKANIA JEST TAKI SAM, JAK ADRES ZAMELDOWANIA?"
     # — kratki TAK/NIE (glif 13,41 pt, offset standardowy +3,0) + kropkowana
     # linia „Adres zamieszkania: ……" pod pytaniem.
-    Pole("adres_zameldowania_tak", 0, 299.52, 473.11, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("adres_zameldowania_nie", 0, 337.27, 473.11, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("adres_zameldowania_tak", 0, 299.52, 471.79, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("adres_zameldowania_nie", 0, 337.27, 471.79, "kratka", wyrownanie="srodek", rozmiar=8.0),
     Pole("adres_zameldowania", 0, 298.90, 448.79, "tekst", maks_szerokosc=209.80),
     # Pytanie „CZY ADRES DO KORESPONDENCJI JEST TAKI SAM, JAK ADRES
     # ZAMELDOWANIA?" — analogicznie.
-    Pole("adres_korespondencji_tak", 0, 299.52, 423.54, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("adres_korespondencji_nie", 0, 337.27, 423.54, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("adres_korespondencji_tak", 0, 299.52, 422.22, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("adres_korespondencji_nie", 0, 337.27, 422.22, "kratka", wyrownanie="srodek", rozmiar=8.0),
     Pole("adres_korespondencji", 0, 298.90, 399.21, "tekst", maks_szerokosc=209.80),
     # §3 INFORMACJE O WNIOSKODAWCY — WYKSZTAŁCENIE (4 kratki, x środek glifu
     # jednolity 249.27, jedna kolumna checkboxów).
-    Pole("wyksztalcenie_wyzsze", 0, 249.27, 352.78, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("wyksztalcenie_srednie", 0, 249.27, 338.99, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("wyksztalcenie_zawodowe", 0, 249.27, 325.19, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("wyksztalcenie_podstawowe", 0, 249.27, 311.39, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("wyksztalcenie_wyzsze", 0, 249.27, 351.47, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("wyksztalcenie_srednie", 0, 249.27, 337.67, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("wyksztalcenie_zawodowe", 0, 249.27, 323.87, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("wyksztalcenie_podstawowe", 0, 249.27, 310.07, "kratka", wyrownanie="srodek", rozmiar=8.0),
     # STAN CYWILNY (6 kratek, ta sama kolumna x=249.27).
-    Pole("stan_kawaler_panna", 0, 249.27, 296.84, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("stan_rozwiedziony", 0, 249.27, 283.04, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("stan_malzenstwo_rozdzielnosc", 0, 249.27, 269.24, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("stan_malzenstwo_wspolnota", 0, 249.27, 255.44, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("stan_wdowiec_wdowa", 0, 249.27, 241.64, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("stan_separacja", 0, 249.27, 227.85, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("stan_kawaler_panna", 0, 249.27, 295.52, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("stan_rozwiedziony", 0, 249.27, 281.72, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("stan_malzenstwo_rozdzielnosc", 0, 249.27, 267.92, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("stan_malzenstwo_wspolnota", 0, 249.27, 254.13, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("stan_wdowiec_wdowa", 0, 249.27, 240.33, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("stan_separacja", 0, 249.27, 226.53, "kratka", wyrownanie="srodek", rozmiar=8.0),
     # §3 ciąg dalszy — komórki tabeli (kolumna dzieli się teraz przy x=240.4,
     # szersza niż 290.5 powyżej, bo ten fragment tabeli mieści też checkboxy;
     # prawa krawędź x=523.9). 7 wierszy.
@@ -190,9 +205,9 @@ _STRONA_1: tuple[Pole, ...] = (
 # ---------------------------------------------------------------------------
 _STRONA_2: tuple[Pole, ...] = (
     # §4 — forma zatrudnienia: 3 kratki (kolumna x=249.27, jak na str. 1).
-    Pole("praca_umowa_o_prace", 1, 249.27, 741.84, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("praca_zlecenie", 1, 249.27, 728.04, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("praca_dzielo", 1, 249.27, 714.24, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("praca_umowa_o_prace", 1, 249.27, 740.53, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("praca_zlecenie", 1, 249.27, 726.73, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("praca_dzielo", 1, 249.27, 712.93, "kratka", wyrownanie="srodek", rozmiar=8.0),
     # DATA ZATRUDNIENIA — komórka tabeli (kolumna x=240.4/523.9, jak w dolnej
     # części §3 na str. 1 — ten sam układ powtarza się na całej stronie 2).
     Pole("praca_data_zatrudnienia", 1, 246.40, 690.45, "tekst", maks_szerokosc=277.50),
@@ -217,9 +232,9 @@ _STRONA_2: tuple[Pole, ...] = (
     Pole("renta_kwota_dochodu", 1, 246.40, 297.15, "tekst", maks_szerokosc=277.50),
     # §7 DZIAŁALNOŚĆ GOSPODARCZA — forma opodatkowania: 3 kratki + kropkowana
     # linia obok „inne" (wszystkie w tym samym wierszu tabeli).
-    Pole("dzialalnosc_ryczalt", 1, 249.27, 248.52, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("dzialalnosc_kpir", 1, 249.27, 234.72, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("dzialalnosc_inne", 1, 249.27, 220.92, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("dzialalnosc_ryczalt", 1, 249.27, 247.20, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("dzialalnosc_kpir", 1, 249.27, 233.40, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("dzialalnosc_inne", 1, 249.27, 219.60, "kratka", wyrownanie="srodek", rozmiar=8.0),
     Pole("dzialalnosc_forma_inna", 1, 275.45, 220.45, "tekst", maks_szerokosc=81.92),
     Pole("dzialalnosc_nip", 1, 246.40, 197.95, "tekst", maks_szerokosc=277.50),
     Pole("dzialalnosc_nazwa", 1, 246.40, 169.60, "tekst", maks_szerokosc=277.50),
