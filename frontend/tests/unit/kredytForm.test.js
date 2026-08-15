@@ -1,6 +1,7 @@
 import {
   TAK_NIE_OPCJE,
   WYKSZTALCENIE_OPCJE,
+  RODZAJ_DOKUMENTU_OPCJE,
   STAN_CYWILNY_OPCJE,
   PRACA_FORMA_OPCJE,
   PRACA_OKRES_OPCJE,
@@ -11,6 +12,7 @@ import {
   defaultForm,
   buildDane,
   hydrateFrom,
+  normalizujKwote,
 } from '@/utils/kredytForm'
 
 function deepFreeze(value) {
@@ -25,7 +27,7 @@ function deepFreeze(value) {
 
 describe('Kredyt form logic', () => {
   describe('option constants', () => {
-    it('pins the authoritative (lowercase) option wording from the PDF transcription', () => {
+    it('pins the authoritative option wording (PDF transcription, except STAN_CYWILNY_OPCJE which is an owner override)', () => {
       expect(TAK_NIE_OPCJE).toEqual(['', 'Tak', 'Nie'])
       expect(WYKSZTALCENIE_OPCJE).toEqual([
         '',
@@ -34,12 +36,13 @@ describe('Kredyt form logic', () => {
         'zawodowe',
         'podstawowe/gimnazjalne',
       ])
+      expect(RODZAJ_DOKUMENTU_OPCJE).toEqual(['', 'Dowód osobisty', 'Paszport', 'Karta pobytu'])
       expect(STAN_CYWILNY_OPCJE).toEqual([
         '',
-        'kawaler/panna',
+        'Kawaler/panna',
         'Rozwiedziony/a',
-        'W związku małżeńskim rozdzielność majątkowa',
-        'W związku małżeńskim wspólnota majątkowa',
+        'Małżeństwo - rozdzielność majątkowa',
+        'Małżeństwo - wspólnota majątkowa',
         'Wdowiec/wdowa',
         'Separacja',
       ])
@@ -355,6 +358,64 @@ describe('Kredyt form logic', () => {
       first.miejsce_urodzenia = 'zmienione'
       expect(second.miejsce_urodzenia).toBe('Łódź')
       expect(first).not.toBe(second)
+    })
+  })
+
+  describe('normalizujKwote', () => {
+    it('appends ",00" to a bare integer', () => {
+      expect(normalizujKwote('123')).toBe('123,00')
+    })
+
+    it('pads a single decimal digit to two', () => {
+      expect(normalizujKwote('123,4')).toBe('123,40')
+    })
+
+    it('leaves an already-two-decimal-digit amount unchanged', () => {
+      expect(normalizujKwote('123,90')).toBe('123,90')
+    })
+
+    it('treats a trailing comma with no digits as zero decimals', () => {
+      expect(normalizujKwote('123,')).toBe('123,00')
+    })
+
+    it('converts a dot decimal separator to a comma and pads it', () => {
+      expect(normalizujKwote('123.4')).toBe('123,40')
+    })
+
+    it('treats a trailing dot with no digits as zero decimals', () => {
+      expect(normalizujKwote('123.')).toBe('123,00')
+    })
+
+    it('preserves user-typed thousands-space grouping, touching only the decimal part', () => {
+      expect(normalizujKwote('12 300')).toBe('12 300,00')
+      expect(normalizujKwote('12 300,5')).toBe('12 300,50')
+      expect(normalizujKwote('1 234 567')).toBe('1 234 567,00')
+    })
+
+    it('returns empty or whitespace-only text unchanged', () => {
+      expect(normalizujKwote('')).toBe('')
+      expect(normalizujKwote('   ')).toBe('   ')
+    })
+
+    it('returns text unchanged when it fails a Decimal-like parse', () => {
+      expect(normalizujKwote('abc')).toBe('abc')
+      expect(normalizujKwote('1,2,3')).toBe('1,2,3')
+      expect(normalizujKwote(',123')).toBe(',123')
+      expect(normalizujKwote('1.2.3')).toBe('1.2.3')
+    })
+
+    it('leaves more than 2 decimal digits unchanged rather than rounding', () => {
+      expect(normalizujKwote('123,456')).toBe('123,456')
+      expect(normalizujKwote('123.4567')).toBe('123.4567')
+    })
+
+    it('never mutates its argument and never throws on non-string input', () => {
+      const tekst = '123'
+      const wynik = normalizujKwote(tekst)
+      expect(tekst).toBe('123')
+      expect(wynik).toBe('123,00')
+      expect(() => normalizujKwote(null)).not.toThrow()
+      expect(() => normalizujKwote(undefined)).not.toThrow()
     })
   })
 })

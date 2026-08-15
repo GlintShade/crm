@@ -14,6 +14,12 @@
 // "normalize" casing or punctuation here, a mismatch breaks the round-trip
 // of a saved value. Kept in this single block so all wording lives in
 // exactly one place to reconcile against the backend.
+//
+// EXCEPTION: STAN_CYWILNY_OPCJE below is an owner override (post-click-test
+// feedback), not a PDF transcription — the stored values follow the owner's
+// wording, not the PDF's. Still transcribed verbatim from the owner's
+// instruction and still authoritative for the round-trip; just not
+// PDF-sourced like its siblings.
 
 export const TAK_NIE_OPCJE = ['', 'Tak', 'Nie']
 
@@ -25,12 +31,14 @@ export const WYKSZTALCENIE_OPCJE = [
   'podstawowe/gimnazjalne',
 ]
 
+export const RODZAJ_DOKUMENTU_OPCJE = ['', 'Dowód osobisty', 'Paszport', 'Karta pobytu']
+
 export const STAN_CYWILNY_OPCJE = [
   '',
-  'kawaler/panna',
+  'Kawaler/panna',
   'Rozwiedziony/a',
-  'W związku małżeńskim rozdzielność majątkowa',
-  'W związku małżeńskim wspólnota majątkowa',
+  'Małżeństwo - rozdzielność majątkowa',
+  'Małżeństwo - wspólnota majątkowa',
   'Wdowiec/wdowa',
   'Separacja',
 ]
@@ -68,7 +76,8 @@ export const PREFILL_KEYS = [
 // toggle — identity, addresses, and the household/financial summary fields.
 export const BASE_FIELDS = [
   'miejsce_urodzenia',
-  'rodzaj_seria_numer_dokumentu',
+  'rodzaj_dokumentu',
+  'seria_numer_dokumentu',
   'data_wydania_dokumentu',
   'data_waznosci_dokumentu',
   'adres_zameldowania_taki_sam',
@@ -130,7 +139,8 @@ export const GRUPY = [
       'dzialalnosc_forma_inna',
       'dzialalnosc_nip',
       'dzialalnosc_nazwa',
-      'dzialalnosc_adres_telefon',
+      'dzialalnosc_adres',
+      'dzialalnosc_telefon',
       'dzialalnosc_od_kiedy',
       'dzialalnosc_kwota_dochodu',
     ],
@@ -225,4 +235,52 @@ export function hydrateFrom(record) {
   })
 
   return form
+}
+
+// Matches a plain amount: an integer part (digits, optionally interspersed
+// with spaces/NBSP thousands grouping — never touched, only the decimal
+// part is normalized) plus an optional decimal separator (',' or '.')
+// followed by zero or more digits. Anything that doesn't fit this shape
+// (letters, multiple separators, a leading separator with no digits before
+// it) fails the match and is left for the server to reject.
+const WZORZEC_KWOTY = /^(\d[\d\s]*?)(?:([.,])(\d*))?$/
+
+/**
+ * Normalize an amount typed by the rep, on blur, to the "123,45" shape the
+ * server expects — owner-requested UX so the field visibly confirms what
+ * was understood before save, without silently changing the number.
+ *
+ * Rules (see kredytForm.test.js for the exhaustive matrix):
+ *  - no decimal part ("123")       -> append ",00"       ("123,00")
+ *  - 1 decimal digit ("123,4")     -> pad to 2            ("123,40")
+ *  - 2 decimal digits ("123,90")   -> unchanged
+ *  - trailing separator ("123,")   -> treated as 0 decimals ("123,00")
+ *  - dot decimal ("123.4")         -> comma, padded        ("123,40")
+ *  - thousands grouping the user typed ("12 300,5") is preserved verbatim;
+ *    only the decimal part is touched ("12 300,50")
+ *  - empty/whitespace-only text    -> returned unchanged
+ *  - more than 2 decimal digits    -> returned unchanged (no silent rounding)
+ *  - anything not matching a plain amount shape (e.g. "abc", "1,2,3")
+ *    -> returned unchanged; the server validates and rejects it
+ *
+ * Never mutates its argument (a string is immutable anyway); always
+ * returns a value, never throws.
+ *
+ * @param {string} tekst - raw text from the amount input's blur event
+ * @returns {string} normalized "calość,dd" text, or `tekst` unchanged
+ */
+export function normalizujKwote(tekst) {
+  if (typeof tekst !== 'string') return tekst
+  if (tekst.trim() === '') return tekst
+
+  const dopasowanie = tekst.match(WZORZEC_KWOTY)
+  if (!dopasowanie) return tekst
+
+  const [, calaCzesc, separator, dziesietneSurowe] = dopasowanie
+  const dziesietne = dziesietneSurowe ?? ''
+
+  if (dziesietne.length > 2) return tekst
+  if (!separator) return `${calaCzesc},00`
+
+  return `${calaCzesc},${dziesietne.padEnd(2, '0')}`
 }
