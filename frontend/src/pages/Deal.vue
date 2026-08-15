@@ -85,25 +85,11 @@
       >
         {{ __(dealId) }}
       </div>
-      <div class="flex items-center justify-start gap-5 border-b p-5">
-        <Tooltip :text="__('Organization Logo')">
-          <div class="group relative size-12">
-            <Avatar
-              size="3xl"
-              class="size-12"
-              :label="title"
-              :image="organization?.organization_logo"
-            />
-          </div>
-        </Tooltip>
-        <div class="flex flex-col gap-2.5 truncate text-ink-gray-9">
-          <Tooltip :text="organization?.name || __('Set an Organization')">
-            <div class="truncate text-3xl-medium">
-              {{ title }}
-            </div>
-          </Tooltip>
-        </div>
-      </div>
+      <DealNextStepNote
+        :deal-id="dealId"
+        :status="doc.status"
+        :rodzaj="doc.custom_rodzaj_umowy"
+      />
       <SLASection
         v-if="doc.sla_status"
         v-model="doc"
@@ -345,6 +331,7 @@ import MontazTab from '@/components/deal/MontazTab.vue'
 import AudytTab from '@/components/deal/AudytTab.vue'
 import UmowaTab from '@/components/deal/UmowaTab.vue'
 import DealPipelineBar from '@/components/deal/DealPipelineBar.vue'
+import DealNextStepNote from '@/components/deal/DealNextStepNote.vue'
 import OrganizationModal from '@/components/Modals/OrganizationModal.vue'
 import LostReasonModal from '@/components/Modals/LostReasonModal.vue'
 import AssignTo from '@/components/AssignTo.vue'
@@ -375,7 +362,6 @@ import { useBroadcast } from '@/composables/useBroadcast'
 import {
   createResource,
   Dropdown,
-  Tooltip,
   Avatar,
   Tabs,
   Breadcrumbs,
@@ -478,24 +464,6 @@ watch(
   },
   { once: true },
 )
-
-const organizationDocument = ref(null)
-
-watch(
-  () => doc.value.organization,
-  (org) => {
-    if (org && !organizationDocument.value?.doc) {
-      let { document: _organizationDocument } = useDocument(
-        'CRM Organization',
-        org,
-      )
-      organizationDocument.value = _organizationDocument
-    }
-  },
-  { immediate: true },
-)
-
-const organization = computed(() => organizationDocument.value?.doc || {})
 
 onMounted(async () => {
   $socket.on('crm_customer_created', () => {

@@ -4,12 +4,15 @@
   jedynym ręcznym sterowaniem statusem pozostaje dropdown w nagłówku strony
   (Deal.vue / MobileDeal.vue, triggerStatusChange).
 
-  Cała logika stanu (tryb paska, stan węzła, numer węzła, notatka "następny
-  krok", odznaka poza pipeline'em) żyje w `utils/dealPipeline.js` — ten
-  komponent tylko renderuje wynik na podstawie payloadu SERWERA (KSZTAŁT
-  rurociągu: `steps`/`notes`, z `crm.api.pipeline.volteo_pipeline_get`,
-  WOŁANY PO PEŁNEJ KROPKOWANEJ ŚCIEŻCE — gołe nazwy dają HTTP 417 w runtime
-  dla API forka) i `props.status` (prawda kliencka — patrz komentarz w <script>).
+  Cała logika stanu (tryb paska, stan węzła, numer węzła, odznaka poza
+  pipeline'em) żyje w `utils/dealPipeline.js` — ten komponent tylko renderuje
+  wynik na podstawie payloadu SERWERA (KSZTAŁT rurociągu: `steps`/`notes`, z
+  `crm.api.pipeline.volteo_pipeline_get`, WOŁANY PO PEŁNEJ KROPKOWANEJ
+  ŚCIEŻCE — gołe nazwy dają HTTP 417 w runtime dla API forka) i `props.status`
+  (prawda kliencka — patrz komentarz w <script>). Notatka "następny krok" NIE
+  renderuje się tu — korzysta z tego samego payloadu i tej samej pochodnej
+  logiki co reszta tego pliku, ale mieszka w panelu bocznym, patrz
+  `DealNextStepNote.vue`.
 -->
 <template>
   <div
@@ -60,15 +63,6 @@
         variant="subtle"
         class="shrink-0"
       />
-
-      <!-- Notatka o następnym kroku, tylko w trybie 'progress' -->
-      <div
-        v-if="note"
-        class="max-w-xs shrink-0 truncate text-sm text-ink-gray-5"
-        :title="note"
-      >
-        {{ __('Następny krok: {0}', [note]) }}
-      </div>
     </div>
   </div>
 </template>
@@ -95,7 +89,6 @@ import {
   currentIndexFor,
   nodeStateForMode,
   stepNumber,
-  nextStepNote,
   offPipelineBadge,
 } from '@/utils/dealPipeline'
 
@@ -111,6 +104,7 @@ const resource = createResource({
   url: 'crm.api.pipeline.volteo_pipeline_get',
   params: { deal: props.dealId },
   auto: true,
+  cache: ['volteo-pipeline', props.dealId],
 })
 
 // Kształt rurociągu zależy tylko od `rodzaj` — to jedyna zmiana, po której
@@ -123,12 +117,12 @@ const payload = computed(() => resource.data || null)
 // undefined) i store statusów jeszcze niezaładowany (to samo zimne-wejście
 // zjawisko, które wywalało render w Deal.vue — patrz commit 46397328;
 // tu żaden odczyt nie rzuca, bo `?.type` na undefined daje po prostu undefined,
-// a bandMode/nextStepNote/offPipelineBadge traktują undefined statusType jako 'unknown').
+// a bandMode/offPipelineBadge (i notatka "następny krok" w panelu bocznym,
+// zasilana tym samym payloadem) traktują undefined statusType jako 'unknown').
 const statusType = computed(() => getDealStatus?.(props.status)?.type)
 
 const currentIndex = computed(() => currentIndexFor(payload.value?.steps, props.status))
 const mode = computed(() => bandMode(payload.value, props.status, statusType.value))
-const note = computed(() => nextStepNote(payload.value, props.status, statusType.value))
 const badgeLabel = computed(() => offPipelineBadge(payload.value, props.status, statusType.value))
 
 const badgeTheme = computed(() => {

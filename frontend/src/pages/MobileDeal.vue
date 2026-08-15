@@ -68,6 +68,11 @@
     >
       <template #tab-panel="{ tab }">
         <div v-if="tab.name == 'Details'">
+          <DealNextStepNote
+            :deal-id="dealId"
+            :status="doc.status"
+            :rodzaj="doc.custom_rodzaj_umowy"
+          />
           <SLASection
             v-if="doc.sla_status"
             v-model="doc"
@@ -303,6 +308,7 @@ import FakturyTab from '@/components/deal/FakturyTab.vue'
 import MontazTab from '@/components/deal/MontazTab.vue'
 import AudytTab from '@/components/deal/AudytTab.vue'
 import DealPipelineBar from '@/components/deal/DealPipelineBar.vue'
+import DealNextStepNote from '@/components/deal/DealNextStepNote.vue'
 import OrganizationModal from '@/components/Modals/OrganizationModal.vue'
 import LostReasonModal from '@/components/Modals/LostReasonModal.vue'
 import AssignTo from '@/components/AssignTo.vue'
