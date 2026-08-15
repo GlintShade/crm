@@ -20,6 +20,7 @@ import frappe
 from frappe import _
 from frappe.rate_limiter import rate_limit
 
+from crm.api.pipeline import advance_deal_status
 from crm.api.umowa import (
 	DOCTYPE,
 	_dane_kontaktu,
@@ -480,6 +481,14 @@ def poll_autenti_status() -> None:
 			frappe.db.commit()
 
 			if nowy_status == "Podpisana":
+				# Automatyzacja: przesuwa status szansy do przodu, o ile włączona w
+				# panelu admina i przejście jest do przodu w JEJ rurociągu; nigdy nie
+				# rzuca — awaria automatyzacji nie może cofnąć już zapisanego statusu
+				# podpisu ani zablokować pobrania podpisanego pliku poniżej. Ten worker
+				# nie ma sesji wołającego (scheduler), więc `doc.save()` wewnątrz
+				# `advance_deal_status` zapisuje jako wołający zadania w tle.
+				advance_deal_status(wiersz.name, "Umowa Podpisana", "umowa_podpisana")
+				frappe.db.commit()
 				_attach_signed_pdf(wiersz.name, wiersz.name, wiersz.autenti_document_id)
 		except Exception:
 			frappe.log_error(

@@ -19,6 +19,7 @@ from frappe.rate_limiter import rate_limit
 from frappe.utils import cint, getdate
 
 from crm.api.czyste_powietrze import KALKULATOR_ROLE
+from crm.api.pipeline import advance_deal_status
 from crm.integrations.autenti import logika as autenti_logika
 from crm.volteo_naming import code_for
 from crm.volteo_umowa import (
@@ -669,5 +670,10 @@ def volteo_umowa_pdf(deal: str) -> dict[str, Any]:
 		plik.insert(ignore_permissions=True)
 	except Exception:
 		_blad_zapisu_pliku()
+
+	# Automatyzacja: przesuwa status szansy do przodu, o ile włączona w panelu
+	# admina i przejście jest do przodu w JEJ rurociągu; nigdy nie rzuca — awaria
+	# automatyzacji nie może cofnąć już wygenerowanego i zapisanego PDF-u.
+	advance_deal_status(deal, "Umowa Wygenerowana", "umowa_wygenerowana")
 
 	return {"file_url": plik.file_url, "file_name": plik.file_name}
