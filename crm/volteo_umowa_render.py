@@ -163,9 +163,40 @@ def zloz_umowe(kontekst: dict[str, Any], szablon_pdf: bytes, kod: str) -> bytes:
 
 	Nie mutuje `kontekst` ani `szablon_pdf` — obie wartości są tylko czytane.
 	"""
-	_sprawdz_sume_kontrolna(szablon_pdf, kod)
+	szablon = SZABLONY[kod]
+	opis = f"umowy rodzaju '{kod}' ({szablon.nazwa_pliku})"
+	return _zloz_dokument(kontekst, szablon_pdf, szablon, opis)
+
+
+def _zloz_dokument(kontekst: dict[str, Any], szablon_pdf: bytes, szablon: Szablon, opis: str) -> bytes:
+	"""Rdzeń nakładania: identyczny dla każdego dokumentu złożonego z pary
+	(szablon PDF + mapa współrzędnych), niezależnie od tego, czy to umowa
+	(`zloz_umowe()`, `SZABLONY[kod]`) czy formularz kredytowy
+	(`crm.volteo_kredyt_render.zloz_kredyt()`, `SZABLON_KREDYT`).
+
+	`opis` jest wyłącznie tekstem błędu — nazywa dokument w komunikacie
+	`_sprawdz_sume_kontrolna()` (np. "umowy rodzaju 'PVME' (umowa_pv_me.pdf)"
+	albo "formularza kredytowego (formularz_kredytowy.pdf)"), nie wpływa na
+	samo renderowanie.
+
+	Kroki: (1) suma SHA-256 `szablon_pdf` musi się zgadzać z `szablon.sha256`
+	— w przeciwnym razie funkcja przerywa z czytelnym wyjątkiem, zamiast
+	nanieść dane w oparciu o nieaktualne współrzędne; (2) `szablon_pdf`
+	klonujemy bezpośrednio do `PdfWriter` (`clone_from=`), więc strony, na
+	których rysujemy, są od razu DOŁĄCZONE do writera — pypdf w wersji 6.x
+	oznacza jako przestarzały (i "niewiarygodny") wariant, w którym scala się
+	strony `PdfReader` PRZED dodaniem ich do writera przez `add_page()`; (3) dla
+	każdej strony, na której `szablon.mapa` ma choć jedną pozycję, budujemy
+	jednostronicową warstwę `reportlab` (rozmiar strony brany z oryginału przez
+	`pypdf`, nie zakładany na sztywno) i scalamy ją z tą stroną (`merge_page`
+	— warstwa rysuje się NA WIERZCHU oryginału); (4) strony bez żadnej pozycji
+	w mapie przechodzą bez zmian.
+
+	Nie mutuje `kontekst` ani `szablon_pdf` — obie wartości są tylko czytane.
+	"""
+	_sprawdz_sume_kontrolna(szablon_pdf, szablon, opis)
 	nazwa_fontu = _zarejestruj_font()
-	pozycje_wg_strony = _pogrupuj_wg_strony(SZABLONY[kod].mapa)
+	pozycje_wg_strony = _pogrupuj_wg_strony(szablon.mapa)
 
 	pisarz = PdfWriter(clone_from=io.BytesIO(szablon_pdf))
 
@@ -183,22 +214,20 @@ def zloz_umowe(kontekst: dict[str, Any], szablon_pdf: bytes, kod: str) -> bytes:
 	return bufor_wyjsciowy.getvalue()
 
 
-def _sprawdz_sume_kontrolna(szablon_pdf: bytes, kod: str) -> None:
+def _sprawdz_sume_kontrolna(szablon_pdf: bytes, szablon: Szablon, opis: str) -> None:
 	"""Bezpiecznik: przerywa, gdy `szablon_pdf` nie jest bajt-w-bajt tym plikiem,
-	dla którego mapa współrzędnych `SZABLONY[kod].mapa` była mierzona.
+	dla którego mapa współrzędnych `szablon.mapa` była mierzona.
 
-	Zakłada, że `kod` jest kluczem `SZABLONY` — `zloz_umowe()` woła tę funkcję
-	dopiero po tym, jak `sciezka_wbudowanego_szablonu(kod)` (albo sam wołający)
-	już by rzucił dla nieznanego kodu, więc `KeyError` tutaj sygnalizowałby błąd
-	programisty, nie błąd danych wejściowych."""
-	oczekiwany = SZABLONY[kod]
+	`opis` nazywa dokument w komunikacie błędu (zob. `_zloz_dokument()`) —
+	wołający dobiera go tak, żeby był jednoznaczny (np. zawierał kod rodzaju
+	umowy albo nazwę formularza), ta funkcja go tylko wstawia do tekstu."""
 	suma = hashlib.sha256(szablon_pdf).hexdigest()
-	if suma != oczekiwany.sha256:
+	if suma != szablon.sha256:
 		raise ValueError(
-			f"Szablon umowy PDF dla rodzaju '{kod}' ({oczekiwany.nazwa_pliku}) został "
-			"zmieniony — mapa współrzędnych wymaga ponownego pomiaru. Generowanie "
-			"wstrzymane, żeby nie nanieść danych w niewłaściwe miejsca. "
-			f"Oczekiwana suma SHA-256: {oczekiwany.sha256}, otrzymana: {suma}."
+			f"Szablon PDF dla {opis} został zmieniony — mapa współrzędnych "
+			"wymaga ponownego pomiaru. Generowanie wstrzymane, żeby nie nanieść "
+			"danych w niewłaściwe miejsca. Oczekiwana suma SHA-256: "
+			f"{szablon.sha256}, otrzymana: {suma}."
 		)
 
 
