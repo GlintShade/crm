@@ -33,13 +33,13 @@
       >
         <template #default="{ open }">
           <Button
-            v-if="doc.status"
+            v-if="dealStatus"
             :label="statusLabel(doc.status)"
             :iconRight="open ? 'chevron-up' : 'chevron-down'"
-            :class="statusButtonClass(getDealStatus(doc.status).color)"
+            :class="statusButtonClass(dealStatus.color)"
           >
             <template #prefix>
-              <IndicatorIcon :class="getDealStatus(doc.status).color" />
+              <IndicatorIcon :class="dealStatus.color" />
             </template>
           </Button>
         </template>
@@ -429,6 +429,19 @@ const {
 const canDelete = computed(() => permissions.data?.permissions?.delete || false)
 
 const doc = computed(() => document.doc || {})
+
+// Zimne wejście na stronę szansy (refresh na /crm/deals/:dealId) uruchamia dwa
+// niezależne zasoby: dokument szansy (document/doc, szybki) i globalną listę
+// statusów w store Pinia (dealStatuses, auto:true, osobne zapytanie CRM Deal Status).
+// Nie ma między nimi żadnej kolejności — jeśli dokument dotrze pierwszy,
+// getDealStatus(doc.status) trafia w dealStatusesByName zanim ten słownik się
+// wypełni i zwraca undefined; odczyt .color na undefined wywala render (patrz
+// nagłówek szansy niżej) i w skrajnym przypadku daje pustą stronę. Ten computed
+// jest null, dopóki store realnie ma wpis dla bieżącego statusu — v-if w
+// szablonie czeka na niego zamiast zakładać, że coś jest gotowe.
+const dealStatus = computed(() =>
+  doc.value.status ? getDealStatus(doc.value.status) : null,
+)
 
 watch(error, (err) => {
   if (err) {

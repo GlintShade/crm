@@ -23,13 +23,13 @@
         >
           <template #default="{ open }">
             <Button
-              v-if="doc.status"
+              v-if="dealStatus"
               :label="statusLabel(doc.status)"
               :iconRight="open ? 'chevron-up' : 'chevron-down'"
-              :class="statusButtonClass(getDealStatus(doc.status).color)"
+              :class="statusButtonClass(dealStatus.color)"
             >
               <template #prefix>
-                <IndicatorIcon :class="getDealStatus(doc.status).color" />
+                <IndicatorIcon :class="dealStatus.color" />
               </template>
             </Button>
           </template>
@@ -363,6 +363,15 @@ const {
 } = useDocument('CRM Deal', props.dealId)
 
 const doc = computed(() => document.doc || {})
+
+// Ten sam wyścig co w Deal.vue: przy zimnym wejściu (refresh) dokument szansy
+// potrafi dotrzeć przed globalną listą statusów w store (dealStatuses,
+// auto:true). getDealStatus(doc.status) zwraca wtedy undefined, a odczyt
+// .color w nagłówku wywala render. computed jest null, dopóki store nie ma
+// realnego wpisu dla bieżącego statusu.
+const dealStatus = computed(() =>
+  doc.value.status ? getDealStatus(doc.value.status) : null,
+)
 
 onMounted(async () => {
   if (document.doc) await triggerOnRender()
