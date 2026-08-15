@@ -41,7 +41,12 @@ let pinia = createPinia()
 let app = createApp(App)
 
 setConfig('resourceFetcher', frappeRequest)
-app.use(FrappeUI)
+// frappe-ui defaults to socketio: true, which opens its own socket.io connection to
+// host:9000 and stores it on app.config.globalProperties.$socket. main.js immediately
+// overwrites $socket below with the CRM's own socket (./socket.js), so that first
+// connection is orphaned but stays open — every page load was carrying two realtime
+// connections. Disable it here; nothing reads $socket before the overwrite happens.
+app.use(FrappeUI, { socketio: false })
 app.use(pinia)
 app.use(router)
 app.use(translationPlugin)
