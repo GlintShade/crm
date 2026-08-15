@@ -24,6 +24,7 @@
     v-model:updatedPageCount="updatedPageCount"
     doctype="Contact"
   />
+  <!-- celowo bez @applyFilter: klik w komórkę ma otwierać rekord, nie filtrować -->
   <ContactsListView
     v-if="contacts.data && rows.length"
     ref="contactsListView"
@@ -40,7 +41,6 @@
     @loadMore="() => loadMore++"
     @columnWidthUpdated="() => triggerResize++"
     @updatePageCount="(count) => (updatedPageCount = count)"
-    @applyFilter="(data) => viewControls.applyFilter(data)"
     @applyLikeFilter="(data) => viewControls.applyLikeFilter(data)"
     @likeDoc="(data) => viewControls.likeDoc(data)"
     @selectionsChanged="

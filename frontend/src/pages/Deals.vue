@@ -207,6 +207,7 @@
       </div>
     </template>
   </KanbanView>
+  <!-- celowo bez @applyFilter: klik w komórkę ma otwierać rekord, nie filtrować -->
   <DealsListView
     v-else-if="deals.data && rows.length"
     ref="dealsListView"
@@ -223,7 +224,6 @@
     @loadMore="() => loadMore++"
     @columnWidthUpdated="() => triggerResize++"
     @updatePageCount="(count) => (updatedPageCount = count)"
-    @applyFilter="(data) => viewControls.applyFilter(data)"
     @applyLikeFilter="(data) => viewControls.applyLikeFilter(data)"
     @likeDoc="(data) => viewControls.likeDoc(data)"
     @selectionsChanged="
