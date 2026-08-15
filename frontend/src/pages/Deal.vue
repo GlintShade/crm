@@ -45,7 +45,13 @@
       </Dropdown>
     </template>
   </LayoutHeader>
-  <div v-if="doc.name" class="flex h-full overflow-hidden">
+  <div v-if="doc.name" class="flex h-full flex-col overflow-hidden">
+    <DealPipelineBar
+      :deal-id="dealId"
+      :status="doc.status"
+      :rodzaj="doc.custom_rodzaj_umowy"
+    />
+    <div class="flex flex-1 min-h-0 overflow-hidden">
     <Tabs
       v-model="tabIndex"
       as="div"
@@ -72,10 +78,6 @@
       </template>
     </Tabs>
     <Resizer side="right" class="flex flex-col justify-between border-l">
-      <DealStatusBar
-        :status="doc.status"
-        :triggerStatusChange="triggerStatusChange"
-      />
       <div
         class="flex h-[45px] cursor-copy items-center border-b px-5 py-2.5 text-lg-medium text-ink-gray-9"
         @click="copyToClipboard(dealId)"
@@ -260,6 +262,7 @@
         </SidePanelLayout>
       </div>
     </Resizer>
+    </div>
   </div>
   <ErrorPage
     v-else-if="errorTitle"
@@ -340,7 +343,7 @@ import FakturyTab from '@/components/deal/FakturyTab.vue'
 import MontazTab from '@/components/deal/MontazTab.vue'
 import AudytTab from '@/components/deal/AudytTab.vue'
 import UmowaTab from '@/components/deal/UmowaTab.vue'
-import DealStatusBar from '@/components/deal/DealStatusBar.vue'
+import DealPipelineBar from '@/components/deal/DealPipelineBar.vue'
 import OrganizationModal from '@/components/Modals/OrganizationModal.vue'
 import LostReasonModal from '@/components/Modals/LostReasonModal.vue'
 import AssignTo from '@/components/AssignTo.vue'

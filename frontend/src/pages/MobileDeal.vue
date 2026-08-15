@@ -52,6 +52,12 @@
       />
     </div>
   </div>
+  <DealPipelineBar
+    v-if="doc.name"
+    :deal-id="dealId"
+    :status="doc.status"
+    :rodzaj="doc.custom_rodzaj_umowy"
+  />
   <div v-if="doc.name" class="flex h-full overflow-hidden">
     <Tabs
       v-model="tabIndex"
@@ -61,10 +67,6 @@
     >
       <template #tab-panel="{ tab }">
         <div v-if="tab.name == 'Details'">
-          <DealStatusBar
-            :status="doc.status"
-            :triggerStatusChange="triggerStatusChange"
-          />
           <SLASection
             v-if="doc.sla_status"
             v-model="doc"
@@ -299,7 +301,7 @@ import ZestawTab from '@/components/deal/ZestawTab.vue'
 import FakturyTab from '@/components/deal/FakturyTab.vue'
 import MontazTab from '@/components/deal/MontazTab.vue'
 import AudytTab from '@/components/deal/AudytTab.vue'
-import DealStatusBar from '@/components/deal/DealStatusBar.vue'
+import DealPipelineBar from '@/components/deal/DealPipelineBar.vue'
 import OrganizationModal from '@/components/Modals/OrganizationModal.vue'
 import LostReasonModal from '@/components/Modals/LostReasonModal.vue'
 import AssignTo from '@/components/AssignTo.vue'
