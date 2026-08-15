@@ -1,0 +1,228 @@
+// Formularz kredytowy (Deal tab "Kredyt") — logika formularza, testowana bez
+// mocka Vue. Modeled on `cpForm.js` (payload-builder-never-mutates,
+// deepFreeze-safe), but with one deliberate divergence: form keys here ARE
+// the doctype fieldnames (snake_case), not cpForm's camelCase UI-state
+// names. The reason is different from CP: this form has no derived/computed
+// fields and no server-side recalculation loop — it is a straight
+// save-as-typed contact/income form, so there is no benefit to a separate
+// UI vocabulary and a translation layer would just be one more place for a
+// fieldname typo to hide.
+//
+// AUTHORITATIVE: every Select option array below (`*_OPCJE`) is transcribed
+// verbatim from the source PDF (mirrored in ops/crm-kredyt.py and
+// crm/volteo_kredyt_mapa.py) and is what the doctype schema stores — do not
+// "normalize" casing or punctuation here, a mismatch breaks the round-trip
+// of a saved value. Kept in this single block so all wording lives in
+// exactly one place to reconcile against the backend.
+
+export const TAK_NIE_OPCJE = ['', 'Tak', 'Nie']
+
+export const WYKSZTALCENIE_OPCJE = [
+  '',
+  'wyższe',
+  'średnie',
+  'zawodowe',
+  'podstawowe/gimnazjalne',
+]
+
+export const STAN_CYWILNY_OPCJE = [
+  '',
+  'kawaler/panna',
+  'Rozwiedziony/a',
+  'W związku małżeńskim rozdzielność majątkowa',
+  'W związku małżeńskim wspólnota majątkowa',
+  'Wdowiec/wdowa',
+  'Separacja',
+]
+
+export const PRACA_FORMA_OPCJE = ['', 'Umowa o pracę', 'Umowa zlecenie', 'Umowa o dzieło']
+
+export const PRACA_OKRES_OPCJE = ['', 'Czas określony', 'Czas nieokreślony']
+
+// NOTE: all-lowercase, including 'inne' — the depends_on condition for
+// dzialalnosc_forma_inna in KredytTab.vue must match this exactly ('inne',
+// not 'Inne').
+export const DZIALALNOSC_FORMA_OPCJE = [
+  '',
+  'ryczałt',
+  'księga przychodów i rozchodów (KPiR)',
+  'inne',
+]
+
+// `prefill` keys returned by crm.api.kredyt.volteo_kredyt_get/create/save —
+// read-only CRM data (contact card), never part of the editable payload.
+export const PREFILL_KEYS = [
+  'pesel',
+  'imiona',
+  'nazwisko',
+  'telefon',
+  'email',
+  'kod_pocztowy',
+  'miejscowosc',
+  'ulica',
+  'nr_domu',
+  'nr_lokalu',
+]
+
+// Fields that are always part of the payload, independent of any income-group
+// toggle — identity, addresses, and the household/financial summary fields.
+export const BASE_FIELDS = [
+  'miejsce_urodzenia',
+  'rodzaj_seria_numer_dokumentu',
+  'data_wydania_dokumentu',
+  'data_waznosci_dokumentu',
+  'adres_zameldowania_taki_sam',
+  'adres_zameldowania',
+  'adres_korespondencji_taki_sam',
+  'adres_korespondencji',
+  'wyksztalcenie',
+  'stan_cywilny',
+  'liczba_osob_na_utrzymaniu',
+  'kwota_800_plus',
+  'dochod_wspolmalzonka',
+  'zrodlo_dochodu_malzonka',
+  'oplaty_miesieczne',
+  'suma_zobowiazan',
+  'numer_rachunku',
+]
+
+// Six income-source groups. Each carries its own on/off toggle fieldname
+// (`wlaczone`) plus the doctype fields it owns. Turning a group off nulls
+// its fields in the save payload (see buildDane) without touching what the
+// rep already typed, so switching it back on restores exactly that input —
+// same "gate zeroes the payload, not the form" pattern as cpForm's
+// zrodloWlaczone/termoWlaczone.
+export const GRUPY = [
+  {
+    key: 'praca',
+    wlaczone: 'praca_wlaczone',
+    label: 'Umowa o pracę / zlecenie / dzieło',
+    fields: [
+      'praca_forma',
+      'praca_data_zatrudnienia',
+      'praca_okres',
+      'praca_okres_od',
+      'praca_okres_do',
+      'praca_nip',
+      'praca_nazwa_zakladu',
+      'praca_adres_telefon',
+      'praca_kwota_dochodu',
+    ],
+  },
+  {
+    key: 'emerytura',
+    wlaczone: 'emerytura_wlaczone',
+    label: 'Emerytura',
+    fields: ['emerytura_numer_swiadczenia', 'emerytura_od_kiedy', 'emerytura_kwota_dochodu'],
+  },
+  {
+    key: 'renta',
+    wlaczone: 'renta_wlaczone',
+    label: 'Renta',
+    fields: ['renta_numer_swiadczenia', 'renta_od_kiedy', 'renta_kwota_dochodu'],
+  },
+  {
+    key: 'dzialalnosc',
+    wlaczone: 'dzialalnosc_wlaczone',
+    label: 'Działalność gospodarcza',
+    fields: [
+      'dzialalnosc_forma_opodatkowania',
+      'dzialalnosc_forma_inna',
+      'dzialalnosc_nip',
+      'dzialalnosc_nazwa',
+      'dzialalnosc_adres_telefon',
+      'dzialalnosc_od_kiedy',
+      'dzialalnosc_kwota_dochodu',
+    ],
+  },
+  {
+    key: 'gospodarstwo',
+    wlaczone: 'gospodarstwo_wlaczone',
+    label: 'Gospodarstwo rolne',
+    fields: ['gospodarstwo_nip', 'gospodarstwo_od_kiedy', 'gospodarstwo_kwota_dochodu'],
+  },
+  {
+    key: 'inne',
+    wlaczone: 'inne_wlaczone',
+    label: 'Inne źródła dochodu',
+    fields: ['inne_1_typ', 'inne_1_kwota', 'inne_2_typ', 'inne_2_kwota'],
+  },
+]
+
+/**
+ * Create the initial state of the Kredyt form. Every call returns a
+ * completely independent object (own copy, no shared references) — mirrors
+ * cpForm's `pustyFormularz()`.
+ *
+ * @returns {object} empty kredyt form: every field '', every toggle false
+ */
+export function defaultForm() {
+  const form = {}
+  BASE_FIELDS.forEach((fn) => {
+    form[fn] = ''
+  })
+  GRUPY.forEach((grupa) => {
+    form[grupa.wlaczone] = false
+    grupa.fields.forEach((fn) => {
+      form[fn] = ''
+    })
+  })
+  return form
+}
+
+/**
+ * Build the save payload accepted by crm.api.kredyt.volteo_kredyt_save.
+ * Never mutates `form` — always returns a fresh object.
+ *
+ * Every income group whose toggle is off has its fields sent as `null`
+ * (not omitted, not left as stale typed text) so a save while a group is
+ * switched off actually clears it server-side rather than silently keeping
+ * whatever was last saved. Toggles themselves are always sent as booleans.
+ *
+ * @param {object} form - current form state (as produced by defaultForm/hydrateFrom)
+ * @returns {object} save payload — fresh object, `form` untouched
+ */
+export function buildDane(form) {
+  const dane = {}
+
+  BASE_FIELDS.forEach((fn) => {
+    dane[fn] = form[fn]
+  })
+
+  GRUPY.forEach((grupa) => {
+    const wlaczone = Boolean(form[grupa.wlaczone])
+    dane[grupa.wlaczone] = wlaczone
+    grupa.fields.forEach((fn) => {
+      dane[fn] = wlaczone ? form[fn] : null
+    })
+  })
+
+  return dane
+}
+
+/**
+ * Build a fresh form object from a saved kredyt record. Toggles coerce to
+ * real booleans (`!!record[x]`); every other field coerces a null/undefined
+ * server value to '' so text inputs never render the literal string "null".
+ * Never mutates `record`.
+ *
+ * @param {object|null} record - saved kredyt record (or null/undefined)
+ * @returns {object} new form object, independent of `record`
+ */
+export function hydrateFrom(record) {
+  const form = defaultForm()
+  const r = record || {}
+
+  BASE_FIELDS.forEach((fn) => {
+    form[fn] = r[fn] ?? ''
+  })
+
+  GRUPY.forEach((grupa) => {
+    form[grupa.wlaczone] = !!r[grupa.wlaczone]
+    grupa.fields.forEach((fn) => {
+      form[fn] = r[fn] ?? ''
+    })
+  })
+
+  return form
+}
