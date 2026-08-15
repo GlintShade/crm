@@ -133,6 +133,8 @@ _POLA_DATY = frozenset(
 		"data_wydania_dokumentu",
 		"data_waznosci_dokumentu",
 		"praca_data_zatrudnienia",
+		"praca_okres_od",
+		"praca_okres_do",
 		"emerytura_od_kiedy",
 		"renta_od_kiedy",
 		"dzialalnosc_od_kiedy",
@@ -142,15 +144,9 @@ _POLA_DATY = frozenset(
 """Pola Date formularza — puste wejście (`None`/`""`) zapisuje się jako `None`,
 niepuste jest walidowane przez `getdate` (rzuca czytelny komunikat po polsku
 przy niepoprawnej dacie zamiast pozwolić Frappe wywalić się gołym wyjątkiem
-frameworka przy `.save()`).
-
-CELOWO bez `praca_okres_od`/`praca_okres_do`: mimo nazwy sugerującej zakres
-dat, te dwa pola opisują — razem z `praca_okres` („Czas określony”/„Czas
-nieokreślony”) — okres trwania UMOWY o pracę jako deklarację słowną/liczbową
-powiązaną z `praca_okres`, nie samodzielną datę kalendarzową; stąd siedem
-(nie dziewięć) pól w tym zbiorze. Jeśli przy budowie schematu (`ops/`) okaże
-się, że `praca_okres_od`/`praca_okres_do` jednak są typu Date, ten zbiór
-wymaga uzupełnienia — patrz uwaga w raporcie zadania.
+frameworka przy `.save()`). `praca_okres_od`/`praca_okres_do` SĄ tu: to
+kalendarzowe daty początku/końca umowy o pracę na czas określony — `praca_okres`
+(Select) tylko wybiera, które z nich mają zastosowanie, nie zmienia ich typu.
 """
 
 _POLA_KWOTOWE_DATA = frozenset(
@@ -245,10 +241,11 @@ _PREFILL_ETYKIETY: dict[str, str] = {
 	"miejscowosc": "Miejscowość",
 	"ulica": "Ulica",
 	"nr_domu": "Nr domu",
-	"nr_lokalu": "Nr lokalu",
+	# `nr_lokalu` celowo POMINIĘTY: klient mieszkający w domu jednorodzinnym legalnie
+	# nie ma numeru lokalu, więc nie może to blokować generowania PDF-u.
 }
-"""Etykiety PL dziesięciu pól bloku `prefill` — używane WYŁĄCZNIE do komunikatu
-`volteo_kredyt_pdf`, gdy dane kontaktu podstawowego są niekomplet."""
+"""Etykiety PL dziewięciu WYMAGANYCH pól bloku `prefill` — używane WYŁĄCZNIE do
+komunikatu `volteo_kredyt_pdf`, gdy dane kontaktu podstawowego są niekomplet."""
 
 
 def _sprawdz_rodzaj_oze(deal_doc: "frappe.model.document.Document") -> None:
