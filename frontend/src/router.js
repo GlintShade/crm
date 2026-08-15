@@ -69,7 +69,10 @@ const routes = [
     component: () => import('@/pages/Deals.vue'),
   },
   {
-    path: '/deals/:dealId',
+    // VOLTEO: deal names carry slashes since b38 (PRO/KOD/RR/NNNN, crm/volteo_naming.py).
+    // The default single-segment param can't match them on a cold load (refresh/deep-link
+    // → silently empty view); (.+) lets the param span slashes.
+    path: '/deals/:dealId(.+)',
     name: 'Deal',
     component: () => import(`@/pages/${handleMobileView('Deal')}.vue`),
     props: true,
