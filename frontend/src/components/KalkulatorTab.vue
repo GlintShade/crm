@@ -284,7 +284,16 @@
                 Wybierz klienta, aby wygenerować ofertę.
               </div>
 
-              <div v-if="summary.is_admin && summary.breakdown" class="mt-2.5 rounded-lg border border-dashed border-amber-300 bg-amber-50 p-2.5">
+              <div v-if="summary.is_admin && summary.breakdown" class="mt-2.5">
+                <button
+                  type="button"
+                  class="flex w-full items-center justify-between rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-sm font-semibold text-amber-700 transition-colors hover:bg-amber-100"
+                  @click="showAdminBreakdown = !showAdminBreakdown"
+                >
+                  <span>Admin - Ustawienia Zaawansowane</span>
+                  <FeatherIcon :name="showAdminBreakdown ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 text-amber-700" />
+                </button>
+                <div v-show="showAdminBreakdown" class="mt-1.5 rounded-lg border border-dashed border-amber-300 bg-amber-50 p-2.5">
                 <div class="mb-1.5 text-xs font-semibold uppercase tracking-wider text-amber-700">Rozbicie kosztów (administrator)</div>
                 <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Falownik</span><span>{{ formatPln(summary.breakdown.k_falownik) }}</span></div>
                 <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Bateria</span><span>{{ formatPln(summary.breakdown.k_bateria) }}</span></div>
@@ -301,6 +310,7 @@
                 <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Marża SPS</span><span>{{ formatPln(summary.breakdown.marza_sps) }}</span></div>
                 <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Bonus liderki</span><span>{{ formatPln(summary.breakdown.bonus_liderki) }}</span></div>
                 <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Kilometrówka</span><span>{{ formatPln(summary.breakdown.kilometrowka) }}</span></div>
+                </div>
               </div>
             </div>
           </div>
@@ -572,6 +582,8 @@ const dealHref = ref('#')
 
 // --- Narzut disclosure (open by default so reps see the narzut setting immediately; still manually collapsible) ---
 const showNarzut = ref(true)
+// Collapsed by default so the admin cost breakdown is not visible during screenshares.
+const showAdminBreakdown = ref(false)
 
 // --- Completeness gate (mirrors the server-side validation) -----------------
 const isComplete = computed(() => {

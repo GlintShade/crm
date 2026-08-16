@@ -313,7 +313,16 @@
                 {{ __('To oferta wstępna o charakterze szacunkowym. Wiążące kwoty i zakres prac określi oferta właściwa, przygotowana po energetycznym audycie na miejscu.') }}
               </div>
 
-              <div v-if="hasInternal" class="rounded-lg border border-dashed border-amber-300 bg-amber-50 p-2.5">
+              <div v-if="hasInternal">
+                <button
+                  type="button"
+                  class="flex w-full items-center justify-between rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-sm font-semibold text-amber-700 transition-colors hover:bg-amber-100"
+                  @click="showAdminCosts = !showAdminCosts"
+                >
+                  <span>{{ __('Admin - Ustawienia Zaawansowane') }}</span>
+                  <FeatherIcon :name="showAdminCosts ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 text-amber-700" />
+                </button>
+                <div v-show="showAdminCosts" class="mt-1.5 rounded-lg border border-dashed border-amber-300 bg-amber-50 p-2.5">
                 <div class="mb-1.5 text-xs font-semibold uppercase tracking-wider text-amber-700">{{ __('Rozbicie kosztów (administrator)') }}</div>
                 <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>{{ __('Koszt całkowity') }}</span><span>{{ formatPln(result.wewnetrzne.koszt_calkowity) }}</span></div>
                 <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>{{ __('Marża') }}</span><span>{{ formatPln(result.wewnetrzne.marza) }}</span></div>
@@ -329,6 +338,7 @@
                   class="flex justify-between border-t border-amber-200 pt-1 text-sm font-semibold tabular-nums"
                   :class="podzial.razem.zysk < 0 ? 'text-red-600' : 'text-amber-800'"
                 ><span>{{ __('Zysk') }}</span><span>{{ formatPln(podzial.razem.zysk) }}</span></div>
+                </div>
               </div>
             </div>
             <div v-else-if="!errorMsg" class="text-sm text-ink-gray-5">
@@ -361,8 +371,16 @@
            po prostu nie ma czego pokazać nie-administratorowi. Pełna
            szerokość (poza wąską kolumną kalk-output), bo tabela ma 9 kolumn. -->
       <div v-if="hasInternal && hasResult" class="mt-4 border-t border-gray-200 pt-4">
-        <div class="mb-2 flex flex-wrap items-start justify-between gap-2">
-          <div>
+        <button
+          type="button"
+          class="flex w-full items-center justify-between rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-sm font-semibold text-amber-700 transition-colors hover:bg-amber-100"
+          @click="showAdminModeling = !showAdminModeling"
+        >
+          <span>{{ __('Admin - Ustawienia Zaawansowane') }}</span>
+          <FeatherIcon :name="showAdminModeling ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 text-amber-700" />
+        </button>
+        <div v-show="showAdminModeling" class="mt-2">
+          <div class="mb-2">
             <div class="text-base font-semibold text-ink-gray-9">
               {{ __('Modelowanie prowizji dla struktur sprzedażowych (administrator)') }}
             </div>
@@ -370,14 +388,7 @@
               {{ __('Zmiany poniżej są wyłącznie poglądowe — nic tutaj nie jest zapisywane ani nie trafia do oferty klienta.') }}
             </div>
           </div>
-          <button
-            type="button"
-            class="shrink-0 rounded-md border border-transparent bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200"
-            @click="sekcjaProwizjiRozwinieta = !sekcjaProwizjiRozwinieta"
-          >{{ sekcjaProwizjiRozwinieta ? __('Zwiń') : __('Rozwiń') }}</button>
-        </div>
 
-        <div v-show="sekcjaProwizjiRozwinieta">
           <div class="kalk-marza-scroll">
             <table class="kalk-marza-table w-full border-collapse text-sm">
               <thead>
@@ -510,7 +521,7 @@
 </template>
 
 <script setup>
-import { Button, call, toast } from 'frappe-ui'
+import { Button, FeatherIcon, call, toast } from 'frappe-ui'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
@@ -687,7 +698,10 @@ const stawki = ref({})
 // stan trzyma oba pola dla każdego kodu jednolicie; przeliczPodzial i tak
 // bierze katalogowe 0 dla pól, których administrator nigdy nie dotknął.
 const koszty = ref({})
-const sekcjaProwizjiRozwinieta = ref(true)
+// Zwinięte domyślnie — panele administracyjne nie mogą być widoczne od razu
+// przy udostępnianiu ekranu (screenshare).
+const showAdminCosts = ref(false)
+const showAdminModeling = ref(false)
 // `razem.marzaProc` and `razem.zyskProc` are computed inside przeliczPodzial
 // itself (both as % of netto) so the component never re-derives the same
 // ratio by hand — see cpMarza.js.
