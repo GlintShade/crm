@@ -35,6 +35,7 @@
           <TimelineTimestamp :date="attachment.creation" />
           <div class="flex gap-1">
             <Button
+              v-if="canManageAttachmentVisibility"
               :tooltip="
                 attachment.is_private ? __('Make Public') : __('Make Private')
               "
@@ -77,7 +78,9 @@ import FileAudioIcon from '@/components/Icons/FileAudioIcon.vue'
 import FileTextIcon from '@/components/Icons/FileTextIcon.vue'
 import FileVideoIcon from '@/components/Icons/FileVideoIcon.vue'
 import { globalStore } from '@/stores/global'
+import { usersStore } from '@/stores/users'
 import { call } from 'frappe-ui'
+import { computed } from 'vue'
 import TimelineTimestamp from '@/components/Activities/TimelineTimestamp.vue'
 import { convertSize, isImage } from '@/utils'
 
@@ -88,6 +91,14 @@ defineProps({
 const emit = defineEmits(['reload'])
 
 const { $dialog } = globalStore()
+
+// Flipping a private attachment to public is a data-exposure footgun (a
+// signed contract/PESEL-bearing file becomes downloadable with no auth) —
+// restrict the toggle to admins, same combined check DealsListView.vue uses
+// for its bulk-action gating (System Manager via isAdmin, folded into
+// isVolteoAdmin together with the Volteo-specific `Volteo Core Admin` role).
+const { isVolteoAdmin } = usersStore()
+const canManageAttachmentVisibility = computed(() => isVolteoAdmin())
 
 function openFile(attachment) {
   window.open(attachment.file_url, '_blank')

@@ -26,7 +26,14 @@
           <FormControl type="date" :label="__('Termin płatności')" v-model="draft.termin_platnosci" />
         </div>
         <div class="mt-3 flex items-center justify-between">
-          <FileUploader @success="(file) => (draft.plik = file.file_url)">
+          <FileUploader
+            :upload-args="{
+              doctype: 'CRM Deal',
+              docname: dealId,
+              private: true,
+            }"
+            @success="(file) => (draft.plik = file.file_url)"
+          >
             <template #default="{ openFileSelector, uploading }">
               <Button
                 :label="draft.plik ? __('Plik dodany') : __('Załącz plik')"

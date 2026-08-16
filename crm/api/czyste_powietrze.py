@@ -158,6 +158,9 @@ def _blad_ogolny() -> NoReturn:
 @frappe.whitelist()
 def volteo_cp_pozycje() -> dict[str, Any]:
 	"""Zwraca bezpieczne dane katalogu do wyświetlenia w formularzu."""
+	role_uzytkownika = set(frappe.get_roles(frappe.session.user))
+	if not KALKULATOR_ROLE & role_uzytkownika:
+		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
 	wiersze = frappe.get_all(
 		"Volteo CP Pozycja",
 		fields=_POZYCJE_POLA,
@@ -256,6 +259,8 @@ def volteo_cp_calc(wejscie: dict[str, Any]) -> dict[str, Any]:
 
 def _imie_nazwisko_kontaktu(kontakt: str) -> str:
 	"""Pobiera imię i nazwisko z kontaktu; rzuca czytelny błąd, gdy kontakt nie istnieje."""
+	if not frappe.has_permission("Contact", ptype="read", doc=kontakt):
+		frappe.throw(_("Brak dostępu do wybranego kontaktu."), frappe.PermissionError)
 	dane = frappe.db.get_value("Contact", kontakt, ["first_name", "last_name"], as_dict=True)
 	if not dane:
 		frappe.throw(_("Wybrany kontakt nie istnieje."))

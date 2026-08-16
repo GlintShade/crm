@@ -62,6 +62,11 @@ def get_faktura_permission_query_conditions(user=None):
 	# references resolve against that same table with no ambiguity (its
 	# correlated subqueries reference their own aliased tables and are
 	# self-contained).
+	# Trust boundary: deal_cond MUST remain a server-derived condition (built by
+	# org_hierarchy's pypika builder from frappe.session.user), never client input.
+	# If a future change routes user-supplied data into get_deal_permission_query_conditions,
+	# this string interpolation becomes an injection sink -- keep that function pypika-only.
+	assert isinstance(deal_cond, str), "deal_cond must be a pypika-rendered SQL string"
 	return "`tabVolteo Faktura`.`deal` in (select `name` from `tabCRM Deal` where {})".format(deal_cond)
 
 
