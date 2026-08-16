@@ -483,6 +483,21 @@ watch(
   },
 )
 
+// Default panel-card preselection: pick the first active card (lowest sort)
+// once the catalog loads, and again whenever the current pick falls out of
+// the active list. Never touches sel.panel for battery-only variants — the
+// variant watcher above already owns clearing it there.
+watch(
+  [panelOptions, hasPv],
+  ([opcje, pv]) => {
+    if (!pv || !opcje.length) return
+    if (!sel.panel || !opcje.some((c) => c.name === sel.panel)) {
+      sel.panel = opcje[0].name
+    }
+  },
+  { immediate: true },
+)
+
 // --- Auto-assembly suggestion from Roczne zużycie ---------------------------
 // Sizing heuristics live in pvForm.js (display-only estimate — the server
 // remains the source of truth for pricing/BOM once fields are set).

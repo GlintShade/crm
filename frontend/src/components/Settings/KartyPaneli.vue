@@ -9,7 +9,7 @@
         <p class="text-p-base text-ink-gray-6">
           {{
             __(
-              'Katalog kart producenckich paneli PV. Karty nie są usuwane — dostępność rotuje się przełącznikiem Aktywna / Nieaktywna.',
+              'Katalog kart producenckich paneli PV. Dostępność rotuje się przełącznikiem Aktywna / Nieaktywna. Karta, której nie użyła żadna szansa, może zostać trwale usunięta; karta już użyta — nie.',
             )
           }}
         </p>
@@ -79,6 +79,14 @@
             :theme="karta.aktywny ? 'gray' : undefined"
             :loading="toggleAktywnosc.loading && togglingName === karta.name"
             @click="toggleCard(karta)"
+          />
+          <Button
+            :label="__('Usuń')"
+            variant="subtle"
+            theme="red"
+            icon-left="trash-2"
+            :loading="deleteCard.loading && deletingName === karta.name"
+            @click="openDeleteDialog(karta)"
           />
         </div>
       </div>
@@ -156,6 +164,40 @@
             variant="solid"
             :loading="saveCard.loading"
             @click="submitForm"
+          />
+        </div>
+      </template>
+    </Dialog>
+
+    <!-- Delete confirmation dialog -->
+    <Dialog
+      v-model:open="showDeleteDialog"
+      :title="__('Usuń kartę panelu')"
+      :size="'md'"
+      @close="closeDeleteDialog"
+    >
+      <template #default>
+        <div class="flex flex-col gap-4">
+          <p class="text-p-base text-ink-gray-7">
+            {{
+              __(
+                'Ta operacja jest nieodwracalna. Karta {0} zostanie trwale usunięta z katalogu. Karty użytej już w jakiejkolwiek szansie nie da się usunąć — w takim wypadku użyj akcji Dezaktywuj.',
+                [deleteTarget?.nazwa || ''],
+              )
+            }}
+          </p>
+          <ErrorMessage :message="deleteError" />
+        </div>
+      </template>
+      <template #actions>
+        <div class="flex justify-end gap-2">
+          <Button :label="__('Anuluj')" variant="outline" @click="closeDeleteDialog" />
+          <Button
+            :label="__('Usuń')"
+            variant="solid"
+            theme="red"
+            :loading="deleteCard.loading"
+            @click="confirmDelete"
           />
         </div>
       </template>
@@ -314,5 +356,45 @@ function toggleCard(karta) {
     name: karta.name,
     aktywny: karta.aktywny ? 0 : 1,
   })
+}
+
+// --- Delete card -------------------------------------------------------
+
+const showDeleteDialog = ref(false)
+const deleteTarget = ref(null)
+const deleteError = ref('')
+const deletingName = ref('')
+
+const deleteCard = createResource({
+  url: 'crm.api.volteo_panele.volteo_panel_usun',
+  onSuccess: (data) => {
+    state.karty = state.karty.filter((k) => k.name !== data.usunieto)
+    toast.success(__('Karta {0} została usunięta', [deleteTarget.value?.nazwa || '']))
+    deletingName.value = ''
+    closeDeleteDialog()
+  },
+  onError: (err) => {
+    deletingName.value = ''
+    deleteError.value = err?.messages?.[0] || __('Nie udało się usunąć karty')
+  },
+})
+
+function openDeleteDialog(karta) {
+  deleteTarget.value = karta
+  deleteError.value = ''
+  showDeleteDialog.value = true
+}
+
+function closeDeleteDialog() {
+  showDeleteDialog.value = false
+  deleteTarget.value = null
+  deleteError.value = ''
+}
+
+function confirmDelete() {
+  if (!deleteTarget.value) return
+  deleteError.value = ''
+  deletingName.value = deleteTarget.value.name
+  deleteCard.submit({ name: deleteTarget.value.name })
 }
 </script>

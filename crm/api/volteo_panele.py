@@ -20,13 +20,22 @@ to bezpieczne, bo wołający jest już przefiltrowany do tych samych ról, któr
 mają dostęp do kosztów wewnętrznych gdzie indziej w systemie (por. model
 tajemnicy kosztów opisany w `crm/api/umowa.py` i `crm/czyste_powietrze/`).
 
-Karty nigdy nie są usuwane
------------------------------
+Karty użyte w jakiejkolwiek szansie nigdy nie są usuwane
+-------------------------------------------------------------
 Zgodnie z konwencją katalogu `Volteo Komponent` (patrz `crm/api/umowa.py`,
-`_komponenty_katalogu`) wiersze nie są kasowane — historyczne deale muszą
-nadal rozwiązywać swoje komponenty nawet po dezaktywacji karty. Dlatego ten
-moduł celowo NIE ma metody usuwania; rotacja dostępności odbywa się przez
-`aktywny` (patrz `volteo_panel_aktywnosc`).
+`_komponenty_katalogu`) karta, którą wskazuje choć jeden deal, nie może zniknąć
+— `crm/volteo_umowa_pdf.py::_znajdz_komponent` rozwiązuje panel historycznego
+deala dopasowując `f"{nazwa} {model}"` do `CRM Deal.custom_panel`, więc
+usunięcie użytej karty po cichu degradowałoby regenerowane umowy. Dla kart w
+użyciu jedyną operacją pozostaje rotacja dostępności przez `aktywny`
+(patrz `volteo_panel_aktywnosc`).
+
+Karta, której żaden deal nigdy nie użył — „wyszła z użycia na dobre" zanim
+w ogóle trafiła do jakiejkolwiek szansy — MOŻE zostać trwale skasowana przez
+`volteo_panel_usun`. Metoda sama sprawdza referencje (ten sam sklejony klucz
+`f"{nazwa} {model}"` co `_znajdz_komponent`) i odmawia, jeśli znajdzie choćby
+jedno użycie; w takim wypadku instruuje wywołującego, żeby zamiast tego użył
+`volteo_panel_aktywnosc`.
 
 Pole `producent` pozostaje puste na wierszach paneli
 --------------------------------------------------------
@@ -206,3 +215,43 @@ def volteo_panel_aktywnosc(name: str, aktywny: int | str) -> dict:
 	doc.save(ignore_permissions=True)
 
 	return {"karta": _wiersz_do_dict(doc)}
+
+
+@frappe.whitelist()
+def volteo_panel_usun(name: str) -> dict:
+	"""Trwale kasuje kartę panelu PV, o ile żaden deal nigdy jej nie użył.
+
+	Referencję sprawdzamy po tym samym sklejonym kluczu `f"{nazwa} {model}"`,
+	którego używa `crm/volteo_umowa_pdf.py::_znajdz_komponent` do rozwiązania
+	panelu historycznego deala — dokładnie ten string ląduje w
+	`CRM Deal.custom_panel` przy generowaniu oferty. Sprawdzamy dwa miejsca:
+	`CRM Deal.custom_panel` wprost oraz pozycje BOM (`Volteo Zestaw Item` typu
+	`Panele PV`) jako dodatkowe zabezpieczenie. Jeśli karta jest użyta,
+	odmawiamy i każemy wywołującemu użyć `volteo_panel_aktywnosc` zamiast
+	usuwania. Odmawia też, jeśli wskazany wiersz nie istnieje lub nie jest
+	kategorii `Panel PV` (patrz `_pobierz_karte_panelu`).
+	"""
+	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
+
+	name = (name or "").strip()
+	if not name:
+		frappe.throw(_("Nazwa karty jest wymagana."))
+
+	doc = _pobierz_karte_panelu(name)
+
+	sklejka = f"{doc.nazwa or ''} {doc.model or ''}".strip()
+	uzyta = frappe.db.exists("CRM Deal", {"custom_panel": sklejka}) or frappe.db.exists(
+		"Volteo Zestaw Item",
+		{"parenttype": "CRM Deal", "typ": "Panele PV", "nazwa": sklejka},
+	)
+	if uzyta:
+		frappe.throw(
+			_(
+				"Karta {0} była użyta w co najmniej jednej szansie i nie może zostać"
+				" usunięta. Użyj akcji Dezaktywuj, żeby wycofać ją z dostępności."
+			).format(sklejka or name)
+		)
+
+	frappe.delete_doc("Volteo Komponent", doc.name, ignore_permissions=True)
+
+	return {"usunieto": doc.name}
