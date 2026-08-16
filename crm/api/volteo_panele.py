@@ -37,6 +37,13 @@ w ogóle trafiła do jakiejkolwiek szansy — MOŻE zostać trwale skasowana prz
 jedno użycie; w takim wypadku instruuje wywołującego, żeby zamiast tego użył
 `volteo_panel_aktywnosc`.
 
+Z tego samego powodu `volteo_panel_zapisz` (ścieżka edycji) blokuje zmianę
+`nazwa`/`model` na karcie w użyciu — sama sklejka jest kluczem dopasowania,
+więc jej zmiana po cichu odrywałaby istniejące umowy od poprawnych wartości
+Wp/gwarancji, mimo że karta formalnie wciąż istnieje. Referencję sprawdza
+wspólny `_czy_karta_uzyta` (patrz niżej), używany przez obie metody. Inne
+pola karty w użyciu (cena, moc, sort, gwarancja) edytować wolno bez ograniczeń.
+
 Pole `producent` pozostaje puste na wierszach paneli
 --------------------------------------------------------
 `Volteo Komponent.producent` to osobny Select od tekstowego `nazwa` (który
@@ -99,6 +106,29 @@ def _wiersz_do_dict(doc) -> dict:
 		"aktywny": doc.aktywny,
 		"sort": doc.sort,
 	}
+
+
+def _sklejka(nazwa: str, model: str) -> str:
+	"""Sklejony klucz `f"{nazwa} {model}"`, dokładnie w postaci, w jakiej
+	zapisuje go `_znajdz_komponent` w `CRM Deal.custom_panel` przy generowaniu
+	umowy — jedyne miejsce w module, które ma prawo tę sklejkę budować, żeby
+	`volteo_panel_usun` i `volteo_panel_zapisz` porównywały identyczny string."""
+	return f"{nazwa or ''} {model or ''}".strip()
+
+
+def _czy_karta_uzyta(sklejka: str) -> bool:
+	"""Sprawdza, czy dana sklejka `nazwa model` widnieje w jakiejkolwiek
+	szansie — wprost na `CRM Deal.custom_panel` albo w pozycji BOM
+	(`Volteo Zestaw Item` typu `Panele PV`). Współdzielone przez
+	`volteo_panel_usun` (blokada kasowania) i `volteo_panel_zapisz` (blokada
+	zmiany tożsamości karty w użyciu) — patrz docstring modułu."""
+	return bool(
+		frappe.db.exists("CRM Deal", {"custom_panel": sklejka})
+		or frappe.db.exists(
+			"Volteo Zestaw Item",
+			{"parenttype": "CRM Deal", "typ": "Panele PV", "nazwa": sklejka},
+		)
+	)
 
 
 def _pobierz_karte_panelu(docname: str):
@@ -176,6 +206,23 @@ def volteo_panel_zapisz(
 
 	if docname:
 		doc = _pobierz_karte_panelu(docname)
+
+		# Zmiana tożsamości karty (nazwa/model) w użyciu po cichu degraduje
+		# regenerowane umowy — `_znajdz_komponent` dopasowuje panel po tej
+		# właśnie sklejce, więc stara sklejka przestałaby się zgadzać z
+		# `CRM Deal.custom_panel` zapisanym przy pierwotnym generowaniu.
+		# Blokujemy tylko realną zmianę sklejki; inne pola (cena, moc, sort,
+		# gwarancja) na karcie w użyciu edytować wolno.
+		stara_sklejka = _sklejka(doc.nazwa, doc.model)
+		nowa_sklejka = _sklejka(nazwa, model)
+		if nowa_sklejka != stara_sklejka and _czy_karta_uzyta(stara_sklejka):
+			frappe.throw(
+				_(
+					"Karta {0} była użyta w co najmniej jednej szansie lub zestawie —"
+					" nie można zmienić jej nazwy/modelu. Zamiast tego dezaktywuj tę"
+					" kartę i utwórz nową."
+				).format(stara_sklejka or docname)
+			)
 	else:
 		doc = frappe.new_doc("Volteo Komponent")
 
@@ -239,12 +286,8 @@ def volteo_panel_usun(name: str) -> dict:
 
 	doc = _pobierz_karte_panelu(name)
 
-	sklejka = f"{doc.nazwa or ''} {doc.model or ''}".strip()
-	uzyta = frappe.db.exists("CRM Deal", {"custom_panel": sklejka}) or frappe.db.exists(
-		"Volteo Zestaw Item",
-		{"parenttype": "CRM Deal", "typ": "Panele PV", "nazwa": sklejka},
-	)
-	if uzyta:
+	sklejka = _sklejka(doc.nazwa, doc.model)
+	if _czy_karta_uzyta(sklejka):
 		frappe.throw(
 			_(
 				"Karta {0} była użyta w co najmniej jednej szansie i nie może zostać"
