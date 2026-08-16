@@ -11,33 +11,55 @@ czy hooków) mieszka w ``crm.api.pipeline``.
 
 KOLEJNOŚĆ etapów rurociągu żyje WYŁĄCZNIE tutaj, nigdy w `CRM Deal
 Status.position` — to pole steruje jedynie kolejnością wyświetlania w
-rozwijanej liście i nie ma pojęcia o tym, że „Weryfikacja Backoffice” to
-JEDEN wiersz statusu, który w dwóch różnych rurociągach zajmuje dwa różne
-miejsca (indeks 3 w OZE, indeks 2 w CP). Licząc „do przodu” po
-`position` dla takiego statusu, nie da się w ogóle odpowiedzieć na pytanie
-„do przodu względem czego” — trzeba znać rurociąg danej sprawy.
+rozwijanej liście i nie ma pojęcia o tym, że „Finansowanie” to JEDEN wiersz
+statusu, który w dwóch różnych rurociągach zajmuje dwa różne miejsca (indeks
+4 w OZE, indeks 5 w CP). Licząc „do przodu” po `position` dla takiego
+statusu, nie da się w ogóle odpowiedzieć na pytanie „do przodu względem
+czego” — trzeba znać rurociąg danej sprawy. „Weryfikacja Backoffice” jest od
+teraz statusem WYŁĄCZNIE OZE — CP go nie ma (usunięty razem z „Ofertą
+Docelową”, zastąpioną przez „Ofertę Wstępną” i „Ofertę Właściwą”).
 
-Oba rurociągi będą rosnąć: kroki od piątego (OZE) i od siódmego (CP) są
+Oba rurociągi będą rosnąć: kroki od szóstego (OZE) i od siódmego (CP) są
 celowo niezdefiniowane. Dodanie kolejnego kroku w przyszłości to zmiana w
 odpowiedniej krotce (`PIPELINE_OZE`/`PIPELINE_CP`) plus założenie wiersza
 statusu skryptem ops — nic więcej.
+
+Poza rurociągiem żyją statusy TERMINALNE (`TERMINALE`) — wybieralne w
+rozwijanej liście sprawy, ale renderowane jako stan pasma odznaki
+(wygrana/przegrana), nigdy jako ponumerowany krok. CP celowo nie ma jeszcze
+statusu wygranej. Rozwijana lista w formularzu sprawy pokazuje dokładnie
+`grupa_for(rodzaj)`: rurociąg plus statusy terminalne, w tej kolejności.
 """
 
 OZE_RODZAJE: frozenset[str] = frozenset({"Fotowoltaika", "Fotowoltaika + Magazyn", "Magazyn energii"})
 """Wartości pola `custom_rodzaj_umowy`, które mapują się na rurociąg OZE."""
 
-PIPELINE_OZE: tuple[str, ...] = ("Lead", "Umowa Wygenerowana", "Umowa Podpisana", "Weryfikacja Backoffice")
+PIPELINE_OZE: tuple[str, ...] = (
+	"Lead",
+	"Umowa Wygenerowana",
+	"Umowa Podpisana",
+	"Weryfikacja Backoffice",
+	"Finansowanie",
+)
 """Rurociąg statusów dla linii OZE (fotowoltaika + magazyny energii), w kolejności przejścia."""
 
 PIPELINE_CP: tuple[str, ...] = (
 	"Lead",
+	"Oferta Wstępna",
 	"Dokumentacja",
-	"Weryfikacja Backoffice",
 	"Audyt Energetyczny",
-	"Oferta Docelowa",
+	"Oferta Właściwa",
 	"Finansowanie",
 )
 """Rurociąg statusów dla linii Czyste Powietrze, w kolejności przejścia."""
+
+TERMINALE: dict[str, tuple[str, ...]] = {
+	"OZE": ("Wygrana – montaż", "Przegrana"),
+	"CP": ("Przegrana",),
+}
+"""Statusy terminalne per rurociąg — wybieralne w rozwijanej liście sprawy, renderowane jako
+stan pasma odznaki (wygrana/przegrana), nigdy jako ponumerowany krok; CP celowo nie ma jeszcze
+statusu wygranej."""
 
 NOTATKI: dict[str, dict[str, str]] = {
 	"OZE": {"Umowa Podpisana": "Uzupełnij audyt i wyślij do weryfikacji."},
@@ -65,6 +87,18 @@ def pipeline_for(rodzaj: str | None) -> tuple[str, ...] | None:
 	if klucz == "CP":
 		return PIPELINE_CP
 	return None
+
+
+def grupa_for(rodzaj: str | None) -> tuple[str, ...] | None:
+	"""Zwraca grupę statusów rozwijanej listy dla rodzaju umowy: rurociąg plus statusy terminalne,
+	w tej kolejności (kolejność rozwijanej listy). Zwraca None, gdy rodzaj nie ma rurociągu.
+	"""
+	rurociag = pipeline_for(rodzaj)
+	if rurociag is None:
+		return None
+	klucz = pipeline_key_for(rodzaj)
+	terminale = TERMINALE.get(klucz, ())
+	return rurociag + terminale
 
 
 def step_index(rodzaj: str | None, status: str | None) -> int:
