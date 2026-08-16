@@ -31,7 +31,16 @@ from typing import Any
 import frappe
 from frappe import _
 
-from crm.volteo_pipeline import NOTATKI, is_forward, notatka_for, pipeline_for, pipeline_key_for, step_index
+from crm.volteo_pipeline import (
+	NOTATKI,
+	OZE_RODZAJE,
+	grupa_for,
+	is_forward,
+	notatka_for,
+	pipeline_for,
+	pipeline_key_for,
+	step_index,
+)
 
 
 def _sprawdz_dostep_do_szansy(deal: str) -> None:
@@ -45,8 +54,12 @@ def _sprawdz_dostep_do_szansy(deal: str) -> None:
 @frappe.whitelist()
 def volteo_pipeline_get(deal: str) -> dict[str, Any]:
 	"""Zwraca KSZTAŁT paska rurociągu dla rodzaju umowy tej szansy (`steps`,
-	`notes`) plus migawkę stanu serwera w chwili odpytania (`status`,
+	`notes`, `group`) plus migawkę stanu serwera w chwili odpytania (`status`,
 	`current_index`, `off_pipeline*`, `note`).
+
+	`group` to uporządkowany podzbiór statusów (kroki rurociągu plus statusy
+	terminalne) do rozwijanej listy statusu na formularzu tej szansy — pusty,
+	gdy rodzaj umowy nie ma rurociągu.
 
 	Pusty `steps` (rodzaj umowy szansy bez rurociągu — np. nieustawiony) jest
 	poprawną odpowiedzią, nie błędem: frontend ukrywa wtedy pasek zamiast go
@@ -84,11 +97,37 @@ def volteo_pipeline_get(deal: str) -> dict[str, Any]:
 		"status": status,
 		"steps": kroki,
 		"notes": notatki,
+		"group": list(grupa_for(rodzaj) or ()),
 		"current_index": biezacy_indeks,
 		"off_pipeline": poza_rurociagiem,
 		"off_pipeline_type": typ_poza_rurociagiem,
 		"note": notatka_for(rodzaj, status),
 	}
+
+
+@frappe.whitelist()
+def volteo_pipeline_grupy() -> dict[str, list[str]]:
+	"""Zwraca słownik rodzaj umowy → grupa statusów (rurociąg plus statusy
+	terminalne) dla KAŻDEGO `custom_rodzaj_umowy`, który ma rurociąg.
+
+	Słownictwo na poziomie rodzaju, nie konkretnej szansy — potrzebne do
+	zawężenia rozwijanej listy statusu na stronach `Deal`/`MobileDeal` oraz
+	w modalach tworzenia/konwersji szansy, które jeszcze nie mają `deal`
+	(więc `volteo_pipeline_get` tam nie zadziała). Odczyt bez sekretów —
+	sama nazewnictwo statusów — więc jedyną bramką jest zalogowanie, bez
+	dodatkowego sprawdzania uprawnień do konkretnego dokumentu.
+
+	Front woła po PEŁNEJ, kropkowanej ścieżce
+	`crm.api.pipeline.volteo_pipeline_grupy` (patrz nagłówek modułu).
+
+	Kolejność wyjścia jest deterministyczna: rodzaje OZE w kolejności opcji
+	pola Select (Fotowoltaika, Fotowoltaika + Magazyn, Magazyn energii), na
+	końcu Czyste Powietrze.
+	"""
+	kolejnosc_oze = ("Fotowoltaika", "Fotowoltaika + Magazyn", "Magazyn energii")
+	assert set(kolejnosc_oze) == OZE_RODZAJE, "kolejność OZE w volteo_pipeline_grupy rozjechała się z OZE_RODZAJE"
+	rodzaje = (*kolejnosc_oze, "Czyste Powietrze")
+	return {rodzaj: list(grupa_for(rodzaj) or ()) for rodzaj in rodzaje}
 
 
 def advance_deal_status(deal: str, target_status: str, automation_key: str) -> bool:
