@@ -356,6 +356,7 @@ import { getView } from '@/utils/view'
 import { getSettings } from '@/stores/settings'
 import { globalStore } from '@/stores/global'
 import { statusesStore } from '@/stores/statuses'
+import { grupaForRodzaj, filterKnown } from '@/utils/dealPipeline'
 import { statusButtonClass } from '@/utils/statusColors'
 import { getMeta } from '@/stores/meta'
 import { useDocument } from '@/data/document'
@@ -388,7 +389,7 @@ import { useActiveTabManager } from '@/composables/useActiveTabManager'
 const { on } = useBroadcast()
 const { brand } = getSettings()
 const { $dialog, $socket, makeCall } = globalStore()
-const { statusOptions, getDealStatus } = statusesStore()
+const { statusOptions, getDealStatus, dealStatuses } = statusesStore()
 const { doctypeMeta } = getMeta('CRM Deal')
 
 const { updateOnboardingStep, isOnboardingStepsCompleted } =
@@ -514,10 +515,43 @@ const title = computed(() => {
   return doc.value?.[t] || props.dealId
 })
 
+// Grupa statusów (rurociąg + terminalne) per `custom_rodzaj_umowy`, jeden
+// współdzielony fetch (cache klucz jak w DealPipelineBar.vue/DealNextStepNote.vue
+// dla `volteo_pipeline_get`) — sam config nie zależy od konkretnej szansy, więc
+// `auto: true` bez `params` i bez odświeżania po zmianie rodzaju wystarczy.
+const grupyStatusow = createResource({
+  url: 'crm.api.pipeline.volteo_pipeline_grupy',
+  cache: ['volteo-pipeline-grupy'],
+  auto: true,
+})
+
+// Grupa zawężona do nazw realnie obecnych w załadowanym store statusów
+// (`dealStatuses.data` — pusta tablica dopóki store się nie załaduje, więc
+// przy zimnym wejściu ten computed poprawnie daje [] zamiast zepsutych opcji
+// `undefined`, patrz `filterKnown` w dealPipeline.js). Pusta grupa (rodzaj
+// nieustawiony/nierozpoznany, config jeszcze nie doszedł, albo store pusty)
+// to sygnał "brak zawężenia", nie błąd — `statusOptions` sam wtedy pokazuje
+// pełną listę.
+const grupaStatusow = computed(() =>
+  filterKnown(
+    grupaForRodzaj(grupyStatusow.data, doc.value?.custom_rodzaj_umowy),
+    (name) => Boolean(dealStatuses.data?.some((s) => s.name === name)),
+  ),
+)
+
 const statuses = computed(() => {
-  let customStatuses = document.statuses?.length
+  // Kolejność pierwszeństwa: Form Script (document.statuses / document._statuses,
+  // wstrzykiwane w watchu na document.doc wyżej) ZAWSZE wygrywa, jeśli podał
+  // niepustą listę — bez zmian względem wcześniejszego zachowania. Dopiero
+  // gdy Form Script nic sensownego nie dostarczył, nowym fallbackiem jest
+  // grupa statusów rodzaju umowy (zamiast wprost pełnej listy) — a pusta
+  // grupa i tak spada dalej na pełną listę wewnątrz `statusOptions`.
+  let formScriptStatuses = document.statuses?.length
     ? document.statuses
-    : document._statuses || []
+    : document._statuses
+  let customStatuses = formScriptStatuses?.length
+    ? formScriptStatuses
+    : grupaStatusow.value
   return statusOptions('deal', customStatuses, triggerStatusChange)
 })
 

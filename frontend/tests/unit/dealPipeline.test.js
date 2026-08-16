@@ -6,6 +6,8 @@ import {
   stepNumber,
   nextStepNote,
   offPipelineBadge,
+  grupaForRodzaj,
+  filterKnown,
 } from '@/utils/dealPipeline'
 
 const stepsPvMe = [
@@ -245,6 +247,70 @@ describe('Pipeline dealu — logika węzłów paska etapów (dealPipeline)', () 
       expect(offPipelineBadge(payload, 'Status spoza znanych typów', 'Recycled')).toBe(
         'Status spoza znanych typów',
       )
+    })
+  })
+
+  describe('grupaForRodzaj', () => {
+    const config = {
+      Fotowoltaika: ['Nowy', 'Kalkulacja', 'Umowa', 'Wygrana – montaż', 'Przegrana'],
+      'Czyste Powietrze': ['Nowy', 'Wniosek', 'Wygrana', 'Przegrana'],
+    }
+
+    it('zwraca grupę statusów dla rozpoznanego rodzaju (trafienie)', () => {
+      expect(grupaForRodzaj(config, 'Fotowoltaika')).toEqual([
+        'Nowy',
+        'Kalkulacja',
+        'Umowa',
+        'Wygrana – montaż',
+        'Przegrana',
+      ])
+    })
+
+    it('zwraca [] dla rodzaju nieobecnego w configu (nietrafienie)', () => {
+      expect(grupaForRodzaj(config, 'Magazyn energii')).toEqual([])
+    })
+
+    it.each([[null], [undefined]])(
+      'zwraca [] dla config=%p (null-safe względem configu)',
+      (badConfig) => {
+        expect(grupaForRodzaj(badConfig, 'Fotowoltaika')).toEqual([])
+      },
+    )
+
+    it.each([[null], [undefined], ['']])(
+      'zwraca [] dla rodzaj=%p (null-safe względem rodzaju)',
+      (rodzaj) => {
+        expect(grupaForRodzaj(config, rodzaj)).toEqual([])
+      },
+    )
+  })
+
+  describe('filterKnown', () => {
+    const isKnown = (name) => ['Nowy', 'Kalkulacja', 'Umowa'].includes(name)
+
+    it('filtruje do nazw znanych store\'owi', () => {
+      expect(filterKnown(['Nowy', 'Widmo', 'Umowa'], isKnown)).toEqual([
+        'Nowy',
+        'Umowa',
+      ])
+    })
+
+    it('zwraca [] gdy żadna nazwa nie jest znana', () => {
+      expect(filterKnown(['Widmo1', 'Widmo2'], isKnown)).toEqual([])
+    })
+
+    it.each([[null], [undefined], [[]]])(
+      'zwraca [] dla names=%p (null-safe)',
+      (names) => {
+        expect(filterKnown(names, isKnown)).toEqual([])
+      },
+    )
+
+    it('nie mutuje przekazanej tablicy names', () => {
+      const names = ['Nowy', 'Widmo', 'Umowa']
+      const kopia = [...names]
+      filterKnown(names, isKnown)
+      expect(names).toEqual(kopia)
     })
   })
 

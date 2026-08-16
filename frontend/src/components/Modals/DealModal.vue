@@ -77,6 +77,7 @@ import EditIcon from '@/components/Icons/EditIcon.vue'
 import FieldLayout from '@/components/FieldLayout/FieldLayout.vue'
 import { usersStore } from '@/stores/users'
 import { statusesStore } from '@/stores/statuses'
+import { grupaForRodzaj, filterKnown } from '@/utils/dealPipeline'
 import { isMobileView } from '@/composables/settings'
 import { showQuickEntryModal, quickEntryProps } from '@/composables/modals'
 import { useDocument } from '@/data/document'
@@ -90,7 +91,11 @@ const props = defineProps({
 })
 
 const { getUser, isManager } = usersStore()
-const { getDealStatus, statusOptions } = statusesStore()
+const {
+  getDealStatus,
+  statusOptions,
+  dealStatuses: dealStatusesResource,
+} = statusesStore()
 
 const show = defineModel({ type: Boolean })
 const router = useRouter()
@@ -125,6 +130,43 @@ watch(
   },
 )
 
+// Zawężenie opcji pola "status" w tym modalu (Quick Entry) do grupy rodzaju
+// umowy — ten sam config/cache klucz co Deal.vue/MobileDeal.vue. `deal.doc`
+// nie ma jeszcze `custom_rodzaj_umowy` ustawionego dopóki użytkownik go nie
+// wybierze w formularzu (jeśli to pole w ogóle jest w layoucie Quick Entry —
+// jeśli nie, `grupaForRodzaj` dostaje `rodzaj` undefined i zwraca [], więc
+// scopedDealStatuses spada na pełną listę bez żadnego specjalnego przypadku).
+const grupyStatusow = createResource({
+  url: 'crm.api.pipeline.volteo_pipeline_grupy',
+  cache: ['volteo-pipeline-grupy'],
+  auto: true,
+})
+
+const grupaStatusow = computed(() =>
+  filterKnown(
+    grupaForRodzaj(grupyStatusow.data, deal.doc?.custom_rodzaj_umowy),
+    (name) => Boolean(dealStatusesResource.data?.some((s) => s.name === name)),
+  ),
+)
+
+const scopedDealStatuses = computed(() =>
+  grupaStatusow.value.length
+    ? statusOptions('deal', grupaStatusow.value)
+    : dealStatuses.value,
+)
+
+// Referencja do znalezionego pola "status" w drzewie `tabs.data` (mutowanym
+// w miejscu w `transform` niżej) — potrzebna, żeby watcher mógł podmienić
+// `field.options` na żywo, gdy `custom_rodzaj_umowy` się zmieni PO tym, jak
+// `transform` już raz przebiegł (transform leci raz, przy załadowaniu zasobu).
+const statusFieldRef = ref(null)
+
+watch([() => deal.doc?.custom_rodzaj_umowy, () => grupyStatusow.data], () => {
+  if (statusFieldRef.value) {
+    statusFieldRef.value.options = scopedDealStatuses.value
+  }
+})
+
 const tabs = createResource({
   url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_fields_layout',
   cache: ['QuickEntry', 'CRM Deal'],
@@ -151,8 +193,9 @@ const tabs = createResource({
           column.fields.forEach((field) => {
             if (field.fieldname == 'status') {
               field.fieldtype = 'Select'
-              field.options = dealStatuses.value
+              field.options = scopedDealStatuses.value
               field.prefix = getDealStatus(deal.doc.status).color
+              statusFieldRef.value = field
             }
 
             if (field.fieldtype === 'Table') {

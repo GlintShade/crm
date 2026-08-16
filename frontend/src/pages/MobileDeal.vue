@@ -9,18 +9,7 @@
         </template>
       </Breadcrumbs>
       <div class="absolute right-0">
-        <Dropdown
-          v-if="doc"
-          :options="
-            statusOptions(
-              'deal',
-              document.statuses?.length
-                ? document.statuses
-                : document._statuses,
-              triggerStatusChange,
-            )
-          "
-        >
+        <Dropdown v-if="doc" :options="statuses">
           <template #default="{ open }">
             <Button
               v-if="dealStatus"
@@ -323,6 +312,7 @@ import { getView } from '@/utils/view'
 import { getSettings } from '@/stores/settings'
 import { globalStore } from '@/stores/global'
 import { statusesStore } from '@/stores/statuses'
+import { grupaForRodzaj, filterKnown } from '@/utils/dealPipeline'
 import { statusButtonClass } from '@/utils/statusColors'
 import { getMeta } from '@/stores/meta'
 import { useDocument } from '@/data/document'
@@ -345,7 +335,7 @@ import { useRoute, useRouter } from 'vue-router'
 
 const { brand } = getSettings()
 const { $dialog, $socket } = globalStore()
-const { statusOptions, getDealStatus } = statusesStore()
+const { statusOptions, getDealStatus, dealStatuses } = statusesStore()
 const { doctypeMeta } = getMeta('CRM Deal')
 
 const route = useRoute()
@@ -378,6 +368,35 @@ const doc = computed(() => document.doc || {})
 const dealStatus = computed(() =>
   doc.value.status ? getDealStatus(doc.value.status) : null,
 )
+
+// Ten sam config/cache klucz co w Deal.vue (współdzielony fetch przez
+// `createResource` z tym samym `cache`). Zawężenie rozwijanej listy statusu
+// w nagłówku do grupy rodzaju umowy — zrefaktoryzowane z inlinowanego
+// wyrażenia w szablonie (patrz `statuses` niżej) na computed z tą samą
+// logiką pierwszeństwa co desktopowy Deal.vue: Form Script > grupa rodzaju
+// > (wewnątrz `statusOptions`) pełna lista.
+const grupyStatusow = createResource({
+  url: 'crm.api.pipeline.volteo_pipeline_grupy',
+  cache: ['volteo-pipeline-grupy'],
+  auto: true,
+})
+
+const grupaStatusow = computed(() =>
+  filterKnown(
+    grupaForRodzaj(grupyStatusow.data, doc.value?.custom_rodzaj_umowy),
+    (name) => Boolean(dealStatuses.data?.some((s) => s.name === name)),
+  ),
+)
+
+const statuses = computed(() => {
+  let formScriptStatuses = document.statuses?.length
+    ? document.statuses
+    : document._statuses
+  let customStatuses = formScriptStatuses?.length
+    ? formScriptStatuses
+    : grupaStatusow.value
+  return statusOptions('deal', customStatuses, triggerStatusChange)
+})
 
 onMounted(async () => {
   if (document.doc) await triggerOnRender()

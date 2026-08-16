@@ -95,6 +95,7 @@ import { useDocument } from '@/data/document'
 import { usersStore } from '@/stores/users'
 import { sessionStore } from '@/stores/session'
 import { statusesStore } from '@/stores/statuses'
+import { grupaForRodzaj, filterKnown } from '@/utils/dealPipeline'
 import { showQuickEntryModal, quickEntryProps } from '@/composables/modals'
 import { isMobileView } from '@/composables/settings'
 import { useOnboarding, useTelemetry } from 'frappe-ui/frappe'
@@ -110,7 +111,11 @@ const show = defineModel({ type: Boolean })
 
 const router = useRouter()
 
-const { statusOptions, getDealStatus } = statusesStore()
+const {
+  statusOptions,
+  getDealStatus,
+  dealStatuses: dealStatusesResource,
+} = statusesStore()
 const { isManager } = usersStore()
 const { user } = sessionStore()
 const { updateOnboardingStep } = useOnboarding('frappecrm')
@@ -189,6 +194,41 @@ async function convertToDeal() {
 
 const dealStatuses = computed(() => statusOptions('deal'))
 
+// Zawężenie do grupy rodzaju umowy — jak w DealModal.vue. `custom_rodzaj_umowy`
+// jest polem WYŁĄCZNIE `CRM Deal` (Lead go nie ma), więc `prefillFromLead`
+// nigdy go nie wypełni; jeśli admin nie dodał tego pola do layoutu "Required
+// Fields", `deal.doc.custom_rodzaj_umowy` zostaje `undefined` na stałe,
+// `grupaForRodzaj` dostaje `rodzaj` undefined i zwraca [], więc
+// scopedDealStatuses spada na pełną listę — dokładnie niezmienione zachowanie
+// sprzed tej zmiany. Jeśli pole JEST w layoucie, użytkownik może je ustawić
+// interaktywnie w formularzu i wtedy lista statusu zawęża się na żywo.
+const grupyStatusow = createResource({
+  url: 'crm.api.pipeline.volteo_pipeline_grupy',
+  cache: ['volteo-pipeline-grupy'],
+  auto: true,
+})
+
+const grupaStatusow = computed(() =>
+  filterKnown(
+    grupaForRodzaj(grupyStatusow.data, deal.doc?.custom_rodzaj_umowy),
+    (name) => Boolean(dealStatusesResource.data?.some((s) => s.name === name)),
+  ),
+)
+
+const scopedDealStatuses = computed(() =>
+  grupaStatusow.value.length
+    ? statusOptions('deal', grupaStatusow.value)
+    : dealStatuses.value,
+)
+
+const statusFieldRef = ref(null)
+
+watch([() => deal.doc?.custom_rodzaj_umowy, () => grupyStatusow.data], () => {
+  if (statusFieldRef.value) {
+    statusFieldRef.value.options = scopedDealStatuses.value
+  }
+})
+
 const dealTabs = createResource({
   url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_fields_layout',
   cache: ['RequiredFields', 'CRM Deal'],
@@ -203,8 +243,9 @@ const dealTabs = createResource({
             hasFields = true
             if (field.fieldname == 'status') {
               field.fieldtype = 'Select'
-              field.options = dealStatuses.value
+              field.options = scopedDealStatuses.value
               field.prefix = getDealStatus(deal.doc.status).color
+              statusFieldRef.value = field
             }
           })
         })

@@ -149,3 +149,38 @@ export function offPipelineBadge(payload, status, statusType) {
   }
   return null
 }
+
+/**
+ * Grupa statusów (rurociąg plus statusy terminalne) dla danego rodzaju umowy,
+ * wyciągnięta z konfiguracji zwróconej przez `crm.api.pipeline.volteo_pipeline_grupy`
+ * (`{ [rodzaj]: [nazwy statusów w kolejności] }`). Null-safe względem obu
+ * argumentów — brak configu (zasób jeszcze nie załadowany / błąd fetchu) albo
+ * nieustawiony/nierozpoznany rodzaj dają pustą tablicę, którą wołający ma
+ * traktować jak sygnał "brak zawężenia" (pełna lista statusów).
+ *
+ * @param {Object<string, string[]>|null|undefined} config
+ * @param {string|null|undefined} rodzaj
+ * @returns {string[]}
+ */
+export function grupaForRodzaj(config, rodzaj) {
+  if (!config || !rodzaj) return []
+  return config[rodzaj] || []
+}
+
+/**
+ * Filtruje nazwy statusów do tych, które faktycznie istnieją w załadowanym
+ * store statusów — bez tego sprawdzenia nazwa nieobecna w store (np. przez
+ * wyścig zimnego ładowania: grupa doszła zanim `CRM Deal Status` się załadował)
+ * dałaby zepsutą opcję `undefined` w rozwijanej liście (patrz `statusOptions`
+ * w `stores/statuses.js` — brak tam takiej walidacji, bo zakłada gotowy store).
+ * Celowo bezstanowe i bez importu store'u (`isKnown` jako callback), żeby ten
+ * moduł został frappe-free/testowalny — patrz nagłówek pliku.
+ *
+ * @param {string[]|null|undefined} names
+ * @param {(name: string) => boolean} isKnown
+ * @returns {string[]}
+ */
+export function filterKnown(names, isKnown) {
+  if (!Array.isArray(names)) return []
+  return names.filter((name) => isKnown(name))
+}
