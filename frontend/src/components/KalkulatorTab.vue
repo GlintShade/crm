@@ -246,7 +246,7 @@
                   <template v-if="sel.typKlienta === 'indywidualny'">
                     <div class="mt-1.5 border-t border-dashed border-outline-gray-2 pt-1.5">
                       <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
-                        <span>Dotacja Mój Prąd</span><span>− {{ formatPln(summary.dotacja) }}</span>
+                        <span>Dotacja Przydomowe Magazyny Energii</span><span>− {{ formatPln(summary.dotacja) }}</span>
                       </div>
                       <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
                         <span>Cena po dotacji</span><span>{{ formatPln(summary.cena_po_dotacji) }}</span>
