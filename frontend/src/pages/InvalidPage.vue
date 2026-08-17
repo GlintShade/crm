@@ -15,15 +15,9 @@
 
 <script setup>
 import LeadsIcon from '@/components/Icons/LeadsIcon.vue'
-import { getSettings } from '@/stores/settings'
 import { usePageMeta } from 'frappe-ui'
 
-const { brand } = getSettings()
-
 usePageMeta(() => {
-  return {
-    title: __('Nieprawidłowa strona'),
-    icon: brand.favicon,
-  }
+  return { title: __('Nieprawidłowa strona') }
 })
 </script>

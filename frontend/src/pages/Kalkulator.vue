@@ -41,11 +41,8 @@ import ViewBreadcrumbs from '@/components/ViewBreadcrumbs.vue'
 import Link from '@/components/Controls/Link.vue'
 import ContactModal from '@/components/Modals/ContactModal.vue'
 import KalkulatorTab from '@/components/KalkulatorTab.vue'
-import { getSettings } from '@/stores/settings'
 import { createResource, usePageMeta } from 'frappe-ui'
 import { ref, computed, watch } from 'vue'
-
-const { brand } = getSettings()
 
 const selectedContact = ref('')
 const showContactModal = ref(false)
@@ -53,10 +50,7 @@ const _contact = ref({})
 const clientLinkRef = ref(null)
 
 usePageMeta(() => {
-  return {
-    title: __('Kalkulator OZE'),
-    icon: brand.favicon,
-  }
+  return { title: __('Kalkulator OZE') }
 })
 
 function onCreateContact(value, close) {
