@@ -9,7 +9,7 @@
         :key="column.key"
         class="text-ink-gray-5 overflow-hidden whitespace-nowrap text-ellipsis"
       >
-        {{ __(column.label) }}
+        {{ column.label }}
       </div>
     </div>
     <hr />
@@ -33,11 +33,11 @@ const assignmentRuleErrors = inject('assignmentRuleErrors')
 
 const columns = [
   {
-    label: 'Days',
+    label: __('Days'),
     key: 'day',
   },
   {
-    label: 'Active',
+    label: __('Active'),
     key: 'active',
   },
 ]

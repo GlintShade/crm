@@ -122,17 +122,17 @@ const { getPinnedViews, getPublicViews } = viewsStore()
 
 const links = [
   {
-    label: 'Dashboard',
+    label: __('Dashboard'),
     icon: LucideLayoutDashboard,
     to: 'Dashboard',
   },
   {
-    label: 'Tasks',
+    label: __('Tasks'),
     icon: TaskIcon,
     to: 'Tasks',
   },
   {
-    label: 'Contacts',
+    label: __('Contacts'),
     icon: ContactsIcon,
     to: 'Contacts',
   },
@@ -155,25 +155,25 @@ const links = [
     to: 'KalkulatorCzystePowietrze',
   },
   {
-    label: 'Leads',
+    label: __('Leads'),
     icon: LeadsIcon,
     to: 'Leads',
     condition: () => !window.hide_leads, // VOLTEO
   },
   {
-    label: 'Organizations',
+    label: __('Organizations'),
     icon: OrganizationsIcon,
     to: 'Organizations',
     condition: () => false, // VOLTEO
   },
   {
-    label: 'Notes',
+    label: __('Notes'),
     icon: NoteIcon,
     to: 'Notes',
     condition: () => false, // VOLTEO
   },
   {
-    label: 'Call Logs',
+    label: __('Call Logs'),
     icon: PhoneIcon,
     to: 'Call Logs',
     condition: () => false, // VOLTEO

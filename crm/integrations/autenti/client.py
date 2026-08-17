@@ -5,6 +5,7 @@ import urllib.parse
 
 import frappe
 import requests
+from frappe import _
 
 CONNECT_TIMEOUT = 10
 READ_TIMEOUT = 30
@@ -27,7 +28,7 @@ class AutentiClient:
 		"""Read credentials from Volteo Autenti Settings doctype."""
 		settings = frappe.get_single("Volteo Autenti Settings")
 		if not settings.enabled:
-			frappe.throw("Integracja Autenti jest wyłączona")
+			frappe.throw(_("Integracja Autenti jest wyłączona"))
 
 		# Fail-safe direction: unset/None `environment` (e.g. a half-configured Single —
 		# Frappe's DocField `default=` never seeds stored Single data, so "unset" is a
@@ -60,7 +61,7 @@ class AutentiClient:
 		resp.raise_for_status()
 		token_data = resp.json()
 		if not isinstance(token_data, dict) or "access_token" not in token_data:
-			frappe.throw("Autenti token request failed: expected an access_token in the response")
+			frappe.throw(_("Autenti token request failed: expected an access_token in the response"))
 		self._token = token_data["access_token"]
 		try:
 			expires_in = int(token_data.get("expires_in", self.TOKEN_FALLBACK_EXPIRY))
@@ -84,7 +85,7 @@ class AutentiClient:
 		resp = self._request("POST", "/document-processes", json={"title": title, "processLanguage": "pl"})
 		response_data = resp.json()
 		if not isinstance(response_data, dict) or "id" not in response_data:
-			frappe.throw("Autenti create_document_process failed: expected an id in the response")
+			frappe.throw(_("Autenti create_document_process failed: expected an id in the response"))
 		return response_data["id"]
 
 	def add_party(

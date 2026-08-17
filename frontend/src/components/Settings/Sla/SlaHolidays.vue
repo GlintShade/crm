@@ -228,13 +228,13 @@ const columns = [
 ]
 
 const workDayOptions = [
-  { label: 'Monday', value: 'Monday' },
-  { label: 'Tuesday', value: 'Tuesday' },
-  { label: 'Wednesday', value: 'Wednesday' },
-  { label: 'Thursday', value: 'Thursday' },
-  { label: 'Friday', value: 'Friday' },
-  { label: 'Saturday', value: 'Saturday' },
-  { label: 'Sunday', value: 'Sunday' },
+  { label: __('Monday'), value: 'Monday' },
+  { label: __('Tuesday'), value: 'Tuesday' },
+  { label: __('Wednesday'), value: 'Wednesday' },
+  { label: __('Thursday'), value: 'Thursday' },
+  { label: __('Friday'), value: 'Friday' },
+  { label: __('Saturday'), value: 'Saturday' },
+  { label: __('Sunday'), value: 'Sunday' },
 ]
 
 const createNewHolidayList = () => {
@@ -268,8 +268,8 @@ const addWorkDay = () => {
     slaData.value.working_hours.map((day) => day.workday),
   )
   const nextDay =
-    workDayOptions.find((day) => !usedDays.has(day.label))?.label ||
-    workDayOptions[0].label
+    workDayOptions.find((day) => !usedDays.has(day.value))?.value ||
+    workDayOptions[0].value
 
   slaData.value.working_hours.push({
     workday: nextDay,

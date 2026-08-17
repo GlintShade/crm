@@ -141,11 +141,15 @@
                 class="flex flex-col gap-3 items-center text-center text-ink-gray-7 text-sm mb-2 border border-outline-gray-3 rounded-md p-3 py-4"
               >
                 <span class="text-p-sm">
-                  Conditions for this SLA were created from
-                  <a :href="deskUrl" target="_blank" class="underline">desk</a>
-                  which are not compatible with this UI, you will need to
-                  recreate the conditions here if you want to manage and add new
-                  conditions from this UI.
+                  {{ __('Conditions for this SLA were created from') }}
+                  <a :href="deskUrl" target="_blank" class="underline">{{
+                    __('desk')
+                  }}</a>
+                  {{
+                    __(
+                      'which are not compatible with this UI, you will need to recreate the conditions here if you want to manage and add new conditions from this UI.',
+                    )
+                  }}
                 </span>
                 <Button
                   :label="__('I understand, Add Conditions')"

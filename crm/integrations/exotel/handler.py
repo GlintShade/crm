@@ -110,7 +110,7 @@ def make_a_call(to_number: str, from_number: str | None = None, caller_id: str |
 		response.raise_for_status()
 	except requests.exceptions.HTTPError:
 		if exc := response.json().get("RestException"):
-			frappe.throw(exc.get("Message"), title=_("Exotel Exception"))
+			frappe.throw(_("Exotel: {0}").format(exc.get("Message") or ""), title=_("Exotel Exception"))
 	else:
 		res = response.json()
 		call_payload = res.get("Call", {})

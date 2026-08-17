@@ -1,4 +1,5 @@
 import frappe
+from frappe import _
 
 
 @frappe.whitelist()
@@ -43,7 +44,7 @@ def create_email_account(data: dict):
 		# if correct credentials, save the email account
 		email_doc.save()
 	except Exception as e:
-		frappe.throw(str(e))
+		frappe.throw(_("Nie udało się utworzyć konta e-mail: {0}").format(str(e)))
 
 
 email_service_config = {

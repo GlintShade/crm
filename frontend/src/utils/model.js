@@ -1,33 +1,33 @@
 export const standardFieldsMeta = [
   {
     fieldname: 'name',
-    label: 'Name',
+    label: __('Name'),
     fieldtype: 'Data',
   },
   {
     fieldname: 'creation',
-    label: 'Created On',
+    label: __('Created On'),
     fieldtype: 'Datetime',
   },
   {
     fieldname: 'modified',
-    label: 'Last Modified',
+    label: __('Last Modified'),
     fieldtype: 'Datetime',
   },
   {
     fieldname: 'modified_by',
-    label: 'Modified By',
+    label: __('Modified By'),
     fieldtype: 'Link',
     options: 'User',
   },
-  { label: 'Assigned To', fieldtype: 'Text', fieldname: '_assign' },
+  { label: __('Assigned To'), fieldtype: 'Text', fieldname: '_assign' },
   {
-    label: 'Owner',
+    label: __('Owner'),
     fieldtype: 'Link',
     fieldname: 'owner',
     options: 'User',
   },
-  { label: 'Like', fieldtype: 'Data', fieldname: '_liked_by' },
+  { label: __('Like', null, 'field label'), fieldtype: 'Data', fieldname: '_liked_by' },
 ]
 
 export const noValueFieldTypes = [
