@@ -47,8 +47,19 @@
 import AvatarIcon from '@/components/Icons/AvatarIcon.vue'
 import GoogleIcon from '@/components/Icons/GoogleIcon.vue'
 import LeadModal from '@/components/Modals/LeadModal.vue'
+import { getSettings } from '@/stores/settings'
+import { usePageMeta } from 'frappe-ui'
 import { ref } from 'vue'
+
+const { brand } = getSettings()
 
 const name = ref('John Doe')
 const showLeadModal = ref(false)
+
+usePageMeta(() => {
+  return {
+    title: __('Witamy'),
+    icon: brand.favicon,
+  }
+})
 </script>

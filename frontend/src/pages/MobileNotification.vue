@@ -75,12 +75,21 @@ import NotificationsIcon from '@/components/Icons/NotificationsIcon.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { notifications, notificationsStore } from '@/stores/notifications'
 import { globalStore } from '@/stores/global'
+import { getSettings } from '@/stores/settings'
 import { timeAgo, sanitizeHTML } from '@/utils'
-import { Breadcrumbs } from 'frappe-ui'
+import { Breadcrumbs, usePageMeta } from 'frappe-ui'
 import { onMounted, onBeforeUnmount } from 'vue'
 
 const { $socket } = globalStore()
 const { mark_as_read, mark_doc_as_read } = notificationsStore()
+const { brand } = getSettings()
+
+usePageMeta(() => {
+  return {
+    title: __('Powiadomienia'),
+    icon: brand.favicon,
+  }
+})
 
 onBeforeUnmount(() => {
   $socket.off('crm_notification')

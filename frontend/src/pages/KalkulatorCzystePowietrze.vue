@@ -41,13 +41,23 @@ import ViewBreadcrumbs from '@/components/ViewBreadcrumbs.vue'
 import Link from '@/components/Controls/Link.vue'
 import ContactModal from '@/components/Modals/ContactModal.vue'
 import KalkulatorCPTab from '@/components/KalkulatorCPTab.vue'
-import { createResource } from 'frappe-ui'
+import { getSettings } from '@/stores/settings'
+import { createResource, usePageMeta } from 'frappe-ui'
 import { ref, computed, watch } from 'vue'
+
+const { brand } = getSettings()
 
 const selectedContact = ref('')
 const showContactModal = ref(false)
 const _contact = ref({})
 const clientLinkRef = ref(null)
+
+usePageMeta(() => {
+  return {
+    title: __('Kalkulator Czyste Powietrze'),
+    icon: brand.favicon,
+  }
+})
 
 function onCreateContact(value, close) {
   _contact.value = { first_name: value }

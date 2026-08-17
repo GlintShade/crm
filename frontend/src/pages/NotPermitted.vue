@@ -26,5 +26,16 @@
 </template>
 <script setup>
 import { sessionStore } from '@/stores/session'
+import { getSettings } from '@/stores/settings'
+import { usePageMeta } from 'frappe-ui'
+
 const { logout } = sessionStore()
+const { brand } = getSettings()
+
+usePageMeta(() => {
+  return {
+    title: __('Brak uprawnień'),
+    icon: brand.favicon,
+  }
+})
 </script>
