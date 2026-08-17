@@ -316,10 +316,9 @@
 <script setup>
 import UmowaIcon from '@/components/Icons/UmowaIcon.vue'
 import { Badge, Button, FormControl, call, toast } from 'frappe-ui'
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { formatPlnAmount } from '@/utils/money'
-import { formatDate } from '@/utils'
-import { badgeFor, canSend, groupRecipients, isInFlight, sendButtonLabel } from '@/utils/autentiStatus'
+import { useAutenti } from '@/composables/useAutenti'
 
 const props = defineProps({
   dealId: { type: String, required: true },
@@ -623,23 +622,36 @@ const brakujace = ref([])
 const form = reactive({})
 
 // --- Autenti e-signature state ----------------------------------------------------
-// Explicit `null` initial state (never a bare `reactive` key presence check —
-// see the CLAUDE.md note on the hasOwnProperty/reactive trap that froze the
-// CP admin panel). `autenti` is a plain ref holding the whole status payload
-// as returned by autenti_umowa_status; it is replaced wholesale (never
-// mutated in place) on every load/send so Vue always sees a fresh reference.
-const autenti = ref(null)
-const showAutentiConfirm = ref(false)
-const sendingAutenti = ref(false)
-let autentiPollInterval = null
+// Lifted into useAutenti() (shared with KredytTab.vue) — see that file's
+// header comment for why the interval lifecycle lives there. Names below
+// are unchanged so nothing else in this file/template needs to move.
+const {
+  autenti,
+  showAutentiConfirm,
+  sendingAutenti,
+  loadAutentiStatus,
+  toggleAutentiConfirm,
+  confirmSendAutenti,
+  openSignedPdf,
+  autentiEnabled,
+  autentiStatus,
+  autentiBadgeEntry,
+  autentiSendLabel,
+  showAutentiSendButton,
+  signerMissingEmail,
+  recipientGroups,
+  autentiSentAtDisplay,
+  autentiSignedAtDisplay,
+} = useAutenti({
+  dealId: () => props.dealId,
+  statusMethod: 'crm.integrations.autenti.api.autenti_umowa_status',
+  sendMethod: 'crm.integrations.autenti.api.autenti_send_umowa',
+  sentToastLabel: __('Umowa wysłana do podpisu'),
+})
 
 onMounted(() => {
   loadUmowa()
-  loadAutentiStatus().then(() => {
-    if (isInFlight(autentiStatus.value)) startAutentiPolling()
-  })
 })
-onUnmounted(stopAutentiPolling)
 
 // The missing-fields list travels inside `wyliczenia.brakujace_pola` on
 // EVERY endpoint (get/create/save) — there is no top-level `brakujace` key.
@@ -715,100 +727,6 @@ const missingLabels = computed(() =>
 
 const recordStatus = computed(() => umowa.value?.status || 'Roboczy')
 const isKompletny = computed(() => recordStatus.value === 'Kompletny')
-
-// --- Autenti e-signature (derived) ------------------------------------------------
-// `enabled === false` (integration off) OR `autenti === null` (not loaded yet /
-// load failed) both mean: render NO signing UI at all — the feature must stay
-// completely invisible rather than show a half-broken control.
-const autentiEnabled = computed(() => autenti.value?.enabled === true)
-const autentiStatus = computed(() => autenti.value?.autenti_status || null)
-const autentiBadgeEntry = computed(() => badgeFor(autentiStatus.value))
-const autentiSendLabel = computed(() => sendButtonLabel(autentiStatus.value))
-// Gated on the status payload's OWN umowa_exists/pdf_exists (not the separate
-// umowa/generatingPdf state above) — that's what the backend contract says to
-// check, and it stays correct even if the two loads (umowa vs autenti status)
-// settle in different order.
-const showAutentiSendButton = computed(
-  () =>
-    autentiEnabled.value &&
-    !!autenti.value?.umowa_exists &&
-    !!autenti.value?.pdf_exists &&
-    canSend(autentiStatus.value),
-)
-const proposedSigner = computed(() => autenti.value?.proposed_signer || null)
-const signerMissingEmail = computed(() => !proposedSigner.value || !proposedSigner.value.email)
-// Grouped SIGNER/VIEWER view of `proposed_recipients` for the confirm panel.
-// Falls back to `proposedSigner` alone when the backend hasn't shipped
-// `proposed_recipients` yet — see groupRecipients() for why.
-const recipientGroups = computed(() =>
-  groupRecipients(autenti.value?.proposed_recipients, proposedSigner.value),
-)
-const autentiSentAtDisplay = computed(() =>
-  autenti.value?.sent_at ? formatDate(autenti.value.sent_at, null, true, true) : '',
-)
-const autentiSignedAtDisplay = computed(() =>
-  autenti.value?.signed_at ? formatDate(autenti.value.signed_at, null, true, true) : '',
-)
-
-async function loadAutentiStatus() {
-  try {
-    const data = await call('crm.integrations.autenti.api.autenti_umowa_status', {
-      deal: props.dealId,
-    })
-    autenti.value = data || null
-  } catch (err) {
-    // Non-fatal and silent on purpose: this is a background status check for
-    // an optional feature, not a user-triggered action. Leaving `autenti`
-    // unset simply keeps the signing UI hidden, same as "integration
-    // disabled" — no toast for a control the rep hasn't touched.
-    console.error(err)
-  }
-}
-
-function startAutentiPolling() {
-  if (autentiPollInterval) return
-  autentiPollInterval = setInterval(async () => {
-    await loadAutentiStatus()
-    if (!isInFlight(autentiStatus.value)) stopAutentiPolling()
-  }, 30000)
-}
-
-function stopAutentiPolling() {
-  if (autentiPollInterval) {
-    clearInterval(autentiPollInterval)
-    autentiPollInterval = null
-  }
-}
-
-function toggleAutentiConfirm() {
-  showAutentiConfirm.value = !showAutentiConfirm.value
-}
-
-async function confirmSendAutenti() {
-  if (sendingAutenti.value || signerMissingEmail.value) return
-  sendingAutenti.value = true
-  try {
-    const data = await call('crm.integrations.autenti.api.autenti_send_umowa', {
-      deal: props.dealId,
-    })
-    autenti.value = autenti.value
-      ? { ...autenti.value, autenti_status: data?.autenti_status || 'Wysyłanie' }
-      : autenti.value
-    showAutentiConfirm.value = false
-    toast.success(__('Umowa wysłana do podpisu'))
-    startAutentiPolling()
-  } catch (err) {
-    toast.error(extractErrorMessage(err))
-  } finally {
-    sendingAutenti.value = false
-  }
-}
-
-function openSignedPdf() {
-  if (autenti.value?.signed_pdf_file) {
-    window.open(autenti.value.signed_pdf_file, '_blank')
-  }
-}
 
 // --- Create ----------------------------------------------------------------------
 async function createUmowa() {

@@ -79,8 +79,17 @@
       <!-- Form -->
       <div v-else class="flex flex-col gap-6">
         <div class="flex flex-wrap items-center justify-between gap-3">
-          <div class="text-lg font-semibold text-ink-gray-8">
-            {{ __('Wniosek kredytowy') }}
+          <div class="flex items-center gap-3">
+            <div class="text-lg font-semibold text-ink-gray-8">
+              {{ __('Wniosek kredytowy') }}
+            </div>
+            <Badge
+              v-if="autentiEnabled && autentiBadgeEntry"
+              :theme="autentiBadgeEntry.theme"
+              variant="subtle"
+              size="lg"
+              :label="autentiBadgeEntry.label"
+            />
           </div>
           <div class="flex items-center gap-3">
             <span v-if="saveState === 'saving'" class="text-xs text-ink-gray-4">
@@ -92,6 +101,12 @@
             <span v-else-if="saveState === 'error'" class="text-xs text-ink-red-6">
               {{ __('Błąd zapisu') }}
             </span>
+            <Button
+              v-if="showAutentiSendButton"
+              variant="outline"
+              :label="autentiSendLabel"
+              @click="toggleAutentiConfirm"
+            />
             <Button
               variant="outline"
               :label="__('Generuj PDF')"
@@ -111,6 +126,99 @@
               :loading="saving"
               @click="saveForm"
             />
+          </div>
+        </div>
+
+        <!-- Autenti timestamps — small muted line under the header/badges -->
+        <div
+          v-if="autentiEnabled && (autentiSentAtDisplay || autentiSignedAtDisplay)"
+          class="-mt-4 flex flex-wrap gap-3 text-xs text-ink-gray-4"
+        >
+          <span v-if="autentiSentAtDisplay">
+            {{ __('Wysłano') }}: {{ autentiSentAtDisplay }}
+          </span>
+          <span v-if="autentiSignedAtDisplay">
+            {{ __('Podpisano') }}: {{ autentiSignedAtDisplay }}
+          </span>
+        </div>
+
+        <!-- Autenti error — shown only for a failed send -->
+        <div
+          v-if="autentiEnabled && autentiStatus === 'Błąd' && autenti.error_message"
+          class="rounded-lg border border-outline-red-3 bg-surface-red-2 px-4 py-3 text-sm text-ink-red-8"
+        >
+          {{ autenti.error_message }}
+        </div>
+
+        <!-- Autenti signed PDF download -->
+        <div v-if="autentiEnabled && autentiStatus === 'Podpisana' && autenti.signed_pdf_file">
+          <Button
+            variant="outline"
+            :label="__('Pobierz podpisany wniosek')"
+            @click="openSignedPdf"
+          />
+        </div>
+
+        <!-- Autenti send confirmation — inline panel, not a modal -->
+        <div
+          v-if="showAutentiConfirm"
+          class="rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-4"
+        >
+          <div class="mb-2 text-sm font-medium text-ink-gray-8">
+            {{ __('Potwierdź wysyłkę do podpisu') }}
+          </div>
+
+          <div v-if="signerMissingEmail" class="mb-3 text-sm text-ink-red-5">
+            {{ __('Kontakt szansy nie ma adresu e-mail — uzupełnij go w CRM.') }}
+          </div>
+          <div v-else class="mb-3 text-sm text-ink-gray-6">
+            <div>{{ __('Formularz kredytowy zostanie wysłany do:') }}</div>
+            <div v-if="recipientGroups.signers.length" class="mt-2">
+              <div class="text-xs font-medium uppercase tracking-wide text-ink-gray-5">
+                {{ __('Podpisują:') }}
+              </div>
+              <div
+                v-for="r in recipientGroups.signers"
+                :key="'signer-' + r.email"
+                class="font-medium text-ink-gray-8"
+              >
+                {{ r.full_name }} ({{ r.email }})
+              </div>
+            </div>
+            <div v-if="recipientGroups.viewers.length" class="mt-2">
+              <div class="text-xs font-medium uppercase tracking-wide text-ink-gray-5">
+                {{ __('Do wglądu:') }}
+              </div>
+              <div
+                v-for="r in recipientGroups.viewers"
+                :key="'viewer-' + r.email"
+                class="font-medium text-ink-gray-8"
+              >
+                {{ r.full_name }} ({{ r.email }})
+              </div>
+            </div>
+          </div>
+
+          <div
+            v-if="autenti.environment === 'Sandbox'"
+            class="mb-3 rounded-lg border border-outline-amber-3 bg-surface-amber-2 px-3 py-2 text-sm text-ink-amber-8"
+          >
+            {{
+              __(
+                'Środowisko testowe Autenti — podpis NIE jest prawnie wiążący, a e-mail do klienta przyjdzie z domeny testowej.',
+              )
+            }}
+          </div>
+
+          <div class="flex gap-2">
+            <Button
+              variant="solid"
+              :label="__('Wyślij')"
+              :loading="sendingAutenti"
+              :disabled="signerMissingEmail"
+              @click="confirmSendAutenti"
+            />
+            <Button variant="ghost" :label="__('Anuluj')" @click="toggleAutentiConfirm" />
           </div>
         </div>
 
@@ -162,6 +270,7 @@
                 :disabled="saving"
                 v-model="form[f.fieldname]"
                 @blur="onKwotaBlur(f)"
+                @input="onPoleInput(f, $event)"
               />
             </div>
           </div>
@@ -215,8 +324,9 @@
 
 <script setup>
 import KredytIcon from '@/components/Icons/KredytIcon.vue'
-import { Button, FormControl, call, toast } from 'frappe-ui'
+import { Badge, Button, FormControl, call, toast } from 'frappe-ui'
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useAutenti } from '@/composables/useAutenti'
 import {
   GRUPY,
   PREFILL_KEYS,
@@ -231,6 +341,8 @@ import {
   buildDane,
   hydrateFrom,
   normalizujKwote,
+  formatujNumerRachunku,
+  formatujNumerRachunkuZKursorem,
 } from '@/utils/kredytForm'
 
 const props = defineProps({
@@ -504,6 +616,27 @@ function onKwotaBlur(f) {
   form[f.fieldname] = normalizujKwote(form[f.fieldname])
 }
 
+// Live NRB space-grouping for numer_rachunku, applied on every keystroke
+// (not just on blur, like the amount fields above) so the rep sees the
+// bank's own grouping while typing. `el.value` and the caret are written
+// BEFORE the reactive `form[...]` assignment on purpose: Vue's v-model
+// patches the DOM value from `form` on next tick, and if that patch were
+// the first write, the caret would already have been reset to the end of
+// the input by the browser's own re-render — writing the already-correct
+// value+caret here first makes that later patch a no-op diff, so the
+// caret never jumps mid-typing.
+function onPoleInput(f, event) {
+  if (f.fieldname !== 'numer_rachunku') return
+  const el = event.target
+  const raw = el.value
+  const { tekst, kursor } = formatujNumerRachunkuZKursorem(raw, el.selectionStart ?? raw.length)
+  if (tekst !== raw) {
+    el.value = tekst
+    el.setSelectionRange(kursor, kursor)
+  }
+  form[f.fieldname] = tekst
+}
+
 // --- Load state --------------------------------------------------------------
 const loading = ref(true)
 const loadError = ref('')
@@ -536,6 +669,36 @@ const prefillDisplay = computed(() =>
   })),
 )
 
+// --- Autenti e-signature state ------------------------------------------------
+// Shared with UmowaTab.vue via useAutenti() — see that composable's header
+// comment for why the poll lifecycle lives there. `dokument_exists` is the
+// record-existence key on this endpoint (the umowa endpoint additionally
+// returns the legacy `umowa_exists` with the same value; the composable's
+// `showAutentiSendButton` reads either).
+const {
+  autenti,
+  showAutentiConfirm,
+  sendingAutenti,
+  loadAutentiStatus,
+  toggleAutentiConfirm,
+  confirmSendAutenti,
+  openSignedPdf,
+  autentiEnabled,
+  autentiStatus,
+  autentiBadgeEntry,
+  autentiSendLabel,
+  showAutentiSendButton,
+  signerMissingEmail,
+  recipientGroups,
+  autentiSentAtDisplay,
+  autentiSignedAtDisplay,
+} = useAutenti({
+  dealId: () => props.dealId,
+  statusMethod: 'crm.integrations.autenti.api.autenti_kredyt_status',
+  sendMethod: 'crm.integrations.autenti.api.autenti_send_kredyt',
+  sentToastLabel: __('Formularz kredytowy wysłany do podpisu'),
+})
+
 onMounted(loadKredyt)
 
 // brakujace_pola is a TOP-LEVEL key on every kredyt endpoint (unlike
@@ -546,6 +709,16 @@ function extractBrakujace(data) {
   return Array.isArray(list) ? list : []
 }
 
+// Hydrate `form` from a saved/created/loaded kredyt record, then re-group
+// numer_rachunku into the display mask. Records saved before this masking
+// existed (or edited directly in the database) come back unspaced — this
+// makes them render grouped immediately on load, not only after the rep
+// next touches the field, and the next save persists them grouped too.
+function przyjmijRekord(record) {
+  Object.assign(form, hydrateFrom(record))
+  form.numer_rachunku = formatujNumerRachunku(form.numer_rachunku)
+}
+
 async function loadKredyt() {
   loading.value = true
   loadError.value = ''
@@ -554,7 +727,7 @@ async function loadKredyt() {
     kredyt.value = data?.kredyt || null
     prefill.value = data?.prefill || {}
     brakujace.value = extractBrakujace(data)
-    Object.assign(form, hydrateFrom(kredyt.value))
+    przyjmijRekord(kredyt.value)
   } catch (err) {
     loadError.value = extractErrorMessage(err)
   } finally {
@@ -576,7 +749,7 @@ async function createKredyt() {
     kredyt.value = data?.kredyt || null
     prefill.value = data?.prefill || {}
     brakujace.value = extractBrakujace(data)
-    Object.assign(form, hydrateFrom(kredyt.value))
+    przyjmijRekord(kredyt.value)
     toast.success(__('Utworzono wniosek kredytowy'))
   } catch (err) {
     toast.error(extractErrorMessage(err))
@@ -598,7 +771,7 @@ async function saveForm() {
     kredyt.value = data?.kredyt || kredyt.value
     prefill.value = data?.prefill || prefill.value
     brakujace.value = extractBrakujace(data)
-    Object.assign(form, hydrateFrom(kredyt.value))
+    przyjmijRekord(kredyt.value)
     saveState.value = 'saved'
     if (brakujace.value.length) {
       toast.success(__('Zapisano jako roboczy — część pól nadal brakuje.'))
@@ -624,6 +797,15 @@ async function generatePdf() {
     if (data?.file_url) {
       window.open(data.file_url, '_blank')
       toast.success(__('Wygenerowano PDF wniosku'))
+      // Optimistic local flip so the Autenti send button can appear
+      // instantly, mirroring UmowaTab.vue's generatePdf(). New object, not
+      // a mutation, per the ref-replace convention.
+      if (autenti.value) {
+        autenti.value = { ...autenti.value, pdf_exists: true }
+      }
+      // Follow up with a real reload so `dokument_exists`/`pdf_exists` and
+      // anything else in the payload get corrected too.
+      await loadAutentiStatus()
     } else {
       toast.error(__('Wystąpił błąd - spróbuj ponownie'))
     }
