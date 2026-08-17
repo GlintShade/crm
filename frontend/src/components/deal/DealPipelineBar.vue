@@ -18,7 +18,7 @@
   <div
     v-if="!resource.loading && mode !== 'hidden'"
     class="w-full border-b px-5 py-3"
-    :class="mode === 'lost' ? 'bg-red-50' : 'bg-surface-white'"
+    :class="mode === 'lost' ? 'bg-surface-red-2' : 'bg-surface-base'"
   >
     <!-- Zawartość ograniczona do ~80% szerokości kontenera i wyśrodkowana;
          na wąskich ekranach (mobile/wąskie okno) pełna szerokość, bo przy
@@ -150,7 +150,7 @@ function nodeCircleClass(index) {
 
 function nodeLabelClass(index) {
   const state = nodeStateForMode(mode.value, index, currentIndex.value)
-  if (state === 'current') return 'font-medium text-blue-600'
+  if (state === 'current') return 'font-medium text-ink-blue-link'
   if (state === 'done') return 'text-ink-gray-7'
   if (state === 'muted') return 'text-ink-gray-3'
   return 'text-ink-gray-5'

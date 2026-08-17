@@ -6,7 +6,7 @@
 <template>
   <div class="flex flex-1 flex-col overflow-y-auto">
     <div class="mx-auto w-full max-w-[1180px] px-4 py-3">
-      <div v-if="errorMsg" class="mb-2.5 flex items-center justify-between rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+      <div v-if="errorMsg" class="mb-2.5 flex items-center justify-between rounded border border-outline-red-3 bg-surface-red-2 px-3 py-2 text-sm text-ink-red-8">
         <span>{{ errorMsg }}</span>
         <button class="ml-2 text-base font-bold leading-none" @click="errorMsg = ''">×</button>
       </div>
@@ -16,7 +16,7 @@
 
           <div>
             <div class="kalk-part">
-              <div class="kalk-part-heading mb-4 flex items-center gap-2 border-b border-gray-100 pb-2.5 text-lg font-bold text-ink-gray-9">
+              <div class="kalk-part-heading mb-4 flex items-center gap-2 border-b border-outline-gray-1 pb-2.5 text-lg font-bold text-ink-gray-9">
                 <span class="kalk-part-number">1</span>Instalacja
               </div>
 
@@ -27,8 +27,8 @@
                     v-for="v in VARIANTS" :key="v"
                     class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
                     :class="sel.variant === v
-                      ? 'border-gray-900 bg-gray-900 text-white'
-                      : 'border-transparent bg-gray-100 text-gray-600 hover:bg-gray-200'"
+                      ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base'
+                      : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
                     @click="sel.variant = v"
                   >{{ v }}</button>
                 </div>
@@ -42,8 +42,8 @@
                       v-for="opt in TYP_KLIENTA_OPTIONS" :key="opt.value"
                       class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
                       :class="sel.typKlienta === opt.value
-                        ? 'border-gray-900 bg-gray-900 text-white'
-                        : 'border-transparent bg-gray-100 text-gray-600 hover:bg-gray-200'"
+                        ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base'
+                        : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
                       @click="sel.typKlienta = opt.value"
                     >{{ opt.label }}</button>
                   </div>
@@ -57,19 +57,19 @@
                     v-model.number="sel.consumption" type="number" min="0" step="1"
                     class="kalk-input"
                   />
-                  <div v-if="sel.consumption > 0" class="mt-1 text-xs leading-relaxed text-gray-500">
-                    Sug. moc: <span class="font-medium text-gray-700">{{ suggestedKwp }} kW</span>
+                  <div v-if="sel.consumption > 0" class="mt-1 text-xs leading-relaxed text-ink-gray-4">
+                    Sug. moc: <span class="font-medium text-ink-gray-6">{{ suggestedKwp }} kW</span>
                     <template v-if="hasBat">
-                       · magazyn: <span class="font-medium text-gray-700">{{ suggestedStorage }} kWh</span>
+                       · magazyn: <span class="font-medium text-ink-gray-6">{{ suggestedStorage }} kWh</span>
                     </template>
-                    <button type="button" class="ml-1 font-medium text-blue-600 hover:underline" @click="applyFromConsumption">Ustaw</button>
+                    <button type="button" class="ml-1 font-medium text-ink-blue-link hover:underline" @click="applyFromConsumption">Ustaw</button>
                   </div>
                 </div>
               </div>
             </div>
 
             <div class="kalk-part">
-              <div class="kalk-part-heading mb-4 flex items-center gap-2 border-b border-gray-100 pb-2.5 text-lg font-bold text-ink-gray-9">
+              <div class="kalk-part-heading mb-4 flex items-center gap-2 border-b border-outline-gray-1 pb-2.5 text-lg font-bold text-ink-gray-9">
                 <span class="kalk-part-number">2</span>Konfiguracja
               </div>
 
@@ -80,8 +80,8 @@
                     v-for="p in producentOptions" :key="p"
                     class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
                     :class="sel.producent === p
-                      ? 'border-gray-900 bg-gray-900 text-white'
-                      : 'border-transparent bg-gray-100 text-gray-600 hover:bg-gray-200'"
+                      ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base'
+                      : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
                     @click="sel.producent = p"
                   >{{ p }}</button>
                 </div>
@@ -131,7 +131,7 @@
             </div>
 
             <div class="kalk-part">
-              <div class="kalk-part-heading mb-4 flex items-center gap-2 border-b border-gray-100 pb-2.5 text-lg font-bold text-ink-gray-9">
+              <div class="kalk-part-heading mb-4 flex items-center gap-2 border-b border-outline-gray-1 pb-2.5 text-lg font-bold text-ink-gray-9">
                 <span class="kalk-part-number">3</span>Montaż i przyłącze
               </div>
 
@@ -168,7 +168,7 @@
             </div>
 
             <div class="kalk-part">
-              <div class="kalk-part-heading mb-4 flex items-center gap-2 border-b border-gray-100 pb-2.5 text-lg font-bold text-ink-gray-9">
+              <div class="kalk-part-heading mb-4 flex items-center gap-2 border-b border-outline-gray-1 pb-2.5 text-lg font-bold text-ink-gray-9">
                 <span class="kalk-part-number">4</span>Finansowanie
               </div>
 
@@ -195,12 +195,12 @@
             </div>
           </div>
 
-          <div class="kalk-output border-l border-gray-200 pl-5">
+          <div class="kalk-output border-l border-outline-gray-2 pl-5">
             <div class="sticky top-3">
               <div class="mb-2.5">
                 <button
                   type="button"
-                  class="flex w-full items-center justify-between rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-sm font-medium text-ink-gray-7 transition-colors hover:bg-gray-100"
+                  class="flex w-full items-center justify-between rounded-md border border-outline-gray-1 bg-surface-gray-1 px-2.5 py-1.5 text-sm font-medium text-ink-gray-7 transition-colors hover:bg-surface-gray-2"
                   @click="showNarzut = !showNarzut"
                 >
                   <span>{{ showNarzut ? 'Ukryj ustawienia niestandardowe' : 'Pokaż ustawienia niestandardowe' }}</span>
@@ -213,7 +213,7 @@
                     class="kalk-input"
                     @blur="sel.narzut = Math.min(7000, Math.max(0, Number(sel.narzut) || 0))"
                   />
-                  <div v-if="!narzutValid" class="mt-0.5 text-xs text-red-600">Narzut musi być w zakresie 0–7000 zł.</div>
+                  <div v-if="!narzutValid" class="mt-0.5 text-xs text-ink-red-6">Narzut musi być w zakresie 0–7000 zł.</div>
                 </div>
               </div>
 
@@ -222,7 +222,7 @@
               <div v-if="summary.lines.length" class="mb-2">
                 <div
                   v-for="(ln, i) in summary.lines" :key="i"
-                  class="flex items-center gap-2 border-t border-gray-100 py-1.5 text-sm first:border-t-0"
+                  class="flex items-center gap-2 border-t border-outline-gray-1 py-1.5 text-sm first:border-t-0"
                 >
                   <span class="min-w-[88px] text-ink-gray-5">{{ ln.typ }}</span>
                   <span class="flex-1 text-ink-gray-8">{{ ln.nazwa }}</span>
@@ -232,19 +232,19 @@
               <div v-else class="mb-2 text-sm text-ink-gray-5">Uzupełnij konfigurację, aby zobaczyć wycenę.</div>
 
               <template v-if="summary.lines.length">
-                <div class="rounded-lg border border-gray-200 bg-gray-50 p-2.5">
+                <div class="rounded-lg border border-outline-gray-1 bg-surface-gray-1 p-2.5">
                   <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
                     <span>Suma netto</span><span>{{ formatPln(summary.netto) }}</span>
                   </div>
                   <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
                     <span>VAT ({{ summary.vat_rate }}%)</span><span>{{ formatPln(summary.vat) }}</span>
                   </div>
-                  <div class="mt-1 flex justify-between border-t border-gray-200 pt-1.5 text-base font-semibold tabular-nums text-ink-gray-9">
+                  <div class="mt-1 flex justify-between border-t border-outline-gray-2 pt-1.5 text-base font-semibold tabular-nums text-ink-gray-9">
                     <span>Suma brutto</span><span>{{ formatPln(summary.brutto) }}</span>
                   </div>
 
                   <template v-if="sel.typKlienta === 'indywidualny'">
-                    <div class="mt-1.5 border-t border-dashed border-gray-300 pt-1.5">
+                    <div class="mt-1.5 border-t border-dashed border-outline-gray-2 pt-1.5">
                       <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
                         <span>Dotacja Mój Prąd</span><span>− {{ formatPln(summary.dotacja) }}</span>
                       </div>
@@ -254,7 +254,7 @@
                       <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
                         <span>Ulga termo. ({{ sel.ulgaPct }}%)</span><span>− {{ formatPln(summary.ulga) }}</span>
                       </div>
-                      <div class="mt-1 flex justify-between border-t border-gray-200 pt-1.5 text-base font-semibold tabular-nums text-ink-gray-9">
+                      <div class="mt-1 flex justify-between border-t border-outline-gray-2 pt-1.5 text-base font-semibold tabular-nums text-ink-gray-9">
                         <span>Cena po uldze</span><span>{{ formatPln(summary.cena_po_uldze) }}</span>
                       </div>
                       <div class="mt-0.5 flex justify-between py-0.5 text-xs tabular-nums text-ink-gray-5">
@@ -280,21 +280,21 @@
                 {{ generating ? 'Generuję ofertę…' : 'Generuj ofertę' }}
               </Button>
 
-              <div v-if="!c.name" class="mt-1 text-center text-xs text-red-600">
+              <div v-if="!c.name" class="mt-1 text-center text-xs text-ink-red-6">
                 Wybierz klienta, aby wygenerować ofertę.
               </div>
 
               <div v-if="summary.is_admin && summary.breakdown" class="mt-2.5">
                 <button
                   type="button"
-                  class="flex w-full items-center justify-between rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-sm font-semibold text-amber-700 transition-colors hover:bg-amber-100"
+                  class="flex w-full items-center justify-between rounded-md border border-outline-amber-3 bg-surface-amber-2 px-2.5 py-1.5 text-sm font-semibold text-ink-amber-8 transition-colors hover:bg-surface-amber-3"
                   @click="showAdminBreakdown = !showAdminBreakdown"
                 >
                   <span>Admin - Ustawienia Zaawansowane</span>
-                  <FeatherIcon :name="showAdminBreakdown ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 text-amber-700" />
+                  <FeatherIcon :name="showAdminBreakdown ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 text-ink-amber-8" />
                 </button>
-                <div v-show="showAdminBreakdown" class="mt-1.5 rounded-lg border border-dashed border-amber-300 bg-amber-50 p-2.5">
-                <div class="mb-1.5 text-xs font-semibold uppercase tracking-wider text-amber-700">Rozbicie kosztów (administrator)</div>
+                <div v-show="showAdminBreakdown" class="mt-1.5 rounded-lg border border-dashed border-outline-amber-3 bg-surface-amber-2 p-2.5">
+                <div class="mb-1.5 text-xs font-semibold uppercase tracking-wider text-ink-amber-8">Rozbicie kosztów (administrator)</div>
                 <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Falownik</span><span>{{ formatPln(summary.breakdown.k_falownik) }}</span></div>
                 <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Bateria</span><span>{{ formatPln(summary.breakdown.k_bateria) }}</span></div>
                 <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Panele</span><span>{{ formatPln(summary.breakdown.k_panele) }}</span></div>
@@ -305,7 +305,7 @@
                 <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Kabel</span><span>{{ formatPln(summary.breakdown.k_kabel) }}</span></div>
                 <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Spółdzielnia</span><span>{{ formatPln(summary.breakdown.k_spoldzielnia) }}</span></div>
                 <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Sterownik</span><span>{{ formatPln(summary.breakdown.k_sterownik) }}</span></div>
-                <div class="mt-1 flex justify-between border-t border-amber-200 pt-1 text-sm font-semibold tabular-nums text-ink-gray-9"><span>Koszt bazowy (net_base)</span><span>{{ formatPln(summary.breakdown.net_base) }}</span></div>
+                <div class="mt-1 flex justify-between border-t border-outline-amber-2 pt-1 text-sm font-semibold tabular-nums text-ink-gray-9"><span>Koszt bazowy (net_base)</span><span>{{ formatPln(summary.breakdown.net_base) }}</span></div>
                 <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Marża ProEnergy</span><span>{{ formatPln(summary.breakdown.marza_proenergy) }}</span></div>
                 <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Marża SPS</span><span>{{ formatPln(summary.breakdown.marza_sps) }}</span></div>
                 <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Bonus liderki</span><span>{{ formatPln(summary.breakdown.bonus_liderki) }}</span></div>
@@ -322,7 +322,7 @@
         <div class="mb-2 text-base font-semibold text-ink-gray-9">Szansa utworzona</div>
         <p class="mb-3 text-sm text-ink-gray-7">{{ successSummary }}</p>
         <div class="flex gap-2">
-          <a class="inline-flex items-center rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800" :href="dealHref" target="_blank" rel="noopener">Otwórz szansę w CRM</a>
+          <a class="inline-flex items-center rounded bg-surface-gray-10 px-3 py-1.5 text-sm font-medium text-ink-base hover:bg-surface-gray-9" :href="dealHref" target="_blank" rel="noopener">Otwórz szansę w CRM</a>
           <Button variant="ghost" @click="resetFlow">Nowa oferta</Button>
         </div>
       </div>
@@ -753,11 +753,11 @@ function extractErrorMessage(err) {
   height: 28px;
   width: 100%;
   border-radius: 0.25rem;
-  border: 1px solid #e5e5e5;
-  background: #f5f5f5;
+  border: 1px solid var(--outline-gray-1);
+  background: var(--surface-gray-2);
   padding: 0 8px;
   font-size: 14px;
-  color: #383838;
+  color: var(--ink-gray-8);
   outline: none;
   transition: background-color 0.15s, border-color 0.15s;
   cursor: pointer;
@@ -765,21 +765,21 @@ function extractErrorMessage(err) {
 .kalk-input { cursor: text; }
 .kalk-input:hover,
 .kalk-select:hover {
-  background: #ededed;
+  background: var(--surface-gray-3);
 }
 .kalk-input:focus,
 .kalk-select:focus {
-  border-color: #a3a3a3;
-  background: #fff;
+  border-color: var(--outline-gray-4);
+  background: var(--surface-base);
   box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 /* Bordered cards make visual grouping clearer than thin divider rules; the
    muted numeral chip is a non-interactive step/order indicator. */
 .kalk-part-heading { letter-spacing: -0.01em; }
 .kalk-part {
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--outline-gray-1);
   border-radius: 0.75rem;
-  background: #fff;
+  background: var(--surface-elevation-1);
   padding: 1.25rem 1.25rem 1.375rem;
 }
 .kalk-part + .kalk-part { margin-top: 1rem; }
@@ -791,8 +791,8 @@ function extractErrorMessage(err) {
   width: 1.375rem;
   height: 1.375rem;
   border-radius: 9999px;
-  background: #f0f0f0;
-  color: #9ca3af;
+  background: var(--surface-gray-2);
+  color: var(--ink-gray-4);
   font-size: 0.7rem;
   font-weight: 700;
 }

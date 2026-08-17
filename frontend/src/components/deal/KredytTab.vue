@@ -169,7 +169,7 @@
 
         <!-- §4-9: income groups -->
         <section v-for="grupa in GRUPY" :key="grupa.key" class="kalk-part">
-          <div class="kalk-part-heading mb-4 flex items-center justify-between gap-2 border-b border-gray-100 pb-2.5 text-base font-semibold text-ink-gray-9">
+          <div class="kalk-part-heading mb-4 flex items-center justify-between gap-2 border-b border-outline-gray-1 pb-2.5 text-base font-semibold text-ink-gray-9">
             <div>{{ grupa.label }}</div>
             <button
               type="button"
@@ -660,11 +660,14 @@ function extractErrorMessage(err) {
 /* Income-group card + iOS-style TAK/NIE switch — copied from
    KalkulatorCPTab.vue's `.kalk-part`/`.kalk-switch` pattern (see that
    file's CSS comments for the full rationale). Colours are fixed by owner
-   decision: green = on, BLACK = off, never grey/red. */
+   decision: green = on, BLACK = off, never grey/red. Dark mode: BLACK-off
+   would vanish against a dark surface, so it gets an explicit
+   [data-theme="dark"] override below (same pattern as RatingInput.vue) —
+   everything else here uses var() references that flip automatically. */
 .kalk-part {
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--outline-gray-1);
   border-radius: 0.75rem;
-  background: #fff;
+  background: var(--surface-elevation-1);
   padding: 1.25rem 1.25rem 1.375rem;
 }
 .kalk-part-heading {
@@ -688,6 +691,10 @@ function extractErrorMessage(err) {
 }
 .kalk-switch-off {
   background: #111827;
+}
+/* Dark mode: black-off is unreadable against a dark card background. */
+[data-theme='dark'] .kalk-switch-off {
+  background: var(--surface-gray-4);
 }
 .kalk-switch:disabled {
   opacity: 0.5;

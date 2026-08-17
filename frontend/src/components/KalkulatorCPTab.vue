@@ -6,7 +6,7 @@
       </div>
       <div
         v-else-if="catalogueError"
-        class="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+        class="rounded border border-outline-red-3 bg-surface-red-2 px-3 py-2 text-sm text-ink-red-8"
       >
         {{ catalogueError }}
       </div>
@@ -14,7 +14,7 @@
       <div v-else class="kalk-split grid items-start gap-x-5" style="grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr)">
         <div>
           <div class="kalk-part">
-            <div class="kalk-part-heading mb-4 flex items-center gap-2 border-b border-gray-100 pb-2.5 text-lg font-bold text-ink-gray-9">
+            <div class="kalk-part-heading mb-4 flex items-center gap-2 border-b border-outline-gray-1 pb-2.5 text-lg font-bold text-ink-gray-9">
               <span class="kalk-part-number">1</span>{{ __('Poziom dotacji') }}
             </div>
 
@@ -29,8 +29,8 @@
                   type="button"
                   class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
                   :class="form.standard === standard
-                    ? 'border-gray-900 bg-gray-900 text-white'
-                    : 'border-transparent bg-gray-100 text-gray-600 hover:bg-gray-200'"
+                    ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base'
+                    : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
                   @click="form.standard = standard"
                 >{{ standardLabels[standard] }}</button>
               </div>
@@ -47,8 +47,8 @@
                   type="button"
                   class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
                   :class="form.gospodarstwo === g
-                    ? 'border-gray-900 bg-gray-900 text-white'
-                    : 'border-transparent bg-gray-100 text-gray-600 hover:bg-gray-200'"
+                    ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base'
+                    : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
                   @click="form.gospodarstwo = g"
                 >{{ gospodarstwoLabels[g] }}</button>
               </div>
@@ -65,8 +65,8 @@
                   type="button"
                   class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                   :class="form.progDochodu === prog
-                    ? 'border-gray-900 bg-gray-900 text-white'
-                    : 'border-transparent bg-gray-100 text-gray-600 hover:bg-gray-200'"
+                    ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base'
+                    : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
                   :disabled="!form.gospodarstwo"
                   @click="form.progDochodu = prog"
                 >{{ progDochoduLabel(prog) }}</button>
@@ -76,13 +76,13 @@
               </div>
             </div>
 
-            <div class="kalk-outcome mt-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5">
+            <div class="kalk-outcome mt-1 rounded-lg border border-outline-gray-1 bg-surface-gray-1 px-3 py-2.5">
               <div class="mb-1.5 text-sm font-medium text-ink-gray-7">
                 {{ __('Wyliczony poziom') }}
               </div>
               <span
                 v-if="poziomWyliczony"
-                class="inline-flex items-center rounded-md border border-gray-900 bg-gray-900 px-2.5 py-1 text-sm font-medium text-white"
+                class="inline-flex items-center rounded-md border border-outline-gray-7 bg-surface-gray-10 px-2.5 py-1 text-sm font-medium text-ink-base"
               >{{ poziomLabels[poziomWyliczony] }}</span>
               <div v-else class="text-sm text-ink-gray-5">
                 {{ __('Uzupełnij standard budynku i dochód') }}
@@ -94,7 +94,7 @@
           </div>
 
           <div class="kalk-part">
-            <div class="kalk-part-heading mb-4 flex items-center justify-between gap-2 border-b border-gray-100 pb-2.5 text-lg font-bold text-ink-gray-9">
+            <div class="kalk-part-heading mb-4 flex items-center justify-between gap-2 border-b border-outline-gray-1 pb-2.5 text-lg font-bold text-ink-gray-9">
               <div class="flex items-center gap-2">
                 <span class="kalk-part-number">2</span>{{ __('Źródło ciepła') }}
               </div>
@@ -120,8 +120,8 @@
                   type="button"
                   class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                   :class="form.zrodlo === zrodlo
-                    ? 'border-gray-900 bg-gray-900 text-white'
-                    : 'border-transparent bg-gray-100 text-gray-600 hover:bg-gray-200'"
+                    ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base'
+                    : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
                   :disabled="!isActive(zrodlo)"
                   :title="isActive(zrodlo) ? '' : __('Pozycja chwilowo niedostępna')"
                   @click="setZrodlo(zrodlo)"
@@ -148,7 +148,7 @@
                   :class="{ 'opacity-60': !isActive('cwu') }"
                   :title="isActive('cwu') ? '' : __('Pozycja chwilowo niedostępna')"
                 >
-                  <input :checked="form.cwu" type="checkbox" class="h-4 w-4 rounded border-gray-300" disabled />
+                  <input :checked="form.cwu" type="checkbox" class="h-4 w-4 rounded border-outline-gray-2" disabled />
                   <span>{{ __('Pompa ciepła do CWU') }}</span>
                 </label>
                 <div class="mt-0.5 pl-6 text-xs text-ink-gray-5">
@@ -159,7 +159,7 @@
           </div>
 
           <div class="kalk-part">
-            <div class="kalk-part-heading mb-4 flex items-center justify-between gap-2 border-b border-gray-100 pb-2.5 text-lg font-bold text-ink-gray-9">
+            <div class="kalk-part-heading mb-4 flex items-center justify-between gap-2 border-b border-outline-gray-1 pb-2.5 text-lg font-bold text-ink-gray-9">
               <div class="flex items-center gap-2">
                 <span class="kalk-part-number">3</span>{{ __('Termomodernizacja') }}
               </div>
@@ -181,7 +181,7 @@
                 </div>
                 <div class="text-sm text-ink-gray-5">{{ __('m²') }}</div>
                 <input v-model="form.powierzchnia" type="number" min="0" step="0.01" class="kalk-input mt-1" />
-                <div v-if="brakPowierzchni" class="mt-1 text-xs text-amber-700">
+                <div v-if="brakPowierzchni" class="mt-1 text-xs text-ink-amber-8">
                   {{ __('Podaj powierzchnię użytkową — bez niej metraże prac wyjdą zerowe.') }}
                 </div>
               </div>
@@ -193,7 +193,7 @@
                 <div
                   v-for="kod in PRACE_M2"
                   :key="kod"
-                  class="border-t border-gray-100 py-2.5 transition-opacity first:border-t-0"
+                  class="border-t border-outline-gray-1 py-2.5 transition-opacity first:border-t-0"
                   :class="{ 'opacity-50': !form.prace[kod].wybrana }"
                 >
                   <div class="flex items-center gap-2.5">
@@ -221,21 +221,21 @@
                     <button
                       v-if="!form.prace[kod].reczne"
                       type="button"
-                      class="shrink-0 text-xs font-medium text-blue-600 hover:underline disabled:text-gray-400 disabled:no-underline"
+                      class="shrink-0 text-xs font-medium text-ink-blue-link hover:underline disabled:text-ink-gray-4 disabled:no-underline"
                       :disabled="!form.prace[kod].wybrana || !isActive(kod)"
                       @click="enableManual(kod)"
                     >{{ __('wprowadź ręcznie') }}</button>
                     <button
                       v-else
                       type="button"
-                      class="shrink-0 rounded bg-gray-100 px-1.5 py-1 text-xs text-gray-600 hover:bg-gray-200"
+                      class="shrink-0 rounded bg-surface-gray-2 px-1.5 py-1 text-xs text-ink-gray-5 hover:bg-surface-gray-3"
                       @click="disableManual(kod)"
                     >{{ __('auto') }}</button>
                   </div>
                 </div>
 
                 <div
-                  class="border-t border-gray-100 py-2.5 transition-opacity"
+                  class="border-t border-outline-gray-1 py-2.5 transition-opacity"
                   :class="{ 'opacity-50': !form.prace.drzwi.wybrana }"
                 >
                   <div class="flex items-center gap-2.5">
@@ -268,14 +268,14 @@
           </div>
         </div>
 
-        <div class="kalk-output border-l border-gray-200 pl-5">
+        <div class="kalk-output border-l border-outline-gray-2 pl-5">
           <div class="sticky top-3">
             <div class="mb-2 text-base font-semibold text-ink-gray-9">{{ __('Wycena') }}</div>
-            <div v-if="errorMsg" class="mb-2 rounded border border-red-200 bg-red-50 px-2.5 py-2 text-sm text-red-800">
+            <div v-if="errorMsg" class="mb-2 rounded border border-outline-red-3 bg-surface-red-2 px-2.5 py-2 text-sm text-ink-red-8">
               {{ errorMsg }}
             </div>
             <div v-if="hasResult">
-              <div class="mb-2 rounded-lg border border-gray-200 bg-gray-50 p-2.5">
+              <div class="mb-2 rounded-lg border border-outline-gray-1 bg-surface-gray-1 p-2.5">
                 <div class="flex justify-between py-0.5 text-sm text-ink-gray-7">
                   <span>{{ __('Wkład własny beneficjenta') }}</span>
                   <span class="text-xl font-semibold tabular-nums text-ink-gray-9">{{ formatPln(result.wklad_wlasny) }}</span>
@@ -285,7 +285,7 @@
                 <div v-if="result.prowizja_handlowa != null" class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
                   <span>{{ __('Prowizja handlowa') }}</span><span>{{ formatPln(result.prowizja_handlowa) }}</span>
                 </div>
-                <div class="flex justify-between border-t border-gray-200 pt-1.5 text-sm tabular-nums text-ink-gray-7">
+                <div class="flex justify-between border-t border-outline-gray-1 pt-1.5 text-sm tabular-nums text-ink-gray-7">
                   <span>{{ __('Dotacja łączna') }}</span><span>{{ formatPln(result.dotacja_laczna) }}</span>
                 </div>
               </div>
@@ -297,12 +297,12 @@
               <div
                 v-for="grupa in grupyZPozycjami"
                 :key="grupa.kod"
-                class="mb-2 overflow-hidden rounded-lg border border-gray-200"
+                class="mb-2 overflow-hidden rounded-lg border border-outline-gray-1"
               >
-                <div class="flex justify-between border-b border-gray-200 bg-gray-50 px-2.5 py-1.5 text-sm font-semibold tabular-nums text-ink-gray-8">
+                <div class="flex justify-between border-b border-outline-gray-1 bg-surface-gray-1 px-2.5 py-1.5 text-sm font-semibold tabular-nums text-ink-gray-8">
                   <span>{{ grupa.nazwa }}</span><span>{{ formatPln(grupa.dotacja) }}</span>
                 </div>
-                <div v-for="(line, index) in grupa.pozycje" :key="index" class="border-b border-gray-100 px-2.5 py-2 last:border-b-0">
+                <div v-for="(line, index) in grupa.pozycje" :key="index" class="border-b border-outline-gray-1 px-2.5 py-2 last:border-b-0">
                   <div class="mb-1 text-sm text-ink-gray-8">{{ lineName(line) }}</div>
                   <div class="flex justify-between gap-2 text-xs tabular-nums text-ink-gray-5">
                     <span>{{ formatQty(line.ilosc) }} {{ line.jednostka || '' }}</span>
@@ -318,14 +318,14 @@
               <div v-if="hasInternal">
                 <button
                   type="button"
-                  class="flex w-full items-center justify-between rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-sm font-semibold text-amber-700 transition-colors hover:bg-amber-100"
+                  class="flex w-full items-center justify-between rounded-md border border-outline-amber-3 bg-surface-amber-2 px-2.5 py-1.5 text-sm font-semibold text-ink-amber-8 transition-colors hover:bg-surface-amber-3"
                   @click="showAdminCosts = !showAdminCosts"
                 >
                   <span>{{ __('Admin - Ustawienia Zaawansowane') }}</span>
-                  <FeatherIcon :name="showAdminCosts ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 text-amber-700" />
+                  <FeatherIcon :name="showAdminCosts ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 text-ink-amber-8" />
                 </button>
-                <div v-show="showAdminCosts" class="mt-1.5 rounded-lg border border-dashed border-amber-300 bg-amber-50 p-2.5">
-                <div class="mb-1.5 text-xs font-semibold uppercase tracking-wider text-amber-700">{{ __('Rozbicie kosztów (administrator)') }}</div>
+                <div v-show="showAdminCosts" class="mt-1.5 rounded-lg border border-dashed border-outline-amber-3 bg-surface-amber-2 p-2.5">
+                <div class="mb-1.5 text-xs font-semibold uppercase tracking-wider text-ink-amber-8">{{ __('Rozbicie kosztów (administrator)') }}</div>
                 <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>{{ __('Koszt całkowity') }}</span><span>{{ formatPln(result.wewnetrzne.koszt_calkowity) }}</span></div>
                 <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>{{ __('Marża') }}</span><span>{{ formatPln(result.wewnetrzne.marza) }}</span></div>
                 <!-- Prowizja/Zysk czytają z `podzial.razem`, NIE z `result.wewnetrzne`:
@@ -337,8 +337,8 @@
                      nieaktualne. -->
                 <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>{{ __('Prowizja') }}</span><span>{{ formatPln(podzial.razem.prowizja) }}</span></div>
                 <div
-                  class="flex justify-between border-t border-amber-200 pt-1 text-sm font-semibold tabular-nums"
-                  :class="podzial.razem.zysk < 0 ? 'text-red-600' : 'text-amber-800'"
+                  class="flex justify-between border-t border-outline-amber-2 pt-1 text-sm font-semibold tabular-nums"
+                  :class="podzial.razem.zysk < 0 ? 'text-ink-red-6' : 'text-ink-amber-8'"
                 ><span>{{ __('Zysk') }}</span><span>{{ formatPln(podzial.razem.zysk) }}</span></div>
                 </div>
               </div>
@@ -360,7 +360,7 @@
             >
               {{ creatingDeal ? __('Tworzę szansę…') : __('Utwórz szansę') }}
             </Button>
-            <div v-if="hasResult && !contactSelected" class="mt-1 text-center text-xs text-red-600">
+            <div v-if="hasResult && !contactSelected" class="mt-1 text-center text-xs text-ink-red-6">
               {{ __('Wybierz klienta, aby utworzyć szansę.') }}
             </div>
           </div>
@@ -372,14 +372,14 @@
            dostaje `wewnetrzne` z serwera — przeglądarka niczego tu nie ukrywa,
            po prostu nie ma czego pokazać nie-administratorowi. Pełna
            szerokość (poza wąską kolumną kalk-output), bo tabela ma 9 kolumn. -->
-      <div v-if="hasInternal && hasResult" class="mt-4 border-t border-gray-200 pt-4">
+      <div v-if="hasInternal && hasResult" class="mt-4 border-t border-outline-gray-2 pt-4">
         <button
           type="button"
-          class="flex w-full items-center justify-between rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-sm font-semibold text-amber-700 transition-colors hover:bg-amber-100"
+          class="flex w-full items-center justify-between rounded-md border border-outline-amber-3 bg-surface-amber-2 px-2.5 py-1.5 text-sm font-semibold text-ink-amber-8 transition-colors hover:bg-surface-amber-3"
           @click="showAdminModeling = !showAdminModeling"
         >
           <span>{{ __('Admin - Ustawienia Zaawansowane') }}</span>
-          <FeatherIcon :name="showAdminModeling ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 text-amber-700" />
+          <FeatherIcon :name="showAdminModeling ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 text-ink-amber-8" />
         </button>
         <div v-show="showAdminModeling" class="mt-2">
           <div class="mb-2">
@@ -394,7 +394,7 @@
           <div class="kalk-marza-scroll">
             <table class="kalk-marza-table w-full border-collapse text-sm">
               <thead>
-                <tr class="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-ink-gray-5">
+                <tr class="border-b border-outline-gray-2 text-left text-xs uppercase tracking-wide text-ink-gray-5">
                   <th class="py-1.5 pr-2">{{ __('Pozycja') }}</th>
                   <th class="py-1.5 pr-2 text-right">{{ __('Ilość') }}</th>
                   <th class="py-1.5 pr-2 text-right">{{ __('Netto') }}</th>
@@ -407,7 +407,7 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="linia in podzial.linie" :key="linia.kod" class="border-b border-gray-100 tabular-nums">
+                <tr v-for="linia in podzial.linie" :key="linia.kod" class="border-b border-outline-gray-1 tabular-nums">
                   <td class="py-1.5 pr-2 text-ink-gray-8">{{ nazwaPozycji(linia.kod) }}</td>
                   <td class="py-1.5 pr-2 text-right text-ink-gray-6">
                     {{ formatQty(linia.iloscRozliczeniowa) }} {{ linia.jednostkaRozliczeniowa === 'szt' ? __('szt') : __('m²') }}
@@ -459,14 +459,14 @@
                     />
                   </td>
                   <td class="py-1.5 pr-2 text-right text-ink-gray-7">{{ formatPln(linia.prowizja) }}</td>
-                  <td class="py-1.5 pr-2 text-right font-medium" :class="linia.zysk < 0 ? 'text-red-600' : 'text-ink-gray-8'">
+                  <td class="py-1.5 pr-2 text-right font-medium" :class="linia.zysk < 0 ? 'text-ink-red-6' : 'text-ink-gray-8'">
                     {{ formatPln(linia.zysk) }}
                   </td>
                   <td class="py-1.5 text-right text-ink-gray-6">{{ formatPercent(linia.zyskProc) }}</td>
                 </tr>
               </tbody>
               <tfoot>
-                <tr class="border-t-2 border-gray-300 font-semibold tabular-nums">
+                <tr class="border-t-2 border-outline-gray-2 font-semibold tabular-nums">
                   <td class="py-1.5 pr-2 text-ink-gray-9">{{ __('RAZEM') }}</td>
                   <td class="py-1.5 pr-2"></td>
                   <td class="py-1.5 pr-2 text-right">{{ formatPln(podzial.razem.netto) }}</td>
@@ -474,7 +474,7 @@
                   <td class="py-1.5 pr-2 text-right">{{ formatPln(podzial.razem.pula) }}</td>
                   <td class="py-1.5 pr-2"></td>
                   <td class="py-1.5 pr-2 text-right">{{ formatPln(podzial.razem.prowizja) }}</td>
-                  <td class="py-1.5 pr-2 text-right" :class="podzial.razem.zysk < 0 ? 'text-red-600' : ''">
+                  <td class="py-1.5 pr-2 text-right" :class="podzial.razem.zysk < 0 ? 'text-ink-red-6' : ''">
                     {{ formatPln(podzial.razem.zysk) }}
                   </td>
                   <td class="py-1.5 text-right">{{ formatPercent(podzial.razem.zyskProc) }}</td>
@@ -483,14 +483,14 @@
             </table>
           </div>
 
-          <div class="mt-3 max-w-xs rounded-lg border border-gray-200 bg-gray-50 p-2.5 text-sm tabular-nums">
+          <div class="mt-3 max-w-xs rounded-lg border border-outline-gray-1 bg-surface-gray-1 p-2.5 text-sm tabular-nums">
             <div class="flex justify-between py-0.5 text-ink-gray-7">
               <span>{{ __('Przychód netto') }}</span><span>{{ formatPln(podzial.razem.netto) }}</span>
             </div>
             <div class="flex justify-between py-0.5 text-ink-gray-7">
               <span>{{ __('− Koszt ProEnergy') }}</span><span>{{ formatPln(podzial.razem.koszt) }}</span>
             </div>
-            <div class="flex justify-between border-t border-gray-200 py-0.5 pt-1 font-medium text-ink-gray-8">
+            <div class="flex justify-between border-t border-outline-gray-1 py-0.5 pt-1 font-medium text-ink-gray-8">
               <span>{{ __('= Marża brutto') }}</span>
               <span>{{ formatPln(podzial.razem.pula) }} <span class="font-normal text-ink-gray-5">({{ formatPercent(podzial.razem.marzaProc) }} {{ __('netto') }})</span></span>
             </div>
@@ -498,13 +498,13 @@
               <span>{{ __('− Prowizja struktury') }}</span><span>{{ formatPln(podzial.razem.prowizja) }}</span>
             </div>
             <div
-              class="flex justify-between border-t border-gray-200 py-0.5 pt-1 font-semibold"
-              :class="podzial.razem.zysk < 0 ? 'text-red-600' : 'text-ink-gray-9'"
+              class="flex justify-between border-t border-outline-gray-2 py-0.5 pt-1 font-semibold"
+              :class="podzial.razem.zysk < 0 ? 'text-ink-red-6' : 'text-ink-gray-9'"
             >
               <span>{{ __('= ZYSK ProEnergy') }}</span>
               <span>
                 {{ formatPln(podzial.razem.zysk) }}
-                <span class="font-normal" :class="podzial.razem.zysk < 0 ? 'text-red-600' : 'text-ink-gray-5'">
+                <span class="font-normal" :class="podzial.razem.zysk < 0 ? 'text-ink-red-6' : 'text-ink-gray-5'">
                   ({{ formatPercent(podzial.razem.zyskProc) }} {{ __('netto') }})
                 </span>
               </span>
@@ -513,7 +513,7 @@
 
           <button
             type="button"
-            class="mt-2 rounded-md border border-transparent bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200"
+            class="mt-2 rounded-md border border-transparent bg-surface-gray-2 px-2.5 py-1 text-xs font-medium text-ink-gray-5 hover:bg-surface-gray-3"
             @click="resetWartosci"
           >{{ __('Przywróć wartości katalogowe') }}</button>
         </div>
@@ -916,11 +916,11 @@ onBeforeUnmount(() => {
   height: 28px;
   width: 100%;
   border-radius: 0.25rem;
-  border: 1px solid #e5e5e5;
-  background: #f5f5f5;
+  border: 1px solid var(--outline-gray-1);
+  background: var(--surface-gray-2);
   padding: 0 8px;
   font-size: 14px;
-  color: #383838;
+  color: var(--ink-gray-8);
   outline: none;
   transition: background-color 0.15s, border-color 0.15s;
   cursor: pointer;
@@ -928,12 +928,12 @@ onBeforeUnmount(() => {
 .kalk-input { cursor: text; }
 .kalk-input:hover,
 .kalk-select:hover {
-  background: #ededed;
+  background: var(--surface-gray-3);
 }
 .kalk-input:focus,
 .kalk-select:focus {
-  border-color: #a3a3a3;
-  background: #fff;
+  border-color: var(--outline-gray-4);
+  background: var(--surface-base);
   box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 .kalk-input:disabled,
@@ -958,15 +958,15 @@ onBeforeUnmount(() => {
    pierwszy rzut oka, które liczby są prawdziwe (katalogowe), a które
    zmodelowane. Wartość katalogowa jest w atrybucie `title` na inpucie. */
 .kalk-input-nadpisany {
-  background: #fef3c7;
-  border-color: #d97706;
+  background: var(--surface-amber-2);
+  border-color: var(--outline-amber-3);
 }
 .kalk-input-nadpisany:hover {
-  background: #fde8a8;
+  background: var(--surface-amber-3);
 }
 .kalk-input-nadpisany:focus {
-  background: #fff;
-  border-color: #d97706;
+  background: var(--surface-base);
+  border-color: var(--outline-amber-3);
 }
 .kalk-part-heading {
   letter-spacing: -0.01em;
@@ -978,9 +978,9 @@ onBeforeUnmount(() => {
    the old `.kalk-part-divider` marker elements were removed from the template
    entirely (no more divider rule to keep here). */
 .kalk-part {
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--outline-gray-1);
   border-radius: 0.75rem;
-  background: #fff;
+  background: var(--surface-elevation-1);
   padding: 1.25rem 1.25rem 1.375rem;
 }
 .kalk-part + .kalk-part {
@@ -996,8 +996,8 @@ onBeforeUnmount(() => {
   width: 1.375rem;
   height: 1.375rem;
   border-radius: 9999px;
-  background: #f0f0f0;
-  color: #9ca3af;
+  background: var(--surface-gray-2);
+  color: var(--ink-gray-4);
   font-size: 0.7rem;
   font-weight: 700;
 }
@@ -1006,7 +1006,9 @@ onBeforeUnmount(() => {
    = OFF. Black for off is deliberate, never grey (grey stays reserved for
    disabled inputs elsewhere in this file) and never red. One shared look
    for every TAK/NIE toggle in this component instead of repeating a class
-   string at each of the four call sites. */
+   string at each of the four call sites. Czarne tło OFF zostaje czarne w
+   trybie jasnym (decyzja właściciela), ale w trybie ciemnym dostaje osobne
+   nadpisanie niżej — czysta czerń zlewałaby się z ciemnym tłem panelu. */
 .kalk-switch {
   position: relative;
   display: inline-block;
@@ -1025,6 +1027,9 @@ onBeforeUnmount(() => {
 }
 .kalk-switch-off {
   background: #111827;
+}
+[data-theme='dark'] .kalk-switch-off {
+  background: var(--surface-gray-4);
 }
 .kalk-switch:disabled {
   opacity: 0.5;
