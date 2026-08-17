@@ -136,6 +136,8 @@ permission_query_conditions = {
 	"CRM Deal": "crm.permissions.org_hierarchy.get_deal_permission_query_conditions",
 	"Contact": "crm.permissions.contact_visibility.get_contact_permission_query_conditions",
 	"Volteo Faktura": "crm.permissions.faktura_visibility.get_faktura_permission_query_conditions",
+	"FCRM Note": "crm.permissions.child_visibility.get_note_permission_query_conditions",
+	"CRM Task": "crm.permissions.child_visibility.get_task_permission_query_conditions",
 }
 
 has_permission = {
@@ -152,8 +154,14 @@ has_permission = {
 		"crm.permissions.delete_lockdown.block_nonadmin_delete",
 	],
 	"Volteo Faktura": "crm.permissions.faktura_visibility.has_faktura_permission",
-	"FCRM Note": "crm.permissions.delete_lockdown.block_nonadmin_delete",
-	"CRM Task": "crm.permissions.delete_lockdown.block_nonadmin_delete",
+	"FCRM Note": [
+		"crm.permissions.child_visibility.has_note_permission",
+		"crm.permissions.delete_lockdown.block_nonadmin_delete",
+	],
+	"CRM Task": [
+		"crm.permissions.child_visibility.has_task_permission",
+		"crm.permissions.delete_lockdown.block_nonadmin_delete",
+	],
 	"CRM Organization": "crm.permissions.delete_lockdown.block_nonadmin_delete",
 }
 
@@ -233,6 +241,7 @@ scheduler_events = {
 	"daily": [
 		"crm.fcrm.doctype.crm_view_settings.crm_view_settings.clear_old_versions",
 		"crm.permissions.kalkulator_guard.reconcile_kalkulator_perms",
+		"crm.fcrm.doctype.crm_invitation.crm_invitation.expire_invitations",
 	],
 	"daily_long": ["crm.lead_syncing.background_sync.sync_leads_from_sources_daily"],
 	"hourly_long": ["crm.lead_syncing.background_sync.sync_leads_from_sources_hourly"],

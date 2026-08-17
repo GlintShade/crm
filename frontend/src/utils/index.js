@@ -857,13 +857,19 @@ export function clearCache() {
     'metadata_version',
     'page_info',
     'last_visited',
+    'firstLead',
+    'firstDeal',
+    'crm-contact-details-open',
   ].forEach((key) => localStorage.removeItem(key))
 
   for (let key in localStorage) {
     if (
       key.startsWith('_page:') ||
       key.startsWith('_doctype:') ||
-      key.startsWith('preferred_breadcrumbs:')
+      key.startsWith('preferred_breadcrumbs:') ||
+      key.startsWith('emailBoxContent-') ||
+      key.startsWith('commentBoxContent-') ||
+      key.startsWith('attachments-')
     ) {
       localStorage.removeItem(key)
     }

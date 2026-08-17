@@ -389,7 +389,10 @@ def get_data(
 		if not kanban_columns and column_field:
 			field_meta = frappe.get_meta(doctype).get_field(column_field)
 			if field_meta.fieldtype == "Link":
-				kanban_columns = frappe.get_all(
+				# get_list (not get_all) so this respects read permission and
+				# permission_query_conditions on the linked doctype instead of
+				# leaking its full directory (e.g. every User) to any caller.
+				kanban_columns = frappe.get_list(
 					field_meta.options,
 					fields=["name"],
 					order_by="modified asc",
@@ -602,7 +605,11 @@ def get_records_based_on_order(doctype, rows, filters, page_length, order):
 
 
 @frappe.whitelist()
-def remove_assignments(doctype: str, name: str, assignees: str | list, ignore_permissions: bool = False):
+def remove_assignments(doctype: str, name: str, assignees: str | list):
+	# ignore_permissions was previously a caller-settable whitelisted HTTP parameter
+	# that let any authenticated user bypass assignment authorization. Removed;
+	# the legitimate frontend never passed it, so set_status now always runs
+	# with its own default (ignore_permissions=False).
 	assignees = frappe.parse_json(assignees)
 
 	if not assignees:
@@ -615,7 +622,6 @@ def remove_assignments(doctype: str, name: str, assignees: str | list, ignore_pe
 			todo=None,
 			assign_to=assign_to,
 			status="Cancelled",
-			ignore_permissions=ignore_permissions,
 		)
 
 

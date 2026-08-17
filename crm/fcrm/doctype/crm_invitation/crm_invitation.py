@@ -27,7 +27,7 @@ class CRMInvitation(Document):
 	def before_insert(self):
 		frappe.utils.validate_email_address(self.email, True)
 
-		self.key = frappe.generate_hash(length=12)
+		self.key = frappe.generate_hash()
 		self.invited_by = frappe.session.user
 		self.status = "Pending"
 

@@ -250,6 +250,10 @@ def volteo_cp_calc(wejscie: dict[str, Any]) -> dict[str, Any]:
 			# (wynik["wewnetrzne"]["linie"]) wprowadzone w obliczenia.py — wszystkie dane
 			# kosztowe żyją wyłącznie wewnątrz poddrzewa "wewnetrzne".
 			wynik.pop("wewnetrzne", None)
+			# V4 (2026-08-16, decyzja właściciela): ukryj zagregowaną prowizję przed handlowcami.
+			# Wartość pozostaje w poddrzewie "wewnetrzne" dla adminów. Aby przywrócić widoczność
+			# dla handlowców, usuń tę jedną linię.
+			wynik.pop("prowizja_handlowa", None)
 		return wynik
 	except (CPNiedozwolonaKombinacja, CPPozycjaNieaktywna, CPDaneNiekompletne) as blad:
 		frappe.throw(_(str(blad)))

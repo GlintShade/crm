@@ -41,9 +41,19 @@ def _conditions(user: str | None):
 	if roles & BYPASS_ROLES:
 		return ""
 
-	# Defensive fail-open: fresh site before the custom_opiekun field exists.
+	# Fail closed: if custom_opiekun is absent (deleted field, or an
+	# ops-schema-before-image deploy-order violation), scoping cannot be
+	# evaluated. Hide all rows for non-bypass users rather than leak every
+	# contact org-wide, and log so the schema drift is visible. The never-match
+	# condition is built on `name` (always present, NOT NULL) rather than
+	# OPIEKUN_FIELD, since referencing the missing column would itself raise
+	# an "unknown column" SQL error instead of failing closed.
 	if not frappe.get_meta("Contact").has_field(OPIEKUN_FIELD):
-		return ""
+		frappe.log_error(
+			title="contact_visibility: custom_opiekun missing",
+			message="Fail-closed: Contact.custom_opiekun field absent; scoping cannot be evaluated.",
+		)
+		return frappe.qb.DocType("Contact").name.isnull()
 
 	in_tree = hierarchy_enabled() and _in_hierarchy(user)
 
@@ -78,9 +88,16 @@ def has_contact_permission(doc, ptype, user):
 	if ptype == "create" or not doc.name:
 		return True
 
-	# Defensive fail-open: fresh site before the custom_opiekun field exists.
+	# Fail closed: if custom_opiekun is absent (deleted field, or an
+	# ops-schema-before-image deploy-order violation), scoping cannot be
+	# evaluated. Deny access for non-bypass users rather than leak every
+	# contact org-wide, and log so the schema drift is visible.
 	if not frappe.get_meta("Contact").has_field(OPIEKUN_FIELD):
-		return True
+		frappe.log_error(
+			title="contact_visibility: custom_opiekun missing",
+			message="Fail-closed: Contact.custom_opiekun field absent; scoping cannot be evaluated.",
+		)
+		return False
 
 	in_tree = hierarchy_enabled() and _in_hierarchy(user)
 	if "Sales Manager" in roles and not in_tree:

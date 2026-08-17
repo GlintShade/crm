@@ -280,7 +280,9 @@
                   <span>{{ __('Wkład własny beneficjenta') }}</span>
                   <span class="text-xl font-semibold tabular-nums text-ink-gray-9">{{ formatPln(result.wklad_wlasny) }}</span>
                 </div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
+                <!-- V4 (2026-08-16): ukrycie odwracalne — serwer nie zwraca top-level prowizji
+                     handlowcom (crm/api/czyste_powietrze.py), więc dla nich ten wiersz znika. -->
+                <div v-if="result.prowizja_handlowa != null" class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
                   <span>{{ __('Prowizja handlowa') }}</span><span>{{ formatPln(result.prowizja_handlowa) }}</span>
                 </div>
                 <div class="flex justify-between border-t border-gray-200 pt-1.5 text-sm tabular-nums text-ink-gray-7">

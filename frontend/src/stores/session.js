@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { createResource } from 'frappe-ui'
 import router from '@/router'
 import { ref, computed } from 'vue'
+import { clearCache } from '@/utils'
 
 export const sessionStore = defineStore('crm-session', () => {
   function sessionUser() {
@@ -32,6 +33,7 @@ export const sessionStore = defineStore('crm-session', () => {
     url: 'logout',
     onSuccess() {
       user.value = null
+      clearCache()
       window.location.href = '/login?redirect-to=/crm'
     },
   })
