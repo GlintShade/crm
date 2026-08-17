@@ -284,3 +284,107 @@ export function normalizujKwote(tekst) {
 
   return `${calaCzesc},${dziesietne.padEnd(2, '0')}`
 }
+
+// Strips every whitespace character, including the non-breaking space a
+// pasted bank-format number often carries (JS `\s` already matches U+00A0,
+// but the class is spelled out explicitly so that stays true regardless of
+// engine quirks).
+const WZORZEC_BIALE_ZNAKI = /[\s ]/g
+
+/**
+ * Group a raw digit string into Polish NRB display shape: 2 digits, then
+ * groups of 4, single spaces between. Length-agnostic (partial and >26
+ * digit inputs both format, no padding/truncation) — this is a live-typing
+ * mask, not a validator.
+ *
+ * @param {string} cyfry - digits only, already stripped of whitespace
+ * @returns {string} grouped string
+ */
+function grupujCyfryRachunku(cyfry) {
+  if (cyfry.length <= 2) return cyfry
+  const grupy = [cyfry.slice(0, 2)]
+  for (let i = 2; i < cyfry.length; i += 4) {
+    grupy.push(cyfry.slice(i, i + 4))
+  }
+  return grupy.join(' ')
+}
+
+/**
+ * Format a bank account number (`numer_rachunku`) into Polish NRB grouping
+ * for display: "61 1090 1014 0000 0712 1981 2874". Pure and idempotent —
+ * formatting an already-formatted value returns it unchanged, and partial
+ * input formats progressively as the rep types.
+ *
+ * The server stores this field verbatim with no format validation, so
+ * anything that isn't purely digits after stripping whitespace (a "PL"
+ * IBAN prefix, a dash, letters) is returned EXACTLY as given — we must
+ * never mangle a non-standard value the rep intentionally typed.
+ *
+ * Never throws; a non-string argument is returned unchanged (mirrors
+ * `normalizujKwote`'s defensive shape).
+ *
+ * @param {string} tekst - raw text from the account-number input
+ * @returns {string} grouped text, or `tekst` unchanged when not purely digits
+ */
+export function formatujNumerRachunku(tekst) {
+  if (typeof tekst !== 'string') return tekst
+
+  const oczyszczony = tekst.replace(WZORZEC_BIALE_ZNAKI, '')
+  if (oczyszczony === '') return ''
+  if (!/^\d+$/.test(oczyszczony)) return tekst
+
+  return grupujCyfryRachunku(oczyszczony)
+}
+
+/**
+ * Format `tekst` like `formatujNumerRachunku` while keeping the text
+ * caret glued to the digit the rep just typed/deleted, instead of it
+ * jumping to the end of the input on every keystroke (the naive
+ * "reformat the whole string" approach).
+ *
+ * Method: count how many digits sit strictly before `kursor` in the raw
+ * input, then walk the freshly formatted string until that many digits
+ * have been passed — the new caret lands right after the last one counted.
+ * Caret 0 always stays 0. When the value is returned verbatim (non-digit
+ * content, e.g. a "PL" prefix), there is nothing to re-flow, so the
+ * original `kursor` is kept as-is.
+ *
+ * @param {string} tekst - raw text from the input's current value
+ * @param {number} kursor - caret position (selectionStart) in `tekst`
+ * @returns {{tekst: string, kursor: number}} formatted text and new caret
+ */
+export function formatujNumerRachunkuZKursorem(tekst, kursor) {
+  const sformatowany = formatujNumerRachunku(tekst)
+
+  if (typeof tekst !== 'string') {
+    return { tekst: sformatowany, kursor }
+  }
+
+  const oczyszczony = tekst.replace(WZORZEC_BIALE_ZNAKI, '')
+  const jestCyfrowy = oczyszczony !== '' && /^\d+$/.test(oczyszczony)
+  if (!jestCyfrowy) {
+    return { tekst: sformatowany, kursor }
+  }
+
+  let cyfrPrzedKursorem = 0
+  for (let i = 0; i < Math.min(kursor, tekst.length); i++) {
+    if (/\d/.test(tekst[i])) cyfrPrzedKursorem++
+  }
+
+  let nowyKursor = 0
+  if (cyfrPrzedKursorem > 0) {
+    let widzianeCyfry = 0
+    nowyKursor = sformatowany.length
+    for (let i = 0; i < sformatowany.length; i++) {
+      if (/\d/.test(sformatowany[i])) {
+        widzianeCyfry++
+        if (widzianeCyfry === cyfrPrzedKursorem) {
+          nowyKursor = i + 1
+          break
+        }
+      }
+    }
+  }
+
+  return { tekst: sformatowany, kursor: nowyKursor }
+}

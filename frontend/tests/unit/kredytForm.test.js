@@ -13,6 +13,8 @@ import {
   buildDane,
   hydrateFrom,
   normalizujKwote,
+  formatujNumerRachunku,
+  formatujNumerRachunkuZKursorem,
 } from '@/utils/kredytForm'
 
 function deepFreeze(value) {
@@ -416,6 +418,117 @@ describe('Kredyt form logic', () => {
       expect(wynik).toBe('123,00')
       expect(() => normalizujKwote(null)).not.toThrow()
       expect(() => normalizujKwote(undefined)).not.toThrow()
+    })
+  })
+
+  describe('formatujNumerRachunku', () => {
+    it('groups a full 26-digit NRB as 2 digits then groups of 4', () => {
+      expect(formatujNumerRachunku('61109010140000071219812874')).toBe(
+        '61 1090 1014 0000 0712 1981 2874',
+      )
+    })
+
+    it('formats progressively as digits accumulate (partial input)', () => {
+      expect(formatujNumerRachunku('6')).toBe('6')
+      expect(formatujNumerRachunku('61')).toBe('61')
+      expect(formatujNumerRachunku('611')).toBe('61 1')
+      expect(formatujNumerRachunku('611090')).toBe('61 1090')
+    })
+
+    it('is idempotent — formatting an already-formatted value is a no-op', () => {
+      const raz = formatujNumerRachunku('61109010140000071219812874')
+      expect(formatujNumerRachunku(raz)).toBe(raz)
+    })
+
+    it('regroups a value with misplaced spaces, keying only off the digits', () => {
+      expect(formatujNumerRachunku('61 10 9010')).toBe('61 1090 10')
+    })
+
+    it('strips a non-breaking space and regroups from the digits underneath', () => {
+      expect(formatujNumerRachunku('61 1090')).toBe('61 1090')
+    })
+
+    it('returns empty and whitespace-only input as empty string', () => {
+      expect(formatujNumerRachunku('')).toBe('')
+      expect(formatujNumerRachunku('   ')).toBe('')
+    })
+
+    it('returns non-digit content verbatim — server has no format validation for this field', () => {
+      expect(formatujNumerRachunku('PL61109010140000071219812874')).toBe(
+        'PL61109010140000071219812874',
+      )
+      expect(formatujNumerRachunku('61-1090')).toBe('61-1090')
+      expect(formatujNumerRachunku('abc')).toBe('abc')
+    })
+
+    it('groups more than 26 digits too — this is a display mask, not a length validator', () => {
+      expect(formatujNumerRachunku('6110901014000007121981287499')).toBe(
+        '61 1090 1014 0000 0712 1981 2874 99',
+      )
+    })
+
+    it('returns non-string input unchanged and never throws', () => {
+      expect(formatujNumerRachunku(null)).toBeNull()
+      expect(formatujNumerRachunku(undefined)).toBeUndefined()
+      expect(formatujNumerRachunku(123)).toBe(123)
+    })
+  })
+
+  describe('formatujNumerRachunkuZKursorem', () => {
+    it('keeps the caret at the end when it starts at the end', () => {
+      // '611090' (6 digits) -> '61 1090' (7 chars); caret was after all 6
+      // digits, so it lands after all digits in the formatted string too.
+      expect(formatujNumerRachunkuZKursorem('611090', 6)).toEqual({
+        tekst: '61 1090',
+        kursor: 7,
+      })
+    })
+
+    it('lands the caret right after a digit just typed mid-string', () => {
+      // Rep had '61 1090' and typed '5' after '61 1', producing raw
+      // '61 15090' with the caret at index 5 (right after the new '5').
+      // That's the 4th digit in the raw text (6,1,1,5); the formatted
+      // string '61 1509 0' has its 4th digit ('5') at index 4, so the
+      // caret goes to index 5 — still immediately after that same '5'.
+      expect(formatujNumerRachunkuZKursorem('61 15090', 5)).toEqual({
+        tekst: '61 1509 0',
+        kursor: 5,
+      })
+    })
+
+    it('keeps caret 0 at 0', () => {
+      expect(formatujNumerRachunkuZKursorem('611090', 0)).toEqual({
+        tekst: '61 1090',
+        kursor: 0,
+      })
+    })
+
+    it('deleting a digit just after a space keeps the caret stable', () => {
+      // Raw '6110914' (7 digits) with the caret at index 5 — 5 digits
+      // precede it (6,1,1,0,9). The formatted string '61 1091 4' has its
+      // 5th digit ('9') at index 5, so the caret goes to index 6,
+      // immediately after that digit rather than jumping to the end.
+      expect(formatujNumerRachunkuZKursorem('6110914', 5)).toEqual({
+        tekst: '61 1091 4',
+        kursor: 6,
+      })
+    })
+
+    it('pasting a full 26-digit number with the caret at the end lands the caret at the end', () => {
+      const surowy = '61109010140000071219812874'
+      const sformatowany = '61 1090 1014 0000 0712 1981 2874'
+      expect(formatujNumerRachunkuZKursorem(surowy, surowy.length)).toEqual({
+        tekst: sformatowany,
+        kursor: sformatowany.length,
+      })
+    })
+
+    it('keeps the original caret untouched for verbatim (non-digit) passthrough', () => {
+      expect(formatujNumerRachunkuZKursorem('61-1090', 3)).toEqual({
+        tekst: '61-1090',
+        kursor: 3,
+      })
+      expect(formatujNumerRachunkuZKursorem('abc', 2)).toEqual({ tekst: 'abc', kursor: 2 })
     })
   })
 })

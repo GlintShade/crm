@@ -713,7 +713,6 @@ class TestBrakujacePolaBazowe(unittest.TestCase):
 				"zrodlo_dochodu_malzonka",
 				"oplaty_miesieczne",
 				"suma_zobowiazan",
-				"numer_rachunku",
 			],
 		)
 
@@ -735,6 +734,10 @@ class TestBrakujacePolaBazowe(unittest.TestCase):
 		kopia = copy.deepcopy(dane)
 		brakujace_pola(dane)
 		self.assertEqual(dane, kopia)
+
+	def test_f_numer_rachunku_pusty_nie_jest_brakujacy(self: "TestBrakujacePolaBazowe") -> None:
+		dane = _kredyt(numer_rachunku="")
+		self.assertNotIn("numer_rachunku", brakujace_pola(dane))
 
 
 class TestBrakujacePolaWarunkoweAdresy(unittest.TestCase):

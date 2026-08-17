@@ -79,9 +79,9 @@ _BAZA_WYMAGANE: tuple[str, ...] = (
 	"zrodlo_dochodu_malzonka",
 	"oplaty_miesieczne",
 	"suma_zobowiazan",
-	"numer_rachunku",
 )
-"""Pola wymagane niezależnie od pozostałych odpowiedzi w formularzu (decyzja właściciela, 2026-08-15)."""
+"""Pola wymagane niezależnie od pozostałych odpowiedzi w formularzu (decyzja właściciela, 2026-08-15).
+`numer_rachunku` usunięte z wymaganych decyzją właściciela z 2026-08-17 — pole nadal istnieje i trafia na PDF, jeśli podane."""
 
 
 def kwota_poprawna(tekst: Any) -> bool:
