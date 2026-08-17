@@ -25,7 +25,7 @@ msgstr " (Nowy)"
 
 #: frontend/src/components/Filter.vue:587
 msgid "%John%"
-msgstr "%John%"
+msgstr "%Jan%"
 
 #: frontend/src/components/Calendar/CalendarEventPanel.vue:66
 msgid "(No Title)"
@@ -1411,7 +1411,7 @@ msgstr "Kolumny"
 #. Label of the comment (Link) field in DocType 'CRM Notification'
 #: crm/fcrm/doctype/crm_notification/crm_notification.json frontend/src/components/Activities/ActivityHeader.vue:126 frontend/src/components/CommentBox.vue:78 frontend/src/components/CommunicationArea.vue:15 frontend/src/components/Layouts/AppSidebar.vue:609
 msgid "Comment"
-msgstr "Komentarz"
+msgstr "Skomentuj"
 
 #: frontend/src/components/CommunicationArea.vue:275
 msgid "Comment sent"
@@ -1536,7 +1536,7 @@ msgstr "Potwierdź hasło"
 
 #: frontend/src/utils/index.js:822 frontend/src/utils/index.js:825
 msgid "Confirm {0}"
-msgstr "Potwierdź {0}"
+msgstr "Potwierdź: {0}"
 
 #: frontend/src/components/Settings/ERPNextSettings.vue:274
 msgid "Connect ERPNext to Frappe CRM"
@@ -3632,7 +3632,7 @@ msgstr "Jest standardowe"
 
 #: frontend/src/components/ListViews/EmptyState.vue:43
 msgid "It appears that there are currently no {0} available. You can create more {0} by using the Create button."
-msgstr "Wygląda na to, że obecnie nie ma żadnych {0}. Możesz dodać więcej {0}, używając przycisku Utwórz."
+msgstr "{0}: nie ma tu jeszcze żadnych pozycji. Możesz dodać kolejne, korzystając z przycisku Utwórz."
 
 #. Description of the 'Enable Forecasting' (Check) field in DocType 'FCRM
 #. Settings'
@@ -3665,7 +3665,7 @@ msgstr "Jan Kowalski"
 
 #: frontend/src/components/Filter.vue:582
 msgid "John, Jane, Doe"
-msgstr "John, Jane, Doe"
+msgstr "Jan, Anna, Piotr"
 
 #. Label of the kanban_tab (Tab Break) field in DocType 'CRM View Settings'
 #: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json frontend/src/components/ViewControls.vue:392 frontend/src/components/ViewControls.vue:608 frontend/src/utils/view.js:20
@@ -4537,7 +4537,7 @@ msgstr "Żaden użytkownik nie pasuje do bieżącego filtra."
 
 #: frontend/src/components/ListViews/EmptyState.vue:37 frontend/src/pages/MobileOrganization.vue:145
 msgid "No {0} Found"
-msgstr "Nie znaleziono {0}"
+msgstr "{0} — brak wyników"
 
 #: frontend/src/components/PrimaryDropdown.vue:33
 msgid "No {0} available"
@@ -4545,7 +4545,7 @@ msgstr "Brak dostępnych {0}"
 
 #: frontend/src/pages/MobileContact.vue:153
 msgid "No {0} found"
-msgstr "Nie znaleziono {0}"
+msgstr "{0} — brak wyników"
 
 #: frontend/src/components/Controls/Grid.vue:27
 msgid "No."
@@ -7347,7 +7347,7 @@ msgstr "za {0} mies."
 
 #: frontend/src/utils/index.js:139
 msgid "in {0} d"
-msgstr "za {0} d"
+msgstr "za {0} dni"
 
 #: frontend/src/utils/index.js:186
 msgid "in {0} days"
@@ -7383,7 +7383,7 @@ msgstr "za {0} tygodni"
 
 #: frontend/src/utils/index.js:145
 msgid "in {0} y"
-msgstr "za {0} lata"
+msgstr "za {0} l."
 
 #: frontend/src/utils/index.js:194
 msgid "in {0} years"
@@ -7640,7 +7640,7 @@ msgstr "{0} tygodni temu"
 
 #: frontend/src/utils/index.js:164
 msgid "{0} y"
-msgstr "{0} lata"
+msgstr "{0} l."
 
 #: frontend/src/utils/index.js:225
 msgid "{0} years ago"

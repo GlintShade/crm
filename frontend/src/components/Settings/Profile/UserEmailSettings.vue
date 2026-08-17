@@ -48,7 +48,7 @@
       <div class="flex flex-col gap-4 mt-6">
         <div class="flex flex-col gap-1">
           <span class="text-base-medium text-ink-gray-8">
-            {{ __('Emails') }}
+            {{ __('Email Accounts') }}
           </span>
           <span class="text-p-sm text-ink-gray-6">
             {{
