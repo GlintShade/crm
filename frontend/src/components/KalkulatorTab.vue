@@ -295,21 +295,11 @@
                 </button>
                 <div v-show="showAdminBreakdown" class="mt-1.5 rounded-lg border border-dashed border-outline-amber-3 bg-surface-amber-2 p-2.5">
                 <div class="mb-1.5 text-xs font-semibold uppercase tracking-wider text-ink-amber-8">Rozbicie kosztów (administrator)</div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Falownik</span><span>{{ formatPln(summary.breakdown.k_falownik) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Bateria</span><span>{{ formatPln(summary.breakdown.k_bateria) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Panele</span><span>{{ formatPln(summary.breakdown.k_panele) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Konstrukcja</span><span>{{ formatPln(summary.breakdown.k_konstrukcja) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Montaż PV</span><span>{{ formatPln(summary.breakdown.k_montaz_pv) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Montaż magazynu</span><span>{{ formatPln(summary.breakdown.k_montaz_mag) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Akcesoria</span><span>{{ formatPln(summary.breakdown.k_akcesoria) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Kabel</span><span>{{ formatPln(summary.breakdown.k_kabel) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Spółdzielnia</span><span>{{ formatPln(summary.breakdown.k_spoldzielnia) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Sterownik</span><span>{{ formatPln(summary.breakdown.k_sterownik) }}</span></div>
-                <div class="mt-1 flex justify-between border-t border-outline-amber-2 pt-1 text-sm font-semibold tabular-nums text-ink-gray-9"><span>Koszt bazowy (net_base)</span><span>{{ formatPln(summary.breakdown.net_base) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Marża ProEnergy</span><span>{{ formatPln(summary.breakdown.marza_proenergy) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Marża SPS</span><span>{{ formatPln(summary.breakdown.marza_sps) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Bonus liderki</span><span>{{ formatPln(summary.breakdown.bonus_liderki) }}</span></div>
-                <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>Kilometrówka</span><span>{{ formatPln(summary.breakdown.kilometrowka) }}</span></div>
+                <div v-for="grupa in grupyBreakdown" :key="grupa.klucz">
+                  <div :class="grupa.klucz === 'hurtownia' ? 'mt-0' : 'mt-2'" class="mb-0.5 text-xs font-semibold uppercase tracking-wider text-ink-amber-8">{{ grupa.etykieta }}</div>
+                  <div v-for="p in grupa.pozycje" :key="p.klucz" class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>{{ p.etykieta }}</span><span>{{ formatPln(p.kwota) }}</span></div>
+                  <div class="mt-1 flex justify-between border-t border-outline-amber-2 pt-1 text-sm font-semibold tabular-nums text-ink-gray-9"><span>Razem</span><span>{{ formatPln(grupa.suma) }}</span></div>
+                </div>
                 </div>
               </div>
             </div>
@@ -351,6 +341,7 @@ import {
   pickMounting,
 } from '@/utils/pvForm'
 import { formatPln } from '@/utils/money'
+import { grupujBreakdown } from '@/utils/pvBreakdown'
 
 const props = defineProps({
   contact: { type: Object, default: () => ({}) },
@@ -591,6 +582,7 @@ const summary = reactive({
   is_admin: false,
   breakdown: null,
 })
+const grupyBreakdown = computed(() => grupujBreakdown(summary.breakdown))
 
 const successSummary = ref('')
 const dealHref = ref('#')
