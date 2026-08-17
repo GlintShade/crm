@@ -1,10 +1,12 @@
-"""Rdzeń logiki integracji Autenti dla podpisu elektronicznego UMOWY — frappe-free.
+"""Rdzeń logiki integracji Autenti dla podpisu elektronicznego — frappe-free.
 
-Jedyne źródło prawdy o mapowaniu statusów zdalnego procesu dokumentu Autenti na
-statusy `Volteo Umowa.autenti_status`, o tym które statusy blokują ponowne
-wysłanie, i o regule nazewnictwa plików PDF umowy — dzielonej z `crm/api/umowa.py`,
-żeby nazwa oryginalnego PDF-u wysyłanego do podpisu i nazwa PDF-u generowanego
-przez `volteo_umowa_pdf` nigdy nie mogły się rozjechać.
+Od b47 obsługuje DWA dokumenty: UMOWĘ (`Volteo Umowa`) i formularz kredytowy
+(`Volteo Kredyt`). Jedyne źródło prawdy o mapowaniu statusów zdalnego procesu
+dokumentu Autenti na statusy lokalne (`autenti_status`), o tym które statusy
+blokują ponowne wysłanie, i o regule nazewnictwa plików PDF — dzielonej z
+`crm/api/umowa.py` i `crm/api/kredyt.py`, żeby nazwa oryginalnego PDF-u
+wysyłanego do podpisu i nazwa PDF-u generowanego przez `volteo_umowa_pdf`/
+`volteo_kredyt_pdf` nigdy nie mogły się rozjechać.
 """
 
 STATUS_MAP = {
@@ -122,3 +124,47 @@ def nazwa_pliku_umowy(deal: str) -> str:
 def nazwa_pliku_podpisanego(deal: str) -> str:
 	"""Nazwa pliku podpisanego PDF-u umowy pobranego z Autenti po zakończeniu procesu."""
 	return f"Umowa-{deal.replace('/', '-')}-podpisana.pdf"
+
+
+def tytul_dokumentu_kredytu(signer_name: str | None) -> str:
+	"""Tytuł procesu dokumentu Autenti dla formularza kredytowego.
+
+	Analogicznie do `tytul_dokumentu` — puste/`None` imię i nazwisko
+	podpisującego daje tytuł bez myślnika, nie "Formularz kredytowy ProEnergy - "
+	z pustym ogonem.
+	"""
+	if not signer_name or not signer_name.strip():
+		return "Formularz kredytowy ProEnergy"
+	return f"Formularz kredytowy ProEnergy - {signer_name}"
+
+
+def prefiks_pliku_kredytu(deal: str) -> str:
+	"""Prefiks nazwy pliku PDF-u formularza kredytowego dla danej szansy.
+
+	JEDYNE źródło prawdy tego prefiksu — dzielone z `crm/api/kredyt.py`
+	(generowanie PDF-u i sprzątanie starych plików, `_usun_stare_pliki_kredytu`)
+	oraz z odpytywania Autenti po prefiksie (LIKE) przy szukaniu pliku źródłowego
+	do wysyłki. Umowy tych trzech miejsc pękają, jeśli ten wzorzec się rozjedzie.
+	"""
+	return f"Formularz-kredytowy-{deal.replace('/', '-')}"
+
+
+def nazwa_pliku_kredytu(deal: str) -> str:
+	"""Stała, nieznacznikowana nazwa pliku PDF-u formularza kredytowego (niepodpisanego)
+	dla danej szansy — to po prostu nazwa, pod którą bajty PDF-u są wysyłane do
+	Autenti, czyli nazwa, którą podpisujący widzi w interfejsie Autenti.
+
+	W odróżnieniu od plików generowanych lokalnie przez `volteo_kredyt_pdf`
+	(które NADAL mają znacznik czasu w nazwie, żeby ominąć cache przeglądarki —
+	patrz komentarz przy `prefiks_nazwy` w `crm/api/kredyt.py`), ta nazwa jest
+	stała z konwencji (analogicznie do `nazwa_pliku_umowy`), nie z wymogu
+	Autenti — problem cache przeglądarki, który wymusza znacznik czasu na
+	plikach zapisywanych lokalnie, nie dotyczy nazwy użytej przy wysyłce.
+	"""
+	return f"{prefiks_pliku_kredytu(deal)}.pdf"
+
+
+def nazwa_pliku_kredytu_podpisanego(deal: str) -> str:
+	"""Nazwa pliku podpisanego PDF-u formularza kredytowego pobranego z Autenti
+	po zakończeniu procesu."""
+	return f"{prefiks_pliku_kredytu(deal)}-podpisany.pdf"

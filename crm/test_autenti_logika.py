@@ -5,9 +5,13 @@ from crm.integrations.autenti.logika import (
 	SEND_BLOCKED_STATUSES,
 	STATUS_MAP,
 	mozna_wyslac,
+	nazwa_pliku_kredytu,
+	nazwa_pliku_kredytu_podpisanego,
 	nazwa_pliku_podpisanego,
 	nazwa_pliku_umowy,
+	prefiks_pliku_kredytu,
 	tytul_dokumentu,
+	tytul_dokumentu_kredytu,
 	zbuduj_odbiorcow,
 )
 
@@ -197,6 +201,46 @@ class TestAutentiLogika(unittest.TestCase):
 		self.assertEqual(len(wynik), 1)
 		self.assertEqual(wynik[0]["zrodlo"], "klient")
 		self.assertEqual(wynik[0]["email"], "Jan.Kowalski@Example.com")
+
+	def test_p_tytul_dokumentu_kredytu_normalny(self: "TestAutentiLogika") -> None:
+		self.assertEqual(
+			tytul_dokumentu_kredytu("Jan Kowalski"), "Formularz kredytowy ProEnergy - Jan Kowalski"
+		)
+		self.assertIn("-", tytul_dokumentu_kredytu("Jan Kowalski"))
+		self.assertNotIn("—", tytul_dokumentu_kredytu("Jan Kowalski"))
+
+	def test_q_tytul_dokumentu_kredytu_puste_imie(self: "TestAutentiLogika") -> None:
+		self.assertEqual(tytul_dokumentu_kredytu(None), "Formularz kredytowy ProEnergy")
+		self.assertEqual(tytul_dokumentu_kredytu(""), "Formularz kredytowy ProEnergy")
+		self.assertEqual(tytul_dokumentu_kredytu("   "), "Formularz kredytowy ProEnergy")
+		self.assertNotIn("-", tytul_dokumentu_kredytu(None))
+		self.assertNotIn("—", tytul_dokumentu_kredytu(None))
+
+	def test_r_prefiks_pliku_kredytu(self: "TestAutentiLogika") -> None:
+		self.assertEqual(
+			prefiks_pliku_kredytu("PRO/PVME/26/1021"), "Formularz-kredytowy-PRO-PVME-26-1021"
+		)
+
+	def test_s_nazwa_pliku_kredytu(self: "TestAutentiLogika") -> None:
+		self.assertEqual(
+			nazwa_pliku_kredytu("PRO/PVME/26/1021"), "Formularz-kredytowy-PRO-PVME-26-1021.pdf"
+		)
+
+	def test_t_nazwa_pliku_kredytu_podpisanego(self: "TestAutentiLogika") -> None:
+		self.assertEqual(
+			nazwa_pliku_kredytu_podpisanego("PRO/PVME/26/1021"),
+			"Formularz-kredytowy-PRO-PVME-26-1021-podpisany.pdf",
+		)
+
+	def test_u_nazwy_plikow_kredytu_dziela_wspolny_prefiks(self: "TestAutentiLogika") -> None:
+		# Odpytywanie Autenti po prefiksie (LIKE) i sprzątanie starych plików
+		# formularza kredytowego w `crm/api/kredyt.py` zależą od tego, że OBIE
+		# nazwy zaczynają się dokładnie od `prefiks_pliku_kredytu(deal)` —
+		# rozjazd tu po cichu psuje dopasowanie w obu miejscach.
+		deal = "PRO/PVME/26/1021"
+		prefiks = prefiks_pliku_kredytu(deal)
+		self.assertTrue(nazwa_pliku_kredytu(deal).startswith(prefiks))
+		self.assertTrue(nazwa_pliku_kredytu_podpisanego(deal).startswith(prefiks))
 
 
 if __name__ == "__main__":

@@ -27,10 +27,14 @@ niejednoznaczność u źródła, kosztem walidacji po stronie serwera przy każd
 zapisie (`kwota_poprawna`/cyfry-only dla `liczba_osob_na_utrzymaniu`) zamiast
 polegania na typie kolumny.
 
-Formularz kredytowy nie ma żadnej integracji z Autenti — w odróżnieniu od
-`Volteo Umowa` (wysyłka do e-podpisu od b45), ten dokument nie jest tu ani
-wysyłany do podpisu, ani śledzony statusem podpisu; PDF trafia wyłącznie jako
-prywatny załącznik `CRM Deal` do ręcznego dalszego obiegu.
+Od b47 (decyzja właściciela, 2026-08-17) formularz kredytowy JEST wysyłany do
+e-podpisu przez Autenti — endpointy wysyłki/statusu/pobrania żyją w
+`crm/integrations/autenti/api.py`, analogicznie do `Volteo Umowa` (od b45).
+Co pozostaje celowo nieobsłużone: żadna automatyzacja rurociągu
+(`advance_deal_status`) nie reaguje na podpisanie formularza kredytowego —
+w odróżnieniu od umowy, kredyt nie ma własnego etapu w `crm.volteo_pipeline`
+i jego podpisanie niczego w statusie szansy nie przesuwa (patrz też komentarz
+w `volteo_kredyt_pdf` poniżej).
 """
 
 from typing import Any, NoReturn
@@ -41,6 +45,7 @@ from frappe.rate_limiter import rate_limit
 from frappe.utils import cint, getdate
 
 from crm.api.umowa import _dane_kontaktu, _podstawowy_kontakt, _sprawdz_dostep_do_szansy, _sprawdz_role
+from crm.integrations.autenti import logika as autenti_logika
 from crm.volteo_kredyt import GRUPY_DOCHODU, brakujace_pola, kwota_poprawna
 from crm.volteo_kredyt_pdf import zbuduj_kontekst_kredytu
 from crm.volteo_kredyt_render import sciezka_szablonu_kredytu, zloz_kredyt
@@ -594,6 +599,28 @@ def volteo_kredyt_pdf(deal: str) -> dict[str, Any]:
 	if kredyt_doc is None:
 		frappe.throw(_("Najpierw wypełnij formularz kredytowy dla tej szansy sprzedaży."))
 
+	# Formularz wysłany do podpisu (albo już podpisany) nie może zostać po cichu
+	# podmieniony nowym PDF-em, analogicznie do `volteo_umowa_pdf`: (a) bajty
+	# pokazane klientowi w podglądzie muszą zostać identyczne z bajtami wysłanymi
+	# do podpisu, i (b) to jednocześnie chroni sam wysłany plik przed
+	# `_usun_stare_pliki_kredytu` niżej, która sprząta tylko przy generowaniu
+	# PDF-u — skasowanie lokalnego pliku źródłowego NIE zepsułoby samego procesu
+	# podpisu (Autenti dostaje bajty PDF-u przy wysyłce i już do naszego URL-a
+	# pliku nie wraca, a podpisany dokument pobieramy z Autenti, nie z naszego
+	# pliku), ale zniszczyłoby nasze lokalne archiwum dokładnie tego, co zostało
+	# wysłane do podpisu — bramka utrzymuje ten zapis bajt w bajt.
+	# `kredyt_doc.get("autenti_status")` zwraca `None`, gdy Custom Field jeszcze
+	# nie istnieje (przed wdrożeniem schematu) — `None` nie jest w
+	# `SEND_BLOCKED_STATUSES`, więc to bezpieczne względem kolejności wdrożenia
+	# bez dodatkowej bramki.
+	if kredyt_doc.get("autenti_status") in autenti_logika.SEND_BLOCKED_STATUSES:
+		frappe.throw(
+			_(
+				"Formularz kredytowy jest w trakcie podpisywania lub został podpisany — "
+				"nie można wygenerować nowego PDF-u."
+			)
+		)
+
 	braki = brakujace_pola({pole: kredyt_doc.get(pole) for pole in _DANE_POLA_DOZWOLONE})
 	if braki:
 		etykiety = ", ".join(_ETYKIETY_POL.get(pole, pole) for pole in braki)
@@ -631,17 +658,21 @@ def volteo_kredyt_pdf(deal: str) -> dict[str, Any]:
 	except Exception:
 		_blad_generowania_pdf()
 
-	# Nazwa MUSI zawierać znacznik czasu generacji, w odróżnieniu od `Volteo Umowa`
-	# (`crm.integrations.autenti.logika.nazwa_pliku_umowy`), która celowo ma STAŁĄ
-	# nazwę — bo dzieli ją z Autenti (wysyłka do e-podpisu odwołuje się do tego
-	# samego URL-a). Formularz kredytowy nie ma tego ograniczenia, a stała nazwa
-	# okazała się realnym defektem: zmierzony nagłówek odpowiedzi pliku to
-	# `Cache-Control: private,max-age=3600,stale-while-revalidate=86400`, więc pod
-	# STAŁYM URL-em (`/private/files/Formularz-kredytowy-<deal>.pdf`) przeglądarka
-	# przez godzinę serwowała pierwszy wygenerowany render mimo poprawnie
-	# przeliczonego, świeżego pliku po stronie backendu — właściciel zgłosił to
-	# jako "ponowne Generuj PDF pokazuje stary dokument" (sonda 2026-08-15).
-	prefiks_nazwy = f"Formularz-kredytowy-{deal.replace('/', '-')}"
+	# Nazwa MUSI zawierać znacznik czasu generacji — w odróżnieniu od
+	# `autenti_logika.nazwa_pliku_kredytu`, która celowo ma STAŁĄ nazwę (bez
+	# znacznika czasu), bo to właśnie ta stała nazwa jest dzielona z Autenti
+	# (wysyłka do e-podpisu odwołuje się do tego samego URL-a). Ten lokalnie
+	# generowany plik (poniżej) nie ma tego ograniczenia, a stała nazwa okazała
+	# się realnym defektem zanim Autenti wszedł do gry: zmierzony nagłówek
+	# odpowiedzi pliku to `Cache-Control: private,max-age=3600,stale-while-
+	# revalidate=86400`, więc pod STAŁYM URL-em przeglądarka przez godzinę
+	# serwowała pierwszy wygenerowany render mimo poprawnie przeliczonego,
+	# świeżego pliku po stronie backendu — właściciel zgłosił to jako "ponowne
+	# Generuj PDF pokazuje stary dokument" (sonda 2026-08-15). Prefiks sam w
+	# sobie (bez znacznika czasu) pochodzi z `autenti_logika.prefiks_pliku_kredytu`
+	# — JEDYNE źródło prawdy dzielone też ze sprzątaniem starych plików niżej
+	# i z wyszukiwaniem pliku źródłowego przy wysyłce do Autenti.
+	prefiks_nazwy = autenti_logika.prefiks_pliku_kredytu(deal)
 	nazwa_pliku = f"{prefiks_nazwy}-{frappe.utils.now_datetime().strftime('%Y%m%d-%H%M%S')}.pdf"
 	# Sprzątanie idzie PRZED insertem nowego pliku (niżej) i dopasowuje po
 	# `prefiks_nazwy` BEZ znacznika czasu — LIKE 'prefiks_nazwy%.pdf' obejmuje
