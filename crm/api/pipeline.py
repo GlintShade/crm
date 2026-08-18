@@ -39,6 +39,7 @@ from crm.volteo_pipeline import (
 	notatka_for,
 	pipeline_for,
 	pipeline_key_for,
+	podzadania_for,
 	step_index,
 )
 
@@ -54,8 +55,14 @@ def _sprawdz_dostep_do_szansy(deal: str) -> None:
 @frappe.whitelist()
 def volteo_pipeline_get(deal: str) -> dict[str, Any]:
 	"""Zwraca KSZTAŁT paska rurociągu dla rodzaju umowy tej szansy (`steps`,
-	`notes`, `group`) plus migawkę stanu serwera w chwili odpytania (`status`,
-	`current_index`, `off_pipeline*`, `note`).
+	`notes`, `group`, `subtasks`) plus migawkę stanu serwera w chwili odpytania
+	(`status`, `current_index`, `off_pipeline*`, `note`).
+
+	`subtasks` to katalog podzadań (`crm.volteo_pipeline.podzadania_for`) —
+	zależy TYLKO od rodzaju umowy, więc istniejący cache payloadu per-rodzaj
+	na froncie pozostaje ważny. Pusty dict dla rodzajów bez katalogu (OZE, na
+	razie). Odczyt bieżącego STANU podzadań (zaakceptowane/błąd/nd) to osobny
+	endpoint — poza zakresem tej funkcji.
 
 	`group` to uporządkowany podzbiór statusów (kroki rurociągu plus statusy
 	terminalne) do rozwijanej listy statusu na formularzu tej szansy — pusty,
@@ -102,6 +109,7 @@ def volteo_pipeline_get(deal: str) -> dict[str, Any]:
 		"off_pipeline": poza_rurociagiem,
 		"off_pipeline_type": typ_poza_rurociagiem,
 		"note": notatka_for(rodzaj, status),
+		"subtasks": podzadania_for(rodzaj),
 	}
 
 
