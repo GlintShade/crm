@@ -50,8 +50,11 @@
             :class="connectorClass(i)"
           />
           <div
-            class="flex shrink-0 flex-col items-center px-1"
-            :class="capWidth ? 'gap-1.5' : 'gap-1'"
+            class="flex shrink-0 flex-col items-center rounded-md px-1 py-1"
+            :class="[
+              capWidth ? 'gap-1.5' : 'gap-1',
+              rozwinietyEtap === step.status ? 'bg-surface-gray-2' : '',
+            ]"
           >
             <div
               class="flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-medium"
@@ -75,11 +78,19 @@
                  katalog, więc tu nic się nie renderuje i wygląd paska OZE
                  zostaje bez zmian). Hit area >=40px przez padding wokół
                  14px ikony (13px * 2 + 14px = 40px), bez zmiany widocznego
-                 rozmiaru strzałki. -->
+                 rozmiaru strzałki. Stan aktywny (etap rozwinięty) dostaje
+                 wypełnione tło + ciemniejszy kolor ikony — razem z tłem
+                 całej kolumny węzła wyżej to jedyny sygnał, do którego
+                 kroku należy pas mini-zadań poniżej. -->
             <button
               v-if="payload.subtasks?.[step.status]?.length"
               type="button"
-              class="flex items-center justify-center rounded p-[13px] text-ink-gray-4 transition-colors hover:bg-surface-gray-2 hover:text-ink-gray-7"
+              class="flex items-center justify-center rounded p-[13px] transition-colors"
+              :class="
+                rozwinietyEtap === step.status
+                  ? 'bg-surface-gray-3 text-ink-gray-8'
+                  : 'text-ink-gray-4 hover:bg-surface-gray-2 hover:text-ink-gray-7'
+              "
               :aria-expanded="rozwinietyEtap === step.status"
               :aria-label="__('Pokaż zadania etapu')"
               @click="toggleEtap(step.status)"
@@ -107,13 +118,13 @@
     <!-- Pas mini-zadań etapu — celowo POZA divem overflow-x-auto steppera
          wyżej: pełna szerokość, nie scrolluje się razem z paskiem etapów. -->
     <div v-if="rozwinietyEtap" class="mx-auto mt-3 w-full max-w-full border-t pt-3">
-      <div class="mb-2 flex items-center gap-2">
+      <div class="mb-2 flex items-center justify-center gap-2">
         <span class="text-sm font-medium text-ink-gray-8">{{ __(rozwinietyEtap) }}</span>
         <span class="text-xs text-ink-gray-5">
           {{ etapPodsumowanie.zrobione }}/{{ etapPodsumowanie.wszystkie }}
         </span>
       </div>
-      <div class="flex flex-wrap gap-2">
+      <div class="flex flex-wrap justify-center gap-2">
         <template v-for="def in etapZadania" :key="def.klucz">
           <!-- Rep: prostokąt tylko do odczytu, bez popovera (nie widzi/nie
                zmienia stanu podzadań — jak reszta tego paska). -->
@@ -196,10 +207,17 @@
                     @click="ustawStan(def.klucz, 'brak')"
                   />
                 </div>
+                <!-- `label` celowo BEZ __() — msgid "Data" trafia w pl.po
+                     na zupełnie inny, niepowiązany łańcuch UI ("Dane" na
+                     `Activities/DataFields.vue` i kilku innych miejscach) i
+                     katalog .mo zwróciłby to samo tłumaczenie tutaj. Krótkie
+                     "Data" nie potrzebuje tłumaczenia — zostaje gołym
+                     stringiem, żeby nie kolidować z tym cudzym msgid. -->
                 <FormControl
                   v-if="def.z_data"
                   type="date"
-                  :label="__('Data')"
+                  label="Data"
+                  placeholder="Wybierz datę"
                   :modelValue="mapaZadan[def.klucz]?.data || ''"
                   @update:modelValue="(v) => ustawData(def.klucz, v)"
                 />
