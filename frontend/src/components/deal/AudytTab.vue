@@ -42,18 +42,32 @@
       >
         <AudytIcon class="h-10 w-10 text-ink-gray-4" />
         <div class="text-lg font-medium text-ink-gray-7">{{ __('Brak audytu') }}</div>
-        <div class="max-w-md text-sm text-ink-gray-5">
-          {{ __('Wybierz rodzaj instalacji, aby rozpocząć audyt techniczny.') }}
-        </div>
-        <div class="w-64">
-          <FormControl
-            type="select"
-            :options="['', ...requirements.variants]"
-            :placeholder="__('Rodzaj instalacji')"
+        <template v-if="rodzajZDeala">
+          <div class="max-w-md text-sm text-ink-gray-5">
+            {{ rodzajZDeala }} — {{ __('na podstawie kalkulatora') }}
+          </div>
+          <Button
+            variant="solid"
+            :label="__('Rozpocznij audyt')"
+            :loading="creating"
             :disabled="creating"
-            v-model="newVariant"
+            @click="createAudyt(rodzajZDeala)"
           />
-        </div>
+        </template>
+        <template v-else>
+          <div class="max-w-md text-sm text-ink-gray-5">
+            {{ __('Wybierz rodzaj instalacji, aby rozpocząć audyt techniczny.') }}
+          </div>
+          <div class="w-64">
+            <FormControl
+              type="select"
+              :options="['', ...requirements.variants]"
+              :placeholder="__('Rodzaj instalacji')"
+              :disabled="creating"
+              v-model="newVariant"
+            />
+          </div>
+        </template>
       </div>
 
       <!-- Audit form (draft / verification / approved) -->
@@ -398,6 +412,9 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 
 const props = defineProps({
   dealId: { type: String, required: true },
+  // Rodzaj umowy z szansy (custom_rodzaj_umowy) — źródło auto-wyboru rodzaju
+  // instalacji przy tworzeniu audytu; pusty/nieznany ⇒ ręczny wybór.
+  rodzaj: { type: String, default: '' },
 })
 
 // --- Mutable timers/snapshots (plain vars — declared before any `immediate`
@@ -541,6 +558,12 @@ const newVariant = ref('') // bound to the "create audit" picker only
 const creating = ref(false)
 const submitting = ref(false)
 const statusUpdating = ref(false)
+
+// Rodzaj z szansy uznajemy tylko, gdy jest jednym z wariantów audytu
+// zwróconych przez serwer (odpada „Czyste Powietrze", pusty, nieznany).
+const rodzajZDeala = computed(() =>
+  requirements.variants.includes(props.rodzaj) ? props.rodzaj : '',
+)
 
 const { trackOldFile, processPendingDeletions } = useAttachments('Volteo Audyt', props.dealId)
 

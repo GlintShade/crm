@@ -217,7 +217,7 @@
         <ZestawTab v-else-if="tab.name === 'Zestaw'" :deal-id="dealId" />
         <FakturyTab v-else-if="tab.name === 'Faktury'" :deal-id="dealId" />
         <MontazTab v-else-if="tab.name === 'Montaz'" :deal-id="dealId" />
-        <AudytTab v-else-if="tab.name === 'Audyt'" :deal-id="dealId" />
+        <AudytTab v-else-if="tab.name === 'Audyt'" :deal-id="dealId" :rodzaj="doc.custom_rodzaj_umowy || ''" />
         <Activities
           v-else
           v-model:reload="reload"

@@ -74,7 +74,7 @@
         <ZestawTab v-else-if="tab.name === 'Zestaw'" :deal-id="dealId" />
         <FakturyTab v-else-if="tab.name === 'Faktury'" :deal-id="dealId" />
         <MontazTab v-else-if="tab.name === 'Montaz'" :deal-id="dealId" />
-        <AudytTab v-else-if="tab.name === 'Audyt'" :deal-id="dealId" />
+        <AudytTab v-else-if="tab.name === 'Audyt'" :deal-id="dealId" :rodzaj="doc.custom_rodzaj_umowy || ''" />
         <UmowaTab v-else-if="tab.name === 'Umowa'" :deal-id="dealId" />
         <KredytTab v-else-if="tab.name === 'Kredyt'" :deal-id="dealId" />
       </template>
