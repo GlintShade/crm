@@ -26,29 +26,34 @@ po stronie klienta z `props.status` (prawda kliencka, ustawiona przez
 dropdown natychmiast) i `notes`, patrz `frontend/src/utils/dealPipeline.js`.
 """
 
+import json
 from typing import Any
 
 import frappe
 from frappe import _
 
+from crm.permissions.org_hierarchy import BYPASS_ROLES
 from crm.volteo_pipeline import (
 	NOTATKI,
 	OZE_RODZAJE,
+	dozwolone_stany,
 	grupa_for,
 	is_forward,
 	notatka_for,
+	parsuj_podzadania,
 	pipeline_for,
 	pipeline_key_for,
 	podzadania_for,
+	podzadanie_def,
 	step_index,
 )
 
 
-def _sprawdz_dostep_do_szansy(deal: str) -> None:
-	"""Sprawdza istnienie szansy i uprawnienie `read` wywołującego do niej."""
+def _sprawdz_dostep_do_szansy(deal: str, ptype: str = "read") -> None:
+	"""Sprawdza istnienie szansy i uprawnienie `ptype` (domyślnie `read`) wywołującego do niej."""
 	if not deal or not frappe.db.exists("CRM Deal", deal):
 		frappe.throw(_("Szansa sprzedaży nie istnieje."), frappe.DoesNotExistError)
-	if not frappe.has_permission("CRM Deal", "read", deal):
+	if not frappe.has_permission("CRM Deal", ptype, deal):
 		frappe.throw(_("Brak uprawnień do tej szansy sprzedaży."), frappe.PermissionError)
 
 
@@ -111,6 +116,115 @@ def volteo_pipeline_get(deal: str) -> dict[str, Any]:
 		"note": notatka_for(rodzaj, status),
 		"subtasks": podzadania_for(rodzaj),
 	}
+
+
+@frappe.whitelist()
+def volteo_podzadania_get(deal: str) -> dict[str, Any]:
+	"""Zwraca bieżący STAN podzadań tej szansy (`crm.volteo_pipeline.parsuj_podzadania`
+	na `custom_podzadania_json`), plus czy wywołujący ma prawo go zmieniać.
+
+	Wymaga tylko `read` do szansy (jak `volteo_pipeline_get`) — samo podglądanie stanu
+	podzadań (waiting/accepted/error/nd) nie jest tajemnicą kosztową/prowizyjną, więc
+	handlowiec może je widzieć; `editable` mówi frontowi, czy pokazać kontrolki zmiany
+	stanu, a faktyczny zapis i tak jest osobno bramkowany rolą w `volteo_podzadania_set`.
+
+	Front woła po PEŁNEJ, kropkowanej ścieżce `crm.api.pipeline.volteo_podzadania_get`
+	(patrz nagłówek modułu).
+	"""
+	_sprawdz_dostep_do_szansy(deal)
+
+	raw = frappe.db.get_value("CRM Deal", deal, "custom_podzadania_json")
+	return {
+		"stan": parsuj_podzadania(raw),
+		"editable": bool(set(frappe.get_roles()) & BYPASS_ROLES),
+	}
+
+
+@frappe.whitelist()
+def volteo_podzadania_set(
+	deal: str,
+	zadanie: str,
+	stan: str,
+	data: str | None = None,
+	note: str | None = None,
+) -> dict[str, Any]:
+	"""Ustawia (albo cofa, dla `stan="brak"`) stan jednego podzadania CP w mapie
+	`custom_podzadania_json` tej szansy — read-modify-write jak `volteo_audyt_set_verdict`
+	w `ops/crm-audyt.py`, ale jako zwykłe API forka (importy dozwolone, to nie Server Script).
+
+	Zapis zarezerwowany dla ról backoffice/core-admin (`BYPASS_ROLES`) — brama roli jest
+	PIERWSZYM sprawdzeniem, przed nawet istnieniem szansy, więc handlowiec (`Volteo D2D Sales`)
+	dostaje `frappe.PermissionError` niezależnie od tego, czy `deal` w ogóle istnieje.
+
+	Walidacja fail-fast w kolejności: rola → istnienie szansy + prawo `write` → istnienie
+	definicji podzadania dla rodzaju umowy szansy → dozwolony `stan` (`dozwolone_stany`
+	definicji, plus `"brak"` do cofnięcia) → `data` tylko gdy definicja ma `z_data=True` i musi
+	parsować się jako data → `note` do 500 znaków po przycięciu białych znaków.
+
+	Pusty/`None` `data` na wpisie z `z_data=True` USUWA istniejącą datę wpisu (wpis jest
+	w całości nadpisywany nowym, nie łatany) — tak samo `note`. Zmiana jest zapisywana
+	`frappe.db.set_value(..., update_modified=False)` (bez commitu — framework commituje na
+	końcu requestu) i odnotowywana jako komentarz aktywności na szansie (`add_comment`), bo
+	`db.set_value` pomija tworzenie wersji/timeline.
+
+	Sonda żywa (lokalnie, po dodaniu pola przez skrypt ops): rola `Volteo D2D Sales` musi
+	dostać `frappe.PermissionError`; zapis rolą backoffice/core-admin musi wpisać się do
+	`custom_podzadania_json` i pojawić w aktywności szansy jako komentarz.
+
+	Front woła po PEŁNEJ, kropkowanej ścieżce `crm.api.pipeline.volteo_podzadania_set`
+	(patrz nagłówek modułu).
+	"""
+	if not (set(frappe.get_roles()) & BYPASS_ROLES):
+		frappe.throw(_("Brak uprawnień do zmiany stanu podzadań."), frappe.PermissionError)
+
+	_sprawdz_dostep_do_szansy(deal, "write")
+
+	rodzaj = frappe.db.get_value("CRM Deal", deal, "custom_rodzaj_umowy")
+	definicja = podzadanie_def(rodzaj, zadanie)
+	if definicja is None:
+		frappe.throw(_("Nieznane zadanie: {0}").format(zadanie))
+
+	stany_ok = dozwolone_stany(definicja) | {"brak"}
+	if stan not in stany_ok:
+		frappe.throw(_("Nieprawidłowy stan podzadania: {0}").format(stan))
+
+	data = (data or "").strip() or None
+	note = (note or "").strip() or None
+
+	if data and not definicja.get("z_data"):
+		frappe.throw(_("To zadanie nie przyjmuje daty."))
+	if data:
+		try:
+			frappe.utils.getdate(data)
+		except (ValueError, TypeError):
+			frappe.throw(_("Nieprawidłowa data."))
+
+	if note and len(note) > 500:
+		frappe.throw(_("Notatka jest za długa (maksymalnie 500 znaków)."))
+
+	raw = frappe.db.get_value("CRM Deal", deal, "custom_podzadania_json")
+	mapa_biezaca = parsuj_podzadania(raw)
+	mapa = dict(mapa_biezaca)
+
+	if stan == "brak":
+		mapa.pop(zadanie, None)
+		tekst_komentarza = _("Cofnięto stan podzadania: {0}").format(definicja["label"])
+	else:
+		wpis = {"stan": stan, "by": frappe.session.user, "at": frappe.utils.now()}
+		if data:
+			wpis["data"] = data
+		if note:
+			wpis["note"] = note
+		mapa[zadanie] = wpis
+
+		tekst_komentarza = _('Ustawiono stan podzadania „{0}” na: {1}').format(definicja["label"], stan)
+		if note:
+			tekst_komentarza = tekst_komentarza + _(' — „{0}”').format(note)
+
+	frappe.db.set_value("CRM Deal", deal, "custom_podzadania_json", json.dumps(mapa), update_modified=False)
+	frappe.get_doc("CRM Deal", deal).add_comment("Info", tekst_komentarza)
+
+	return {"ok": True, "zadanie": zadanie, "stan": stan, "stan_mapa": mapa}
 
 
 @frappe.whitelist()
