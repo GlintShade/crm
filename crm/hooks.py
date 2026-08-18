@@ -232,6 +232,15 @@ doc_events = {
 		"before_validate": ["crm.api.live_demo.validate_user"],
 		"validate_reset_password": ["crm.api.live_demo.validate_reset_password"],
 	},
+	"File": {
+		# No public files, ever (owner decision, 2026-08-18). See
+		# crm/permissions/file_privacy.py for why `before_validate` (not
+		# `before_insert` or plain `validate`) is the event that actually
+		# enforces this -- `before_insert` alone cannot stop the
+		# controller's own save_file() from writing a public file first.
+		"before_insert": ["crm.permissions.file_privacy.enforce_private_on_insert"],
+		"before_validate": ["crm.permissions.file_privacy.enforce_private_on_validate"],
+	},
 }
 
 # Scheduled Tasks

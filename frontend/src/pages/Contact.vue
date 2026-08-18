@@ -93,6 +93,7 @@
       <div class="border-b">
         <FileUploader
           :validateFile="validateIsImageFile"
+          :upload-args="{ private: true }"
           @success="changeContactImage"
         >
           <template #default="{ openFileSelector, error }">

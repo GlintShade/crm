@@ -86,12 +86,6 @@
             <div class="mb-1">
               {{ convertSize(file.fileObj.size) }}
             </div>
-            <FormControl
-              v-model="file.private"
-              type="checkbox"
-              class="[&>label]:text-sm [&>label]:text-ink-gray-5"
-              :label="__('Private')"
-            />
             <ErrorMessage
               v-if="file.errorMessage"
               class="mt-2"
@@ -131,12 +125,7 @@ import FileTextIcon from '@/components/Icons/FileTextIcon.vue'
 import FileAudioIcon from '@/components/Icons/FileAudioIcon.vue'
 import FileVideoIcon from '@/components/Icons/FileVideoIcon.vue'
 import { formatDate, convertSize } from '@/utils'
-import {
-  FormControl,
-  CircularProgressBar,
-  createResource,
-  toast,
-} from 'frappe-ui'
+import { CircularProgressBar, createResource, toast } from 'frappe-ui'
 import { ref, onMounted, watch, onUnmounted } from 'vue'
 
 const props = defineProps({
@@ -162,7 +151,6 @@ const allowTakePhoto = ref(
   props.options.allowTakePhoto || window.navigator.mediaDevices || false,
 )
 const restrictions = ref(props.options.restrictions || {})
-const makeAttachmentsPublic = ref(props.options.makeAttachmentsPublic || false)
 
 onMounted(() => {
   createResource({
@@ -180,7 +168,6 @@ onMounted(() => {
         maxNumberOfFiles: data.max_number_of_files,
         ...propRestrictions,
       }
-      makeAttachmentsPublic.value = Boolean(data.make_attachments_public)
     },
   })
 })
@@ -285,7 +272,11 @@ function addFiles(fileArray) {
         requestSucceeded: false,
         errorMessage: null,
         uploading: false,
-        private: !makeAttachmentsPublic.value,
+        // No public files, ever (owner decision) -- always private. Kept as
+        // a field (rather than dropped) because FilesUploader.vue's
+        // attachFile() still reads file.private when building upload args;
+        // filesUploaderHandler.ts ignores that value server-side too.
+        private: true,
       }
     })
 

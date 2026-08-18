@@ -13,6 +13,7 @@
   <div v-if="organization.doc" class="flex flex-col h-full overflow-hidden">
     <FileUploader
       :validateFile="validateIsImageFile"
+      :upload-args="{ private: true }"
       @success="changeOrganizationImage"
     >
       <template #default="{ openFileSelector, error }">
