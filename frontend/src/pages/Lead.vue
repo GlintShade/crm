@@ -69,6 +69,7 @@
       </div>
       <FileUploader
         :validateFile="validateIsImageFile"
+        :upload-args="{ private: true }"
         @success="(file) => updateField('image', file.file_url)"
       >
         <template #default="{ openFileSelector }">

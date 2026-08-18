@@ -1,6 +1,7 @@
 <template>
   <FileUploader
     :file-types="image_type"
+    :upload-args="{ private: true }"
     @success="(file) => emit('upload', file.file_url)"
   >
     <template #default="{ progress, uploading, openFileSelector }">

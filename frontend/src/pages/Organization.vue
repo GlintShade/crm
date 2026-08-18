@@ -23,6 +23,7 @@
       <div class="border-b">
         <FileUploader
           :validateFile="validateIsImageFile"
+          :upload-args="{ private: true }"
           @success="changeOrganizationImage"
         >
           <template #default="{ openFileSelector, error }">

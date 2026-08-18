@@ -35,23 +35,6 @@
           <TimelineTimestamp :date="attachment.creation" />
           <div class="flex gap-1">
             <Button
-              v-if="canManageAttachmentVisibility"
-              :tooltip="
-                attachment.is_private ? __('Make Public') : __('Make Private')
-              "
-              class="!size-5"
-              @click.stop="
-                togglePrivate(attachment.name, attachment.is_private)
-              "
-            >
-              <template #icon>
-                <FeatherIcon
-                  :name="attachment.is_private ? 'lock' : 'unlock'"
-                  class="size-3 text-ink-gray-7"
-                />
-              </template>
-            </Button>
-            <Button
               :tooltip="__('Delete Attachment')"
               class="!size-5"
               @click.stop="() => deleteAttachment(attachment.name)"
@@ -78,9 +61,7 @@ import FileAudioIcon from '@/components/Icons/FileAudioIcon.vue'
 import FileTextIcon from '@/components/Icons/FileTextIcon.vue'
 import FileVideoIcon from '@/components/Icons/FileVideoIcon.vue'
 import { globalStore } from '@/stores/global'
-import { usersStore } from '@/stores/users'
 import { call } from 'frappe-ui'
-import { computed } from 'vue'
 import TimelineTimestamp from '@/components/Activities/TimelineTimestamp.vue'
 import { convertSize, isImage } from '@/utils'
 
@@ -92,45 +73,8 @@ const emit = defineEmits(['reload'])
 
 const { $dialog } = globalStore()
 
-// Flipping a private attachment to public is a data-exposure footgun (a
-// signed contract/PESEL-bearing file becomes downloadable with no auth) —
-// restrict the toggle to admins, same combined check DealsListView.vue uses
-// for its bulk-action gating (System Manager via isAdmin, folded into
-// isVolteoAdmin together with the Volteo-specific `Volteo Core Admin` role).
-const { isVolteoAdmin } = usersStore()
-const canManageAttachmentVisibility = computed(() => isVolteoAdmin())
-
 function openFile(attachment) {
   window.open(attachment.file_url, '_blank')
-}
-
-function togglePrivate(fileName, isPrivate) {
-  let changeTo = isPrivate ? __('public') : __('private')
-  let title = __('Make attachment {0}', [changeTo])
-  let message = __('Are you sure you want to make this attachment {0}?', [
-    changeTo,
-  ])
-  $dialog({
-    title,
-    message,
-    actions: [
-      {
-        label: __('Make {0}', [changeTo]),
-        variant: 'solid',
-        onClick: async (close) => {
-          await call('frappe.client.set_value', {
-            doctype: 'File',
-            name: fileName,
-            fieldname: {
-              is_private: !isPrivate,
-            },
-          })
-          emit('reload')
-          close()
-        },
-      },
-    ],
-  })
 }
 
 function deleteAttachment(fileName) {

@@ -13,6 +13,7 @@
   <div v-if="contact.doc" class="flex flex-col h-full overflow-hidden">
     <FileUploader
       :validateFile="validateIsImageFile"
+      :upload-args="{ private: true }"
       @success="changeContactImage"
     >
       <template #default="{ openFileSelector, error }">

@@ -101,7 +101,10 @@ def add_attachments(name: str, attachments: Iterable[str | dict]) -> None:
 			attach = frappe.db.get_value("File", {"name": a}, ["file_url", "is_private"], as_dict=1)
 			file_args = {
 				"file_url": attach.file_url,
-				"is_private": attach.is_private,
+				# Never inherit the source File's is_private -- no public files, ever.
+				# (crm.permissions.file_privacy re-enforces this on save regardless,
+				# but this stays hard-coded so intent doesn't depend on the hook.)
+				"is_private": 1,
 			}
 		elif isinstance(a, dict) and "fcontent" in a and "fname" in a:
 			# dict returned by frappe.attach_print()

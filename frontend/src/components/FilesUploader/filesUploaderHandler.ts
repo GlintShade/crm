@@ -103,7 +103,10 @@ class FilesUploadHandler {
       if (options.fileObj && file?.name) {
         formData.append('file', options.fileObj, file.name)
       }
-      formData.append('is_private', options.private || false ? '1' : '0')
+      // No public files, ever (owner decision) -- always upload private,
+      // regardless of what the caller passes. The server enforces this too
+      // (crm.permissions.file_privacy), this just avoids the round trip.
+      formData.append('is_private', '1')
       formData.append('folder', options.folder || 'Home')
 
       if (options.fileUrl) {
