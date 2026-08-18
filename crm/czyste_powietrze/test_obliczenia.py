@@ -6,6 +6,7 @@ from crm.czyste_powietrze.obliczenia import (
 	CPDaneNiekompletne,
 	CPNiedozwolonaKombinacja,
 	CPPozycjaNieaktywna,
+	baza_pracy,
 	oblicz_oferte,
 )
 
@@ -87,25 +88,63 @@ KATALOG = {
 		"koszt_staly": "3000",
 		"aktywny": True,
 	},
-	"strop": {
+	# strop/dach: warianty materiałowe (patrz _WARIANTY_TERMO w obliczenia.py). Cena i dotacja
+	# są CELOWO identyczne w obrębie każdej pary strop_*/dach_* na tym samym poziomie -- to
+	# gwarancja produktowa (klient płaci i dostaje dotację tak samo niezależnie od materiału);
+	# koszt_proenergy/prowizja różnią się per wariant. dach ma tylko piana/welna (bez
+	# styropianu).
+	"strop_piana": {
 		"kategoria": "termo",
 		"jednostka": "m2",
 		"cena_netto": "220",
 		"dotacja": {"podstawowy": "88", "podwyzszony": "154", "najwyzszy": "220"},
 		"limit_dotacji": {"podstawowy": None, "podwyzszony": None, "najwyzszy": None},
-		"prowizja": "10",
+		"prowizja": "30",
+		"koszt_proenergy": "95",
+		"koszt_staly": "0",
+		"aktywny": True,
+	},
+	"strop_welna": {
+		"kategoria": "termo",
+		"jednostka": "m2",
+		"cena_netto": "220",
+		"dotacja": {"podstawowy": "88", "podwyzszony": "154", "najwyzszy": "220"},
+		"limit_dotacji": {"podstawowy": None, "podwyzszony": None, "najwyzszy": None},
+		"prowizja": "28",
+		"koszt_proenergy": "105",
+		"koszt_staly": "0",
+		"aktywny": True,
+	},
+	"strop_styropian": {
+		"kategoria": "termo",
+		"jednostka": "m2",
+		"cena_netto": "220",
+		"dotacja": {"podstawowy": "88", "podwyzszony": "154", "najwyzszy": "220"},
+		"limit_dotacji": {"podstawowy": None, "podwyzszony": None, "najwyzszy": None},
+		"prowizja": "25",
 		"koszt_proenergy": "120",
 		"koszt_staly": "0",
 		"aktywny": True,
 	},
-	"dach": {
+	"dach_piana": {
 		"kategoria": "termo",
 		"jednostka": "m2",
 		"cena_netto": "220",
 		"dotacja": {"podstawowy": "88", "podwyzszony": "154", "najwyzszy": "220"},
 		"limit_dotacji": {"podstawowy": None, "podwyzszony": None, "najwyzszy": None},
-		"prowizja": "10",
-		"koszt_proenergy": "120",
+		"prowizja": "30",
+		"koszt_proenergy": "95",
+		"koszt_staly": "0",
+		"aktywny": True,
+	},
+	"dach_welna": {
+		"kategoria": "termo",
+		"jednostka": "m2",
+		"cena_netto": "220",
+		"dotacja": {"podstawowy": "88", "podwyzszony": "154", "najwyzszy": "220"},
+		"limit_dotacji": {"podstawowy": None, "podwyzszony": None, "najwyzszy": None},
+		"prowizja": "28",
+		"koszt_proenergy": "105",
 		"koszt_staly": "0",
 		"aktywny": True,
 	},
@@ -224,9 +263,11 @@ class TestObliczenia(unittest.TestCase):
 		#   dotacja_termo_surowa = 12870 + 7920 = 20790, ograniczona limitem kwotowym 19200
 		#   -> dotacja_ograniczona_o = 20790 - 19200 = 1590.
 		#   wklad_termo = 63504 - 19200 = 44304 = wklad_wlasny (brak zrodla/co).
-		#   prowizja: elewacja 130 x 10 = 1300 (na PEŁNEJ powierzchni), strop 90 x 10 = 900
-		#   -> 2200 (prowizja NIE jest redukowana, tylko dotacja).
-		#   koszt: elewacja 130 x 220 + 3000 = 31600, strop 90 x 120 = 10800 -> 42400.
+		#   Brak "material" -> strop rozstrzyga się na domyślny wariant strop_piana (prowizja
+		#   30, koszt_proenergy 95). prowizja: elewacja 130 x 10 = 1300 (na PEŁNEJ
+		#   powierzchni), strop_piana 90 x 30 = 2700 -> 4000 (prowizja NIE jest redukowana,
+		#   tylko dotacja).
+		#   koszt: elewacja 130 x 220 + 3000 = 31600, strop_piana 90 x 95 = 8550 -> 40150.
 		wejscie = _wejscie(standard="od80do140")
 		wejscie["powierzchnia_m2"] = "100"
 		wejscie["zrodlo_ciepla"] = None
@@ -234,9 +275,9 @@ class TestObliczenia(unittest.TestCase):
 		wejscie["prace"]["strop"]["wybrana"] = True
 		wynik = self.policz(wejscie)
 		self.assertEqual(wynik["wklad_wlasny"], Decimal("44304.00"))
-		self.assertEqual(wynik["prowizja_handlowa"], Decimal("2200.00"))
+		self.assertEqual(wynik["prowizja_handlowa"], Decimal("4000.00"))
 		self.assertEqual(wynik["dotacja_ograniczona_o"], Decimal("1590.00"))
-		self.assertEqual(wynik["wewnetrzne"]["koszt_calkowity"], Decimal("42400.00"))
+		self.assertEqual(wynik["wewnetrzne"]["koszt_calkowity"], Decimal("40150.00"))
 
 	def test_f_do_ustalenia_z_praca(self: "TestObliczenia") -> None:
 		wejscie = _wejscie(standard="do80")
@@ -313,13 +354,68 @@ class TestObliczenia(unittest.TestCase):
 		grupa_termo = next(g for g in wynik["grupy"] if g["kod"] == "termo")
 		self.assertEqual(grupa_termo["dotacja"], Decimal("0.00"))
 
-	def test_s_dach_stawki_jak_strop(self: "TestObliczenia") -> None:
-		wejscie = _wejscie()
-		wejscie["powierzchnia_m2"] = "100"
-		wejscie["zrodlo_ciepla"] = None
-		wejscie["prace"]["dach"]["wybrana"] = True
-		wynik = self.policz(wejscie)
-		self.assertEqual(wynik["wklad_wlasny"], Decimal("19448.00"))
+	def test_s_dach_piana_cena_jak_strop_piana(self: "TestObliczenia") -> None:
+		"""dach_piana i strop_piana wyceniają się KLIENTOWI identycznie (ta sama cena
+		netto/dotacja dla tej samej powierzchni) mimo osobnych pozycji katalogowych -- różnią
+		się wyłącznie kosztem/prowizją wewnętrzną, nigdy stroną publiczną wyceny. Powierzchnia
+		musi być podana RĘCZNIE i identycznie dla obu prac -- mnozniki "strop" (0.9) i "dach"
+		(1.3) różnią się, więc porównanie przez wspólne powierzchnia_m2 (automatyczne m2)
+		porównywałoby różne powierzchnie, nie tę samą stawkę."""
+		def policz_dla_pracy(kod: str) -> dict[str, object]:
+			wejscie = _wejscie()
+			wejscie["zrodlo_ciepla"] = None
+			wejscie["prace"][kod] = {"wybrana": True, "m2": "100"}
+			return self.policz(wejscie)
+
+		wynik_dach = policz_dla_pracy("dach")
+		wynik_strop = policz_dla_pracy("strop")
+		self.assertEqual(wynik_dach["linie"][0]["kod"], "dach_piana")
+		self.assertEqual(wynik_strop["linie"][0]["kod"], "strop_piana")
+		self.assertEqual(wynik_dach["linie"][0]["netto"], Decimal("22000.00"))
+		self.assertEqual(wynik_dach["linie"][0]["netto"], wynik_strop["linie"][0]["netto"])
+		self.assertEqual(wynik_dach["linie"][0]["brutto"], wynik_strop["linie"][0]["brutto"])
+		self.assertEqual(wynik_dach["dotacja_laczna"], wynik_strop["dotacja_laczna"])
+		self.assertEqual(wynik_dach["wklad_wlasny"], wynik_strop["wklad_wlasny"])
+		self.assertEqual(wynik_dach["wklad_wlasny"], Decimal("14960.00"))
+		# Kod katalogowy różni się (rozstrzygnięty na domyślny wariant piana każdej pracy),
+		# ale koszt/prowizja wewnętrzna są takie same między dach_piana i strop_piana -- to
+		# zbieg wartości w tej fixturze (oba warianty piana mają identyczne stawki), nie
+		# gwarancja produktowa; gwarancją jest wyłącznie identyczna cena/dotacja klienta
+		# sprawdzona wyżej.
+		self.assertEqual(
+			wynik_dach["wewnetrzne"]["linie"][0]["koszt"], wynik_strop["wewnetrzne"]["linie"][0]["koszt"]
+		)
+
+	def test_s2_warianty_strop_i_dach_roznia_sie_tylko_kosztem_i_prowizja(
+		self: "TestObliczenia",
+	) -> None:
+		"""Wełna i styropian kosztują/rozliczają się inaczej niż piana, ale cena i dotacja dla
+		klienta pozostają identyczne w obrębie tej samej pracy (strop lub dach) -- to jest
+		gwarancja produktowa tej zmiany."""
+		def policz_wariant(kod: str, material: str) -> dict[str, object]:
+			wejscie = _wejscie()
+			wejscie["powierzchnia_m2"] = "100"
+			wejscie["zrodlo_ciepla"] = None
+			wejscie["prace"][kod] = {"wybrana": True, "m2": None, "material": material}
+			return self.policz(wejscie)
+
+		for kod, warianty in (
+			("strop", ("strop_piana", "strop_welna", "strop_styropian")),
+			("dach", ("dach_piana", "dach_welna")),
+		):
+			wyniki = [policz_wariant(kod, material) for material in warianty]
+			for wynik in wyniki[1:]:
+				self.assertEqual(wynik["linie"][0]["netto"], wyniki[0]["linie"][0]["netto"])
+				self.assertEqual(wynik["linie"][0]["brutto"], wyniki[0]["linie"][0]["brutto"])
+				self.assertEqual(wynik["wklad_wlasny"], wyniki[0]["wklad_wlasny"])
+			kody_wewnetrzne = [w["wewnetrzne"]["linie"][0]["kod"] for w in wyniki]
+			self.assertEqual(kody_wewnetrzne, list(warianty))
+			koszty = {w["wewnetrzne"]["linie"][0]["koszt"] for w in wyniki}
+			prowizje = {w["wewnetrzne"]["linie"][0]["prowizja"] for w in wyniki}
+			# Koszty/prowizje różnią się między wariantami tej samej pracy -- inaczej test
+			# byłby bez znaczenia (mógłby przejść nawet bez działających wariantów).
+			self.assertGreater(len(koszty), 1)
+			self.assertGreater(len(prowizje), 1)
 
 	def test_t_piec_i_zero_grzejnikow(self: "TestObliczenia") -> None:
 		wejscie = _wejscie()
@@ -646,7 +742,7 @@ class TestObliczenia(unittest.TestCase):
 		wejscie["prace"]["elewacja"] = {"wybrana": True, "m2": "0"}
 		wejscie["prace"]["strop"]["wybrana"] = True
 		wynik = self.policz(wejscie)
-		self.assertEqual([linia["kod"] for linia in wynik["linie"]], ["strop"])
+		self.assertEqual([linia["kod"] for linia in wynik["linie"]], ["strop_piana"])
 
 	def test_praca_z_dodatnia_iloscia_nadal_daje_linie(self: "TestObliczenia") -> None:
 		"""Strażnik przed nadmiernym pomijaniem: dodatnia ilość (drzwi i m2) musi nadal
@@ -678,6 +774,83 @@ class TestObliczenia(unittest.TestCase):
 		niezmienione tą zmianą (przegrupowanie dotyczy wyłącznie prezentacji, nie liczb)."""
 		wynik = self.policz(_wejscie("najwyzszy"))
 		self.assertEqual(wynik["wklad_wlasny"], Decimal("2816.00"))
+
+	def test_warianty_termo_koszt_i_prowizja_per_wariant(self: "TestObliczenia") -> None:
+		"""Każdy z pięciu wariantów strop/dach, wybrany jawnie przez "material", generuje
+		poprawny koszt i prowizję na linii wewnętrznej dla znanej powierzchni. strop ma
+		mnoznik 0.9 (100 m2 budynku -> 90 m2 pracy), dach ma mnoznik 1.3 (100 m2 -> 130 m2)."""
+		oczekiwane = {
+			"strop_piana": ("strop", Decimal("90"), Decimal("8550.00"), Decimal("2700.00")),
+			"strop_welna": ("strop", Decimal("90"), Decimal("9450.00"), Decimal("2520.00")),
+			"strop_styropian": ("strop", Decimal("90"), Decimal("10800.00"), Decimal("2250.00")),
+			"dach_piana": ("dach", Decimal("130"), Decimal("12350.00"), Decimal("3900.00")),
+			"dach_welna": ("dach", Decimal("130"), Decimal("13650.00"), Decimal("3640.00")),
+		}
+		for material, (kod_bazowy, m2, koszt_oczekiwany, prowizja_oczekiwana) in oczekiwane.items():
+			with self.subTest(material=material):
+				wejscie = _wejscie()
+				wejscie["powierzchnia_m2"] = "100"
+				wejscie["zrodlo_ciepla"] = None
+				wejscie["prace"][kod_bazowy] = {"wybrana": True, "m2": None, "material": material}
+				wynik = self.policz(wejscie)
+				linia = wynik["wewnetrzne"]["linie"][0]
+				self.assertEqual(linia["kod"], material)
+				self.assertEqual(linia["ilosc_rozliczeniowa"], m2)
+				self.assertEqual(linia["koszt"], koszt_oczekiwany)
+				self.assertEqual(linia["prowizja"], prowizja_oczekiwana)
+
+	def test_material_domyslny_przy_braku_i_pustym_stringu(self: "TestObliczenia") -> None:
+		"""Brak klucza "material" i pusty string "" oba rozstrzygają się na domyślny wariant
+		(piana) -- literówka jest błędem (patrz test niżej), ale brak wyboru nie."""
+		for wartosc_material in (None, ""):
+			for kod_bazowy, domyslny in (("strop", "strop_piana"), ("dach", "dach_piana")):
+				with self.subTest(kod_bazowy=kod_bazowy, wartosc_material=wartosc_material):
+					wejscie = _wejscie()
+					wejscie["powierzchnia_m2"] = "100"
+					wejscie["zrodlo_ciepla"] = None
+					praca: dict[str, object] = {"wybrana": True, "m2": None}
+					if wartosc_material is not None:
+						praca["material"] = wartosc_material
+					wejscie["prace"][kod_bazowy] = praca
+					wynik = self.policz(wejscie)
+					self.assertEqual(wynik["linie"][0]["kod"], domyslny)
+
+	def test_nieznany_material_rzuca_blad(self: "TestObliczenia") -> None:
+		wejscie = _wejscie()
+		wejscie["powierzchnia_m2"] = "100"
+		wejscie["zrodlo_ciepla"] = None
+		wejscie["prace"]["strop"] = {"wybrana": True, "m2": None, "material": "strop_bzdura"}
+		with self.assertRaises(CPDaneNiekompletne):
+			self.policz(wejscie)
+
+	def test_dane_klienta_niezmienne_wzgledem_wariantu_stropu(self: "TestObliczenia") -> None:
+		"""Najważniejsza gwarancja tej zmiany: netto, brutto, dotacja i wklad_wlasny są
+		identyczne niezależnie od wybranego wariantu materiałowego stropu -- różni się
+		wyłącznie koszt/prowizja wewnętrzna (sprawdzone osobno wyżej)."""
+		def policz_wariant(material: str) -> dict[str, object]:
+			wejscie = _wejscie(standard="powyzej140")
+			wejscie["powierzchnia_m2"] = "100"
+			wejscie["zrodlo_ciepla"] = None
+			wejscie["prace"]["strop"] = {"wybrana": True, "m2": None, "material": material}
+			return self.policz(wejscie)
+
+		bazowy = policz_wariant("strop_piana")
+		for material in ("strop_welna", "strop_styropian"):
+			with self.subTest(material=material):
+				wynik = policz_wariant(material)
+				self.assertEqual(wynik["linie"][0]["netto"], bazowy["linie"][0]["netto"])
+				self.assertEqual(wynik["linie"][0]["brutto"], bazowy["linie"][0]["brutto"])
+				self.assertEqual(wynik["dotacja_laczna"], bazowy["dotacja_laczna"])
+				self.assertEqual(wynik["wklad_wlasny"], bazowy["wklad_wlasny"])
+
+	def test_baza_pracy_mapuje_warianty_i_zostawia_pozostale_kody(self: "TestObliczenia") -> None:
+		self.assertEqual(baza_pracy("strop_piana"), "strop")
+		self.assertEqual(baza_pracy("strop_welna"), "strop")
+		self.assertEqual(baza_pracy("strop_styropian"), "strop")
+		self.assertEqual(baza_pracy("dach_piana"), "dach")
+		self.assertEqual(baza_pracy("dach_welna"), "dach")
+		for kod_bez_wariantow in ("okna", "elewacja", "drzwi"):
+			self.assertEqual(baza_pracy(kod_bez_wariantow), kod_bez_wariantow)
 
 
 if __name__ == "__main__":

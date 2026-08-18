@@ -228,8 +228,8 @@ describe('Czyste Powietrze form logic', () => {
         termoWlaczone: false,
         prace: {
           elewacja: { wybrana: false, reczne: false, m2: '' },
-          strop: { wybrana: false, reczne: false, m2: '' },
-          dach: { wybrana: false, reczne: false, m2: '' },
+          strop: { wybrana: false, reczne: false, m2: '', material: 'strop_piana' },
+          dach: { wybrana: false, reczne: false, m2: '', material: 'dach_piana' },
           okna: { wybrana: false, reczne: false, m2: '' },
           drzwi: { wybrana: false, ilosc: '' },
         },
@@ -270,6 +270,44 @@ describe('Czyste Powietrze form logic', () => {
         })
       },
     )
+
+    it('emits material for strop and dach, defaulting from pustyFormularz', () => {
+      const form = pustyFormularz()
+      form.termoWlaczone = true
+      form.prace.strop.wybrana = true
+      form.prace.dach.wybrana = true
+
+      const result = buildWejscie(form)
+
+      expect(result.prace.strop.material).toBe('strop_piana')
+      expect(result.prace.dach.material).toBe('dach_piana')
+    })
+
+    it('passes through an explicitly selected material variant', () => {
+      const form = pustyFormularz()
+      form.termoWlaczone = true
+      form.prace.strop = { wybrana: true, reczne: false, m2: '', material: 'strop_welna' }
+      form.prace.dach = { wybrana: true, reczne: false, m2: '', material: 'dach_welna' }
+
+      const result = buildWejscie(form)
+
+      expect(result.prace.strop.material).toBe('strop_welna')
+      expect(result.prace.dach.material).toBe('dach_welna')
+    })
+
+    it('does not emit a material key at all for works without variants', () => {
+      const form = pustyFormularz()
+      form.termoWlaczone = true
+      form.prace.elewacja.wybrana = true
+      form.prace.okna.wybrana = true
+      form.prace.drzwi = { wybrana: true, ilosc: '1' }
+
+      const result = buildWejscie(form)
+
+      expect(result.prace.elewacja).not.toHaveProperty('material')
+      expect(result.prace.okna).not.toHaveProperty('material')
+      expect(result.prace.drzwi).not.toHaveProperty('material')
+    })
 
     it('passes permitted heat-pump radiators through when the source scope is on', () => {
       const form = pustyFormularz()
@@ -354,7 +392,7 @@ describe('Czyste Powietrze form logic', () => {
       form.termoWlaczone = true
       form.powierzchnia = '120'
       form.prace.elewacja = { wybrana: true, reczne: true, m2: '123.45' }
-      form.prace.strop = { wybrana: true, reczne: false, m2: '999' }
+      form.prace.strop = { wybrana: true, reczne: false, m2: '999', material: 'strop_welna' }
       form.prace.drzwi = { wybrana: true, ilosc: '2.7' }
       const before = JSON.parse(JSON.stringify(form))
 
@@ -373,8 +411,8 @@ describe('Czyste Powietrze form logic', () => {
         powierzchnia_m2: 120,
         prace: {
           elewacja: { wybrana: true, m2: '123.45' },
-          strop: { wybrana: true, m2: null },
-          dach: { wybrana: false, m2: null },
+          strop: { wybrana: true, m2: null, material: 'strop_welna' },
+          dach: { wybrana: false, m2: null, material: 'dach_piana' },
           okna: { wybrana: false, m2: null },
           drzwi: { wybrana: true, ilosc: 2 },
         },
@@ -394,8 +432,8 @@ describe('Czyste Powietrze form logic', () => {
         form.iloscGrzejnikow = 0
         form.powierzchnia = '100'
         form.prace.elewacja = { wybrana: true, reczne: false, m2: '' }
-        form.prace.strop = { wybrana: true, reczne: true, m2: '50' }
-        form.prace.dach = { wybrana: false, reczne: false, m2: '' }
+        form.prace.strop = { wybrana: true, reczne: true, m2: '50', material: 'strop_piana' }
+        form.prace.dach = { wybrana: false, reczne: false, m2: '', material: 'dach_piana' }
         form.prace.okna = { wybrana: true, reczne: false, m2: '' }
         form.prace.drzwi = { wybrana: true, ilosc: '2' }
         return form

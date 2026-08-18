@@ -2,6 +2,10 @@ export const POZIOMY = ['podstawowy', 'podwyzszony', 'najwyzszy']
 export const STANDARDY = ['do80', 'od80do140', 'powyzej140']
 export const ZRODLA = ['pompa_ciepla', 'pellet', 'zgazowujacy']
 export const PRACE_M2 = ['elewacja', 'strop', 'dach', 'okna']
+export const WARIANTY_PRAC = {
+  strop: ['strop_piana', 'strop_welna', 'strop_styropian'],
+  dach: ['dach_piana', 'dach_welna'],
+}
 export const GOSPODARSTWA = ['jednoosobowe', 'wieloosobowe']
 export const PROGI_DOCHODU = ['niski', 'sredni', 'wysoki']
 // Progi z Programu Priorytetowego Czyste Powietrze (nabór od 2026-07-20), §8.2 pkt 2
@@ -32,8 +36,8 @@ export function pustyFormularz() {
     termoWlaczone: false,
     prace: {
       elewacja: { wybrana: false, reczne: false, m2: '' },
-      strop: { wybrana: false, reczne: false, m2: '' },
-      dach: { wybrana: false, reczne: false, m2: '' },
+      strop: { wybrana: false, reczne: false, m2: '', material: 'strop_piana' },
+      dach: { wybrana: false, reczne: false, m2: '', material: 'dach_piana' },
       okna: { wybrana: false, reczne: false, m2: '' },
       drzwi: { wybrana: false, ilosc: '' },
     },
@@ -234,6 +238,7 @@ export function buildWejscie(form) {
     prace[kod] = {
       wybrana: termoWlaczone ? work.wybrana : false,
       m2: manualM2(work),
+      ...(WARIANTY_PRAC[kod] ? { material: work.material } : {}),
     }
   }
 

@@ -23,6 +23,7 @@ from crm.czyste_powietrze.obliczenia import (
 	CPDaneNiekompletne,
 	CPNiedozwolonaKombinacja,
 	CPPozycjaNieaktywna,
+	baza_pracy,
 	oblicz_oferte,
 )
 
@@ -103,6 +104,12 @@ def _czy_reczna_ilosc(kod: str, wejscie: dict[str, Any]) -> bool:
 	ciepła, CWU i grzejniki nigdy nie są "ręczną powierzchnią" w tym sensie, więc kody
 	spoza _PRACE_M2_RECZNE (w tym "drzwi") zawsze dają False.
 	"""
+	# Pułapka wariantów materiału (obliczenia.py::_kod_katalogowy): linie termo z wariantem
+	# (np. "strop_piana") docierają tu z linia["kod"] JUŻ podmienionym na kod wariantu, który
+	# nie jest kluczem w _PRACE_M2_RECZNE (ta krotka trzyma tylko kody BAZOWE). Bez tej
+	# normalizacji funkcja po cichu zwróciłaby False dla każdej ręcznie wpisanej powierzchni
+	# stropu/dachu -- reczna_ilosc zapisałoby się jako 0 mimo ręcznego wpisu handlowca.
+	kod = baza_pracy(kod)
 	if kod not in _PRACE_M2_RECZNE:
 		return False
 	prace = wejscie.get("prace")

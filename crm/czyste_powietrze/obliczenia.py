@@ -21,8 +21,23 @@ class CPNiedozwolonaKombinacja(CPBlad):
 _POZIOMY = ("podstawowy", "podwyzszony", "najwyzszy")
 _STANDARDY = ("do80", "od80do140", "powyzej140")
 _PRACE_TERMO = ("elewacja", "strop", "dach", "okna", "drzwi")
+# Warianty materiałowe dla prac, które je mają -- pierwszy element każdej krotki jest
+# DOMYŚLNY (piana PUR, tańsza dla firmy przy tej samej cenie dla klienta) i jednocześnie
+# pierwszy w kolejności rozwijanej listy pokazywanej w UI: kolejność krotki to zarówno
+# priorytet domyślny, jak i kolejność wyświetlania.
+_WARIANTY_TERMO = {
+	"strop": ("strop_piana", "strop_welna", "strop_styropian"),
+	"dach": ("dach_piana", "dach_welna"),
+}
+_DOMYSLNY_WARIANT = {"strop": "strop_piana", "dach": "dach_piana"}
+_BAZA_WARIANTU = {w: baza for baza, warianty in _WARIANTY_TERMO.items() for w in warianty}
 _ZERO = Decimal("0")
 _JEDEN = Decimal("1")
+
+
+def baza_pracy(kod: str) -> str:
+	"""Zwraca kod bazowy pracy dla kodu wariantu; dla kodów bez wariantów zwraca wejście."""
+	return _BAZA_WARIANTU.get(kod, kod)
 
 
 def _blad(komunikat: str) -> NoReturn:
@@ -203,6 +218,25 @@ def _powierzchnia_pracy(
 	return m2, None
 
 
+def _kod_katalogowy(kod: str, praca: dict[str, Any]) -> str:
+	"""Rozstrzyga kod pozycji katalogowej dla pracy termo, uwzględniając wariant materiału.
+
+	Dla prac bez wariantów (elewacja, okna, drzwi) zwraca kod bez zmian. Dla prac z
+	wariantami (patrz _WARIANTY_TERMO) brak materiału albo pusty string oznacza domyślny
+	wariant (piana PUR); nieznany materiał jest błędem -- literówka w payloadzie NIE może
+	po cichu przeliczyć oferty na domyślny wariant, bo to zmieniłoby koszt/prowizję bez
+	wiedzy handlowca.
+	"""
+	if kod not in _WARIANTY_TERMO:
+		return kod
+	material = praca.get("material")
+	if material is None or (isinstance(material, str) and material.strip() == ""):
+		return _DOMYSLNY_WARIANT[kod]
+	if material not in _WARIANTY_TERMO[kod]:
+		_blad(f"Nieznany wariant materiału {material} dla pracy {kod}.")
+	return material
+
+
 # Ostatnia linia obrony przed wyciekiem kosztów/prowizji do wynik["linie"]: usuwa KAŻDY klucz
 # zaczynający się od "_", niezależnie od tego, czy jest tu wymieniony po nazwie. Dzięki temu
 # nowe prywatne pole dopisane kiedyś do _linia() i zapomniane w tej liście i tak zostanie
@@ -317,8 +351,11 @@ def oblicz_oferte(
 		praca = _wybrana_praca(prace, kod)
 		if praca is None:
 			continue
-		pozycja = _pozycja(kod, katalog)
-		_sprawdz_kategorie(pozycja, "termo", kod)
+		kod_katalogowy = _kod_katalogowy(kod, praca)
+		pozycja = _pozycja(kod_katalogowy, katalog)
+		_sprawdz_kategorie(pozycja, "termo", kod_katalogowy)
+		# Mnożnik powierzchni pozostaje kluczowany kodem BAZOWYM (mnozniki w stale) -- podanie
+		# tu wariantu (np. "strop_piana") rzuciłoby "Brak mnożnika powierzchni".
 		m2, liczba_drzwi = _powierzchnia_pracy(kod, praca, powierzchnia, powierzchnia_elewacji, stale)
 		# Wybrana praca o zerowej powierzchni nie generuje pozycji na wycenie -- taka linia
 		# wnosi zero do netto/brutto/dotacji/prowizji, więc jej pominięcie usuwa wyłącznie
@@ -334,6 +371,9 @@ def oblicz_oferte(
 		# -- to celowe: bez wykonanej pracy nie ma kosztu do rozliczenia.
 		if m2 == _ZERO:
 			continue
+		# drzwi/elewacja: kod BAZOWY celowo (nie kod_katalogowy) -- żadna z tych dwóch prac
+		# nie ma wariantów materiału, więc rozróżnienie tu jest bez znaczenia; zostaje jawne
+		# dla czytelności zamiast milcząco polegać na tym, że oba kody są sobie równe.
 		ilosc_rozliczeniowa = liczba_drzwi if kod == "drzwi" else m2
 		ilosc_wyswietlana = liczba_drzwi if kod == "drzwi" and pozycja["jednostka"] == "szt" else m2
 		jednostka_rozliczeniowa = "szt" if kod == "drzwi" else None
@@ -351,7 +391,7 @@ def oblicz_oferte(
 			ilosc_dotowana = m2 * udzial_dotacji_elewacja
 		termo_linie.append(
 			_linia(
-				kod,
+				kod_katalogowy,
 				pozycja,
 				poziom,
 				m2,

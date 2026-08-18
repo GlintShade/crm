@@ -218,6 +218,19 @@
                       :disabled="!form.prace[kod].wybrana || !form.prace[kod].reczne || !isActive(kod)"
                       @input="form.prace[kod].m2 = $event.target.value"
                     />
+                    <select
+                      v-if="WARIANTY_PRAC[kod]"
+                      v-model="form.prace[kod].material"
+                      class="kalk-select kalk-select-wariant"
+                      :disabled="!form.prace[kod].wybrana"
+                    >
+                      <option
+                        v-for="wariant in WARIANTY_PRAC[kod]"
+                        :key="wariant"
+                        :value="wariant"
+                        :disabled="!isActive(wariant)"
+                      >{{ materialLabels[wariant] }}</option>
+                    </select>
                     <button
                       v-if="!form.prace[kod].reczne"
                       type="button"
@@ -278,14 +291,14 @@
               <div class="mb-2 rounded-lg border border-outline-gray-1 bg-surface-gray-1 p-2.5">
                 <div class="flex justify-between py-0.5 text-sm text-ink-gray-7">
                   <span>{{ __('Wkład własny beneficjenta') }}</span>
-                  <span class="text-xl font-semibold tabular-nums text-ink-gray-9">{{ formatPln(result.wklad_wlasny) }}</span>
+                  <span class="text-lg font-semibold tabular-nums text-ink-gray-9">{{ formatPln(result.wklad_wlasny) }}</span>
                 </div>
                 <!-- V4 (2026-08-16): ukrycie odwracalne — serwer nie zwraca top-level prowizji
                      handlowcom (crm/api/czyste_powietrze.py), więc dla nich ten wiersz znika. -->
                 <div v-if="result.prowizja_handlowa != null" class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
                   <span>{{ __('Prowizja handlowa') }}</span><span>{{ formatPln(result.prowizja_handlowa) }}</span>
                 </div>
-                <div class="flex justify-between border-t border-outline-gray-1 pt-1.5 text-sm tabular-nums text-ink-gray-7">
+                <div class="flex justify-between border-t border-outline-gray-1 pt-1.5 text-sm font-semibold tabular-nums text-ink-gray-8">
                   <span>{{ __('Dotacja łączna') }}</span><span>{{ formatPln(result.dotacja_laczna) }}</span>
                 </div>
               </div>
@@ -530,6 +543,7 @@ import {
   GOSPODARSTWA,
   POZIOMY,
   PRACE_M2,
+  WARIANTY_PRAC,
   PROGI_DOCHODU,
   PROGI_KWOTY,
   STANDARDY,
@@ -602,6 +616,13 @@ const workLabels = {
   strop: __('Strop'),
   dach: __('Dach'),
   okna: __('Okna'),
+}
+const materialLabels = {
+  strop_piana: __('Piana PUR'),
+  strop_welna: __('Wełna'),
+  strop_styropian: __('Styropian'),
+  dach_piana: __('Piana PUR'),
+  dach_welna: __('Wełna'),
 }
 
 // Etykiety progów dochodowych czytane wyłącznie z PROGI_KWOTY — jedno
@@ -759,6 +780,9 @@ function setZrodlo(zrodlo) {
 }
 
 function isActive(kod) {
+  if (WARIANTY_PRAC[kod]) {
+    return WARIANTY_PRAC[kod].some((wariant) => pozycje.value[wariant]?.aktywny !== false)
+  }
   return pozycje.value[kod]?.aktywny !== false
 }
 
@@ -897,6 +921,10 @@ onMounted(async () => {
     m2NaDrzwi.value = data.m2_na_drzwi
     for (const kod of PRACE_M2) {
       if (mnozniki.value[kod] === null) form.prace[kod].reczne = true
+      if (WARIANTY_PRAC[kod] && !isActive(form.prace[kod].material)) {
+        const aktywnyWariant = WARIANTY_PRAC[kod].find((wariant) => isActive(wariant))
+        if (aktywnyWariant) form.prace[kod].material = aktywnyWariant
+      }
     }
   } catch (error) {
     catalogueError.value = opisBledu(error)
@@ -952,6 +980,10 @@ onBeforeUnmount(() => {
 .kalk-input-koszt-staly {
   width: 92px;
   margin-left: auto;
+}
+.kalk-select-wariant {
+  width: auto;
+  flex: 0 0 auto;
 }
 /* Wskaźnik nadpisania: pole, którego wartość różni się od katalogowej,
    dostaje inne tło i obramowanie — po kilku wariantach ma być widać na
@@ -1069,5 +1101,6 @@ onBeforeUnmount(() => {
   .kalk-input-stawka { width: 68px; }
   .kalk-input-koszt { width: 76px; }
   .kalk-input-koszt-staly { width: 76px; }
+  .kalk-select-wariant { width: 110px; }
 }
 </style>
