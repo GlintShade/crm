@@ -177,6 +177,8 @@ import LeadsIcon from '@/components/Icons/LeadsIcon.vue'
 import DealsIcon from '@/components/Icons/DealsIcon.vue'
 import KalkulatorIcon from '@/components/Icons/KalkulatorIcon.vue'
 import KalkulatorCPIcon from '@/components/Icons/KalkulatorCPIcon.vue'
+import DokumentyOzeIcon from '@/components/Icons/DokumentyOzeIcon.vue'
+import DokumentyCPIcon from '@/components/Icons/DokumentyCPIcon.vue'
 import ContactsIcon from '@/components/Icons/ContactsIcon.vue'
 import OrganizationsIcon from '@/components/Icons/OrganizationsIcon.vue'
 import NoteIcon from '@/components/Icons/NoteIcon.vue'
@@ -261,6 +263,16 @@ const links = [
     label: 'Kalkulator Czyste Powietrze',
     icon: KalkulatorCPIcon,
     to: 'KalkulatorCzystePowietrze',
+  },
+  {
+    label: 'Dokumenty OZE',
+    icon: DokumentyOzeIcon,
+    to: 'DokumentyOze',
+  },
+  {
+    label: 'Dokumenty Czyste Powietrze',
+    icon: DokumentyCPIcon,
+    to: 'DokumentyCzystePowietrze',
   },
   {
     label: __('Leads'),

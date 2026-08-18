@@ -9,7 +9,7 @@
           : 'text-ink-gray-7',
       ]"
     >
-      {{ routeName === 'Deals' ? __('Umowy') : routeName === 'Kalkulator' ? __('Kalkulator OZE') : routeName === 'KalkulatorCzystePowietrze' ? __('Kalkulator Czyste Powietrze') : __(routeName) }}
+      {{ routeName === 'Deals' ? __('Umowy') : routeName === 'Kalkulator' ? __('Kalkulator OZE') : routeName === 'KalkulatorCzystePowietrze' ? __('Kalkulator Czyste Powietrze') : routeName === 'DokumentyOze' ? __('Dokumenty OZE') : routeName === 'DokumentyCzystePowietrze' ? __('Dokumenty Czyste Powietrze') : __(routeName) }}
     </router-link>
     <span
       v-if="viewControls && viewControls.viewsDropdownOptions"
