@@ -214,8 +214,17 @@
               </button>
             </template>
             <template #body>
+              <!-- frappe-ui's Popover already sits on reka-ui's PopperContent
+                   with `avoidCollisions: true` (default `shift` + `flip`
+                   middleware, `collisionPadding: 10`), so bottom-start
+                   auto-repositions near a screen edge without any placement
+                   logic here. `max-w-[calc(100vw-2rem)]` is only a safety net
+                   under the fixed `w-64` (256px) for viewports narrower than
+                   ~288px — b49 F4; at every width this app actually ships to
+                   (375px+) it is a no-op, so nothing here changes on desktop
+                   or on the 375px/768px probe widths. -->
               <div
-                class="my-2 flex w-64 flex-col gap-2.5 rounded-lg bg-surface-elevation-2 p-3 shadow-2xl ring-1 ring-black ring-opacity-5 focus:outline-none"
+                class="my-2 flex w-64 max-w-[calc(100vw-2rem)] flex-col gap-2.5 rounded-lg bg-surface-elevation-2 p-3 shadow-2xl ring-1 ring-black ring-opacity-5 focus:outline-none"
               >
                 <div class="flex items-start justify-between gap-2">
                   <span class="text-sm font-medium text-ink-gray-8">{{ __(def.label) }}</span>
@@ -611,10 +620,16 @@ const PILL_THEME_CLASSES = {
   red: 'border-outline-red-3 bg-surface-red-2 text-ink-red-8',
 }
 
+// `min-h-10` (2.5rem = 40px) + bumped `px-3 py-2 gap-2` on mobile give the
+// pill (both the read-only div and the popover-trigger button below) a
+// >=40px touch target regardless of label length — b49 F4. `sm:` reverts
+// every one of those to the ORIGINAL desktop values (`min-h-0`/`px-2.5`/
+// `py-1.5`/`gap-1.5`), so desktop stays pixel-identical to pre-F4: this is
+// the padding-only approach the issue asks for, not an icon/text resize.
 function pillClass(stan) {
   const meta = STAN_META[stan] || STAN_META.brak
   const theme = PILL_THEME_CLASSES[meta.theme] || PILL_THEME_CLASSES.gray
   const border = meta.muted ? 'border-dashed opacity-70' : 'border-solid'
-  return `inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs ${theme} ${border}`
+  return `inline-flex min-h-10 items-center gap-2 rounded-md border px-3 py-2 text-xs sm:min-h-0 sm:gap-1.5 sm:px-2.5 sm:py-1.5 ${theme} ${border}`
 }
 </script>
