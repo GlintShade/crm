@@ -22,9 +22,14 @@
   Ten komponent renderuje ją nad KATALOGIEM podzadań, który już jedzie w tym
   samym payloadzie (`payload.subtasks`, dodane w B1) — więc rozwinięcie
   pasa NIE odpytuje serwera ponownie, zgodnie z regułą "jedno pobranie per
-  rodzaj" wyjaśnioną niżej. Sam STAN podzadań (kto co zaznaczył) jest na razie
-  mockiem lokalnym w tym komponencie — patrz `// F3: zastąpić
-  volteo_podzadania_get/set` przy `mapaZadan` niżej.
+  rodzaj" wyjaśnioną niżej. Sam STAN podzadań (kto co zaznaczył/zaakceptował)
+  jedzie osobnym pobraniem, `crm.api.pipeline.volteo_podzadania_get`
+  (`mapaZadan` niżej), i zapisuje się przez `volteo_podzadania_set` z zapisem
+  optymistycznym (b49 F3) — wzorzec `setVerdict()` z `AudytTab.vue`: snapshot
+  mapy → optymistyczna podmiana wpisu → po odpowiedzi CAŁA mapa zastępowana
+  autorytatywnym `res.stan_mapa` → rollback do snapshotu + toast na błędzie.
+  NIGDY `resource.reload()` po zapisie (patrz uzasadnienie tej zasady dla
+  `volteo_pipeline_get` powyżej — ten sam race jest tu równie realny).
 -->
 <template>
   <div
@@ -126,9 +131,11 @@
       </div>
       <div class="flex flex-wrap justify-center gap-2">
         <template v-for="def in etapZadania" :key="def.klucz">
-          <!-- Rep: prostokąt tylko do odczytu, bez popovera (nie widzi/nie
-               zmienia stanu podzadań — jak reszta tego paska). -->
-          <div v-if="isRep" :class="pillClass(stanFor(mapaZadan, def.klucz))">
+          <!-- Rep (albo dowolny użytkownik bez roli backoffice/core-admin —
+               `editable` jest prawdą SERWERA po załadowaniu, patrz komentarz
+               przy `stanResource` w <script>): prostokąt tylko do odczytu,
+               bez popovera. -->
+          <div v-if="!editable" :class="pillClass(stanFor(mapaZadan, def.klucz))">
             <span
               v-if="def.z_data && mapaZadan[def.klucz]?.data"
               class="lucide-calendar size-3 shrink-0"
@@ -198,12 +205,14 @@
                     variant="subtle"
                     :theme="STAN_META[stan].theme"
                     :label="__(STAN_META[stan].label)"
+                    :disabled="busyZadania[def.klucz]"
                     @click="ustawStan(def.klucz, stan)"
                   />
                   <Button
                     size="sm"
                     variant="ghost"
                     :label="__('Wyczyść')"
+                    :disabled="busyZadania[def.klucz]"
                     @click="ustawStan(def.klucz, 'brak')"
                   />
                 </div>
@@ -218,14 +227,14 @@
                   type="date"
                   label="Data"
                   placeholder="Wybierz datę"
-                  :modelValue="mapaZadan[def.klucz]?.data || ''"
+                  :modelValue="formData(def.klucz)"
                   @update:modelValue="(v) => ustawData(def.klucz, v)"
                 />
                 <FormControl
                   type="textarea"
                   :label="__('Notatka')"
                   :maxlength="500"
-                  :modelValue="mapaZadan[def.klucz]?.note || ''"
+                  :modelValue="formNote(def.klucz)"
                   @update:modelValue="(v) => ustawNotatka(def.klucz, v)"
                 />
               </div>
@@ -253,7 +262,7 @@
 // `off_pipeline*`, `note`, `status`) zostają w odpowiedzi API dla sond, ale
 // ten komponent ich nie czyta. Rozwijanie pasa mini-zadań (poniżej) czyta
 // TEN SAM `payload.subtasks` bez żadnego dodatkowego fetcha.
-import { Badge, Button, FormControl, Popover, createResource } from 'frappe-ui'
+import { Badge, Button, FormControl, Popover, call, createResource, toast } from 'frappe-ui'
 import { computed, reactive, ref, watch } from 'vue'
 import { getFormat } from '@/utils'
 import { statusesStore } from '@/stores/statuses'
@@ -271,6 +280,9 @@ import {
   dozwoloneStany,
   tasksForStage,
   stageSummary,
+  buildPodzadaniePayload,
+  entryFromPayload,
+  applyOptimistic,
 } from '@/utils/dealPodzadania'
 
 const props = defineProps({
@@ -348,7 +360,7 @@ function nodeLabelClass(index) {
 }
 
 // -----------------------------------------------------------------------
-// Pas mini-zadań (b49 F2) — rozwijanie, katalog i STAN (mock).
+// Pas mini-zadań (b49 F2) — rozwijanie i katalog.
 // -----------------------------------------------------------------------
 
 // Nazwa statusu (step.status) aktualnie rozwiniętego etapu, albo `null`, gdy
@@ -365,49 +377,198 @@ function toggleEtap(status) {
 // patrz nagłówek pliku). `[]`, gdy pas jest zwinięty albo etap nie ma
 // podzadań (tasksForStage jest null-safe względem obu argumentów).
 const etapZadania = computed(() => tasksForStage(payload.value?.subtasks, rozwinietyEtap.value))
-const etapPodsumowanie = computed(() => stageSummary(etapZadania.value, mapaZadan))
 
-// Restricted D2D rep: widzi pas (postęp), ale nie zmienia stanu podzadań —
-// ten sam flag, ten sam wzorzec co w Deal.vue/MobileDeal.vue.
-const isRep = Boolean(window.volteo_is_rep)
+// -----------------------------------------------------------------------
+// Stan podzadań (b49 F3) — pobranie, edytowalność, zapis optymistyczny.
+// -----------------------------------------------------------------------
 
-// F3: zastąpić volteo_podzadania_get/set. Do tego czasu STAN podzadań
-// (kto co zaznaczył/zaakceptował/oznaczył jako nd) żyje wyłącznie w tej
-// lokalnej mapie reactive — nic tu się nie zapisuje na serwer i znika przy
-// odświeżeniu strony. Seed pokazuje demonstracyjnie wszystkie pięć wyglądów
-// (brak/waiting/accepted/error/nd) plus oba chipy (data, notatka) na jednym
-// etapie „Dokumentacja”, a „Umowa na realizację” zostaje celowo bez seeda,
-// żeby był widoczny etap całkiem szary (wszystko „brak”).
-//
-// Klucz notatki w każdym wpisie to `note` (nie `notatka`) — dopasowanie do
-// kształtu, który zwraca/zapisuje już scalony `volteo_podzadania_set`
-// (`crm.api.pipeline`, B3): `{stan, by, at, data?, note?}`. Gdy F3 podepnie
-// tę mapę pod prawdziwy endpoint, klucz musi się zgadzać, inaczej odczyt
-// notatki po cichu przestanie działać.
-const SEED_PODZADAN = {
-  'dok:umowa_obsluga_dotacji': { stan: 'accepted' },
-  'dok:gops_zaswiadczenie': { stan: 'accepted' },
-  'dok:pelnomocnictwo_notarialne': { stan: 'waiting' },
-  'dok:zgoda_wspolwlascicieli': { stan: 'nd' },
-  'dok:ankieta_cp': { stan: 'error', note: 'Brakuje podpisu na drugiej stronie ankiety.' },
-  'audyt:umowiony': { stan: 'waiting', data: '2026-08-25' },
+// Osobne pobranie od `resource` (KSZTAŁT rurociągu) powyżej — ten payload
+// jest per-SZANSA (STAN, nie katalog), więc cache klucz niesie `dealId`, nie
+// `rodzaj`. Pełna kropkowana ścieżka: gołe nazwy metod dają HTTP 417 w
+// runtime dla API forka (patrz nagłówek pliku / `crm.api.umowa`).
+const stanResource = createResource({
+  url: 'crm.api.pipeline.volteo_podzadania_get',
+  params: { deal: props.dealId },
+  auto: true,
+  cache: ['volteo-podzadania', props.dealId],
+})
+
+// Mapa stanu jest w `ref`, nie `reactive()`, żeby zapis/rollback mógł
+// zamienić CAŁĄ mapę na nowy obiekt jednym przypisaniem (`applyOptimistic`
+// i rekoncyliacja z `res.stan_mapa` zwracają zawsze NOWY obiekt, nigdy nie
+// mutują — patrz `utils/dealPodzadania.js`) zamiast ręcznie kasować/dopisywać
+// klucze na istniejącym reactive obiekcie. Template czyta `mapaZadan` bez
+// `.value` — Vue odwija top-level ref automatycznie w wyrażeniach szablonu.
+const mapaZadan = ref(parsePodzadania(stanResource.data?.stan))
+watch(
+  () => stanResource.data,
+  (data) => {
+    mapaZadan.value = parsePodzadania(data?.stan)
+  },
+)
+
+// Licznik zrobione/wszystkie obok chevronu/nagłówka pasa — musi być
+// zdefiniowany PO `mapaZadan`, bo czyta jej `.value` synchronicznie w ciele
+// (nie w callbacku, więc kolejność deklaracji ma tu znaczenie, w
+// przeciwieństwie do funkcji niżej wołanych dopiero z handlerów).
+const etapPodsumowanie = computed(() => stageSummary(etapZadania.value, mapaZadan.value))
+
+// Edytowalność: serwer jest prawdą PO załadowaniu (`stanResource.data.editable`,
+// wyliczone z ról wywołującego — `BYPASS_ROLES`, ten sam zestaw co backoffice/
+// core-admin gdzie indziej w apce). `!window.volteo_is_rep` to WYŁĄCZNIE
+// boot-flaga na pierwszy paint (zanim `stanResource` się załaduje) — ten sam
+// flag co w Deal.vue/MobileDeal.vue, ale tu nigdy nie jest ostatnim słowem:
+// gdy odpowiedź serwera nadejdzie, `stanResource.data?.editable` przejmuje
+// gating, więc popover nie renderuje się dla nikogo bez roli backoffice/
+// core-admin nawet gdyby boot-flaga była (błędnie) `false` dla repa.
+const editable = computed(() => stanResource.data?.editable ?? !window.volteo_is_rep)
+
+// Formularz (data/notatka) w otwartym popoverze czyta z lokalnego draftu
+// zamiast wprost z `mapaZadan`, bo "brak" (żaden wpis jeszcze) nie ma
+// odpowiednika po stronie serwera do którego przypiąć datę/notatkę —
+// `volteo_podzadania_set` w gałęzi `stan == "brak"` tylko usuwa wpis z mapy,
+// nigdy nie czyta `data`/`note` (patrz `crm/api/pipeline.py`). Wpisana przed
+// wybraniem stanu wartość więc NIE jedzie do serwera od razu — czeka w
+// `draftZadan` i jest wysyłana razem z PIERWSZYM ustawieniem stanu
+// (`ustawStan` niżej czyta `formData`/`formNote`, które sięgają do draftu).
+// Gdy wpis na serwerze już istnieje, draft nadpisuje wyświetlaną wartość
+// (jest "świeższy" niż to, co ostatnio potwierdził serwer) — ale pigułka i
+// widok tylko-do-odczytu poza formularzem ZAWSZE czytają `mapaZadan` wprost
+// (autorytatywny stan potwierdzony), nigdy draft, żeby nie pokazywać
+// niewysłanych zmian jako gdyby były zapisane.
+const draftZadan = reactive({})
+
+function formData(klucz) {
+  return draftZadan[klucz]?.data ?? mapaZadan.value[klucz]?.data ?? ''
 }
 
-const mapaZadan = reactive(parsePodzadania(SEED_PODZADAN))
+function formNote(klucz) {
+  return draftZadan[klucz]?.note ?? mapaZadan.value[klucz]?.note ?? ''
+}
 
+// Zapis w locie per klucz zadania — osobna flaga per zadanie, nie jedna
+// globalna, żeby zapis jednego podzadania nie blokował przycisków innego w
+// tym samym (albo innym otwartym) popoverze.
+const busyZadania = reactive({})
+
+// Debounce notatki (500ms) — ten sam odstęp i ten sam wzorzec
+// (per-pole `setTimeout`, czyszczony przy kolejnym wejściu) co autosave pól
+// audytu w AudytTab.vue. Klucz = nazwa zadania, bo więcej niż jeden popover
+// może być otwarty naraz (każdy Popover zarządza swoim stanem niezależnie).
+const noteSaveTimers = {}
+
+function cancelNoteTimer(klucz) {
+  if (noteSaveTimers[klucz]) {
+    clearTimeout(noteSaveTimers[klucz])
+    delete noteSaveTimers[klucz]
+  }
+}
+
+// Jedyne miejsce, które faktycznie woła `volteo_podzadania_set` — zapis
+// optymistyczny z rollbackiem, wzorzec `setVerdict()` z `AudytTab.vue`
+// (~l.892): snapshot mapy PRZED optymistyczną podmianą (żeby błąd cofał do
+// dokładnie tego, co było na ekranie, nie do tego, czym stała się mapa po
+// optymistycznej zmianie), po odpowiedzi CAŁA mapa zastąpiona autorytatywnym
+// `res.stan_mapa` (serwer nadpisuje cały wpis, nie łata go — stąd
+// `buildPodzadaniePayload` zawsze wysyła KOMPLET bieżącej daty/notatki, nie
+// tylko zmienione pole). Nigdy `resource.reload()` — ten sam race co przy
+// statusie rurociągu (patrz nagłówek pliku).
+async function persist(klucz, { stan, data, note, zData }) {
+  if (!editable.value || busyZadania[klucz]) return
+
+  const payload = buildPodzadaniePayload({ zadanie: klucz, stan, data, note, zData })
+  busyZadania[klucz] = true
+  const before = mapaZadan.value
+  mapaZadan.value = applyOptimistic(before, klucz, entryFromPayload(payload))
+
+  try {
+    const res = await call('crm.api.pipeline.volteo_podzadania_set', {
+      deal: props.dealId,
+      ...payload,
+    })
+    mapaZadan.value = parsePodzadania(res?.stan_mapa)
+  } catch (err) {
+    mapaZadan.value = before
+    toast.error(extractErrorMessage(err))
+  } finally {
+    busyZadania[klucz] = false
+  }
+}
+
+// Przycisk stanu (albo "Wyczyść", `stan === 'brak'`) — zapis NATYCHMIAST,
+// zawsze z bieżącą datą/notatką z formularza (draft, jeśli edytowany, inaczej
+// to, co już potwierdził serwer), bo zapis nadpisuje cały wpis. "Wyczyść"
+// dodatkowo czyści draft i ewentualny debounce notatki w locie — po
+// wyczyszczeniu wpisu po stronie serwera nie ma sensu wysłać za chwilę
+// spóźnioną notatkę, która odtworzyłaby wpis.
 function ustawStan(klucz, stan) {
-  const istniejacy = mapaZadan[klucz] || {}
-  mapaZadan[klucz] = { ...istniejacy, stan }
+  const def = etapZadania.value.find((d) => d.klucz === klucz)
+  if (!def) return
+  if (stan === 'brak') {
+    delete draftZadan[klucz]
+    cancelNoteTimer(klucz)
+  }
+  persist(klucz, { stan, data: formData(klucz), note: formNote(klucz), zData: def.z_data })
 }
 
+// Zmiana daty: jeśli zadanie ma już stan inny niż "brak", zapis natychmiast
+// (z bieżącą notatką — kompletny wpis, jak wyżej). Jeśli stan to "brak", nie
+// ma po stronie serwera czego nadpisać datą — patrz komentarz przy
+// `draftZadan` powyżej — więc data zostaje wyłącznie lokalnie i pojedzie
+// razem z pierwszym ustawieniem stanu.
 function ustawData(klucz, data) {
-  const istniejacy = mapaZadan[klucz] || {}
-  mapaZadan[klucz] = { ...istniejacy, data }
+  draftZadan[klucz] = { ...draftZadan[klucz], data }
+
+  const aktualny = stanFor(mapaZadan.value, klucz)
+  if (aktualny === 'brak') return
+
+  const def = etapZadania.value.find((d) => d.klucz === klucz)
+  if (!def) return
+  persist(klucz, { stan: aktualny, data, note: formNote(klucz), zData: def.z_data })
 }
 
+// Notatka: debounce 500ms zamiast zapisu na każde naciśnięcie klawisza (ta
+// sama logika "brak = tylko draft" co dla daty). Stan jest odczytywany
+// PONOWNIE wewnątrz timera (nie zamykany przez `aktualny` z momentu wpisu),
+// bo w ciągu tych 500ms użytkownik mógł już nacisnąć przycisk stanu — ten
+// zapis idzie osobno i natychmiast, więc odroczony zapis notatki musi widzieć
+// stan, jaki jest FAKTYCZNIE w chwili odpalenia, nie w chwili wpisania znaku.
 function ustawNotatka(klucz, note) {
-  const istniejacy = mapaZadan[klucz] || {}
-  mapaZadan[klucz] = { ...istniejacy, note }
+  const truncated = typeof note === 'string' ? note.slice(0, 500) : ''
+  draftZadan[klucz] = { ...draftZadan[klucz], note: truncated }
+
+  if (stanFor(mapaZadan.value, klucz) === 'brak') return
+
+  const def = etapZadania.value.find((d) => d.klucz === klucz)
+  if (!def) return
+
+  cancelNoteTimer(klucz)
+  noteSaveTimers[klucz] = setTimeout(() => {
+    delete noteSaveTimers[klucz]
+    const aktualny = stanFor(mapaZadan.value, klucz)
+    if (aktualny === 'brak') return // wyczyszczone w międzyczasie — nic do zapisania
+    persist(klucz, { stan: aktualny, data: formData(klucz), note: truncated, zData: def.z_data })
+  }, 500)
+}
+
+function extractErrorMessage(err) {
+  try {
+    if (err && err._server_messages) {
+      const msgs = JSON.parse(err._server_messages)
+      if (msgs && msgs.length) {
+        const first = JSON.parse(msgs[0])
+        return first.message || __('Wystąpił błąd - spróbuj ponownie')
+      }
+    }
+    if (err && err.exception) {
+      const parts = String(err.exception).split(': ')
+      return parts[parts.length - 1] || __('Wystąpił błąd - spróbuj ponownie')
+    }
+    if (err && err.message) return err.message
+  } catch (e) {
+    /* fall through */
+  }
+  return __('Wystąpił błąd - spróbuj ponownie')
 }
 
 // Klasy pigułki per stan — te same tokeny co warianty subtle+outline w

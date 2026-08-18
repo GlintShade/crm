@@ -6,6 +6,9 @@ import {
   dozwoloneStany,
   tasksForStage,
   stageSummary,
+  buildPodzadaniePayload,
+  entryFromPayload,
+  applyOptimistic,
 } from '@/utils/dealPodzadania'
 
 describe('Podzadania rurociągu CP — czysta logika (dealPodzadania)', () => {
@@ -254,6 +257,154 @@ describe('Podzadania rurociągu CP — czysta logika (dealPodzadania)', () => {
       expect(STAN_META.nd.theme).toBe('gray')
       expect(STAN_META.brak.theme).toBe('gray')
       expect(STAN_META.nd.muted).not.toBe(STAN_META.brak.muted)
+    })
+  })
+
+  describe('buildPodzadaniePayload — kształt żądania do volteo_podzadania_set (b49 F3)', () => {
+    it('stan="brak" nigdy nie niesie data/note, nawet gdy podane', () => {
+      expect(
+        buildPodzadaniePayload({
+          zadanie: 'dok:a',
+          stan: 'brak',
+          data: '2026-08-20',
+          note: 'coś',
+          zData: true,
+        }),
+      ).toEqual({ zadanie: 'dok:a', stan: 'brak' })
+    })
+
+    it('pomija data, gdy zData=false, nawet jeśli wartość podana', () => {
+      expect(
+        buildPodzadaniePayload({ zadanie: 'dok:a', stan: 'accepted', data: '2026-08-20', zData: false }),
+      ).toEqual({ zadanie: 'dok:a', stan: 'accepted' })
+    })
+
+    it('pomija data, gdy zData=true ale wartość pusta/undefined', () => {
+      expect(buildPodzadaniePayload({ zadanie: 'dok:a', stan: 'accepted', data: '', zData: true })).toEqual({
+        zadanie: 'dok:a',
+        stan: 'accepted',
+      })
+      expect(
+        buildPodzadaniePayload({ zadanie: 'dok:a', stan: 'accepted', data: undefined, zData: true }),
+      ).toEqual({ zadanie: 'dok:a', stan: 'accepted' })
+    })
+
+    it('dołącza data, gdy zData=true i wartość podana', () => {
+      expect(
+        buildPodzadaniePayload({ zadanie: 'dok:a', stan: 'accepted', data: '2026-08-20', zData: true }),
+      ).toEqual({ zadanie: 'dok:a', stan: 'accepted', data: '2026-08-20' })
+    })
+
+    it('przycina notatkę do 500 znaków klientowsko', () => {
+      const dluga = 'x'.repeat(600)
+      const wynik = buildPodzadaniePayload({ zadanie: 'dok:a', stan: 'accepted', note: dluga })
+      expect(wynik.note).toHaveLength(500)
+      expect(wynik.note).toBe('x'.repeat(500))
+    })
+
+    it('przycina białe znaki i pomija notatkę, gdy po przycięciu jest pusta', () => {
+      expect(buildPodzadaniePayload({ zadanie: 'dok:a', stan: 'accepted', note: '   ' })).toEqual({
+        zadanie: 'dok:a',
+        stan: 'accepted',
+      })
+      expect(
+        buildPodzadaniePayload({ zadanie: 'dok:a', stan: 'accepted', note: '  ważne  ' }),
+      ).toEqual({ zadanie: 'dok:a', stan: 'accepted', note: 'ważne' })
+    })
+
+    it('note nie-string (np. undefined) nie rzuca i jest pomijane', () => {
+      expect(buildPodzadaniePayload({ zadanie: 'dok:a', stan: 'accepted', note: undefined })).toEqual({
+        zadanie: 'dok:a',
+        stan: 'accepted',
+      })
+    })
+
+    it('nie mutuje przekazanych argumentów (nie zwraca referencji na nie)', () => {
+      const input = { zadanie: 'dok:a', stan: 'accepted', data: '2026-08-20', note: 'x', zData: true }
+      const kopia = { ...input }
+      buildPodzadaniePayload(input)
+      expect(input).toEqual(kopia)
+    })
+  })
+
+  describe('entryFromPayload — payload wysłany → wpis optymistyczny w mapie', () => {
+    it('stan="brak" daje null (wpis usunięty)', () => {
+      expect(entryFromPayload({ zadanie: 'dok:a', stan: 'brak' })).toBeNull()
+    })
+
+    it('null/undefined payload daje null', () => {
+      expect(entryFromPayload(null)).toBeNull()
+      expect(entryFromPayload(undefined)).toBeNull()
+    })
+
+    it('zachowuje tylko stan, gdy payload nie ma data/note', () => {
+      expect(entryFromPayload({ zadanie: 'dok:a', stan: 'accepted' })).toEqual({ stan: 'accepted' })
+    })
+
+    it('przenosi data i note, gdy obecne w payloadzie', () => {
+      expect(
+        entryFromPayload({ zadanie: 'audyt:umowiony', stan: 'waiting', data: '2026-08-25', note: 'ok' }),
+      ).toEqual({ stan: 'waiting', data: '2026-08-25', note: 'ok' })
+    })
+
+    it('pomija `zadanie` z wpisu — to klucz mapy, nie pole wpisu', () => {
+      const wynik = entryFromPayload({ zadanie: 'dok:a', stan: 'accepted' })
+      expect(wynik).not.toHaveProperty('zadanie')
+    })
+  })
+
+  describe('applyOptimistic — zapis/rollback bez mutacji', () => {
+    it('dodaje/nadpisuje wpis pod kluczem, zwraca NOWY obiekt', () => {
+      const mapa = { 'dok:a': { stan: 'waiting' } }
+      const wynik = applyOptimistic(mapa, 'dok:b', { stan: 'accepted' })
+      expect(wynik).not.toBe(mapa)
+      expect(wynik).toEqual({ 'dok:a': { stan: 'waiting' }, 'dok:b': { stan: 'accepted' } })
+      expect(mapa).toEqual({ 'dok:a': { stan: 'waiting' } }) // niezmutowane
+    })
+
+    it('wpis=null usuwa klucz (mirror stan="brak")', () => {
+      const mapa = { 'dok:a': { stan: 'waiting' }, 'dok:b': { stan: 'accepted' } }
+      const wynik = applyOptimistic(mapa, 'dok:a', null)
+      expect(wynik).toEqual({ 'dok:b': { stan: 'accepted' } })
+      expect(mapa).toHaveProperty('dok:a') // źródło niezmutowane
+    })
+
+    it('wpis=undefined też usuwa klucz', () => {
+      const mapa = { 'dok:a': { stan: 'waiting' } }
+      expect(applyOptimistic(mapa, 'dok:a', undefined)).toEqual({})
+    })
+
+    it('usuwanie nieistniejącego klucza jest no-opem (zwraca kopię bez rzucania)', () => {
+      const mapa = { 'dok:a': { stan: 'waiting' } }
+      expect(applyOptimistic(mapa, 'dok:nieznany', null)).toEqual(mapa)
+    })
+
+    it('mapa=null/undefined traktowane jak pusta mapa', () => {
+      expect(applyOptimistic(null, 'dok:a', { stan: 'accepted' })).toEqual({ 'dok:a': { stan: 'accepted' } })
+      expect(applyOptimistic(undefined, 'dok:a', { stan: 'accepted' })).toEqual({
+        'dok:a': { stan: 'accepted' },
+      })
+    })
+
+    it('kopiuje wpis płytko — mutacja zwróconego wpisu nie rusza oryginału podanego jako wpis', () => {
+      const wpis = { stan: 'accepted', note: 'x' }
+      const wynik = applyOptimistic({}, 'dok:a', wpis)
+      wynik['dok:a'].note = 'zmienione'
+      expect(wpis.note).toBe('x')
+    })
+
+    it('kompozycja z buildPodzadaniePayload/entryFromPayload — rollback do snapshotu na błędzie', () => {
+      const before = { 'dok:a': { stan: 'waiting' } }
+      const payload = buildPodzadaniePayload({
+        zadanie: 'dok:a',
+        stan: 'accepted',
+        note: 'zaakceptowane',
+      })
+      const optimistic = applyOptimistic(before, 'dok:a', entryFromPayload(payload))
+      expect(optimistic).toEqual({ 'dok:a': { stan: 'accepted', note: 'zaakceptowane' } })
+      // Na błędzie serwera wołający po prostu wraca do `before` — sam `before`
+      // pozostał niezmutowany przez cały czas.
+      expect(before).toEqual({ 'dok:a': { stan: 'waiting' } })
     })
   })
 })

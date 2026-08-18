@@ -13,9 +13,10 @@
 // read/validate a STATE map against that catalogue.
 //
 // Persistence (reading/writing the actual state map from/to the server) is
-// NOT part of this issue (b49 F2) — DealPipelineBar.vue keeps the state in a
-// local mock for now. See the `// F3: zastąpić volteo_podzadania_get/set`
-// comment in that component.
+// wired up in DealPipelineBar.vue via `crm.api.pipeline.volteo_podzadania_get`
+// / `volteo_podzadania_set` (b49 F3). The optimistic-write/rollback/payload
+// logic below is pure so it can be unit-tested without mounting the
+// component or mocking `frappe-ui`'s `call`/`createResource`.
 
 /** Valid subtask states — mirrors `STANY_PODZADAN` in `crm/volteo_pipeline.py`. */
 export const STANY_PODZADAN = ['waiting', 'accepted', 'error', 'nd']
@@ -161,4 +162,81 @@ export function stageSummary(defs, mapa) {
     return stan === 'accepted' || stan === 'nd' ? acc + 1 : acc
   }, 0)
   return { zrobione, wszystkie: list.length }
+}
+
+/**
+ * Builds the request body for `crm.api.pipeline.volteo_podzadania_set`
+ * (b49 F3) from raw form inputs — the single place that decides which of
+ * `data`/`note` actually get sent, mirroring the server's own rules:
+ *
+ * - `stan === 'brak'` (Wyczyść) never sends `data`/`note` — the backend's
+ *   "brak" branch only pops the map entry, it never reads either field, and
+ *   `volteo_podzadania_set` OVERWRITES the whole entry rather than patching
+ *   it, so sending a stale `data`/`note` alongside an unrelated stan change
+ *   would silently keep it (harmless here since it's dropped, but keeping
+ *   the payload minimal for "brak" documents that intent).
+ * - `data` is included only when the task definition takes a date
+ *   (`zData`) AND a non-empty value was provided — tasks without `z_data`
+ *   never carry a date, matching the server's own `frappe.throw` guard.
+ * - `note` is trimmed and clamped to 500 chars client-side (the server
+ *   enforces the same limit and would reject anything longer) and included
+ *   only when non-empty after trimming.
+ *
+ * Never mutates its input; returns a fresh plain object each call.
+ *
+ * @param {{zadanie: string, stan: string, data?: string, note?: string, zData?: boolean}} input
+ * @returns {{zadanie: string, stan: string, data?: string, note?: string}}
+ */
+export function buildPodzadaniePayload({ zadanie, stan, data, note, zData }) {
+  const payload = { zadanie, stan }
+  if (stan === 'brak') return payload
+
+  if (zData && data) payload.data = data
+
+  const trimmed = typeof note === 'string' ? note.trim().slice(0, 500) : ''
+  if (trimmed) payload.note = trimmed
+
+  return payload
+}
+
+/**
+ * Derives the optimistic map entry a `buildPodzadaniePayload` result implies
+ * — `null` for `stan === 'brak'` (entry removed), otherwise `{stan, data?,
+ * note?}` with only the fields the payload actually carries. Deliberately
+ * omits `by`/`at` (server-only bookkeeping fields, never read by this
+ * component's rendering) since the optimistic write happens before the
+ * server response is known.
+ *
+ * @param {{zadanie: string, stan: string, data?: string, note?: string}|null|undefined} payload
+ * @returns {{stan: string, data?: string, note?: string}|null}
+ */
+export function entryFromPayload(payload) {
+  if (!payload || payload.stan === 'brak') return null
+  const { stan, data, note } = payload
+  return { stan, ...(data ? { data } : {}), ...(note ? { note } : {}) }
+}
+
+/**
+ * Applies an optimistic write to a subtask state map WITHOUT mutating the
+ * input — returns a new map with `klucz` set to `wpis` (a shallow copy of
+ * it), or removed entirely when `wpis` is `null`/`undefined` (mirrors the
+ * server's "brak" branch, which pops the key rather than storing an empty
+ * entry). Used both for the optimistic local write before a save round-trip
+ * and, symmetrically, to roll back to a snapshot taken before it on failure
+ * (the caller just calls this — or restores its own snapshot — either way
+ * no mutation of a previously-rendered map ever happens in place).
+ *
+ * @param {Object<string, object>|null|undefined} mapa
+ * @param {string} klucz
+ * @param {{stan: string, data?: string, note?: string}|null|undefined} wpis
+ * @returns {Object<string, object>}
+ */
+export function applyOptimistic(mapa, klucz, wpis) {
+  const next = { ...(mapa || {}) }
+  if (!wpis) {
+    delete next[klucz]
+  } else {
+    next[klucz] = { ...wpis }
+  }
+  return next
 }
