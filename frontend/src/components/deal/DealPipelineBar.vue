@@ -54,13 +54,32 @@
             class="mt-3.5 h-0.5 flex-1 shrink-0"
             :class="connectorClass(i)"
           />
-          <div class="flex shrink-0 flex-col items-center px-1">
+          <!-- "Tab" wokół węzła rozwiniętego etapu: tło (ten sam token
+               `bg-surface-gray-2` co panel pasa niżej) + zaokrąglenie TYLKO
+               górnych rogów (`rounded-t-md`, bez `rounded-b`) — kolumna
+               wygląda jak zakładka teczki, która na dole przechodzi prosto w
+               pełnoszerokościowy panel. `self-stretch` każe jej wypełnić
+               PEŁNĄ wysokość wiersza steppera (nie tylko wysokość własnej
+               treści) — w praktyce i tak jest już najwyższą kolumną w
+               wierszu (tylko kolumny z chevronem, czyli z podzadaniami, mogą
+               być rozwinięte, a to one ustawiają wysokość wiersza), ale bez
+               `self-stretch` zerowa przerwa do panelu niżej zależałaby od
+               przypadku, nie była gwarantowana. Zero marginesu/paddingu
+               między tą kolumną a panelem (patrz `mt-2` USUNIĘTE z panelu
+               niżej) — inaczej "zakładka" wisiałaby w powietrzu nad panelem
+               zamiast się w niego wtapiać. Poziome dopasowanie tabu do
+               panelu jest przybliżone: ten div żyje w scrollowanym
+               kontenerze steppera, panel POZA scrollem na pełną szerokość —
+               przy nieprzewiniętym stepperze wygląda jak jedno spójne tło,
+               po przewinięciu tab się przesuwa. Świadomy, zaakceptowany
+               kompromis (bez mierzenia offsetów JS-em). -->
+          <div
+            class="flex shrink-0 flex-col items-center px-1"
+            :class="rozwinietyEtap === step.status ? 'self-stretch rounded-t-md bg-surface-gray-2' : ''"
+          >
             <div
-              class="flex flex-col items-center rounded-md py-1"
-              :class="[
-                capWidth ? 'gap-1.5' : 'gap-1',
-                rozwinietyEtap === step.status ? 'bg-surface-gray-2' : '',
-              ]"
+              class="flex flex-col items-center py-1"
+              :class="capWidth ? 'gap-1.5' : 'gap-1'"
             >
               <div
                 class="flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-medium"
@@ -85,17 +104,16 @@
                    zostaje bez zmian). Hit area >=40px przez padding wokół
                    14px ikony (13px * 2 + 14px = 40px), bez zmiany widocznego
                    rozmiaru strzałki. Stan aktywny (etap rozwinięty) dostaje
-                   wypełnione tło + ciemniejszy kolor ikony — razem z tłem
-                   całej kolumny węzła wyżej to jeden z sygnałów, do którego
-                   kroku należy pas mini-zadań poniżej (drugi — kreska
-                   niżej — i trzeci — klamra nad pigułkami w pasie). -->
+                   wypełnione tło — `bg-surface-gray-4`, nie `-3`, żeby mieć
+                   kontrast NA TLE taba (`bg-surface-gray-2` wyżej), nie na
+                   gołym tle paska. -->
               <button
                 v-if="payload.subtasks?.[step.status]?.length"
                 type="button"
                 class="flex items-center justify-center rounded p-[13px] transition-colors"
                 :class="
                   rozwinietyEtap === step.status
-                    ? 'bg-surface-gray-3 text-ink-gray-8'
+                    ? 'bg-surface-gray-4 text-ink-gray-8'
                     : 'text-ink-gray-4 hover:bg-surface-gray-2 hover:text-ink-gray-7'
                 "
                 :aria-expanded="rozwinietyEtap === step.status"
@@ -109,21 +127,6 @@
                 />
               </button>
             </div>
-            <!-- Kreska "od węzła w dół" — TYLKO dla rozwiniętego etapu, żyje
-                 wewnątrz tej kolumny (a więc wewnątrz kontenera
-                 overflow-x-auto steppera wyżej), bo klamra w pasie poniżej
-                 renderuje się POZA scrollem na pełną szerokość i nie ma
-                 pojęcia, gdzie dokładnie w poziomie jest ten węzeł przy
-                 przewinięciu. Dopasowanie 1:1 wymagałoby mierzenia offsetów
-                 JS-em — celowo tego nie robimy; to jest świadomy kompromis,
-                 nie pomyłka. Poza kolumną z podświetleniem (nie wewnątrz
-                 zaokrąglonego tła wyżej), żeby wizualnie "wychodziła" spod
-                 węzła w stronę pasa, a nie ginęła w tle. -->
-            <span
-              v-if="rozwinietyEtap === step.status"
-              class="h-2 w-0 border-l-2 border-outline-gray-3"
-              aria-hidden="true"
-            />
           </div>
         </template>
       </div>
@@ -138,145 +141,135 @@
       />
     </div>
 
-    <!-- Pas mini-zadań etapu — celowo POZA divem overflow-x-auto steppera
-         wyżej: pełna szerokość, nie scrolluje się razem z paskiem etapów. -->
-    <div v-if="rozwinietyEtap" class="mt-2 w-full max-w-full">
+    <!-- Panel mini-zadań etapu — celowo POZA divem overflow-x-auto steppera
+         wyżej: pełna szerokość, nie scrolluje się razem z paskiem etapów.
+         BEZ marginesu/paddingu nad tym divem (patrz `self-stretch` na tabie
+         kolumny węzła wyżej) — panel i tab dzielą ten sam token tła
+         (`bg-surface-gray-2`), więc przy nieprzewiniętym stepperze wyglądają
+         jak jedna spójna "obwoluta": tab wokół aktywnego węzła + panel pod
+         spodem, bez przerwy między nimi. -->
+    <div
+      v-if="rozwinietyEtap"
+      class="w-full max-w-full rounded-md bg-surface-gray-2 p-3"
+    >
       <div class="mb-2 flex items-center justify-center gap-2">
         <span class="text-sm font-medium text-ink-gray-8">{{ __(rozwinietyEtap) }}</span>
         <span class="text-xs text-ink-gray-5">
           {{ etapPodsumowanie.zrobione }}/{{ etapPodsumowanie.wszystkie }}
         </span>
       </div>
-      <!-- Klamra ⎴ + grupa pigułek dzielą wspólny kontener kurczący się do
-           treści (`w-fit`, standardowe CSS `width: fit-content` — bez
-           mierzenia offsetów JS-em): klamra to div bez `border-b`
-           (`border-t-2` + `border-x-2`), więc rysuje dokładnie poziomą linię
-           z dwoma krótkimi pionowymi "wąsami" w dół na końcach, jak odwrócony
-           nawias ⎴. Jej `self-stretch` w kolumnie flex każe jej rozciągnąć
-           się do TEJ SAMEJ szerokości co wiersz pigułek pod nią (a nie do
-           pełnej szerokości pasa) — więc klamra faktycznie "obejmuje" tylko
-           grupę prostokątów, nie cały pas. Zamierzone niedopasowanie: kreska
-           schodząca z kolumny węzła (wyżej, w scrollu steppera) i ta klamra
-           to DWA NIEZALEŻNE przybliżenia tego samego związku, nie
-           matematycznie dopasowana para — patrz komentarz przy kresce. -->
-      <div class="mx-auto flex w-fit max-w-full flex-col items-stretch">
-        <div
-          class="h-2 self-stretch rounded-t-md border-x-2 border-t-2 border-outline-gray-3"
-          aria-hidden="true"
-        />
-        <div class="mt-1.5 flex flex-wrap justify-center gap-2">
-          <template v-for="def in etapZadania" :key="def.klucz">
-            <!-- Rep (albo dowolny użytkownik bez roli backoffice/core-admin —
-                 `editable` jest prawdą SERWERA po załadowaniu, patrz komentarz
-                 przy `stanResource` w <script>): prostokąt tylko do odczytu,
-                 bez popovera. -->
-            <div v-if="!editable" :class="pillClass(stanFor(mapaZadan, def.klucz))">
-              <span
-                v-if="def.z_data && mapaZadan[def.klucz]?.data"
-                class="lucide-calendar size-3 shrink-0"
-                aria-hidden="true"
-              />
-              <span>{{ __(def.label) }}</span>
-              <span
-                v-if="def.z_data && mapaZadan[def.klucz]?.data"
-                class="text-[11px] tabular-nums opacity-80"
-              >
-                {{ getFormat(mapaZadan[def.klucz].data, '', true, false, true) }}
-              </span>
-              <span
-                v-if="mapaZadan[def.klucz]?.note"
-                class="size-1.5 shrink-0 rounded-full bg-current"
-                :title="mapaZadan[def.klucz].note"
-                aria-hidden="true"
-              />
-            </div>
+      <div class="flex flex-wrap justify-center gap-2">
+        <template v-for="def in etapZadania" :key="def.klucz">
+          <!-- Rep (albo dowolny użytkownik bez roli backoffice/core-admin —
+               `editable` jest prawdą SERWERA po załadowaniu, patrz komentarz
+               przy `stanResource` w <script>): prostokąt tylko do odczytu,
+               bez popovera. -->
+          <div v-if="!editable" :class="pillClass(stanFor(mapaZadan, def.klucz))">
+            <span
+              v-if="def.z_data && mapaZadan[def.klucz]?.data"
+              class="lucide-calendar size-3 shrink-0"
+              aria-hidden="true"
+            />
+            <span>{{ __(def.label) }}</span>
+            <span
+              v-if="def.z_data && mapaZadan[def.klucz]?.data"
+              class="text-[11px] tabular-nums opacity-80"
+            >
+              {{ getFormat(mapaZadan[def.klucz].data, '', true, false, true) }}
+            </span>
+            <span
+              v-if="mapaZadan[def.klucz]?.note"
+              class="size-1.5 shrink-0 rounded-full bg-current"
+              :title="mapaZadan[def.klucz].note"
+              aria-hidden="true"
+            />
+          </div>
 
-            <!-- Admin/backoffice: prostokąt otwiera popover ze stanami i notatką. -->
-            <Popover v-else placement="bottom-start">
-              <template #target="{ togglePopover }">
-                <button
-                  type="button"
-                  :class="pillClass(stanFor(mapaZadan, def.klucz))"
-                  @click="togglePopover"
+          <!-- Admin/backoffice: prostokąt otwiera popover ze stanami i notatką. -->
+          <Popover v-else placement="bottom-start">
+            <template #target="{ togglePopover }">
+              <button
+                type="button"
+                :class="pillClass(stanFor(mapaZadan, def.klucz))"
+                @click="togglePopover"
+              >
+                <span
+                  v-if="def.z_data && mapaZadan[def.klucz]?.data"
+                  class="lucide-calendar size-3 shrink-0"
+                  aria-hidden="true"
+                />
+                <span>{{ __(def.label) }}</span>
+                <span
+                  v-if="def.z_data && mapaZadan[def.klucz]?.data"
+                  class="text-[11px] tabular-nums opacity-80"
                 >
-                  <span
-                    v-if="def.z_data && mapaZadan[def.klucz]?.data"
-                    class="lucide-calendar size-3 shrink-0"
-                    aria-hidden="true"
-                  />
-                  <span>{{ __(def.label) }}</span>
-                  <span
-                    v-if="def.z_data && mapaZadan[def.klucz]?.data"
-                    class="text-[11px] tabular-nums opacity-80"
-                  >
-                    {{ getFormat(mapaZadan[def.klucz].data, '', true, false, true) }}
-                  </span>
-                  <span
-                    v-if="mapaZadan[def.klucz]?.note"
-                    class="size-1.5 shrink-0 rounded-full bg-current"
-                    :title="mapaZadan[def.klucz].note"
-                    aria-hidden="true"
-                  />
-                </button>
-              </template>
-              <template #body>
-                <div
-                  class="my-2 flex w-64 flex-col gap-2.5 rounded-lg bg-surface-elevation-2 p-3 shadow-2xl ring-1 ring-black ring-opacity-5 focus:outline-none"
-                >
-                  <div class="flex items-start justify-between gap-2">
-                    <span class="text-sm font-medium text-ink-gray-8">{{ __(def.label) }}</span>
-                    <Badge
-                      :theme="STAN_META[stanFor(mapaZadan, def.klucz)].theme"
-                      variant="subtle"
-                      size="sm"
-                      :label="__(STAN_META[stanFor(mapaZadan, def.klucz)].label)"
-                    />
-                  </div>
-                  <div class="flex flex-wrap gap-1.5">
-                    <Button
-                      v-for="stan in dozwoloneStany(def).filter((s) => s !== 'brak')"
-                      :key="stan"
-                      size="sm"
-                      variant="subtle"
-                      :theme="STAN_META[stan].theme"
-                      :label="__(STAN_META[stan].label)"
-                      :disabled="busyZadania[def.klucz]"
-                      @click="ustawStan(def.klucz, stan)"
-                    />
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      :label="__('Wyczyść')"
-                      :disabled="busyZadania[def.klucz]"
-                      @click="ustawStan(def.klucz, 'brak')"
-                    />
-                  </div>
-                  <!-- `label` celowo BEZ __() — msgid "Data" trafia w pl.po
-                       na zupełnie inny, niepowiązany łańcuch UI ("Dane" na
-                       `Activities/DataFields.vue` i kilku innych miejscach) i
-                       katalog .mo zwróciłby to samo tłumaczenie tutaj. Krótkie
-                       "Data" nie potrzebuje tłumaczenia — zostaje gołym
-                       stringiem, żeby nie kolidować z tym cudzym msgid. -->
-                  <FormControl
-                    v-if="def.z_data"
-                    type="date"
-                    label="Data"
-                    placeholder="Wybierz datę"
-                    :modelValue="formData(def.klucz)"
-                    @update:modelValue="(v) => ustawData(def.klucz, v)"
-                  />
-                  <FormControl
-                    type="textarea"
-                    :label="__('Notatka')"
-                    :maxlength="500"
-                    :modelValue="formNote(def.klucz)"
-                    @update:modelValue="(v) => ustawNotatka(def.klucz, v)"
+                  {{ getFormat(mapaZadan[def.klucz].data, '', true, false, true) }}
+                </span>
+                <span
+                  v-if="mapaZadan[def.klucz]?.note"
+                  class="size-1.5 shrink-0 rounded-full bg-current"
+                  :title="mapaZadan[def.klucz].note"
+                  aria-hidden="true"
+                />
+              </button>
+            </template>
+            <template #body>
+              <div
+                class="my-2 flex w-64 flex-col gap-2.5 rounded-lg bg-surface-elevation-2 p-3 shadow-2xl ring-1 ring-black ring-opacity-5 focus:outline-none"
+              >
+                <div class="flex items-start justify-between gap-2">
+                  <span class="text-sm font-medium text-ink-gray-8">{{ __(def.label) }}</span>
+                  <Badge
+                    :theme="STAN_META[stanFor(mapaZadan, def.klucz)].theme"
+                    variant="subtle"
+                    size="sm"
+                    :label="__(STAN_META[stanFor(mapaZadan, def.klucz)].label)"
                   />
                 </div>
-              </template>
-            </Popover>
-          </template>
-        </div>
+                <div class="flex flex-wrap gap-1.5">
+                  <Button
+                    v-for="stan in dozwoloneStany(def).filter((s) => s !== 'brak')"
+                    :key="stan"
+                    size="sm"
+                    variant="subtle"
+                    :theme="STAN_META[stan].theme"
+                    :label="__(STAN_META[stan].label)"
+                    :disabled="busyZadania[def.klucz]"
+                    @click="ustawStan(def.klucz, stan)"
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    :label="__('Wyczyść')"
+                    :disabled="busyZadania[def.klucz]"
+                    @click="ustawStan(def.klucz, 'brak')"
+                  />
+                </div>
+                <!-- `label` celowo BEZ __() — msgid "Data" trafia w pl.po
+                     na zupełnie inny, niepowiązany łańcuch UI ("Dane" na
+                     `Activities/DataFields.vue` i kilku innych miejscach) i
+                     katalog .mo zwróciłby to samo tłumaczenie tutaj. Krótkie
+                     "Data" nie potrzebuje tłumaczenia — zostaje gołym
+                     stringiem, żeby nie kolidować z tym cudzym msgid. -->
+                <FormControl
+                  v-if="def.z_data"
+                  type="date"
+                  label="Data"
+                  placeholder="Wybierz datę"
+                  :modelValue="formData(def.klucz)"
+                  @update:modelValue="(v) => ustawData(def.klucz, v)"
+                />
+                <FormControl
+                  type="textarea"
+                  :label="__('Notatka')"
+                  :maxlength="500"
+                  :modelValue="formNote(def.klucz)"
+                  @update:modelValue="(v) => ustawNotatka(def.klucz, v)"
+                />
+              </div>
+            </template>
+          </Popover>
+        </template>
       </div>
     </div>
   </div>
