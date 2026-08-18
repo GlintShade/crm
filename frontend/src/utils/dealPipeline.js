@@ -48,10 +48,15 @@ export function currentIndexFor(steps, status) {
  *
  * - 'hidden' — brak payloadu, albo `steps` puste/nieobecne (deal bez
  *   rodzaju albo z nierozpoznanym rodzajem — pasek się nie renderuje).
- * - 'progress' — `status` jest jednym z kroków rurociągu (niezależnie od
- *   tego, co mówi migawkowe `payload.current_index` — ono jest nieużywane).
+ * - 'progress' — `status` jest jednym z kroków rurociągu, a `statusType`
+ *   nie jest `'Won'` (niezależnie od tego, co mówi migawkowe
+ *   `payload.current_index` — ono jest nieużywane).
+ * - 'won' — albo status POZA rurociągiem ze `statusType === 'Won'` (np. OZE
+ *   „Wygrana – montaż"), albo status W rurociągu ze `statusType === 'Won'`
+ *   (np. CP „Projekt rozliczony", ostatni krok rurociągu, który jest
+ *   jednocześnie statusem typu Won — cały pasek renderuje się wtedy na
+ *   zielono zamiast jako zwykły krok „current").
  * - 'lost' — status POZA rurociągiem, `statusType === 'Lost'`.
- * - 'won' — status POZA rurociągiem, `statusType === 'Won'`.
  * - 'unknown' — status POZA rurociągiem, a `statusType` inny/nieznany
  *   (obcy status spoza Lost/Won, albo store statusów jeszcze nie załadowany).
  *
@@ -64,7 +69,9 @@ export function bandMode(payload, status, statusType) {
   if (!payload) return 'hidden'
   if (!Array.isArray(payload.steps) || payload.steps.length === 0) return 'hidden'
 
-  if (currentIndexFor(payload.steps, status) >= 0) return 'progress'
+  if (currentIndexFor(payload.steps, status) >= 0) {
+    return statusType === 'Won' ? 'won' : 'progress'
+  }
 
   if (statusType === 'Lost') return 'lost'
   if (statusType === 'Won') return 'won'
@@ -137,12 +144,21 @@ export function nextStepNote(payload, status, statusType) {
  * Surowa nazwa statusu do pokazania w odznace paska poza pipeline'em
  * ('lost' / 'won' / 'unknown'); w trybie 'progress'/'hidden' brak odznaki.
  *
+ * Status W rurociągu (`steps`) nigdy nie dostaje odznaki, nawet gdy jego
+ * `statusType === 'Won'` sprawia, że `bandMode` zwraca 'won' (np. CP
+ * „Projekt rozliczony" — 12. krok rurociągu, jednocześnie status typu Won).
+ * Bez tego guarda cały zielony pasek miałby obok zdublowaną odznakę z tym
+ * samym statusem — guard sprawdzony PRZED odczytaniem `mode`, żeby ten
+ * przypadek nie musiał przechodzić przez gałąź 'won' poniżej.
+ *
  * @param {{steps?: Array, notes?: Object}|null|undefined} payload
  * @param {string|null|undefined} status
  * @param {string|null|undefined} statusType
  * @returns {string|null}
  */
 export function offPipelineBadge(payload, status, statusType) {
+  if (currentIndexFor(payload?.steps, status) >= 0) return null
+
   const mode = bandMode(payload, status, statusType)
   if (mode === 'lost' || mode === 'won' || mode === 'unknown') {
     return status
