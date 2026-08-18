@@ -16,6 +16,15 @@ const stepsPvMe = [
   { status: 'Umowa', index: 2 },
 ]
 
+// Rurociąg CP: „Projekt rozliczony" jest jednocześnie 12. (tu: ostatnim)
+// krokiem rurociągu ORAZ statusem typu Won (b49 F1) — w przeciwieństwie do
+// OZE, gdzie „Wygrana – montaż" jest CAŁKOWICIE POZA `steps`.
+const stepsCp = [
+  { status: 'Nowy', index: 0 },
+  { status: 'Wniosek', index: 1 },
+  { status: 'Projekt rozliczony', index: 2 },
+]
+
 function shapePayload(overrides = {}) {
   return {
     rodzaj: 'Fotowoltaika + Magazyn',
@@ -99,6 +108,24 @@ describe('Pipeline dealu — logika węzłów paska etapów (dealPipeline)', () 
     it('undefined statusType (store jeszcze nie załadowany) daje "unknown" dla statusu spoza rurociągu', () => {
       const payload = shapePayload()
       expect(bandMode(payload, 'Przegrana', undefined)).toBe('unknown')
+    })
+  })
+
+  describe('bandMode — status Won OBECNY w steps (b49 F1: CP „Projekt rozliczony" jest jednocześnie 12. krokiem rurociągu i statusem Won)', () => {
+    it('zwraca "won" (nie "progress") gdy status jest w steps i statusType==="Won"', () => {
+      const payload = shapePayload({ steps: stepsCp })
+      expect(bandMode(payload, 'Projekt rozliczony', 'Won')).toBe('won')
+    })
+
+    it('regresja: ten sam status w steps ale statusType!=="Won" nadal daje "progress"', () => {
+      const payload = shapePayload({ steps: stepsCp })
+      expect(bandMode(payload, 'Projekt rozliczony', undefined)).toBe('progress')
+      expect(bandMode(payload, 'Wniosek', 'Recycled')).toBe('progress')
+    })
+
+    it('regresja: status Won POZA steps (OZE „Wygrana – montaż") nadal daje "won" przez drugą gałąź', () => {
+      const payload = shapePayload() // steps = stepsPvMe, nie zawiera „Wygrana – montaż"
+      expect(bandMode(payload, 'Wygrana – montaż', 'Won')).toBe('won')
     })
   })
 
@@ -220,6 +247,14 @@ describe('Pipeline dealu — logika węzłów paska etapów (dealPipeline)', () 
       expect(nextStepNote(null, 'Nowy', undefined)).toBeNull()
       expect(nextStepNote({ steps: [] }, 'Nowy', undefined)).toBeNull()
     })
+
+    it('zwraca null w trybie "won" powstałym ze statusu W steps (b49 F1: CP „Projekt rozliczony"), nawet gdy notes ma wpis dla tego statusu', () => {
+      const payload = shapePayload({
+        steps: stepsCp,
+        notes: { 'Projekt rozliczony': 'Ta notatka nie powinna się pokazać' },
+      })
+      expect(nextStepNote(payload, 'Projekt rozliczony', 'Won')).toBeNull()
+    })
   })
 
   describe('offPipelineBadge', () => {
@@ -247,6 +282,18 @@ describe('Pipeline dealu — logika węzłów paska etapów (dealPipeline)', () 
       expect(offPipelineBadge(payload, 'Status spoza znanych typów', 'Recycled')).toBe(
         'Status spoza znanych typów',
       )
+    })
+  })
+
+  describe('offPipelineBadge — status Won OBECNY w steps: brak zdublowanej odznaki (b49 F1)', () => {
+    it('zwraca null gdy status jest w steps i statusType==="Won" (CP „Projekt rozliczony" — cały pasek już zielony, odznaka byłaby duplikatem)', () => {
+      const payload = shapePayload({ steps: stepsCp })
+      expect(offPipelineBadge(payload, 'Projekt rozliczony', 'Won')).toBeNull()
+    })
+
+    it('regresja: status Won POZA steps (OZE „Wygrana – montaż") nadal pokazuje odznakę jak dotychczas', () => {
+      const payload = shapePayload() // steps = stepsPvMe, nie zawiera „Wygrana – montaż"
+      expect(offPipelineBadge(payload, 'Wygrana – montaż', 'Won')).toBe('Wygrana – montaż')
     })
   })
 
