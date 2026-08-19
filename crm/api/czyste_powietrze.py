@@ -13,6 +13,7 @@ from typing import Any, NoReturn
 import frappe
 from frappe import _
 from frappe.rate_limiter import rate_limit
+from frappe.utils import flt
 
 from crm.czyste_powietrze.mapowanie import (
 	katalog_z_wierszy,
@@ -26,6 +27,7 @@ from crm.czyste_powietrze.obliczenia import (
 	baza_pracy,
 	oblicz_oferte,
 )
+from crm.koszty.rdzen import zbuduj_snapshot_cp
 
 KALKULATOR_ROLE = {"Volteo D2D Sales", "Volteo Backend", "Volteo Core Admin", "System Manager"}
 ADMIN_ROLE = {"Volteo Core Admin", "System Manager"}
@@ -391,8 +393,10 @@ def volteo_cp_create_deal(wejscie: dict[str, Any], contact: str) -> dict[str, An
 				# "System Manager" (patrz ops/crm-zestaw-cp.py) -- każda inna rola,
 				# łącznie z "Volteo D2D Sales" i "Volteo Backend", nie zobaczy tej
 				# wartości żadną ścieżką odczytu (frappe.get_doc, frappe.client.get_value,
-				# widoki list). wynik["wewnetrzne"] (koszt/marża per pozycja) POZOSTAJE
-				# nieutrwalane -- to się nie zmieniło.
+				# widoki list). wynik["wewnetrzne"] (koszt/marża per pozycja) JEST teraz
+				# UTRWALANE -- ale nie w tym dict-cie: patrz snapshot kosztów budowany i
+				# zapisywany przez db_set() niżej, tuż obok custom_cp_prowizja_handlowa
+				# (custom_koszty_json, crm/koszty/rdzen.py, ops/crm-koszty-montaz.py).
 			}
 		)
 		# Wiersze BOM per pozycja, dopisywane PRZED insert() (wzorzec z kalkulatora PV,
@@ -428,6 +432,15 @@ def volteo_cp_create_deal(wejscie: dict[str, Any], contact: str) -> dict[str, An
 		# otherwise silently strip this from a Volteo D2D Sales rep's insert (see
 		# the comment above, next to custom_cp_wejscie_json).
 		deal.db_set("custom_cp_prowizja_handlowa", wynik["prowizja_handlowa"])
+		# Snapshot kosztów/marży (schema v1, crm/koszty/rdzen.py) -- pola permlevel-2
+		# (custom_koszty_json, custom_koszty_zysk_plan; ops/crm-koszty-montaz.py), więc
+		# db_set() pomija brak prawa zapisu twórcy tak samo jak custom_cp_prowizja_handlowa
+		# wyżej. Snapshot pochodzi z tego samego autorytatywnego przeliczenia serwerowego
+		# (wynik["wewnetrzne"]) niezależnie od roli twórcy szansy -- administrator edytuje
+		# "koszty rzeczywiste" na tym snapshocie później z zakładki Zestaw (crm/api/koszty.py).
+		snapshot = zbuduj_snapshot_cp(wynik["wewnetrzne"], nazwy, frappe.utils.now())
+		deal.db_set("custom_koszty_json", json.dumps(snapshot, ensure_ascii=False))
+		deal.db_set("custom_koszty_zysk_plan", flt(snapshot["podsumowanie"]["zysk_plan"], 2))
 	except Exception:
 		_blad_ogolny()
 

@@ -496,7 +496,10 @@ def oblicz_oferte(
 	# Rozbicie kosztów/prowizji per pozycja budowane PRZED czyszczeniem prywatnych pól przez
 	# _zaokragl_wynik. Żyje wyłącznie wewnątrz wynik["wewnetrzne"], bo crm/api/czyste_powietrze.py
 	# usuwa całe to poddrzewo dla nie-adminów jednym wynik.pop("wewnetrzne", None) — umieszczenie
-	# tych danych na wynik["linie"] ujawniłoby koszty i marże handlowcom terenowym.
+	# tych danych na wynik["linie"] ujawniłoby koszty i marże handlowcom terenowym. Od
+	# volteo_cp_create_deal (crm/api/czyste_powietrze.py) to poddrzewo jest DODATKOWO
+	# zrzucane do trwałego snapshotu w permlevel-2 custom_koszty_json (schema v1,
+	# crm/koszty/rdzen.py::zbuduj_snapshot_cp) — nadal nigdy do wynik["linie"].
 	linie_wewnetrzne = [
 		{
 			"kod": linia["kod"],

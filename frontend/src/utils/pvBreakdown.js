@@ -1,6 +1,13 @@
 // WYŁĄCZNIE prezentacyjne grupowanie i sumowanie liczb już policzonych przez
 // serwer — świadomy, wąski wyjątek od reguły „ZERO pricing math" w
 // `KalkulatorTab.vue`, analogicznie do `cpMarza.js`. Nic nie jest zapisywane.
+//
+// Etykiety pozycji PV (klucz -> etykieta) w DEFINICJA_GRUP poniżej są
+// CELOWO zduplikowane w `ops/crm-kalkulator-bom.py` (mapowanie etykiet przy
+// budowie snapshotu `custom_koszty_json` — GENERATE_PERSIST) — zmieniaj oba
+// miejsca razem, inaczej etykiety w panelu kosztów rzeczywistych (b49,
+// `MontazKosztyPanel.vue`, zamontowany na dole zakładki Zestaw) rozjadą się
+// z etykietami w tym pliku.
 
 const DEFINICJA_GRUP = [
   {

@@ -184,40 +184,82 @@
         </div>
 
         <!--
-          Sales commission — internal-only, permission-driven (see `hasCommission`
-          below): the server strips this field for any role without permlevel-2
-          read on CRM Deal, so a non-admin's dealSubsidy.data simply never has this
-          key and the block below never renders for them. Deliberately styled with
-          the amber "internal warning" treatment already used on this tab family
-          (see AudytTab.vue / UmowaTab.vue), NOT the plain gray of the customer-
-          facing subsidy box above, so nobody mistakes it for a quotable figure.
+          Sales commission — permission-driven (see `hasCommission` below),
+          but no longer admin-only (owner decision): visible to the deal's
+          owning rep (`deal_owner`) as well as admins. The underlying field
+          (`custom_cp_prowizja_handlowa`) is still permlevel 2 on every other
+          path — that protection is unchanged. This box instead reaches it
+          through a dedicated endpoint (`crm.api.koszty.volteo_prowizja_szansy`,
+          see the `dealCommission` fetch in the script) that enforces
+          `admin OR deal_owner` server-side and throws for anyone else; a
+          disallowed viewer's fetch fails silently (no toast, no console
+          noise — see the fetch comment) and `hasCommission` stays false, so
+          the block below simply never renders for them. Deliberately styled
+          with the amber "internal warning" treatment already used on this
+          tab family (see AudytTab.vue / UmowaTab.vue), NOT the plain gray of
+          the customer-facing subsidy box above, so nobody mistakes it for a
+          quotable figure.
+
+          Collapsible, collapsed by default (owner decision, same reasoning as
+          KalkulatorTab.vue's showAdminBreakdown and MontazKosztyPanel.vue's
+          own toggle below): this figure must not be visible by default during
+          a screenshare. Only the expand/collapse is new here — the
+          `hasCommission` gate itself still fully controls whether the toggle
+          button (and everything inside it) exists at all, not merely
+          whether it's collapsed.
         -->
-        <div
-          v-if="hasCommission"
-          class="mt-3 max-w-xs rounded-lg border border-outline-amber-3 bg-surface-amber-2 p-2.5 text-sm"
-        >
-          <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-amber-8">
-            {{ __('Prowizja handlowa — widoczne tylko dla administratorów') }}
-          </div>
-          <div class="flex justify-between py-0.5 text-ink-amber-8">
-            <span>{{ __('Prowizja') }}</span>
-            <span class="font-medium">{{ formatPln(dealFields.custom_cp_prowizja_handlowa) }}</span>
+        <div v-if="hasCommission" class="mt-3 max-w-xs">
+          <button
+            type="button"
+            class="flex w-full items-center justify-between rounded-md border border-outline-amber-3 bg-surface-amber-2 px-2.5 py-1.5 text-sm font-semibold text-ink-amber-8 transition-colors hover:bg-surface-amber-3"
+            @click="showCommission = !showCommission"
+          >
+            <span>{{ __('Prowizja handlowa — widoczne dla opiekuna szansy i administratorów') }}</span>
+            <FeatherIcon :name="showCommission ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 text-ink-amber-8" />
+          </button>
+          <div v-show="showCommission" class="mt-1.5 rounded-lg border border-outline-amber-3 bg-surface-amber-2 p-2.5 text-sm">
+            <div class="flex justify-between py-0.5 text-ink-amber-8">
+              <span>{{ __('Prowizja') }}</span>
+              <span class="font-medium">{{ formatPln(dealCommission.data?.prowizja) }}</span>
+            </div>
           </div>
         </div>
       </div>
+
+      <!--
+        Koszty rzeczywiste (montaż/realizacja) — admin-only panel, placed at
+        the very bottom of this tab's content (owner decision, moved here
+        from MontazTab.vue where it was originally placed by mistake). Lives
+        outside the loading/empty/populated v-if chain above on purpose: the
+        underlying snapshot (`CRM Deal.custom_koszty_json`) is independent of
+        whether this deal has BOM rows to show, so the panel must still
+        render for a deal with no zestaw. It renders nothing itself when
+        there is no usable snapshot (permlevel-2 field absent for a
+        non-admin, or a pre-b49 deal) — see the component's own header
+        comment. Kept inside this `max-w-5xl` container (not full page
+        width) so it scrolls with the rest of the tab's content and lines up
+        with the table above.
+      -->
+      <MontazKosztyPanel :deal-id="dealId" />
     </div>
   </div>
 </template>
 
 <script setup>
 import ZestawIcon from '@/components/Icons/ZestawIcon.vue'
-import { Badge, createResource } from 'frappe-ui'
-import { computed } from 'vue'
+import { Badge, FeatherIcon, createResource } from 'frappe-ui'
+import MontazKosztyPanel from '@/components/deal/MontazKosztyPanel.vue'
+import { computed, ref } from 'vue'
 import { formatPln, roundPln } from '@/utils/money'
 
 const props = defineProps({
   dealId: { type: String, required: true },
 })
+
+// Collapsed by default so the sales commission figure is not visible during
+// screenshares — mirrors KalkulatorTab.vue's showAdminBreakdown and
+// MontazKosztyPanel.vue's own toggle (see the template comment above).
+const showCommission = ref(false)
 
 // Itemized BOM (preferred), from the deal's custom_zestaw child table.
 const bom = createResource({
@@ -239,6 +281,10 @@ const bom = createResource({
 // (see the comment above `hasMoney` below for why the rows can no longer
 // carry a per-line `dotacja`). Fetched separately because it's a handful of
 // scalar fields on CRM Deal, not part of the child-table listing.
+//
+// None of these subsidy fields carry a permlevel restriction (unlike the
+// commission field below, which used to live in this same fetch — see
+// `dealCommission` further down for why it was split out).
 const dealSubsidy = createResource({
   url: 'frappe.client.get_value',
   params: {
@@ -249,16 +295,40 @@ const dealSubsidy = createResource({
       'custom_cp_dotacja_co',
       'custom_cp_dotacja_termo',
       'custom_estimated_subsidy_pln',
-      // permlevel 2 (Volteo Core Admin / System Manager only, see
-      // ops/crm-zestaw-cp.py): Frappe silently drops this key from the response
-      // for every other role instead of returning null or erroring -- verified
-      // empirically via frappe.client.get_value during implementation. `hasCommission`
-      // below treats "key absent" and "key present but 0" identically (both render
-      // nothing), so this is safe to always request.
-      'custom_cp_prowizja_handlowa',
     ],
   },
   auto: true,
+})
+
+// Sales commission — visible to the deal's owning rep (`deal_owner`) AND
+// admins, not admins only (owner decision). `custom_cp_prowizja_handlowa`
+// itself is still permlevel 2 (Volteo Core Admin / System Manager only, see
+// ops/crm-zestaw-cp.py) on every OTHER path — that field-level protection is
+// unchanged and still the reason it can never be fetched via a plain
+// `frappe.client.get_value` for a rep. This tab reaches it instead through a
+// dedicated whitelisted endpoint that re-derives the same value under an
+// explicit `admin OR deal_owner` check server-side
+// (`crm.api.koszty.volteo_prowizja_szansy`) — full dotted path is mandatory,
+// a bare method name resolves only for Server Scripts (see the api-call-path
+// trap documented in UmowaTab.vue).
+//
+// The endpoint THROWS PermissionError for anyone who is neither admin nor
+// the deal owner (unlike the old permlevel-strip fetch above, which failed
+// silently by omitting the key) — so unlike `dealSubsidy`, this fetch MUST
+// swallow its error into "no commission shown" with no toast and no console
+// noise: a backoffice user or a rep who doesn't own this particular deal is
+// an entirely expected, non-exceptional viewer of this tab, not an error
+// condition to surface. Mirrors MontazKosztyPanel.vue's own onError, which
+// does exactly the same swallow-to-null for the same permission-denied-is-
+// normal reason.
+const dealCommission = createResource({
+  url: 'crm.api.koszty.volteo_prowizja_szansy',
+  params: { deal: props.dealId },
+  auto: true,
+  onError: () => {
+    /* PermissionError for a non-owner/non-admin viewer is expected — leave
+       dealCommission.data unset so hasCommission below stays false. */
+  },
 })
 
 // PV-line offer financials, persisted on the deal by the PV calculator (see
@@ -376,19 +446,18 @@ const totalBrutto = computed(() => rows.value.reduce((sum, row) => sum + roundPl
 // above). Read by value, never `hasOwnProperty` — `dealFields` guards against
 // the resource not having answered yet by declaring every key up front with
 // a `0` fallback, so `Number(...)` checks below stay well-defined on every
-// render, not just after the fetch resolves.
+// render, not just after the fetch resolves. This is the same general rule
+// applied everywhere in this file (and the codebase — see
+// KalkulatorCPTab.vue's admin-cost-panel bug): a `computed` must never gate
+// on key presence/absence on a `reactive` object (Vue's proxy defines no
+// `getOwnPropertyDescriptor` trap, so a `hasOwnProperty`/`in` read registers
+// no dependency and freezes at first evaluation) — plain `Number(...) > 0`
+// reads the value itself, never the key.
 const dealFields = computed(() => ({
   custom_cp_dotacja_zrodlo: 0,
   custom_cp_dotacja_co: 0,
   custom_cp_dotacja_termo: 0,
   custom_estimated_subsidy_pln: 0,
-  // Declared up front with a 0 fallback like every other field here, for the
-  // same reason: a `computed` must never gate on key presence/absence on a
-  // `reactive` object (Vue's proxy defines no `getOwnPropertyDescriptor` trap,
-  // so a `hasOwnProperty`/`in` read registers no dependency and freezes at
-  // first evaluation -- see KalkulatorCPTab.vue's admin-cost-panel bug). Plain
-  // `Number(...) > 0` below reads the value itself, never the key.
-  custom_cp_prowizja_handlowa: 0,
   ...(dealSubsidy.data || {}),
 }))
 const hasGroupSubsidy = computed(() =>
@@ -396,15 +465,16 @@ const hasGroupSubsidy = computed(() =>
   Number(dealFields.value.custom_cp_dotacja_co) > 0 ||
   Number(dealFields.value.custom_cp_dotacja_termo) > 0,
 )
-// Permission-driven, not role-driven: a non-admin's dealSubsidy.data never has
-// this key at all (Frappe strips permlevel-2 fields server-side -- see the
-// fetch comment above), so it falls through to the `0` default here and this
-// stays false. An admin viewing a deal where the commission was genuinely
-// never computed (e.g. a PV deal, or any deal from before this field existed)
-// ALSO reads back an unset Currency column as `0` -- indistinguishable from a
-// real zero at the SQL level -- so `> 0`, not a presence check, is what keeps
-// that case blank too instead of rendering a misleading "0 zł".
-const hasCommission = computed(() => Number(dealFields.value.custom_cp_prowizja_handlowa) > 0)
+// Permission-driven, not role-driven: `dealCommission` (see above) is the
+// dedicated endpoint result, gated server-side on admin OR deal_owner. A
+// viewer who is neither gets a swallowed PermissionError and `.data` stays
+// unset, so this reads `undefined` -> `Number(undefined)` -> `NaN` -> `> 0`
+// is `false`. A deal where the commission was genuinely never computed (e.g.
+// a PV deal, or any deal from before this field existed) reads back
+// `prowizja: null` from the endpoint the same way -- `Number(null)` is `0`,
+// also `false` -- so `> 0`, not a presence check, is what keeps both cases
+// blank instead of rendering a misleading "0 zł" or throwing on `null`.
+const hasCommission = computed(() => Number(dealCommission.data?.prowizja) > 0)
 
 // PV offer financials, fetched from the parent deal (see `dealWycena`
 // above). Same explicit-defaults pattern as `dealFields`: every key declared
