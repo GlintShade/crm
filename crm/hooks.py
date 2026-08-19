@@ -241,6 +241,14 @@ doc_events = {
 		"before_insert": ["crm.permissions.file_privacy.enforce_private_on_insert"],
 		"before_validate": ["crm.permissions.file_privacy.enforce_private_on_validate"],
 	},
+	# Audyt specjalny Czyste Powietrze -- doctype tworzy ops/crm-audyt-cp.py
+	# (nie istnieje jeszcze na świeżym/lokalnym site). doc_events na
+	# nieistniejącym doctype są bezpieczne -- Frappe rozwiązuje hooki leniwie,
+	# dopiero gdy dokument tego typu faktycznie próbuje się zapisać/usunąć.
+	"Volteo Audyt CP": {
+		"before_save": ["crm.api.audyt_cp.lock_guard"],
+		"on_trash": ["crm.api.audyt_cp.delete_guard"],
+	},
 }
 
 # Scheduled Tasks

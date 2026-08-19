@@ -373,6 +373,7 @@ VOLTEO_LINKED_SOURCES = [
 		"text_fields": ["typ", "tekst"],
 	},
 	{"doctype": "Volteo Audyt", "label": _("Audyt"), "link_field": "deal", "text_fields": [], "skip_version_fields": {"zdjecia_json", "zdjecia_dodatkowe_json", "weryfikacja_json"}},
+	{"doctype": "Volteo Audyt CP", "label": _("Audyt"), "link_field": "deal", "text_fields": [], "skip_version_fields": {"dokumenty_json", "zdjecia_json", "weryfikacja_json"}},
 ]
 
 CUSTOM_ZESTAW_FIELDNAME = "custom_zestaw"
@@ -545,36 +546,46 @@ def get_volteo_linked_activities(name: str):
 					)
 					continue
 
-	try:
-		if frappe.db.exists("Volteo Audyt", name):
-			comments = frappe.get_all(
-				"Comment",
-				filters={"reference_doctype": "Volteo Audyt", "reference_name": name,
-						 "comment_type": ["in", ["Comment", "Info"]]},
-				fields=["name", "owner", "creation", "content", "comment_type"],
-				order_by="creation desc", limit_page_length=500,  # desc to keep newest rows; caller re-sorts for display
-			)
-			for c in comments:
-				raw = frappe.utils.strip_html(c.get("content") or "").strip()
-				if not raw:
-					continue
-				if c.get("comment_type") == "Info":
-					text = raw  # transition log message, already human Polish
-				else:
-					snippet = raw[:80] + "…" if len(raw) > 80 else raw
-					text = _("komentarz do audytu: „{0}”").format(snippet)
-				linked_activities.append({
-					"name": f"volteo-audyt-comment-{c['name']}",
-					"activity_type": "volteo_linked",
-					"creation": c["creation"],
-					"owner": c["owner"],
-					"is_lead": False,
-					"data": {"source": "Volteo Audyt", "label": _("Audyt"),
-							 "title": None, "action": "comment", "doc_name": name, "text": text},
-				})
-	except Exception:
-		frappe.log_error(title="Volteo linked activities: audyt comments failed",
-						 message=f"deal={name}\n{frappe.get_traceback()}")
+	# Both audyt doctypes (OZE "Volteo Audyt" and CP "Volteo Audyt CP") log their
+	# submit/set-status/set-verdict transitions as native Info comments (see
+	# crm.api.audyt_cp -- db.set_value bypasses Version creation, so this is
+	# the only way those transitions surface in the deal's Aktywność feed).
+	# Looped per doctype, each with its own try/except, so a failure fetching
+	# one audyt's comments can never suppress the other's.
+	for audyt_doctype, activity_name_prefix in (
+		("Volteo Audyt", "volteo-audyt-comment"),
+		("Volteo Audyt CP", "volteo-audyt-cp-comment"),
+	):
+		try:
+			if frappe.db.exists(audyt_doctype, name):
+				comments = frappe.get_all(
+					"Comment",
+					filters={"reference_doctype": audyt_doctype, "reference_name": name,
+							 "comment_type": ["in", ["Comment", "Info"]]},
+					fields=["name", "owner", "creation", "content", "comment_type"],
+					order_by="creation desc", limit_page_length=500,  # desc to keep newest rows; caller re-sorts for display
+				)
+				for c in comments:
+					raw = frappe.utils.strip_html(c.get("content") or "").strip()
+					if not raw:
+						continue
+					if c.get("comment_type") == "Info":
+						text = raw  # transition log message, already human Polish
+					else:
+						snippet = raw[:80] + "…" if len(raw) > 80 else raw
+						text = _("komentarz do audytu: „{0}”").format(snippet)
+					linked_activities.append({
+						"name": f"{activity_name_prefix}-{c['name']}",
+						"activity_type": "volteo_linked",
+						"creation": c["creation"],
+						"owner": c["owner"],
+						"is_lead": False,
+						"data": {"source": audyt_doctype, "label": _("Audyt"),
+								 "title": None, "action": "comment", "doc_name": name, "text": text},
+					})
+		except Exception:
+			frappe.log_error(title="Volteo linked activities: audyt comments failed",
+							 message=f"deal={name} doctype={audyt_doctype}\n{frappe.get_traceback()}")
 
 	return linked_activities
 
@@ -626,6 +637,16 @@ def compose_volteo_linked_text(dt: str, action: str, rec: dict, summary: str | N
 				if field_value:
 					text += ": " + field_value
 				return text
+			text = _("zaktualizowano audyt")
+			if summary:
+				text += " — " + summary
+			return text
+
+		if dt == "Volteo Audyt CP":
+			if action == "added":
+				# No status suffix: crm.api.audyt_cp.lock_guard forces every new
+				# Volteo Audyt CP to start as "Szkic", so it would carry zero information.
+				return _("dodano audyt")
 			text = _("zaktualizowano audyt")
 			if summary:
 				text += " — " + summary

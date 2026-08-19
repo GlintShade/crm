@@ -218,6 +218,7 @@
         <FakturyTab v-else-if="tab.name === 'Faktury'" :deal-id="dealId" />
         <MontazTab v-else-if="tab.name === 'Montaz'" :deal-id="dealId" />
         <AudytTab v-else-if="tab.name === 'Audyt'" :deal-id="dealId" :rodzaj="doc.custom_rodzaj_umowy || ''" />
+        <AudytCPTab v-else-if="tab.name === 'AudytCP'" :deal-id="dealId" />
         <Activities
           v-else
           v-model:reload="reload"
@@ -296,6 +297,7 @@ import ZestawTab from '@/components/deal/ZestawTab.vue'
 import FakturyTab from '@/components/deal/FakturyTab.vue'
 import MontazTab from '@/components/deal/MontazTab.vue'
 import AudytTab from '@/components/deal/AudytTab.vue'
+import AudytCPTab from '@/components/deal/AudytCPTab.vue'
 import DealPipelineBar from '@/components/deal/DealPipelineBar.vue'
 import DealNextStepNote from '@/components/deal/DealNextStepNote.vue'
 import OrganizationModal from '@/components/Modals/OrganizationModal.vue'
@@ -495,7 +497,24 @@ const tabs = computed(() => {
     { name: 'Faktury', label: __('Faktury'), icon: FakturyIcon },
     { name: 'Montaz', label: __('Montaż'), icon: MontazIcon },
     { name: 'Activity', label: __('Historia'), icon: ActivityIcon },
-    { name: 'Audyt', label: __('Audyt'), icon: AudytIcon },
+    {
+      name: 'Audyt',
+      label: __('Audyt'),
+      icon: AudytIcon,
+      // Negated on CP (not `OZE_RODZAJE.has(...)`) so deals with an
+      // unset/unrecognised custom_rodzaj_umowy keep seeing this tab, same
+      // as before AudytCP existed — only CP deals lose it.
+      condition: () => doc.value?.custom_rodzaj_umowy !== 'Czyste Powietrze',
+    },
+    {
+      // CP's own special audit form (AudytCPTab, not AudytTab) — mutually
+      // exclusive with 'Audyt' above; both share the label 'Audyt' and
+      // AudytIcon but never appear together for the same deal.
+      name: 'AudytCP',
+      label: __('Audyt'),
+      icon: AudytIcon,
+      condition: () => doc.value?.custom_rodzaj_umowy === 'Czyste Powietrze',
+    },
   ]
   return tabOptions.filter((tab) => (tab.condition ? tab.condition() : true))
 })
