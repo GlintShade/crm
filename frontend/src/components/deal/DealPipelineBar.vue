@@ -46,7 +46,7 @@
       :class="capWidth ? 'sm:max-w-[80%]' : ''"
     >
       <!-- Stepper: węzły równo rozłożone na pełną szerokość, połączone linią -->
-      <div class="flex flex-1 items-start overflow-x-auto">
+      <div ref="stepperScrollRef" class="flex flex-1 items-start overflow-x-auto">
         <template v-for="(step, i) in payload.steps" :key="i">
           <!-- Segment łącznika PRZED węzłem (pomijamy dla pierwszego węzła) -->
           <div
@@ -69,11 +69,16 @@
                niżej) — inaczej "zakładka" wisiałaby w powietrzu nad panelem
                zamiast się w niego wtapiać. Poziome dopasowanie tabu do
                panelu jest przybliżone: ten div żyje w scrollowanym
-               kontenerze steppera, panel POZA scrollem na pełną szerokość —
-               przy nieprzewiniętym stepperze wygląda jak jedno spójne tło,
-               po przewinięciu tab się przesuwa (tab jedzie ze scrollem, górna
-               krawędź panelu może wtedy przebiegać "pod" tabem) — świadomy,
-               zaakceptowany kompromis (bez mierzenia offsetów JS-em).
+               kontenerze steppera, panel POZA scrollem na pełną szerokość.
+               Przy nieprzewiniętym stepperze wygląda jak jedno spójne tło z
+               otwartym szwem u góry (patrz maska `updateSeamMask()` w
+               <script> — zamalowuje segment górnej ramki panelu DOKŁADNIE
+               pod tym divem, mierzone przez `getBoundingClientRect`, bo
+               czystym CSS-em nie da się tego zrobić przy scrollującym
+               stepperze); po przewinięciu tab jedzie ze scrollem, maska
+               podąża za nim (nasłuch scrolla na kontenerze), a przy
+               częściowym/całkowitym zjechaniu taba poza widoczny obszar
+               maska przycina się do realnie widocznej części albo znika.
                Subtelna ramka 1px (`border-outline-gray-3` — widoczna na tle
                `bg-surface-gray-2`, ale niekrzykliwa) z góry i po bokach, BEZ
                dołu (wtapia się w panel). `border-x border-t` jest OBECNE w
@@ -82,6 +87,7 @@
                ramki pojawiającej się/znikającej przy rozwijaniu przesuwałby
                sąsiednie węzły w wierszu o te same 1-2px. -->
           <div
+            :ref="(el) => setTabRef(step.status, el)"
             class="flex shrink-0 flex-col items-center border-x border-t px-1"
             :class="
               rozwinietyEtap === step.status
@@ -163,11 +169,28 @@
          przerwy między nimi. Pełna ramka (wszystkie 4 boki) — w
          przeciwieństwie do tabu wyżej ten div montuje/odmontowuje się cały
          przez `v-if`, więc dodanie ramki nie powoduje osobnego "skoku"
-         layoutu poza tym, który już wynika z pojawienia/zniknięcia panelu. -->
+         layoutu poza tym, który już wynika z pojawienia/zniknięcia panelu.
+         `relative` — kontekst pozycjonowania dla maski szwu niżej. -->
     <div
       v-if="rozwinietyEtap"
-      class="w-full max-w-full rounded-md border border-outline-gray-3 bg-surface-gray-2 p-3"
+      ref="panelRef"
+      class="relative w-full max-w-full rounded-md border border-outline-gray-3 bg-surface-gray-2 p-3"
     >
+      <!-- Maska szwu: zamalowuje segment GÓRNEJ ramki panelu dokładnie pod
+           aktywnym tabem (`updateSeamMask()` w <script>), żeby ramka panelu
+           wyglądała na "otwartą" na szerokość taba zamiast go przecinać —
+           patrz komentarz przy tabie wyżej. `top: -1px` (a nie `0`) celowo:
+           offsety absolutnie pozycjonowanego potomka liczą się od PADDING
+           BOX rodzica (wewnątrz jego 1px ramki), więc żeby trafić dokładnie
+           w linię ramki (border-box top), trzeba cofnąć się o jej szerokość.
+           `pointer-events-none`, bo to czysto kosmetyczny 1px pasek, nie ma
+           przechwytywać kliknięć/hoverów elementów pod nim. -->
+      <span
+        v-if="seamMaskVisible"
+        class="pointer-events-none absolute h-px bg-surface-gray-2"
+        :style="{ top: '-1px', left: seamMaskLeft + 'px', width: seamMaskWidth + 'px' }"
+        aria-hidden="true"
+      />
       <div class="mb-2 flex items-center justify-center gap-2">
         <span class="text-sm font-medium text-ink-gray-8">{{ __(rozwinietyEtap) }}</span>
         <span class="text-xs text-ink-gray-5">
@@ -317,7 +340,7 @@
 // ten komponent ich nie czyta. Rozwijanie pasa mini-zadań (poniżej) czyta
 // TEN SAM `payload.subtasks` bez żadnego dodatkowego fetcha.
 import { Badge, Button, FormControl, Popover, call, createResource, toast } from 'frappe-ui'
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, reactive, ref, watch } from 'vue'
 import { getFormat } from '@/utils'
 import { statusesStore } from '@/stores/statuses'
 import {
@@ -426,6 +449,132 @@ const rozwinietyEtap = ref(null)
 function toggleEtap(status) {
   rozwinietyEtap.value = rozwinietyEtap.value === status ? null : status
 }
+
+// -----------------------------------------------------------------------
+// Maska szwu tab/panel (b49 F2 review 5) — JEDYNE miejsce w tym pliku, które
+// mierzy offsety JS-em (`getBoundingClientRect`). Zakaz mierzenia offsetów z
+// poprzednich rund tego issue jest tu świadomie zdjęty przez właściciela:
+// czystym CSS-em nie da się otworzyć górnej ramki panelu dokładnie pod
+// aktywnym tabem, gdy ten tab żyje w scrollowanym kontenerze steppera, a
+// panel POZA nim na pełną szerokość — te dwa elementy nie mają wspólnego
+// układu odniesienia bez JS-a.
+// -----------------------------------------------------------------------
+
+// Referencje do elementów DOM. `tabRefs` to zwykły obiekt (nie reactive) —
+// węzły steppera renderują się ZAWSZE (dla każdego kroku), zmieniają się
+// tylko ich klasy przy (roz)winięciu, więc każdy tab rejestruje się raz i
+// zostaje w tym obiekcie do odmontowania całego paska; nie ma potrzeby
+// reaktywności na ten obiekt, bo template czyta te elementy tylko z wnętrza
+// `updateSeamMask()`, imperatywnie, nigdy w wyrażeniu renderowanym.
+const tabRefs = {}
+function setTabRef(status, el) {
+  if (el) tabRefs[status] = el
+  else delete tabRefs[status]
+}
+const panelRef = ref(null)
+const stepperScrollRef = ref(null)
+
+// Pozycja/szerokość maski w px, względem PADDING BOX panelu (bo maska jest
+// `position: absolute` wewnątrz `position: relative` panelu) — i czy w ogóle
+// pokazywać maskę (chowana, gdy pas zwinięty albo aktywny tab jest CAŁKOWICIE
+// poza widocznym, przewiniętym obszarem steppera).
+const seamMaskLeft = ref(0)
+const seamMaskWidth = ref(0)
+const seamMaskVisible = ref(false)
+
+/**
+ * Przelicza pozycję/szerokość maski szwu. Wołane: po (roz)winięciu etapu (po
+ * nextTick — DOM musi się zdążyć zaktualizować), na scroll kontenera
+ * steppera i na resize okna (patrz nasłuchy niżej). Bez debounce — to tylko
+ * podstawienie left/width, tańsze niż sam przeliczany layout.
+ */
+function updateSeamMask() {
+  const status = rozwinietyEtap.value
+  const tabEl = status ? tabRefs[status] : null
+  const panelEl = panelRef.value
+  const scrollEl = stepperScrollRef.value
+
+  if (!status || !tabEl || !panelEl || !scrollEl) {
+    seamMaskVisible.value = false
+    return
+  }
+
+  const tabRect = tabEl.getBoundingClientRect()
+  const scrollRect = scrollEl.getBoundingClientRect()
+  const panelRect = panelEl.getBoundingClientRect()
+
+  // Krok 1: realnie WIDOCZNA (nieucięta przez scroll steppera) część taba,
+  // w koordynatach viewportu — przecięcie prostokąta taba z prostokątem
+  // kontenera scrolla. Zerowe/ujemne przecięcie = tab całkiem poza widokiem,
+  // maska znika (pełna, niezamalowana górna linia panelu).
+  const visLeft = Math.max(tabRect.left, scrollRect.left)
+  const visRight = Math.min(tabRect.right, scrollRect.right)
+  if (visRight <= visLeft) {
+    seamMaskVisible.value = false
+    return
+  }
+
+  // Krok 2: korekta +-1px, TYLKO na krawędziach, które są prawdziwą
+  // krawędzią taba (jego własną ramką boczną), nie ucięciem przez kontener
+  // scrolla. Maska celowo węższa o ten 1px z każdej prawdziwej strony taba,
+  // żeby zamalowany segment nigdy nie sięgał dalej niż WŁASNA kolumna ramki
+  // bocznej taba — ta kolumna i tak wizualnie należy już do taba (jego tło
+  // sięga do samego dołu, do linii panelu, zero przerwy — patrz komentarz
+  // przy tabie w <template>), więc nie trzeba jej dodatkowo zamalowywać, a
+  // pozostawienie jej nietkniętej eliminuje ryzyko włosowatej szczeliny na
+  // styku wynikającej z zaokrągleń subpikselowych `getBoundingClientRect`.
+  // Na krawędzi UCIĘTEJ przez scroll (visLeft/visRight != tabRect.left/right)
+  // korekta się NIE stosuje — tam nie ma własnej ramki taba do zachowania,
+  // maska ma sięgać dokładnie do brzegu widocznego obszaru.
+  const maskLeftViewport = visLeft === tabRect.left ? tabRect.left + 1 : visLeft
+  const maskRightViewport = visRight === tabRect.right ? tabRect.right - 1 : visRight
+  if (maskRightViewport <= maskLeftViewport) {
+    seamMaskVisible.value = false
+    return
+  }
+
+  // Krok 3: viewport → lokalne współrzędne panelu, z defensywnym clampem do
+  // szerokości panelu (na wypadek gdyby tab geometrycznie wystawał poza
+  // panel — nie powinno się zdarzyć przy obecnym layoucie, ale maska nie ma
+  // prawa "wyciec" poza własną ramkę panelu w żadnym scenariuszu).
+  const left = Math.max(0, maskLeftViewport - panelRect.left)
+  const width = Math.min(panelRect.width - left, maskRightViewport - maskLeftViewport)
+
+  seamMaskLeft.value = left
+  seamMaskWidth.value = width
+  seamMaskVisible.value = width > 0
+}
+
+// Przeliczenie po KAŻDEJ (roz)winiętej zmianie etapu — nextTick, bo panel
+// (v-if) i klasy taba muszą się zdążyć zaktualizować w DOM przed pomiarem.
+watch(rozwinietyEtap, async () => {
+  await nextTick()
+  updateSeamMask()
+})
+
+// Nasłuch scrolla kontenera steppera — maska musi podążać za tabem w locie,
+// nie tylko przy otwarciu. `stepperScrollRef` to element STABILNY (nie żyje
+// pod v-if, więc nie znika przy (roz)wijaniu pasa — tylko przy ukryciu
+// CAŁEGO paska, gdy `mode === 'hidden'`), więc `watch` na samej referencji
+// (Vue aktualizuje ją na null przy odmontowaniu) wystarcza do poprawnego
+// dodania/zdjęcia nasłuchu bez osobnej logiki mount/unmount. `passive: true`
+// — nasłuch niczego nie blokuje, tylko czyta.
+watch(stepperScrollRef, (el, oldEl) => {
+  oldEl?.removeEventListener('scroll', updateSeamMask)
+  el?.addEventListener('scroll', updateSeamMask, { passive: true })
+})
+
+// Resize okna — najprostsza z dwóch dróg zaakceptowanych do przeliczenia
+// maski przy zmianie szerokości layoutu (np. zwężenie/rozszerzenie okna
+// zmienia, ile miejsca ma stepper i panel); `window` nie montuje/odmontowuje
+// się z komponentem, więc nasłuch dodajemy raz tutaj i zdejmujemy jawnie w
+// onUnmounted (w przeciwieństwie do nasłuchu scrolla wyżej, tu nie ma
+// naturalnego "element zniknął z DOM" momentu, który by to zrobił za nas).
+window.addEventListener('resize', updateSeamMask, { passive: true })
+onUnmounted(() => {
+  window.removeEventListener('resize', updateSeamMask)
+  stepperScrollRef.value?.removeEventListener('scroll', updateSeamMask)
+})
 
 // Katalog podzadań rozwiniętego etapu, prosto z payloadu serwera (kształt —
 // patrz nagłówek pliku). `[]`, gdy pas jest zwinięty albo etap nie ma
