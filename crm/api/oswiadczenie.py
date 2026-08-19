@@ -28,9 +28,21 @@ SINGLE = "Volteo Oswiadczenie Ustawienia"
 
 _CACHE_KLUCZ = "volteo_osw_ok"
 """Klucz hasha w cache Frappe (`frappe.cache`); pole = nazwa usera, wartość =
-`"ok"` gdy podpisał. Cache'ujemy WYŁĄCZNIE werdykty pozytywne (podpisał) —
-nigdy negatywne ("jeszcze nie podpisał"), żeby świeżo podpisane oświadczenie
-od razu odblokowało dostęp bez czekania na wygaśnięcie wpisu."""
+`"ok"`, gdy werdykt jest "NIE wymaga podpisu" — czyli albo user już podpisał
+(rekord `Volteo Oswiadczenie Poufnosci` istnieje), ALBO jego konto powstało
+PRZED `data_graniczna` (zwolnienie z bramki jako "sprzed cutoffu"). To NIE jest
+"podpisał" sensu stricto — patrz `_wymaga_oswiadczenia`, gdzie oba przypadki
+ustawiają ten sam wpis. Cache'ujemy WYŁĄCZNIE werdykty w tym sensie pozytywne —
+nigdy "jeszcze nie podpisał, i musi" — żeby świeżo podpisane oświadczenie od
+razu odblokowało dostęp bez czekania na wygaśnięcie wpisu.
+
+Wpisy są BEZTERMINOWE (bez TTL) — oba źródła zwolnienia są z założenia trwałe:
+podpisanie się nie cofa, a `User.creation` nigdy się nie zmienia i cutoff z
+zasady nigdy nie jest przesuwany wstecz (prawo seedu w ops-skrypcie). ZASTRZEŻENIE:
+gdyby kiedykolwiek ŚWIADOMIE przesunięto `data_graniczna` WSTECZ (re-bramkowanie
+kont wcześniej uznanych za "sprzed cutoffu"), trzeba ręcznie wyczyścić CAŁY ten
+hash w redis (`frappe.cache.delete_key(_CACHE_KLUCZ)`) — inaczej te konta zostają
+cicho zwolnione z bramki na zawsze, mimo zmiany ustawienia."""
 
 _ALLOWLIST = frozenset(
     {
@@ -68,39 +80,70 @@ CELOWO bez jakiegokolwiek `/api/resource/*` — ścieżki resource są zawsze
 blokowane niżej w `before_request`, niezależnie od tej listy."""
 
 
+_MARKER_BRAK_CUTOFFU = "volteo_osw_brak_cutoffu_zalogowano"
+"""Klucz string (nie hash) w cache Frappe — obecność oznacza "już zalogowano
+brak `data_graniczna` w ciągu ostatnich 24h", patrz `_zaloguj_brak_cutoffu_raz_dziennie`."""
+
+
+def _zaloguj_brak_cutoffu_raz_dziennie() -> None:
+    """Loguje do Error Log brak skonfigurowanej `data_graniczna` co najwyżej
+    raz na 24h. Bez tego throttla `before_request` — wołany na KAŻDYM `/api/*`
+    KAŻDEGO usera — zasypałby Error Log tysiącami wpisów przez cały (potencjalnie
+    wielogodzinny) stan przejściowy między wdrożeniem schematu a zasianiem
+    cutoffu przez ops-skrypt."""
+    if frappe.cache.get_value(_MARKER_BRAK_CUTOFFU):
+        return
+    frappe.log_error(
+        title="Volteo Oświadczenie: brak daty granicznej",
+        message=(
+            f"{SINGLE}.data_graniczna jest pusta/nieustawiona — bramka NDA "
+            "pozostaje wyłączona (fail-open) do czasu jej ustawienia."
+        ),
+    )
+    frappe.cache.set_value(_MARKER_BRAK_CUTOFFU, "1", expires_in_sec=86400)
+
+
 def _wymaga_oswiadczenia(user: str | None) -> bool:
     """Kanoniczny predykat: czy `user` musi podpisać oświadczenie, zanim
     dostanie dostęp do danych CRM.
 
     `False` dla `Guest`/`Administrator`/pustego usera — Administrator jest
     kontem technicznym, nie osobą składającą oświadczenie. Cała reszta ciała
-    jest owinięta w try/except: wyjątek (brakujący schemat, błąd bazy, cokolwiek)
-    NIGDY nie ma prawa zablokować całego CRM-a — failujemy OTWARCIE i logujemy.
+    jest owinięta w try/except: wyjątek (brakujący schemat, błąd bazy, cokolwiek,
+    w tym sam Redis) NIGDY nie ma prawa zablokować całego CRM-a — failujemy
+    OTWARCIE i logujemy.
+
+    Cache-first: sprawdzenie `frappe.cache` jest PIERWSZĄ operacją w try, przed
+    jakimkolwiek zapytaniem do bazy. `before_request` leci na KAŻDYM wywołaniu
+    `/api/*` każdego usera, więc bez tego porządku każdy request każdego
+    zwolnionego użytkownika (podpisał ALBO konto sprzed cutoffu) płaciłby te
+    same ~3 SELECT-y (DocType, Single, User.creation) na zawsze — cache trafia
+    dopiero na samym końcu starej ścieżki, więc nigdy by nie zadziałał jako
+    skrót. Zobacz `_CACHE_KLUCZ` po pełną semantykę wpisu i zastrzeżenie o
+    cofnięciu cutoffu.
     """
     if not user or user in ("Guest", "Administrator"):
         return False
 
     try:
+        if frappe.cache.hget(_CACHE_KLUCZ, user) == "ok":
+            return False
+
         if not frappe.db.exists("DocType", SINGLE):
             return False
 
         ustawienia = frappe.db.get_singles_dict(SINGLE)
         data_graniczna = ustawienia.get("data_graniczna") if ustawienia else None
         if not data_graniczna:
-            frappe.log_error(
-                title="Volteo Oświadczenie: brak daty granicznej",
-                message=(
-                    f"{SINGLE}.data_graniczna jest pusta/nieustawiona — bramka NDA "
-                    "pozostaje wyłączona (fail-open) do czasu jej ustawienia."
-                ),
-            )
+            _zaloguj_brak_cutoffu_raz_dziennie()
             return False
 
         utworzenie_konta = frappe.db.get_value("User", user, "creation")
         if not utworzenie_konta or get_datetime(utworzenie_konta) < get_datetime(data_graniczna):
-            return False
-
-        if frappe.cache.hget(_CACHE_KLUCZ, user) == "ok":
+            # Zwolnienie "sprzed cutoffu" jest trwałe: `User.creation` się nie
+            # zmienia, a cutoff z założenia nigdy nie jest przesuwany wstecz —
+            # cache'ujemy je identycznie jak podpisanie (patrz `_CACHE_KLUCZ`).
+            frappe.cache.hset(_CACHE_KLUCZ, user, "ok")
             return False
 
         if not frappe.db.exists("DocType", DOCTYPE):
