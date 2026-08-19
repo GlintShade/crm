@@ -4,9 +4,9 @@
 """Testy `crm/volteo_oswiadczenie.py` (`unittest`, NIE pytest — nie istnieje dla
 Pythona 3.14 użytego lokalnie do tych testów).
 
-`reportlab` i `pypdf` NIE są zainstalowane w systemowym Pythonie — do testów
-użyj interpretera z osobnego wirtualnego środowiska, w którym obie biblioteki
-są zainstalowane (zob. `crm/test_volteo_umowa_render.py`, ten sam wymóg).
+`reportlab` i `pypdf` SĄ dostępne w systemowym Pythonie tej maszyny — testy
+uruchamia się zwykłym `python3 -m unittest crm.test_volteo_oswiadczenie`, bez
+osobnego wirtualnego środowiska (to samo dotyczy `crm/test_volteo_umowa_render.py`).
 
 Testy generujące PDF potrzebują PRAWDZIWEGO pliku TTF, żeby zweryfikować
 realne renderowanie (w tym polskie znaki diakrytyczne) — `_zarejestruj_font()`
