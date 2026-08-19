@@ -71,11 +71,23 @@
                panelu jest przybliżone: ten div żyje w scrollowanym
                kontenerze steppera, panel POZA scrollem na pełną szerokość —
                przy nieprzewiniętym stepperze wygląda jak jedno spójne tło,
-               po przewinięciu tab się przesuwa. Świadomy, zaakceptowany
-               kompromis (bez mierzenia offsetów JS-em). -->
+               po przewinięciu tab się przesuwa (tab jedzie ze scrollem, górna
+               krawędź panelu może wtedy przebiegać "pod" tabem) — świadomy,
+               zaakceptowany kompromis (bez mierzenia offsetów JS-em).
+               Subtelna ramka 1px (`border-outline-gray-3` — widoczna na tle
+               `bg-surface-gray-2`, ale niekrzykliwa) z góry i po bokach, BEZ
+               dołu (wtapia się w panel). `border-x border-t` jest OBECNE w
+               obu gałęziach (aktywnej i nieaktywnej), zmienia się tylko
+               kolor (`border-transparent` gdy nieaktywna) — inaczej 1px
+               ramki pojawiającej się/znikającej przy rozwijaniu przesuwałby
+               sąsiednie węzły w wierszu o te same 1-2px. -->
           <div
-            class="flex shrink-0 flex-col items-center px-1"
-            :class="rozwinietyEtap === step.status ? 'self-stretch rounded-t-md bg-surface-gray-2' : ''"
+            class="flex shrink-0 flex-col items-center border-x border-t px-1"
+            :class="
+              rozwinietyEtap === step.status
+                ? 'self-stretch rounded-t-md border-outline-gray-3 bg-surface-gray-2'
+                : 'border-transparent'
+            "
           >
             <div
               class="flex flex-col items-center py-1"
@@ -145,12 +157,16 @@
          wyżej: pełna szerokość, nie scrolluje się razem z paskiem etapów.
          BEZ marginesu/paddingu nad tym divem (patrz `self-stretch` na tabie
          kolumny węzła wyżej) — panel i tab dzielą ten sam token tła
-         (`bg-surface-gray-2`), więc przy nieprzewiniętym stepperze wyglądają
-         jak jedna spójna "obwoluta": tab wokół aktywnego węzła + panel pod
-         spodem, bez przerwy między nimi. -->
+         (`bg-surface-gray-2`) i tę samą ramkę (`border-outline-gray-3`), więc
+         przy nieprzewiniętym stepperze wyglądają jak jedna spójna
+         "obwoluta": tab wokół aktywnego węzła + panel pod spodem, bez
+         przerwy między nimi. Pełna ramka (wszystkie 4 boki) — w
+         przeciwieństwie do tabu wyżej ten div montuje/odmontowuje się cały
+         przez `v-if`, więc dodanie ramki nie powoduje osobnego "skoku"
+         layoutu poza tym, który już wynika z pojawienia/zniknięcia panelu. -->
     <div
       v-if="rozwinietyEtap"
-      class="w-full max-w-full rounded-md bg-surface-gray-2 p-3"
+      class="w-full max-w-full rounded-md border border-outline-gray-3 bg-surface-gray-2 p-3"
     >
       <div class="mb-2 flex items-center justify-center gap-2">
         <span class="text-sm font-medium text-ink-gray-8">{{ __(rozwinietyEtap) }}</span>
