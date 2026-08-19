@@ -8874,3 +8874,35 @@ msgstr "Autenti create_document_process nie powiodło się: brak id w odpowiedzi
 msgctxt "field label"
 msgid "Like"
 msgstr "Polubienia"
+
+# nowy string: zaproszenia z rolą Volteo i miejscem w hierarchii (b49, issue #10)
+msgid "Volteo role"
+msgstr "Rola Volteo"
+
+# nowy string: zaproszenia z rolą Volteo i miejscem w hierarchii (b49, issue #10)
+msgid "D2D Sales Rep"
+msgstr "Handlowiec D2D"
+
+# nowy string: zaproszenia z rolą Volteo i miejscem w hierarchii (b49, issue #10)
+msgid "Backoffice"
+msgstr "Backoffice"
+
+# nowy string: zaproszenia z rolą Volteo i miejscem w hierarchii (b49, issue #10)
+msgid "Reports to (hierarchy)"
+msgstr "Przełożony (hierarchia)"
+
+# nowy string: zaproszenia z rolą Volteo i miejscem w hierarchii (b49, issue #10)
+msgid "None"
+msgstr "Brak"
+
+# nowy string: zaproszenia z rolą Volteo i miejscem w hierarchii (b49, issue #10)
+msgid "Select a hierarchy node"
+msgstr "Wybierz węzeł hierarchii"
+
+# nowy string: email zaproszenia — polonizacja i branding ProEnergy (b49, defekt zgłoszony przez właściciela)
+msgid "You have been invited to join {0}"
+msgstr "Zaproszenie do {0}"
+
+# nowy string: email zaproszenia — polonizacja i branding ProEnergy (b49, defekt zgłoszony przez właściciela)
+msgid "Click the button below to accept the invitation and get started."
+msgstr "Kliknij przycisk poniżej, aby przyjąć zaproszenie i rozpocząć pracę."

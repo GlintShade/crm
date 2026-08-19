@@ -35,16 +35,23 @@ class CRMInvitation(Document):
 		self.invite_via_email()
 
 	def invite_via_email(self):
-		invite_link = frappe.utils.get_url(f"/api/method/crm.api.accept_invitation?key={self.key}")
+		# A guest GET on the accept-invitation API endpoint 403s: that
+		# endpoint is deliberately POST-only (b47 audit hardening — see
+		# ops/crm-invitation-hardening.py — and must stay that way). The
+		# emailed link instead points at a website page that does the POST
+		# from a button (crm/www/zaproszenie.py).
+		invite_link = frappe.utils.get_url(f"/zaproszenie?key={self.key}")
 		if frappe.local.dev_server:
 			print(f"Invite link for {self.email}: {invite_link}")  # nosemgrep
 
-		title = "Frappe CRM"
+		# User-facing branding is ProEnergy (see CLAUDE.md) even though the
+		# app/doctype namespace stays "Volteo"/"CRM" internally.
+		title = "CRM ProEnergy"
 		template = "crm_invitation"
 
 		frappe.sendmail(
 			recipients=self.email,
-			subject=f"You have been invited to join {title}",
+			subject=_("You have been invited to join {0}").format(title),
 			template=template,
 			args={"title": title, "invite_link": invite_link},
 			now=True,
@@ -68,7 +75,34 @@ class CRMInvitation(Document):
 			user.append_roles("Sales User")
 		if self.role == "Sales User":
 			self.update_module_in_user(user, "FCRM")
+		# Volteo-specific role. Read via `.get()`, not attribute access: the
+		# `volteo_role` Custom Field only exists once
+		# ops/crm-invitation-volteo.py has run on this site, and `.get()` on
+		# a Document returns None for an undefined field instead of raising
+		# — same reasoning as `hierarchy_parent` below.
+		volteo_role = self.get("volteo_role")
+		if volteo_role:
+			user.append_roles(volteo_role)
+		# One save covers the stock role(s) above and the Volteo role.
 		user.save(ignore_permissions=True)
+
+		# Place the new user in the Sales Hierarchy tree under the chosen
+		# parent, if one was picked at invite time and no node exists for
+		# this user yet. accept() runs allow_guest (see accept_invitation),
+		# so this insert must ignore permissions explicitly. A failure here
+		# is deliberately NOT swallowed: it propagates so the invitation
+		# stays Pending and the accept can be retried, rather than silently
+		# leaving the new rep unplaced in the hierarchy.
+		hierarchy_parent = self.get("hierarchy_parent")
+		if hierarchy_parent and not frappe.db.exists("CRM Sales Hierarchy", {"user": self.email}):
+			full_name = user.full_name or self.email
+			frappe.get_doc(
+				doctype="CRM Sales Hierarchy",
+				full_name=full_name,
+				user=self.email,
+				reports_to=hierarchy_parent,
+				is_group=0,
+			).insert(ignore_permissions=True)
 
 		self.status = "Accepted"
 		self.accepted_at = frappe.utils.now()

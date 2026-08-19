@@ -94,8 +94,13 @@ def accept_invitation(key: str | None = None):
 
 
 @frappe.whitelist()
-def invite_by_email(emails: str, role: str):
-	frappe.only_for(["Sales Manager", "System Manager"], True)
+def invite_by_email(
+	emails: str,
+	role: str,
+	volteo_role: str | None = None,
+	hierarchy_parent: str | None = None,
+):
+	frappe.only_for(["Sales Manager", "System Manager", "Volteo Core Admin"], True)
 
 	user_roles = frappe.get_roles(frappe.session.user)
 
@@ -107,6 +112,20 @@ def invite_by_email(emails: str, role: str):
 
 	if role not in ["System Manager", "Sales Manager", "Sales User"]:
 		frappe.throw(_("Cannot invite for this role"), frappe.PermissionError)
+
+	# Volteo-specific role assigned alongside the stock CRM role above. Kept
+	# to an explicit allowlist — anything outside it is a hard error, never a
+	# silent skip.
+	if volteo_role not in (None, "", "Volteo D2D Sales", "Volteo Backend"):
+		frappe.throw(_("Cannot invite for this Volteo role"), frappe.PermissionError)
+
+	if volteo_role == "Volteo Backend" and not (
+		"System Manager" in user_roles or "Volteo Core Admin" in user_roles
+	):
+		frappe.throw(_("You are not allowed to invite Backoffice users"), frappe.PermissionError)
+
+	if hierarchy_parent and not frappe.db.exists("CRM Sales Hierarchy", hierarchy_parent):
+		frappe.throw(_("Sales Hierarchy node {0} does not exist").format(hierarchy_parent))
 
 	if not emails:
 		return
@@ -127,7 +146,13 @@ def invite_by_email(emails: str, role: str):
 	to_invite = list(set(email_list) - set(existing_members) - set(existing_invites))
 
 	for email in to_invite:
-		frappe.get_doc(doctype="CRM Invitation", email=email, role=role).insert(ignore_permissions=True)
+		frappe.get_doc(
+			doctype="CRM Invitation",
+			email=email,
+			role=role,
+			volteo_role=volteo_role or "",
+			hierarchy_parent=hierarchy_parent or "",
+		).insert(ignore_permissions=True)
 
 	return {
 		"existing_members": existing_members,

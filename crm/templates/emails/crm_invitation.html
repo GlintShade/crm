@@ -1,4 +1,5 @@
-<p>You have been invited to join Frappe CRM</p>
+<p>{{ _("You have been invited to join {0}").format(title) }}</p>
+<p>{{ _("Click the button below to accept the invitation and get started.") }}</p>
 <p>
-	<a class="btn btn-primary" href="{{ invite_link }}">Accept Invitation</a>
+	<a class="btn btn-primary" href="{{ invite_link }}">{{ _("Accept Invitation") }}</a>
 </p>

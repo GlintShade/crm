@@ -18,7 +18,10 @@
           :label="__('Send Invites')"
           variant="solid"
           :disabled="
-            !invitees.length || userExistMessage || inviteeExistMessage
+            !invitees.length ||
+            userExistMessage ||
+            inviteeExistMessage ||
+            hierarchyRequiredButMissing
           "
           :loading="inviteByEmail.loading"
           @click="inviteByEmail.submit()"
@@ -54,6 +57,21 @@
           :options="roleOptions"
           :description="description"
         />
+        <FormControl
+          v-model="volteoRole"
+          type="select"
+          class="mt-4"
+          :label="__('Volteo role')"
+          :options="volteoRoleOptions"
+        />
+        <FormControl
+          v-if="volteoRole"
+          v-model="hierarchyParent"
+          type="select"
+          class="mt-4"
+          :label="__('Reports to (hierarchy)')"
+          :options="hierarchyOptions"
+        />
       </div>
       <template v-if="pendingInvitations.data?.length && !invitees.length">
         <div class="flex flex-col gap-4">
@@ -71,7 +89,10 @@
                   {{ user.email }}
                 </span>
                 <span class="text-ink-gray-5">
-                  ({{ roleMap[user.role] }})
+                  ({{ roleMap[user.role]
+                  }}<template v-if="user.volteo_role">
+                    · {{ volteoRoleMap[user.volteo_role] }}</template
+                  >)
                 </span>
               </div>
               <div>
@@ -107,11 +128,13 @@ import {
 import { ref, computed } from 'vue'
 
 const { updateOnboardingStep } = useOnboarding('frappecrm')
-const { users, isAdmin } = usersStore()
+const { users, isAdmin, isVolteoAdmin } = usersStore()
 const { capture } = useTelemetry()
 
 const invitees = ref([])
 const role = ref('Sales User')
+const volteoRole = ref('Volteo D2D Sales')
+const hierarchyParent = ref('')
 const error = ref(null)
 
 const userExistMessage = computed(() => {
@@ -171,16 +194,64 @@ const roleMap = {
   'System Manager': __('Admin'),
 }
 
+// Volteo-specific role assigned alongside the stock role above. Backoffice
+// is only offered to Volteo admins — same gate the backend enforces in
+// `crm.api.invite_by_email`.
+const volteoRoleOptions = computed(() => {
+  return [
+    { value: '', label: __('None') },
+    { value: 'Volteo D2D Sales', label: __('D2D Sales Rep') },
+    ...(isVolteoAdmin()
+      ? [{ value: 'Volteo Backend', label: __('Backoffice') }]
+      : []),
+  ]
+})
+
+const volteoRoleMap = {
+  'Volteo D2D Sales': __('D2D Sales Rep'),
+  'Volteo Backend': __('Backoffice'),
+}
+
+// Sales User has stock read on CRM Sales Hierarchy, so this list resource
+// resolves for every inviter, not just admins.
+const hierarchyList = createListResource({
+  type: 'list',
+  doctype: 'CRM Sales Hierarchy',
+  fields: ['name', 'full_name', 'is_group'],
+  pageLength: 999,
+  auto: true,
+})
+
+const hierarchyOptions = computed(() => {
+  return [
+    { value: '', label: __('Select a hierarchy node') },
+    ...(hierarchyList.data || []).map((node) => ({
+      value: node.name,
+      label: node.full_name || node.name,
+    })),
+  ]
+})
+
+// Required for D2D invites — a rep without a hierarchy node gets no scope
+// from the org_hierarchy visibility hooks.
+const hierarchyRequiredButMissing = computed(() => {
+  return volteoRole.value === 'Volteo D2D Sales' && !hierarchyParent.value
+})
+
 const inviteByEmail = createResource({
   url: 'crm.api.invite_by_email',
   makeParams() {
     return {
       emails: convertArrayToString(invitees.value),
       role: role.value,
+      volteo_role: volteoRole.value || '',
+      hierarchy_parent: hierarchyParent.value || '',
     }
   },
   onSuccess() {
     role.value = 'Sales User'
+    volteoRole.value = 'Volteo D2D Sales'
+    hierarchyParent.value = ''
     error.value = null
     invitees.value = []
     pendingInvitations.reload()
@@ -198,7 +269,7 @@ const pendingInvitations = createListResource({
   type: 'list',
   doctype: 'CRM Invitation',
   filters: { status: 'Pending' },
-  fields: ['name', 'email', 'role'],
+  fields: ['name', 'email', 'role', 'volteo_role'],
   pageLength: 999,
   auto: true,
 })

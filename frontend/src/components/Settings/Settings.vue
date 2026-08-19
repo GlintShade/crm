@@ -156,7 +156,7 @@ const tabs = computed(() => {
           label: __('Invite User'),
           icon: 'user-plus',
           component: markRaw(InviteUserPage),
-          condition: () => isManager(),
+          condition: () => isManager() || isVolteoAdmin(),
         },
         {
           label: __('Sales Hierarchy'),
