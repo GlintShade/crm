@@ -8,6 +8,8 @@ from frappe.translate import get_messages_for_boot, get_translated_doctypes
 from frappe.utils import cint, get_system_timezone
 from frappe.utils.telemetry import capture
 
+from crm.api.oswiadczenie import _wymaga_oswiadczenia
+
 no_cache = 1
 
 
@@ -60,6 +62,12 @@ def get_boot():
 				"Volteo D2D Sales" in frappe.get_roles()
 				and not (set(frappe.get_roles()) & {"System Manager", "Volteo Core Admin", "Volteo Backend"})
 			),
+			# VOLTEO: first-login NDA gate — the SPA shows the signing screen (and
+			# blocks the rest of the UI) when this is true. Server-side enforcement
+			# for /api/* lives in crm.api.oswiadczenie.before_request; this boot key
+			# only drives client-side UI. Fails open on any error (missing schema,
+			# etc.) — see _wymaga_oswiadczenia docstring.
+			"volteo_wymaga_oswiadczenia": _wymaga_oswiadczenia(frappe.session.user),
 			"translated_doctypes": get_translated_doctypes(),
 			"translated_messages": get_messages_for_boot(),
 			"timezone": {
