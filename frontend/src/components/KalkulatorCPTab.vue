@@ -283,25 +283,33 @@
 
         <div class="kalk-output border-l border-outline-gray-2 pl-5">
           <div class="sticky top-3">
-            <div class="mb-2 text-base font-semibold text-ink-gray-9">{{ __('Wycena') }}</div>
             <div v-if="errorMsg" class="mb-2 rounded border border-outline-red-3 bg-surface-red-2 px-2.5 py-2 text-sm text-ink-red-8">
               {{ errorMsg }}
             </div>
-            <div v-if="hasResult">
-              <div class="mb-2 rounded-lg border border-outline-gray-1 bg-surface-gray-1 p-2.5">
-                <div class="flex justify-between py-0.5 text-sm text-ink-gray-7">
+
+            <div class="mb-2 overflow-hidden rounded-lg border border-outline-gray-1">
+              <div class="border-b border-outline-gray-1 bg-surface-gray-1 px-2.5 py-1.5 text-sm font-semibold text-ink-gray-8">
+                {{ __('Wycena') }}
+              </div>
+              <div v-if="hasResult" class="p-2.5">
+                <div class="flex justify-between py-1 text-sm text-ink-gray-7">
                   <span>{{ __('Wartość inwestycji brutto') }}</span>
                   <span class="text-lg font-semibold tabular-nums text-ink-gray-9">{{ formatPln(result.suma_brutto) }}</span>
                 </div>
-                <div class="flex justify-between py-0.5 text-sm text-ink-gray-7">
+                <div class="flex justify-between border-t border-outline-gray-1 py-1 text-sm text-ink-gray-7">
                   <span>{{ __('Wkład własny beneficjenta') }}</span>
                   <span class="text-sm font-semibold tabular-nums text-ink-gray-8">{{ formatPln(result.wklad_wlasny) }}</span>
                 </div>
-                <div class="flex justify-between border-t border-outline-gray-1 pt-1.5 text-sm font-semibold tabular-nums text-ink-gray-8">
+                <div class="flex justify-between border-t border-outline-gray-1 py-1 text-sm font-semibold tabular-nums text-ink-gray-8">
                   <span>{{ __('Dotacja łączna') }}</span><span>{{ formatPln(result.dotacja_laczna) }}</span>
                 </div>
               </div>
+              <div v-else class="p-2.5 text-sm text-ink-gray-5">
+                {{ __('Uzupełnij konfigurację, aby zobaczyć wycenę.') }}
+              </div>
+            </div>
 
+            <div v-if="hasResult">
               <div v-if="restrictionAmount > 0" class="mb-2 text-xs text-ink-gray-5">
                 {{ __('Dofinansowanie ograniczone limitem (−{0} zł)', [formatPlnAmount(result.dotacja_ograniczona_o)]) }}
               </div>
@@ -370,9 +378,6 @@
                 ><span>{{ __('Zysk') }}</span><span>{{ formatPln(podzial.razem.zysk) }}</span></div>
                 </div>
               </div>
-            </div>
-            <div v-else-if="!errorMsg" class="text-sm text-ink-gray-5">
-              {{ __('Uzupełnij konfigurację, aby zobaczyć wycenę.') }}
             </div>
 
             <div v-if="$slots['client-picker']" class="mb-2 mt-2">
