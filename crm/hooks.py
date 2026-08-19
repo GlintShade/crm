@@ -249,6 +249,12 @@ doc_events = {
 		"before_save": ["crm.api.audyt_cp.lock_guard"],
 		"on_trash": ["crm.api.audyt_cp.delete_guard"],
 	},
+	"Volteo Oswiadczenie Poufnosci": {
+		# Deleting a signed declaration (e.g. an admin forcing re-sign) must
+		# invalidate the positive-verdict cache immediately -- see
+		# crm.api.oswiadczenie._CACHE_KLUCZ.
+		"on_trash": ["crm.api.oswiadczenie.po_usunieciu_oswiadczenia"],
+	},
 }
 
 # Scheduled Tasks
@@ -303,7 +309,10 @@ ignore_links_on_delete = ["Failed Lead Sync Log"]
 
 # Request Events
 # ----------------
-# before_request = ["crm.utils.before_request"]
+# First-login NDA gate: blocks /api/* for users created after the deploy-time
+# cutoff who haven't signed the confidentiality declaration yet (fail-open on
+# any error -- see crm.api.oswiadczenie._wymaga_oswiadczenia).
+before_request = ["crm.api.oswiadczenie.before_request"]
 # after_request = ["crm.utils.after_request"]
 
 # Job Events
