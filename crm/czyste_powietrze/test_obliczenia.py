@@ -469,6 +469,13 @@ class TestObliczenia(unittest.TestCase):
 		katalog["pompa_ciepla"]["dotacja"]["podstawowy"] = "50000"
 		wynik = oblicz_oferte(_wejscie(), katalog, copy.deepcopy(LIMITY), copy.deepcopy(STALE))
 		self.assertEqual(wynik["wklad_wlasny"], Decimal("0.00"))
+		# Pułapka: gdy dotacja grupy przekracza jej brutto, wklad_wlasny jest przycinany do
+		# zera (klamrowanie per grupa, patrz obliczenia.py ok. linii 439-441), więc
+		# wklad_wlasny + dotacja_laczna PRZESTAJE być tożsame z sumą brutto linii. suma_brutto
+		# musi więc pochodzić z linii, nigdy z tej sumy.
+		suma_linii = sum((linia["brutto"] for linia in wynik["linie"]), Decimal("0"))
+		self.assertEqual(wynik["suma_brutto"], suma_linii)
+		self.assertNotEqual(wynik["suma_brutto"], wynik["wklad_wlasny"] + wynik["dotacja_laczna"])
 
 	def test_wynik_i_linie_zawieraja_kwoty_decimal(self: "TestObliczenia") -> None:
 		wynik = self.policz(_wejscie())
@@ -476,10 +483,20 @@ class TestObliczenia(unittest.TestCase):
 			set(wynik["linie"][0]),
 			{"kod", "nazwa_kategorii", "grupa", "ilosc", "jednostka", "netto", "brutto"},
 		)
-		for kwota in ("wklad_wlasny", "prowizja_handlowa", "dotacja_laczna", "dotacja_ograniczona_o"):
+		for kwota in ("wklad_wlasny", "prowizja_handlowa", "dotacja_laczna", "dotacja_ograniczona_o", "suma_brutto"):
 			self.assertIsInstance(wynik[kwota], Decimal)
 		self.assertIsInstance(wynik["wewnetrzne"]["koszt_calkowity"], Decimal)
 		self.assertIsInstance(wynik["linie"][0]["brutto"], Decimal)
+
+	def test_suma_brutto_rowna_sumie_linii(self: "TestObliczenia") -> None:
+		wejscie = _wejscie()
+		wejscie["typ_grzejnikow"] = "grzejnik"
+		wejscie["ilosc_grzejnikow"] = 3
+		wejscie["prace"]["elewacja"] = {"wybrana": True, "m2": "50"}
+		wynik = self.policz(wejscie)
+		suma_linii = sum((linia["brutto"] for linia in wynik["linie"]), Decimal("0"))
+		self.assertEqual(wynik["suma_brutto"], suma_linii)
+		self.assertEqual(wynik["suma_brutto"].as_tuple().exponent, -2)
 
 	def test_zaokraglanie_half_up(self: "TestObliczenia") -> None:
 		katalog = _katalog()

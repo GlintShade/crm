@@ -290,13 +290,12 @@
             <div v-if="hasResult">
               <div class="mb-2 rounded-lg border border-outline-gray-1 bg-surface-gray-1 p-2.5">
                 <div class="flex justify-between py-0.5 text-sm text-ink-gray-7">
-                  <span>{{ __('Wkład własny beneficjenta') }}</span>
-                  <span class="text-lg font-semibold tabular-nums text-ink-gray-9">{{ formatPln(result.wklad_wlasny) }}</span>
+                  <span>{{ __('Wartość inwestycji brutto') }}</span>
+                  <span class="text-lg font-semibold tabular-nums text-ink-gray-9">{{ formatPln(result.suma_brutto) }}</span>
                 </div>
-                <!-- V4 (2026-08-16): ukrycie odwracalne — serwer nie zwraca top-level prowizji
-                     handlowcom (crm/api/czyste_powietrze.py), więc dla nich ten wiersz znika. -->
-                <div v-if="result.prowizja_handlowa != null" class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
-                  <span>{{ __('Prowizja handlowa') }}</span><span>{{ formatPln(result.prowizja_handlowa) }}</span>
+                <div class="flex justify-between py-0.5 text-sm text-ink-gray-7">
+                  <span>{{ __('Wkład własny beneficjenta') }}</span>
+                  <span class="text-sm font-semibold tabular-nums text-ink-gray-8">{{ formatPln(result.wklad_wlasny) }}</span>
                 </div>
                 <div class="flex justify-between border-t border-outline-gray-1 pt-1.5 text-sm font-semibold tabular-nums text-ink-gray-8">
                   <span>{{ __('Dotacja łączna') }}</span><span>{{ formatPln(result.dotacja_laczna) }}</span>
@@ -326,6 +325,22 @@
 
               <div class="mb-2 text-xs text-ink-gray-5">
                 {{ __('To oferta wstępna o charakterze szacunkowym. Wiążące kwoty i zakres prac określi oferta właściwa, przygotowana po energetycznym audycie na miejscu.') }}
+              </div>
+
+              <div v-if="result.prowizja_handlowa != null" class="mb-2">
+                <button
+                  type="button"
+                  class="flex w-full items-center justify-between rounded-md border border-outline-gray-1 bg-surface-gray-1 px-2.5 py-1.5 text-sm font-medium text-ink-gray-7 transition-colors hover:bg-surface-gray-2"
+                  @click="showInfoDodatkowe = !showInfoDodatkowe"
+                >
+                  <span>{{ __('Informacje dodatkowe') }}</span>
+                  <FeatherIcon :name="showInfoDodatkowe ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 text-ink-gray-5" />
+                </button>
+                <div v-if="showInfoDodatkowe" class="mt-1.5 rounded-lg border border-outline-gray-1 p-2.5">
+                  <div class="flex justify-between text-sm tabular-nums text-ink-gray-7">
+                    <span>{{ __('Prowizja handlowa') }}</span><span>{{ formatPln(result.prowizja_handlowa) }}</span>
+                  </div>
+                </div>
               </div>
 
               <div v-if="hasInternal">
@@ -580,6 +595,7 @@ const m2NaDrzwi = ref(null)
 const errorMsg = ref('')
 const resultReady = ref(false)
 const result = reactive({
+  suma_brutto: '',
   wklad_wlasny: '',
   prowizja_handlowa: '',
   dotacja_laczna: '',
@@ -725,6 +741,10 @@ const koszty = ref({})
 // przy udostępnianiu ekranu (screenshare).
 const showAdminCosts = ref(false)
 const showAdminModeling = ref(false)
+// Collapsed by default and neutrally titled ("Informacje dodatkowe", never
+// mentions prowizja) — a customer looking at the screen while it's collapsed
+// must not be able to tell a commission figure is behind it.
+const showInfoDodatkowe = ref(false)
 // `razem.marzaProc` and `razem.zyskProc` are computed inside przeliczPodzial
 // itself (both as % of netto) so the component never re-derives the same
 // ratio by hand — see cpMarza.js.
@@ -803,6 +823,7 @@ function disableManual(kod) {
 
 function clearResult() {
   resultReady.value = false
+  result.suma_brutto = ''
   result.wklad_wlasny = ''
   result.prowizja_handlowa = ''
   result.dotacja_laczna = ''
@@ -872,6 +893,7 @@ async function runCalc() {
       wejscie: buildWejscie(form),
     })
     if (request !== calcRequest) return
+    result.suma_brutto = data.suma_brutto
     result.wklad_wlasny = data.wklad_wlasny
     result.prowizja_handlowa = data.prowizja_handlowa
     result.dotacja_laczna = data.dotacja_laczna

@@ -514,7 +514,14 @@ def oblicz_oferte(
 
 	prowizja_handlowa = _kwota(suma_prowizji)
 	marza = _kwota(suma_netto - koszt_calkowity)
+	# suma_brutto liczona z JUŻ zaokrąglonych linia["brutto"] (nie z surowego brutto_zrodlo/
+	# brutto_co/brutto_termo ani z wklad_wlasny + dotacja_laczna) -- to jedyna wersja
+	# gwarantująca, że klient patrzący na linie zawsze doliczy się do tej sumy. wklad_wlasny
+	# jest przycinany do zera per grupa (patrz max(_ZERO, ...) wyżej), więc jego suma z
+	# dotacja_laczna NIE jest w ogólności tożsama z sumą brutto.
+	suma_brutto = _kwota(sum((linia["brutto"] for linia in linie), _ZERO))
 	wynik = {
+		"suma_brutto": suma_brutto,
 		"wklad_wlasny": _kwota(wklad_zrodlo + wklad_co + wklad_termo),
 		"prowizja_handlowa": prowizja_handlowa,
 		"linie": linie,
