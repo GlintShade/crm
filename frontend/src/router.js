@@ -157,6 +157,11 @@ const routes = [
     component: () => import('@/pages/PersonaForm.vue'),
   },
   {
+    path: '/oswiadczenie',
+    name: 'Oswiadczenie',
+    component: () => import('@/pages/Oswiadczenie.vue'),
+  },
+  {
     path: '/:invalidpath',
     name: 'Invalid Page',
     component: () => import('@/pages/InvalidPage.vue'),
@@ -251,6 +256,20 @@ router.beforeEach(async (to, from, next) => {
     } catch (error) {
       console.error('Error loading users', error)
     }
+  }
+
+  // VOLTEO: first-login NDA gate. window.volteo_wymaga_oswiadczenia is
+  // injected server-side (like window.hide_leads / window.volteo_is_rep)
+  // and reflects whether this user still needs to sign the confidentiality
+  // declaration. This must run before the persona-wizard logic below so an
+  // unsigned user is never routed into onboarding (or anywhere else) ahead
+  // of signing — the backend allowlists get_users for unsigned users, so
+  // the users-store await above already succeeded by this point.
+  if (isLoggedIn && window.volteo_wymaga_oswiadczenia && to.name !== 'Oswiadczenie') {
+    return next({ name: 'Oswiadczenie' })
+  }
+  if (isLoggedIn && !window.volteo_wymaga_oswiadczenia && to.name === 'Oswiadczenie') {
+    return next({ name: 'Home' })
   }
 
   const isAdminUser = isAdmin() || user === 'Administrator'

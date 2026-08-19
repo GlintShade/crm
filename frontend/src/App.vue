@@ -2,6 +2,7 @@
   <FrappeUIProvider>
     <NotPermitted v-if="$route.name === 'Not Permitted'" />
     <router-view v-else-if="$route.name === 'Onboarding'" />
+    <router-view v-else-if="$route.name === 'Oswiadczenie'" />
     <Layout v-else-if="session.isLoggedIn" class="isolate">
       <router-view :key="$route.fullPath" />
     </Layout>
