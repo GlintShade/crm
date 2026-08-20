@@ -162,7 +162,7 @@ const tabs = computed(() => {
           label: __('Sales Hierarchy'),
           icon: LucideNetwork,
           component: markRaw(Hierarchy),
-          condition: () => isManager(),
+          condition: () => isManager() || isVolteoAdmin(),
         },
         {
           label: __('Konta Volteo'),
