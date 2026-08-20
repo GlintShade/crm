@@ -233,18 +233,12 @@ const hierarchyList = createListResource({
 
 const hierarchyOptions = computed(() => {
   return [
-    { value: '', label: __('Select a hierarchy node') },
+    { value: '', label: __('Directly under management (tree root)') },
     ...(hierarchyList.data || []).map((node) => ({
       value: node.name,
       label: node.full_name || node.name,
     })),
   ]
-})
-
-// Required for D2D invites — a rep without a hierarchy node gets no scope
-// from the org_hierarchy visibility hooks.
-const hierarchyRequiredButMissing = computed(() => {
-  return volteoRole.value === 'Volteo D2D Sales' && !hierarchyParent.value
 })
 
 const isSendDisabled = computed(() => {
@@ -253,8 +247,7 @@ const isSendDisabled = computed(() => {
     !firstName.value.trim() ||
     !lastName.value.trim() ||
     Boolean(userExistMessage.value) ||
-    Boolean(inviteeExistMessage.value) ||
-    hierarchyRequiredButMissing.value
+    Boolean(inviteeExistMessage.value)
   )
 })
 

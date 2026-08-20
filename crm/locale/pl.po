@@ -8895,10 +8895,6 @@ msgstr "Przełożony (hierarchia)"
 msgid "None"
 msgstr "Brak"
 
-# nowy string: zaproszenia z rolą Volteo i miejscem w hierarchii (b49, issue #10)
-msgid "Select a hierarchy node"
-msgstr "Wybierz węzeł hierarchii"
-
 # nowy string: email zaproszenia — polonizacja i branding ProEnergy (b49, defekt zgłoszony przez właściciela)
 msgid "You have been invited to join {0}"
 msgstr "Zaproszenie do {0}"
@@ -8910,3 +8906,7 @@ msgstr "Kliknij przycisk poniżej, aby przyjąć zaproszenie i rozpocząć prac�
 # nowy string: zaproszenia jednoosobowe (b50, issue #14)
 msgid "Send Invite"
 msgstr "Wyślij zaproszenie"
+
+# nowy string: pozycja w hierarchii opcjonalna przy zapraszaniu (b51, issue #15)
+msgid "Directly under management (tree root)"
+msgstr "Bezpośrednio pod zarządem (szczyt drzewa)"

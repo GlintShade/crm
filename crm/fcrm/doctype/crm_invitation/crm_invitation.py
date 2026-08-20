@@ -86,21 +86,26 @@ class CRMInvitation(Document):
 		# One save covers the stock role(s) above and the Volteo role.
 		user.save(ignore_permissions=True)
 
-		# Place the new user in the Sales Hierarchy tree under the chosen
-		# parent, if one was picked at invite time and no node exists for
-		# this user yet. accept() runs allow_guest (see accept_invitation),
-		# so this insert must ignore permissions explicitly. A failure here
-		# is deliberately NOT swallowed: it propagates so the invitation
-		# stays Pending and the accept can be retried, rather than silently
-		# leaving the new rep unplaced in the hierarchy.
-		hierarchy_parent = self.get("hierarchy_parent")
-		if hierarchy_parent and not frappe.db.exists("CRM Sales Hierarchy", {"user": self.email}):
+		# Place the new user in the Sales Hierarchy tree whenever the
+		# invite carried a Volteo role, whether or not a parent node was
+		# picked (issue #15): an empty hierarchy_parent means the node goes
+		# straight under management at the tree root (reports_to = None) —
+		# the same position the existing backoffice leaves already sit at,
+		# so it is no longer treated as "unplaced". Skipped only if a node
+		# for this user already exists. accept() runs allow_guest (see
+		# accept_invitation), so this insert must ignore permissions
+		# explicitly. A failure here is deliberately NOT swallowed: it
+		# propagates so the invitation stays Pending and the accept can be
+		# retried, rather than silently leaving the new rep unplaced in the
+		# hierarchy.
+		if volteo_role and not frappe.db.exists("CRM Sales Hierarchy", {"user": self.email}):
+			hierarchy_parent = self.get("hierarchy_parent")
 			full_name = user.full_name or self.email
 			frappe.get_doc(
 				doctype="CRM Sales Hierarchy",
 				full_name=full_name,
 				user=self.email,
-				reports_to=hierarchy_parent,
+				reports_to=hierarchy_parent or None,
 				is_group=0,
 			).insert(ignore_permissions=True)
 
