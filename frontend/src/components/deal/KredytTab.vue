@@ -817,8 +817,21 @@ async function generatePdf() {
 }
 
 // --- Helpers -----------------------------------------------------------------------
+// Copied verbatim from the extractErrorMessage() pattern used across the
+// deal tabs (useAutenti.js, KredytTab.vue, UmowaTab.vue, ...) — but that
+// pattern was blind to the actual shape of errors thrown by frappe-ui's
+// call() (see frontend/node_modules/frappe-ui/src/utils/frappeRequest.js
+// ~L82-124): call() consumes _server_messages itself and re-throws an
+// error whose `message` is just "{url} {exc_type}" and whose `messages` is
+// the already-parsed array of server message strings (the Polish text
+// lives there, not under `_server_messages`/`exception`). Without the
+// `err.messages` branch below, the name-mismatch ValidationError always
+// fell through to the raw "{url} {exc_type}" fallback instead of the
+// server's Polish message. The old `_server_messages`/`exception` branches
+// are kept as a fallback for any caller that isn't call().
 function extractErrorMessage(err) {
   try {
+    if (err?.messages?.length && err.messages[0]) return err.messages[0]
     if (err && err._server_messages) {
       const msgs = JSON.parse(err._server_messages)
       if (msgs && msgs.length) {
