@@ -60,10 +60,10 @@ Imię i nazwisko: {imie_nazwisko}
 """
 # Punkt 4. jest NOWĄ klauzulą (rzetelność informacji przekazywanych klientom),
 # nieobecną w oryginalnym dokumencie właściciela (.docx) — dodana na prośbę
-# właściciela do tego zadania, ale CZEKA NA JEGO FORMALNĄ AKCEPTACJĘ treści
-# przed pierwszym realnym wysłaniem do doradcy. Do czasu akceptacji traktować
-# jako roboczą: nie usuwać samodzielnie, ale nie polegać na niej jako na
-# finalnym brzmieniu prawnym bez potwierdzenia właściciela.
+# właściciela do tego zadania. Właściciel FORMALNIE ZAAKCEPTOWAŁ jej treść
+# w tym brzmieniu 2026-08-20. Każda przyszła zmiana tekstu punktu 4. zmienia
+# `wersja_tresci()` i wymaga ponownej akceptacji właściciela przed pierwszym
+# realnym wysłaniem do doradcy.
 
 _WZORZEC_WIELU_BIALYCH_ZNAKOW = re.compile(r"\s+")
 """Wyłapuje dowolny ciąg białych znaków (spacje, tabulacje, wielokrotne spacje
