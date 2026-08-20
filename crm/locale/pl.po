@@ -8906,3 +8906,7 @@ msgstr "Zaproszenie do {0}"
 # nowy string: email zaproszenia — polonizacja i branding ProEnergy (b49, defekt zgłoszony przez właściciela)
 msgid "Click the button below to accept the invitation and get started."
 msgstr "Kliknij przycisk poniżej, aby przyjąć zaproszenie i rozpocząć pracę."
+
+# nowy string: zaproszenia jednoosobowe (b50, issue #14)
+msgid "Send Invite"
+msgstr "Wyślij zaproszenie"

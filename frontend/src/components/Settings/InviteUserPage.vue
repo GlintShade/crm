@@ -15,14 +15,9 @@
       </div>
       <div class="flex item-center space-x-2 w-3/12 justify-end">
         <Button
-          :label="__('Send Invites')"
+          :label="__('Send Invite')"
           variant="solid"
-          :disabled="
-            !invitees.length ||
-            userExistMessage ||
-            inviteeExistMessage ||
-            hierarchyRequiredButMissing
-          "
+          :disabled="isSendDisabled"
           :loading="inviteByEmail.loading"
           @click="inviteByEmail.submit()"
         />
@@ -30,18 +25,27 @@
     </div>
     <div class="flex-1 flex flex-col px-2 gap-8 overflow-y-auto">
       <div>
+        <div class="grid grid-cols-2 gap-4">
+          <FormControl
+            v-model="firstName"
+            type="text"
+            :label="__('First Name')"
+            :disabled="inviteByEmail.loading"
+          />
+          <FormControl
+            v-model="lastName"
+            type="text"
+            :label="__('Last Name')"
+            :disabled="inviteByEmail.loading"
+          />
+        </div>
         <FormControl
-          type="textarea"
+          v-model="email"
+          type="email"
+          class="mt-4"
           :label="__('Invite By Email')"
-          placeholder="user1@example.com, user2@example.com, ..."
-          :debounce="100"
+          placeholder="user@example.com"
           :disabled="inviteByEmail.loading"
-          :description="
-            __(
-              'You can invite multiple users by comma separating their email addresses',
-            )
-          "
-          @input="updateInvitees($event.target.value)"
         />
         <div
           v-if="userExistMessage || inviteeExistMessage"
@@ -73,7 +77,7 @@
           :options="hierarchyOptions"
         />
       </div>
-      <template v-if="pendingInvitations.data?.length && !invitees.length">
+      <template v-if="pendingInvitations.data?.length">
         <div class="flex flex-col gap-4">
           <div class="flex items-center justify-between text-base-semibold">
             <div>{{ __('Pending Invites') }}</div>
@@ -87,6 +91,13 @@
               <div class="text-base">
                 <span class="text-ink-gray-8">
                   {{ user.email }}
+                  <template v-if="user.first_name || user.last_name">
+                    ({{
+                      [user.first_name, user.last_name]
+                        .filter(Boolean)
+                        .join(' ')
+                    }})
+                  </template>
                 </span>
                 <span class="text-ink-gray-5">
                   ({{ roleMap[user.role]
@@ -116,7 +127,7 @@
   </div>
 </template>
 <script setup>
-import { validateEmail, convertArrayToString } from '@/utils'
+import { validateEmail } from '@/utils'
 import { usersStore } from '@/stores/users'
 import { useOnboarding, useTelemetry } from 'frappe-ui/frappe'
 import {
@@ -131,42 +142,40 @@ const { updateOnboardingStep } = useOnboarding('frappecrm')
 const { users, isAdmin, isVolteoAdmin } = usersStore()
 const { capture } = useTelemetry()
 
-const invitees = ref([])
+// Single-person invite form (issue #14): the inviter — not the invitee —
+// types the invitee's name here, because the invitee never gets a chance
+// to supply it before the NDA gate on first login compares the typed name
+// against User.full_name (crm.api.oswiadczenie._pelne_imie_i_nazwisko).
+const firstName = ref('')
+const lastName = ref('')
+const email = ref('')
 const role = ref('Sales User')
 const volteoRole = ref('Volteo D2D Sales')
 const hierarchyParent = ref('')
 const error = ref(null)
 
+const isValidEmail = computed(() => validateEmail(email.value.trim()))
+
 const userExistMessage = computed(() => {
-  const inviteesSet = new Set(invitees.value)
-  if (!inviteesSet.size) return null
-
+  const trimmed = email.value.trim()
+  if (!isValidEmail.value) return null
   if (!users.data?.crmUsers?.length) return null
-  const existingEmails = users.data.crmUsers.map((user) => user.name)
-  const existingUsersSet = new Set(existingEmails)
 
-  const existingInvitees = inviteesSet.intersection(existingUsersSet)
-  if (existingInvitees.size === 0) return null
+  const exists = users.data.crmUsers.some((user) => user.name === trimmed)
+  if (!exists) return null
 
-  return __('User with email {0} already exists', [
-    Array.from(existingInvitees).join(', '),
-  ])
+  return __('User with email {0} already exists', [trimmed])
 })
 
 const inviteeExistMessage = computed(() => {
-  const inviteesSet = new Set(invitees.value)
-  if (!inviteesSet.size) return null
-
+  const trimmed = email.value.trim()
+  if (!isValidEmail.value) return null
   if (!pendingInvitations.data?.length) return null
-  const existingEmails = pendingInvitations.data.map((user) => user.email)
-  const existingUsersSet = new Set(existingEmails)
 
-  const existingInvitees = inviteesSet.intersection(existingUsersSet)
-  if (existingInvitees.size === 0) return null
+  const exists = pendingInvitations.data.some((user) => user.email === trimmed)
+  if (!exists) return null
 
-  return __('User with email {0} already invited', [
-    Array.from(existingInvitees).join(', '),
-  ])
+  return __('User with email {0} already invited', [trimmed])
 })
 
 const description = computed(() => {
@@ -238,14 +247,27 @@ const hierarchyRequiredButMissing = computed(() => {
   return volteoRole.value === 'Volteo D2D Sales' && !hierarchyParent.value
 })
 
+const isSendDisabled = computed(() => {
+  return (
+    !isValidEmail.value ||
+    !firstName.value.trim() ||
+    !lastName.value.trim() ||
+    Boolean(userExistMessage.value) ||
+    Boolean(inviteeExistMessage.value) ||
+    hierarchyRequiredButMissing.value
+  )
+})
+
 const inviteByEmail = createResource({
   url: 'crm.api.invite_by_email',
   makeParams() {
     return {
-      emails: convertArrayToString(invitees.value),
+      emails: email.value.trim(),
       role: role.value,
       volteo_role: volteoRole.value || '',
       hierarchy_parent: hierarchyParent.value || '',
+      first_name: firstName.value.trim(),
+      last_name: lastName.value.trim(),
     }
   },
   onSuccess() {
@@ -253,7 +275,9 @@ const inviteByEmail = createResource({
     volteoRole.value = 'Volteo D2D Sales'
     hierarchyParent.value = ''
     error.value = null
-    invitees.value = []
+    firstName.value = ''
+    lastName.value = ''
+    email.value = ''
     pendingInvitations.reload()
     toast.success(__('Invitations sent successfully'))
     updateOnboardingStep('invite_your_team')
@@ -269,16 +293,8 @@ const pendingInvitations = createListResource({
   type: 'list',
   doctype: 'CRM Invitation',
   filters: { status: 'Pending' },
-  fields: ['name', 'email', 'role', 'volteo_role'],
+  fields: ['name', 'email', 'role', 'volteo_role', 'first_name', 'last_name'],
   pageLength: 999,
   auto: true,
 })
-
-function updateInvitees(value) {
-  const emails = value
-    .split(',')
-    .map((email) => email.trim())
-    .filter((email) => validateEmail(email))
-  invitees.value = emails
-}
 </script>

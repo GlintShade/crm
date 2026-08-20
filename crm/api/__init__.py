@@ -99,6 +99,8 @@ def invite_by_email(
 	role: str,
 	volteo_role: str | None = None,
 	hierarchy_parent: str | None = None,
+	first_name: str | None = None,
+	last_name: str | None = None,
 ):
 	frappe.only_for(["Sales Manager", "System Manager", "Volteo Core Admin"], True)
 
@@ -127,12 +129,25 @@ def invite_by_email(
 	if hierarchy_parent and not frappe.db.exists("CRM Sales Hierarchy", hierarchy_parent):
 		frappe.throw(_("Sales Hierarchy node {0} does not exist").format(hierarchy_parent))
 
+	# The invite form is single-person: the inviter (not the invitee) now
+	# supplies the invitee's name, since it feeds User.full_name and the NDA
+	# gate compares against that identity (see
+	# crm.api.oswiadczenie._pelne_imie_i_nazwisko). Both are mandatory —
+	# an invite with a placeholder or missing name would make the NDA gate
+	# either unpassable or pass with a throwaway identity.
+	first_name = (first_name or "").strip()
+	last_name = (last_name or "").strip()
+	if not first_name or not last_name:
+		frappe.throw(_("First and last name are required"))
+
 	if not emails:
 		return
 	email_string = validate_email_address(emails, throw=False)
 	email_list = split_emails(email_string)
 	if not email_list:
 		return
+	if len(email_list) > 1:
+		frappe.throw(_("Invite one person at a time"))
 	existing_members = frappe.db.get_all("User", filters={"email": ["in", email_list]}, pluck="email")
 	existing_invites = frappe.db.get_all(
 		"CRM Invitation",
@@ -152,6 +167,8 @@ def invite_by_email(
 			role=role,
 			volteo_role=volteo_role or "",
 			hierarchy_parent=hierarchy_parent or "",
+			first_name=first_name,
+			last_name=last_name,
 		).insert(ignore_permissions=True)
 
 	return {

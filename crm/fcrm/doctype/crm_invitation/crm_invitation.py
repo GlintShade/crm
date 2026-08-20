@@ -121,15 +121,29 @@ class CRMInvitation(Document):
 
 	def create_user_if_not_exists(self):
 		if not frappe.db.exists("User", self.email):
-			first_name = self.email.split("@")[0].title()
+			# `first_name`/`last_name` are Custom Fields (issue #14,
+			# ops/crm-invitation-dane.py) supplied by the inviter, not the
+			# invitee — they feed User.full_name, which the NDA gate compares
+			# the signer's typed name against (see
+			# crm.api.oswiadczenie._pelne_imie_i_nazwisko). Read via `.get()`,
+			# not attribute access: on a site where the ops script hasn't run
+			# yet, the field doesn't exist and `.get()` returns None instead
+			# of raising (same reasoning as `volteo_role`/`hierarchy_parent`
+			# above). Fall back to the local-part-derived name only for
+			# invitations that predate this field.
+			first_name = self.get("first_name") or self.email.split("@")[0].title()
+			last_name = self.get("last_name") or ""
 			user = frappe.get_doc(
 				doctype="User",
 				user_type="System User",
 				email=self.email,
 				send_welcome_email=0,
 				first_name=first_name,
+				last_name=last_name,
 			).insert(ignore_permissions=True)
 		else:
+			# Existing User: never overwrite an established identity with
+			# whatever the inviter typed this time around.
 			user = frappe.get_doc("User", self.email)
 		return user
 
