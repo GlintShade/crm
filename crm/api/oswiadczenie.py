@@ -282,7 +282,15 @@ def _wyslij_kopie_mailem(user: str, pdf: bytes) -> None:
     """Wysyła podpisany PDF mailem jako kopię dla użytkownika. CAŁOŚĆ w
     try/except: lokalny stack nie ma skonfigurowanego konta pocztowego, więc
     to wywołanie MA prawo się nie udać — nieudana wysyłka nigdy nie może
-    cofnąć ani zablokować już zapisanego podpisania."""
+    cofnąć ani zablokować już zapisanego podpisania.
+
+    Nieudany `frappe.sendmail` (np. brak domyślnego konta pocztowego) dopisuje
+    komunikat do `frappe.local.message_log` (msgprint z `raise_exception`)
+    ZANIM rzuci wyjątek — bez sprzątnięcia ten komunikat pojedzie w
+    `_server_messages` odpowiedzi `volteo_podpisz_oswiadczenie`, mimo że samo
+    podpisanie się powiodło, i w UI może mignąć jako mylący czerwony toast przy
+    de facto udanym podpisie. `frappe.clear_messages()` w except czyści to.
+    """
     try:
         frappe.sendmail(
             recipients=[user],
@@ -298,6 +306,15 @@ def _wyslij_kopie_mailem(user: str, pdf: bytes) -> None:
             frappe.get_traceback(),
             "Volteo Oświadczenie: nie udało się wysłać kopii mailem",
         )
+        # Bezpieczne TYLKO w tym konkretnym przepływie (volteo_podpisz_oswiadczenie):
+        # przed wywołaniem _wyslij_kopie_mailem (a więc przed tym miejscem w
+        # requeście) żaden msgprint się nie odkłada przy sukcesie, więc czyścimy
+        # CAŁY message_log, nie tylko ostatni wpis — sendmail może dopisać więcej
+        # niż jeden komunikat. Gdyby ta funkcja kiedyś była wołana z innego
+        # miejsca, gdzie coś wcześniej w tym samym requeście zasadnie odkłada
+        # swój własny msgprint, to założenie przestaje być prawdziwe i wymaga
+        # ponownej weryfikacji.
+        frappe.clear_messages()
 
 
 @frappe.whitelist(methods=["POST"])
