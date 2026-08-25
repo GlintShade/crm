@@ -1,11 +1,19 @@
+import re
+
 import frappe
 from bs4 import BeautifulSoup
 from frappe import _
 from frappe.core.api.file import get_max_file_size
 from frappe.translate import get_all_translations
-from frappe.utils import cstr, split_emails, validate_email_address
+from frappe.utils import cint, cstr, split_emails, validate_email_address
 
 from crm.utils import is_frappe_version
+
+# Light sanity check only — digits, "+", spaces, dashes, parentheses; not a
+# strict phone-format validator (international formats vary too widely for
+# that). Reject only obvious garbage, e.g. letters or a length outside a
+# plausible phone number.
+_MOBILE_NO_PATTERN = re.compile(r"^[\d+\-\s()]+$")
 
 
 @frappe.whitelist(allow_guest=True)
@@ -132,6 +140,9 @@ def invite_by_email(
 	hierarchy_parent: str | None = None,
 	first_name: str | None = None,
 	last_name: str | None = None,
+	mobile_no: str | None = None,
+	linia_oze: int = 1,
+	linia_cp: int = 1,
 ):
 	frappe.only_for(["Sales Manager", "System Manager", "Volteo Core Admin"], True)
 
@@ -171,6 +182,26 @@ def invite_by_email(
 	if not first_name or not last_name:
 		frappe.throw(_("First and last name are required"))
 
+	# Phone is optional (issue #17); when supplied, only a light sanity
+	# check — not a strict format validator, since international formats
+	# vary too widely for that. Garbage (letters, implausible length) is
+	# rejected outright rather than silently stored.
+	mobile_no = (mobile_no or "").strip()
+	if mobile_no and not (
+		7 <= len(mobile_no) <= 20 and _MOBILE_NO_PATTERN.match(mobile_no)
+	):
+		frappe.throw(_("Enter a valid phone number"))
+
+	# Product-line selection (issue #17): the inviter sets which of
+	# OZE / Czyste Powietrze the invitee may use, mirroring
+	# `custom_linia_oze` / `custom_linia_cp` on `User` (issue #16). Client
+	# may send these as strings, so coerce deliberately with `cint` before
+	# the falsy check.
+	linia_oze = cint(linia_oze)
+	linia_cp = cint(linia_cp)
+	if not linia_oze and not linia_cp:
+		frappe.throw(_("Wybierz co najmniej jedną linię produktową"))
+
 	if not emails:
 		return
 	email_string = validate_email_address(emails, throw=False)
@@ -200,6 +231,9 @@ def invite_by_email(
 			hierarchy_parent=hierarchy_parent or "",
 			first_name=first_name,
 			last_name=last_name,
+			mobile_no=mobile_no,
+			linia_oze=1 if linia_oze else 0,
+			linia_cp=1 if linia_cp else 0,
 		).insert(ignore_permissions=True)
 
 	return {

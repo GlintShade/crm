@@ -40,6 +40,14 @@
           />
         </div>
         <FormControl
+          v-model="mobileNo"
+          type="text"
+          class="mt-4"
+          :label="__('Telefon')"
+          placeholder="+48 000 000 000"
+          :disabled="inviteByEmail.loading"
+        />
+        <FormControl
           v-model="email"
           type="email"
           class="mt-4"
@@ -76,6 +84,25 @@
           :label="__('Reports to (hierarchy)')"
           :options="hierarchyOptions"
         />
+        <div class="flex flex-col gap-2 mt-4">
+          <FormControl
+            type="checkbox"
+            :label="__('Linia OZE')"
+            :modelValue="linieOze"
+            :disabled="inviteByEmail.loading"
+            @update:modelValue="(val) => (linieOze = Boolean(val))"
+          />
+          <FormControl
+            type="checkbox"
+            :label="__('Linia Czyste Powietrze')"
+            :modelValue="linieCp"
+            :disabled="inviteByEmail.loading"
+            @update:modelValue="(val) => (linieCp = Boolean(val))"
+          />
+          <div v-if="!linieOze && !linieCp" class="text-xs text-ink-red-6">
+            {{ __('Wybierz co najmniej jedną linię produktową') }}
+          </div>
+        </div>
       </div>
       <template v-if="pendingInvitations.data?.length">
         <div class="flex flex-col gap-4">
@@ -98,12 +125,16 @@
                         .join(' ')
                     }})
                   </template>
+                  <template v-if="user.mobile_no">
+                    · {{ user.mobile_no }}
+                  </template>
                 </span>
                 <span class="text-ink-gray-5">
                   ({{ roleMap[user.role]
                   }}<template v-if="user.volteo_role">
                     · {{ volteoRoleMap[user.volteo_role] }}</template
-                  >)
+                  >
+                  · {{ linieLabel(user) }})
                 </span>
               </div>
               <div>
@@ -148,10 +179,16 @@ const { capture } = useTelemetry()
 // against User.full_name (crm.api.oswiadczenie._pelne_imie_i_nazwisko).
 const firstName = ref('')
 const lastName = ref('')
+const mobileNo = ref('')
 const email = ref('')
 const role = ref('Sales User')
 const volteoRole = ref('Volteo D2D Sales')
 const hierarchyParent = ref('')
+// Product-line selection (issue #17): both checked by default, mirroring
+// the pre-#17 behaviour of unrestricted access — see
+// ops/crm-invitation-linie-telefon.py "Why".
+const linieOze = ref(true)
+const linieCp = ref(true)
 const error = ref(null)
 
 const isValidEmail = computed(() => validateEmail(email.value.trim()))
@@ -247,7 +284,8 @@ const isSendDisabled = computed(() => {
     !firstName.value.trim() ||
     !lastName.value.trim() ||
     Boolean(userExistMessage.value) ||
-    Boolean(inviteeExistMessage.value)
+    Boolean(inviteeExistMessage.value) ||
+    (!linieOze.value && !linieCp.value)
   )
 })
 
@@ -261,6 +299,9 @@ const inviteByEmail = createResource({
       hierarchy_parent: hierarchyParent.value || '',
       first_name: firstName.value.trim(),
       last_name: lastName.value.trim(),
+      mobile_no: mobileNo.value.trim(),
+      linia_oze: linieOze.value ? 1 : 0,
+      linia_cp: linieCp.value ? 1 : 0,
     }
   },
   onSuccess() {
@@ -270,7 +311,10 @@ const inviteByEmail = createResource({
     error.value = null
     firstName.value = ''
     lastName.value = ''
+    mobileNo.value = ''
     email.value = ''
+    linieOze.value = true
+    linieCp.value = true
     pendingInvitations.reload()
     toast.success(__('Invitations sent successfully'))
     updateOnboardingStep('invite_your_team')
@@ -286,8 +330,32 @@ const pendingInvitations = createListResource({
   type: 'list',
   doctype: 'CRM Invitation',
   filters: { status: 'Pending' },
-  fields: ['name', 'email', 'role', 'volteo_role', 'first_name', 'last_name'],
+  fields: [
+    'name',
+    'email',
+    'role',
+    'volteo_role',
+    'first_name',
+    'last_name',
+    'mobile_no',
+    'linia_oze',
+    'linia_cp',
+  ],
   pageLength: 999,
   auto: true,
 })
+
+// Rows created before ops/crm-invitation-linie-telefon.py ran carry
+// undefined/None for linia_oze/linia_cp — render those as the legacy
+// default ("OZE + CP"), matching the pre-#17 behaviour of unrestricted
+// product-line access (same resolution as
+// CRMInvitation._resolve_linia_flag on the backend).
+function linieLabel(user) {
+  const oze = user.linia_oze === 0 || user.linia_oze === '0' ? false : true
+  const cp = user.linia_cp === 0 || user.linia_cp === '0' ? false : true
+  if (oze && cp) return __('OZE + CP')
+  if (oze) return __('OZE')
+  if (cp) return __('CP')
+  return __('brak linii')
+}
 </script>

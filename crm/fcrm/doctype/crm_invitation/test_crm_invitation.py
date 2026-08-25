@@ -4,18 +4,20 @@
 from unittest.mock import patch
 
 import frappe
+from frappe.utils import cint
 
 from crm.tests import CRMTestCase as FrappeTestCase
 
 
 class TestCRMInvitation(FrappeTestCase):
-	def make_invitation(self, email="invitee@example.com", role="Sales User"):
+	def make_invitation(self, email="invitee@example.com", role="Sales User", **kwargs):
 		"""Create a Pending invitation without actually sending an email."""
 		with patch.object(frappe, "sendmail"):
 			return frappe.get_doc(
 				doctype="CRM Invitation",
 				email=email,
 				role=role,
+				**kwargs,
 			).insert(ignore_permissions=True)
 
 	def test_new_invitation_is_pending_with_key(self):
@@ -68,3 +70,32 @@ class TestCRMInvitation(FrappeTestCase):
 		user_roles = {r.role for r in user.roles}
 		self.assertIn("Sales Manager", user_roles)
 		self.assertIn("Sales User", user_roles)
+
+	def test_accept_with_phone_and_cp_only(self):
+		"""Issue #17: phone lands on mobile_no; an explicit CP-only selection
+		grants custom_linia_cp but withholds custom_linia_oze."""
+		invitation = self.make_invitation(
+			email="cp-rep@example.com",
+			mobile_no="+48 123 456 789",
+			linia_oze=0,
+			linia_cp=1,
+		)
+
+		invitation.accept()
+
+		user = frappe.get_doc("User", invitation.email)
+		self.assertEqual(user.mobile_no, "+48 123 456 789")
+		self.assertEqual(cint(user.custom_linia_oze), 0)
+		self.assertEqual(cint(user.custom_linia_cp), 1)
+
+	def test_accept_with_fields_unset_defaults_to_both_lines(self):
+		"""A Pending invitation predating ops/crm-invitation-linie-telefon.py
+		has nothing in linia_oze/linia_cp — accept() must not crash and must
+		default the new user to both product lines (the pre-#17 behaviour)."""
+		invitation = self.make_invitation(email="legacy-invite@example.com")
+
+		invitation.accept()
+
+		user = frappe.get_doc("User", invitation.email)
+		self.assertEqual(cint(user.custom_linia_oze), 1)
+		self.assertEqual(cint(user.custom_linia_cp), 1)

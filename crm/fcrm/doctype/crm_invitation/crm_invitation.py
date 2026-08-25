@@ -4,6 +4,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.utils import cint
 
 
 class CRMInvitation(Document):
@@ -83,7 +84,20 @@ class CRMInvitation(Document):
 		volteo_role = self.get("volteo_role")
 		if volteo_role:
 			user.append_roles(volteo_role)
-		# One save covers the stock role(s) above and the Volteo role.
+
+		# Product-line access (issue #17, ops/crm-invitation-linie-telefon.py):
+		# thread the inviter's OZE / Czyste Powietrze selection onto the new
+		# User's `custom_linia_oze` / `custom_linia_cp` flags (issue #16).
+		# Resolution defaults to 1 (both lines granted) when the invitation
+		# carries no value — Pending invitations created before this script
+		# ran have nothing in these columns, and the pre-#17 behaviour was
+		# unrestricted product-line access, so "missing" must resolve the
+		# same way "both checked" would.
+		user.custom_linia_oze = self._resolve_linia_flag("linia_oze")
+		user.custom_linia_cp = self._resolve_linia_flag("linia_cp")
+
+		# One save covers the stock role(s) above, the Volteo role, and the
+		# product-line flags.
 		user.save(ignore_permissions=True)
 
 		# Place the new user in the Sales Hierarchy tree whenever the
@@ -114,6 +128,23 @@ class CRMInvitation(Document):
 		self.key = None
 		self.save(ignore_permissions=True)
 
+	def _resolve_linia_flag(self, fieldname):
+		"""Resolve a product-line flag (`linia_oze` / `linia_cp`) to 0/1.
+
+		`.get()`, not attribute access — same reasoning as `volteo_role`
+		above: on a site where ops/crm-invitation-linie-telefon.py hasn't
+		run yet, the field doesn't exist and `.get()` returns None instead
+		of raising. None/missing resolves to 1 (both lines granted) — see
+		the docstring on the call site in `accept()`. A value that IS set
+		may arrive as a string ("0"/"1") depending on read path, so coerce
+		deliberately with `cint` rather than relying on Python truthiness
+		of the raw value.
+		"""
+		raw = self.get(fieldname)
+		if raw is None or raw == "":
+			return 1
+		return 1 if cint(raw) else 0
+
 	def update_module_in_user(self, user, module):
 		block_modules = frappe.get_all(
 			"Module Def",
@@ -138,6 +169,10 @@ class CRMInvitation(Document):
 			# invitations that predate this field.
 			first_name = self.get("first_name") or self.email.split("@")[0].title()
 			last_name = self.get("last_name") or ""
+			# `mobile_no` is optional (issue #17, ops/crm-invitation-linie-telefon.py)
+			# and only ever set on the brand-new User — the existing-User branch
+			# below deliberately never overwrites an established identity, phone
+			# included.
 			user = frappe.get_doc(
 				doctype="User",
 				user_type="System User",
@@ -145,6 +180,7 @@ class CRMInvitation(Document):
 				send_welcome_email=0,
 				first_name=first_name,
 				last_name=last_name,
+				mobile_no=self.get("mobile_no") or None,
 			).insert(ignore_permissions=True)
 		else:
 			# Existing User: never overwrite an established identity with
