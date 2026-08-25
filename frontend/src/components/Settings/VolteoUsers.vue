@@ -99,6 +99,55 @@
       </div>
     </div>
 
+    <div class="border-t mx-2" />
+
+    <!-- Product-line access switch (issue #16) -->
+    <div class="flex flex-col gap-4 px-2">
+      <div class="text-base-semibold">{{ __('Dostęp do linii produktowych') }}</div>
+      <p class="text-p-sm text-ink-gray-5 max-w-2xl">
+        {{
+          __(
+            'Wyłączenie linii ukrywa Kalkulator i Dokumenty tej linii dla wskazanego użytkownika i blokuje jej użycie po stronie serwera. Nie dotyczy kont System Manager / Volteo Core Admin / Volteo Backend — te zawsze mają dostęp do obu linii.',
+          )
+        }}
+      </p>
+      <div class="grid grid-cols-2 gap-4 max-w-2xl items-end">
+        <FormControl
+          v-model="linieForm.email"
+          type="email"
+          :label="__('E-mail')"
+          placeholder="jan.kowalski@proenergy.pro"
+          :disabled="setLinie.loading"
+        />
+        <div class="flex flex-col gap-2">
+          <FormControl
+            type="checkbox"
+            :label="__('Linia OZE')"
+            :modelValue="Boolean(linieForm.oze)"
+            :disabled="setLinie.loading"
+            @update:modelValue="(val) => (linieForm.oze = val ? 1 : 0)"
+          />
+          <FormControl
+            type="checkbox"
+            :label="__('Linia Czyste Powietrze')"
+            :modelValue="Boolean(linieForm.cp)"
+            :disabled="setLinie.loading"
+            @update:modelValue="(val) => (linieForm.cp = val ? 1 : 0)"
+          />
+        </div>
+      </div>
+      <ErrorMessage class="max-w-2xl" :message="linieError" />
+      <div>
+        <Button
+          :label="__('Zapisz dostęp')"
+          variant="solid"
+          icon-left="check"
+          :loading="setLinie.loading"
+          @click="submitLinie"
+        />
+      </div>
+    </div>
+
     <!-- Password reveal dialog: shown exactly once, right after account creation -->
     <Dialog
       v-model:open="showPasswordDialog"
@@ -284,5 +333,50 @@ function submitRoleChange() {
   }
 
   changeRole.submit()
+}
+
+// --- Product-line access switch (issue #16) ------------------------------
+
+function emptyLinieForm() {
+  return {
+    email: '',
+    oze: 1,
+    cp: 1,
+  }
+}
+
+const linieForm = reactive(emptyLinieForm())
+const linieError = ref('')
+
+const setLinie = createResource({
+  url: 'crm.api.volteo_uzytkownicy.volteo_ustaw_linie',
+  makeParams: () => ({
+    email: linieForm.email.trim(),
+    oze: linieForm.oze ? 1 : 0,
+    cp: linieForm.cp ? 1 : 0,
+  }),
+  onSuccess: (data) => {
+    linieError.value = ''
+    toast.success(__('Dostęp do linii produktowych zapisany dla {0}', [data.user]))
+    Object.assign(linieForm, emptyLinieForm())
+  },
+  onError: (err) => {
+    linieError.value = err?.messages?.[0] || __('Nie udało się zapisać dostępu do linii')
+  },
+})
+
+function submitLinie() {
+  linieError.value = ''
+
+  if (!linieForm.email.trim()) {
+    linieError.value = __('Podaj e-mail użytkownika')
+    return
+  }
+  if (!validateEmail(linieForm.email.trim())) {
+    linieError.value = __('Podaj poprawny adres e-mail')
+    return
+  }
+
+  setLinie.submit()
 }
 </script>

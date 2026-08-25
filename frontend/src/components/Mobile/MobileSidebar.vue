@@ -150,21 +150,25 @@ const links = [
     label: 'Kalkulator OZE',
     icon: KalkulatorIcon,
     to: 'Kalkulator',
+    condition: () => window.volteo_linia_oze !== false, // VOLTEO — issue #16, fail-open on stale bundle
   },
   {
     label: 'Kalkulator Czyste Powietrze',
     icon: KalkulatorCPIcon,
     to: 'KalkulatorCzystePowietrze',
+    condition: () => window.volteo_linia_cp !== false, // VOLTEO — issue #16
   },
   {
     label: 'Dokumenty OZE',
     icon: DokumentyOzeIcon,
     to: 'DokumentyOze',
+    condition: () => window.volteo_linia_oze !== false, // VOLTEO — issue #16
   },
   {
     label: 'Dokumenty Czyste Powietrze',
     icon: DokumentyCPIcon,
     to: 'DokumentyCzystePowietrze',
+    condition: () => window.volteo_linia_cp !== false, // VOLTEO — issue #16
   },
   {
     label: __('Leads'),

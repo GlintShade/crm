@@ -64,7 +64,7 @@ import string
 
 import frappe
 from frappe import _
-from frappe.utils import validate_email_address
+from frappe.utils import cint, validate_email_address
 
 # Role, które ten moduł wolno nadać. Zamknięta biała lista — cokolwiek spoza
 # niej jest odrzucane, niezależnie od tego, kto woła (patrz docstring modułu).
@@ -241,4 +241,44 @@ def volteo_zmien_role(email: str, rola: str) -> dict:
 	return {
 		"user": user_doc.name,
 		"role": [d.role for d in user_doc.get("roles")],
+	}
+
+
+@frappe.whitelist()
+def volteo_ustaw_linie(email: str, oze: int, cp: int) -> dict:
+	"""Ustawia flagi dostępu do linii produktowych (`custom_linia_oze` /
+	`custom_linia_cp`) na koncie `User` (issue #16).
+
+	Dostępne wyłącznie dla `Volteo Core Admin` / `System Manager`. Flagi
+	dotyczą wyłącznie zwykłych pól Check na `User` — proste `db.set_value`
+	wystarcza, bez potrzeby `.save()` (żadnych hooków kontrolera nie trzeba
+	tu przechodzić, w odróżnieniu od zmiany ról w `volteo_zmien_role`
+	powyżej). Rola/uprawnienia bypassujące flagi (`System Manager`,
+	`Volteo Core Admin`, `Volteo Backend`) są rozstrzygane po stronie
+	`crm.api.volteo_ma_linie` przy każdym odczycie — ten endpoint jedynie
+	zapisuje surowe wartości flag, niezależnie od roli konta docelowego.
+	"""
+	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
+
+	email = (email or "").strip()
+	if not email:
+		frappe.throw(_("Adres e-mail jest wymagany."))
+
+	if not frappe.db.exists("User", email):
+		frappe.throw(_("Konto o adresie {0} nie istnieje.").format(email))
+
+	oze_flaga = 1 if cint(oze) else 0
+	cp_flaga = 1 if cint(cp) else 0
+
+	frappe.db.set_value(
+		"User",
+		email,
+		{"custom_linia_oze": oze_flaga, "custom_linia_cp": cp_flaga},
+		update_modified=False,
+	)
+
+	return {
+		"user": email,
+		"custom_linia_oze": oze_flaga,
+		"custom_linia_cp": cp_flaga,
 	}

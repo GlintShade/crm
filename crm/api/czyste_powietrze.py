@@ -15,6 +15,7 @@ from frappe import _
 from frappe.rate_limiter import rate_limit
 from frappe.utils import flt
 
+from crm.api import volteo_ma_linie
 from crm.czyste_powietrze.mapowanie import (
 	katalog_z_wierszy,
 	limity_z_wierszy,
@@ -170,6 +171,8 @@ def volteo_cp_pozycje() -> dict[str, Any]:
 	role_uzytkownika = set(frappe.get_roles(frappe.session.user))
 	if not KALKULATOR_ROLE & role_uzytkownika:
 		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
+	if not volteo_ma_linie("Czyste Powietrze"):
+		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
 	wiersze = frappe.get_all(
 		"Volteo CP Pozycja",
 		fields=_POZYCJE_POLA,
@@ -250,6 +253,8 @@ def volteo_cp_calc(wejscie: dict[str, Any]) -> dict[str, Any]:
 	role_uzytkownika = set(frappe.get_roles(frappe.session.user))
 	if not KALKULATOR_ROLE & role_uzytkownika:
 		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
+	if not volteo_ma_linie("Czyste Powietrze"):
+		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
 
 	try:
 		wynik, _limity, _nazwy = _wynik_kalkulatora(wejscie)
@@ -293,6 +298,8 @@ def volteo_cp_create_deal(wejscie: dict[str, Any], contact: str) -> dict[str, An
 	"""
 	role_uzytkownika = set(frappe.get_roles(frappe.session.user))
 	if not KALKULATOR_ROLE & role_uzytkownika:
+		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
+	if not volteo_ma_linie("Czyste Powietrze"):
 		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
 
 	kontakt = (contact or "").strip()

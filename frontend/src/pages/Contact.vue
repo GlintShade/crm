@@ -355,22 +355,32 @@ function changeContactImage(file) {
 }
 
 const tabIndex = ref(0)
-const tabs = [
-  {
-    label: 'Deals',
-    icon: DealsIcon,
-    count: computed(() => deals.data?.length),
-  },
-  {
-    label: 'Kalkulator OZE',
-    icon: KalkulatorIcon,
-    // no count badge for the Kalkulator tab
-  },
-  {
-    label: 'Kalkulator Czyste Powietrze',
-    icon: KalkulatorCPIcon,
-  },
-]
+// VOLTEO: Kalkulator entries filtered by the per-user product-line access
+// switch (issue #16) — window.volteo_linia_oze / window.volteo_linia_cp are
+// injected server-side (crm/www/crm.py::get_boot). Fail-open on `undefined`
+// (stale bundle must not lock users out) — only an explicit `false` hides.
+const tabs = computed(() =>
+  [
+    {
+      label: 'Deals',
+      icon: DealsIcon,
+      count: computed(() => deals.data?.length),
+    },
+    {
+      label: 'Kalkulator OZE',
+      icon: KalkulatorIcon,
+      // no count badge for the Kalkulator tab
+    },
+    {
+      label: 'Kalkulator Czyste Powietrze',
+      icon: KalkulatorCPIcon,
+    },
+  ].filter((tab) => {
+    if (tab.label === 'Kalkulator OZE') return window.volteo_linia_oze !== false
+    if (tab.label === 'Kalkulator Czyste Powietrze') return window.volteo_linia_cp !== false
+    return true
+  }),
+)
 
 const deals = createResource({
   url: 'crm.api.contact.get_linked_deals',

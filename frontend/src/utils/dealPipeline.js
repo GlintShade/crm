@@ -200,3 +200,42 @@ export function filterKnown(names, isKnown) {
   if (!Array.isArray(names)) return []
   return names.filter((name) => isKnown(name))
 }
+
+// VOLTEO — issue #16: per-user product-line access switch. `custom_rodzaj_umowy`
+// (CRM Deal, Select) carries three OZE variants and one Czyste Powietrze variant;
+// the deal-creation modals (DealModal.vue, ConvertToDealModal.vue) filter its
+// options down to the lines the current user is switched on for, mirroring the
+// server-side gate in crm.api.volteo_ma_linie. Bypass-role users get both flags
+// `true` from boot (crm/www/crm.py::get_boot), so no separate admin branch is
+// needed here.
+const RODZAJE_UMOWY_OZE = new Set([
+  'Fotowoltaika',
+  'Fotowoltaika + Magazyn',
+  'Magazyn energii',
+])
+const RODZAJ_UMOWY_CP = 'Czyste Powietrze'
+
+/**
+ * Filtruje "\n"-łączony string opcji pola Select `custom_rodzaj_umowy` do
+ * wariantów dozwolonych przez flagi linii produktowych. Pusta opcja (pierwszy,
+ * niewybrany wpis Select) zawsze zostaje. Fail-open: `undefined`/`null`
+ * (nieustawiona flaga — np. stary bundle) traktowane jak `true`, tylko
+ * jawne `false` usuwa warianty danej linii. Non-string input (np. już
+ * podmienione pole "status" gdzieś indziej w layoucie) zwracany bez zmian.
+ *
+ * @param {string} options - surowy string opcji pola Select
+ * @param {{oze?: boolean, cp?: boolean}} flagi
+ * @returns {string}
+ */
+export function filtrujOpcjeRodzajuUmowy(options, { oze, cp } = {}) {
+  if (typeof options !== 'string') return options
+  return options
+    .split('\n')
+    .filter((opcja) => {
+      if (!opcja) return true
+      if (RODZAJE_UMOWY_OZE.has(opcja)) return oze !== false
+      if (opcja === RODZAJ_UMOWY_CP) return cp !== false
+      return true
+    })
+    .join('\n')
+}

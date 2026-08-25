@@ -35,6 +35,8 @@ def get_context_for_dev():
 
 
 def get_boot():
+	from crm.api import volteo_ma_linie
+
 	return frappe._dict(
 		{
 			"frappe_version": frappe.__version__,
@@ -68,6 +70,13 @@ def get_boot():
 			# only drives client-side UI. Fails open on any error (missing schema,
 			# etc.) — see _wymaga_oswiadczenia docstring.
 			"volteo_wymaga_oswiadczenia": _wymaga_oswiadczenia(frappe.session.user),
+			# VOLTEO: per-user product-line access switch (issue #16). Bypass-or-flag
+			# logic mirrors crm.api.volteo_ma_linie; consumed by the frontend to hide
+			# Kalkulator/Dokumenty entries for a line the user is switched off from.
+			# Server-side enforcement lives in the API endpoints themselves — these
+			# booleans are UI convenience only.
+			"volteo_linia_oze": volteo_ma_linie("OZE"),
+			"volteo_linia_cp": volteo_ma_linie("Czyste Powietrze"),
 			"translated_doctypes": get_translated_doctypes(),
 			"translated_messages": get_messages_for_boot(),
 			"timezone": {

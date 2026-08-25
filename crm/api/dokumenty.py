@@ -34,6 +34,8 @@ from frappe import _
 from frappe.rate_limiter import rate_limit
 from frappe.utils import add_days, cint, get_datetime, now_datetime
 
+from crm.api import volteo_ma_linie
+
 WOJEWODZTWA = (
 	"dolnośląskie",
 	"kujawsko-pomorskie",
@@ -187,6 +189,8 @@ def dokumenty_lista(linia: str) -> dict[str, Any]:
 
 	if linia not in LINIE:
 		frappe.throw(_("Nieznana linia produktowa."))
+	if not volteo_ma_linie(linia):
+		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
 
 	if not frappe.db.table_exists(DOCTYPE):
 		return {
@@ -344,6 +348,8 @@ def pobierz_zip(linia: str, wojewodztwo: str = "") -> None:
 
 	if linia not in LINIE:
 		frappe.throw(_("Nieznana linia produktowa."))
+	if not volteo_ma_linie(linia):
+		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
 	if linia == "Czyste Powietrze" and wojewodztwo not in WOJEWODZTWA:
 		frappe.throw(_("Wybierz województwo, aby pobrać dokumenty Czystego Powietrza."))
 

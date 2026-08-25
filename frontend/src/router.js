@@ -272,6 +272,29 @@ router.beforeEach(async (to, from, next) => {
     return next({ name: 'Home' })
   }
 
+  // VOLTEO: per-user product-line access switch (issue #16). window.volteo_linia_oze /
+  // window.volteo_linia_cp are injected server-side alongside window.volteo_wymaga_oswiadczenia
+  // above. Fail-open on `undefined` (stale bundle must not lock users out) — only an
+  // explicit `false` redirects. Real enforcement is server-side; this is UI convenience.
+  const volteoOzeRoutes = ['Kalkulator', 'DokumentyOze']
+  const volteoCpRoutes = ['KalkulatorCzystePowietrze', 'DokumentyCzystePowietrze']
+  if (
+    isLoggedIn &&
+    window.volteo_linia_oze === false &&
+    volteoOzeRoutes.includes(to.name) &&
+    to.name !== 'Not Permitted'
+  ) {
+    return next({ name: 'Not Permitted' })
+  }
+  if (
+    isLoggedIn &&
+    window.volteo_linia_cp === false &&
+    volteoCpRoutes.includes(to.name) &&
+    to.name !== 'Not Permitted'
+  ) {
+    return next({ name: 'Not Permitted' })
+  }
+
   const isAdminUser = isAdmin() || user === 'Administrator'
 
   // Only admins who haven't finished may reach the wizard, even via direct URL.

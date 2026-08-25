@@ -29,6 +29,8 @@ USER_FIELDS = [
 	"full_name",
 	"user_type",
 	"language",
+	"custom_linia_oze",
+	"custom_linia_cp",
 ]
 
 

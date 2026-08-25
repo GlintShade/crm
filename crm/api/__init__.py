@@ -51,6 +51,24 @@ def get_user_signature():
 	return content
 
 
+def volteo_ma_linie(linia: str) -> bool:
+	"""True if the current user may use the given product line ("OZE" / "Czyste Powietrze").
+
+	Users holding any of System Manager / Volteo Core Admin / Volteo Backend
+	bypass the per-user flags entirely — the flags only ever restrict D2D
+	reps (issue #16, `custom_linia_oze` / `custom_linia_cp` on `User`).
+	Plain helper, not whitelisted: callers are the whitelisted endpoints
+	that already gate on KALKULATOR_ROLE / similar, so this only narrows
+	further.
+	"""
+	role_uzytkownika = set(frappe.get_roles(frappe.session.user))
+	if role_uzytkownika & {"System Manager", "Volteo Core Admin", "Volteo Backend"}:
+		return True
+
+	fieldname = "custom_linia_oze" if linia == "OZE" else "custom_linia_cp"
+	return bool(frappe.db.get_value("User", frappe.session.user, fieldname))
+
+
 def check_app_permission():
 	if frappe.session.user == "Administrator":
 		return True

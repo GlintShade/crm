@@ -305,29 +305,39 @@ async function deleteContact() {
 }
 
 const tabIndex = ref(0)
-const tabs = [
-  {
-    name: 'Details',
-    label: __('Details'),
-    icon: DetailsIcon,
-  },
-  {
-    name: 'Deals',
-    label: __('Deals'),
-    icon: h(DealsIcon, { class: 'h-4 w-4' }),
-    count: computed(() => deals.data?.length),
-  },
-  {
-    name: 'Kalkulator',
-    label: __('Kalkulator OZE'),
-    icon: h(KalkulatorIcon, { class: 'h-4 w-4' }),
-  },
-  {
-    name: 'KalkulatorCP',
-    label: __('Kalkulator Czyste Powietrze'),
-    icon: h(KalkulatorCPIcon, { class: 'h-4 w-4' }),
-  },
-]
+// VOLTEO: Kalkulator entries filtered by the per-user product-line access
+// switch (issue #16) — window.volteo_linia_oze / window.volteo_linia_cp are
+// injected server-side (crm/www/crm.py::get_boot). Fail-open on `undefined`
+// (stale bundle must not lock users out) — only an explicit `false` hides.
+const tabs = computed(() =>
+  [
+    {
+      name: 'Details',
+      label: __('Details'),
+      icon: DetailsIcon,
+    },
+    {
+      name: 'Deals',
+      label: __('Deals'),
+      icon: h(DealsIcon, { class: 'h-4 w-4' }),
+      count: computed(() => deals.data?.length),
+    },
+    {
+      name: 'Kalkulator',
+      label: __('Kalkulator OZE'),
+      icon: h(KalkulatorIcon, { class: 'h-4 w-4' }),
+    },
+    {
+      name: 'KalkulatorCP',
+      label: __('Kalkulator Czyste Powietrze'),
+      icon: h(KalkulatorCPIcon, { class: 'h-4 w-4' }),
+    },
+  ].filter((tab) => {
+    if (tab.name === 'Kalkulator') return window.volteo_linia_oze !== false
+    if (tab.name === 'KalkulatorCP') return window.volteo_linia_cp !== false
+    return true
+  }),
+)
 
 const deals = createResource({
   url: 'crm.api.contact.get_linked_deals',

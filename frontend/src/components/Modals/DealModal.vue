@@ -77,7 +77,7 @@ import EditIcon from '@/components/Icons/EditIcon.vue'
 import FieldLayout from '@/components/FieldLayout/FieldLayout.vue'
 import { usersStore } from '@/stores/users'
 import { statusesStore } from '@/stores/statuses'
-import { grupaForRodzaj, filterKnown } from '@/utils/dealPipeline'
+import { grupaForRodzaj, filterKnown, filtrujOpcjeRodzajuUmowy } from '@/utils/dealPipeline'
 import { isMobileView } from '@/composables/settings'
 import { showQuickEntryModal, quickEntryProps } from '@/composables/modals'
 import { useDocument } from '@/data/document'
@@ -196,6 +196,15 @@ const tabs = createResource({
               field.options = scopedDealStatuses.value
               field.prefix = getDealStatus(deal.doc.status).color
               statusFieldRef.value = field
+            }
+
+            // VOLTEO — issue #16: hide rodzaj-umowy variants for lines the
+            // user is switched off from. See dealPipeline.js docstring.
+            if (field.fieldname === 'custom_rodzaj_umowy') {
+              field.options = filtrujOpcjeRodzajuUmowy(field.options, {
+                oze: window.volteo_linia_oze,
+                cp: window.volteo_linia_cp,
+              })
             }
 
             if (field.fieldtype === 'Table') {
