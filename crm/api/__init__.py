@@ -51,6 +51,12 @@ def get_user_signature():
 	return content
 
 
+VOLTEO_LINIA_POLA = {
+	"OZE": "custom_linia_oze",
+	"Czyste Powietrze": "custom_linia_cp",
+}
+
+
 def volteo_ma_linie(linia: str) -> bool:
 	"""True if the current user may use the given product line ("OZE" / "Czyste Powietrze").
 
@@ -60,12 +66,19 @@ def volteo_ma_linie(linia: str) -> bool:
 	Plain helper, not whitelisted: callers are the whitelisted endpoints
 	that already gate on KALKULATOR_ROLE / similar, so this only narrows
 	further.
+
+	`linia` is validated against a closed allowlist (`VOLTEO_LINIA_POLA`) —
+	an unrecognised value is a caller bug, not silently mapped to either
+	line, and throws rather than guessing.
 	"""
 	role_uzytkownika = set(frappe.get_roles(frappe.session.user))
 	if role_uzytkownika & {"System Manager", "Volteo Core Admin", "Volteo Backend"}:
 		return True
 
-	fieldname = "custom_linia_oze" if linia == "OZE" else "custom_linia_cp"
+	fieldname = VOLTEO_LINIA_POLA.get(linia)
+	if fieldname is None:
+		frappe.throw(_("Nieznana linia produktowa: {0}").format(linia))
+
 	return bool(frappe.db.get_value("User", frappe.session.user, fieldname))
 
 

@@ -136,6 +136,7 @@
           />
         </div>
       </div>
+      <p v-if="linieHint" class="text-p-sm text-ink-gray-5 max-w-2xl">{{ linieHint }}</p>
       <ErrorMessage class="max-w-2xl" :message="linieError" />
       <div>
         <Button
@@ -204,9 +205,12 @@
 </template>
 
 <script setup>
-import { reactive, ref, computed } from 'vue'
+import { reactive, ref, computed, watch } from 'vue'
 import { createResource, toast, Dialog, ErrorMessage } from 'frappe-ui'
 import { validateEmail, copyToClipboard } from '@/utils'
+import { usersStore } from '@/stores/users'
+
+const { getUser, allUsers } = usersStore()
 
 // Exactly the four Volteo roles the server accepts. Never offer
 // "System Manager" here — the server refuses it, and listing it would be
@@ -348,6 +352,45 @@ function emptyLinieForm() {
 const linieForm = reactive(emptyLinieForm())
 const linieError = ref('')
 
+// Looked up WITHOUT calling getUser() directly on arbitrary typed text —
+// getUser() synthesizes and permanently caches a stub entry (role: null, no
+// custom_linia_* fields) for any email it doesn't already know, which would
+// pollute the store with junk on every keystroke of a typo/in-progress email.
+// allUsers (crm.api.session.get_users, USER_FIELDS incl. custom_linia_oze/cp)
+// is searched first; only once a real match is confirmed is getUser(email)
+// called, which then just returns that same cached record safely.
+const linieMatchedUser = computed(() => {
+  const email = linieForm.email.trim()
+  if (!email) return null
+  return (allUsers.value || []).find((u) => u.name === email) || null
+})
+
+const linieHint = computed(() => {
+  const email = linieForm.email.trim()
+  if (!email || !validateEmail(email)) return ''
+  return linieMatchedUser.value
+    ? __('Aktualne ustawienia wczytane dla {0}', [email])
+    : __(
+        'Nie znaleziono użytkownika o takim adresie — przy zapisie zostaną użyte wartości z formularza.',
+      )
+})
+
+// Prefill the checkboxes from the matched user's CURRENT flags the moment a
+// match is found, instead of leaving the admin editing blind against the
+// default 1/1 — a 0 set by a previous admin decision must not be silently
+// re-enabled just because the form defaults to "both on". Undefined treated
+// as 1 (pre-ops-script data, before custom_linia_oze/cp existed on the site).
+watch(
+  () => linieForm.email,
+  () => {
+    const user = linieMatchedUser.value
+    if (!user) return
+    const cached = getUser(user.name) // safe: match already confirmed above
+    linieForm.oze = cached.custom_linia_oze === undefined ? 1 : cached.custom_linia_oze ? 1 : 0
+    linieForm.cp = cached.custom_linia_cp === undefined ? 1 : cached.custom_linia_cp ? 1 : 0
+  },
+)
+
 const setLinie = createResource({
   url: 'crm.api.volteo_uzytkownicy.volteo_ustaw_linie',
   makeParams: () => ({
@@ -358,6 +401,15 @@ const setLinie = createResource({
   onSuccess: (data) => {
     linieError.value = ''
     toast.success(__('Dostęp do linii produktowych zapisany dla {0}', [data.user]))
+    // Mutate the store's cached record in place (same object reference the
+    // fast-fetch resource, usersByName and getUser() all share) so a second
+    // edit of the same user prefills the just-saved values, not the stale
+    // ones from before this save.
+    const target = (allUsers.value || []).find((u) => u.name === data.user)
+    if (target) {
+      target.custom_linia_oze = data.custom_linia_oze
+      target.custom_linia_cp = data.custom_linia_cp
+    }
     Object.assign(linieForm, emptyLinieForm())
   },
   onError: (err) => {
