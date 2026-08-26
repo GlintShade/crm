@@ -131,7 +131,7 @@
 </template>
 
 <script setup>
-import { createResource, call } from 'frappe-ui'
+import { createResource, call, toast } from 'frappe-ui'
 import { useRouter } from 'vue-router'
 import { computed, ref } from 'vue'
 
@@ -204,13 +204,20 @@ const unlinkLinkedDoc = (doc) => {
     items: selectedDocs,
     remove_contact: props.doctype == 'Contact',
     delete: doc.delete,
-  }).then(() => {
-    linkedDocsResource.reload()
-    confirmDeleteInfo.value = {
-      show: false,
-      title: '',
-    }
   })
+    .then(() => {
+      linkedDocsResource.reload()
+      confirmDeleteInfo.value = {
+        show: false,
+        title: '',
+      }
+    })
+    .catch((err) => {
+      toast.error(
+        (err && (err.messages?.[0] || err.message)) ||
+          'Nie udało się odłączyć dokumentów',
+      )
+    })
 }
 
 const confirmDelete = () => {
@@ -249,11 +256,23 @@ const removeDocLinks = () => {
 }
 
 const deleteDoc = async () => {
-  await call('frappe.client.delete', {
-    doctype: props.doctype,
-    name: props.docname,
-  })
-  router.push({ name: props.name })
-  props?.reload?.()
+  try {
+    const report = await call('crm.api.doc.delete_bulk_docs', {
+      doctype: props.doctype,
+      items: [props.docname],
+      delete_linked: false,
+    })
+    if (report?.failed?.length) {
+      toast.error(report.failed[0].reason)
+      return
+    }
+    router.push({ name: props.name })
+    props?.reload?.()
+  } catch (err) {
+    toast.error(
+      (err && (err.messages?.[0] || err.message)) ||
+        'Nie udało się usunąć rekordu',
+    )
+  }
 }
 </script>

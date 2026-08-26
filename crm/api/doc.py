@@ -751,7 +751,57 @@ def get_linked_docs_of_document(doctype: str, docname: str):
 				"reference_doctype": doc["reference_doctype"],
 			}
 		)
+
+	if doctype == "CRM Deal":
+		# Doctypy Volteo linkuja CRM Deal przez wlasne pole Link "deal", wiec
+		# generyczny mechanizm reference_doctype/reference_docname powyzej ich
+		# nie widzi — dopisujemy je jawnie, zeby DeleteLinkedDocModal je pokazal.
+		existing_keys = {(d["reference_doctype"], d["reference_docname"]) for d in docs_data}
+		for cascade_doctype, cascade_field in DEAL_CASCADE_DOCTYPES:
+			if not frappe.db.exists("DocType", cascade_doctype):
+				continue
+
+			for row_name in frappe.get_all(
+				cascade_doctype, filters={cascade_field: docname}, pluck="name"
+			):
+				key = (cascade_doctype, row_name)
+				if key in existing_keys:
+					continue
+
+				try:
+					row_doc = frappe.get_doc(cascade_doctype, row_name)
+				except (frappe.DoesNotExistError, frappe.ValidationError):
+					continue
+
+				docs_data.append(
+					{
+						"doc": cascade_doctype,
+						"title": row_doc.get("title") or row_name,
+						"reference_docname": row_name,
+						"reference_doctype": cascade_doctype,
+					}
+				)
+				existing_keys.add(key)
+
 	return docs_data
+
+
+# Doctype'y Volteo linkujace CRM Deal przez wlasne pole Link "deal" —
+# generyczny mechanizm reference_doctype/reference_docname ich nie zna,
+# wiec kaskada musi byc jawna.
+DEAL_CASCADE_DOCTYPES = [
+	("Volteo Umowa", "deal"),
+	("Volteo Kredyt", "deal"),
+	("Volteo Audyt", "deal"),
+	("Volteo Audyt CP", "deal"),
+	("Volteo Faktura", "deal"),
+	("Volteo Montaz Update", "deal"),
+	("Volteo Oferta", "deal"),
+	("Volteo CP Oferta", "deal"),
+]
+AUTENTI_STATUSY_BLOKADY = {"Wysyłanie", "Wysłana", "Podpisana"}
+OFERTA_STATUSY_BLOKADY = {"Wysłana do podpisu", "Podpisana"}
+CONTACT_UNLINK_LINK_FIELDS = [("Volteo Oferta", "contact")]
 
 
 def remove_doc_link(doctype, docname):
@@ -828,10 +878,171 @@ def remove_linked_doc_reference(items: str | list, remove_contact: bool = False,
 	return "success"
 
 
+def _bezpiecznik_autenti(deal_name: str) -> str | None:
+	"""Blokuje usuniecie CRM Deal, jesli powiazany dokument Volteo ma juz
+	status podpisu (Autenti lub Oferta) — usuniecie kaskadowe skasowaloby
+	prawnie wiazacy dokument."""
+	for cascade_doctype, cascade_field in DEAL_CASCADE_DOCTYPES:
+		if not frappe.db.exists("DocType", cascade_doctype):
+			continue
+
+		meta = frappe.get_meta(cascade_doctype)
+		status_field = None
+		blocked_statuses = None
+		if cascade_doctype in ("Volteo Umowa", "Volteo Kredyt") and meta.has_field("autenti_status"):
+			status_field = "autenti_status"
+			blocked_statuses = AUTENTI_STATUSY_BLOKADY
+		elif cascade_doctype == "Volteo Oferta" and meta.has_field("status"):
+			status_field = "status"
+			blocked_statuses = OFERTA_STATUSY_BLOKADY
+
+		if not status_field:
+			continue
+
+		rows = frappe.get_all(cascade_doctype, filters={cascade_field: deal_name}, fields=["name", status_field])
+		for row in rows:
+			status = row.get(status_field)
+			if status in blocked_statuses:
+				return (
+					f"Powiązany dokument {cascade_doctype} {row.name} ma status podpisu "
+					f"„{status}” — podpisanych lub wysłanych do podpisu dokumentów nie wolno usuwać."
+				)
+
+	return None
+
+
+def _usun_jeden(doctype: str, name: str, delete_linked: bool) -> None:
+	"""Usuwa jeden dokument wraz z powiazaniami. Rzuca wyjatek na kazdym
+	niepowodzeniu — wywolujacy (delete_bulk_docs) lapie go per-rekord."""
+	if not frappe.has_permission(doctype, "delete", name):
+		frappe.throw(_("Brak uprawnień do usunięcia tego rekordu."), frappe.PermissionError)
+
+	if doctype == "CRM Deal":
+		powod = _bezpiecznik_autenti(name)
+		if powod:
+			frappe.throw(powod, frappe.ValidationError)
+
+		for cascade_doctype, cascade_field in DEAL_CASCADE_DOCTYPES:
+			if not frappe.db.exists("DocType", cascade_doctype):
+				continue
+			for row_name in frappe.get_all(cascade_doctype, filters={cascade_field: name}, pluck="name"):
+				frappe.delete_doc(cascade_doctype, row_name)
+
+		linked_docs = get_linked_docs_of_document("CRM Deal", name)
+		for linked_doc in linked_docs:
+			if not linked_doc.get("reference_doctype") or not linked_doc.get("reference_docname"):
+				continue
+
+			remove_linked_doc_reference(
+				[
+					{
+						"doctype": linked_doc["reference_doctype"],
+						"docname": linked_doc["reference_docname"],
+					}
+				],
+				remove_contact=False,
+				delete=delete_linked,
+			)
+
+		frappe.delete_doc("CRM Deal", name)
+
+	elif doctype == "Contact":
+		# Wpierw celowane odlinkowanie: tylko wiersze/dealy DOTYCZACE tego
+		# kontaktu, nie remove_contact_link (ktory czysci CALA tabele
+		# "contacts" dokumentu, wliczajac innych kontaktow).
+		child_deal_names = frappe.get_all(
+			"CRM Contacts",
+			filters={"contact": name, "parenttype": "CRM Deal"},
+			pluck="parent",
+			distinct=True,
+		)
+		direct_deal_names = frappe.get_all("CRM Deal", filters={"contact": name}, pluck="name")
+		affected_deals = set(child_deal_names) | set(direct_deal_names)
+
+		for deal_name in affected_deals:
+			deal_doc = frappe.get_doc("CRM Deal", deal_name)
+			deal_doc.contacts = [row for row in deal_doc.contacts if row.contact != name]
+			if deal_doc.get("contact") == name:
+				deal_doc.contact = None
+			deal_doc.save(ignore_permissions=True)
+
+		for cascade_doctype, cascade_field in CONTACT_UNLINK_LINK_FIELDS:
+			if not frappe.db.exists("DocType", cascade_doctype):
+				continue
+			for row_name in frappe.get_all(cascade_doctype, filters={cascade_field: name}, pluck="name"):
+				frappe.db.set_value(cascade_doctype, row_name, cascade_field, None)
+
+		# Adresy linkuja kontakt przez child table Dynamic Link — usun tylko
+		# wiersze tego kontaktu; osierocony adres (bez zadnych pozostalych
+		# linkow) usun w calosci.
+		adresy = frappe.get_all(
+			"Dynamic Link",
+			filters={"link_doctype": "Contact", "link_name": name, "parenttype": "Address"},
+			pluck="parent",
+			distinct=True,
+		)
+		osierocone_adresy = []
+		for adres_name in adresy:
+			adres_doc = frappe.get_doc("Address", adres_name)
+			pozostale = [
+				row for row in adres_doc.links
+				if not (row.link_doctype == "Contact" and row.link_name == name)
+			]
+			adres_doc.links = pozostale
+			adres_doc.save(ignore_permissions=True)
+			if not pozostale:
+				osierocone_adresy.append(adres_name)
+
+		# Generyczna sciezka dla reszty (Task/Note/itp.) — wykluczamy CRM
+		# Deal, bo obsluzylismy go wyzej celowo (remove_contact_link
+		# wyczyscilby CALA tabele "contacts", nie tylko ten wiersz).
+		linked_docs = get_linked_docs_of_document("Contact", name)
+		linked_docs = [d for d in linked_docs if d.get("reference_doctype") != "CRM Deal"]
+		for linked_doc in linked_docs:
+			if not linked_doc.get("reference_doctype") or not linked_doc.get("reference_docname"):
+				continue
+
+			remove_linked_doc_reference(
+				[
+					{
+						"doctype": linked_doc["reference_doctype"],
+						"docname": linked_doc["reference_docname"],
+					}
+				],
+				remove_contact=True,
+				delete=delete_linked,
+			)
+
+		frappe.delete_doc("Contact", name)
+
+		# Dopiero po skasowaniu kontaktu nic juz nie linkuje osieroconych
+		# adresow — usuwamy je teraz, zeby uniknac LinkExistsError z
+		# jeszcze zywego Contact.address.
+		for adres_name in osierocone_adresy:
+			frappe.delete_doc("Address", adres_name)
+
+	else:
+		linked_docs = get_linked_docs_of_document(doctype, name)
+		for linked_doc in linked_docs:
+			if not linked_doc.get("reference_doctype") or not linked_doc.get("reference_docname"):
+				continue
+
+			remove_linked_doc_reference(
+				[
+					{
+						"doctype": linked_doc["reference_doctype"],
+						"docname": linked_doc["reference_docname"],
+					}
+				],
+				remove_contact=False,
+				delete=delete_linked,
+			)
+
+		frappe.delete_doc(doctype, name)
+
+
 @frappe.whitelist()
 def delete_bulk_docs(doctype: str, items: str | list, delete_linked: bool = False):
-	from frappe.desk.reportview import delete_bulk
-
 	if not doctype:
 		frappe.throw(_("Doctype is required"))
 
@@ -842,32 +1053,56 @@ def delete_bulk_docs(doctype: str, items: str | list, delete_linked: bool = Fals
 	if not isinstance(items, list):
 		frappe.throw(_("Items must be a list"))
 
-	for doc in items:
+	if len(items) > 200:
+		frappe.throw(_("Za dużo rekordów naraz (limit 200)."))
+
+	deleted = []
+	failed = []
+
+	for idx, name in enumerate(items):
+		savepoint = f"bulk_del_{idx}"
+		frappe.db.savepoint(savepoint)
 		try:
-			if not frappe.db.exists(doctype, doc):
-				frappe.log_error(f"Document {doctype} {doc} does not exist", "Bulk Delete Error")
+			if not frappe.db.exists(doctype, name):
+				# Cel juz osiagniety — rekordu i tak nie ma.
+				deleted.append(name)
 				continue
 
-			linked_docs = get_linked_docs_of_document(doctype, doc)
-			for linked_doc in linked_docs:
-				if not linked_doc.get("reference_doctype") or not linked_doc.get("reference_docname"):
-					continue
+			_usun_jeden(doctype, name, delete_linked)
+			deleted.append(name)
+		except frappe.DoesNotExistError:
+			deleted.append(name)
+		except frappe.PermissionError:
+			frappe.db.rollback(save_point=savepoint)
+			frappe.clear_messages()
+			failed.append({"name": name, "reason": "Brak uprawnień do usunięcia tego rekordu."})
+		except frappe.LinkExistsError:
+			frappe.db.rollback(save_point=savepoint)
+			frappe.clear_messages()
+			failed.append(
+				{
+					"name": name,
+					"reason": (
+						"Rekord jest powiązany z innymi dokumentami, których nie można "
+						"automatycznie usunąć."
+					),
+				}
+			)
+		except frappe.ValidationError as e:
+			frappe.db.rollback(save_point=savepoint)
+			frappe.clear_messages()
+			reason = e.args[0] if e.args else str(e)
+			failed.append({"name": name, "reason": str(reason)})
+		except Exception:
+			frappe.db.rollback(save_point=savepoint)
+			frappe.clear_messages()
+			frappe.log_error(frappe.get_traceback(), "Bulk Delete Error")
+			failed.append({"name": name, "reason": "Nieoczekiwany błąd — szczegóły w logu serwera."})
 
-				remove_linked_doc_reference(
-					[
-						{
-							"doctype": linked_doc["reference_doctype"],
-							"docname": linked_doc["reference_docname"],
-						}
-					],
-					remove_contact=doctype == "Contact",
-					delete=delete_linked,
-				)
-		except Exception as e:
-			frappe.log_error(f"Error processing linked docs for {doctype} {doc}: {e!s}", "Bulk Delete Error")
+	# Bezpiecznik: gwarantuje czysta koperte HTTP niezaleznie od tego, ktore
+	# galezie wyzej sie wykonaly (np. msgprint z frappe.get_doc przy
+	# DoesNotExistError albo z udanej kaskady nie powinien wyciec jako
+	# _server_messages przy odpowiedzi 200).
+	frappe.clear_messages()
 
-	if len(items) > 10:
-		frappe.enqueue("frappe.desk.reportview.delete_bulk", doctype=doctype, items=items)
-	else:
-		delete_bulk(doctype, items)
-	return "success"
+	return {"total": len(items), "deleted": deleted, "failed": failed}
