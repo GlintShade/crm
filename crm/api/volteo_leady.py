@@ -274,13 +274,19 @@ def przydziel(
 	gdzie = " and ".join(warunki)
 
 	# Paczka ma być geograficznie ZWARTA (sąsiednie kody pocztowe), nie
-	# losowa próbka z całego województwa/powiatu.
+	# losowa próbka z całego województwa/powiatu. Dwustopniowy order by:
+	# MariaDB sortuje NULL/'' PRZED wszystkim w ASC, więc bez pierwszego
+	# klucza leady bez kodu pocztowego (~810 na produkcyjnym imporcie)
+	# zawsze wygrywałyby paczkę jako pierwsze mimo bycia geograficznie
+	# bezużyteczne — pierwszy klucz spycha puste/NULL kody na koniec,
+	# drugi sortuje właściwe kody rosnąco jak dotychczas.
 	kandydaci = frappe.db.sql(
 		f"""
 		select name
 		from `tabCRM Lead`
 		where {gdzie}
-		order by custom_install_postal_code asc
+		order by (custom_install_postal_code is null or custom_install_postal_code = '') asc,
+		         custom_install_postal_code asc
 		limit %(limit)s
 		""",
 		{**wartosci, "limit": ilosc},
