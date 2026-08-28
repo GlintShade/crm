@@ -45,21 +45,10 @@ def get_linked_deals(contact: str):
 	# get deals data
 	deals = []
 	for d in deal_names:
-		deal = frappe.get_cached_doc(
-			"CRM Deal",
-			d.parent,
-			fields=[
-				"name",
-				"organization",
-				"currency",
-				"annual_revenue",
-				"status",
-				"email",
-				"mobile_no",
-				"deal_owner",
-				"modified",
-			],
-		)
+		# get_cached_doc ignoruje kwarg fields i zawsze zwraca PEŁNY dokument
+		# (frontend potrzebuje m.in. deal_value i currency) — dlatego celowo
+		# bez listy pól.
+		deal = frappe.get_cached_doc("CRM Deal", d.parent)
 		deals.append(deal.as_dict())
 
 	return deals
