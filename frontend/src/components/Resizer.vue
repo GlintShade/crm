@@ -1,7 +1,12 @@
 <template>
-  <div class="relative" :style="{ width: `${sidebarWidth}px` }">
+  <div
+    class="relative"
+    :class="{ 'transition-[width] duration-300 ease-in-out': !sidebarResizing }"
+    :style="{ width: collapsed ? '48px' : `${sidebarWidth}px` }"
+  >
     <slot v-bind="{ sidebarResizing, sidebarWidth }" />
     <div
+      v-if="!collapsed"
       class="absolute z-10 h-full w-1 cursor-col-resize bg-surface-gray-4 opacity-0 transition-opacity hover:opacity-100"
       :class="{
         'opacity-100': sidebarResizing,
@@ -21,6 +26,7 @@ const props = defineProps({
   maxWidth: { type: Number, default: 30 * 16 },
   side: { type: String, default: 'left' },
   parent: { type: Object, default: null },
+  collapsed: { type: Boolean, default: false },
 })
 
 const sidebarResizing = ref(false)

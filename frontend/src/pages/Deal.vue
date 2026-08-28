@@ -80,175 +80,201 @@
         <KredytTab v-else-if="tab.name === 'Kredyt'" :deal-id="dealId" />
       </template>
     </Tabs>
-    <Resizer side="right" class="flex flex-col justify-between border-l">
+    <Resizer
+      side="right"
+      class="flex flex-col border-l"
+      :collapsed="isSidePanelCollapsed"
+    >
       <div
-        class="flex h-[45px] cursor-copy items-center border-b px-5 py-2.5 text-lg-medium text-ink-gray-9"
-        @click="copyToClipboard(dealId)"
+        v-show="!isSidePanelCollapsed"
+        class="flex min-h-0 flex-1 flex-col overflow-hidden"
       >
-        {{ __(dealId) }}
-      </div>
-      <DealNextStepNote
-        :deal-id="dealId"
-        :status="doc.status"
-        :rodzaj="doc.custom_rodzaj_umowy"
-      />
-      <SLASection
-        v-if="doc.sla_status"
-        v-model="doc"
-        @updateField="updateField"
-      />
-      <TasksSection doctype="CRM Deal" :docname="dealId" />
-      <div
-        v-if="sections.data"
-        class="flex flex-1 flex-col justify-between overflow-hidden"
-      >
-        <SidePanelLayout
-          :sections="sections.data"
-          :addContact="addContact"
-          doctype="CRM Deal"
-          :docname="dealId"
-          @reload="sections.reload"
-          @beforeFieldChange="beforeStatusChange"
-          @afterFieldChange="reloadResources"
+        <div
+          class="flex h-[45px] cursor-copy items-center border-b px-5 py-2.5 text-lg-medium text-ink-gray-9"
+          @click="copyToClipboard(dealId)"
         >
-          <template #actions="{ section }">
-            <div v-if="section.name == 'contacts_section'" class="pr-2">
-              <Link
-                value=""
-                doctype="Contact"
-                :onCreate="
-                  (value, close) => {
-                    _contact = {
-                      first_name: value,
-                      company_name: doc.organization,
+          {{ __(dealId) }}
+        </div>
+        <DealNextStepNote
+          :deal-id="dealId"
+          :status="doc.status"
+          :rodzaj="doc.custom_rodzaj_umowy"
+        />
+        <SLASection
+          v-if="doc.sla_status"
+          v-model="doc"
+          @updateField="updateField"
+        />
+        <TasksSection doctype="CRM Deal" :docname="dealId" />
+        <div
+          v-if="sections.data"
+          class="flex flex-1 flex-col justify-between overflow-hidden"
+        >
+          <SidePanelLayout
+            :sections="sections.data"
+            :addContact="addContact"
+            doctype="CRM Deal"
+            :docname="dealId"
+            @reload="sections.reload"
+            @beforeFieldChange="beforeStatusChange"
+            @afterFieldChange="reloadResources"
+          >
+            <template #actions="{ section }">
+              <div v-if="section.name == 'contacts_section'" class="pr-2">
+                <Link
+                  value=""
+                  doctype="Contact"
+                  :onCreate="
+                    (value, close) => {
+                      _contact = {
+                        first_name: value,
+                        company_name: doc.organization,
+                      }
+                      showContactModal = true
+                      close()
                     }
-                    showContactModal = true
-                    close()
-                  }
-                "
-                @change="(e) => addContact(e)"
-              >
-                <template #target="{ togglePopover }">
-                  <Button
-                    class="h-7 px-3"
-                    variant="ghost"
-                    icon="lucide-plus"
-                    @click="togglePopover()"
-                  />
-                </template>
-              </Link>
-            </div>
-          </template>
-          <template #default="{ section }">
-            <div
-              v-if="section.name == 'contacts_section'"
-              class="contacts-area"
-            >
-              <div
-                v-if="dealContacts?.loading && dealContacts?.data?.length == 0"
-                class="flex min-h-20 flex-1 items-center justify-center gap-3 text-base text-ink-gray-4"
-              >
-                <LoadingIndicator class="h-4 w-4" />
-                <span>{{ __('Loading...') }}</span>
+                  "
+                  @change="(e) => addContact(e)"
+                >
+                  <template #target="{ togglePopover }">
+                    <Button
+                      class="h-7 px-3"
+                      variant="ghost"
+                      icon="lucide-plus"
+                      @click="togglePopover()"
+                    />
+                  </template>
+                </Link>
               </div>
+            </template>
+            <template #default="{ section }">
               <div
-                v-for="(contact, i) in dealContacts.data"
-                v-else-if="dealContacts?.data?.length"
-                :key="contact.name"
+                v-if="section.name == 'contacts_section'"
+                class="contacts-area"
               >
-                <div class="px-2 pb-2.5" :class="[i == 0 ? 'pt-5' : 'pt-2.5']">
-                  <Section :opened="contact.opened">
-                    <template #header="{ opened, toggle }">
-                      <div
-                        class="flex cursor-pointer items-center justify-between gap-2 pr-1 text-base leading-5 text-ink-gray-7"
-                      >
-                        <div
-                          class="flex h-7 items-center gap-2 truncate"
-                          @click="toggle()"
-                        >
-                          <Avatar
-                            :label="contact.full_name"
-                            :image="contact.image"
-                            size="md"
-                          />
-                          <div class="truncate">
-                            {{ contact.full_name }}
-                          </div>
-                          <Badge
-                            v-if="contact.is_primary"
-                            class="ml-2"
-                            variant="outline"
-                            :label="__('Primary')"
-                            theme="green"
-                          />
-                        </div>
-                        <div class="flex items-center">
-                          <Dropdown :options="contactOptions(contact)">
-                            <Button
-                              icon="lucide-more-horizontal"
-                              class="text-ink-gray-5"
-                              variant="ghost"
-                            />
-                          </Dropdown>
-                          <Button
-                            variant="ghost"
-                            :tooltip="__('View Contact')"
-                            :icon="ArrowUpRightIcon"
-                            @click="
-                              router.push({
-                                name: 'Contact',
-                                params: { contactId: contact.name },
-                              })
-                            "
-                          />
-                          <Button
-                            variant="ghost"
-                            class="transition-all duration-300 ease-in-out"
-                            :class="{ 'rotate-90': opened }"
-                            icon="lucide-chevron-right"
-                            @click="toggle()"
-                          />
-                        </div>
-                      </div>
-                    </template>
-                    <div class="flex flex-col gap-1.5 text-base">
-                      <div
-                        v-if="contact.email"
-                        class="flex items-center gap-3 pb-1.5 pl-1 pt-4 text-ink-gray-8"
-                      >
-                        <Email2Icon class="h-4 w-4" />
-                        {{ contact.email }}
-                      </div>
-                      <div
-                        v-if="contact.mobile_no"
-                        class="flex items-center gap-3 p-1 py-1.5 text-ink-gray-8"
-                      >
-                        <PhoneIcon class="h-4 w-4" />
-                        {{ contact.mobile_no }}
-                      </div>
-                      <div
-                        v-if="!contact.email && !contact.mobile_no"
-                        class="flex items-center justify-center py-4 text-sm text-ink-gray-4"
-                      >
-                        {{ __('No Details Added') }}
-                      </div>
-                    </div>
-                  </Section>
+                <div
+                  v-if="dealContacts?.loading && dealContacts?.data?.length == 0"
+                  class="flex min-h-20 flex-1 items-center justify-center gap-3 text-base text-ink-gray-4"
+                >
+                  <LoadingIndicator class="h-4 w-4" />
+                  <span>{{ __('Loading...') }}</span>
                 </div>
                 <div
-                  v-if="i != dealContacts.data.length - 1"
-                  class="mx-2 h-px border-t border-outline-elevation-2"
-                />
+                  v-for="(contact, i) in dealContacts.data"
+                  v-else-if="dealContacts?.data?.length"
+                  :key="contact.name"
+                >
+                  <div class="px-2 pb-2.5" :class="[i == 0 ? 'pt-5' : 'pt-2.5']">
+                    <Section :opened="contact.opened">
+                      <template #header="{ opened, toggle }">
+                        <div
+                          class="flex cursor-pointer items-center justify-between gap-2 pr-1 text-base leading-5 text-ink-gray-7"
+                        >
+                          <div
+                            class="flex h-7 items-center gap-2 truncate"
+                            @click="toggle()"
+                          >
+                            <Avatar
+                              :label="contact.full_name"
+                              :image="contact.image"
+                              size="md"
+                            />
+                            <div class="truncate">
+                              {{ contact.full_name }}
+                            </div>
+                            <Badge
+                              v-if="contact.is_primary"
+                              class="ml-2"
+                              variant="outline"
+                              :label="__('Primary')"
+                              theme="green"
+                            />
+                          </div>
+                          <div class="flex items-center">
+                            <Dropdown :options="contactOptions(contact)">
+                              <Button
+                                icon="lucide-more-horizontal"
+                                class="text-ink-gray-5"
+                                variant="ghost"
+                              />
+                            </Dropdown>
+                            <Button
+                              variant="ghost"
+                              :tooltip="__('View Contact')"
+                              :icon="ArrowUpRightIcon"
+                              @click="
+                                router.push({
+                                  name: 'Contact',
+                                  params: { contactId: contact.name },
+                                })
+                              "
+                            />
+                            <Button
+                              variant="ghost"
+                              class="transition-all duration-300 ease-in-out"
+                              :class="{ 'rotate-90': opened }"
+                              icon="lucide-chevron-right"
+                              @click="toggle()"
+                            />
+                          </div>
+                        </div>
+                      </template>
+                      <div class="flex flex-col gap-1.5 text-base">
+                        <div
+                          v-if="contact.email"
+                          class="flex items-center gap-3 pb-1.5 pl-1 pt-4 text-ink-gray-8"
+                        >
+                          <Email2Icon class="h-4 w-4" />
+                          {{ contact.email }}
+                        </div>
+                        <div
+                          v-if="contact.mobile_no"
+                          class="flex items-center gap-3 p-1 py-1.5 text-ink-gray-8"
+                        >
+                          <PhoneIcon class="h-4 w-4" />
+                          {{ contact.mobile_no }}
+                        </div>
+                        <div
+                          v-if="!contact.email && !contact.mobile_no"
+                          class="flex items-center justify-center py-4 text-sm text-ink-gray-4"
+                        >
+                          {{ __('No Details Added') }}
+                        </div>
+                      </div>
+                    </Section>
+                  </div>
+                  <div
+                    v-if="i != dealContacts.data.length - 1"
+                    class="mx-2 h-px border-t border-outline-elevation-2"
+                  />
+                </div>
+                <div
+                  v-else
+                  class="flex h-20 items-center justify-center text-base text-ink-gray-5"
+                >
+                  {{ __('No Contacts Added') }}
+                </div>
               </div>
-              <div
-                v-else
-                class="flex h-20 items-center justify-center text-base text-ink-gray-5"
-              >
-                {{ __('No Contacts Added') }}
-              </div>
-            </div>
+            </template>
+          </SidePanelLayout>
+        </div>
+      </div>
+      <div class="mt-auto shrink-0 border-t p-2">
+        <SidebarLink
+          class="w-full"
+          :label="isSidePanelCollapsed ? __('Expand') : __('Collapse')"
+          :isCollapsed="isSidePanelCollapsed"
+          @click="isSidePanelCollapsed = !isSidePanelCollapsed"
+        >
+          <template #icon>
+            <span class="grid h-4 w-4 flex-shrink-0 place-items-center">
+              <CollapseSidebar
+                class="h-4 w-4 text-ink-gray-7 duration-300 ease-in-out"
+                :class="{ '[transform:rotateY(180deg)]': !isSidePanelCollapsed }"
+              />
+            </span>
           </template>
-        </SidePanelLayout>
+        </SidebarLink>
       </div>
     </Resizer>
     </div>
@@ -348,6 +374,8 @@ import SidePanelLayout from '@/components/SidePanelLayout.vue'
 import SLASection from '@/components/SLASection.vue'
 import TasksSection from '@/components/TasksSection.vue'
 import CustomActions from '@/components/CustomActions.vue'
+import SidebarLink from '@/components/SidebarLink.vue'
+import CollapseSidebar from '@/components/Icons/CollapseSidebar.vue'
 import {
   openWebsite,
   setupCustomizations,
@@ -387,6 +415,7 @@ import {
 } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useActiveTabManager } from '@/composables/useActiveTabManager'
+import { useStorage } from '@vueuse/core'
 
 const { on } = useBroadcast()
 const { brand } = getSettings()
@@ -407,6 +436,7 @@ const props = defineProps({
 const errorTitle = ref('')
 const errorMessage = ref('')
 const showDeleteLinkedDocModal = ref(false)
+const isSidePanelCollapsed = useStorage('isDealSidePanelCollapsed', false)
 
 const {
   triggerOnChange,

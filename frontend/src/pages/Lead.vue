@@ -60,142 +60,168 @@
         />
       </template>
     </Tabs>
-    <Resizer class="flex flex-col justify-between border-l" side="right">
+    <Resizer
+      class="flex flex-col border-l"
+      side="right"
+      :collapsed="isSidePanelCollapsed"
+    >
       <div
-        class="flex h-[45px] cursor-copy items-center border-b px-5 py-2.5 text-lg-medium text-ink-gray-9"
-        @click="copyToClipboard(leadId)"
+        v-show="!isSidePanelCollapsed"
+        class="flex min-h-0 flex-1 flex-col overflow-hidden"
       >
-        {{ __(leadId) }}
-      </div>
-      <FileUploader
-        :validateFile="validateIsImageFile"
-        :upload-args="{ private: true }"
-        @success="(file) => updateField('image', file.file_url)"
-      >
-        <template #default="{ openFileSelector }">
-          <div class="flex items-center justify-start gap-5 border-b p-5">
-            <div class="group relative size-12">
-              <Avatar
-                size="3xl"
-                class="size-12"
-                :label="title"
-                :image="doc.image"
-              />
-              <component
-                :is="doc.image ? Dropdown : 'div'"
-                v-bind="
-                  doc.image
-                    ? {
-                        options: [
-                          {
-                            icon: 'upload',
-                            label: doc.image
-                              ? __('Change Image')
-                              : __('Upload Image'),
-                            onClick: openFileSelector,
-                          },
-                          {
-                            icon: 'trash-2',
-                            label: __('Remove Image'),
-                            onClick: () => updateField('image', ''),
-                          },
-                        ],
-                      }
-                    : { onClick: openFileSelector }
-                "
-                class="!absolute bottom-0 left-0 right-0"
-              >
-                <div
-                  class="z-1 absolute bottom-0.5 left-0 right-0.5 flex h-9 cursor-pointer items-center justify-center rounded-b-full bg-black bg-opacity-40 pt-3 opacity-0 duration-300 ease-in-out group-hover:opacity-100"
-                  style="
-                    -webkit-clip-path: inset(12px 0 0 0);
-                    clip-path: inset(12px 0 0 0);
+        <div
+          class="flex h-[45px] cursor-copy items-center border-b px-5 py-2.5 text-lg-medium text-ink-gray-9"
+          @click="copyToClipboard(leadId)"
+        >
+          {{ __(leadId) }}
+        </div>
+        <FileUploader
+          :validateFile="validateIsImageFile"
+          :upload-args="{ private: true }"
+          @success="(file) => updateField('image', file.file_url)"
+        >
+          <template #default="{ openFileSelector }">
+            <div class="flex items-center justify-start gap-5 border-b p-5">
+              <div class="group relative size-12">
+                <Avatar
+                  size="3xl"
+                  class="size-12"
+                  :label="title"
+                  :image="doc.image"
+                />
+                <component
+                  :is="doc.image ? Dropdown : 'div'"
+                  v-bind="
+                    doc.image
+                      ? {
+                          options: [
+                            {
+                              icon: 'upload',
+                              label: doc.image
+                                ? __('Change Image')
+                                : __('Upload Image'),
+                              onClick: openFileSelector,
+                            },
+                            {
+                              icon: 'trash-2',
+                              label: __('Remove Image'),
+                              onClick: () => updateField('image', ''),
+                            },
+                          ],
+                        }
+                      : { onClick: openFileSelector }
                   "
+                  class="!absolute bottom-0 left-0 right-0"
                 >
-                  <CameraIcon class="size-4 cursor-pointer text-white" />
-                </div>
-              </component>
-            </div>
-            <div class="flex flex-col gap-2.5 truncate">
-              <Tooltip :text="doc.lead_name || __('Set First Name')">
-                <div class="truncate text-3xl-medium text-ink-gray-9">
-                  {{ title }}
-                </div>
-              </Tooltip>
-              <div class="flex gap-1.5">
-                <Button
-                  v-if="callEnabled"
-                  :tooltip="__('Make a Call')"
-                  :icon="PhoneIcon"
-                  @click="
-                    () =>
-                      doc.mobile_no
-                        ? makeCall(doc.mobile_no)
-                        : toast.error(
-                            __('Please set a mobile number to make calls'),
-                          )
-                  "
-                />
-
-                <Button
-                  :tooltip="__('Send an Email')"
-                  :icon="Email2Icon"
-                  @click="
-                    doc.email
-                      ? openEmailBox()
-                      : toast.error(
-                          __('Please set an email address to send emails'),
-                        )
-                  "
-                />
-                <Button
-                  :tooltip="__('Go to Website')"
-                  :icon="LinkIcon"
-                  @click="
-                    doc.website
-                      ? openWebsite(doc.website)
-                      : toast.error(__('Please set a website to visit'))
-                  "
-                />
-
-                <Button
-                  :tooltip="__('Attach a File')"
-                  :icon="AttachmentIcon"
-                  @click="showFilesUploader = true"
-                />
-
-                <Button
-                  v-if="canDelete"
-                  :tooltip="__('Delete')"
-                  variant="subtle"
-                  theme="red"
-                  icon="lucide-trash-2"
-                  @click="deleteLead"
-                />
+                  <div
+                    class="z-1 absolute bottom-0.5 left-0 right-0.5 flex h-9 cursor-pointer items-center justify-center rounded-b-full bg-black bg-opacity-40 pt-3 opacity-0 duration-300 ease-in-out group-hover:opacity-100"
+                    style="
+                      -webkit-clip-path: inset(12px 0 0 0);
+                      clip-path: inset(12px 0 0 0);
+                    "
+                  >
+                    <CameraIcon class="size-4 cursor-pointer text-white" />
+                  </div>
+                </component>
               </div>
-              <ErrorMessage :message="__(error)" />
+              <div class="flex flex-col gap-2.5 truncate">
+                <Tooltip :text="doc.lead_name || __('Set First Name')">
+                  <div class="truncate text-3xl-medium text-ink-gray-9">
+                    {{ title }}
+                  </div>
+                </Tooltip>
+                <div class="flex gap-1.5">
+                  <Button
+                    v-if="callEnabled"
+                    :tooltip="__('Make a Call')"
+                    :icon="PhoneIcon"
+                    @click="
+                      () =>
+                        doc.mobile_no
+                          ? makeCall(doc.mobile_no)
+                          : toast.error(
+                              __('Please set a mobile number to make calls'),
+                            )
+                    "
+                  />
+
+                  <Button
+                    :tooltip="__('Send an Email')"
+                    :icon="Email2Icon"
+                    @click="
+                      doc.email
+                        ? openEmailBox()
+                        : toast.error(
+                            __('Please set an email address to send emails'),
+                          )
+                    "
+                  />
+                  <Button
+                    :tooltip="__('Go to Website')"
+                    :icon="LinkIcon"
+                    @click="
+                      doc.website
+                        ? openWebsite(doc.website)
+                        : toast.error(__('Please set a website to visit'))
+                    "
+                  />
+
+                  <Button
+                    :tooltip="__('Attach a File')"
+                    :icon="AttachmentIcon"
+                    @click="showFilesUploader = true"
+                  />
+
+                  <Button
+                    v-if="canDelete"
+                    :tooltip="__('Delete')"
+                    variant="subtle"
+                    theme="red"
+                    icon="lucide-trash-2"
+                    @click="deleteLead"
+                  />
+                </div>
+                <ErrorMessage :message="__(error)" />
+              </div>
             </div>
-          </div>
-        </template>
-      </FileUploader>
-      <SLASection
-        v-if="doc.sla_status"
-        v-model="doc"
-        @updateField="updateField"
-      />
-      <TasksSection doctype="CRM Lead" :docname="leadId" />
-      <div
-        v-if="sections.data"
-        class="flex flex-1 flex-col justify-between overflow-hidden"
-      >
-        <SidePanelLayout
-          :sections="sections.data"
-          doctype="CRM Lead"
-          :docname="leadId"
-          @reload="sections.reload"
-          @beforeFieldChange="beforeStatusChange"
-          @afterFieldChange="reloadResources"
+          </template>
+        </FileUploader>
+        <SLASection
+          v-if="doc.sla_status"
+          v-model="doc"
+          @updateField="updateField"
         />
+        <TasksSection doctype="CRM Lead" :docname="leadId" />
+        <div
+          v-if="sections.data"
+          class="flex flex-1 flex-col justify-between overflow-hidden"
+        >
+          <SidePanelLayout
+            :sections="sections.data"
+            doctype="CRM Lead"
+            :docname="leadId"
+            @reload="sections.reload"
+            @beforeFieldChange="beforeStatusChange"
+            @afterFieldChange="reloadResources"
+          />
+        </div>
+      </div>
+      <div class="mt-auto shrink-0 border-t p-2">
+        <SidebarLink
+          class="w-full"
+          :label="isSidePanelCollapsed ? __('Expand') : __('Collapse')"
+          :isCollapsed="isSidePanelCollapsed"
+          @click="isSidePanelCollapsed = !isSidePanelCollapsed"
+        >
+          <template #icon>
+            <span class="grid h-4 w-4 flex-shrink-0 place-items-center">
+              <CollapseSidebar
+                class="h-4 w-4 text-ink-gray-7 duration-300 ease-in-out"
+                :class="{ '[transform:rotateY(180deg)]': !isSidePanelCollapsed }"
+              />
+            </span>
+          </template>
+        </SidebarLink>
       </div>
     </Resizer>
   </div>
@@ -261,6 +287,8 @@ import SLASection from '@/components/SLASection.vue'
 import TasksSection from '@/components/TasksSection.vue'
 import CustomActions from '@/components/CustomActions.vue'
 import ConvertToDealModal from '@/components/Modals/ConvertToDealModal.vue'
+import SidebarLink from '@/components/SidebarLink.vue'
+import CollapseSidebar from '@/components/Icons/CollapseSidebar.vue'
 import {
   openWebsite,
   setupCustomizations,
@@ -291,6 +319,7 @@ import {
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useActiveTabManager } from '@/composables/useActiveTabManager'
+import { useStorage } from '@vueuse/core'
 
 const { brand } = getSettings()
 const { $dialog, $socket, makeCall } = globalStore()
@@ -311,6 +340,7 @@ const errorMessage = ref('')
 const showDeleteLinkedDocModal = ref(false)
 const showConvertToDealModal = ref(false)
 const showFilesUploader = ref(false)
+const isSidePanelCollapsed = useStorage('isLeadSidePanelCollapsed', false)
 
 const {
   triggerOnChange,
