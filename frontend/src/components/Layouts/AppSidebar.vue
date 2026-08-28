@@ -244,6 +244,16 @@ const links = [
     to: 'Tasks',
   },
   {
+    label: __('Contacts'),
+    icon: ContactsIcon,
+    to: 'Contacts',
+  },
+  {
+    label: 'Umowy',
+    icon: DealsIcon,
+    to: 'Deals',
+  },
+  {
     label: __('Leads'),
     icon: LeadsIcon,
     to: 'Leads',
@@ -254,16 +264,6 @@ const links = [
     icon: MapaLeadowIcon,
     to: 'MapaLeadow',
     condition: () => !window.hide_leads, // VOLTEO — issue ops#26, same gate as Leads
-  },
-  {
-    label: __('Contacts'),
-    icon: ContactsIcon,
-    to: 'Contacts',
-  },
-  {
-    label: 'Umowy',
-    icon: DealsIcon,
-    to: 'Deals',
   },
   {
     divider: true, // VOLTEO
