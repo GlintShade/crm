@@ -126,7 +126,7 @@ usePageMeta(() => {
 
 const mapId = `mapa-leadow-${Math.random().toString(36).slice(2)}`
 
-const currentUser = sessionStore().user
+const { user: currentUser } = sessionStore()
 const { getUser } = usersStore()
 const { getLeadStatus } = statusesStore()
 
@@ -241,7 +241,7 @@ const unikalniWlasciciele = computed(() =>
 const pokazSelectHandlowca = computed(() => {
   const wlasciciele = unikalniWlasciciele.value
   if (wlasciciele.length > 1) return true
-  return wlasciciele.length === 1 && wlasciciele[0] !== currentUser
+  return wlasciciele.length === 1 && wlasciciele[0] !== currentUser.value
 })
 
 const opcjeHandlowcow = computed(() => [
@@ -325,7 +325,7 @@ async function initMap() {
       '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(mapInstance)
 
-  markerLayer = L.layerGroup().addTo(mapInstance)
+  markerLayer = L.featureGroup().addTo(mapInstance)
 
   rysujMarkery()
 }
