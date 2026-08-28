@@ -10,6 +10,8 @@ from crm.api.exchange_rate import get_exchange_rate
 from crm.fcrm.doctype.crm_service_level_agreement.utils import get_sla
 from crm.fcrm.doctype.crm_status_change_log.crm_status_change_log import add_status_change_log
 from crm.fcrm.doctype.utils import add_or_remove_lost_reason_section_in_sidepanel
+from crm.permissions.org_hierarchy import BYPASS_ROLES
+from crm.volteo_pipeline import grupa_for, pipeline_for
 
 
 class CRMDeal(Document):
@@ -486,10 +488,91 @@ def create_contact(doc):
 	return contact.name
 
 
+_ALWAYS_DROPPED_DEAL_KEYS = {
+	"name",
+	"owner",
+	"creation",
+	"modified",
+	"modified_by",
+	"docstatus",
+	"doctype",
+	"idx",
+	"naming_series",
+}
+"""System/identity keys a caller-supplied deal payload must never control, regardless of role."""
+
+
+def _is_deal_input_bypass(user: str | None = None) -> bool:
+	"""True when `user` (default: current session) is exempt from deal-input sanitization --
+	Administrator or a role in `BYPASS_ROLES`. Shared between `sanitize_deal_input` and the two
+	deal-creation call sites (`create_deal` here, `CRMLead.create_deal`) that need the same
+	decision to gate whether a caller-supplied `deal_owner` may be trusted after insert.
+	"""
+	if not user:
+		user = frappe.session.user
+	if user == "Administrator":
+		return True
+	return bool(set(frappe.get_roles(user)) & BYPASS_ROLES)
+
+
+def sanitize_deal_input(doc: dict) -> dict:
+	"""Return a sanitized COPY of a caller-controlled CRM Deal payload (`doc` is never mutated).
+
+	Always drops: keys starting with `_`, and the identity/system keys in
+	`_ALWAYS_DROPPED_DEAL_KEYS`. Also drops any key that is not an actual CRM Deal fieldname
+	(per `frappe.get_meta`, which already includes `contacts`, a Table field). This closes the
+	attribute-clobbering hole a caller could otherwise reach by naming an arbitrary Document
+	attribute (e.g. `flags`) in the payload.
+
+	For a non-bypass caller (see `_is_deal_input_bypass`), also drops every field the DocType
+	meta marks `permlevel > 0` -- this is what stops a `Volteo D2D Sales` rep from spoofing
+	`deal_owner` (permlevel 1, ops/crm-setup.py reassign lock) or the CP commission-secrecy
+	fields (permlevel 2, ops/crm-koszty-montaz.py -- present in live meta, not in
+	crm_deal.json, so only `frappe.get_meta` sees them; deliberately meta-driven rather than a
+	hardcoded field list so it never drifts from what ops actually locks down). And rewrites
+	`status` to the first step of the product line's pipeline (`crm.volteo_pipeline`) whenever
+	the caller's status is not a member of that line's group -- prevents e.g. a Czyste Powietrze
+	deal being created sitting on an OZE-only status. A deal whose `custom_rodzaj_umowy` has no
+	known pipeline (unset/unrecognised) is left with whatever status the caller sent; Link
+	validation on `status` covers existence.
+	"""
+	if not isinstance(doc, dict):
+		frappe.throw(_("Invalid deal payload: expected an object of field values."))
+
+	meta = frappe.get_meta("CRM Deal")
+	valid_fieldnames = {df.fieldname for df in meta.fields}
+
+	new_dict = {}
+	for key, value in doc.items():
+		if key.startswith("_") or key in _ALWAYS_DROPPED_DEAL_KEYS:
+			continue
+		if key not in valid_fieldnames:
+			continue
+		new_dict[key] = value
+
+	if _is_deal_input_bypass():
+		return new_dict
+
+	high_permlevel_fields = {df.fieldname for df in meta.fields if (df.permlevel or 0) > 0}
+	new_dict = {k: v for k, v in new_dict.items() if k not in high_permlevel_fields}
+
+	rodzaj = new_dict.get("custom_rodzaj_umowy")
+	grupa = grupa_for(rodzaj)
+	if grupa is not None and new_dict.get("status") not in grupa:
+		new_dict["status"] = pipeline_for(rodzaj)[0]
+
+	return new_dict
+
+
 @frappe.whitelist()
 def create_deal(doc: dict):
+	dane = sanitize_deal_input(doc)
+
 	deal = frappe.new_doc("CRM Deal")
 
+	# create_contact/create_organization read fields (first_name, email, website, ...) that are
+	# not CRM Deal meta fields, so they deliberately keep reading the raw, unsanitized `doc` --
+	# their own ignore_permissions=True inserts are out of scope for this fix.
 	contact = doc.get("contact")
 	if not contact and (
 		doc.get("first_name") or doc.get("last_name") or doc.get("email") or doc.get("mobile_no")
@@ -503,9 +586,34 @@ def create_deal(doc: dict):
 		}
 	)
 
-	doc.pop("organization", None)
+	dane.pop("organization", None)
 
-	deal.update(doc)
+	deal.update(dane)
 
-	deal.insert(ignore_permissions=True)
+	# Normal permission enforcement is the primary control here (no more
+	# ignore_permissions=True): a Volteo D2D Sales rep has create rights on CRM Deal
+	# (ops/crm-setup.py GRANTS), so insert() succeeds, but permlevel>0 fields (deal_owner,
+	# the CP secrecy fields) get silently stripped for them at insert time -- sanitize_deal_input
+	# already removed them too, this is belt-and-suspenders on the same mechanism.
+	deal.insert()
+
+	# deal_owner is permlevel 1: insert() strips a caller-supplied value for a non-privileged
+	# creator, so it must be applied explicitly with db_set() afterwards, same pattern as
+	# crm/api/czyste_powietrze.py's volteo_cp_create_deal. Only a bypass caller's requested
+	# owner is honored -- the frontend always sends deal_owner = current user for reps anyway,
+	# so this changes nothing for legitimate use.
+	requested_owner = doc.get("deal_owner")
+	owner = requested_owner if (_is_deal_input_bypass() and requested_owner) else frappe.session.user
+	deal.db_set("deal_owner", owner)
+
+	# db_set() does not run validate()/after_insert(), so CRMDeal.after_insert's own
+	# share_with_agent + assign_agent (triggered when deal_owner is already set going into
+	# insert()) never fires here -- deal_owner is only known after db_set. Replicate it
+	# explicitly; both helpers are idempotent (assign_agent no-ops if already an assignee,
+	# share_with_agent checks DocShare existence), so this is safe to call unconditionally,
+	# including for a bypass caller for whom after_insert may already have run.
+	if owner != frappe.session.user:
+		deal.share_with_agent(owner)
+	deal.assign_agent(owner)
+
 	return deal.name

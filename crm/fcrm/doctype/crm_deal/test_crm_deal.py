@@ -10,6 +10,7 @@ from crm.fcrm.doctype.crm_deal.crm_deal import (
 	set_primary_contact,
 )
 from crm.tests import CRMTestCase as FrappeTestCase
+from crm.volteo_pipeline import pipeline_for
 
 
 class TestCRMDeal(FrappeTestCase):
@@ -363,6 +364,103 @@ class TestCRMDeal(FrappeTestCase):
 
 		deal.reload()
 		self.assertEqual(deal.contacts[0].is_primary, 1)
+
+	# ------------------------------------------------------------------
+	# ops#32 -- create_deal input sanitization: a Volteo D2D Sales rep must
+	# not be able to spoof permlevel>0 fields (deal_owner, the CP commission
+	# secrecy fields) or open a deal on a status from a different product
+	# line's pipeline by sending them straight through the whitelisted
+	# create_deal API.
+	# ------------------------------------------------------------------
+
+	def test_create_deal_rep_cannot_inject_permlevel_fields_or_status(self):
+		"""A Volteo D2D Sales rep's payload must have permlevel>0 fields stripped and an
+		out-of-pipeline status corrected, even though create_deal no longer uses
+		ignore_permissions=True. Also pins the ops#32 QA follow-up: the rep must still end up
+		assigned to their own deal, since deal_owner is now applied via db_set() after insert
+		rather than before it (where CRMDeal.after_insert would have picked it up)."""
+		rep = _ensure_d2d_rep(self)
+		meta = frappe.get_meta("CRM Deal")
+		if not (
+			meta.has_field("custom_cp_prowizja_handlowa") and meta.has_field("custom_koszty_zysk_plan")
+		):
+			self.skipTest("CP secrecy custom fields not present on this site (ops/crm-koszty-montaz.py)")
+		cp_first_status = pipeline_for("Czyste Powietrze")[0]
+		if not frappe.db.exists("CRM Deal Status", "Umowa Wygenerowana") or not frappe.db.exists(
+			"CRM Deal Status", cp_first_status
+		):
+			self.skipTest("Pipeline status rows not present on this site (ops/crm-setup.py)")
+
+		frappe.set_user(rep)
+		try:
+			deal_name = create_deal(
+				{
+					"organization_name": "Injection Test Org",
+					"first_name": "Inject",
+					"email": "inject.rep@example.com",
+					"custom_rodzaj_umowy": "Czyste Powietrze",
+					# Cross-line status: valid for OZE, not for Czyste Powietrze.
+					"status": "Umowa Wygenerowana",
+					"custom_cp_prowizja_handlowa": 9999,
+					"custom_koszty_zysk_plan": 1234,
+					"deal_owner": "someone.else@example.com",
+				}
+			)
+		finally:
+			frappe.set_user("Administrator")
+
+		prowizja = frappe.db.get_value("CRM Deal", deal_name, "custom_cp_prowizja_handlowa")
+		self.assertTrue(prowizja in (None, 0))
+
+		zysk_plan = frappe.db.get_value("CRM Deal", deal_name, "custom_koszty_zysk_plan")
+		self.assertTrue(zysk_plan in (None, 0))
+
+		self.assertEqual(frappe.db.get_value("CRM Deal", deal_name, "deal_owner"), rep)
+		self.assertEqual(frappe.db.get_value("CRM Deal", deal_name, "status"), cp_first_status)
+
+		deal_assignees = frappe.get_doc("CRM Deal", deal_name).get_assigned_users()
+		self.assertIn(rep, deal_assignees)
+
+	def test_create_deal_administrator_owner_is_honored(self):
+		"""An Administrator-submitted deal_owner is a bypass caller and must be honored, unlike
+		the rep case above."""
+		rep = _ensure_d2d_rep(self)
+
+		deal_name = create_deal(
+			{
+				"organization_name": "Admin Owner Test Org",
+				"first_name": "AdminOwner",
+				"email": "adminowner@example.com",
+				"deal_owner": rep,
+			}
+		)
+
+		self.assertEqual(frappe.db.get_value("CRM Deal", deal_name, "deal_owner"), rep)
+
+
+def _ensure_d2d_rep(testcase):
+	"""Create (or reuse) a `Volteo D2D Sales` rep user for ops#32 regression tests, skipping the
+	calling test if the role does not exist on this site (a fresh/unseeded test site never has
+	it -- it is created by ops/crm-setup.py, which only runs against a real seeded site per
+	CLAUDE.md's local-first workflow). Restores the session user in all cases.
+	"""
+	if not frappe.db.exists("Role", "Volteo D2D Sales"):
+		testcase.skipTest("Volteo D2D Sales role not present on this site (ops/crm-setup.py)")
+
+	email = "ops32.d2d.rep@example.com"
+	if not frappe.db.exists("User", email):
+		frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": email,
+				"first_name": "Ops32",
+				"last_name": "Rep",
+				"send_welcome_email": 0,
+			}
+		).insert(ignore_permissions=True)
+	user = frappe.get_doc("User", email)
+	user.add_roles("Volteo D2D Sales", "Sales User")
+	return email
 
 
 def create_test_deal(**kwargs):
