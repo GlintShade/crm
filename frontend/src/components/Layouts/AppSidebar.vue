@@ -57,8 +57,8 @@
           </template>
           <nav class="flex flex-col">
             <template
-              v-for="link in view.views"
-              :key="link.divider ? 'divider' : link.label"
+              v-for="(link, i) in view.views"
+              :key="link.divider ? 'divider-' + i : link.label"
             >
               <div
                 v-if="link.divider"
@@ -243,6 +243,18 @@ const links = [
     to: 'Tasks',
   },
   {
+    label: __('Leads'),
+    icon: LeadsIcon,
+    to: 'Leads',
+    condition: () => !window.hide_leads, // VOLTEO
+  },
+  {
+    label: __('Mapa leadów'),
+    icon: MapaLeadowIcon,
+    to: 'MapaLeadow',
+    condition: () => !window.hide_leads, // VOLTEO — issue ops#26, same gate as Leads
+  },
+  {
     label: __('Contacts'),
     icon: ContactsIcon,
     to: 'Contacts',
@@ -268,6 +280,9 @@ const links = [
     condition: () => window.volteo_linia_cp !== false, // VOLTEO — issue #16
   },
   {
+    divider: true, // VOLTEO
+  },
+  {
     label: 'Dokumenty OZE',
     icon: DokumentyOzeIcon,
     to: 'DokumentyOze',
@@ -278,18 +293,6 @@ const links = [
     icon: DokumentyCPIcon,
     to: 'DokumentyCzystePowietrze',
     condition: () => window.volteo_linia_cp !== false, // VOLTEO — issue #16
-  },
-  {
-    label: __('Leads'),
-    icon: LeadsIcon,
-    to: 'Leads',
-    condition: () => !window.hide_leads, // VOLTEO
-  },
-  {
-    label: __('Mapa leadów'),
-    icon: MapaLeadowIcon,
-    to: 'MapaLeadow',
-    condition: () => !window.hide_leads, // VOLTEO — issue ops#26, same gate as Leads
   },
   {
     label: __('Organizations'),
@@ -311,18 +314,30 @@ const links = [
   },
 ]
 
+// VOLTEO — usuwa dividery skrajne i sąsiadujące po odfiltrowaniu linków warunkami
+function bezZbednychDividerow(items) {
+  return items.filter((item, i, arr) => {
+    if (!item.divider) return true
+    const maPoprzedni = arr.slice(0, i).some((x) => !x.divider)
+    const maNastepny = arr.slice(i + 1).some((x) => !x.divider)
+    return maPoprzedni && maNastepny && !arr[i + 1]?.divider
+  })
+}
+
 const allViews = computed(() => {
   let _views = [
     {
       name: 'All Views',
       hideLabel: true,
       opened: true,
-      views: links.filter((link) => {
-        if (link.condition) {
-          return link.condition()
-        }
-        return true
-      }),
+      views: bezZbednychDividerow(
+        links.filter((link) => {
+          if (link.condition) {
+            return link.condition()
+          }
+          return true
+        }),
+      ),
     },
   ]
   if (getPublicViews().length) {
