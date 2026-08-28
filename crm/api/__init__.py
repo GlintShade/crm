@@ -143,6 +143,7 @@ def invite_by_email(
 	mobile_no: str | None = None,
 	linia_oze: int = 1,
 	linia_cp: int = 1,
+	linia_leady: int = 0,
 ):
 	frappe.only_for(["Sales Manager", "System Manager", "Volteo Core Admin"], True)
 
@@ -202,6 +203,13 @@ def invite_by_email(
 	if not linia_oze and not linia_cp:
 		frappe.throw(_("Wybierz co najmniej jedną linię produktową"))
 
+	# Leady module access (issue #27, ops/crm-linia-leady.py): unlike
+	# linia_oze/linia_cp above, this is NOT a product line an invitee must
+	# have at least one of — it's an independent, off-by-default access
+	# switch for the Leady module (mirrors the safe-rollout backfill default
+	# on `User.custom_linia_leady`). No "at least one" requirement applies.
+	linia_leady = cint(linia_leady)
+
 	if not emails:
 		return
 	email_string = validate_email_address(emails, throw=False)
@@ -234,6 +242,7 @@ def invite_by_email(
 			mobile_no=mobile_no,
 			linia_oze=1 if linia_oze else 0,
 			linia_cp=1 if linia_cp else 0,
+			linia_leady=1 if linia_leady else 0,
 		).insert(ignore_permissions=True)
 
 	return {

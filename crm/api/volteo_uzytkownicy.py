@@ -245,9 +245,10 @@ def volteo_zmien_role(email: str, rola: str) -> dict:
 
 
 @frappe.whitelist()
-def volteo_ustaw_linie(email: str, oze: int, cp: int) -> dict:
+def volteo_ustaw_linie(email: str, oze: int, cp: int, leady: int = 0) -> dict:
 	"""Ustawia flagi dostępu do linii produktowych (`custom_linia_oze` /
-	`custom_linia_cp`) na koncie `User` (issue #16).
+	`custom_linia_cp`, issue #16) oraz dostępu do modułu Leady
+	(`custom_linia_leady`, issue #27) na koncie `User`.
 
 	Dostępne wyłącznie dla `Volteo Core Admin` / `System Manager`. Flagi
 	dotyczą wyłącznie zwykłych pól Check na `User` — proste `db.set_value`
@@ -255,8 +256,13 @@ def volteo_ustaw_linie(email: str, oze: int, cp: int) -> dict:
 	tu przechodzić, w odróżnieniu od zmiany ról w `volteo_zmien_role`
 	powyżej). Rola/uprawnienia bypassujące flagi (`System Manager`,
 	`Volteo Core Admin`, `Volteo Backend`) są rozstrzygane po stronie
-	`crm.api.volteo_ma_linie` przy każdym odczycie — ten endpoint jedynie
-	zapisuje surowe wartości flag, niezależnie od roli konta docelowego.
+	`crm.api.volteo_ma_linie` (OZE/CP) i
+	`crm.permissions.org_hierarchy._ma_linie_leady` (Leady) przy każdym
+	odczycie — ten endpoint jedynie zapisuje surowe wartości flag,
+	niezależnie od roli konta docelowego. `leady` domyślnie 0 (zgodnie z
+	bezpiecznym rolloutem z issue #27 — patrz `ops/crm-linia-leady.py`), żeby
+	istniejące wywołania bez tego parametru nie włączały modułu Leady
+	niechcący.
 	"""
 	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
 
@@ -269,11 +275,16 @@ def volteo_ustaw_linie(email: str, oze: int, cp: int) -> dict:
 
 	oze_flaga = 1 if cint(oze) else 0
 	cp_flaga = 1 if cint(cp) else 0
+	leady_flaga = 1 if cint(leady) else 0
 
 	frappe.db.set_value(
 		"User",
 		email,
-		{"custom_linia_oze": oze_flaga, "custom_linia_cp": cp_flaga},
+		{
+			"custom_linia_oze": oze_flaga,
+			"custom_linia_cp": cp_flaga,
+			"custom_linia_leady": leady_flaga,
+		},
 		update_modified=False,
 	)
 
@@ -281,4 +292,5 @@ def volteo_ustaw_linie(email: str, oze: int, cp: int) -> dict:
 		"user": email,
 		"custom_linia_oze": oze_flaga,
 		"custom_linia_cp": cp_flaga,
+		"custom_linia_leady": leady_flaga,
 	}

@@ -101,13 +101,13 @@
 
     <div class="border-t mx-2" />
 
-    <!-- Product-line access switch (issue #16) -->
+    <!-- Product-line access switch (issue #16) + Leady module switch (issue #27) -->
     <div class="flex flex-col gap-4 px-2">
       <div class="text-base-semibold">{{ __('Dostęp do linii produktowych') }}</div>
       <p class="text-p-sm text-ink-gray-5 max-w-2xl">
         {{
           __(
-            'Wyłączenie linii ukrywa Kalkulator i Dokumenty tej linii dla wskazanego użytkownika i blokuje jej użycie po stronie serwera. Nie dotyczy kont System Manager / Volteo Core Admin / Volteo Backend — te zawsze mają dostęp do obu linii.',
+            'Wyłączenie linii ukrywa Kalkulator i Dokumenty tej linii dla wskazanego użytkownika i blokuje jej użycie po stronie serwera. Wyłączenie „Leady” ukrywa moduł Leady (listę i mapę) i blokuje przydzielanie temu użytkownikowi. Nie dotyczy kont System Manager / Volteo Core Admin / Volteo Backend — te zawsze mają pełny dostęp.',
           )
         }}
       </p>
@@ -133,6 +133,13 @@
             :modelValue="Boolean(linieForm.cp)"
             :disabled="setLinie.loading"
             @update:modelValue="(val) => (linieForm.cp = val ? 1 : 0)"
+          />
+          <FormControl
+            type="checkbox"
+            :label="__('Leady')"
+            :modelValue="Boolean(linieForm.leady)"
+            :disabled="setLinie.loading"
+            @update:modelValue="(val) => (linieForm.leady = val ? 1 : 0)"
           />
         </div>
       </div>
@@ -339,13 +346,18 @@ function submitRoleChange() {
   changeRole.submit()
 }
 
-// --- Product-line access switch (issue #16) ------------------------------
+// --- Product-line access switch (issue #16) + Leady module switch (issue #27) --
 
 function emptyLinieForm() {
   return {
     email: '',
     oze: 1,
     cp: 1,
+    // Default OFF, unlike oze/cp above — matches the safe-rollout default
+    // recommended for issue #27 (ops/crm-linia-leady.py: BACKFILL_DOMYSLNA=0).
+    // Unchecked by default so a blind save (no matched user, or admin who
+    // doesn't touch the checkbox) never grants Leady access by accident.
+    leady: 0,
   }
 }
 
@@ -377,9 +389,13 @@ const linieHint = computed(() => {
 
 // Prefill the checkboxes from the matched user's CURRENT flags the moment a
 // match is found, instead of leaving the admin editing blind against the
-// default 1/1 — a 0 set by a previous admin decision must not be silently
-// re-enabled just because the form defaults to "both on". Undefined treated
-// as 1 (pre-ops-script data, before custom_linia_oze/cp existed on the site).
+// form defaults — a 0 set by a previous admin decision must not be silently
+// re-enabled just because the form defaults to "on". Undefined treated as 1
+// for oze/cp (pre-ops-script data, before custom_linia_oze/cp existed on the
+// site — the pre-#16 behaviour was unrestricted access). Undefined treated
+// as 0 for leady (issue #27's safe-rollout default — there is no
+// pre-existing "everyone already had it" behaviour to preserve for a module
+// that never had per-user access control before).
 watch(
   () => linieForm.email,
   () => {
@@ -388,6 +404,7 @@ watch(
     const cached = getUser(user.name) // safe: match already confirmed above
     linieForm.oze = cached.custom_linia_oze === undefined ? 1 : cached.custom_linia_oze ? 1 : 0
     linieForm.cp = cached.custom_linia_cp === undefined ? 1 : cached.custom_linia_cp ? 1 : 0
+    linieForm.leady = cached.custom_linia_leady ? 1 : 0
   },
 )
 
@@ -397,6 +414,7 @@ const setLinie = createResource({
     email: linieForm.email.trim(),
     oze: linieForm.oze ? 1 : 0,
     cp: linieForm.cp ? 1 : 0,
+    leady: linieForm.leady ? 1 : 0,
   }),
   onSuccess: (data) => {
     linieError.value = ''
@@ -409,6 +427,7 @@ const setLinie = createResource({
     if (target) {
       target.custom_linia_oze = data.custom_linia_oze
       target.custom_linia_cp = data.custom_linia_cp
+      target.custom_linia_leady = data.custom_linia_leady
     }
     Object.assign(linieForm, emptyLinieForm())
   },

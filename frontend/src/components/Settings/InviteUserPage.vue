@@ -102,6 +102,13 @@
           <div v-if="!linieOze && !linieCp" class="text-xs text-ink-red-6">
             {{ __('Wybierz co najmniej jedną linię produktową') }}
           </div>
+          <FormControl
+            type="checkbox"
+            :label="__('Leady')"
+            :modelValue="linieLeady"
+            :disabled="inviteByEmail.loading"
+            @update:modelValue="(val) => (linieLeady = Boolean(val))"
+          />
         </div>
       </div>
       <template v-if="pendingInvitations.data?.length">
@@ -189,6 +196,13 @@ const hierarchyParent = ref('')
 // ops/crm-invitation-linie-telefon.py "Why".
 const linieOze = ref(true)
 const linieCp = ref(true)
+// Leady module access (issue #27): UNchecked by default — unlike
+// linieOze/linieCp above, there is no pre-existing "everyone already had
+// this" behaviour to preserve. Matches the safe-rollout default recommended
+// for issue #27 (ops/crm-linia-leady.py: BACKFILL_DOMYSLNA=0, CRM
+// Invitation.linia_leady schema default "0"). Independent of the product
+// lines — not part of the "select at least one" requirement below.
+const linieLeady = ref(false)
 const error = ref(null)
 
 const isValidEmail = computed(() => validateEmail(email.value.trim()))
@@ -302,6 +316,7 @@ const inviteByEmail = createResource({
       mobile_no: mobileNo.value.trim(),
       linia_oze: linieOze.value ? 1 : 0,
       linia_cp: linieCp.value ? 1 : 0,
+      linia_leady: linieLeady.value ? 1 : 0,
     }
   },
   onSuccess() {
@@ -315,6 +330,7 @@ const inviteByEmail = createResource({
     email.value = ''
     linieOze.value = true
     linieCp.value = true
+    linieLeady.value = false
     pendingInvitations.reload()
     toast.success(__('Invitations sent successfully'))
     updateOnboardingStep('invite_your_team')
@@ -340,6 +356,7 @@ const pendingInvitations = createListResource({
     'mobile_no',
     'linia_oze',
     'linia_cp',
+    'linia_leady',
   ],
   pageLength: 999,
   auto: true,
@@ -349,13 +366,20 @@ const pendingInvitations = createListResource({
 // undefined/None for linia_oze/linia_cp — render those as the legacy
 // default ("OZE + CP"), matching the pre-#17 behaviour of unrestricted
 // product-line access (same resolution as
-// CRMInvitation._resolve_linia_flag on the backend).
+// CRMInvitation._resolve_linia_flag on the backend, default=1 for these
+// two). linia_leady (issue #27) resolves the OPPOSITE way for
+// undefined/missing — rendered as OFF, mirroring the backend's
+// `_resolve_linia_flag("linia_leady", default=0)` — since there is no
+// pre-existing "everyone already had it" behaviour for a module that never
+// had per-user access control before.
 function linieLabel(user) {
   const oze = user.linia_oze === 0 || user.linia_oze === '0' ? false : true
   const cp = user.linia_cp === 0 || user.linia_cp === '0' ? false : true
-  if (oze && cp) return __('OZE + CP')
-  if (oze) return __('OZE')
-  if (cp) return __('CP')
-  return __('brak linii')
+  const leady = user.linia_leady === 1 || user.linia_leady === '1' ? true : false
+  const parts = []
+  if (oze) parts.push(__('OZE'))
+  if (cp) parts.push(__('CP'))
+  if (leady) parts.push(__('Leady'))
+  return parts.length ? parts.join(' + ') : __('brak linii')
 }
 </script>

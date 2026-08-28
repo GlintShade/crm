@@ -31,6 +31,7 @@ USER_FIELDS = [
 	"language",
 	"custom_linia_oze",
 	"custom_linia_cp",
+	"custom_linia_leady",
 ]
 
 
