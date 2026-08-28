@@ -4,11 +4,7 @@
     :columns="columns"
     :rows="rows"
     :options="{
-      getRowRoute: (row) => ({
-        name: 'Contact',
-        params: { contactId: row.name },
-        query: { view: route.query.view, viewType: route.params.viewType },
-      }),
+      getRowRoute: contactRoute,
       selectable: options.selectable,
       showTooltip: options.showTooltip,
       resizeColumn: options.resizeColumn,
@@ -38,7 +34,7 @@
       </ListHeaderItem>
     </ListHeader>
     <ListRows
-      v-slot="{ idx, column, item }"
+      v-slot="{ idx, column, item, row }"
       class="mx-3 sm:mx-5"
       :rows="rows"
       doctype="Contact"
@@ -77,8 +73,18 @@
           </div>
         </template>
         <template #default="{ label }">
+          <div v-if="column.label === 'Szczegóły'" class="flex items-center">
+            <Button
+              variant="outline"
+              size="sm"
+              class="w-fit"
+              @click.stop.prevent="() => goToContact(row)"
+            >
+              {{ __('Szczegóły') }}
+            </Button>
+          </div>
           <div
-            v-if="
+            v-else-if="
               ['modified', 'creation'].includes(column.key) &&
               column.type !== 'Date'
             "
@@ -203,7 +209,7 @@ import {
 } from 'frappe-ui'
 import { sessionStore } from '@/stores/session'
 import { ref, computed, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 defineProps({
   rows: { type: Array, required: true },
@@ -231,6 +237,7 @@ const emit = defineEmits([
 ])
 
 const route = useRoute()
+const router = useRouter()
 
 const pageLengthCount = defineModel({ type: Number })
 const list = defineModel('list', { type: Object })
@@ -239,6 +246,21 @@ function getLabel(label, column) {
   if (column.type === 'Duration') return formatDuration(label)
   if (column.options && isTranslatable(column.options)) return __(label)
   return label
+}
+
+// Same destination the default row click already navigates to (see
+// getRowRoute below) — kept as one function so the "Szczegóły" button and
+// the row-level link never drift apart.
+function contactRoute(row) {
+  return {
+    name: 'Contact',
+    params: { contactId: row.name },
+    query: { view: route.query.view, viewType: route.params.viewType },
+  }
+}
+
+function goToContact(row) {
+  router.push(contactRoute(row))
 }
 
 const isLikeFilterApplied = computed(() => {

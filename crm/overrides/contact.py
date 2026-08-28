@@ -9,6 +9,15 @@ class CustomContact(Contact):
 		# date-only "Data dodania". Users can still customize per-user natively.
 		columns = [
 			{
+				# "Szczegóły" celowo dzieli key: "name" z tego samego powodu co
+				# analogiczna kolumna w crm_deal.py:default_list_data (pełne
+				# wyjaśnienie pułapki z `rows`/`meta.get_field` żyje tam).
+				"label": "Szczegóły",
+				"type": "Data",
+				"key": "name",
+				"width": "7rem",
+			},
+			{
 				"label": "Imię i nazwisko",
 				"type": "Data",
 				"key": "full_name",
