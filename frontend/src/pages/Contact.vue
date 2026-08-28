@@ -13,7 +13,7 @@
         :actions="contact._actions"
       />
       <Button
-        :label="__('Dane klienta')"
+        :label="__('Szczegóły')"
         iconLeft="sidebar"
         @click="isSidePanelCollapsed = !isSidePanelCollapsed"
       />
@@ -46,7 +46,11 @@
         </button>
       </template>
       <template #tab-panel="{ tab }">
-        <template v-if="tab.label === 'Deals'">
+        <DaneKlientaTab
+          v-if="tab.name === 'DaneKlienta'"
+          :contact-id="props.contactId"
+        />
+        <template v-else-if="tab.name === 'Deals'">
           <DealsListView
             v-if="rows.length"
             class="mt-4"
@@ -57,11 +61,11 @@
           <EmptyState v-else :icon="tab.icon" name="Deals" />
         </template>
         <KalkulatorTab
-          v-else-if="tab.label === 'Kalkulator OZE'"
+          v-else-if="tab.name === 'Kalkulator'"
           :contact="contact.doc"
         />
         <KalkulatorCPTab
-          v-else-if="tab.label === 'Kalkulator Czyste Powietrze'"
+          v-else-if="tab.name === 'KalkulatorCP'"
           :contact="contact.doc"
         />
       </template>
@@ -220,9 +224,11 @@ import CameraIcon from '@/components/Icons/CameraIcon.vue'
 import DealsIcon from '@/components/Icons/DealsIcon.vue'
 import KalkulatorIcon from '@/components/Icons/KalkulatorIcon.vue'
 import KalkulatorCPIcon from '@/components/Icons/KalkulatorCPIcon.vue'
+import ContactsIcon from '@/components/Icons/ContactsIcon.vue'
 import DealsListView from '@/components/ListViews/DealsListView.vue'
 import KalkulatorTab from '@/components/KalkulatorTab.vue'
 import KalkulatorCPTab from '@/components/KalkulatorCPTab.vue'
+import DaneKlientaTab from '@/components/DaneKlientaTab.vue'
 import CustomActions from '@/components/CustomActions.vue'
 import SidebarLink from '@/components/SidebarLink.vue'
 import CollapseSidebar from '@/components/Icons/CollapseSidebar.vue'
@@ -347,22 +353,30 @@ const tabIndex = ref(0)
 const tabs = computed(() =>
   [
     {
+      name: 'DaneKlienta',
+      label: 'Dane klienta',
+      icon: ContactsIcon,
+    },
+    {
+      name: 'Deals',
       label: 'Deals',
       icon: DealsIcon,
       count: computed(() => deals.data?.length),
     },
     {
+      name: 'Kalkulator',
       label: 'Kalkulator OZE',
       icon: KalkulatorIcon,
       // no count badge for the Kalkulator tab
     },
     {
+      name: 'KalkulatorCP',
       label: 'Kalkulator Czyste Powietrze',
       icon: KalkulatorCPIcon,
     },
   ].filter((tab) => {
-    if (tab.label === 'Kalkulator OZE') return window.volteo_linia_oze !== false
-    if (tab.label === 'Kalkulator Czyste Powietrze') return window.volteo_linia_cp !== false
+    if (tab.name === 'Kalkulator') return window.volteo_linia_oze !== false
+    if (tab.name === 'KalkulatorCP') return window.volteo_linia_cp !== false
     return true
   }),
 )
