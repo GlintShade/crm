@@ -36,6 +36,7 @@ def get_context_for_dev():
 
 def get_boot():
 	from crm.api import volteo_ma_linie
+	from crm.permissions.org_hierarchy import _ma_linie_leady
 
 	return frappe._dict(
 		{
@@ -57,9 +58,20 @@ def get_boot():
 			"show_sales_hierarchy_banner": False,
 			# VOLTEO: restored to the upstream permission-gated expression —
 			# Leads are no longer hidden globally. The D2D role's read access is
-			# granted separately by ops/crm-leady-d2d.py; a future change layers
-			# the per-user linia_leady flag on top of this (see that issue).
-			"hide_leads": not frappe.has_permission("CRM Lead", "read"),
+			# granted separately by ops/crm-leady-d2d.py. Since issue #27, the
+			# per-user `custom_linia_leady` flag is layered on top of that: a
+			# D2D rep without the flag has hide_leads forced True regardless of
+			# the role-based `has_permission` check, mirroring the same gate
+			# enforced authoritatively in
+			# crm.permissions.org_hierarchy.get_lead_permission_query_conditions
+			# / has_lead_permission — this boot key only drives client-side UI
+			# (sidebar/mobile sidebar `window.hide_leads` checks).
+			"hide_leads": not frappe.has_permission("CRM Lead", "read")
+			or not _ma_linie_leady(frappe.session.user),
+			# VOLTEO: per-user Leady module access switch (issue #27), boot
+			# convenience mirroring volteo_linia_oze/volteo_linia_cp below —
+			# server-side enforcement is the lead permission hooks, not this.
+			"volteo_linia_leady": _ma_linie_leady(frappe.session.user),
 			# VOLTEO: expose invoice-add capability so the Faktury tab can hide its add button for reps
 			"can_create_faktura": frappe.has_permission("Volteo Faktura", "create"),
 			# VOLTEO: restricted D2D rep (used to hide rep-only-forbidden UI affordances)

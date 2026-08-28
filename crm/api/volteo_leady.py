@@ -55,14 +55,19 @@ jako `0.0`, nie `None` (patrz `ops/crm-leady-pola.py`, sekcja "Pułapka
 None-vs-0"). `mapa()` filtruje `custom_lat != 0`, więc leady bez geokodu po
 prostu nie trafiają na mapę zamiast renderować się w (0, 0).
 
-`przydziel` — antycypacja issue #27
+`przydziel` — bramka flagi `custom_linia_leady` (issue #27)
 ------------------------------------------------------------------------
-Osobne issue (#27) doda walidację flagi `custom_linia_leady` (albo
-pokrewnej — dokładna nazwa nie jest jeszcze ustalona) na koncie handlowca,
-analogicznie do `custom_linia_oze`/`custom_linia_cp` z b51
-(`crm.api.volteo_ma_linie`). Miejsce na ten dodatkowy check jest oznaczone
-komentarzem tuż po walidacji roli `Volteo D2D Sales` poniżej — CELOWO nie
-implementowane tutaj.
+Od issue #27 `przydziel` odrzuca przydział, gdy docelowy handlowiec nie ma
+flagi `custom_linia_leady` na koncie (analogicznie do
+`custom_linia_oze`/`custom_linia_cp` z b51,
+`crm.api.volteo_ma_linie`). Sprawdzenie idzie przez współdzielony helper
+`crm.permissions.org_hierarchy._ma_linie_leady` — ten sam, który bramkuje
+`get_lead_permission_query_conditions`/`has_lead_permission` — żeby "kto
+może zostać przydzielony" i "kto widzi przydzielone leady" nigdy nie
+rozjechały się w dwóch osobnych implementacjach tej samej reguły. Bramka
+stoi tuż po walidacji roli `Volteo D2D Sales` poniżej: bez roli D2D handlowiec
+i tak nie mógłby zobaczyć leada, więc kolejność (rola najpierw, potem linia)
+daje czytelniejszy komunikat błędu.
 
 Wzorzec zaczerpnięty z `crm.api.volteo_uzytkownicy` / `crm.api.volteo_panele`
 --------------------------------------------------------------------------------
@@ -77,6 +82,8 @@ sama NIE rzutuje, więc `cint()` jawnie w ciele funkcji, tak jak
 import frappe
 from frappe import _
 from frappe.utils import cint
+
+from crm.permissions.org_hierarchy import _ma_linie_leady
 
 DOPUSZCZONE_ROLE_WOLAJACEGO = ("System Manager", "Volteo Core Admin")
 ROLA_D2D = "Volteo D2D Sales"
@@ -235,10 +242,17 @@ def przydziel(
 		frappe.throw(
 			_("Użytkownik {0} nie ma roli {1}.").format(handlowiec, ROLA_D2D)
 		)
-	# Miejsce na przyszłą walidację (issue #27): flaga dostępu do linii
-	# "leady" na koncie handlowca, analogicznie do custom_linia_oze/
-	# custom_linia_cp (b51, crm.api.volteo_ma_linie). Celowo nieobecna tutaj
-	# — #27 jest osobnym, jeszcze niezaplanowanym zadaniem.
+	# Bramka flagi custom_linia_leady (issue #27) — patrz docstring modułu
+	# "przydziel — bramka flagi custom_linia_leady". Współdzielony helper z
+	# crm.permissions.org_hierarchy, ta sama reguła, która bramkuje widoczność
+	# leadów dla tego handlowca.
+	if not _ma_linie_leady(handlowiec):
+		frappe.throw(
+			_(
+				"Użytkownik {0} nie ma dostępu do modułu Leady — włącz linię "
+				"Leady w Ustawienia → Użytkownicy przed przydzieleniem."
+			).format(handlowiec)
+		)
 
 	ilosc = cint(ilosc)
 	if ilosc < ILOSC_MIN:

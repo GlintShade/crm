@@ -18,6 +18,37 @@ _OWNER_FIELD = {
 BYPASS_ROLES = {"System Manager", "Volteo Core Admin", "Volteo Backend"}
 
 
+def _ma_linie_leady(user: str) -> bool:
+	"""True if `user` may see the Leady module at all (issue #27's
+	`custom_linia_leady` gate on `User`).
+
+	Mirrors `crm.api.volteo_ma_linie()` for the b51 OZE/CP lines: BYPASS_ROLES
+	(System Manager / Volteo Core Admin / Volteo Backend) always pass
+	regardless of the stored flag — the flag only ever narrows a D2D rep's
+	own access, never an admin's/backoffice's. A D2D rep with no
+	`custom_linia_leady` flag set (or the field not yet on this site) reads
+	back `0`/`None` and is denied — the field's SQL default is `0`
+	(`NOT NULL DEFAULT 0`) and the recommended ops backfill (issue #27,
+	`ops/crm-linia-leady.py`) is also 0, so "flag absent" and "flag off" are
+	deliberately the same outcome here (unlike the OZE/CP backfill, which
+	defaulted existing users to 1 — see that script's docstring for why
+	Leady's default direction is the opposite).
+
+	Consumed by both `get_lead_permission_query_conditions` /
+	`has_lead_permission` below (the ONLY place this module gates on it —
+	deal-side scoping and the rest of this module's logic are untouched) and
+	by `crm.www.crm.get_boot()` / `crm.api.volteo_leady.przydziel`.
+	"""
+	if not user or user == "Administrator":
+		return True
+
+	roles = set(frappe.get_roles(user))
+	if roles & BYPASS_ROLES:
+		return True
+
+	return bool(frappe.db.get_value("User", user, "custom_linia_leady"))
+
+
 def hierarchy_enabled() -> bool:
 	return bool(frappe.db.get_single_value("FCRM Settings", "enable_sales_hierarchy"))
 
@@ -69,6 +100,18 @@ def _permission_query_conditions(user: str | None, doctype: str):
 
 
 def get_lead_permission_query_conditions(user=None):
+	if not user:
+		user = frappe.session.user
+
+	# VOLTEO (issue #27): a D2D rep without the `custom_linia_leady` flag
+	# sees no leads at all, regardless of ownership/assignment/hierarchy —
+	# `1=0` short-circuits before any of the tree-scoping logic below runs.
+	# BYPASS_ROLES pass through `_ma_linie_leady` untouched. This is the ONLY
+	# change in this module for issue #27 — deal-side scoping
+	# (`get_deal_permission_query_conditions`) is untouched.
+	if not _ma_linie_leady(user):
+		return "1=0"
+
 	cond = _permission_query_conditions(user, "CRM Lead")
 	return cond.get_sql(quote_char="`", secondary_quote_char="'") if cond else ""
 
@@ -104,6 +147,14 @@ def _has_permission(doc, ptype, user, doctype: str) -> bool | None:
 
 
 def has_lead_permission(doc, ptype, user):
+	# VOLTEO (issue #27): same `custom_linia_leady` gate as
+	# get_lead_permission_query_conditions above — a rep without the flag
+	# gets False on every ptype (including "create"), which
+	# `_has_permission` would otherwise short-circuit to True for.
+	if not user:
+		user = frappe.session.user
+	if not _ma_linie_leady(user):
+		return False
 	return _has_permission(doc, ptype, user, "CRM Lead")
 
 

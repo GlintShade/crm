@@ -95,6 +95,14 @@ class CRMInvitation(Document):
 		# same way "both checked" would.
 		user.custom_linia_oze = self._resolve_linia_flag("linia_oze")
 		user.custom_linia_cp = self._resolve_linia_flag("linia_cp")
+		# Leady module access (issue #27, ops/crm-linia-leady.py): same
+		# resolution mechanism, but default=0 rather than 1 — unlike
+		# OZE/CP there is no pre-existing "everyone already had it"
+		# behaviour to preserve; the owner's safe-rollout default is off
+		# until explicitly granted, matching both the ops backfill default
+		# and the CRM Invitation field's own schema default of "0" (see
+		# ops/crm-linia-leady.py docstring).
+		user.custom_linia_leady = self._resolve_linia_flag("linia_leady", default=0)
 
 		# One save covers the stock role(s) above, the Volteo role, and the
 		# product-line flags.
@@ -128,21 +136,25 @@ class CRMInvitation(Document):
 		self.key = None
 		self.save(ignore_permissions=True)
 
-	def _resolve_linia_flag(self, fieldname):
-		"""Resolve a product-line flag (`linia_oze` / `linia_cp`) to 0/1.
+	def _resolve_linia_flag(self, fieldname, default=1):
+		"""Resolve a product-line/module-access flag (`linia_oze` / `linia_cp` /
+		`linia_leady`) to 0/1.
 
 		`.get()`, not attribute access — same reasoning as `volteo_role`
-		above: on a site where ops/crm-invitation-linie-telefon.py hasn't
-		run yet, the field doesn't exist and `.get()` returns None instead
-		of raising. None/missing resolves to 1 (both lines granted) — see
-		the docstring on the call site in `accept()`. A value that IS set
-		may arrive as a string ("0"/"1") depending on read path, so coerce
-		deliberately with `cint` rather than relying on Python truthiness
-		of the raw value.
+		above: on a site where the relevant ops script hasn't run yet, the
+		field doesn't exist and `.get()` returns None instead of raising.
+		None/missing resolves to `default` — see the docstrings on the two
+		call sites in `accept()`: `linia_oze`/`linia_cp` pass no `default`
+		(so it stays 1, "both lines granted", preserving pre-#17 behaviour),
+		while `linia_leady` explicitly passes `default=0` (issue #27's
+		safe-rollout default — there is no pre-existing behaviour to
+		preserve there). A value that IS set may arrive as a string
+		("0"/"1") depending on read path, so coerce deliberately with
+		`cint` rather than relying on Python truthiness of the raw value.
 		"""
 		raw = self.get(fieldname)
 		if raw is None or raw == "":
-			return 1
+			return default
 		return 1 if cint(raw) else 0
 
 	def update_module_in_user(self, user, module):
