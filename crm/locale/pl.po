@@ -8910,3 +8910,27 @@ msgstr "Wyślij zaproszenie"
 # nowy string: pozycja w hierarchii opcjonalna przy zapraszaniu (b51, issue #15)
 msgid "Directly under management (tree root)"
 msgstr "Bezpośrednio pod zarządem (szczyt drzewa)"
+
+# nowy string: walidacja duplikatu e-mail przy zapraszaniu (b52, cykl leadowy - tlumaczenia)
+msgid "User with email {0} already exists"
+msgstr "Użytkownik z adresem e-mail {0} już istnieje"
+
+# nowy string: walidacja duplikatu e-mail przy zapraszaniu (b52, cykl leadowy - tlumaczenia)
+msgid "User with email {0} already invited"
+msgstr "Użytkownik z adresem e-mail {0} został już zaproszony"
+
+# nowy string: kaskada usuwania z bezpiecznikiem Autenti - BulkDeleteLinkedDocModal.vue (b52, ops#97dd7e99, cykl leadowy - tlumaczenia)
+msgid "Are you sure you want to delete {0} items?"
+msgstr "Czy na pewno chcesz usunąć {0} elementów?"
+
+# nowy string: kaskada usuwania z bezpiecznikiem Autenti - BulkDeleteLinkedDocModal.vue (b52, ops#97dd7e99, cykl leadowy - tlumaczenia)
+msgid "Are you sure you want to delete {0} linked doc(s)?"
+msgstr "Czy na pewno chcesz usunąć {0} powiązany(ch) dokument(ów)?"
+
+# nowy string: kaskada usuwania z bezpiecznikiem Autenti - BulkDeleteLinkedDocModal.vue (b52, ops#97dd7e99, cykl leadowy - tlumaczenia)
+msgid "Are you sure you want to unlink {0} linked doc(s)?"
+msgstr "Czy na pewno chcesz odłączyć {0} powiązany(ch) dokument(ów)?"
+
+# nowy string: kaskada usuwania z bezpiecznikiem Autenti - DeleteLinkedDocModal.vue (b52, ops#97dd7e99, cykl leadowy - tlumaczenia)
+msgid "Are you sure you want to delete {0} - {1}?"
+msgstr "Czy na pewno chcesz usunąć {0} - {1}?"
