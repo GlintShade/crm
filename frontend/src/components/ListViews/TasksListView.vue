@@ -162,7 +162,7 @@
       </template>
     </ListSelectBanner>
   </ListView>
-  <ListFooter
+  <ListFooterVolteo
     v-model="pageLengthCount"
     class="border-t px-3 py-2 sm:px-5"
     :options="{
@@ -188,6 +188,7 @@ import CalendarIcon from '@/components/Icons/CalendarIcon.vue'
 import RatingInput from '@/components/Controls/RatingInput.vue'
 import ListBulkActions from '@/components/ListBulkActions.vue'
 import ListRows from '@/components/ListViews/ListRows.vue'
+import ListFooterVolteo from '@/components/ListFooterVolteo.vue'
 import {
   formatDate,
   isTranslatable,
@@ -201,7 +202,6 @@ import {
   ListHeaderItem,
   ListSelectBanner,
   ListRowItem,
-  ListFooter,
   Dropdown,
   Tooltip,
 } from 'frappe-ui'

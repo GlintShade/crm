@@ -209,7 +209,7 @@
       </template>
     </ListSelectBanner>
   </ListView>
-  <ListFooter
+  <ListFooterVolteo
     v-if="pageLengthCount"
     v-model="pageLengthCount"
     class="border-t sm:px-5 px-3 py-2"
@@ -230,6 +230,7 @@ import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
 import RatingInput from '@/components/Controls/RatingInput.vue'
 import ListBulkActions from '@/components/ListBulkActions.vue'
 import ListRows from '@/components/ListViews/ListRows.vue'
+import ListFooterVolteo from '@/components/ListFooterVolteo.vue'
 import { isTranslatable, formatDuration } from '@/utils'
 import {
   Avatar,
@@ -238,7 +239,6 @@ import {
   ListHeaderItem,
   ListRowItem,
   ListSelectBanner,
-  ListFooter,
   Dropdown,
   Tooltip,
 } from 'frappe-ui'

@@ -78,7 +78,7 @@
       </div>
     </div>
   </div>
-  <ListFooter
+  <ListFooterVolteo
     v-if="notes.data?.data?.length"
     v-model="notes.data.page_length_count"
     class="border-t px-3 py-2 sm:px-5"
@@ -99,10 +99,11 @@ import NoteIcon from '@/components/Icons/NoteIcon.vue'
 import ViewControls from '@/components/ViewControls.vue'
 import { useDoctypeModal } from '@/composables/doctypeModal'
 import EmptyState from '@/components/ListViews/EmptyState.vue'
+import ListFooterVolteo from '@/components/ListFooterVolteo.vue'
 import { usersStore } from '@/stores/users'
 import { timeAgo, formatDate } from '@/utils'
 import { useOnboarding, useTelemetry } from 'frappe-ui/frappe'
-import { TextEditor, call, Dropdown, Tooltip, ListFooter } from 'frappe-ui'
+import { TextEditor, call, Dropdown, Tooltip } from 'frappe-ui'
 import { ref, watch } from 'vue'
 
 const { getUser } = usersStore()

@@ -139,7 +139,7 @@
       </template>
     </ListSelectBanner>
   </ListView>
-  <ListFooter
+  <ListFooterVolteo
     v-model="pageLengthCount"
     class="border-t sm:px-5 px-3 py-2"
     :options="{
@@ -162,6 +162,7 @@ import HeartIcon from '@/components/Icons/HeartIcon.vue'
 import RatingInput from '@/components/Controls/RatingInput.vue'
 import ListBulkActions from '@/components/ListBulkActions.vue'
 import ListRows from '@/components/ListViews/ListRows.vue'
+import ListFooterVolteo from '@/components/ListFooterVolteo.vue'
 import { isTranslatable, formatDuration } from '@/utils'
 import {
   Avatar,
@@ -170,7 +171,6 @@ import {
   ListHeaderItem,
   ListSelectBanner,
   ListRowItem,
-  ListFooter,
   Tooltip,
   Dropdown,
 } from 'frappe-ui'
