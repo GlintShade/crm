@@ -236,6 +236,7 @@ const links = [
     label: __('Dashboard'),
     icon: LucideLayoutDashboard,
     to: 'Dashboard',
+    condition: () => false, // VOLTEO — tymczasowo ukryte, do przywrócenia
   },
   {
     label: __('Tasks'),
