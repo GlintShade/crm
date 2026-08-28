@@ -50,13 +50,16 @@ def get_boot():
 			"is_demo_site": frappe.conf.get("is_demo_site"),
 			"demo_data_created": frappe.db.get_default("crm_demo_data_created") == "1",
 			"is_fc_site": is_fc_site(),
-			"show_sales_hierarchy_banner": frappe.db.count("CRM Lead") > 0,
-			# VOLTEO: leads are unused in the current D2D-only phase and the Ecom line
-			# is not in use, so the Leads tab is hidden globally for everyone — including
-			# Administrator and System Manager, who bypass permission checks and would
-			# otherwise still see it. Restoring the tab means editing this line and
-			# rebuilding the image.
-			"hide_leads": True,
+			# VOLTEO: this is the upstream marketing banner pointing admins at
+			# Frappe's blog post about the CRM permissions model
+			# (SalesHierarchyBanner.vue). After importing ~11k leads it would
+			# light up for every admin with zero value — always suppressed.
+			"show_sales_hierarchy_banner": False,
+			# VOLTEO: restored to the upstream permission-gated expression —
+			# Leads are no longer hidden globally. The D2D role's read access is
+			# granted separately by ops/crm-leady-d2d.py; a future change layers
+			# the per-user linia_leady flag on top of this (see that issue).
+			"hide_leads": not frappe.has_permission("CRM Lead", "read"),
 			# VOLTEO: expose invoice-add capability so the Faktury tab can hide its add button for reps
 			"can_create_faktura": frappe.has_permission("Volteo Faktura", "create"),
 			# VOLTEO: restricted D2D rep (used to hide rep-only-forbidden UI affordances)

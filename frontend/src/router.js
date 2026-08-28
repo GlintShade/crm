@@ -343,12 +343,15 @@ router.beforeEach(async (to, from, next) => {
 
     let defaultView = getDefaultView()
     if (!defaultView) {
-      next({ name: window.hide_leads ? 'Deals' : 'Leads' }) // VOLTEO
+      // VOLTEO: fallback route is always Deals — reps land on Szanse, Leads is
+      // a secondary tool, not the primary landing surface (independent of
+      // whether the Leads tab is currently hidden for this user).
+      next({ name: 'Deals' })
       return
     }
 
     let { route_name, type, name, is_standard } = defaultView
-    route_name = route_name || (window.hide_leads ? 'Deals' : 'Leads') // VOLTEO
+    route_name = route_name || 'Deals' // VOLTEO: same fallback as above
 
     if (name && !is_standard) {
       next({

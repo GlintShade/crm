@@ -415,19 +415,15 @@ class CRMLead(Document):
 
 	@staticmethod
 	def default_list_data():
+		# VOLTEO: B2C column set — `organization` is a hidden B2B field here
+		# (crm-setup.py §11), replaced with the install-site city and
+		# voivodeship that actually matter for a residential lead.
 		columns = [
 			{
 				"label": "Name",
 				"type": "Data",
 				"key": "lead_name",
 				"width": "12rem",
-			},
-			{
-				"label": "Organization",
-				"type": "Link",
-				"key": "organization",
-				"options": "CRM Organization",
-				"width": "10rem",
 			},
 			{
 				"label": "Status",
@@ -437,16 +433,22 @@ class CRMLead(Document):
 				"width": "8rem",
 			},
 			{
-				"label": "Email",
-				"type": "Data",
-				"key": "email",
-				"width": "12rem",
-			},
-			{
 				"label": "Mobile No.",
 				"type": "Data",
 				"key": "mobile_no",
 				"width": "11rem",
+			},
+			{
+				"label": "Miejscowość",
+				"type": "Data",
+				"key": "custom_install_city",
+				"width": "10rem",
+			},
+			{
+				"label": "Województwo",
+				"type": "Select",
+				"key": "custom_voivodeship",
+				"width": "10rem",
 			},
 			{
 				"label": "Assigned To",
@@ -464,10 +466,11 @@ class CRMLead(Document):
 		rows = [
 			"name",
 			"lead_name",
-			"organization",
 			"status",
 			"email",
 			"mobile_no",
+			"custom_install_city",
+			"custom_voivodeship",
 			"lead_owner",
 			"first_name",
 			"sla_status",
@@ -482,10 +485,11 @@ class CRMLead(Document):
 
 	@staticmethod
 	def default_kanban_settings():
+		# VOLTEO: B2C — organization swapped for the install-site city.
 		return {
 			"column_field": "status",
 			"title_field": "lead_name",
-			"kanban_fields": '["organization", "email", "mobile_no", "_assign", "modified"]',
+			"kanban_fields": '["custom_install_city", "email", "mobile_no", "_assign", "modified"]',
 		}
 
 
@@ -503,8 +507,12 @@ def convert_to_deal(
 		frappe.throw(_("Not allowed to convert Lead to Deal"), frappe.PermissionError)
 
 	lead = frappe.get_cached_doc("CRM Lead", lead)
-	if frappe.db.exists("CRM Lead Status", "Qualified"):
-		lead.db_set("status", "Qualified")
+	# VOLTEO: statuses were renamed to Polish in ops/crm-setup.py §9 — the
+	# upstream "Qualified" terminal status no longer exists, so this
+	# condition was silently dead (converted=1 still got set, status did
+	# not). "Skonwertowany" is the current terminal status after conversion.
+	if frappe.db.exists("CRM Lead Status", "Skonwertowany"):
+		lead.db_set("status", "Skonwertowany")
 	lead.db_set("converted", 1)
 	if lead.sla and frappe.db.exists("CRM Communication Status", "Replied"):
 		lead.db_set("communication_status", "Replied")
