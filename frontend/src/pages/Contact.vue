@@ -15,7 +15,7 @@
       <Button
         :label="__('Dane klienta')"
         iconLeft="sidebar"
-        @click="toggleDetails"
+        @click="isSidePanelCollapsed = !isSidePanelCollapsed"
       />
     </template>
   </LayoutHeader>
@@ -66,129 +66,132 @@
         />
       </template>
     </Tabs>
-    <!-- Floating expand button (visible when panel is collapsed) -->
-    <button
-      v-if="!showDetails"
-      class="absolute right-0 top-1/2 -translate-y-1/2 z-20 flex h-[26px] w-[26px] -translate-x-1/2 cursor-pointer items-center justify-center rounded-full border border-gray-300 bg-white shadow-sm hover:bg-gray-50"
-      @click="toggleDetails"
-      :title="__('Pokaż dane klienta')"
-    >
-      <svg viewBox="0 0 16 16" class="h-3.5 w-3.5 text-gray-600"><path d="M10 3l-5 5 5 5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </button>
     <Resizer
-      v-if="showDetails"
       :parent="$refs.parentRef"
       side="right"
-      class="flex h-full flex-col overflow-visible border-l"
+      class="flex h-full flex-col border-l"
+      :collapsed="isSidePanelCollapsed"
     >
-      <div class="relative flex h-full flex-col overflow-hidden">
-        <!-- Floating collapse button on the panel's left border -->
-        <button
-          class="absolute -left-[13px] top-1/2 z-20 flex h-[26px] w-[26px] -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-gray-300 bg-white shadow-sm hover:bg-gray-50"
-          @click="toggleDetails"
-          :title="__('Ukryj dane klienta')"
-        >
-          <svg viewBox="0 0 16 16" class="h-3.5 w-3.5 text-gray-600"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-      <div class="border-b">
-        <FileUploader
-          :validateFile="validateIsImageFile"
-          :upload-args="{ private: true }"
-          @success="changeContactImage"
-        >
-          <template #default="{ openFileSelector, error }">
-            <div class="flex flex-col items-start justify-start gap-4 p-5">
-              <div class="flex gap-4 items-center">
-                <div class="group relative h-15.5 w-15.5">
-                  <Avatar
-                    size="3xl"
-                    class="h-15.5 w-15.5"
-                    :label="contact.doc.full_name"
-                    :image="contact.doc.image"
-                  />
-                  <component
-                    :is="contact.doc.image ? Dropdown : 'div'"
-                    v-bind="
-                      contact.doc.image
-                        ? {
-                            options: [
-                              {
-                                icon: 'upload',
-                                label: contact.doc.image
-                                  ? __('Change Image')
-                                  : __('Upload Image'),
-                                onClick: openFileSelector,
-                              },
-                              {
-                                icon: 'trash-2',
-                                label: __('Remove Image'),
-                                onClick: () => changeContactImage(''),
-                              },
-                            ],
-                          }
-                        : { onClick: openFileSelector }
-                    "
-                    class="!absolute bottom-0 left-0 right-0"
-                  >
-                    <div
-                      class="z-1 absolute bottom-0 left-0 right-0 flex h-14 cursor-pointer items-center justify-center rounded-b-full bg-black bg-opacity-40 pt-5 opacity-0 duration-300 ease-in-out group-hover:opacity-100"
-                      style="
-                        -webkit-clip-path: inset(22px 0 0 0);
-                        clip-path: inset(22px 0 0 0);
-                      "
-                    >
-                      <CameraIcon class="h-6 w-6 cursor-pointer text-white" />
-                    </div>
-                  </component>
-                </div>
-                <div class="flex flex-col gap-2 truncate text-ink-gray-9">
-                  <div class="truncate text-3xl-medium">
-                    <span v-if="contact.doc.salutation">
-                      {{ contact.doc.salutation + ' ' }}
-                    </span>
-                    <span>{{ contact.doc.full_name }}</span>
-                  </div>
-                  <div
-                    v-if="contact.doc.company_name"
-                    class="flex items-center gap-1.5 text-base text-ink-gray-8"
-                  >
-                    {{ contact.doc.company_name }}
-                  </div>
-                  <ErrorMessage :message="__(error)" />
-                </div>
-              </div>
-              <div class="flex gap-1.5">
-                <Button
-                  v-if="callEnabled && contact.doc.mobile_no"
-                  :label="__('Make Call')"
-                  size="sm"
-                  :iconLeft="PhoneIcon"
-                  @click="callEnabled && makeCall(contact.doc.mobile_no)"
-                />
-                <Button
-                  v-if="canDelete"
-                  :label="__('Delete')"
-                  theme="red"
-                  size="sm"
-                  iconLeft="trash-2"
-                  @click="deleteContact()"
-                />
-              </div>
-            </div>
-          </template>
-        </FileUploader>
-      </div>
       <div
-        v-if="sections.data"
-        class="flex flex-1 flex-col justify-between overflow-hidden"
+        v-show="!isSidePanelCollapsed"
+        class="flex min-h-0 flex-1 flex-col overflow-hidden"
       >
-        <SidePanelLayout
-          :sections="parsedSections"
-          doctype="Contact"
-          :docname="contact.doc.name"
-          @reload="sections.reload"
-        />
+        <div class="border-b">
+          <FileUploader
+            :validateFile="validateIsImageFile"
+            :upload-args="{ private: true }"
+            @success="changeContactImage"
+          >
+            <template #default="{ openFileSelector, error }">
+              <div class="flex flex-col items-start justify-start gap-4 p-5">
+                <div class="flex gap-4 items-center">
+                  <div class="group relative h-15.5 w-15.5">
+                    <Avatar
+                      size="3xl"
+                      class="h-15.5 w-15.5"
+                      :label="contact.doc.full_name"
+                      :image="contact.doc.image"
+                    />
+                    <component
+                      :is="contact.doc.image ? Dropdown : 'div'"
+                      v-bind="
+                        contact.doc.image
+                          ? {
+                              options: [
+                                {
+                                  icon: 'upload',
+                                  label: contact.doc.image
+                                    ? __('Change Image')
+                                    : __('Upload Image'),
+                                  onClick: openFileSelector,
+                                },
+                                {
+                                  icon: 'trash-2',
+                                  label: __('Remove Image'),
+                                  onClick: () => changeContactImage(''),
+                                },
+                              ],
+                            }
+                          : { onClick: openFileSelector }
+                      "
+                      class="!absolute bottom-0 left-0 right-0"
+                    >
+                      <div
+                        class="z-1 absolute bottom-0 left-0 right-0 flex h-14 cursor-pointer items-center justify-center rounded-b-full bg-black bg-opacity-40 pt-5 opacity-0 duration-300 ease-in-out group-hover:opacity-100"
+                        style="
+                          -webkit-clip-path: inset(22px 0 0 0);
+                          clip-path: inset(22px 0 0 0);
+                        "
+                      >
+                        <CameraIcon class="h-6 w-6 cursor-pointer text-white" />
+                      </div>
+                    </component>
+                  </div>
+                  <div class="flex flex-col gap-2 truncate text-ink-gray-9">
+                    <div class="truncate text-3xl-medium">
+                      <span v-if="contact.doc.salutation">
+                        {{ contact.doc.salutation + ' ' }}
+                      </span>
+                      <span>{{ contact.doc.full_name }}</span>
+                    </div>
+                    <div
+                      v-if="contact.doc.company_name"
+                      class="flex items-center gap-1.5 text-base text-ink-gray-8"
+                    >
+                      {{ contact.doc.company_name }}
+                    </div>
+                    <ErrorMessage :message="__(error)" />
+                  </div>
+                </div>
+                <div class="flex gap-1.5">
+                  <Button
+                    v-if="callEnabled && contact.doc.mobile_no"
+                    :label="__('Make Call')"
+                    size="sm"
+                    :iconLeft="PhoneIcon"
+                    @click="callEnabled && makeCall(contact.doc.mobile_no)"
+                  />
+                  <Button
+                    v-if="canDelete"
+                    :label="__('Delete')"
+                    theme="red"
+                    size="sm"
+                    iconLeft="trash-2"
+                    @click="deleteContact()"
+                  />
+                </div>
+              </div>
+            </template>
+          </FileUploader>
+        </div>
+        <div
+          v-if="sections.data"
+          class="flex flex-1 flex-col justify-between overflow-hidden"
+        >
+          <SidePanelLayout
+            :sections="parsedSections"
+            doctype="Contact"
+            :docname="contact.doc.name"
+            @reload="sections.reload"
+          />
+        </div>
       </div>
+      <div class="mt-auto shrink-0 border-t p-2">
+        <SidebarLink
+          class="w-full"
+          :label="isSidePanelCollapsed ? __('Expand') : __('Collapse')"
+          :isCollapsed="isSidePanelCollapsed"
+          @click="isSidePanelCollapsed = !isSidePanelCollapsed"
+        >
+          <template #icon>
+            <span class="grid h-4 w-4 flex-shrink-0 place-items-center">
+              <CollapseSidebar
+                class="h-4 w-4 text-ink-gray-7 duration-300 ease-in-out"
+                :class="{ '[transform:rotateY(180deg)]': !isSidePanelCollapsed }"
+              />
+            </span>
+          </template>
+        </SidebarLink>
       </div>
     </Resizer>
   </div>
@@ -221,6 +224,8 @@ import DealsListView from '@/components/ListViews/DealsListView.vue'
 import KalkulatorTab from '@/components/KalkulatorTab.vue'
 import KalkulatorCPTab from '@/components/KalkulatorCPTab.vue'
 import CustomActions from '@/components/CustomActions.vue'
+import SidebarLink from '@/components/SidebarLink.vue'
+import CollapseSidebar from '@/components/Icons/CollapseSidebar.vue'
 import { validateIsImageFile, setupCustomizations } from '@/utils'
 import { timestampCell } from '@/composables/useTimelinePreferences'
 import { getView } from '@/utils/view'
@@ -247,6 +252,7 @@ import { useDoctypeModal } from '@/composables/doctypeModal'
 import { useTelemetry } from 'frappe-ui/frappe'
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useStorage } from '@vueuse/core'
 import EmptyState from '@/components/ListViews/EmptyState.vue'
 
 const { brand } = getSettings()
@@ -318,28 +324,7 @@ usePageMeta(() => {
   }
 })
 const showDeleteLinkedDocModal = ref(false)
-
-const CONTACT_DETAILS_STORAGE_KEY = 'crm-contact-details-open'
-
-function getStoredShowDetails() {
-  try {
-    let stored = localStorage.getItem(CONTACT_DETAILS_STORAGE_KEY)
-    return stored === null ? true : stored === 'true'
-  } catch (e) {
-    return true
-  }
-}
-
-const showDetails = ref(getStoredShowDetails())
-
-function toggleDetails() {
-  showDetails.value = !showDetails.value
-  try {
-    localStorage.setItem(CONTACT_DETAILS_STORAGE_KEY, showDetails.value)
-  } catch (e) {
-    // ignore storage errors (e.g. private browsing / disabled storage)
-  }
-}
+const isSidePanelCollapsed = useStorage('isContactSidePanelCollapsed', false)
 
 async function deleteContact() {
   showDeleteLinkedDocModal.value = true
