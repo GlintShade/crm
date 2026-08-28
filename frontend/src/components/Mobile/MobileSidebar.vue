@@ -103,6 +103,7 @@ import Section from '@/components/CollapsibleSection.vue'
 import PinIcon from '@/components/Icons/PinIcon.vue'
 import UserDropdown from '@/components/UserDropdown.vue'
 import LeadsIcon from '@/components/Icons/LeadsIcon.vue'
+import MapaLeadowIcon from '~icons/lucide/map' // VOLTEO — issue ops#26
 import DealsIcon from '@/components/Icons/DealsIcon.vue'
 import KalkulatorIcon from '@/components/Icons/KalkulatorIcon.vue'
 import KalkulatorCPIcon from '@/components/Icons/KalkulatorCPIcon.vue'
@@ -175,6 +176,12 @@ const links = [
     icon: LeadsIcon,
     to: 'Leads',
     condition: () => !window.hide_leads, // VOLTEO
+  },
+  {
+    label: __('Mapa leadów'),
+    icon: MapaLeadowIcon,
+    to: 'MapaLeadow',
+    condition: () => !window.hide_leads, // VOLTEO — issue ops#26, same gate as Leads
   },
   {
     label: __('Organizations'),

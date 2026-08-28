@@ -61,6 +61,12 @@ const routes = [
     component: () => import('@/pages/DokumentyCzystePowietrze.vue'),
   },
   {
+    // VOLTEO: Mapa leadów (b52, ops#26) — piny geokodowanych leadów na Leaflet/OSM.
+    path: '/mapa-leadow',
+    name: 'MapaLeadow',
+    component: () => import('@/pages/MapaLeadow.vue'),
+  },
+  {
     alias: '/leads',
     path: '/leads/view/:viewType?',
     name: 'Leads',
