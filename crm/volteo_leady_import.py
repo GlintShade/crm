@@ -74,6 +74,34 @@ KLUCZ_STARE_NOWE = "_stare_nowe"
 """Klucz nadawany drugiej (w kolejności występowania) bezimiennej kolumnie nagłówka —
 niesie znacznik `STARE`/`NOWE`."""
 
+MARKERY_FIRMY: frozenset[str] = frozenset(
+	{
+		"SPÓŁKA",
+		"SP",  # „Sp. z o.o." skrócone — po obcięciu kropki token to „SP"
+		"S.A",  # „S.A." po obcięciu końcowej kropki
+		"FIRMA",
+		"F.H.U",
+		"P.H.U",
+		"P.P.H",
+		"USŁUGI",
+		"GOSPODARSTWO",
+		"STOWARZYSZENIE",
+		"FUNDACJA",
+		"HOTEL",
+		"RESTAURACJA",
+		"ZAKŁAD",
+		"PRZEDSIĘBIORSTWO",
+		"CENTRUM",
+		"BIURO",
+		"SKLEP",
+		"AUTO",
+		"SERWIS",
+	}
+)
+"""Markery firmowe z ops#30 — dopasowywane jako CAŁE słowo (wielkie litery, otaczające
+kropki/przecinki obcięte), nie jako podciąg wewnątrz dłuższego słowa. `HANDLOW*` jest
+wyjątkiem obsługiwanym osobno w `_wyglada_na_firme` (dopasowanie prefiksem)."""
+
 
 def _pusta(wartosc: str | None) -> bool:
 	"""Czy wartość pola CSV oznacza pustkę.
@@ -210,6 +238,62 @@ def mapuj_zainteresowanie(surowe: str) -> str | None:
 	return " + ".join(rozpoznane)
 
 
+def _wyglada_na_firme(tekst: str) -> bool:
+	"""Czy wielowyrazowy tekst z kolumny `Imię` wygląda na nazwę firmy, nie osobę.
+
+	Sprawdza każde słowo osobno (rozdzielone białymi znakami), po ujednoliceniu
+	do wielkich liter i obcięciu otaczających kropek/przecinków — dopasowanie
+	jako CAŁE słowo z `MARKERY_FIRMY`, nie podciąg (żeby np. nazwisko
+	zawierające "biuro" w środku dłuższego słowa nie dało fałszywego trafienia).
+	`HANDLOW*` jest jedynym wyjątkiem dopasowywanym prefiksem (`HANDLOWA`,
+	`HANDLOWY`, `HANDLOWE`... są zbyt liczne, żeby wymieniać je z osobna) —
+	świadomy kompromis: nazwisko takie jak „Handlowski" też by tu trafiło,
+	ale w praktyce firmowe „(Firma/Usługi) Handlow*" jest znacznie częstsze
+	w tym pliku niż takie nazwisko w polu wielowyrazowym bez Nazwiska.
+	"""
+	for surowe_slowo in tekst.split():
+		oczyszczone = surowe_slowo.strip(".,").upper()
+		if not oczyszczone:
+			continue
+		if oczyszczone in MARKERY_FIRMY:
+			return True
+		if oczyszczone.startswith("HANDLOW"):
+			return True
+	return False
+
+
+def rozdziel_imie_nazwisko(imie: str, nazwisko: str) -> tuple[str, str]:
+	"""Rozdziela sklejone imię i nazwisko z kolumny `Imię`, gdy `Nazwisko` jest puste.
+
+	Gdy `nazwisko` jest już niepuste — zwraca oba pola bez zmian (po
+	ujednoliceniu pustki wg `_pusta()`, czyli `-` → `""`). Gdy `imie` jest
+	jednowyrazowe albo puste — też bez zmian, nie ma czego dzielić.
+
+	Dla wielowyrazowego `imie` przy pustym `nazwisko`:
+	- wygląda na firmę (`_wyglada_na_firme`) → CAŁOŚĆ zostaje w `first_name`,
+	  tak jak dziś — firm się nie dzieli na imię/nazwisko;
+	- dokładnie 2 słowa → (słowo1, słowo2);
+	- 3 i więcej słów → (pierwsze słowo, reszta razem). Świadomy kompromis
+	  odnotowany w issue ops#30: to poprawnie zostawia w całości podwójne
+	  nazwiska („Ratajczak Witkowska") i partykuły („de Groot") w
+	  `last_name`, kosztem tego, że drugie imię („Katarzyna" w „Agnieszka
+	  Katarzyna Marciniak") trafia do `last_name` razem z właściwym
+	  nazwiskiem zamiast zostać osobno rozpoznane.
+	"""
+	imie_czyste = _tekst_albo_puste(imie)
+	nazwisko_czyste = _tekst_albo_puste(nazwisko)
+	if nazwisko_czyste:
+		return imie_czyste, nazwisko_czyste
+	if not imie_czyste:
+		return imie_czyste, nazwisko_czyste
+	slowa = imie_czyste.split()
+	if len(slowa) < 2:
+		return imie_czyste, nazwisko_czyste
+	if _wyglada_na_firme(imie_czyste):
+		return imie_czyste, nazwisko_czyste
+	return slowa[0], " ".join(slowa[1:])
+
+
 def _przemianuj_puste_naglowki(naglowek_surowy: list[str]) -> list[str]:
 	"""Nadaje jawne, unikalne klucze bezimiennym (`""`) kolumnom nagłówka, w kolejności
 	występowania — zamiast pozwolić `dict()`/`csv.DictReader` po cichu nadpisać jedną drugą.
@@ -270,6 +354,20 @@ def _klucz_rankingu(wiersz: dict[str, str]) -> tuple[bool, str, int]:
 	return (data is not None, data or "", _liczba_wypelnionych_pol(wiersz))
 
 
+def _klucz_rankingu_imienia(wiersz: dict[str, str]) -> tuple[bool, bool, str, int]:
+	"""Klucz sortowania do wyboru NAJLEPSZEGO wiersza grupy pod względem imienia/nazwiska.
+
+	Wiersz z niepustym (już rozdzielonym) `Nazwisko` wygrywa nad wierszem ze
+	sklejonym imieniem+nazwiskiem w samym `Imię` — niezależnie od tego, który
+	wiersz wygrywa ogólny ranking `_klucz_rankingu` używany dla reszty pól
+	(ops#30: 333 grupy telefonu mają w CSV obie wersje). Data/kompletność
+	nadal rozstrzygają remis w obrębie tej samej kategorii „ma nazwisko".
+	"""
+	ma_nazwisko = not _pusta(wiersz.get("Nazwisko", ""))
+	data = normalizuj_date(wiersz.get("Data", ""))
+	return (ma_nazwisko, data is not None, data or "", _liczba_wypelnionych_pol(wiersz))
+
+
 def _linia_uwag(wiersz: dict[str, str]) -> str:
 	"""Składa tekstową linię uwag dla jednego wiersza źródłowego: Uwagi + Typ dachu + Pokrycie +
 	znacznik STARE/NOWE, otagowaną źródłem (`[SD]`/`[CC]`/`[ARG]`).
@@ -309,7 +407,11 @@ def deduplikuj(wiersze: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
 	(kolumna `_historia_wyniku` — patrz docstring modułu) trafia do `uwagi`
 	jako `[HISTORIA] <wartość>`, zbierana ze WSZYSTKICH wierszy grupy (nie
 	tylko zwycięzcy) i deduplikowana po wartości, więc dwa wiersze z tym
-	samym „wygrana" nie dają dwóch identycznych tagów.
+	samym „wygrana" nie dają dwóch identycznych tagów. Pola imienia/nazwiska
+	(`imie`/`nazwisko`) NIE pochodzą od tego samego zwycięzcy co reszta pól —
+	patrz `_klucz_rankingu_imienia`: wiersz z już rozdzielonym `Nazwisko`
+	wygrywa nad wierszem ze sklejonym `Imię`, żeby nie zgubić rozdzielonej
+	wersji obecnej gdzie indziej w tej samej grupie telefonu (ops#30).
 
 	Zwraca `dict[telefon, rekord]`, gdzie `rekord` jest już gotowy do
 	przekazania do `zbuduj_leada`.
@@ -324,6 +426,7 @@ def deduplikuj(wiersze: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
 	wynik: dict[str, dict[str, Any]] = {}
 	for telefon, grupa in grupy.items():
 		zwyciezca = max(grupa, key=_klucz_rankingu)
+		zwyciezca_imienia = max(grupa, key=_klucz_rankingu_imienia)
 
 		zrodla_unikalne: list[str] = []
 		for wiersz in grupa:
@@ -344,8 +447,8 @@ def deduplikuj(wiersze: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
 
 		wynik[telefon] = {
 			"telefon": telefon,
-			"imie": _tekst_albo_puste(zwyciezca.get("Imię")),
-			"nazwisko": _tekst_albo_puste(zwyciezca.get("Nazwisko")),
+			"imie": _tekst_albo_puste(zwyciezca_imienia.get("Imię")),
+			"nazwisko": _tekst_albo_puste(zwyciezca_imienia.get("Nazwisko")),
 			"wojewodztwo": _tekst_albo_puste(zwyciezca.get("Województwo")),
 			"powiat": _tekst_albo_puste(zwyciezca.get("Powiat")),
 			"miasto": _tekst_albo_puste(zwyciezca.get("Miasto")),
@@ -362,14 +465,18 @@ def deduplikuj(wiersze: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
 def zbuduj_leada(rekord: dict[str, Any]) -> dict[str, Any]:
 	"""Buduje słownik pól `CRM Lead` z połączonego rekordu zwróconego przez `deduplikuj`.
 
-	`first_name` ma fallback `"Kontakt"`, gdy imię jest puste — `lead_name`
-	nie może być pusty. Świadomie BEZ `lead_owner` — przypisanie właściciela
-	to osobny krok poza tym modułem.
+	Rozdziela sklejone imię+nazwisko przez `rozdziel_imie_nazwisko` (ops#30)
+	zanim zbuduje `first_name`/`last_name`. `first_name` ma fallback
+	`"Kontakt"`, gdy wynikowe imię jest puste — `lead_name` nie może być
+	pusty. Świadomie BEZ `lead_owner` — przypisanie właściciela to osobny
+	krok poza tym modułem.
 	"""
-	imie = rekord.get("imie", "") or ""
+	first_name, last_name = rozdziel_imie_nazwisko(
+		rekord.get("imie", "") or "", rekord.get("nazwisko", "") or ""
+	)
 	return {
-		"first_name": imie if imie else "Kontakt",
-		"last_name": rekord.get("nazwisko", "") or "",
+		"first_name": first_name if first_name else "Kontakt",
+		"last_name": last_name,
 		"mobile_no": rekord.get("telefon", "") or "",
 		"status": "Nowy",
 		"business_line": "D2D",

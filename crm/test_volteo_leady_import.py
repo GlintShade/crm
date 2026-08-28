@@ -9,6 +9,7 @@ from crm.volteo_leady_import import (
 	normalizuj_kod,
 	normalizuj_telefon,
 	normalizuj_wojewodztwo,
+	rozdziel_imie_nazwisko,
 	wczytaj_wiersze,
 	zbuduj_leada,
 )
@@ -144,6 +145,66 @@ class TestMapujZainteresowanie(unittest.TestCase):
 
 	def test_i_wolny_tekst_daje_none(self: "TestMapujZainteresowanie") -> None:
 		self.assertIsNone(mapuj_zainteresowanie("zużywa 720 kw na 2 miesiące"))
+
+
+class TestRozdzielImieNazwisko(unittest.TestCase):
+	def test_a_nazwisko_juz_obecne_bez_zmian(self: "TestRozdzielImieNazwisko") -> None:
+		self.assertEqual(rozdziel_imie_nazwisko("Adam", "Banik"), ("Adam", "Banik"))
+
+	def test_b_myslnik_jako_nazwisko_traktowany_jak_puste(self: "TestRozdzielImieNazwisko") -> None:
+		self.assertEqual(rozdziel_imie_nazwisko("Adam Banik", "-"), ("Adam", "Banik"))
+
+	def test_c_dwa_slowa_dziela_sie_pol_na_pol(self: "TestRozdzielImieNazwisko") -> None:
+		self.assertEqual(rozdziel_imie_nazwisko("Adam Banik", ""), ("Adam", "Banik"))
+
+	def test_d_trzy_slowa_drugie_imie_trafia_do_nazwiska(self: "TestRozdzielImieNazwisko") -> None:
+		self.assertEqual(
+			rozdziel_imie_nazwisko("Agnieszka Katarzyna Marciniak", ""),
+			("Agnieszka", "Katarzyna Marciniak"),
+		)
+
+	def test_e_trzy_slowa_podwojne_nazwisko_zostaje_razem(self: "TestRozdzielImieNazwisko") -> None:
+		self.assertEqual(
+			rozdziel_imie_nazwisko("Aleksandra Ratajczak Witkowska", ""),
+			("Aleksandra", "Ratajczak Witkowska"),
+		)
+
+	def test_f_partykula_zostaje_w_calosci_w_nazwisku(self: "TestRozdzielImieNazwisko") -> None:
+		self.assertEqual(
+			rozdziel_imie_nazwisko("Alicja de Groot", ""),
+			("Alicja", "de Groot"),
+		)
+
+	def test_g_firma_ze_spolka_nie_jest_dzielona(self: "TestRozdzielImieNazwisko") -> None:
+		self.assertEqual(
+			rozdziel_imie_nazwisko("DARK TRADE SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ", ""),
+			("DARK TRADE SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ", ""),
+		)
+
+	def test_h_firma_hotel_nie_jest_dzielona(self: "TestRozdzielImieNazwisko") -> None:
+		self.assertEqual(
+			rozdziel_imie_nazwisko("APOLLO HISTORIC HOTEL", ""),
+			("APOLLO HISTORIC HOTEL", ""),
+		)
+
+	def test_i_firma_skrot_sp_nie_jest_dzielona(self: "TestRozdzielImieNazwisko") -> None:
+		self.assertEqual(
+			rozdziel_imie_nazwisko("Kowalski Sp. z o.o.", ""),
+			("Kowalski Sp. z o.o.", ""),
+		)
+
+	def test_j_firma_handlowa_prefiks_nie_jest_dzielona(self: "TestRozdzielImieNazwisko") -> None:
+		self.assertEqual(
+			rozdziel_imie_nazwisko("Firma Handlowa Dana", ""),
+			("Firma Handlowa Dana", ""),
+		)
+
+	def test_k_jednowyrazowe_imie_bez_zmian(self: "TestRozdzielImieNazwisko") -> None:
+		self.assertEqual(rozdziel_imie_nazwisko("Jan", ""), ("Jan", ""))
+
+	def test_l_puste_oba_pola(self: "TestRozdzielImieNazwisko") -> None:
+		self.assertEqual(rozdziel_imie_nazwisko("", ""), ("", ""))
+		self.assertEqual(rozdziel_imie_nazwisko("-", "-"), ("", ""))
 
 
 class TestWczytajWiersze(unittest.TestCase):
@@ -284,6 +345,34 @@ class TestDeduplikuj(unittest.TestCase):
 		wynik = deduplikuj([a, b])
 		self.assertEqual(len(wynik), 2)
 
+	def test_m_preferuje_rozdzielona_wersje_imienia_mimo_gorszego_rankingu_daty(
+		self: "TestDeduplikuj",
+	) -> None:
+		# ops#30: 333 grupy telefonu maja w CSV obie wersje - sklejona I rozdzielona.
+		# Wiersz z NOWSZA data (ogolny zwyciezca rankingu) niesie sklejone imie;
+		# starszy wiersz niesie juz rozdzielone imie+nazwisko. Nazwisko/imie
+		# musza przyjsc z tego drugiego, mimo ze przegrywa ogolny ranking.
+		sklejony_nowszy = _wiersz(
+			Data="2023-06-15", Imię="Adam Banik", Nazwisko="-", ŹRÓDŁO="ARG"
+		)
+		rozdzielony_starszy = _wiersz(
+			Data="2020-01-01", Imię="Adam", Nazwisko="Banik", ŹRÓDŁO="SD"
+		)
+		wynik = deduplikuj([sklejony_nowszy, rozdzielony_starszy])
+		rekord = wynik["+48502103270"]
+		self.assertEqual(rekord["imie"], "Adam")
+		self.assertEqual(rekord["nazwisko"], "Banik")
+		# reszta pol (Data) nadal pochodzi z OGOLNEGO zwyciezcy - rankingi sa niezalezne.
+		self.assertEqual(rekord["data"], "2023-06-15")
+
+	def test_n_brak_rozdzielonej_wersji_w_grupie_zostaje_sklejone(self: "TestDeduplikuj") -> None:
+		a = _wiersz(Data="2020-01-01", Imię="Adam Banik", Nazwisko="-", ŹRÓDŁO="SD")
+		b = _wiersz(Data="2023-06-15", Imię="Adam Banik", Nazwisko="-", ŹRÓDŁO="ARG")
+		wynik = deduplikuj([a, b])
+		rekord = wynik["+48502103270"]
+		self.assertEqual(rekord["imie"], "Adam Banik")
+		self.assertEqual(rekord["nazwisko"], "")
+
 
 class TestZbudujLeada(unittest.TestCase):
 	def test_a_fallback_imienia_gdy_puste(self: "TestZbudujLeada") -> None:
@@ -332,6 +421,24 @@ class TestZbudujLeada(unittest.TestCase):
 		lead = zbuduj_leada(rekord)
 		self.assertEqual(lead["status"], "Nowy")
 		self.assertEqual(lead["business_line"], "D2D")
+
+	def test_e_sklejone_imie_z_dedupu_wychodzi_rozdzielone(self: "TestZbudujLeada") -> None:
+		# ops#30 end-to-end: deduplikuj() zostawia sklejone "Adam Banik" w polu
+		# imie (Nazwisko puste w calej grupie) - zbuduj_leada musi je rozdzielic.
+		rekord = {"telefon": "+48502103270", "imie": "Adam Banik", "nazwisko": ""}
+		lead = zbuduj_leada(rekord)
+		self.assertEqual(lead["first_name"], "Adam")
+		self.assertEqual(lead["last_name"], "Banik")
+
+	def test_f_firma_sklejona_zostaje_calosc_w_first_name(self: "TestZbudujLeada") -> None:
+		rekord = {
+			"telefon": "+48502103270",
+			"imie": "DARK TRADE SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ",
+			"nazwisko": "",
+		}
+		lead = zbuduj_leada(rekord)
+		self.assertEqual(lead["first_name"], "DARK TRADE SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ")
+		self.assertEqual(lead["last_name"], "")
 
 
 if __name__ == "__main__":
