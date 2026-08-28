@@ -1,6 +1,8 @@
 import unittest
 
 from crm.volteo_leady_import import (
+	KLUCZ_HISTORIA,
+	KLUCZ_STARE_NOWE,
 	deduplikuj,
 	mapuj_zainteresowanie,
 	normalizuj_date,
@@ -28,6 +30,15 @@ class TestNormalizujTelefon(unittest.TestCase):
 	def test_e_uszkodzony_excel_twarde_spacje_i_koncowka_00(self: "TestNormalizujTelefon") -> None:
 		self.assertEqual(normalizuj_telefon("507\xa0063\xa0129,00"), "+48507063129")
 
+	def test_e2_myslniki_jako_separator(self: "TestNormalizujTelefon") -> None:
+		self.assertEqual(normalizuj_telefon("604-932-720"), "+48604932720")
+
+	def test_e3_kropki_jako_separator(self: "TestNormalizujTelefon") -> None:
+		self.assertEqual(normalizuj_telefon("604.932.720"), "+48604932720")
+
+	def test_e4_myslniki_z_prefiksem_48(self: "TestNormalizujTelefon") -> None:
+		self.assertEqual(normalizuj_telefon("+48-604-932-720"), "+48604932720")
+
 	def test_f_odrzuca_za_krotki(self: "TestNormalizujTelefon") -> None:
 		self.assertIsNone(normalizuj_telefon("12345"))
 
@@ -44,6 +55,9 @@ class TestNormalizujTelefon(unittest.TestCase):
 
 	def test_j_odrzuca_wiele_numerow_w_jednym_polu(self: "TestNormalizujTelefon") -> None:
 		self.assertIsNone(normalizuj_telefon("723309923, 782631166"))
+
+	def test_k_odrzuca_wiele_numerow_z_myslnikami_i_tekstem(self: "TestNormalizujTelefon") -> None:
+		self.assertIsNone(normalizuj_telefon("733-794-111, tel do syna: 788 406 223"))
 
 
 class TestNormalizujDate(unittest.TestCase):
@@ -143,6 +157,26 @@ class TestWczytajWiersze(unittest.TestCase):
 	def test_b_pusty_csv_daje_pusta_liste(self: "TestWczytajWiersze") -> None:
 		self.assertEqual(wczytaj_wiersze("Data,Imię,Numer\n"), [])
 
+	def test_c_dwie_puste_kolumny_naglowka_rozdzielone_pozycyjnie(self: "TestWczytajWiersze") -> None:
+		# Odwzorowuje realny kształt pliku źródłowego: pusta kolumna zaraz po
+		# Uwagi niesie historię wyniku szansy, pusta kolumna na końcu wiersza
+		# niesie znacznik STARE/NOWE. Goły csv.DictReader zderzyłby oba klucze
+		# ("") i po cichu zgubił historię — to sprawdza, że tak się NIE dzieje.
+		tekst = (
+			"Data,Imię,Numer,Uwagi,,ŹRÓDŁO,\n"
+			"2022-03-10,Jan,+48502103270,Lead z formularza,wygrana,SD,STARE\n"
+		)
+		wiersze = wczytaj_wiersze(tekst)
+		self.assertEqual(len(wiersze), 1)
+		self.assertEqual(wiersze[0][KLUCZ_HISTORIA], "wygrana")
+		self.assertEqual(wiersze[0][KLUCZ_STARE_NOWE], "STARE")
+		self.assertNotEqual(wiersze[0][KLUCZ_HISTORIA], wiersze[0][KLUCZ_STARE_NOWE])
+
+	def test_d_inna_liczba_pustych_kolumn_niz_dwie_zglasza_blad(self: "TestWczytajWiersze") -> None:
+		tekst = "Data,Imię,Numer,\n2022-03-10,Jan,+48502103270,coś\n"
+		with self.assertRaises(ValueError):
+			wczytaj_wiersze(tekst)
+
 
 def _wiersz(**nadpisania: str) -> dict[str, str]:
 	"""Buduje wiersz CSV testowy z sensownymi domyślnymi wartościami, nadpisując tylko podane pola."""
@@ -160,7 +194,8 @@ def _wiersz(**nadpisania: str) -> dict[str, str]:
 		"Typ dachu": "-",
 		"Pokrycie": "-",
 		"Uwagi": "-",
-		"": "-",
+		KLUCZ_HISTORIA: "-",
+		KLUCZ_STARE_NOWE: "-",
 		"ŹRÓDŁO": "SD",
 	}
 	bazowy.update(nadpisania)
@@ -208,13 +243,40 @@ class TestDeduplikuj(unittest.TestCase):
 	def test_g_typ_dachu_pokrycie_i_stare_nowe_skladaja_sie_do_uwag(self: "TestDeduplikuj") -> None:
 		wiersz = _wiersz(
 			Uwagi="-",
-			**{"Typ dachu": "dwuspadowy", "Pokrycie": "dachówka", "": "STARE"},
+			**{"Typ dachu": "dwuspadowy", "Pokrycie": "dachówka", KLUCZ_STARE_NOWE: "STARE"},
 		)
 		wynik = deduplikuj([wiersz])
 		uwagi = wynik["+48502103270"]["uwagi"]
 		self.assertIn("Typ dachu: dwuspadowy", uwagi)
 		self.assertIn("Pokrycie: dachówka", uwagi)
 		self.assertIn("STARE", uwagi)
+
+	def test_h2_historia_wyniku_trafia_do_uwag_z_tagiem(self: "TestDeduplikuj") -> None:
+		wiersz = _wiersz(**{KLUCZ_HISTORIA: "wygrana"})
+		wynik = deduplikuj([wiersz])
+		self.assertIn("[HISTORIA] wygrana", wynik["+48502103270"]["uwagi"])
+
+	def test_h3_historia_status_nie_wplywa_na_status_leada(self: "TestDeduplikuj") -> None:
+		wiersz = _wiersz(**{KLUCZ_HISTORIA: "przegrana"})
+		wynik = deduplikuj([wiersz])
+		lead = zbuduj_leada(wynik["+48502103270"])
+		self.assertEqual(lead["status"], "Nowy")
+		self.assertIn("[HISTORIA] przegrana", lead["custom_uwagi_import"])
+
+	def test_h4_powtorzona_historia_w_grupie_deduplikuje_sie(self: "TestDeduplikuj") -> None:
+		a = _wiersz(ŹRÓDŁO="SD", **{KLUCZ_HISTORIA: "wygrana"})
+		b = _wiersz(ŹRÓDŁO="CC", **{KLUCZ_HISTORIA: "wygrana"})
+		wynik = deduplikuj([a, b])
+		uwagi = wynik["+48502103270"]["uwagi"]
+		self.assertEqual(uwagi.count("[HISTORIA] wygrana"), 1)
+
+	def test_h5_rozne_wartosci_historii_w_grupie_obie_widoczne(self: "TestDeduplikuj") -> None:
+		a = _wiersz(ŹRÓDŁO="SD", Data="2020-01-01", **{KLUCZ_HISTORIA: "przegrana"})
+		b = _wiersz(ŹRÓDŁO="CC", Data="2023-01-01", **{KLUCZ_HISTORIA: "wygrana"})
+		wynik = deduplikuj([a, b])
+		uwagi = wynik["+48502103270"]["uwagi"]
+		self.assertIn("[HISTORIA] przegrana", uwagi)
+		self.assertIn("[HISTORIA] wygrana", uwagi)
 
 	def test_h_rozne_telefony_daja_rozne_grupy(self: "TestDeduplikuj") -> None:
 		a = _wiersz(Numer="+48502103270")

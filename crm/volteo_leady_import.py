@@ -13,17 +13,22 @@ poza tym plikiem, w whitelisted API forka.
 Cały plik operuje wyłącznie na czystych strukturach `str`/`dict`/`list` —
 zero zależności od frameworka, zero mutacji argumentów wejściowych.
 
-Pułapka pliku źródłowego: nagłówek CSV ma DWIE kolumny o pustej nazwie —
-jedna (tuż po „Uwagi") niesie stary status szansy sprzed importu
-(„wygrana"/„przegrana"/„nieaktualna"/„otwarta"), druga (na samym końcu
-wiersza) niesie znacznik „STARE"/„NOWE". `csv.DictReader` buduje słownik
+Pułapka pliku źródłowego (naprawiona, nie zignorowana): nagłówek CSV ma
+DWIE kolumny o pustej nazwie — jedna (tuż po „Uwagi") niesie stary status
+szansy sprzed importu („wygrana"/„przegrana"/„nieaktualna"/„otwarta" —
+5046 wierszy niepustych na 18574), druga (na samym końcu wiersza) niesie
+znacznik „STARE"/„NOWE". Goły `csv.DictReader` buduje słownik przez
 `zip(fieldnames, wiersz)`, więc przy dwóch kolumnach o kluczu `""` druga
-PO CICHU nadpisuje pierwszą — w praktyce pod kluczem `""` zawsze wychodzi
-wartość znacznika STARE/NOWE, a stary status szansy jest nie do odzyskania
-przez ten sam plik. To zachowanie jest zgodne z faktami zmierzonymi przy
-specyfikowaniu importu (ops#22) i jest tu świadomie zachowane, nie
-naprawiane — naprawa zmieniłaby znaczenie klucza `""` i psułaby zgodność
-z resztą analizy.
+PO CICHU nadpisuje pierwszą i historia szansy znika bez śladu — dokładnie
+tego typu cichej utraty danych ten moduł ma unikać. `wczytaj_wiersze`
+dlatego czyta nagłówek pozycyjnie (`csv.reader`, nie `DictReader`),
+wykrywa bezimienne kolumny i nadaje im jawne, unikalne klucze
+(`_historia_wyniku` / `_stare_nowe`) w kolejności występowania w
+nagłówku — z asercją, że jest ich dokładnie dwie, żeby zmiana kształtu
+pliku źródłowego głośno wywaliła błąd zamiast po cichu pomieszać kolumny.
+Historia trafia do handlowca jako tekst (`[HISTORIA] <wartość>` w
+uwagach), NIE jako nowy status leada — leady zawsze wchodzą ze statusem
+`Nowy`.
 """
 
 import csv
@@ -61,6 +66,14 @@ TOKENY_ZAINTERESOWANIA: dict[str, str] = {
 }
 """Mapowanie skrótów z kolumny `Rachunek na mc` na etykietę `custom_product_interest`."""
 
+KLUCZ_HISTORIA = "_historia_wyniku"
+"""Klucz nadawany pierwszej (w kolejności występowania) bezimiennej kolumnie nagłówka —
+niesie stary status szansy sprzed importu (`wygrana`/`przegrana`/`nieaktualna`/`otwarta`/...)."""
+
+KLUCZ_STARE_NOWE = "_stare_nowe"
+"""Klucz nadawany drugiej (w kolejności występowania) bezimiennej kolumnie nagłówka —
+niesie znacznik `STARE`/`NOWE`."""
+
 
 def _pusta(wartosc: str | None) -> bool:
 	"""Czy wartość pola CSV oznacza pustkę.
@@ -85,14 +98,25 @@ def normalizuj_telefon(surowy: str) -> str | None:
 	"""Normalizuje numer telefonu do formatu `+48XXXXXXXXX`.
 
 	Akceptuje cztery formaty spotykane w źródłowym CSV: `48XXXXXXXXX`,
-	`+48XXXXXXXXX`, gołe 9 cyfr (opcjonalnie z odstępami) oraz uszkodzone
-	przez Excela wartości z twardymi spacjami (`\\xa0`) i końcówką `,00`
-	(np. `"507\\xa0063\\xa0129,00"`). Wszystko inne — za krótkie, z literami,
-	12-cyfrowe bez prefiksu 48 — zwraca `None`.
+	`+48XXXXXXXXX`, gołe 9 cyfr (opcjonalnie z odstępami, myślnikami albo
+	kropkami jako separatorami, np. `604-932-720`) oraz uszkodzone przez
+	Excela wartości z twardymi spacjami (`\\xa0`) i końcówką `,00` (np.
+	`"507\\xa0063\\xa0129,00"`). Separatory są usuwane PRZED walidacją
+	formatu, więc pola z kilkoma numerami naraz (przecinek, ukośnik) albo
+	z literami/notacją naukową nadal poprawnie odpadają — walidacja końcowa
+	akceptuje wyłącznie same cyfry w długości 9 albo 11 (z prefiksem 48).
+	Wszystko inne — za krótkie, z literami, 12-cyfrowe bez prefiksu 48 —
+	zwraca `None`.
 	"""
 	if not surowy:
 		return None
-	oczyszczony = surowy.replace("\xa0", "").replace(" ", "").strip()
+	oczyszczony = (
+		surowy.replace("\xa0", "")
+		.replace(" ", "")
+		.replace("-", "")
+		.replace(".", "")
+		.strip()
+	)
 	if oczyszczony.endswith(",00"):
 		oczyszczony = oczyszczony[:-3]
 	if not oczyszczony:
@@ -186,14 +210,53 @@ def mapuj_zainteresowanie(surowe: str) -> str | None:
 	return " + ".join(rozpoznane)
 
 
+def _przemianuj_puste_naglowki(naglowek_surowy: list[str]) -> list[str]:
+	"""Nadaje jawne, unikalne klucze bezimiennym (`""`) kolumnom nagłówka, w kolejności
+	występowania — zamiast pozwolić `dict()`/`csv.DictReader` po cichu nadpisać jedną drugą.
+
+	Brak bezimiennych kolumn zwraca nagłówek bez zmian (przypadek plików
+	testowych/uproszczonych). Gdy jakieś się znajdą, musi ich być
+	DOKŁADNIE dwie — inna liczba oznacza, że plik źródłowy zmienił kształt
+	i dalsze pozycyjne mapowanie (`KLUCZ_HISTORIA`/`KLUCZ_STARE_NOWE`)
+	byłoby zgadywaniem, więc zgłaszamy błąd głośno zamiast pomieszać dane.
+	"""
+	indeksy_pustych = [i for i, nazwa in enumerate(naglowek_surowy) if nazwa.strip() == ""]
+	if not indeksy_pustych:
+		return list(naglowek_surowy)
+	if len(indeksy_pustych) != 2:
+		raise ValueError(
+			f"Oczekiwano dokładnie 2 bezimiennych kolumn w nagłówku CSV, "
+			f"znaleziono {len(indeksy_pustych)}: {naglowek_surowy}"
+		)
+	nowy_naglowek = list(naglowek_surowy)
+	nowy_naglowek[indeksy_pustych[0]] = KLUCZ_HISTORIA
+	nowy_naglowek[indeksy_pustych[1]] = KLUCZ_STARE_NOWE
+	return nowy_naglowek
+
+
 def wczytaj_wiersze(tekst_csv: str) -> list[dict[str, str]]:
 	"""Wczytuje CSV (jako string) do listy słowników — po jednym na wiersz, kluczami są nagłówki.
 
-	Używa `csv.DictReader` ze standardowej biblioteki; patrz pułapka
-	podwójnej pustej kolumny opisana w docstringu modułu.
+	Czyta nagłówek pozycyjnie przez `csv.reader` (nie `csv.DictReader`),
+	żeby bezimienne kolumny (patrz `_przemianuj_puste_naglowki` i pułapka
+	opisana w docstringu modułu) dostały jawne, unikalne klucze zamiast
+	po cichu się zderzyć. Wiersze krótsze niż nagłówek są dopełniane
+	pustymi polami; dłuższe — przycinane do długości nagłówka.
 	"""
-	czytnik = csv.DictReader(io.StringIO(tekst_csv))
-	return [dict(wiersz) for wiersz in czytnik]
+	czytnik = csv.reader(io.StringIO(tekst_csv))
+	try:
+		naglowek_surowy = next(czytnik)
+	except StopIteration:
+		return []
+	naglowek = _przemianuj_puste_naglowki(naglowek_surowy)
+	wiersze: list[dict[str, str]] = []
+	for wiersz_surowy in czytnik:
+		if len(wiersz_surowy) < len(naglowek):
+			wiersz_wyrownany = wiersz_surowy + [""] * (len(naglowek) - len(wiersz_surowy))
+		else:
+			wiersz_wyrownany = wiersz_surowy[: len(naglowek)]
+		wiersze.append(dict(zip(naglowek, wiersz_wyrownany, strict=True)))
+	return wiersze
 
 
 def _liczba_wypelnionych_pol(wiersz: dict[str, str]) -> int:
@@ -224,7 +287,7 @@ def _linia_uwag(wiersz: dict[str, str]) -> str:
 	pokrycie = wiersz.get("Pokrycie", "")
 	if not _pusta(pokrycie):
 		fragmenty.append(f"Pokrycie: {pokrycie.strip()}")
-	stare_nowe = wiersz.get("", "")
+	stare_nowe = wiersz.get(KLUCZ_STARE_NOWE, "")
 	if not _pusta(stare_nowe):
 		fragmenty.append(stare_nowe.strip())
 	if not fragmenty:
@@ -242,7 +305,11 @@ def deduplikuj(wiersze: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
 	wiersz z największą liczbą wypełnionych pól. Przegrani nie znikają:
 	ich źródło dokłada się do unii `zrodlo`, a ich uwagi (razem z Typ
 	dachu/Pokrycie/STARE-NOWE) doklejają się do tekstu `uwagi` zwycięzcy,
-	każde otagowane własnym źródłem.
+	każde otagowane własnym źródłem. Historia wyniku szansy sprzed importu
+	(kolumna `_historia_wyniku` — patrz docstring modułu) trafia do `uwagi`
+	jako `[HISTORIA] <wartość>`, zbierana ze WSZYSTKICH wierszy grupy (nie
+	tylko zwycięzcy) i deduplikowana po wartości, więc dwa wiersze z tym
+	samym „wygrana" nie dają dwóch identycznych tagów.
 
 	Zwraca `dict[telefon, rekord]`, gdzie `rekord` jest już gotowy do
 	przekazania do `zbuduj_leada`.
@@ -266,6 +333,15 @@ def deduplikuj(wiersze: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
 
 		linie_uwag = [linia for wiersz in grupa if (linia := _linia_uwag(wiersz))]
 
+		historia_unikalna: list[str] = []
+		for wiersz in grupa:
+			wartosc_historii = wiersz.get(KLUCZ_HISTORIA, "")
+			if not _pusta(wartosc_historii):
+				oczyszczona = wartosc_historii.strip()
+				if oczyszczona not in historia_unikalna:
+					historia_unikalna.append(oczyszczona)
+		linie_historii = [f"[HISTORIA] {wartosc}" for wartosc in historia_unikalna]
+
 		wynik[telefon] = {
 			"telefon": telefon,
 			"imie": _tekst_albo_puste(zwyciezca.get("Imię")),
@@ -278,7 +354,7 @@ def deduplikuj(wiersze: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
 			"rachunek_na_mc": _tekst_albo_puste(zwyciezca.get("Rachunek na mc")),
 			"data": _tekst_albo_puste(zwyciezca.get("Data")),
 			"zrodlo": "+".join(zrodla_unikalne),
-			"uwagi": " | ".join(linie_uwag),
+			"uwagi": " | ".join(linie_uwag + linie_historii),
 		}
 	return wynik
 
