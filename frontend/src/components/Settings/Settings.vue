@@ -62,6 +62,7 @@ import Users from '@/components/Settings/Users.vue'
 import VolteoUsers from '@/components/Settings/VolteoUsers.vue'
 import KartyPaneli from '@/components/Settings/KartyPaneli.vue'
 import Automatyzacje from '@/components/Settings/Automatyzacje.vue'
+import LeadyPrzydzial from '@/components/Settings/LeadyPrzydzial.vue'
 import Hierarchy from '@/components/Settings/Hierarchy/Hierarchy.vue'
 import InviteUserPage from '@/components/Settings/InviteUserPage.vue'
 import ProfilePage from '@/components/Settings/Profile/ProfilePage.vue'
@@ -180,6 +181,12 @@ const tabs = computed(() => {
           label: __('Automatyzacje'),
           icon: LucideZap,
           component: markRaw(Automatyzacje),
+          condition: () => isVolteoAdmin(),
+        },
+        {
+          label: __('Przydział leadów'),
+          icon: 'user-check',
+          component: markRaw(LeadyPrzydzial),
           condition: () => isVolteoAdmin(),
         },
       ],
