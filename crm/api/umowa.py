@@ -592,9 +592,11 @@ def volteo_umowa_pdf(deal: str) -> dict[str, Any]:
 	właściwej temu szablonowi. Dzięki temu treść prawna, układ i podział stron
 	są dokładnie takie jak w oryginale.
 
-	Uprawnienia: ten sam gate co `volteo_umowa_get` (rola kalkulatora + `read` na
-	szansie) — generowanie PDF-u niczego nie zapisuje w `Volteo Umowa`, więc nie
-	wymaga `write`. Model tajemnicy kosztów/prowizji: do kontekstu trafiają
+	Uprawnienia: rola kalkulatora + `write` na szansie (SEC#35 — było `read`:
+	generowanie PDF-u faktycznie zapisuje nowy plik `File` podpięty do szansy i,
+	niżej, przesuwa status szansy przez `advance_deal_status`, więc `read` był
+	niewystarczającą bramką dla mutującego endpointu). Model tajemnicy kosztów/prowizji:
+	do kontekstu trafiają
 	wyłącznie kwoty netto/brutto DLA KLIENTA (`deal_value`, `custom_netto`,
 	`wklad_wlasny_pln`, `kwota_kredytu_pln`) i dane techniczne — nigdy
 	`cena_jednostkowa_netto`, marże ani prowizje (patrz `_KOMPONENT_POLA`, które
@@ -612,7 +614,7 @@ def volteo_umowa_pdf(deal: str) -> dict[str, Any]:
 	trzy różne przyczyny, trzy różne, jednoznaczne komunikaty dla użytkownika.
 	"""
 	_sprawdz_role()
-	_sprawdz_dostep_do_szansy(deal, "read")
+	_sprawdz_dostep_do_szansy(deal, "write")
 
 	deal_doc = frappe.get_doc("CRM Deal", deal)
 	rodzaj_umowy = deal_doc.get("custom_rodzaj_umowy")
