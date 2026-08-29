@@ -395,9 +395,17 @@ def _wyslij_dokument(deal: str, konfig: dict[str, Any]) -> dict[str, Any]:
 @rate_limit(limit=10, seconds=60)
 def autenti_send_umowa(deal: str) -> dict[str, Any]:
 	"""Wysyła PDF umowy tej szansy do podpisu przez Autenti (asynchronicznie —
-	kolejkuje `_autenti_send_job` i wraca natychmiast)."""
+	kolejkuje `_autenti_send_job` i wraca natychmiast).
+
+	Bramka `write`, NIE `read` (ops#33): to akcja zmieniająca stan — wysyła do
+	klienta prawnie wiążące żądanie podpisu i przestawia status umowy na
+	„Wysyłanie” — więc samo prawo do PODGLĄDU szansy (np. lidera hierarchii
+	czytającego szansę podwładnego) nie może wystarczyć do jej wywołania.
+	Endpointy statusu (`autenti_umowa_status`/`autenti_kredyt_status`) zostają
+	bramkowane `read` — tam odczyt nie zmienia niczego.
+	"""
 	_sprawdz_role()
-	_sprawdz_dostep_do_szansy(deal, "read")
+	_sprawdz_dostep_do_szansy(deal, "write")
 
 	return _wyslij_dokument(deal, KONFIG_UMOWA)
 
@@ -410,9 +418,13 @@ def autenti_send_kredyt(deal: str) -> dict[str, Any]:
 	(`crm/api/kredyt.py`): formularz kredytowy dotyczy wyłącznie linii OZE, więc próba
 	wysłania go do podpisu dla szansy Czyste Powietrze jest błędem danych szansy, nie
 	stanem roboczym formularza.
+
+	Bramka `write`, NIE `read` (ops#33) — patrz docstring `autenti_send_umowa`
+	powyżej, ten sam powód: to wysyłka prawnie wiążącego żądania podpisu, nie
+	odczyt.
 	"""
 	_sprawdz_role()
-	_sprawdz_dostep_do_szansy(deal, "read")
+	_sprawdz_dostep_do_szansy(deal, "write")
 
 	deal_doc = frappe.get_doc("CRM Deal", deal)
 	_sprawdz_rodzaj_oze(deal_doc)
