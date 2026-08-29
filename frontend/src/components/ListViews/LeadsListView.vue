@@ -4,11 +4,7 @@
     :columns="columns"
     :rows="rows"
     :options="{
-      getRowRoute: (row) => ({
-        name: 'Lead',
-        params: { leadId: row.name },
-        query: { view: route.query.view, viewType: route.params.viewType },
-      }),
+      getRowRoute: leadRoute,
       selectable: options.selectable,
       showTooltip: options.showTooltip,
       resizeColumn: options.resizeColumn,
@@ -89,8 +85,18 @@
           </div>
         </template>
         <template #default="{ label }">
+          <div v-if="column.label === 'Szczegóły'" class="flex items-center">
+            <Button
+              variant="outline"
+              size="sm"
+              class="w-fit"
+              @click.stop.prevent="() => goToLead(row)"
+            >
+              {{ __('Szczegóły') }}
+            </Button>
+          </div>
           <div
-            v-if="
+            v-else-if="
               [
                 'modified',
                 'creation',
@@ -242,7 +248,7 @@ import {
 } from 'frappe-ui'
 import { sessionStore } from '@/stores/session'
 import { ref, computed, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 defineProps({
   rows: { type: Array, required: true },
@@ -269,6 +275,7 @@ const emit = defineEmits([
 ])
 
 const route = useRoute()
+const router = useRouter()
 
 const pageLengthCount = defineModel({ type: Number })
 const list = defineModel('list', { type: Object })
@@ -277,6 +284,21 @@ function getLabel(label, column) {
   if (column.type === 'Duration') return formatDuration(label)
   if (column.options && isTranslatable(column.options)) return __(label)
   return label
+}
+
+// Same destination the default row click already navigates to (see
+// getRowRoute below) — kept as one function so the "Szczegóły" button and
+// the row-level link never drift apart.
+function leadRoute(row) {
+  return {
+    name: 'Lead',
+    params: { leadId: row.name },
+    query: { view: route.query.view, viewType: route.params.viewType },
+  }
+}
+
+function goToLead(row) {
+  router.push(leadRoute(row))
 }
 
 const isLikeFilterApplied = computed(() => {

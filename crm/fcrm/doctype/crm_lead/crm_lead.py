@@ -442,6 +442,15 @@ class CRMLead(Document):
 		# voivodeship that actually matter for a residential lead.
 		columns = [
 			{
+				# "Szczegóły" celowo dzieli key: "name" z tego samego powodu co
+				# analogiczna kolumna w crm_deal.py:default_list_data (pełne
+				# wyjaśnienie pułapki z `rows`/`meta.get_field` żyje tam).
+				"label": "Szczegóły",
+				"type": "Data",
+				"key": "name",
+				"width": "7rem",
+			},
+			{
 				"label": "Name",
 				"type": "Data",
 				"key": "lead_name",
