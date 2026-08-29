@@ -588,9 +588,14 @@ def volteo_kredyt_pdf(deal: str) -> dict[str, Any]:
 	w odróżnieniu od `volteo_umowa_pdf` ten endpoint celowo NIE wywołuje
 	`crm.api.pipeline.advance_deal_status`: wygenerowanie formularza kredytowego
 	nie przesuwa szansy w rurociągu.
+
+	Uprawnienia: rola kalkulatora + `write` na szansie (SEC#35 — było `read`:
+	generowanie mimo braku zaawansowania statusu i tak wstawia i kasuje pliki
+	`File` podpięte do szansy z `ignore_permissions=True`, więc `read` był
+	niewystarczającą bramką dla mutującego endpointu).
 	"""
 	_sprawdz_role()
-	_sprawdz_dostep_do_szansy(deal, "read")
+	_sprawdz_dostep_do_szansy(deal, "write")
 
 	deal_doc = frappe.get_doc("CRM Deal", deal)
 	_sprawdz_rodzaj_oze(deal_doc)

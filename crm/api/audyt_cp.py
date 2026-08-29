@@ -205,8 +205,13 @@ def volteo_audyt_cp_submit(deal: str) -> dict[str, Any]:
     edycji”) nie niosło nieaktualnych werdyktów z poprzedniej rundy recenzji.
     ŻADNEJ automatyzacji rurociągu (`advance_deal_status`) — decyzja
     właściciela, zero automatyzacji statusu szansy z audytu specjalnego CP.
+
+    Uprawnienia do szansy: `write` (SEC#35 — było `read`: ten endpoint
+    zapisuje status audytu przez `db.set_value`, więc `read` był
+    niewystarczającą bramką; sprawdzenie recenzent/właściciel poniżej
+    zostaje jako dodatkowa, węższa autoryzacja, nie zamiast tej bramki).
     """
-    _sprawdz_dostep_do_szansy(deal, "read")
+    _sprawdz_dostep_do_szansy(deal, "write")
 
     audyt_doc = _pobierz_audyt(deal)
     if audyt_doc is None:
@@ -262,8 +267,13 @@ def volteo_audyt_cp_set_status(deal: str, status: str) -> dict[str, Any]:
     - Wszystkie inne przejścia (w tym `status == current`, czy dowolna próba
       wejścia w Weryfikację tędy zamiast przez `volteo_audyt_cp_submit`) są
       odrzucane jednym ogólnym komunikatem.
+
+    Uprawnienia do szansy: `write` (SEC#35 — było `read`: ten endpoint
+    zapisuje status/werdykty przez `db.set_value`, więc `read` był
+    niewystarczającą bramką; sprawdzenie recenzenta poniżej zostaje jako
+    dodatkowa, węższa autoryzacja, nie zamiast tej bramki).
     """
-    _sprawdz_dostep_do_szansy(deal, "read")
+    _sprawdz_dostep_do_szansy(deal, "write")
 
     if not _is_reviewer():
         frappe.throw(_("Brak uprawnień do zmiany statusu audytu."), frappe.PermissionError)
@@ -332,8 +342,13 @@ def volteo_audyt_cp_set_verdict(deal: str, key: str, status: str, note: str | No
     świeży odczyt TUŻ przed zapisem, nie z wcześniej pobranego `audyt_doc`,
     żeby intencja read-modify-write była jawna (tak samo jak w poprzedniku,
     `ops/crm-audyt.py` SET_VERDICT_SCRIPT).
+
+    Uprawnienia do szansy: `write` (SEC#35 — było `read`: ten endpoint
+    zapisuje `weryfikacja_json` przez `db.set_value`, więc `read` był
+    niewystarczającą bramką; sprawdzenie recenzenta poniżej zostaje jako
+    dodatkowa, węższa autoryzacja, nie zamiast tej bramki).
     """
-    _sprawdz_dostep_do_szansy(deal, "read")
+    _sprawdz_dostep_do_szansy(deal, "write")
 
     if not _is_reviewer():
         frappe.throw(_("Brak uprawnień do oceny elementów audytu."), frappe.PermissionError)
