@@ -507,6 +507,60 @@ class TestCRMLead(FrappeTestCase):
 		self.assertIn("Administrator", deal_assignees)
 		self.assertIn("crm.user1@example.com", deal_assignees)
 
+	# ------------------------------------------------------------------
+	# ops#32 -- CRMLead.create_deal must sanitize the caller-controlled `deal`
+	# dict the same way crm_deal.create_deal does: a rep converting their own
+	# lead must not be able to inject permlevel>0 fields or spoof deal_owner
+	# away from the lead's owner.
+	# ------------------------------------------------------------------
+
+	def test_lead_create_deal_rep_cannot_inject_permlevel_fields_or_owner(self):
+		if not frappe.db.exists("Role", "Volteo D2D Sales"):
+			self.skipTest("Volteo D2D Sales role not present on this site (ops/crm-setup.py)")
+		meta = frappe.get_meta("CRM Deal")
+		if not meta.has_field("custom_cp_prowizja_handlowa"):
+			self.skipTest("CP secrecy custom fields not present on this site (ops/crm-koszty-montaz.py)")
+
+		rep = "ops32.d2d.lead.rep@example.com"
+		if not frappe.db.exists("User", rep):
+			frappe.get_doc(
+				{
+					"doctype": "User",
+					"email": rep,
+					"first_name": "Ops32",
+					"last_name": "LeadRep",
+					"send_welcome_email": 0,
+				}
+			).insert(ignore_permissions=True)
+		user = frappe.get_doc("User", rep)
+		user.add_roles("Volteo D2D Sales", "Sales User")
+
+		lead = create_lead(
+			first_name="Injection",
+			last_name="Lead",
+			email="injectionlead@example.com",
+			lead_owner=rep,
+		)
+
+		frappe.set_user(rep)
+		try:
+			contact = lead.create_contact()
+			organization = lead.create_organization()
+			deal_name = lead.create_deal(
+				contact,
+				organization,
+				deal={
+					"custom_cp_prowizja_handlowa": 8888,
+					"deal_owner": "someone.else@example.com",
+				},
+			)
+		finally:
+			frappe.set_user("Administrator")
+
+		prowizja = frappe.db.get_value("CRM Deal", deal_name, "custom_cp_prowizja_handlowa")
+		self.assertTrue(prowizja in (None, 0))
+		self.assertEqual(frappe.db.get_value("CRM Deal", deal_name, "deal_owner"), rep)
+
 
 def create_lead(**kwargs):
 	"""Helper function to create a CRM Lead for testing"""

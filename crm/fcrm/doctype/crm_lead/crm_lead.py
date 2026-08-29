@@ -9,6 +9,7 @@ from frappe.desk.form.assign_to import _add as assign
 from frappe.model.document import Document
 from frappe.utils import validate_email_address
 
+from crm.fcrm.doctype.crm_deal.crm_deal import sanitize_deal_input
 from crm.fcrm.doctype.crm_service_level_agreement.utils import get_sla
 from crm.fcrm.doctype.crm_status_change_log.crm_status_change_log import (
 	add_status_change_log,
@@ -372,9 +373,30 @@ class CRMLead(Document):
 			)
 
 		if deal:
-			new_deal.update(deal)
+			# VOLTEO (ops#32): sanitize the caller-controlled `deal` payload before it lands on
+			# the document -- see crm.fcrm.doctype.crm_deal.crm_deal.sanitize_deal_input for
+			# what it strips (system keys, non-CRM-Deal-meta keys, and for a non-bypass caller
+			# every permlevel>0 field plus an out-of-pipeline status).
+			new_deal.update(sanitize_deal_input(deal))
 
-		new_deal.insert(ignore_permissions=True)
+		# deal_owner is server-derived above (mapped from self.lead_owner by the field loop) --
+		# never from the caller's `deal` dict for a non-bypass caller, since sanitize_deal_input
+		# already stripped it at permlevel 1. Captured before insert() because insert() itself
+		# silently strips permlevel-1 fields for a non-privileged creator (same mechanism as
+		# crm/api/czyste_powietrze.py:437); a bypass caller's `deal_owner` survives sanitization
+		# and is mapped in naturally, so this still honors it.
+		target_owner = new_deal.deal_owner or frappe.session.user
+
+		new_deal.insert()
+		new_deal.db_set("deal_owner", target_owner)
+
+		# db_set() does not run validate()/after_insert(), so CRMDeal.after_insert's own
+		# share_with_agent + assign_agent (triggered when deal_owner is already set going into
+		# insert()) never fires here -- deal_owner is only known after db_set. Replicate it
+		# explicitly, same as crm_deal.create_deal; both helpers are idempotent.
+		if target_owner != frappe.session.user:
+			new_deal.share_with_agent(target_owner)
+		new_deal.assign_agent(target_owner)
 
 		for user in self.get_assigned_users():
 			if user and user != new_deal.deal_owner:
