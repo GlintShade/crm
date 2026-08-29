@@ -154,6 +154,9 @@ def get_contact_by_phone_number(phone_number: str):
 @frappe.whitelist()
 def get_recording_url(call_log_name: str):
 	"""Fetch and stream a call recording, authenticating with the provider's credentials."""
+	if not frappe.has_permission("CRM Call Log", "read", call_log_name):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+
 	if not call_log_name or not frappe.db.exists("CRM Call Log", call_log_name):
 		frappe.throw(_("Call log not found"), frappe.DoesNotExistError)
 

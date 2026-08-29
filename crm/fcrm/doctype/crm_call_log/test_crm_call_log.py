@@ -8,6 +8,7 @@ from crm.fcrm.doctype.crm_call_log.crm_call_log import (
 	get_call_log,
 	parse_call_log,
 )
+from crm.integrations.api import get_recording_url
 from crm.tests import CRMTestCase as FrappeTestCase
 
 
@@ -421,6 +422,104 @@ class TestCRMCallLog(FrappeTestCase):
 
 		call2 = create_test_call_log(telephony_medium="Exotel")
 		self.assertEqual(call2.telephony_medium, "Exotel")
+
+
+class TestCallLogPermissionGate(FrappeTestCase):
+	"""
+	Regression coverage for ops#34: get_call_log() and get_recording_url()
+	read call-log data (recording_url, from/to numbers, notes) with no
+	permission check at all, letting any authenticated user pull any call
+	log by name -- get_recording_url() additionally used server-side
+	telephony provider credentials to fetch the recording itself.
+
+	Residual gap (documented, not fixed here): CRM Call Log has no
+	permission_query_conditions or has_permission hook wired in crm/hooks.py,
+	unlike CRM Lead/CRM Deal/Contact which are scoped by
+	crm/permissions/org_hierarchy.py and friends. The fix added is a bare
+	frappe.has_permission(doctype, "read", name) check, which only blocks
+	users holding NONE of the doctype's granted roles (System Manager, Sales
+	Manager, Sales User) -- it does not scope by ownership or org hierarchy.
+	Any user holding one of those three roles can still read any call log
+	regardless of who created it. Designing per-record scoping for CRM Call
+	Log is a separate owner decision (see ops#34), not part of this fix.
+	"""
+
+	OWNER_EMAIL = "owner@calllogapi.test"
+	OUTSIDER_EMAIL = "outsider@calllogapi.test"
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		ensure_user(cls.OWNER_EMAIL, roles=["Sales User"])
+		# Deliberately no role that carries a CRM Call Log DocPerm (System
+		# Manager / Sales Manager / Sales User), so has_permission denies
+		# read outright -- this is the "no role access at all" case the
+		# bare has_permission gate is expected to catch.
+		ensure_user(cls.OUTSIDER_EMAIL, roles=[])
+		frappe.db.commit()  # nosemgrep: fixtures must persist across committing after_insert hooks
+
+	@classmethod
+	def tearDownClass(cls):
+		for email in (cls.OWNER_EMAIL, cls.OUTSIDER_EMAIL):
+			frappe.delete_doc("User", email, force=True, ignore_permissions=True)
+		frappe.db.commit()  # nosemgrep: persist teardown cleanup of committed fixtures
+		super().tearDownClass()
+
+	def setUp(self):
+		self._created_call_logs = []
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+		for name in self._created_call_logs:
+			frappe.delete_doc("CRM Call Log", name, force=True, ignore_permissions=True)
+		frappe.db.commit()  # nosemgrep: persist per-test cleanup of committed fixtures
+
+	def _create_call_log_as_owner(self, **kwargs):
+		frappe.set_user(self.OWNER_EMAIL)
+		try:
+			call = create_test_call_log(**kwargs)
+		finally:
+			frappe.set_user("Administrator")
+		self._created_call_logs.append(call.name)
+		frappe.db.commit()  # nosemgrep: persist call log created under owner's session
+		return call
+
+	def test_outsider_cannot_read_call_log_via_get_call_log(self):
+		call = self._create_call_log_as_owner()
+		try:
+			frappe.set_user(self.OUTSIDER_EMAIL)
+			self.assertRaises(frappe.PermissionError, get_call_log, call.name)
+		finally:
+			frappe.set_user("Administrator")
+
+	def test_outsider_cannot_fetch_recording_url(self):
+		call = self._create_call_log_as_owner(recording_url="https://example.com/recording.mp3")
+		try:
+			frappe.set_user(self.OUTSIDER_EMAIL)
+			# The permission gate must fire before any credential lookup or
+			# outbound request to the telephony provider -- no telephony
+			# mocking needed since PermissionError is raised first.
+			self.assertRaises(frappe.PermissionError, get_recording_url, call.name)
+		finally:
+			frappe.set_user("Administrator")
+
+
+def ensure_user(email, roles=None):
+	"""Create (or reuse) a test user with exactly the given roles."""
+	if frappe.db.exists("User", email):
+		user = frappe.get_doc("User", email)
+	else:
+		user = frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": email,
+				"first_name": email.split("@")[0],
+				"send_welcome_email": 0,
+			}
+		).insert(ignore_permissions=True)
+	for role in roles or []:
+		user.add_roles(role)
+	return user
 
 
 def create_test_call_log(**kwargs):
