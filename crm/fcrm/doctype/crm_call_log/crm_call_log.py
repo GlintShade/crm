@@ -188,6 +188,9 @@ def parse_call_log(call):
 
 @frappe.whitelist()
 def get_call_log(name: str):
+	if not frappe.has_permission("CRM Call Log", "read", name):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+
 	call = frappe.get_cached_doc(
 		"CRM Call Log",
 		name,
