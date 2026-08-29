@@ -177,16 +177,27 @@ def get_permlevel_access(permission_type="write", doctype=None, parent_doctype=N
 
 
 def get_field_obj(field):
-	field["placeholder"] = field.get("placeholder") or "Add " + field.label + "..."
+	# Build translatable placeholders via gettext instead of concatenating raw
+	# English strings ("Add " + field.label + "..."): a concatenated string can
+	# never have a msgid in the .po catalog, so it always rendered in English
+	# regardless of session language. Computing the placeholder once (instead
+	# of unconditionally setting it to the "Add ..." variant first and only
+	# then checking fieldtype) also fixes a dead-code bug: the old code always
+	# populated field["placeholder"] on the first line, so the `field.get(
+	# "placeholder") or ...` checks in the Link/Select branches below never
+	# fired — Link and Select fields never actually got "Select ..." wording.
+	label = field.label or field.fieldname
+	explicit_placeholder = field.get("placeholder")
+	if field.fieldtype == "Link" or (field.fieldtype == "Select" and field.options):
+		field["placeholder"] = explicit_placeholder or _("Select {0}...").format(_(label))
+	else:
+		field["placeholder"] = explicit_placeholder or _("Add {0}...").format(_(label))
 
-	if field.fieldtype == "Link":
-		field["placeholder"] = field.get("placeholder") or "Select " + field.label + "..."
-	elif field.fieldtype == "Select" and field.options:
-		field["placeholder"] = field.get("placeholder") or "Select " + field.label + "..."
+	if field.fieldtype == "Select" and field.options:
 		field["options"] = [{"label": option, "value": option} for option in field.options.split("\n")]
 
 	if field.read_only:
-		field["tooltip"] = "This field is read only and cannot be edited."
+		field["tooltip"] = _("This field is read only and cannot be edited.")
 
 	return field
 

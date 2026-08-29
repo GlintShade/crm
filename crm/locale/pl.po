@@ -462,6 +462,10 @@ msgstr "Dodawaj, edytuj i zarządzaj szablonami e-maili do różnych komunikacji
 msgid "Add, edit, and manage sources for automatic lead syncing to your CRM"
 msgstr "Dodawaj, edytuj i zarządzaj źródłami automatycznej synchronizacji leadów z CRM"
 
+#: crm/fcrm/doctype/crm_fields_layout/crm_fields_layout.py
+msgid "Add {0}..."
+msgstr "Dodaj {0}..."
+
 #. Label of the address (Link) field in DocType 'CRM Organization'
 #: crm/fcrm/doctype/crm_organization/crm_organization.json
 msgid "Address"
@@ -5824,6 +5828,10 @@ msgstr "Wybierz firmę ERPNext, z którą chcesz się połączyć"
 msgid "Select {0}"
 msgstr "Wybierz {0}"
 
+#: crm/fcrm/doctype/crm_fields_layout/crm_fields_layout.py
+msgid "Select {0}..."
+msgstr "Wybierz {0}..."
+
 #: frontend/src/components/EmailEditor.vue:182
 msgid "Send"
 msgstr "Wyślij"
@@ -6438,6 +6446,10 @@ msgstr "Ten rok"
 #: frontend/src/components/FieldLayoutEditor.vue:584
 msgid "This column contains fields. Are you sure you want to remove it?"
 msgstr "Ta kolumna zawiera pola. Czy na pewno chcesz ją usunąć?"
+
+#: crm/fcrm/doctype/crm_fields_layout/crm_fields_layout.py
+msgid "This field is read only and cannot be edited."
+msgstr "To pole jest tylko do odczytu i nie można go edytować."
 
 #: frontend/src/components/Settings/Sla/WorkDayModal.vue:177
 msgid "This field is required"
