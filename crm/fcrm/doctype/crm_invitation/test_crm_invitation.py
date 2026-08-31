@@ -144,3 +144,15 @@ class TestCRMInvitation(FrappeTestCase):
 
 		user = frappe.get_doc("User", invitation.email)
 		self.assertEqual(user.custom_poziom_prowizji, "Handlowiec")
+
+	def test_validate_lowercases_email(self):
+		"""ops#45: a mixed-case email as typed by the inviting admin must be
+		normalized to lowercase on save, so it can never ride into the
+		session cookie mixed-case at accept-time (the 2026-08-29 incident)."""
+		invitation = self.make_invitation(email="Test.Case.B53@Example.COM")
+
+		self.assertEqual(invitation.email, "test.case.b53@example.com")
+		self.assertEqual(
+			frappe.db.get_value("CRM Invitation", invitation.name, "email"),
+			"test.case.b53@example.com",
+		)

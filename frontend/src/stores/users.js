@@ -169,7 +169,16 @@ export const usersStore = defineStore('crm-users', () => {
 
   const isCrmUser = (user) => {
     user = user || session.user
-    return users.data.crmUsers?.find((u) => u.name === user)
+    // Case-insensitive comparison (b53, ops#45): a mixed-case invitation
+    // email (fixed at the source in crm_invitation.py's validate(), and at
+    // login in accept_invitation()) can still be sitting in a live session
+    // cookie / tabSessions row created before that fix — sessions live up
+    // to 168h (session_expiry). Without this, a stale mixed-case cookie
+    // fails this `===`-style lookup against the always-lowercase
+    // `User.name` list and the router guard loops forever. Guard against
+    // null/undefined before calling toLowerCase().
+    const target = user?.toLowerCase?.()
+    return users.data.crmUsers?.find((u) => u.name?.toLowerCase?.() === target)
   }
 
   return {
