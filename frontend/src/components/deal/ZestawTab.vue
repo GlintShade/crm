@@ -188,17 +188,31 @@
           but no longer admin-only (owner decision): visible to the deal's
           owning rep (`deal_owner`) as well as admins. The underlying field
           (`custom_cp_prowizja_handlowa`) is still permlevel 2 on every other
-          path — that protection is unchanged. This box instead reaches it
-          through a dedicated endpoint (`crm.api.koszty.volteo_prowizja_szansy`,
-          see the `dealCommission` fetch in the script) that enforces
-          `admin OR deal_owner` server-side and throws for anyone else; a
-          disallowed viewer's fetch fails silently (no toast, no console
-          noise — see the fetch comment) and `hasCommission` stays false, so
-          the block below simply never renders for them. Deliberately styled
-          with the amber "internal warning" treatment already used on this
-          tab family (see AudytTab.vue / UmowaTab.vue), NOT the plain gray of
-          the customer-facing subsidy box above, so nobody mistakes it for a
+          path — that protection is unchanged, and the admin-OR-owner rule
+          enforced server-side by the endpoint is unchanged too. This box
+          instead reaches it through a dedicated endpoint
+          (`crm.api.koszty.volteo_prowizja_szansy`, see the `dealCommission`
+          fetch in the script) that enforces `admin OR deal_owner`
+          server-side and throws for anyone else; a disallowed viewer's fetch
+          fails silently (no toast, no console noise — see the fetch
+          comment) and `hasCommission` stays false, so the block below simply
+          never renders for them. Deliberately styled with the amber
+          "internal warning" treatment already used on this tab family (see
+          AudytTab.vue / UmowaTab.vue), NOT the plain gray of the
+          customer-facing subsidy box above, so nobody mistakes it for a
           quotable figure.
+
+          Issue #50: the box is now a TIER BREAKDOWN, not a single figure —
+          the endpoint trims `prowizje` to the CALLING user's own commission
+          level (`crm.api.koszty.volteo_prowizja_szansy`'s docstring), so a
+          Handlowiec caller sees only their own base row, a Manager also sees
+          their nadprowizja + a SUMA of the two, and a Partner/admin sees the
+          full three-row breakdown + SUMA. The nadprowizja rows and the SUMA
+          row are hidden individually when their value is `0` (`v-if`, not
+          CSS) — see `commissionFields`/`hasNadprowizje` in the script — so
+          an old (pre-b53) deal, or one where rates are still seeded at `0`,
+          degrades to today's single-row look instead of showing misleading
+          "0,00 zł" rows.
 
           Collapsible, collapsed by default (owner decision, same reasoning as
           KalkulatorTab.vue's showAdminBreakdown and MontazKosztyPanel.vue's
@@ -214,13 +228,25 @@
             class="flex w-full items-center justify-between rounded-md border border-outline-amber-3 bg-surface-amber-2 px-2.5 py-1.5 text-sm font-semibold text-ink-amber-8 transition-colors hover:bg-surface-amber-3"
             @click="showCommission = !showCommission"
           >
-            <span>{{ __('Prowizja handlowa — widoczne dla opiekuna szansy i administratorów') }}</span>
+            <span>{{ __('Prowizja — rozkład wg poziomu — widoczne dla opiekuna szansy i administratorów') }}</span>
             <FeatherIcon :name="showCommission ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 text-ink-amber-8" />
           </button>
           <div v-show="showCommission" class="mt-1.5 rounded-lg border border-outline-amber-3 bg-surface-amber-2 p-2.5 text-sm">
             <div class="flex justify-between py-0.5 text-ink-amber-8">
-              <span>{{ __('Prowizja') }}</span>
-              <span class="font-medium">{{ formatPln(dealCommission.data?.prowizja) }}</span>
+              <span>{{ __('Prowizja handlowiec') }}</span>
+              <span class="font-medium">{{ formatPln(commissionFields.handlowiec) }}</span>
+            </div>
+            <div v-if="commissionFields.nadprowizja_manager > 0" class="flex justify-between py-0.5 text-ink-amber-8">
+              <span>{{ __('Nadprowizja manager') }}</span>
+              <span class="font-medium">{{ formatPln(commissionFields.nadprowizja_manager) }}</span>
+            </div>
+            <div v-if="commissionFields.nadprowizja_partner > 0" class="flex justify-between py-0.5 text-ink-amber-8">
+              <span>{{ __('Nadprowizja partner') }}</span>
+              <span class="font-medium">{{ formatPln(commissionFields.nadprowizja_partner) }}</span>
+            </div>
+            <div v-if="hasNadprowizje" class="flex justify-between border-t border-outline-amber-3 py-0.5 pt-1 font-medium text-ink-amber-8">
+              <span>{{ __('SUMA') }}</span>
+              <span>{{ formatPln(commissionFields.suma) }}</span>
             </div>
           </div>
         </div>
@@ -321,6 +347,20 @@ const dealSubsidy = createResource({
 // condition to surface. Mirrors MontazKosztyPanel.vue's own onError, which
 // does exactly the same swallow-to-null for the same permission-denied-is-
 // normal reason.
+//
+// Issue #50 (ops#48 server side): the response grew a second key, `prowizje`,
+// a dict already TRIMMED SERVER-SIDE to the CALLER's own commission tier —
+// Handlowiec gets `{handlowiec}`, Manager gets `{handlowiec,
+// nadprowizja_manager, suma}`, Partner/admin get the full four keys
+// (`handlowiec`, `nadprowizja_manager`, `nadprowizja_partner`, `suma`). The
+// legacy top-level `prowizja` key is unchanged (handlowiec base, or `null`
+// when it's zero/unset) and is kept specifically as the fallback for two
+// cases this tab must not break on: a flag-off caller, where the endpoint
+// silently degrades to `{prowizja: null, prowizje: null}` instead of
+// throwing (see the endpoint's own docstring), and an old (pre-b53) response
+// shape from a stale image, which has no `prowizje` key at all. See
+// `commissionFields` below for how the fallback is applied once, not
+// scattered across every read site.
 const dealCommission = createResource({
   url: 'crm.api.koszty.volteo_prowizja_szansy',
   params: { deal: props.dealId },
@@ -465,16 +505,53 @@ const hasGroupSubsidy = computed(() =>
   Number(dealFields.value.custom_cp_dotacja_co) > 0 ||
   Number(dealFields.value.custom_cp_dotacja_termo) > 0,
 )
+// Issue #50: single source of truth for every field the commission box
+// reads, mirroring the `dealFields`/`wycenaFields` explicit-defaults pattern
+// elsewhere in this file — a `computed` must read values, never gate on key
+// presence/absence on a resource's reactive `.data` (see the
+// KalkulatorCPTab.vue admin-cost-panel bug referenced above; the same trap
+// applies to `dealCommission.data` here). Each key resolves independently:
+//   - `handlowiec` falls back from the trimmed `prowizje.handlowiec` to the
+//     legacy top-level `prowizja` — covers a Handlowiec-tier caller (whose
+//     `prowizje` has no `suma` but does carry `handlowiec`) and, further,
+//     an old (pre-b53) response with no `prowizje` key at all.
+//   - `nadprowizja_manager` / `nadprowizja_partner` default to `0` when the
+//     caller's tier doesn't carry that key (Handlowiec sees neither, Manager
+//     sees only the first) — `> 0` template guards below then simply never
+//     fire, no separate "does this key exist" branch needed.
+//   - `suma` falls back the same way `handlowiec` does: a Handlowiec-tier
+//     `prowizje` has no `suma` key, so this resolves to the legacy
+//     `prowizja` (their own base commission) — which is exactly the number
+//     `hasCommission` below needs regardless of tier.
+// A flag-off caller gets `{prowizja: null, prowizje: null}`: every key here
+// then falls all the way through to its `0` default, so `hasCommission`
+// stays false and the whole box stays absent — no silent "0 zł" render.
+const commissionFields = computed(() => ({
+  handlowiec: dealCommission.data?.prowizje?.handlowiec ?? dealCommission.data?.prowizja ?? 0,
+  nadprowizja_manager: dealCommission.data?.prowizje?.nadprowizja_manager ?? 0,
+  nadprowizja_partner: dealCommission.data?.prowizje?.nadprowizja_partner ?? 0,
+  suma: dealCommission.data?.prowizje?.suma ?? dealCommission.data?.prowizja ?? 0,
+}))
+
 // Permission-driven, not role-driven: `dealCommission` (see above) is the
 // dedicated endpoint result, gated server-side on admin OR deal_owner. A
 // viewer who is neither gets a swallowed PermissionError and `.data` stays
-// unset, so this reads `undefined` -> `Number(undefined)` -> `NaN` -> `> 0`
+// unset, so every `commissionFields` key defaults to `0` -> `hasCommission`
 // is `false`. A deal where the commission was genuinely never computed (e.g.
 // a PV deal, or any deal from before this field existed) reads back
-// `prowizja: null` from the endpoint the same way -- `Number(null)` is `0`,
-// also `false` -- so `> 0`, not a presence check, is what keeps both cases
-// blank instead of rendering a misleading "0 zł" or throwing on `null`.
-const hasCommission = computed(() => Number(dealCommission.data?.prowizja) > 0)
+// `prowizja: null` / an all-zero `prowizje` from the endpoint the same way --
+// `> 0`, not a presence check, is what keeps both cases blank instead of
+// rendering a misleading "0 zł" or throwing on `null`.
+const hasCommission = computed(() => Number(commissionFields.value.suma) > 0)
+
+// SUMA row (and, by the same signal, the two nadprowizja rows above it in
+// the template) is shown only once there is a real level breakdown to show —
+// a Handlowiec-tier caller's `prowizje` never carries either nadprowizja key
+// (both default to `0` above), so this stays `false` and an old/base-only
+// deal keeps today's single-row look, pixel-identical.
+const hasNadprowizje = computed(() =>
+  commissionFields.value.nadprowizja_manager > 0 || commissionFields.value.nadprowizja_partner > 0,
+)
 
 // PV offer financials, fetched from the parent deal (see `dealWycena`
 // above). Same explicit-defaults pattern as `dealFields`: every key declared
