@@ -25,6 +25,17 @@ class CRMInvitation(Document):
 		status: DF.Literal["", "Pending", "Accepted", "Expired"]
 	# end: auto-generated types
 
+	def validate(self):
+		# 2026-08-29 incident (ops#45): an invitation created with a
+		# mixed-case email let a mixed-case string ride all the way into the
+		# session cookie at accept-time (see accept_invitation() in
+		# crm/api/__init__.py), which the SPA's case-sensitive `===` checks
+		# against `User.name` (always lowercase) couldn't match — infinite
+		# redirect loop, white screen. Normalizing here, before the email
+		# ever reaches `before_insert`/dedupe/outgoing mail, stops mixed
+		# case from entering the data at all.
+		self.email = (self.email or "").strip().lower()
+
 	def before_insert(self):
 		frappe.utils.validate_email_address(self.email, True)
 

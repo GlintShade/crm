@@ -171,7 +171,20 @@ def accept_invitation(key: str | None = None):
 	invitation.reload()
 
 	if invitation.status == "Accepted":
-		frappe.local.login_manager.login_as(invitation.email)
+		# 2026-08-29 incident (ops#45): logging in with the raw invitation
+		# email verbatim (whatever mixed case the inviting admin typed) puts
+		# that mixed-case string into the session cookie / tabSessions row.
+		# `User.name` is always lowercase-normalized by Frappe, so the SPA's
+		# `===` comparisons against `crmUsers` (frontend/src/stores/users.js)
+		# then never match, and the router guard loops the user between
+		# Not Permitted and Oswiadczenie until Vue Router aborts (white
+		# screen) — the server itself never errors, since MariaDB compares
+		# case-insensitively. Look up the actual `User.name` and log in as
+		# that instead; fall back to the raw email only if the lookup somehow
+		# misses (e.g. a User row was deleted out from under an Accepted
+		# invitation).
+		user_name = frappe.db.get_value("User", {"email": invitation.email}, "name")
+		frappe.local.login_manager.login_as(user_name or invitation.email)
 		frappe.local.response["type"] = "redirect"
 		frappe.local.response["location"] = "/crm"
 
