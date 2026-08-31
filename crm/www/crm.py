@@ -35,7 +35,7 @@ def get_context_for_dev():
 
 
 def get_boot():
-	from crm.api import volteo_ma_linie
+	from crm.api import volteo_ma_linie, volteo_widzi_prowizje
 	from crm.permissions.org_hierarchy import _ma_linie_leady
 
 	return frappe._dict(
@@ -92,6 +92,15 @@ def get_boot():
 			# booleans are UI convenience only.
 			"volteo_linia_oze": volteo_ma_linie("OZE"),
 			"volteo_linia_cp": volteo_ma_linie("Czyste Powietrze"),
+			# VOLTEO: per-user commission-visibility switch (issue #48) -- UI
+			# convenience only (e.g. hiding the "Informacje dodatkowe" prowizja
+			# box up front instead of waiting on a round-trip that would come
+			# back empty); the server enforces the real gate in each endpoint
+			# (volteo_cp_calc, volteo_prowizja_szansy) via
+			# crm.api.volteo_widzi_prowizje. Deliberately no "poziom" boot key --
+			# the client never decides how much of the commission breakdown to
+			# show, the server trims the payload per volteo_poziom_prowizji.
+			"volteo_widzi_prowizje": volteo_widzi_prowizje(frappe.session.user),
 			"translated_doctypes": get_translated_doctypes(),
 			"translated_messages": get_messages_for_boot(),
 			"timezone": {

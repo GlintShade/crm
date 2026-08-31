@@ -15,7 +15,7 @@ from frappe import _
 from frappe.rate_limiter import rate_limit
 from frappe.utils import flt
 
-from crm.api import volteo_ma_linie
+from crm.api import volteo_ma_linie, volteo_poziom_prowizji, volteo_widzi_prowizje
 from crm.czyste_powietrze.mapowanie import (
 	katalog_z_wierszy,
 	limity_z_wierszy,
@@ -160,6 +160,35 @@ def _czy_admin(roles: set[str]) -> bool:
 	return bool(ADMIN_ROLE & roles)
 
 
+def _prowizje_wedlug_poziomu(prowizje: dict[str, Any], poziom: str) -> dict[str, Any]:
+	"""Przycina publiczny blok wynik["prowizje"] do tego, co wolno zobaczyć na
+	danym poziomie prowizyjnym (issue #48, schema ops#46, rdzeń ops#47).
+	Buduje NOWY dict, nie mutuje wejścia (konwencja niemutowalności repo).
+
+	- "Handlowiec": tylko własna prowizja bazowa, celowo BEZ klucza "suma" --
+	  zachowuje dzisiejszy jednowierszowy UX (przed tą zmianą "prowizje" miało
+	  po stronie przeglądarki tylko ten jeden klucz).
+	- "Manager": bazowa + nadprowizja managera + suma tych DWÓCH -- policzona
+	  TU OD NOWA jako handlowiec + manager, nigdy nie brana z trzypoziomowego
+	  wynik["prowizje"]["suma"] (który zawiera też nadprowizję partnera --
+	  stawka/kwota partnera nie może wyciec managerowi tą drogą).
+	- "Partner": pełny, niezmieniony 4-kluczowy dict.
+	"""
+	if poziom == "Partner":
+		return dict(prowizje)
+	if poziom == "Manager":
+		handlowiec = prowizje["handlowiec"]
+		nadprowizja_manager = prowizje["nadprowizja_manager"]
+		return {
+			"handlowiec": handlowiec,
+			"nadprowizja_manager": nadprowizja_manager,
+			"suma": handlowiec + nadprowizja_manager,
+		}
+	# "Handlowiec" -- fail-safe domyślne z volteo_poziom_prowizji, celowo bez
+	# klucza "suma".
+	return {"handlowiec": prowizje["handlowiec"]}
+
+
 def _blad_ogolny() -> NoReturn:
 	frappe.log_error(frappe.get_traceback(), "Volteo CP: błąd kalkulatora")
 	frappe.throw(_("Wystąpił błąd podczas obliczania oferty."))
@@ -264,9 +293,20 @@ def volteo_cp_calc(wejscie: dict[str, Any]) -> dict[str, Any]:
 			# (wynik["wewnetrzne"]["linie"]) wprowadzone w obliczenia.py — wszystkie dane
 			# kosztowe żyją wyłącznie wewnątrz poddrzewa "wewnetrzne".
 			wynik.pop("wewnetrzne", None)
-			# V5 (2026-08-19, decyzja właściciela): handlowiec ponownie widzi zagregowaną
-			# prowizję (trafia do zwiniętego okienka „Informacje dodatkowe" w UI); koszty i
-			# marża nadal wyłącznie w "wewnetrzne".
+			# V6 (issue #48, ops#46/#47): warstwa prowizji nad V5. custom_widzi_prowizje
+			# WYGRYWA na KAŻDYM poziomie -- wyłączona, usuwa prowizję CAŁKOWICIE (obie
+			# ścieżki: legacy "prowizja_handlowa" i publiczne "prowizje"), niezależnie
+			# od custom_poziom_prowizji. Włączona (V5 default), handlowiec nadal widzi
+			# zagregowaną prowizję w zwiniętym okienku „Informacje dodatkowe" -- ale
+			# "prowizje" jest teraz przycinane do poziomu prowizyjnego wywołującego
+			# (Handlowiec/Manager/Partner), żeby nadprowizja Managera/Partnera nie
+			# przeciekła niżej niż powinna. Koszty i marża nadal wyłącznie w
+			# "wewnetrzne", usuniętym wyżej dla każdego nie-admina bez wyjątku.
+			if not volteo_widzi_prowizje():
+				wynik.pop("prowizja_handlowa", None)
+				wynik.pop("prowizje", None)
+			else:
+				wynik["prowizje"] = _prowizje_wedlug_poziomu(wynik["prowizje"], volteo_poziom_prowizji())
 		return wynik
 	except (CPNiedozwolonaKombinacja, CPPozycjaNieaktywna, CPDaneNiekompletne) as blad:
 		frappe.throw(_(str(blad)))
@@ -439,6 +479,14 @@ def volteo_cp_create_deal(wejscie: dict[str, Any], contact: str) -> dict[str, An
 		# otherwise silently strip this from a Volteo D2D Sales rep's insert (see
 		# the comment above, next to custom_cp_wejscie_json).
 		deal.db_set("custom_cp_prowizja_handlowa", wynik["prowizja_handlowa"])
+		# Nadprowizje Managera/Partnera (issue #48, schema ops#46) -- sam wzorzec
+		# db_set() na permlevel 2 co custom_cp_prowizja_handlowa wyżej. Zapisywane
+		# z SUROWEGO wynik["prowizje"] (sprzed przycięcia poziomem w
+		# volteo_cp_calc), więc pełne kwoty trafiają na szansę niezależnie od
+		# poziomu prowizyjnego/flagi custom_widzi_prowizje twórcy -- to odczyt
+		# (permlevel 2 + volteo_prowizja_szansy) chroni te wartości, nie ten zapis.
+		deal.db_set("custom_cp_nadprowizja_manager", wynik["prowizje"]["nadprowizja_manager"])
+		deal.db_set("custom_cp_nadprowizja_partner", wynik["prowizje"]["nadprowizja_partner"])
 		# Snapshot kosztów/marży (schema v1, crm/koszty/rdzen.py) -- pola permlevel-2
 		# (custom_koszty_json, custom_koszty_zysk_plan; ops/crm-koszty-montaz.py), więc
 		# db_set() pomija brak prawa zapisu twórcy tak samo jak custom_cp_prowizja_handlowa
