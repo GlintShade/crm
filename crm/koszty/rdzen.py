@@ -97,10 +97,13 @@ def _parsuj_kwote_klienta(wartosc: Any) -> Decimal:
 
 def zbuduj_snapshot_cp(wewnetrzne: dict[str, Any], nazwy: dict[str, str], utworzono: str) -> dict[str, Any]:
 	"""Buduje snapshot v1 (`linia_produktowa="cp"`) z `wynik["wewnetrzne"]` -- kształt
-	dokumentowany w `crm/czyste_powietrze/obliczenia.py` (ok. linii 500-513):
-	`{koszt_calkowity, marza, prowizja_handlowa, zysk, linie: [{kod,
-	ilosc_rozliczeniowa, jednostka_rozliczeniowa, netto, koszt, ...}]}`, wszystkie
-	kwoty już zaokrąglone do grosza przez rdzeń kalkulatora.
+	dokumentowany w `crm/czyste_powietrze/obliczenia.py` (ok. linii 500-560):
+	`{koszt_calkowity, marza, prowizja_handlowa, nadprowizja_manager,
+	nadprowizja_partner, prowizja_pelna, zysk, linie: [{kod, ilosc_rozliczeniowa,
+	jednostka_rozliczeniowa, netto, koszt, ..., prowizja_pelna}]}`, wszystkie kwoty
+	już zaokrąglone do grosza przez rdzeń kalkulatora. `zysk` jest tam już liczony jako
+	`marza - prowizja_pelna` (nadprowizje Managera/Partnera wliczone), więc
+	`podsumowanie.zysk_plan` niżej jest sumą pełną bez dodatkowej arytmetyki tutaj.
 
 	Snapshot niesie wyłącznie wartości z tego AUTORYTATYWNEGO przeliczenia
 	serwerowego w chwili wywołania -- sandboxowe nadpisania administratora w
@@ -123,7 +126,7 @@ def zbuduj_snapshot_cp(wewnetrzne: dict[str, Any], nazwy: dict[str, str], utworz
 			"ilosc": str(_jako_decimal(linia["ilosc_rozliczeniowa"])),
 			"jednostka": linia["jednostka_rozliczeniowa"],
 			"netto": _str_kwota(linia["netto"]),
-			"prowizja_plan": _str_kwota(linia["prowizja"]),
+			"prowizja_plan": _str_kwota(linia["prowizja_pelna"]),
 			"koszt_plan": _str_kwota(linia["koszt"]),
 			"koszt_rzeczywisty": None,
 		}
@@ -145,7 +148,13 @@ def zbuduj_snapshot_cp(wewnetrzne: dict[str, Any], nazwy: dict[str, str], utworz
 			"netto": _str_kwota(suma_netto),
 			"koszt_plan": _str_kwota(wewnetrzne["koszt_calkowity"]),
 			"marza_plan": _str_kwota(wewnetrzne["marza"]),
-			"prowizja_plan": _str_kwota(wewnetrzne["prowizja_handlowa"]),
+			# "prowizja_plan" nosi teraz PEŁNĄ prowizję (handlowiec + obie nadprowizje), nie
+			# samą prowizję handlowca -- lustrzane wobec zmiany "prowizja" -> "prowizja_pelna"
+			# na liniach wyżej, tak żeby suma linii nadal zgadzała się z podsumowaniem.
+			"prowizja_plan": _str_kwota(wewnetrzne["prowizja_pelna"]),
+			# "zysk_plan" pozostaje = wewnetrzne["zysk"], które rdzeń kalkulatora liczy już
+			# jako marza - prowizja_pelna (patrz obliczenia.py) -- żadna dodatkowa arytmetyka
+			# nadprowizji nie jest tu potrzebna.
 			"zysk_plan": _str_kwota(wewnetrzne["zysk"]),
 		},
 		"podsumowanie_rzeczywiste": None,

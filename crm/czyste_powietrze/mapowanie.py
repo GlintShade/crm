@@ -41,6 +41,12 @@ def katalog_z_wierszy(wiersze: list[dict[str, Any]]) -> dict[str, dict[str, Any]
 		jednostka = _wymagane(wiersz, "jednostka")
 		cena_netto = _wymagane(wiersz, "cena_netto")
 		prowizja = _wymagane(wiersz, "prowizja")
+		# Nadprowizje Managera/Partnera -- stawki override obok stawki handlowca, patrz
+		# _linia() w obliczenia.py: liczone DOKŁADNIE tak samo jak "prowizja" (ta sama
+		# ilość rozliczeniowa), więc dziedziczą jej semantykę jednostek (drzwi per SZTUKA,
+		# elewacja na PEŁNEJ powierzchni, strop/dach per wariant materiałowy).
+		nadprowizja_manager = _wymagane(wiersz, "nadprowizja_manager")
+		nadprowizja_partner = _wymagane(wiersz, "nadprowizja_partner")
 		koszt_proenergy = _wymagane(wiersz, "koszt_proenergy")
 		koszt_staly = _wymagane(wiersz, "koszt_staly")
 		aktywny = _wymagane(wiersz, "aktywny")
@@ -53,6 +59,8 @@ def katalog_z_wierszy(wiersze: list[dict[str, Any]]) -> dict[str, dict[str, Any]
 			"dotacja": dotacja,
 			"limit_dotacji": limit_dotacji,
 			"prowizja": prowizja,
+			"nadprowizja_manager": nadprowizja_manager,
+			"nadprowizja_partner": nadprowizja_partner,
 			"koszt_proenergy": koszt_proenergy,
 			"koszt_staly": koszt_staly,
 			"aktywny": bool(aktywny),

@@ -25,6 +25,8 @@ def _wiersz_pozycji(**zmiany: Any) -> dict[str, Any]:
 		"limit_podwyzszony": None,
 		"limit_najwyzszy": None,
 		"prowizja": "3000",
+		"nadprowizja_manager": "0",
+		"nadprowizja_partner": "0",
 		"koszt_proenergy": "26500",
 		"koszt_staly": "0",
 		"aktywny": 1,
@@ -166,6 +168,28 @@ class TestMapowanie(unittest.TestCase):
 
 		with self.assertRaises(CPBladMapowania):
 			katalog_z_wierszy([wiersz])
+
+	def test_missing_nadprowizja_manager_raises(self: "TestMapowanie") -> None:
+		wiersz = _wiersz_pozycji()
+		del wiersz["nadprowizja_manager"]
+
+		with self.assertRaises(CPBladMapowania):
+			katalog_z_wierszy([wiersz])
+
+	def test_missing_nadprowizja_partner_raises(self: "TestMapowanie") -> None:
+		wiersz = _wiersz_pozycji()
+		del wiersz["nadprowizja_partner"]
+
+		with self.assertRaises(CPBladMapowania):
+			katalog_z_wierszy([wiersz])
+
+	def test_nadprowizja_pola_przenoszone_do_katalogu(self: "TestMapowanie") -> None:
+		wiersz = _wiersz_pozycji(nadprowizja_manager="150", nadprowizja_partner="75")
+
+		katalog = katalog_z_wierszy([wiersz])
+
+		self.assertEqual(katalog["pompa_ciepla"]["nadprowizja_manager"], "150")
+		self.assertEqual(katalog["pompa_ciepla"]["nadprowizja_partner"], "75")
 
 	def test_mapping_fits_core_end_to_end(self: "TestMapowanie") -> None:
 		wejscie = {
