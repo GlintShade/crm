@@ -230,11 +230,31 @@ describe('Czyste Powietrze — modelowanie prowizji (cpMarza)', () => {
     it('returns empty results for missing or empty input', () => {
       expect(przeliczPodzial(undefined, {})).toEqual({
         linie: [],
-        razem: { netto: 0, koszt: 0, pula: 0, prowizja: 0, zysk: 0, zyskProc: 0, marzaProc: 0 },
+        razem: {
+        netto: 0,
+        koszt: 0,
+        pula: 0,
+        prowizja: 0,
+        nadprowizjaManager: 0,
+        nadprowizjaPartner: 0,
+        zysk: 0,
+        zyskProc: 0,
+        marzaProc: 0,
+      },
       })
       expect(przeliczPodzial([], {})).toEqual({
         linie: [],
-        razem: { netto: 0, koszt: 0, pula: 0, prowizja: 0, zysk: 0, zyskProc: 0, marzaProc: 0 },
+        razem: {
+        netto: 0,
+        koszt: 0,
+        pula: 0,
+        prowizja: 0,
+        nadprowizjaManager: 0,
+        nadprowizjaPartner: 0,
+        zysk: 0,
+        zyskProc: 0,
+        marzaProc: 0,
+      },
       })
     })
 
@@ -248,7 +268,17 @@ describe('Czyste Powietrze — modelowanie prowizji (cpMarza)', () => {
       expect(() => przeliczPodzial(null, {})).not.toThrow()
       expect(przeliczPodzial(null, {})).toEqual({
         linie: [],
-        razem: { netto: 0, koszt: 0, pula: 0, prowizja: 0, zysk: 0, zyskProc: 0, marzaProc: 0 },
+        razem: {
+        netto: 0,
+        koszt: 0,
+        pula: 0,
+        prowizja: 0,
+        nadprowizjaManager: 0,
+        nadprowizjaPartner: 0,
+        zysk: 0,
+        zyskProc: 0,
+        marzaProc: 0,
+      },
       })
       expect(() => przeliczPodzial(null, null)).not.toThrow()
     })
@@ -672,6 +702,163 @@ describe('Czyste Powietrze — modelowanie prowizji (cpMarza)', () => {
         const surowyZysk = 1000 - 71.43 * 7 - 3.33 * 7
         expect(wynik[0].zyskProc).toBeCloseTo((surowyZysk / 1000) * 100, 10)
         expect(razem.zyskProc).toBeCloseTo((surowyZysk / 1000) * 100, 10)
+      })
+    })
+
+    describe('nadprowizje (czwarty argument, issue #49)', () => {
+      const linia = {
+        kod: 'pompa_ciepla',
+        ilosc_rozliczeniowa: '1',
+        jednostka_rozliczeniowa: 'szt',
+        netto: '35200.00',
+        koszt: '26500.00',
+        koszt_jednostkowy: '26500.00',
+        koszt_staly: '0.00',
+        stawka_prowizji: '3000.00',
+      }
+
+      it('omitting the 4th argument gives an identical result to passing explicit zeros', () => {
+        const bezArgumentu = przeliczPodzial([linia], { pompa_ciepla: 3000 })
+        const zJawnymiZerami = przeliczPodzial([linia], { pompa_ciepla: 3000 }, undefined, {
+          pompa_ciepla: { manager: 0, partner: 0 },
+        })
+        expect(bezArgumentu).toEqual(zJawnymiZerami)
+        expect(bezArgumentu.linie[0].nadprowizjaManager).toBe(0)
+        expect(bezArgumentu.linie[0].nadprowizjaPartner).toBe(0)
+        expect(bezArgumentu.razem.nadprowizjaManager).toBe(0)
+        expect(bezArgumentu.razem.nadprowizjaPartner).toBe(0)
+      })
+
+      it('an empty object for a known code behaves exactly like an omitted 4th argument', () => {
+        expect(przeliczPodzial([linia], { pompa_ciepla: 3000 }, undefined, {})).toEqual(
+          przeliczPodzial([linia], { pompa_ciepla: 3000 }),
+        )
+      })
+
+      it('folds Manager/Partner nadprowizja into the line zysk and into razem', () => {
+        const { linie: wynik, razem } = przeliczPodzial(
+          [linia],
+          { pompa_ciepla: 3000 },
+          undefined,
+          { pompa_ciepla: { manager: 800, partner: 500 } },
+        )
+        // pula = 35200 - 26500 = 8700; zysk = pula - prowizja - manager - partner
+        expect(wynik[0].nadprowizjaManager).toBe(800)
+        expect(wynik[0].nadprowizjaPartner).toBe(500)
+        expect(wynik[0].zysk).toBe(8700 - 3000 - 800 - 500)
+        expect(razem.nadprowizjaManager).toBe(800)
+        expect(razem.nadprowizjaPartner).toBe(500)
+        expect(razem.zysk).toBe(razem.pula - razem.prowizja - razem.nadprowizjaManager - razem.nadprowizjaPartner)
+      })
+
+      it('a missing entry for one line code falls back to zero nadprowizja for that line only', () => {
+        const okna = {
+          kod: 'okna',
+          ilosc_rozliczeniowa: '20',
+          jednostka_rozliczeniowa: 'm2',
+          netto: '10000.00',
+          koszt: '6000.00',
+          koszt_jednostkowy: '300.00',
+          koszt_staly: '0.00',
+          stawka_prowizji: '50.00',
+        }
+        const { linie: wynik, razem } = przeliczPodzial(
+          [linia, okna],
+          { pompa_ciepla: 3000, okna: 50 },
+          undefined,
+          { pompa_ciepla: { manager: 800, partner: 500 } }, // 'okna' deliberately absent
+        )
+        const okna_wynik = wynik.find((l) => l.kod === 'okna')
+        expect(okna_wynik.nadprowizjaManager).toBe(0)
+        expect(okna_wynik.nadprowizjaPartner).toBe(0)
+        expect(razem.nadprowizjaManager).toBe(800)
+        expect(razem.nadprowizjaPartner).toBe(500)
+      })
+
+      it('applies nadprowizja and a cost override on the same line simultaneously', () => {
+        const { linie: wynik } = przeliczPodzial(
+          [linia],
+          { pompa_ciepla: 3000 },
+          { pompa_ciepla: { jednostkowy: 30000, staly: 0 } },
+          { pompa_ciepla: { manager: 800, partner: 500 } },
+        )
+        // koszt override: 30000 * 1 + 0 = 30000; pula = 35200 - 30000 = 5200
+        expect(wynik[0].koszt).toBe(30000)
+        expect(wynik[0].pula).toBe(5200)
+        expect(wynik[0].nadprowizjaManager).toBe(800)
+        expect(wynik[0].nadprowizjaPartner).toBe(500)
+        expect(wynik[0].zysk).toBe(5200 - 3000 - 800 - 500)
+      })
+
+      it('never clamps zysk to zero when nadprowizje push it negative', () => {
+        const { linie: wynik, razem } = przeliczPodzial(
+          [linia],
+          { pompa_ciepla: 3000 },
+          undefined,
+          { pompa_ciepla: { manager: 4000, partner: 3000 } },
+        )
+        // pula 8700 - prowizja 3000 - manager 4000 - partner 3000 = -1300
+        expect(wynik[0].zysk).toBe(-1300)
+        expect(wynik[0].zysk).toBeLessThan(0)
+        expect(razem.zysk).toBeLessThan(0)
+      })
+
+      it('does not mutate the nadprowizje argument', () => {
+        const nadprowizje = deepFreeze({ pompa_ciepla: { manager: 800, partner: 500 } })
+        expect(() => przeliczPodzial([linia], { pompa_ciepla: 3000 }, undefined, nadprowizje)).not.toThrow()
+      })
+
+      describe('rounding consistency (grosze)', () => {
+        it('rounds fractional nadprowizja amounts to the grosz, and razem sums the rounded rows', () => {
+          const linie = [
+            {
+              kod: 'a',
+              ilosc_rozliczeniowa: '1',
+              jednostka_rozliczeniowa: 'szt',
+              netto: '100.00',
+              koszt: '0',
+              koszt_jednostkowy: '0',
+              koszt_staly: '0',
+              stawka_prowizji: '0',
+            },
+            {
+              kod: 'b',
+              ilosc_rozliczeniowa: '1',
+              jednostka_rozliczeniowa: 'szt',
+              netto: '100.00',
+              koszt: '0',
+              koszt_jednostkowy: '0',
+              koszt_staly: '0',
+              stawka_prowizji: '0',
+            },
+          ]
+          const { linie: wynik, razem } = przeliczPodzial(linie, { a: 0, b: 0 }, undefined, {
+            a: { manager: 10.125, partner: 5.005 },
+            b: { manager: 10.125, partner: 5.005 },
+          })
+          expect(wynik[0].nadprowizjaManager).toBe(10.13)
+          expect(wynik[0].nadprowizjaPartner).toBe(5.01)
+          expect(razem.nadprowizjaManager).toBe(20.26)
+          expect(razem.nadprowizjaPartner).toBe(10.02)
+          for (const pole of ['nadprowizjaManager', 'nadprowizjaPartner']) {
+            const sumaWyswietlanychWierszy = wynik.reduce((suma, l) => suma + l[pole], 0)
+            expect(razem[pole]).toBe(sumaWyswietlanychWierszy)
+          }
+        })
+
+        it('a garbage or negative nadprowizja value falls back to zero, never NaN', () => {
+          const { linie: wynik } = przeliczPodzial([linia], { pompa_ciepla: 3000 }, undefined, {
+            pompa_ciepla: { manager: 'zjadl', partner: -500 },
+          })
+          expect(wynik[0].nadprowizjaManager).toBe(0)
+          // Number(-500) is a valid finite number (unlike parsujStawke, this
+          // path does not clamp negatives to zero — see the header comment:
+          // these are server-computed amounts, not administrator-typed
+          // rates, so there is no negative-rate guard to apply here).
+          expect(wynik[0].nadprowizjaPartner).toBe(-500)
+          expect(Number.isNaN(wynik[0].nadprowizjaManager)).toBe(false)
+          expect(Number.isNaN(wynik[0].nadprowizjaPartner)).toBe(false)
+        })
       })
     })
   })
