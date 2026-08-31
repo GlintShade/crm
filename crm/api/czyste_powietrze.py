@@ -47,6 +47,12 @@ _POZYCJE_POLA_KALKULATORA = [
 	"limit_podwyzszony",
 	"limit_najwyzszy",
 	"prowizja",
+	# Nadprowizje Managera/Partnera (ops#46 schema, ops#47 rdzeń) -- katalog_z_wierszy
+	# / _wymagane wymagają obu pól na każdym wierszu; brak ich tutaj rzuca
+	# CPBladMapowania "Brak wymaganego pola: nadprowizja_manager" dla KAŻDEGO wywołania
+	# kalkulatora, nie tylko przy nadprowizji > 0.
+	"nadprowizja_manager",
+	"nadprowizja_partner",
 	"koszt_proenergy",
 	"koszt_staly",
 	"aktywny",
