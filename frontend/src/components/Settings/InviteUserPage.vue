@@ -110,6 +110,22 @@
             @update:modelValue="(val) => (linieLeady = Boolean(val))"
           />
         </div>
+        <FormControl
+          v-model="poziomProwizji"
+          type="select"
+          class="mt-4"
+          :label="__('Poziom prowizji')"
+          :options="poziomProwizjiOptions"
+          :disabled="inviteByEmail.loading"
+        />
+        <FormControl
+          type="checkbox"
+          class="mt-2"
+          :label="__('Widzi prowizje')"
+          :modelValue="widziProwizje"
+          :disabled="inviteByEmail.loading"
+          @update:modelValue="(val) => (widziProwizje = Boolean(val))"
+        />
       </div>
       <template v-if="pendingInvitations.data?.length">
         <div class="flex flex-col gap-4">
@@ -141,7 +157,7 @@
                   }}<template v-if="user.volteo_role">
                     · {{ volteoRoleMap[user.volteo_role] }}</template
                   >
-                  · {{ linieLabel(user) }})
+                  · {{ linieLabel(user) }} · {{ prowizjeLabel(user) }})
                 </span>
               </div>
               <div>
@@ -203,6 +219,17 @@ const linieCp = ref(true)
 // Invitation.linia_leady schema default "0"). Independent of the product
 // lines — not part of the "select at least one" requirement below.
 const linieLeady = ref(false)
+// Commission visibility/tier (issue #51, schema: #46/ops#46): mirrors
+// crm.api.VOLTEO_POZIOMY_PROWIZJI as a local literal (no shared import path
+// between frontend and backend). Defaults match the field schema defaults
+// (Check default 1 / Select default "Handlowiec") and the pre-#51
+// behaviour of unrestricted commission visibility.
+const POZIOMY_PROWIZJI = ['Handlowiec', 'Manager', 'Partner']
+const poziomProwizjiOptions = computed(() =>
+  POZIOMY_PROWIZJI.map((poziom) => ({ value: poziom, label: __(poziom) })),
+)
+const widziProwizje = ref(true)
+const poziomProwizji = ref('Handlowiec')
 const error = ref(null)
 
 const isValidEmail = computed(() => validateEmail(email.value.trim()))
@@ -317,6 +344,8 @@ const inviteByEmail = createResource({
       linia_oze: linieOze.value ? 1 : 0,
       linia_cp: linieCp.value ? 1 : 0,
       linia_leady: linieLeady.value ? 1 : 0,
+      widzi_prowizje: widziProwizje.value ? 1 : 0,
+      poziom_prowizji: poziomProwizji.value,
     }
   },
   onSuccess() {
@@ -331,6 +360,8 @@ const inviteByEmail = createResource({
     linieOze.value = true
     linieCp.value = true
     linieLeady.value = false
+    widziProwizje.value = true
+    poziomProwizji.value = 'Handlowiec'
     pendingInvitations.reload()
     toast.success(__('Invitations sent successfully'))
     updateOnboardingStep('invite_your_team')
@@ -357,6 +388,8 @@ const pendingInvitations = createListResource({
     'linia_oze',
     'linia_cp',
     'linia_leady',
+    'widzi_prowizje',
+    'poziom_prowizji',
   ],
   pageLength: 999,
   auto: true,
@@ -381,5 +414,19 @@ function linieLabel(user) {
   if (cp) parts.push(__('CP'))
   if (leady) parts.push(__('Leady'))
   return parts.length ? parts.join(' + ') : __('brak linii')
+}
+
+// Commission label for a pending-invite row (issue #51). Rows created before
+// ops/crm-prowizje-uzytkownik.py ran carry undefined for both fields — same
+// resolution rule as the backend's `_resolve_linia_flag`/`volteo_poziom_prowizji`:
+// undefined widzi_prowizje reads as visible (matches the field's own Check
+// default 1), undefined/unrecognised poziom_prowizji falls back to
+// "Handlowiec", the narrowest tier.
+function prowizjeLabel(user) {
+  const widzi = user.widzi_prowizje === 0 || user.widzi_prowizje === '0' ? false : true
+  const poziom = POZIOMY_PROWIZJI.includes(user.poziom_prowizji)
+    ? user.poziom_prowizji
+    : 'Handlowiec'
+  return widzi ? __(poziom) : __('{0} (ukryte)', [__(poziom)])
 }
 </script>

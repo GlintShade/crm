@@ -188,6 +188,8 @@ def invite_by_email(
 	linia_oze: int = 1,
 	linia_cp: int = 1,
 	linia_leady: int = 0,
+	widzi_prowizje: int = 1,
+	poziom_prowizji: str = "Handlowiec",
 ):
 	frappe.only_for(["Sales Manager", "System Manager", "Volteo Core Admin"], True)
 
@@ -254,6 +256,17 @@ def invite_by_email(
 	# on `User.custom_linia_leady`). No "at least one" requirement applies.
 	linia_leady = cint(linia_leady)
 
+	# Commission-visibility settings (issue #51, schema: #48/ops#46): the
+	# inviter sets the invitee's commission tier the same way #17 set product
+	# lines. Unlike the "at least one product line" check above, a garbage
+	# `poziom_prowizji` must NOT fail the whole invitation — the client sends
+	# a fixed set of <select> options, so a bad value here can only come from
+	# a stale/hand-crafted request, and the safest response is to fall back
+	# to the narrowest tier rather than reject the invite outright.
+	widzi_prowizje = cint(widzi_prowizje)
+	if poziom_prowizji not in VOLTEO_POZIOMY_PROWIZJI:
+		poziom_prowizji = "Handlowiec"
+
 	if not emails:
 		return
 	email_string = validate_email_address(emails, throw=False)
@@ -287,6 +300,8 @@ def invite_by_email(
 			linia_oze=1 if linia_oze else 0,
 			linia_cp=1 if linia_cp else 0,
 			linia_leady=1 if linia_leady else 0,
+			widzi_prowizje=1 if widzi_prowizje else 0,
+			poziom_prowizji=poziom_prowizji,
 		).insert(ignore_permissions=True)
 
 	return {

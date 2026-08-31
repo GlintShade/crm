@@ -99,3 +99,48 @@ class TestCRMInvitation(FrappeTestCase):
 		user = frappe.get_doc("User", invitation.email)
 		self.assertEqual(cint(user.custom_linia_oze), 1)
 		self.assertEqual(cint(user.custom_linia_cp), 1)
+
+	def test_accept_with_commission_flag_off_and_manager_tier(self):
+		"""Issue #51: an invitation with widzi_prowizje=0 and poziom_prowizji
+		"Manager" copies both onto the new User's custom_widzi_prowizje /
+		custom_poziom_prowizji."""
+		invitation = self.make_invitation(
+			email="manager-rep@example.com",
+			widzi_prowizje=0,
+			poziom_prowizji="Manager",
+		)
+
+		invitation.accept()
+
+		user = frappe.get_doc("User", invitation.email)
+		self.assertEqual(cint(user.custom_widzi_prowizje), 0)
+		self.assertEqual(user.custom_poziom_prowizji, "Manager")
+
+	def test_accept_with_commission_fields_unset_defaults_to_visible_handlowiec(self):
+		"""A Pending invitation predating ops/crm-prowizje-uzytkownik.py has
+		nothing in widzi_prowizje/poziom_prowizji — accept() must not crash and
+		must default the new user to visible commission at the base tier
+		(matching the field's own schema defaults, Check default 1 / Select
+		default "Handlowiec")."""
+		invitation = self.make_invitation(email="legacy-prowizje-invite@example.com")
+
+		invitation.accept()
+
+		user = frappe.get_doc("User", invitation.email)
+		self.assertEqual(cint(user.custom_widzi_prowizje), 1)
+		self.assertEqual(user.custom_poziom_prowizji, "Handlowiec")
+
+	def test_accept_with_garbage_poziom_prowizji_falls_back_to_handlowiec(self):
+		"""An invitation carrying a poziom_prowizji value outside the closed
+		set (e.g. a stale/hand-crafted request) must fall back to the
+		narrowest tier "Handlowiec" rather than store the garbage value or
+		crash accept()."""
+		invitation = self.make_invitation(
+			email="garbage-poziom@example.com",
+			poziom_prowizji="Wlasciciel",
+		)
+
+		invitation.accept()
+
+		user = frappe.get_doc("User", invitation.email)
+		self.assertEqual(user.custom_poziom_prowizji, "Handlowiec")
