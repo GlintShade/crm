@@ -9,6 +9,7 @@ from crm.czyste_powietrze.obliczenia import (
 	baza_pracy,
 	oblicz_oferte,
 )
+from crm.koszty.rdzen import zbuduj_snapshot_cp
 
 KATALOG = {
 	"pompa_ciepla": {
@@ -18,6 +19,8 @@ KATALOG = {
 		"dotacja": {"podstawowy": "14080", "podwyzszony": "24640", "najwyzszy": "35200"},
 		"limit_dotacji": {"podstawowy": None, "podwyzszony": None, "najwyzszy": None},
 		"prowizja": "3000",
+		"nadprowizja_manager": "0",
+		"nadprowizja_partner": "0",
 		"koszt_proenergy": "26500",
 		"koszt_staly": "0",
 		"aktywny": True,
@@ -29,6 +32,8 @@ KATALOG = {
 		"dotacja": {"podstawowy": "8200", "podwyzszony": "14350", "najwyzszy": "20500"},
 		"limit_dotacji": {"podstawowy": None, "podwyzszony": None, "najwyzszy": None},
 		"prowizja": "2000",
+		"nadprowizja_manager": "0",
+		"nadprowizja_partner": "0",
 		"koszt_proenergy": "19000",
 		"koszt_staly": "0",
 		"aktywny": True,
@@ -40,6 +45,8 @@ KATALOG = {
 		"dotacja": {"podstawowy": "8200", "podwyzszony": "14350", "najwyzszy": "20500"},
 		"limit_dotacji": {"podstawowy": None, "podwyzszony": None, "najwyzszy": None},
 		"prowizja": "2000",
+		"nadprowizja_manager": "0",
+		"nadprowizja_partner": "0",
 		"koszt_proenergy": "29000",
 		"koszt_staly": "0",
 		"aktywny": True,
@@ -51,6 +58,8 @@ KATALOG = {
 		"dotacja": {"podstawowy": "8200", "podwyzszony": "14350", "najwyzszy": "20500"},
 		"limit_dotacji": {"podstawowy": None, "podwyzszony": None, "najwyzszy": None},
 		"prowizja": "3000",
+		"nadprowizja_manager": "0",
+		"nadprowizja_partner": "0",
 		"koszt_proenergy": "8000",
 		"koszt_staly": "0",
 		"aktywny": True,
@@ -62,6 +71,8 @@ KATALOG = {
 		"dotacja": {"podstawowy": "720", "podwyzszony": "1260", "najwyzszy": "1800"},
 		"limit_dotacji": {"podstawowy": "8200", "podwyzszony": "14350", "najwyzszy": "20500"},
 		"prowizja": "100",
+		"nadprowizja_manager": "0",
+		"nadprowizja_partner": "0",
 		"koszt_proenergy": "770",
 		"koszt_staly": "0",
 		"aktywny": True,
@@ -73,6 +84,8 @@ KATALOG = {
 		"dotacja": {"podstawowy": "880", "podwyzszony": "1540", "najwyzszy": "2200"},
 		"limit_dotacji": {"podstawowy": "8200", "podwyzszony": "14350", "najwyzszy": "20500"},
 		"prowizja": "100",
+		"nadprowizja_manager": "0",
+		"nadprowizja_partner": "0",
 		"koszt_proenergy": "900",
 		"koszt_staly": "0",
 		"aktywny": True,
@@ -84,6 +97,8 @@ KATALOG = {
 		"dotacja": {"podstawowy": "110", "podwyzszony": "193", "najwyzszy": "275"},
 		"limit_dotacji": {"podstawowy": None, "podwyzszony": None, "najwyzszy": None},
 		"prowizja": "10",
+		"nadprowizja_manager": "0",
+		"nadprowizja_partner": "0",
 		"koszt_proenergy": "220",
 		"koszt_staly": "3000",
 		"aktywny": True,
@@ -100,6 +115,8 @@ KATALOG = {
 		"dotacja": {"podstawowy": "88", "podwyzszony": "154", "najwyzszy": "220"},
 		"limit_dotacji": {"podstawowy": None, "podwyzszony": None, "najwyzszy": None},
 		"prowizja": "30",
+		"nadprowizja_manager": "0",
+		"nadprowizja_partner": "0",
 		"koszt_proenergy": "95",
 		"koszt_staly": "0",
 		"aktywny": True,
@@ -111,6 +128,8 @@ KATALOG = {
 		"dotacja": {"podstawowy": "88", "podwyzszony": "154", "najwyzszy": "220"},
 		"limit_dotacji": {"podstawowy": None, "podwyzszony": None, "najwyzszy": None},
 		"prowizja": "28",
+		"nadprowizja_manager": "0",
+		"nadprowizja_partner": "0",
 		"koszt_proenergy": "105",
 		"koszt_staly": "0",
 		"aktywny": True,
@@ -122,6 +141,8 @@ KATALOG = {
 		"dotacja": {"podstawowy": "88", "podwyzszony": "154", "najwyzszy": "220"},
 		"limit_dotacji": {"podstawowy": None, "podwyzszony": None, "najwyzszy": None},
 		"prowizja": "25",
+		"nadprowizja_manager": "0",
+		"nadprowizja_partner": "0",
 		"koszt_proenergy": "120",
 		"koszt_staly": "0",
 		"aktywny": True,
@@ -133,6 +154,8 @@ KATALOG = {
 		"dotacja": {"podstawowy": "88", "podwyzszony": "154", "najwyzszy": "220"},
 		"limit_dotacji": {"podstawowy": None, "podwyzszony": None, "najwyzszy": None},
 		"prowizja": "30",
+		"nadprowizja_manager": "0",
+		"nadprowizja_partner": "0",
 		"koszt_proenergy": "95",
 		"koszt_staly": "0",
 		"aktywny": True,
@@ -144,6 +167,8 @@ KATALOG = {
 		"dotacja": {"podstawowy": "88", "podwyzszony": "154", "najwyzszy": "220"},
 		"limit_dotacji": {"podstawowy": None, "podwyzszony": None, "najwyzszy": None},
 		"prowizja": "28",
+		"nadprowizja_manager": "0",
+		"nadprowizja_partner": "0",
 		"koszt_proenergy": "105",
 		"koszt_staly": "0",
 		"aktywny": True,
@@ -155,6 +180,8 @@ KATALOG = {
 		"dotacja": {"podstawowy": "528", "podwyzszony": "924", "najwyzszy": "1320"},
 		"limit_dotacji": {"podstawowy": None, "podwyzszony": None, "najwyzszy": None},
 		"prowizja": "100",
+		"nadprowizja_manager": "0",
+		"nadprowizja_partner": "0",
 		"koszt_proenergy": "1080",
 		"koszt_staly": "0",
 		"aktywny": True,
@@ -166,6 +193,8 @@ KATALOG = {
 		"dotacja": {"podstawowy": "1100", "podwyzszony": "1925", "najwyzszy": "2750"},
 		"limit_dotacji": {"podstawowy": None, "podwyzszony": None, "najwyzszy": None},
 		"prowizja": "200",
+		"nadprowizja_manager": "0",
+		"nadprowizja_partner": "0",
 		"koszt_proenergy": "4500",
 		"koszt_staly": "0",
 		"aktywny": True,
@@ -868,6 +897,181 @@ class TestObliczenia(unittest.TestCase):
 		self.assertEqual(baza_pracy("dach_welna"), "dach")
 		for kod_bez_wariantow in ("okna", "elewacja", "drzwi"):
 			self.assertEqual(baza_pracy(kod_bez_wariantow), kod_bez_wariantow)
+
+	# --- Nadprowizje Managera/Partnera (ops#47) ---------------------------------------
+
+	def test_nadprowizja_drzwi_liczona_na_sztuki(self: "TestObliczenia") -> None:
+		"""Drzwi rozliczają nadprowizję DOKŁADNIE jak prowizję -- za SZTUKĘ, nie za m2 --
+		mimo że netto/dotacja liczą się od metrów kwadratowych (mieszana jednostka drzwi,
+		patrz volteo-cp-drzwi-mieszana-jednostka)."""
+		wejscie = _wejscie("podstawowy", "od80do140")
+		wejscie["zrodlo_ciepla"] = None
+		wejscie["prace"]["drzwi"] = {"wybrana": True, "ilosc": 2}
+		katalog = _katalog()
+		katalog["drzwi"]["nadprowizja_manager"] = "50"
+		katalog["drzwi"]["nadprowizja_partner"] = "20"
+		wynik = oblicz_oferte(wejscie, katalog, copy.deepcopy(LIMITY), copy.deepcopy(STALE))
+		linia = next(l for l in wynik["wewnetrzne"]["linie"] if l["kod"] == "drzwi")
+		# 2 szt. x 50 = 100.00 ; 2 szt. x 20 = 40.00 (NIE za m2 -- m2 drzwi to 2 x 2 = 4).
+		self.assertEqual(linia["nadprowizja_manager"], Decimal("100.00"))
+		self.assertEqual(linia["nadprowizja_partner"], Decimal("40.00"))
+		self.assertEqual(linia["stawka_nadprowizji_manager"], Decimal("50.00"))
+		self.assertEqual(linia["stawka_nadprowizji_partner"], Decimal("20.00"))
+		# prowizja (2 x 200 = 400.00) + nadprowizja_manager (100.00) + nadprowizja_partner (40.00)
+		self.assertEqual(linia["prowizja_pelna"], Decimal("540.00"))
+
+	def test_nadprowizja_elewacja_liczona_na_pelnej_powierzchni(self: "TestObliczenia") -> None:
+		"""Nadprowizja elewacji, tak jak jej prowizja, liczy się od PEŁNEJ powierzchni (100 m2)
+		-- redukcja do 90% dotyczy WYŁĄCZNIE dotacji (okna zajmują resztę fasady), nie
+		rozliczenia wewnętrznego ProEnergy."""
+		wejscie = _wejscie(standard="powyzej140")
+		wejscie["zrodlo_ciepla"] = None
+		wejscie["prace"]["elewacja"] = {"wybrana": True, "m2": "100"}
+		katalog = _katalog()
+		katalog["elewacja"]["nadprowizja_manager"] = "5"
+		katalog["elewacja"]["nadprowizja_partner"] = "2"
+		wynik = oblicz_oferte(wejscie, katalog, copy.deepcopy(LIMITY), copy.deepcopy(STALE))
+		linia = wynik["wewnetrzne"]["linie"][0]
+		self.assertEqual(linia["kod"], "elewacja")
+		# 100 m2 (PEŁNA powierzchnia, nie 90 m2 dotowane) x stawka.
+		self.assertEqual(linia["nadprowizja_manager"], Decimal("500.00"))
+		self.assertEqual(linia["nadprowizja_partner"], Decimal("200.00"))
+
+	def test_nadprowizja_wariant_stropu_bierze_stawke_z_wariantu(self: "TestObliczenia") -> None:
+		"""Nadprowizja pochodzi z pozycji katalogowej WARIANTU (strop_welna), nie z bazowego
+		kodu "strop" -- tak samo jak koszt/prowizja per wariant materiałowy."""
+		wejscie = _wejscie()
+		wejscie["powierzchnia_m2"] = "100"
+		wejscie["zrodlo_ciepla"] = None
+		wejscie["prace"]["strop"] = {"wybrana": True, "m2": None, "material": "strop_welna"}
+		katalog = _katalog()
+		katalog["strop_welna"]["nadprowizja_manager"] = "12"
+		katalog["strop_welna"]["nadprowizja_partner"] = "6"
+		wynik = oblicz_oferte(wejscie, katalog, copy.deepcopy(LIMITY), copy.deepcopy(STALE))
+		linia = wynik["wewnetrzne"]["linie"][0]
+		self.assertEqual(linia["kod"], "strop_welna")
+		# mnoznik strop = 0.9 -> 100 x 0.9 = 90 m2.
+		self.assertEqual(linia["nadprowizja_manager"], Decimal("1080.00"))
+		self.assertEqual(linia["nadprowizja_partner"], Decimal("540.00"))
+
+	def test_prowizje_ksztalt_i_suma(self: "TestObliczenia") -> None:
+		"""wynik["prowizje"] jest publicznym podsumowaniem trzech strumieni prowizji --
+		handlowiec (bez zmian, wsteczna zgodność), nadprowizja_manager, nadprowizja_partner
+		-- i ich sumy."""
+		wejscie = _wejscie()
+		wejscie["typ_grzejnikow"] = "grzejnik"
+		wejscie["ilosc_grzejnikow"] = 3
+		katalog = _katalog()
+		katalog["pompa_ciepla"]["nadprowizja_manager"] = "100"
+		katalog["pompa_ciepla"]["nadprowizja_partner"] = "40"
+		katalog["grzejnik"]["nadprowizja_manager"] = "10"
+		katalog["grzejnik"]["nadprowizja_partner"] = "4"
+		wynik = oblicz_oferte(wejscie, katalog, copy.deepcopy(LIMITY), copy.deepcopy(STALE))
+		self.assertEqual(
+			set(wynik["prowizje"]), {"handlowiec", "nadprowizja_manager", "nadprowizja_partner", "suma"}
+		)
+		self.assertEqual(wynik["prowizje"]["handlowiec"], wynik["prowizja_handlowa"])
+		# pompa: 1 x 100 = 100.00 ; grzejnik: 3 x 10 = 30.00 -> 130.00
+		self.assertEqual(wynik["prowizje"]["nadprowizja_manager"], Decimal("130.00"))
+		# pompa: 1 x 40 = 40.00 ; grzejnik: 3 x 4 = 12.00 -> 52.00
+		self.assertEqual(wynik["prowizje"]["nadprowizja_partner"], Decimal("52.00"))
+		self.assertEqual(
+			wynik["prowizje"]["suma"],
+			wynik["prowizje"]["handlowiec"]
+			+ wynik["prowizje"]["nadprowizja_manager"]
+			+ wynik["prowizje"]["nadprowizja_partner"],
+		)
+
+	def test_wewnetrzne_prowizja_pelna_i_pola_linii(self: "TestObliczenia") -> None:
+		"""wewnetrzne["prowizja_pelna"] zgadza się z sumą prowizja_pelna po liniach, a każda
+		linia niesie własne stawka_nadprowizji_*/nadprowizja_*/prowizja_pelna."""
+		wejscie = _wejscie()
+		wejscie["typ_grzejnikow"] = "grzejnik"
+		wejscie["ilosc_grzejnikow"] = 3
+		wejscie["prace"]["elewacja"] = {"wybrana": True, "m2": "50"}
+		wejscie["prace"]["drzwi"] = {"wybrana": True, "ilosc": 1}
+		katalog = _katalog()
+		katalog["pompa_ciepla"]["nadprowizja_manager"] = "100"
+		katalog["pompa_ciepla"]["nadprowizja_partner"] = "40"
+		katalog["elewacja"]["nadprowizja_manager"] = "5"
+		katalog["elewacja"]["nadprowizja_partner"] = "2"
+		wynik = oblicz_oferte(wejscie, katalog, copy.deepcopy(LIMITY), copy.deepcopy(STALE))
+		wewnetrzne = wynik["wewnetrzne"]
+		for linia in wewnetrzne["linie"]:
+			self.assertEqual(
+				linia["prowizja_pelna"],
+				linia["prowizja"] + linia["nadprowizja_manager"] + linia["nadprowizja_partner"],
+			)
+		suma_linii = sum((linia["prowizja_pelna"] for linia in wewnetrzne["linie"]), Decimal("0"))
+		self.assertEqual(suma_linii, wewnetrzne["prowizja_pelna"])
+		self.assertEqual(
+			wewnetrzne["prowizja_pelna"],
+			wewnetrzne["prowizja_handlowa"]
+			+ wewnetrzne["nadprowizja_manager"]
+			+ wewnetrzne["nadprowizja_partner"],
+		)
+
+	def test_zysk_rowny_marza_minus_prowizja_pelna(self: "TestObliczenia") -> None:
+		"""Zmiana semantyczna tej zmiany (decyzja właściciela 2026-08-31): zysk = marza -
+		prowizja_pelna (handlowiec + obie nadprowizje), nie tylko marza - prowizja_handlowa."""
+		wejscie = _wejscie()
+		wejscie["typ_grzejnikow"] = "grzejnik"
+		wejscie["ilosc_grzejnikow"] = 10
+		katalog = _katalog()
+		katalog["pompa_ciepla"]["nadprowizja_manager"] = "200"
+		katalog["pompa_ciepla"]["nadprowizja_partner"] = "80"
+		wynik = oblicz_oferte(wejscie, katalog, copy.deepcopy(LIMITY), copy.deepcopy(STALE))
+		wewnetrzne = wynik["wewnetrzne"]
+		self.assertEqual(wewnetrzne["zysk"], wewnetrzne["marza"] - wewnetrzne["prowizja_pelna"])
+		# z nadprowizjami > 0 zysk jest teraz NIŻSZY niż marza - prowizja_handlowa (stare
+		# zachowanie) -- to jest właśnie ta zmiana semantyczna.
+		self.assertNotEqual(wewnetrzne["zysk"], wewnetrzne["marza"] - wewnetrzne["prowizja_handlowa"])
+
+	def test_nadprowizje_zerowe_nie_zmieniaja_zachowania_sprzed_zmiany(self: "TestObliczenia") -> None:
+		"""Niezmiennik zgodności wstecznej: gdy obie nadprowizje są zerowe (stan seed na
+		produkcji), zysk, prowizja_handlowa i zbudowany snapshot kosztów są identyczne z
+		zachowaniem sprzed tej zmiany -- w tym golden check wklad_wlasny == 2816.00."""
+		wejscie = _wejscie("najwyzszy")
+		wejscie["typ_grzejnikow"] = None
+		wynik = self.policz(wejscie)
+		wewnetrzne = wynik["wewnetrzne"]
+		self.assertEqual(wynik["wklad_wlasny"], Decimal("2816.00"))
+		self.assertEqual(wewnetrzne["zysk"], wewnetrzne["marza"] - wewnetrzne["prowizja_handlowa"])
+		self.assertEqual(wewnetrzne["nadprowizja_manager"], Decimal("0.00"))
+		self.assertEqual(wewnetrzne["nadprowizja_partner"], Decimal("0.00"))
+		self.assertEqual(wewnetrzne["prowizja_pelna"], wewnetrzne["prowizja_handlowa"])
+		self.assertEqual(wynik["prowizje"]["suma"], wynik["prowizja_handlowa"])
+
+		snapshot = zbuduj_snapshot_cp(wewnetrzne, {}, "2026-08-31 00:00:00")
+		# Z nadprowizjami zerowymi snapshot niesie te same kwoty planu co przed tą zmianą:
+		# prowizja_plan (teraz źródłowany z prowizja_pelna) == dawna prowizja_handlowa, a
+		# zysk_plan pozostaje marza - prowizja_handlowa.
+		self.assertEqual(snapshot["podsumowanie"]["prowizja_plan"], str(wewnetrzne["prowizja_handlowa"]))
+		self.assertEqual(snapshot["podsumowanie"]["zysk_plan"], str(wewnetrzne["zysk"]))
+		suma_linii = sum((Decimal(l["prowizja_plan"]) for l in snapshot["linie"]), Decimal("0.00"))
+		self.assertEqual(suma_linii, Decimal(snapshot["podsumowanie"]["prowizja_plan"]))
+
+	def test_snapshot_suma_prowizji_linii_zgadza_sie_z_podsumowaniem_gdy_nadprowizje_dodatnie(
+		self: "TestObliczenia",
+	) -> None:
+		"""Ta sama właściwość co wyżej, ale z dodatnimi nadprowizjami na kilku liniach o
+		różnych jednostkach rozliczeniowych (sztuka i m2) -- pilnuje, żeby zaokrąglanie per
+		linia (w linie_wewnetrzne) nie rozjechało się z zaokrągleniem sumy całkowitej."""
+		wejscie = _wejscie(standard="od80do140")
+		wejscie["zrodlo_ciepla"] = None
+		wejscie["prace"]["okna"] = {"wybrana": True, "m2": "10"}
+		wejscie["prace"]["drzwi"] = {"wybrana": True, "ilosc": 2}
+		katalog = _katalog()
+		katalog["okna"]["nadprowizja_manager"] = "15"
+		katalog["okna"]["nadprowizja_partner"] = "5"
+		katalog["drzwi"]["nadprowizja_manager"] = "50"
+		katalog["drzwi"]["nadprowizja_partner"] = "20"
+		wynik = oblicz_oferte(wejscie, katalog, copy.deepcopy(LIMITY), copy.deepcopy(STALE))
+		wewnetrzne = wynik["wewnetrzne"]
+
+		snapshot = zbuduj_snapshot_cp(wewnetrzne, {}, "2026-08-31 00:00:00")
+		suma_linii = sum((Decimal(l["prowizja_plan"]) for l in snapshot["linie"]), Decimal("0.00"))
+		self.assertEqual(suma_linii, Decimal(snapshot["podsumowanie"]["prowizja_plan"]))
 
 
 if __name__ == "__main__":

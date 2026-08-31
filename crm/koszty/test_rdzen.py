@@ -8,6 +8,13 @@ WEWNETRZNE = {
 	"koszt_calkowity": Decimal("29500.00"),
 	"marza": Decimal("6700.00"),
 	"prowizja_handlowa": Decimal("3000.00"),
+	# "prowizja_pelna" = suma prowizji handlowca + obu nadprowizji (Manager/Partner) --
+	# w tej fixturze nadprowizje są zerowe (patrz linie niżej: prowizja_pelna == prowizja
+	# na każdej linii), więc prowizja_pelna == prowizja_handlowa. Test niezerowego
+	# przypadku (nadprowizje > 0) żyje w crm/czyste_powietrze/test_obliczenia.py, bo tylko
+	# tam rdzeń kalkulatora faktycznie liczy stawki -- ten moduł tylko przenosi gotowe
+	# kwoty do kształtu snapshotu.
+	"prowizja_pelna": Decimal("7200.00"),
 	"zysk": Decimal("3700.00"),
 	"linie": [
 		{
@@ -20,6 +27,7 @@ WEWNETRZNE = {
 			"koszt_staly": Decimal("0.00"),
 			"stawka_prowizji": Decimal("3000.00"),
 			"prowizja": Decimal("3000.00"),
+			"prowizja_pelna": Decimal("3000.00"),
 		},
 		{
 			"kod": "strop_piana",
@@ -31,6 +39,7 @@ WEWNETRZNE = {
 			"koszt_staly": Decimal("3000.00"),
 			"stawka_prowizji": Decimal("30.00"),
 			"prowizja": Decimal("4200.00"),
+			"prowizja_pelna": Decimal("4200.00"),
 		},
 	],
 }
@@ -93,8 +102,21 @@ class ZbudujSnapshotCpTest(unittest.TestCase):
 		snap = _snapshot()
 		self.assertEqual(snap["podsumowanie"]["koszt_plan"], "29500.00")
 		self.assertEqual(snap["podsumowanie"]["marza_plan"], "6700.00")
-		self.assertEqual(snap["podsumowanie"]["prowizja_plan"], "3000.00")
+		# prowizja_plan nosi teraz PEŁNĄ prowizję (wewnetrzne["prowizja_pelna"]), nie samą
+		# prowizję handlowca (wewnetrzne["prowizja_handlowa"] zostaje 3000.00, ale nie jest
+		# już czytane przez zbuduj_snapshot_cp) -- w tej fixturze nadprowizje są zerowe, ale
+		# suma dwóch linii (3000.00 + 4200.00) i tak różni się od pojedynczej wartości
+		# prowizja_handlowa, bo ta ostatnia w tej ręcznie zbudowanej fixturze nigdy nie była
+		# sumą linii (patrz komentarz przy WEWNETRZNE wyżej).
+		self.assertEqual(snap["podsumowanie"]["prowizja_plan"], "7200.00")
 		self.assertEqual(snap["podsumowanie"]["zysk_plan"], "3700.00")
+
+	def test_prowizja_plan_linii_sumuje_sie_do_podsumowania(self):
+		"""Właściwość, na której opiera się mapowanie prowizja_plan w tym module: suma
+		prowizja_plan wszystkich linii musi się zgadzać dokładnie z podsumowanie.prowizja_plan."""
+		snap = _snapshot()
+		suma_linii = sum((Decimal(l["prowizja_plan"]) for l in snap["linie"]), Decimal("0.00"))
+		self.assertEqual(suma_linii, Decimal(snap["podsumowanie"]["prowizja_plan"]))
 
 	def test_netto_to_suma_linii_netto(self):
 		snap = _snapshot()
@@ -136,8 +158,8 @@ class ScalSnapshotHappyPathTest(unittest.TestCase):
 		self.assertEqual(podsumowanie["pozycje_wg_planu"], 1)
 		# marza = netto(66000.00) - koszt(43300.00)
 		self.assertEqual(podsumowanie["marza_rzeczywista"], "22700.00")
-		# zysk = marza - prowizja_plan(3000.00)
-		self.assertEqual(podsumowanie["zysk_rzeczywisty"], "19700.00")
+		# zysk = marza - prowizja_plan(7200.00, teraz PEŁNA prowizja, nie tylko handlowca)
+		self.assertEqual(podsumowanie["zysk_rzeczywisty"], "15500.00")
 
 	def test_nie_mutuje_zapisanego_snapshotu(self):
 		snap = _snapshot()

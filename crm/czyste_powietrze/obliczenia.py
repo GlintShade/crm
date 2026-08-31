@@ -75,6 +75,8 @@ def _pozycja(kod: str, katalog: dict[str, Any]) -> dict[str, Any]:
 		"dotacja",
 		"limit_dotacji",
 		"prowizja",
+		"nadprowizja_manager",
+		"nadprowizja_partner",
 		"koszt_proenergy",
 		"koszt_staly",
 	):
@@ -119,6 +121,10 @@ def _linia(
 	ilosc_dotowana: Decimal | None = None,
 ) -> dict[str, Any]:
 	netto_jednostkowe, dotacja_jednostkowa, prowizja_jednostkowa, _ = _dane_stawki(pozycja, poziom, kod)
+	# Stawki nadprowizji Managera/Partnera -- nie poziomowane (w odróżnieniu od dotacji),
+	# więc czytane wprost z pozycji, nie przez _dane_stawki() (który zostaje niezmieniony).
+	stawka_nadprowizji_manager = _decimal(pozycja["nadprowizja_manager"], f"nadprowizja_manager:{kod}")
+	stawka_nadprowizji_partner = _decimal(pozycja["nadprowizja_partner"], f"nadprowizja_partner:{kod}")
 	koszt_jednostkowy = _decimal(pozycja["koszt_proenergy"], f"koszt_proenergy:{kod}")
 	koszt_staly = _decimal(pozycja["koszt_staly"], f"koszt_staly:{kod}")
 	ilosc_rozliczeniowa = ilosc if ilosc_rozliczeniowa is None else ilosc_rozliczeniowa
@@ -136,6 +142,11 @@ def _linia(
 	brutto = netto * vat
 	dotacja = ilosc_dotowana * dotacja_jednostkowa
 	prowizja = ilosc_rozliczeniowa * prowizja_jednostkowa
+	# Nadprowizje liczone DOKŁADNIE jak prowizja (ta sama ilosc_rozliczeniowa) -- dziedziczą
+	# więc jej semantykę jednostek za darmo (drzwi per SZTUKA, elewacja na PEŁNEJ
+	# powierzchni, strop/dach per wariant materiałowy).
+	nadprowizja_manager = ilosc_rozliczeniowa * stawka_nadprowizji_manager
+	nadprowizja_partner = ilosc_rozliczeniowa * stawka_nadprowizji_partner
 	koszt = ilosc_rozliczeniowa * koszt_jednostkowy + koszt_staly
 	return {
 		"kod": kod,
@@ -159,6 +170,10 @@ def _linia(
 		"_brutto": brutto,
 		"_dotacja": max(_ZERO, dotacja),
 		"_prowizja": prowizja,
+		"_nadprowizja_manager": nadprowizja_manager,
+		"_nadprowizja_partner": nadprowizja_partner,
+		"_stawka_nadprowizji_manager": stawka_nadprowizji_manager,
+		"_stawka_nadprowizji_partner": stawka_nadprowizji_partner,
 		"_koszt": koszt,
 		"_koszt_jednostkowy": koszt_jednostkowy,
 		"_koszt_staly": koszt_staly,
@@ -435,6 +450,8 @@ def oblicz_oferte(
 
 	suma_netto = sum((linia["_netto"] for linia in linie), _ZERO)
 	suma_prowizji = sum((linia["_prowizja"] for linia in linie), _ZERO)
+	suma_nadprowizji_manager = sum((linia["_nadprowizja_manager"] for linia in linie), _ZERO)
+	suma_nadprowizji_partner = sum((linia["_nadprowizja_partner"] for linia in linie), _ZERO)
 	koszt_calkowity = sum((linia["_koszt"] for linia in linie), _ZERO)
 	wklad_zrodlo = max(_ZERO, brutto_zrodlo - dotacja_zrodlo)
 	wklad_co = max(_ZERO, brutto_co - dotacja_co)
@@ -511,11 +528,17 @@ def oblicz_oferte(
 			"koszt_staly": _kwota(linia["_koszt_staly"]),
 			"stawka_prowizji": _kwota(linia["_stawka_prowizji"]),
 			"prowizja": _kwota(linia["_prowizja"]),
+			"stawka_nadprowizji_manager": _kwota(linia["_stawka_nadprowizji_manager"]),
+			"nadprowizja_manager": _kwota(linia["_nadprowizja_manager"]),
+			"stawka_nadprowizji_partner": _kwota(linia["_stawka_nadprowizji_partner"]),
+			"nadprowizja_partner": _kwota(linia["_nadprowizja_partner"]),
+			"prowizja_pelna": _kwota(linia["_prowizja"] + linia["_nadprowizja_manager"] + linia["_nadprowizja_partner"]),
 		}
 		for linia in linie
 	]
 
 	prowizja_handlowa = _kwota(suma_prowizji)
+	prowizja_pelna_calkowita = _kwota(suma_prowizji + suma_nadprowizji_manager + suma_nadprowizji_partner)
 	marza = _kwota(suma_netto - koszt_calkowity)
 	# suma_brutto liczona z JUŻ zaokrąglonych linia["brutto"] (nie z surowego brutto_zrodlo/
 	# brutto_co/brutto_termo ani z wklad_wlasny + dotacja_laczna) -- to jedyna wersja
@@ -526,7 +549,17 @@ def oblicz_oferte(
 	wynik = {
 		"suma_brutto": suma_brutto,
 		"wklad_wlasny": _kwota(wklad_zrodlo + wklad_co + wklad_termo),
+		# "prowizja_handlowa" ZOSTAJE niezmienione (kompatybilność wsteczna z bramką Vue
+		# `result.prowizja_handlowa != null` i z `custom_cp_prowizja_handlowa`) -- nowe
+		# nadprowizje Managera/Partnera żyją wyłącznie w "prowizje" (publiczne) i
+		# "wewnetrzne" (koszty), nigdy nie modyfikują to pole.
 		"prowizja_handlowa": prowizja_handlowa,
+		"prowizje": {
+			"handlowiec": prowizja_handlowa,
+			"nadprowizja_manager": _kwota(suma_nadprowizji_manager),
+			"nadprowizja_partner": _kwota(suma_nadprowizji_partner),
+			"suma": prowizja_pelna_calkowita,
+		},
 		"linie": linie,
 		"grupy": grupy,
 		"dotacja_laczna": _kwota(dotacja_zrodlo + dotacja_co + dotacja_termo),
@@ -535,7 +568,16 @@ def oblicz_oferte(
 			"koszt_calkowity": _kwota(koszt_calkowity),
 			"marza": marza,
 			"prowizja_handlowa": prowizja_handlowa,
-			"zysk": marza - prowizja_handlowa,
+			"nadprowizja_manager": _kwota(suma_nadprowizji_manager),
+			"nadprowizja_partner": _kwota(suma_nadprowizji_partner),
+			"prowizja_pelna": prowizja_pelna_calkowita,
+			# Zmiana semantyczna (decyzja właściciela 2026-08-31): "zysk" liczy się teraz jako
+			# marza - prowizja_pelna (handlowiec + obie nadprowizje), nie tylko marza -
+			# prowizja_handlowa. Gdy realne stawki nadprowizji zostaną zasiane, zysk i
+			# zysk_plan (crm/koszty/rdzen.py) SPADNĄ o te kwoty -- to zamierzone: reprezentują
+			# realny koszt struktury prowizyjnej. Przy stawkach zerowych (stan seed) liczby są
+			# identyczne z zachowaniem sprzed tej zmiany.
+			"zysk": marza - prowizja_pelna_calkowita,
 			"linie": linie_wewnetrzne,
 		},
 	}
