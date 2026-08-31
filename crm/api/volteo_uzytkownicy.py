@@ -66,6 +66,8 @@ import frappe
 from frappe import _
 from frappe.utils import cint, validate_email_address
 
+from crm.api import VOLTEO_POZIOMY_PROWIZJI
+
 # Role, które ten moduł wolno nadać. Zamknięta biała lista — cokolwiek spoza
 # niej jest odrzucane, niezależnie od tego, kto woła (patrz docstring modułu).
 # `System Manager` CELOWO nie znajduje się na tej liście.
@@ -293,4 +295,57 @@ def volteo_ustaw_linie(email: str, oze: int, cp: int, leady: int = 0) -> dict:
 		"custom_linia_oze": oze_flaga,
 		"custom_linia_cp": cp_flaga,
 		"custom_linia_leady": leady_flaga,
+	}
+
+
+@frappe.whitelist()
+def volteo_ustaw_prowizje(email: str, widzi_prowizje: int, poziom_prowizji: str) -> dict:
+	"""Ustawia widoczność prowizji (`custom_widzi_prowizje`) i poziom prowizji
+	(`custom_poziom_prowizji`) na koncie `User` (issue #51, schemat: #48/ops#46).
+
+	Dostępne wyłącznie dla `Volteo Core Admin` / `System Manager`.
+
+	Celowo ODDZIELNY endpoint od `volteo_ustaw_linie` powyżej, nie kolejne
+	parametry z wartością domyślną dołożone do tamtej funkcji. Gdyby
+	`widzi_prowizje`/`poziom_prowizji` miały wartości domyślne na
+	`volteo_ustaw_linie`, każdy zapis linii produktowych z nieodświeżonego
+	(albo równoległego) formularza — który nie wie nic o prowizjach —
+	cichcem zresetowałby ustawienia prowizji tego użytkownika do wartości
+	domyślnych. Dwa niezależne formularze w UI (sekcja "Linie produktowe" i
+	sekcja "Prowizje" w `VolteoUsers.vue`) wołają dwa niezależne, wąskie
+	endpointy, każdy odpowiedzialny tylko za swoje pola — ten sam powód, dla
+	którego `volteo_zmien_role` i `volteo_ustaw_linie` też są rozdzielone.
+	"""
+	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
+
+	email = (email or "").strip()
+	if not email:
+		frappe.throw(_("Adres e-mail jest wymagany."))
+
+	if not frappe.db.exists("User", email):
+		frappe.throw(_("Konto o adresie {0} nie istnieje.").format(email))
+
+	if poziom_prowizji not in VOLTEO_POZIOMY_PROWIZJI:
+		frappe.throw(
+			_("Nieznany poziom prowizji {0}. Dozwolone: {1}.").format(
+				poziom_prowizji, ", ".join(sorted(VOLTEO_POZIOMY_PROWIZJI))
+			)
+		)
+
+	widzi_flaga = 1 if cint(widzi_prowizje) else 0
+
+	frappe.db.set_value(
+		"User",
+		email,
+		{
+			"custom_widzi_prowizje": widzi_flaga,
+			"custom_poziom_prowizji": poziom_prowizji,
+		},
+		update_modified=False,
+	)
+
+	return {
+		"user": email,
+		"custom_widzi_prowizje": widzi_flaga,
+		"custom_poziom_prowizji": poziom_prowizji,
 	}

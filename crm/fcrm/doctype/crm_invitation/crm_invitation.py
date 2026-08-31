@@ -104,8 +104,23 @@ class CRMInvitation(Document):
 		# ops/crm-linia-leady.py docstring).
 		user.custom_linia_leady = self._resolve_linia_flag("linia_leady", default=0)
 
-		# One save covers the stock role(s) above, the Volteo role, and the
-		# product-line flags.
+		# Commission visibility/tier (issue #51, schema: #46/ops#46): same
+		# `.get()`-then-resolve shape as the linia_* flags above, so a
+		# Pending invitation created before ops/crm-prowizje-uzytkownik.py
+		# ran (fields don't exist yet) doesn't crash `accept()`.
+		user.custom_widzi_prowizje = self._resolve_linia_flag("widzi_prowizje", default=1)
+		# Not imported from `crm.api.VOLTEO_POZIOMY_PROWIZJI` here: crm.api's
+		# package __init__ imports this doctype module indirectly through
+		# other API submodules at load time, and importing it back from here
+		# would risk a circular import for no real benefit — this is a tiny,
+		# closed, effectively-frozen set. Keep it in sync with
+		# `crm.api.VOLTEO_POZIOMY_PROWIZJI` if that set ever changes.
+		_POZIOMY_PROWIZJI = {"Handlowiec", "Manager", "Partner"}
+		raw_poziom = self.get("poziom_prowizji")
+		user.custom_poziom_prowizji = raw_poziom if raw_poziom in _POZIOMY_PROWIZJI else "Handlowiec"
+
+		# One save covers the stock role(s) above, the Volteo role, the
+		# product-line flags, and the commission visibility/tier.
 		user.save(ignore_permissions=True)
 
 		# Place the new user in the Sales Hierarchy tree whenever the

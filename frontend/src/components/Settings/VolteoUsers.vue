@@ -156,6 +156,54 @@
       </div>
     </div>
 
+    <div class="border-t mx-2" />
+
+    <!-- Commission visibility + tier (issue #51) -->
+    <div class="flex flex-col gap-4 px-2">
+      <div class="text-base-semibold">{{ __('Prowizje') }}</div>
+      <p class="text-p-sm text-ink-gray-5 max-w-2xl">
+        {{
+          __(
+            'Wyłączenie widoczności ukrywa dane o prowizji w kalkulatorze Czyste Powietrze dla wskazanego użytkownika. Poziom decyduje o tym, która stawka nadprowizji się do niego stosuje. Nie dotyczy kont System Manager / Volteo Core Admin / Volteo Backend — te zawsze widzą prowizje.',
+          )
+        }}
+      </p>
+      <div class="grid grid-cols-2 gap-4 max-w-2xl items-end">
+        <FormControl
+          v-model="prowizjeForm.email"
+          type="email"
+          :label="__('E-mail')"
+          placeholder="jan.kowalski@proenergy.pro"
+          :disabled="setProwizje.loading"
+        />
+        <FormControl
+          v-model="prowizjeForm.poziom"
+          type="select"
+          :label="__('Poziom prowizji')"
+          :options="poziomProwizjiOptions"
+          :disabled="setProwizje.loading"
+        />
+        <FormControl
+          type="checkbox"
+          :label="__('Widzi prowizje')"
+          :modelValue="Boolean(prowizjeForm.widzi)"
+          :disabled="setProwizje.loading"
+          @update:modelValue="(val) => (prowizjeForm.widzi = val ? 1 : 0)"
+        />
+      </div>
+      <p v-if="prowizjeHint" class="text-p-sm text-ink-gray-5 max-w-2xl">{{ prowizjeHint }}</p>
+      <ErrorMessage class="max-w-2xl" :message="prowizjeError" />
+      <div>
+        <Button
+          :label="__('Zapisz prowizje')"
+          variant="solid"
+          icon-left="check"
+          :loading="setProwizje.loading"
+          @click="submitProwizje"
+        />
+      </div>
+    </div>
+
     <!-- Password reveal dialog: shown exactly once, right after account creation -->
     <Dialog
       v-model:open="showPasswordDialog"
@@ -449,5 +497,106 @@ function submitLinie() {
   }
 
   setLinie.submit()
+}
+
+// --- Commission visibility + tier (issue #51) --------------------------
+
+// Mirrors crm.api.VOLTEO_POZIOMY_PROWIZJI — kept as a local literal here
+// the same way the backend keeps its own copy in crm_invitation.py, since
+// the frontend has no shared import path into that backend module.
+const POZIOMY_PROWIZJI = ['Handlowiec', 'Manager', 'Partner']
+
+const poziomProwizjiOptions = computed(() =>
+  POZIOMY_PROWIZJI.map((poziom) => ({ value: poziom, label: __(poziom) })),
+)
+
+function emptyProwizjeForm() {
+  return {
+    email: '',
+    widzi: 1,
+    poziom: 'Handlowiec',
+  }
+}
+
+const prowizjeForm = reactive(emptyProwizjeForm())
+const prowizjeError = ref('')
+
+// Same lookup discipline as linieMatchedUser above: never call getUser() on
+// arbitrary typed text (stub-cache trap), only on an email already
+// confirmed present in allUsers.
+const prowizjeMatchedUser = computed(() => {
+  const email = prowizjeForm.email.trim()
+  if (!email) return null
+  return (allUsers.value || []).find((u) => u.name === email) || null
+})
+
+const prowizjeHint = computed(() => {
+  const email = prowizjeForm.email.trim()
+  if (!email || !validateEmail(email)) return ''
+  return prowizjeMatchedUser.value
+    ? __('Aktualne ustawienia wczytane dla {0}', [email])
+    : __(
+        'Nie znaleziono użytkownika o takim adresie — przy zapisie zostaną użyte wartości z formularza.',
+      )
+})
+
+// Prefill from the matched user's CURRENT settings, same fail-open display
+// as the linie section: undefined custom_widzi_prowizje is treated as
+// visible (1) rather than hidden (0), since a `User` row predating
+// ops/crm-prowizje-uzytkownik.py should read the same as an explicit
+// default-on value, matching the schema's own Check default 1. An
+// unrecognised/missing poziom falls back to "Handlowiec", the narrowest
+// tier — same rule as the backend's volteo_poziom_prowizji().
+watch(
+  () => prowizjeForm.email,
+  () => {
+    const user = prowizjeMatchedUser.value
+    if (!user) return
+    const cached = getUser(user.name) // safe: match already confirmed above
+    prowizjeForm.widzi = cached.custom_widzi_prowizje === 0 ? 0 : 1
+    prowizjeForm.poziom = POZIOMY_PROWIZJI.includes(cached.custom_poziom_prowizji)
+      ? cached.custom_poziom_prowizji
+      : 'Handlowiec'
+  },
+)
+
+const setProwizje = createResource({
+  url: 'crm.api.volteo_uzytkownicy.volteo_ustaw_prowizje',
+  makeParams: () => ({
+    email: prowizjeForm.email.trim(),
+    widzi_prowizje: prowizjeForm.widzi ? 1 : 0,
+    poziom_prowizji: prowizjeForm.poziom,
+  }),
+  onSuccess: (data) => {
+    prowizjeError.value = ''
+    toast.success(__('Ustawienia prowizji zapisane dla {0}', [data.user]))
+    // Mutate the store's cached record in place — same pattern as setLinie
+    // above — so a second edit of the same user prefills the just-saved
+    // values, not the stale ones from before this save.
+    const target = (allUsers.value || []).find((u) => u.name === data.user)
+    if (target) {
+      target.custom_widzi_prowizje = data.custom_widzi_prowizje
+      target.custom_poziom_prowizji = data.custom_poziom_prowizji
+    }
+    Object.assign(prowizjeForm, emptyProwizjeForm())
+  },
+  onError: (err) => {
+    prowizjeError.value = err?.messages?.[0] || __('Nie udało się zapisać ustawień prowizji')
+  },
+})
+
+function submitProwizje() {
+  prowizjeError.value = ''
+
+  if (!prowizjeForm.email.trim()) {
+    prowizjeError.value = __('Podaj e-mail użytkownika')
+    return
+  }
+  if (!validateEmail(prowizjeForm.email.trim())) {
+    prowizjeError.value = __('Podaj poprawny adres e-mail')
+    return
+  }
+
+  setProwizje.submit()
 }
 </script>
