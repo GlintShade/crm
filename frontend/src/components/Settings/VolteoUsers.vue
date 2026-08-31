@@ -164,7 +164,7 @@
       <p class="text-p-sm text-ink-gray-5 max-w-2xl">
         {{
           __(
-            'Wyłączenie widoczności ukrywa dane o prowizji w kalkulatorze Czyste Powietrze dla wskazanego użytkownika. Poziom decyduje o tym, która stawka nadprowizji się do niego stosuje. Nie dotyczy kont System Manager / Volteo Core Admin / Volteo Backend — te zawsze widzą prowizje.',
+            'Wyłączenie widoczności ukrywa dane o prowizji w kalkulatorze Czyste Powietrze oraz w okienku prowizji na szansie dla wskazanego użytkownika. Poziom decyduje o tym, która stawka nadprowizji się do niego stosuje. Nie dotyczy kont System Manager / Volteo Core Admin / Volteo Backend — te zawsze widzą prowizje.',
           )
         }}
       </p>
