@@ -90,6 +90,50 @@ def volteo_ma_linie(linia: str) -> bool:
 	return bool(frappe.db.get_value("User", frappe.session.user, fieldname))
 
 
+VOLTEO_POZIOMY_PROWIZJI = {"Handlowiec", "Manager", "Partner"}
+
+
+def volteo_widzi_prowizje(user: str | None = None) -> bool:
+	"""True if `user` (default: `frappe.session.user`) may see any commission
+	data returned by the CP calculator (the public ``prowizje`` block /
+	``custom_cp_prowizja_handlowa`` family) -- issue #48 (schema: ops#46).
+
+	Same bypass-or-flag shape as `volteo_ma_linie`: `Administrator` and roles
+	holding System Manager / Volteo Core Admin / Volteo Backend always see it;
+	everyone else (D2D reps) is gated by the per-user `custom_widzi_prowizje`
+	Check field. Plain helper, not whitelisted -- callers are whitelisted
+	endpoints that already gate on KALKULATOR_ROLE/ADMIN_ROLE, this only
+	narrows further, and it wins at every tier (checked before
+	`volteo_poziom_prowizji` is even consulted).
+	"""
+	user = user or frappe.session.user
+	if user == "Administrator":
+		return True
+	role_uzytkownika = set(frappe.get_roles(user))
+	if role_uzytkownika & {"System Manager", "Volteo Core Admin", "Volteo Backend"}:
+		return True
+	return bool(cint(frappe.db.get_value("User", user, "custom_widzi_prowizje")))
+
+
+def volteo_poziom_prowizji(user: str | None = None) -> str:
+	"""Returns `user`'s (default: `frappe.session.user`) commission tier --
+	one of "Handlowiec" / "Manager" / "Partner" (`User.custom_poziom_prowizji`,
+	issue #48 / ops#46) -- used to trim how much of the CP commission
+	breakdown `crm.api.czyste_powietrze.volteo_cp_calc` and
+	`crm.api.koszty.volteo_prowizja_szansy` return to a given caller.
+
+	Anything outside the closed set -- including `None`/empty, e.g. a `User`
+	row predating the `custom_poziom_prowizji` backfill -- fails safe to
+	"Handlowiec", the narrowest tier. Never widens silently on unexpected or
+	missing data.
+	"""
+	user = user or frappe.session.user
+	poziom = frappe.db.get_value("User", user, "custom_poziom_prowizji")
+	if poziom not in VOLTEO_POZIOMY_PROWIZJI:
+		return "Handlowiec"
+	return poziom
+
+
 def check_app_permission():
 	if frappe.session.user == "Administrator":
 		return True

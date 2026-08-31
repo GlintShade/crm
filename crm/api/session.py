@@ -32,6 +32,8 @@ USER_FIELDS = [
 	"custom_linia_oze",
 	"custom_linia_cp",
 	"custom_linia_leady",
+	"custom_widzi_prowizje",
+	"custom_poziom_prowizji",
 ]
 
 
