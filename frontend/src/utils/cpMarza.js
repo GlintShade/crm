@@ -21,6 +21,19 @@
 // zwrócone w `wewnetrzne.linie` są wartością wyjściową (punktem startowym
 // modelowania), a nie wiążącą.
 //
+// Od issue #49 piaskownica zna też nadprowizje Managera i Partnera. W
+// odróżnieniu od stawki handlowca i kosztów, TE kwoty NIE są tu edytowalne
+// — administrator modeluje wyłącznie bazową prowizję handlowca (i koszty),
+// a nadprowizje wyższych poziomów przychodzą gotowe z `wewnetrzne.linie`
+// (serwer je liczy z katalogowych pól `nadprowizja_manager`/
+// `nadprowizja_partner` na `Volteo CP Pozycja`, patrz `mapowanie.py` i
+// `obliczenia.py`). Rola tego pliku wobec nich jest więc węższa niż wobec
+// stawki handlowca: nie parsuje wpisanego tekstu, tylko odejmuje gotowe
+// kwoty od puli przy liczeniu zysku, żeby panel pokazywał realny zysk
+// ProEnergy PO wszystkich trzech poziomach prowizji, nie tylko po bazowej.
+// Nadal nic z tego nie jest zapisywane ani nie zasila żadnego dokumentu —
+// to ten sam podgląd, tylko z pełniejszym rachunkiem.
+//
 // `KalkulatorTab.vue` (kalkulator PV/magazynów) ma w nagłówku regułę
 // „ZERO pricing math in this file" — odstępujemy od niej tutaj ŚWIADOMIE
 // i w WĄSKIM zakresie ograniczonym do tej piaskownicy. To nie jest
@@ -208,12 +221,25 @@ export function scalKoszty(poprzednieKoszty, linieWewnetrzne) {
  * callers never have to re-derive the same ratio from `razem.pula` /
  * `razem.netto` themselves.
  *
+ * `nadprowizje` (issue #49) carries the Manager/Partner over-commission
+ * AMOUNTS per line code — `{ [kod]: { manager, partner } }` — read straight
+ * off the server's `wewnetrzne.linie` (`nadprowizja_manager`/
+ * `nadprowizja_partner`), never parsed from a rate the administrator typed:
+ * unlike `stawki`/`koszty`, these are not editable in this sandbox. Missing
+ * or omitted (default `{}`) means every line's nadprowizja is treated as 0,
+ * which reproduces today's `zysk`/`razem` exactly — this is what keeps
+ * every pre-existing call site (2 or 3 args) and every pre-existing test
+ * behaving exactly as before. `zysk` is reduced by both amounts, on top of
+ * the base commission, so the panel always shows what ProEnergy keeps
+ * AFTER all three commission tiers, not just after the handlowiec's cut.
+ *
  * @param {Array<object>} linieWewnetrzne - `wewnetrzne.linie` from the server
  * @param {Object<string, number>} stawki - current per-code commission rates
  * @param {Object<string, {jednostkowy: number, staly: number}>} [koszty] - current per-code cost overrides
+ * @param {Object<string, {manager: number, partner: number}>} [nadprowizje] - per-code Manager/Partner over-commission amounts (not editable; from the server)
  * @returns {{linie: Array<object>, razem: object}} per-line split and totals
  */
-export function przeliczPodzial(linieWewnetrzne, stawki, koszty) {
+export function przeliczPodzial(linieWewnetrzne, stawki, koszty, nadprowizje = {}) {
   // Dwie „widoki" na każdy wiersz: `publiczna` to kształt zwracany do
   // komponentu (kwoty zaokrąglone do groszy), `surowa` niesie te same kwoty
   // przed zaokrągleniem — potrzebne wyłącznie do policzenia procentów
@@ -234,11 +260,21 @@ export function przeliczPodzial(linieWewnetrzne, stawki, koszty) {
       ? parsujKwote(nadpisanieKosztu.staly)
       : kosztStalyKatalogowy
 
+    // Nadprowizje Managera/Partnera: kwoty gotowe z serwera, NIE stawki do
+    // pomnożenia przez ilość — stąd zwykłe `Number(...) || 0`, nie
+    // `parsujStawke`/`parsujKwote` (te są dla tekstu wpisanego ręcznie przez
+    // administratora; tu nic się nie wpisuje). Brak wpisu dla danego kodu
+    // (w tym gdy `nadprowizje` to `{}`) daje 0 — patrz komentarz przy
+    // funkcji wyżej o zgodności wstecznej.
+    const nadpisanieNadprowizji = nadprowizje?.[linia.kod]
+    const nadprowizjaManagerSurowa = Number(nadpisanieNadprowizji?.manager) || 0
+    const nadprowizjaPartnerSurowa = Number(nadpisanieNadprowizji?.partner) || 0
+
     // Surowe (niezaokrąglone) wartości — patrz komentarz wyżej.
     const kosztSurowy = kosztJednostkowy * iloscRozliczeniowa + kosztStaly
     const pulaSurowa = netto - kosztSurowy
     const prowizjaSurowa = stawka * iloscRozliczeniowa
-    const zyskSurowy = pulaSurowa - prowizjaSurowa
+    const zyskSurowy = pulaSurowa - prowizjaSurowa - nadprowizjaManagerSurowa - nadprowizjaPartnerSurowa
 
     // Kwoty pieniężne zaokrąglamy do groszy DOPIERO na wyjściu, po
     // wyliczeniu z pełnej precyzji — to jedyny sposób, żeby wiersz
@@ -253,6 +289,8 @@ export function przeliczPodzial(linieWewnetrzne, stawki, koszty) {
     const koszt = roundPln(kosztSurowy)
     const pula = roundPln(pulaSurowa)
     const prowizja = roundPln(prowizjaSurowa)
+    const nadprowizjaManager = roundPln(nadprowizjaManagerSurowa)
+    const nadprowizjaPartner = roundPln(nadprowizjaPartnerSurowa)
     const zysk = roundPln(zyskSurowy)
     // Procenty NIE są kwotami — liczymy je z surowych (niezaokrąglonych)
     // wartości i nie zaokrąglamy tutaj w ogóle; komponent renderuje je z
@@ -273,6 +311,8 @@ export function przeliczPodzial(linieWewnetrzne, stawki, koszty) {
         stawka,
         stawkaKatalogowa,
         prowizja,
+        nadprowizjaManager,
+        nadprowizjaPartner,
         pula,
         zysk,
         zyskProc,
@@ -301,9 +341,11 @@ export function przeliczPodzial(linieWewnetrzne, stawki, koszty) {
       koszt: roundPln(acc.koszt + linia.koszt),
       pula: roundPln(acc.pula + linia.pula),
       prowizja: roundPln(acc.prowizja + linia.prowizja),
+      nadprowizjaManager: roundPln(acc.nadprowizjaManager + linia.nadprowizjaManager),
+      nadprowizjaPartner: roundPln(acc.nadprowizjaPartner + linia.nadprowizjaPartner),
       zysk: roundPln(acc.zysk + linia.zysk),
     }),
-    { netto: 0, koszt: 0, pula: 0, prowizja: 0, zysk: 0 },
+    { netto: 0, koszt: 0, pula: 0, prowizja: 0, nadprowizjaManager: 0, nadprowizjaPartner: 0, zysk: 0 },
   )
 
   // Podobnie jak zyskProc na poziomie wiersza: procenty sumaryczne liczymy

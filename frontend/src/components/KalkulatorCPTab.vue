@@ -335,7 +335,7 @@
                 {{ __('To oferta wstępna o charakterze szacunkowym. Wiążące kwoty i zakres prac określi oferta właściwa, przygotowana po energetycznym audycie na miejscu.') }}
               </div>
 
-              <div v-if="result.prowizja_handlowa != null" class="mb-2">
+              <div v-if="result.prowizje != null || result.prowizja_handlowa != null" class="mb-2">
                 <button
                   type="button"
                   class="flex w-full items-center justify-between rounded-md border border-outline-gray-1 bg-surface-gray-1 px-2.5 py-1.5 text-sm font-medium text-ink-gray-7 transition-colors hover:bg-surface-gray-2"
@@ -344,9 +344,40 @@
                   <span>{{ __('Informacje dodatkowe') }}</span>
                   <FeatherIcon :name="showInfoDodatkowe ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 text-ink-gray-5" />
                 </button>
+                <!-- Tytuł sekcji zostaje neutralny (nigdy nie wspomina "prowizji") nawet
+                     zwinięty — patrz komentarz przy `showInfoDodatkowe` niżej: klient
+                     patrzący na ekran nie może się domyślić, że coś się pod nim kryje.
+                     Wiersze poniżej zależą wyłącznie od `result.prowizje` (przycięte przez
+                     serwer do poziomu prowizyjnego wywołującego — issue #48/#49); gałąź
+                     `result.prowizja_handlowa` to wyłącznie zgodność wsteczna ze starszym
+                     obrazem, który jeszcze nie zwracał `prowizje`. -->
                 <div v-if="showInfoDodatkowe" class="mt-1.5 rounded-lg border border-outline-gray-1 p-2.5">
                   <div class="flex justify-between text-sm tabular-nums text-ink-gray-7">
-                    <span>{{ __('Prowizja handlowa') }}</span><span>{{ formatPln(result.prowizja_handlowa) }}</span>
+                    <span>{{ __('Prowizja handlowiec') }}</span>
+                    <span>{{ formatPln(result.prowizje?.handlowiec ?? result.prowizja_handlowa) }}</span>
+                  </div>
+                  <div
+                    v-if="result.prowizje?.nadprowizja_manager != null"
+                    class="flex justify-between text-sm tabular-nums text-ink-gray-7"
+                  >
+                    <span>{{ __('Nadprowizja manager') }}</span>
+                    <span>{{ formatPln(result.prowizje.nadprowizja_manager) }}</span>
+                  </div>
+                  <div
+                    v-if="result.prowizje?.nadprowizja_partner != null"
+                    class="flex justify-between text-sm tabular-nums text-ink-gray-7"
+                  >
+                    <span>{{ __('Nadprowizja partner') }}</span>
+                    <span>{{ formatPln(result.prowizje.nadprowizja_partner) }}</span>
+                  </div>
+                  <!-- Serwer pomija "suma" dla Handlowca (jeden wiersz jak dotąd) --
+                       ten wiersz renderuje się więc tylko dla Managera/Partnera. -->
+                  <div
+                    v-if="result.prowizje?.suma != null"
+                    class="flex justify-between border-t border-outline-gray-1 pt-1 text-sm font-semibold tabular-nums text-ink-gray-8"
+                  >
+                    <span>{{ __('SUMA') }}</span>
+                    <span>{{ formatPln(result.prowizje.suma) }}</span>
                   </div>
                 </div>
               </div>
@@ -530,6 +561,18 @@
             <div class="flex justify-between py-0.5 text-ink-gray-7">
               <span>{{ __('− Prowizja struktury') }}</span><span>{{ formatPln(podzial.razem.prowizja) }}</span>
             </div>
+            <!-- Nadprowizje Managera/Partnera (issue #49): kwoty STAŁE, nie
+                 edytowalne w piaskownicy — przychodzą gotowe z serwera
+                 (`wewnetrzne.linie`) przez `podzial.razem`, ten sam wzorzec co
+                 `prowizja` wyżej. Renderują się tylko, gdy > 0, żeby oferta
+                 bez żadnej ze struktur wyższego poziomu nie zapełniała
+                 podsumowania dwoma zerowymi wierszami. -->
+            <div v-if="podzial.razem.nadprowizjaManager > 0" class="flex justify-between py-0.5 text-ink-gray-7">
+              <span>{{ __('− Nadprowizja manager') }}</span><span>{{ formatPln(podzial.razem.nadprowizjaManager) }}</span>
+            </div>
+            <div v-if="podzial.razem.nadprowizjaPartner > 0" class="flex justify-between py-0.5 text-ink-gray-7">
+              <span>{{ __('− Nadprowizja partner') }}</span><span>{{ formatPln(podzial.razem.nadprowizjaPartner) }}</span>
+            </div>
             <div
               class="flex justify-between border-t border-outline-gray-2 py-0.5 pt-1 font-semibold"
               :class="podzial.razem.zysk < 0 ? 'text-ink-red-6' : 'text-ink-gray-9'"
@@ -611,6 +654,14 @@ const result = reactive({
   // komentarz przy `hasInternal` niżej: usuwanie i doczytywanie klucza przez
   // `hasOwnProperty` na obiekcie `reactive` po cichu psuje reaktywność.
   wewnetrzne: null,
+  // Tak samo jak `wewnetrzne` — jawny `null` od startu, NIGDY `delete`, i
+  // czytany w szablonie zawsze jako właściwość (`result.prowizje?.x`), nigdy
+  // przez `hasOwnProperty` (issue #49, ta sama pułapka Proxy co przy
+  // `hasInternal` niżej). Serwer usuwa ten klucz całkowicie, gdy
+  // `custom_widzi_prowizje` wywołującego jest wyłączone — stąd bramka w
+  // szablonie sprawdza też `prowizja_handlowa` dla kompatybilności ze
+  // starszym obrazem, który tego klucza jeszcze nie zwracał.
+  prowizje: null,
 })
 
 const standardLabels = {
@@ -750,11 +801,26 @@ const showAdminModeling = ref(false)
 // mentions prowizja) — a customer looking at the screen while it's collapsed
 // must not be able to tell a commission figure is behind it.
 const showInfoDodatkowe = ref(false)
+// Nadprowizje Managera/Partnera per pozycja (issue #49) — kwoty GOTOWE z
+// serwera (`wewnetrzne.linie`), NIE edytowalne w tej piaskownicy (w
+// odróżnieniu od `stawki`/`koszty` powyżej). Budowane osobno od `stawki`/
+// `koszty`, bo nic tutaj nie przeżywa kolejnych przeliczeń ani nie ma
+// przycisku resetu — po prostu odzwierciedla to, co serwer właśnie zwrócił.
+const nadprowizjeZLinii = computed(() => {
+  const mapa = {}
+  for (const linia of result.wewnetrzne?.linie ?? []) {
+    mapa[linia.kod] = {
+      manager: linia.nadprowizja_manager,
+      partner: linia.nadprowizja_partner,
+    }
+  }
+  return mapa
+})
 // `razem.marzaProc` and `razem.zyskProc` are computed inside przeliczPodzial
 // itself (both as % of netto) so the component never re-derives the same
 // ratio by hand — see cpMarza.js.
 const podzial = computed(() =>
-  przeliczPodzial(result.wewnetrzne?.linie ?? [], stawki.value, koszty.value),
+  przeliczPodzial(result.wewnetrzne?.linie ?? [], stawki.value, koszty.value, nadprowizjeZLinii.value),
 )
 
 function resetWartosci() {
@@ -831,6 +897,8 @@ function clearResult() {
   result.suma_brutto = ''
   result.wklad_wlasny = ''
   result.prowizja_handlowa = ''
+  // `= null`, never `delete` — same reasoning as `result.wewnetrzne` below.
+  result.prowizje = null
   result.dotacja_laczna = ''
   result.dotacja_ograniczona_o = ''
   result.linie = []
@@ -901,6 +969,11 @@ async function runCalc() {
     result.suma_brutto = data.suma_brutto
     result.wklad_wlasny = data.wklad_wlasny
     result.prowizja_handlowa = data.prowizja_handlowa
+    // `?? null`, never left `undefined` — patrz komentarz przy deklaracji
+    // `prowizje` wyżej: jawny `null` jest wymagany, żeby bramka w szablonie
+    // i `hasInternal`-owy wzorzec czytania właściwości (nigdy
+    // `hasOwnProperty`) działały spójnie także tutaj.
+    result.prowizje = data.prowizje ?? null
     result.dotacja_laczna = data.dotacja_laczna
     result.dotacja_ograniczona_o = data.dotacja_ograniczona_o
     result.linie = data.linie || []
