@@ -98,7 +98,8 @@ export default defineConfig(async ({ mode }) => {
       buildConfig: {
         indexHtmlPath: '../crm/www/crm.html',
         emptyOutDir: true,
-        sourcemap: true,
+        // Disabled: source maps were served publicly from production (2026-09-02).
+        sourcemap: false,
       },
     }),
   )
