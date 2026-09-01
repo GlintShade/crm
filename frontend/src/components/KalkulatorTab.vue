@@ -209,11 +209,11 @@
                 <div v-if="showNarzut" class="mt-1.5">
                   <div class="mb-0.5 text-sm text-ink-gray-5">Wysokość narzutu</div>
                   <input
-                    v-model.number="sel.narzut" type="number" min="0" max="7000" step="0.01"
+                    v-model.number="sel.narzut" type="number" min="0" :max="narzutMax > 0 ? narzutMax : undefined" step="0.01"
                     class="kalk-input"
-                    @blur="sel.narzut = Math.min(7000, Math.max(0, Number(sel.narzut) || 0))"
+                    @blur="sel.narzut = narzutMax > 0 ? Math.min(narzutMax, Math.max(0, Number(sel.narzut) || 0)) : Math.max(0, Number(sel.narzut) || 0)"
                   />
-                  <div v-if="!narzutValid" class="mt-0.5 text-xs text-ink-red-6">Narzut musi być w zakresie 0–7000 zł.</div>
+                  <div v-if="!narzutValid" class="mt-0.5 text-xs text-ink-red-6">{{ narzutErrorMsg }}</div>
                 </div>
               </div>
 
@@ -432,6 +432,10 @@ async function loadComponents() {
       ;(m[x.kategoria] = m[x.kategoria] || []).push(x)
     }
     for (const k in m) catMap[k] = m[k]
+    // narzut_max: 0 or a missing field means no upper limit in this UI. The
+    // server remains authoritative and rejects an out-of-range narzut with a
+    // readable error regardless of what the client enforces here.
+    narzutMax.value = Number(data && data.narzut_max) || 0
   } catch (err) {
     errorMsg.value = extractErrorMessage(err)
   }
@@ -600,10 +604,20 @@ const isComplete = computed(() => {
   return true
 })
 
+// narzut_max comes from volteo_quote_components (loadComponents above);
+// 0 means the server reported no upper limit.
+const narzutMax = ref(0)
+
 const narzutValid = computed(() => {
   const n = Number(sel.narzut)
-  return !isNaN(n) && n >= 0 && n <= 7000
+  return !isNaN(n) && n >= 0 && (narzutMax.value <= 0 || n <= narzutMax.value)
 })
+
+const narzutErrorMsg = computed(() =>
+  narzutMax.value > 0
+    ? `Narzut musi być w zakresie 0–${narzutMax.value} zł.`
+    : 'Narzut nie może być ujemny.',
+)
 
 const canGenerate = computed(() => isComplete.value && !!c.value.name && narzutValid.value)
 
