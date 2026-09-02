@@ -150,6 +150,9 @@
           <div class="flex justify-between py-0.5 text-ink-gray-7">
             <span>{{ __('Dotacja') }}</span><span>{{ formatPln(wycenaFields.custom_dotacja) }}</span>
           </div>
+          <div v-if="wycenaFields.custom_zasady_dotacji" class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Zasady dotacji') }}</span><span>{{ wycenaFields.custom_zasady_dotacji }}</span>
+          </div>
           <div class="flex justify-between py-0.5 text-ink-gray-7">
             <span>{{ __('Cena po dotacji') }}</span><span>{{ formatPln(wycenaFields.custom_cena_po_dotacji) }}</span>
           </div>
@@ -397,6 +400,7 @@ const dealWycena = createResource({
       'custom_vat_pct',
       'deal_value',
       'custom_dotacja',
+      'custom_zasady_dotacji',
       'custom_cena_po_dotacji',
       'custom_ulga_pct',
       'custom_ulga_kwota',
@@ -578,6 +582,7 @@ const wycenaFields = computed(() => ({
   custom_vat_pct: 0,
   deal_value: 0,
   custom_dotacja: 0,
+  custom_zasady_dotacji: '',
   custom_cena_po_dotacji: 0,
   custom_ulga_pct: '0',
   custom_ulga_kwota: 0,
