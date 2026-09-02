@@ -6,6 +6,8 @@ import {
   GOSPODARSTWA,
   PROGI_DOCHODU,
   PROGI_KWOTY,
+  OKRESY_LAT,
+  OKRES_LAT_DOMYSLNY,
   pustyFormularz,
   wyliczPoziom,
   dozwoloneDodatki,
@@ -41,6 +43,11 @@ describe('Czyste Powietrze form logic', () => {
         jednoosobowe: { niski: 1800, sredni: 3150 },
         wieloosobowe: { niski: 1300, sredni: 2250 },
       })
+    })
+
+    it('exports the credit period options and their default', () => {
+      expect(OKRESY_LAT).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+      expect(OKRES_LAT_DOMYSLNY).toBe(5)
     })
   })
 
@@ -233,6 +240,7 @@ describe('Czyste Powietrze form logic', () => {
           okna: { wybrana: false, reczne: false, m2: '' },
           drzwi: { wybrana: false, ilosc: '' },
         },
+        finansowanie: { wlaczone: false, okresLat: 5, wplataGotowka: '' },
       })
     })
 
@@ -248,6 +256,17 @@ describe('Czyste Powietrze form logic', () => {
       expect(second.prace.drzwi.ilosc).toBe('')
       expect(first).not.toBe(second)
       expect(first.prace).not.toBe(second.prace)
+    })
+
+    it('returns a fresh finansowanie object per call', () => {
+      const first = pustyFormularz()
+      const second = pustyFormularz()
+      first.finansowanie.wlaczone = true
+      first.finansowanie.okresLat = 9
+      first.finansowanie.wplataGotowka = '5000'
+
+      expect(second.finansowanie).toEqual({ wlaczone: false, okresLat: 5, wplataGotowka: '' })
+      expect(first.finansowanie).not.toBe(second.finansowanie)
     })
   })
 
@@ -416,6 +435,7 @@ describe('Czyste Powietrze form logic', () => {
           okna: { wybrana: false, m2: null },
           drzwi: { wybrana: true, ilosc: 2 },
         },
+        finansowanie: null,
       })
       expect(form).toEqual(before)
     })
@@ -587,6 +607,85 @@ describe('Czyste Powietrze form logic', () => {
 
           expect(form).toEqual(before)
         }
+      })
+    })
+
+    describe('finansowanie', () => {
+      it('sends null when the switch is off', () => {
+        const form = pustyFormularz()
+        form.finansowanie.wlaczone = false
+        form.finansowanie.okresLat = 7
+        form.finansowanie.wplataGotowka = '5000'
+
+        expect(buildWejscie(form).finansowanie).toBeNull()
+      })
+
+      it('sends the defaults when the switch is on', () => {
+        const form = pustyFormularz()
+        form.finansowanie.wlaczone = true
+
+        expect(buildWejscie(form).finansowanie).toEqual({ okres_lat: 5, wplata_gotowka: 0 })
+      })
+
+      it.each([
+        [7, 7],
+        ['7', 7],
+      ])('coerces okresLat %p to %p', (okresLat, expected) => {
+        const form = pustyFormularz()
+        form.finansowanie.wlaczone = true
+        form.finansowanie.okresLat = okresLat
+
+        expect(buildWejscie(form).finansowanie.okres_lat).toBe(expected)
+      })
+
+      it.each([
+        ['', 0],
+        ['   ', 0],
+        ['abc', 0],
+        ['-15.5', 0],
+        ['5000', 5000],
+        ['1234.56', 1234.56],
+      ])('coerces wplataGotowka %p to %p', (wplataGotowka, expected) => {
+        const form = pustyFormularz()
+        form.finansowanie.wlaczone = true
+        form.finansowanie.wplataGotowka = wplataGotowka
+
+        expect(buildWejscie(form).finansowanie.wplata_gotowka).toBe(expected)
+      })
+
+      it('is unaffected by the zrodlo/termo scope toggles', () => {
+        const form = pustyFormularz()
+        form.finansowanie.wlaczone = true
+        form.finansowanie.okresLat = 3
+        form.finansowanie.wplataGotowka = '1000'
+        form.zrodloWlaczone = false
+        form.termoWlaczone = false
+
+        expect(buildWejscie(form).finansowanie).toEqual({ okres_lat: 3, wplata_gotowka: 1000 })
+      })
+
+      it('builds without mutating a deeply frozen form', () => {
+        const form = pustyFormularz()
+        form.finansowanie.wlaczone = true
+        form.finansowanie.okresLat = 8
+        form.finansowanie.wplataGotowka = '2500.50'
+        const before = JSON.parse(JSON.stringify(form))
+
+        deepFreeze(form)
+
+        expect(() => buildWejscie(form)).not.toThrow()
+        expect(form).toEqual(before)
+      })
+
+      it('returns distinct finansowanie objects across calls', () => {
+        const form = pustyFormularz()
+        form.finansowanie.wlaczone = true
+
+        const first = buildWejscie(form)
+        const second = buildWejscie(form)
+
+        expect(first.finansowanie).not.toBe(second.finansowanie)
+        expect(first.finansowanie).toEqual(second.finansowanie)
       })
     })
 

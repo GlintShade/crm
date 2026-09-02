@@ -15,6 +15,10 @@ export const PROGI_KWOTY = {
   jednoosobowe: { niski: 1800, sredni: 3150 },
   wieloosobowe: { niski: 1300, sredni: 2250 },
 }
+// Kredytowanie wkładu własnego (sekcja "Finansowanie"): okres w latach,
+// wybierany z zamkniętej listy 1..10, domyślnie 5 lat.
+export const OKRESY_LAT = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+export const OKRES_LAT_DOMYSLNY = 5
 
 /**
  * Create the initial state of the Czyste Powietrze form.
@@ -41,6 +45,7 @@ export function pustyFormularz() {
       okna: { wybrana: false, reczne: false, m2: '' },
       drzwi: { wybrana: false, ilosc: '' },
     },
+    finansowanie: { wlaczone: false, okresLat: OKRES_LAT_DOMYSLNY, wplataGotowka: '' },
   }
 }
 
@@ -195,6 +200,23 @@ function areaOrZero(value) {
 }
 
 /**
+ * Coerce a form money amount to a non-negative decimal number.
+ * Semantics are identical to `areaOrZero` today (null/''/whitespace/
+ * non-numeric/negative → 0, fractional preserved), but this is a deliberate,
+ * separate function rather than a shared alias — money and area are
+ * different domains, and a future change to one (e.g. area rounding rules)
+ * must not silently change the other.
+ *
+ * @param {*} value - money amount input
+ * @returns {number} non-negative amount
+ */
+function amountOrZero(value) {
+  const amount = parseNumber(value)
+  if (amount === null || amount < 0) return 0
+  return amount
+}
+
+/**
  * Return a manual area only when the work is explicitly in manual mode.
  *
  * @param {object} work - area work state
@@ -224,12 +246,22 @@ function manualM2(work) {
  * and throws on a blank string, so a source-only quote with an empty area
  * field must still send `0`, not `''`.
  *
+ * `finansowanie` mirrors `zrodlo_ciepla`'s null-when-off pattern: when
+ * `form.finansowanie.wlaczone` is false the whole block is `null`, so the
+ * server does no financing math and the calculator's other scope toggles
+ * (`zrodloWlaczone`/`termoWlaczone`) do not gate it — financing applies to
+ * the wkład własny regardless of which scopes are on. When on, it carries
+ * only the two rep-editable inputs; every derived number (`kwota_kredytu`,
+ * `rata_wkladu`, `rata_trify`, …) is computed server-side and comes back on
+ * the response, never here.
+ *
  * @param {object} form - calculator form state
  * @returns {object} server input payload
  */
 export function buildWejscie(form) {
   const zrodloWlaczone = Boolean(form.zrodloWlaczone)
   const termoWlaczone = Boolean(form.termoWlaczone)
+  const finansowanieWlaczone = Boolean(form.finansowanie?.wlaczone)
   const dodatki = dozwoloneDodatki(form.zrodlo)
   const prace = {}
 
@@ -260,6 +292,12 @@ export function buildWejscie(form) {
       : 0,
     powierzchnia_m2: areaOrZero(form.powierzchnia),
     prace,
+    finansowanie: finansowanieWlaczone
+      ? {
+          okres_lat: Number(form.finansowanie.okresLat),
+          wplata_gotowka: amountOrZero(form.finansowanie.wplataGotowka),
+        }
+      : null,
   }
 }
 
