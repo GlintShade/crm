@@ -7,6 +7,7 @@ from crm.czyste_powietrze.obliczenia import (
 	CPNiedozwolonaKombinacja,
 	CPPozycjaNieaktywna,
 	baza_pracy,
+	oblicz_finansowanie,
 	oblicz_oferte,
 )
 from crm.koszty.rdzen import zbuduj_snapshot_cp
@@ -223,6 +224,7 @@ STALE = {
 	"m2_na_drzwi": "2",
 	"mnoznik_okna_od_elewacji": "0.10",
 	"udzial_dotacji_elewacja": "0.90",
+	"finansowanie": {"oprocentowanie_mies": "1", "trify_udzial": "0.65", "trify_stawka_za_1000": "25"},
 }
 
 
@@ -1072,6 +1074,195 @@ class TestObliczenia(unittest.TestCase):
 		snapshot = zbuduj_snapshot_cp(wewnetrzne, {}, "2026-08-31 00:00:00")
 		suma_linii = sum((Decimal(l["prowizja_plan"]) for l in snapshot["linie"]), Decimal("0.00"))
 		self.assertEqual(suma_linii, Decimal(snapshot["podsumowanie"]["prowizja_plan"]))
+
+
+class TestFinansowanie(unittest.TestCase):
+	"""Blok "Finansowanie" (rata kredytu na wkład własny + rata Trify) -- ops#56 (b55)."""
+
+	def _stale_fin(self: "TestFinansowanie") -> dict[str, object]:
+		return copy.deepcopy(STALE["finansowanie"])
+
+	def test_helper_golden(self: "TestFinansowanie") -> None:
+		wynik = oblicz_finansowanie(
+			Decimal("15000"), Decimal("100000"), {"okres_lat": 5, "wplata_gotowka": 0}, self._stale_fin()
+		)
+		self.assertEqual(wynik["kwota_kredytu"], Decimal("15000.00"))
+		self.assertEqual(wynik["rata_wkladu"], Decimal("333.67"))
+		self.assertEqual(wynik["podstawa_trify"], Decimal("65000.00"))
+		self.assertEqual(wynik["rata_trify"], Decimal("1625.00"))
+		self.assertEqual(wynik["okres_lat"], 5)
+		self.assertIsInstance(wynik["okres_lat"], int)
+		self.assertNotIsInstance(wynik["okres_lat"], bool)
+
+	def test_helper_split_kredyt_i_wplata(self: "TestFinansowanie") -> None:
+		wynik = oblicz_finansowanie(
+			Decimal("20000"), Decimal("0"), {"okres_lat": 5, "wplata_gotowka": 5000}, self._stale_fin()
+		)
+		self.assertEqual(wynik["kwota_kredytu"], Decimal("15000.00"))
+		self.assertEqual(wynik["rata_wkladu"], Decimal("333.67"))
+		self.assertEqual(wynik["wplata_gotowka"], Decimal("5000.00"))
+
+	def test_helper_wplata_pokrywa_caly_wklad(self: "TestFinansowanie") -> None:
+		wynik = oblicz_finansowanie(
+			Decimal("20000"), Decimal("0"), {"okres_lat": 5, "wplata_gotowka": 20000}, self._stale_fin()
+		)
+		self.assertEqual(wynik["kwota_kredytu"], Decimal("0.00"))
+		self.assertEqual(wynik["rata_wkladu"], Decimal("0.00"))
+
+	def test_helper_wplata_wieksza_niz_wklad(self: "TestFinansowanie") -> None:
+		"""Nadpłata: kredyt/rata przycięte do zera, ale wplata_gotowka zapisana dosłownie
+		tak, jak wpisał handlowiec -- to pole nie jest przycinane do wklad_wlasny."""
+		wynik = oblicz_finansowanie(
+			Decimal("20000"), Decimal("0"), {"okres_lat": 5, "wplata_gotowka": 25000}, self._stale_fin()
+		)
+		self.assertEqual(wynik["kwota_kredytu"], Decimal("0.00"))
+		self.assertEqual(wynik["rata_wkladu"], Decimal("0.00"))
+		self.assertEqual(wynik["wplata_gotowka"], Decimal("25000.00"))
+
+	def test_helper_none_wylacza_bez_dotykania_stale(self: "TestFinansowanie") -> None:
+		# Wejście None (przełącznik wyłączony) zwraca None BEZ sprawdzania stale_finansowanie
+		# -- nawet gdy stałe też są None (np. Single jeszcze nie ma tego bloku), nie ma błędu.
+		self.assertIsNone(oblicz_finansowanie(Decimal("15000"), Decimal("100000"), None, None))
+		self.assertIsNone(oblicz_finansowanie(Decimal("15000"), Decimal("100000"), None, self._stale_fin()))
+
+	def test_helper_pusty_slownik_uzywa_domyslnych(self: "TestFinansowanie") -> None:
+		wynik = oblicz_finansowanie(Decimal("15000"), Decimal("0"), {}, self._stale_fin())
+		self.assertEqual(wynik["okres_lat"], 5)
+		self.assertEqual(wynik["wplata_gotowka"], Decimal("0.00"))
+		self.assertEqual(wynik["rata_wkladu"], Decimal("333.67"))
+
+	def test_trify_niezalezna_od_okresu(self: "TestFinansowanie") -> None:
+		wynik_1y = oblicz_finansowanie(
+			Decimal("15000"), Decimal("100000"), {"okres_lat": 1}, self._stale_fin()
+		)
+		wynik_10y = oblicz_finansowanie(
+			Decimal("15000"), Decimal("100000"), {"okres_lat": 10}, self._stale_fin()
+		)
+		self.assertEqual(wynik_1y["rata_trify"], Decimal("1625.00"))
+		self.assertEqual(wynik_10y["rata_trify"], Decimal("1625.00"))
+		self.assertGreater(wynik_1y["rata_wkladu"], wynik_10y["rata_wkladu"])
+
+	def test_oprocentowanie_zerowe(self: "TestFinansowanie") -> None:
+		stale_fin = self._stale_fin()
+		stale_fin["oprocentowanie_mies"] = "0"
+		wynik_5y = oblicz_finansowanie(Decimal("23936"), Decimal("0"), {"okres_lat": 5}, stale_fin)
+		self.assertEqual(wynik_5y["rata_wkladu"], Decimal("398.93"))
+		wynik_1y = oblicz_finansowanie(Decimal("12000"), Decimal("0"), {"okres_lat": 1}, stale_fin)
+		self.assertEqual(wynik_1y["rata_wkladu"], Decimal("1000.00"))
+
+	def test_okres_i_kredyt_rozne_kombinacje(self: "TestFinansowanie") -> None:
+		przypadki = (
+			("2816", 1, "250.20"),
+			("2816", 10, "40.40"),
+			("20000", 5, "444.89"),
+			("1816", 10, "26.05"),
+			("2316", 5, "51.52"),
+			("1000", 5, "22.24"),
+		)
+		for kredyt, okres_lat, oczekiwana_rata in przypadki:
+			with self.subTest(kredyt=kredyt, okres_lat=okres_lat):
+				wynik = oblicz_finansowanie(
+					Decimal(kredyt), Decimal("0"), {"okres_lat": okres_lat}, self._stale_fin()
+				)
+				self.assertEqual(wynik["rata_wkladu"], Decimal(oczekiwana_rata))
+
+	def test_okres_niepoprawny(self: "TestFinansowanie") -> None:
+		for okres_niepoprawny in (0, 11, -1, "5", 5.0, True, 2.5):
+			with self.subTest(okres_lat=okres_niepoprawny):
+				with self.assertRaises(CPDaneNiekompletne):
+					oblicz_finansowanie(
+						Decimal("15000"),
+						Decimal("0"),
+						{"okres_lat": okres_niepoprawny},
+						self._stale_fin(),
+					)
+
+	def test_wplata_gotowka_niepoprawna(self: "TestFinansowanie") -> None:
+		for wplata_niepoprawna in (-1, "abc", "nan", "inf"):
+			with self.subTest(wplata_gotowka=wplata_niepoprawna):
+				with self.assertRaises(CPDaneNiekompletne):
+					oblicz_finansowanie(
+						Decimal("15000"),
+						Decimal("0"),
+						{"wplata_gotowka": wplata_niepoprawna},
+						self._stale_fin(),
+					)
+
+	def test_blok_wejscia_niepoprawnego_typu(self: "TestFinansowanie") -> None:
+		for blok_niepoprawny in ("x", []):
+			with self.subTest(blok=blok_niepoprawny):
+				with self.assertRaises(CPDaneNiekompletne):
+					oblicz_finansowanie(Decimal("15000"), Decimal("0"), blok_niepoprawny, self._stale_fin())
+
+	def test_stale_finansowania_niepoprawne(self: "TestFinansowanie") -> None:
+		stale_ujemne = self._stale_fin()
+		stale_ujemne["oprocentowanie_mies"] = "-1"
+		for stale_niepoprawne in (None, {}, stale_ujemne):
+			with self.subTest(stale=stale_niepoprawne):
+				with self.assertRaises(CPDaneNiekompletne):
+					oblicz_finansowanie(Decimal("15000"), Decimal("0"), {}, stale_niepoprawne)
+
+	def test_dotacja_zero_daje_trify_zero(self: "TestFinansowanie") -> None:
+		wynik = oblicz_finansowanie(Decimal("15000"), Decimal("0"), {}, self._stale_fin())
+		self.assertEqual(wynik["podstawa_trify"], Decimal("0.00"))
+		self.assertEqual(wynik["rata_trify"], Decimal("0.00"))
+
+	def test_oblicz_oferte_bez_klucza_finansowanie_daje_none(self: "TestFinansowanie") -> None:
+		wynik = oblicz_oferte(_wejscie("najwyzszy"), _katalog(), copy.deepcopy(LIMITY), copy.deepcopy(STALE))
+		self.assertIsNone(wynik["finansowanie"])
+
+	def test_oblicz_oferte_z_finansowaniem_pustym_slownikiem(self: "TestFinansowanie") -> None:
+		wejscie = _wejscie("najwyzszy")
+		wejscie["finansowanie"] = {}
+		wynik = oblicz_oferte(wejscie, _katalog(), copy.deepcopy(LIMITY), copy.deepcopy(STALE))
+		self.assertEqual(
+			wynik["finansowanie"],
+			{
+				"okres_lat": 5,
+				"wplata_gotowka": Decimal("0.00"),
+				"kwota_kredytu": Decimal("2816.00"),
+				"rata_wkladu": Decimal("62.64"),
+				"podstawa_trify": Decimal("22880.00"),
+				"rata_trify": Decimal("572.00"),
+			},
+		)
+		for klucz in wynik["finansowanie"]:
+			self.assertFalse(klucz.startswith("_"))
+		self.assertNotIn("finansowanie", wynik["wewnetrzne"])
+
+	def test_oblicz_oferte_z_finansowaniem_i_wplata_gotowka(self: "TestFinansowanie") -> None:
+		wejscie = _wejscie()
+		wejscie["finansowanie"] = {"okres_lat": 5, "wplata_gotowka": 5000}
+		wynik = oblicz_oferte(wejscie, _katalog(), copy.deepcopy(LIMITY), copy.deepcopy(STALE))
+		self.assertEqual(wynik["finansowanie"]["kwota_kredytu"], Decimal("18936.00"))
+		self.assertEqual(wynik["finansowanie"]["rata_wkladu"], Decimal("421.22"))
+		self.assertEqual(wynik["finansowanie"]["podstawa_trify"], Decimal("9152.00"))
+		self.assertEqual(wynik["finansowanie"]["rata_trify"], Decimal("228.80"))
+
+	def test_finansowanie_nie_zmienia_reszty_wyniku(self: "TestFinansowanie") -> None:
+		wejscie_bez = _wejscie("najwyzszy")
+		wejscie_z = _wejscie("najwyzszy")
+		wejscie_z["finansowanie"] = {"okres_lat": 5, "wplata_gotowka": 0}
+		wynik_bez = oblicz_oferte(wejscie_bez, _katalog(), copy.deepcopy(LIMITY), copy.deepcopy(STALE))
+		wynik_z = oblicz_oferte(wejscie_z, _katalog(), copy.deepcopy(LIMITY), copy.deepcopy(STALE))
+		for pole in ("wklad_wlasny", "dotacja_laczna", "suma_brutto", "prowizja_handlowa"):
+			self.assertEqual(wynik_bez[pole], wynik_z[pole])
+		self.assertEqual(
+			wynik_bez["wewnetrzne"]["koszt_calkowity"], wynik_z["wewnetrzne"]["koszt_calkowity"]
+		)
+
+	def test_oblicz_oferte_stale_bez_finansowania(self: "TestFinansowanie") -> None:
+		stale_bez_fin = copy.deepcopy(STALE)
+		del stale_bez_fin["finansowanie"]
+
+		wejscie_puste = _wejscie("najwyzszy")
+		wejscie_puste["finansowanie"] = {}
+		with self.assertRaises(CPDaneNiekompletne):
+			oblicz_oferte(wejscie_puste, _katalog(), copy.deepcopy(LIMITY), stale_bez_fin)
+
+		wejscie_brak = _wejscie("najwyzszy")
+		wynik = oblicz_oferte(wejscie_brak, _katalog(), copy.deepcopy(LIMITY), stale_bez_fin)
+		self.assertIsNone(wynik["finansowanie"])
 
 
 if __name__ == "__main__":

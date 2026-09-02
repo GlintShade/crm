@@ -410,6 +410,26 @@ def volteo_cp_create_deal(wejscie: dict[str, Any], contact: str) -> dict[str, An
 		if grupa["kod"] in pola_dotacji_grup
 	}
 
+	# Blok "Finansowanie" -- jak dotacja_grup_do_zapisu wyżej, budowany PRZED insertem, nie
+	# przez db_set(): wszystkie pięć pól (custom_cp_okres_lat, custom_cp_wplata_gotowka,
+	# custom_cp_kwota_kredytu, custom_cp_rata_wkladu, custom_cp_rata_trify) żyje na
+	# permlevel 0, więc zwykły insert() przez "Volteo D2D Sales" jest wystarczający (w
+	# odróżnieniu od custom_cp_prowizja_handlowa, permlevel 2, patrz komentarz przy
+	# db_set() niżej). Przełącznik WYŁĄCZONY (wynik["finansowanie"] is None) zostawia
+	# wszystkie pięć pól NIEUSTAWIONYCH, nie zerami -- zero byłoby fałszywym sygnałem "rata
+	# wynosi 0 zł", podczas gdy naprawdę oznacza "handlowiec nie liczył finansowania".
+	finansowanie_do_zapisu = (
+		{}
+		if wynik["finansowanie"] is None
+		else {
+			"custom_cp_okres_lat": wynik["finansowanie"]["okres_lat"],
+			"custom_cp_wplata_gotowka": wynik["finansowanie"]["wplata_gotowka"],
+			"custom_cp_kwota_kredytu": wynik["finansowanie"]["kwota_kredytu"],
+			"custom_cp_rata_wkladu": wynik["finansowanie"]["rata_wkladu"],
+			"custom_cp_rata_trify": wynik["finansowanie"]["rata_trify"],
+		}
+	)
+
 	try:
 		deal = frappe.get_doc(
 			{
@@ -425,6 +445,7 @@ def volteo_cp_create_deal(wejscie: dict[str, Any], contact: str) -> dict[str, An
 				"custom_cp_wklad_wlasny": wynik["wklad_wlasny"],
 				"custom_cp_dotacja_ograniczona_o": wynik["dotacja_ograniczona_o"],
 				**dotacja_grup_do_zapisu,
+				**finansowanie_do_zapisu,
 				**_cp_zrodlo_pola_do_zapisu(wejscie),
 				# Zapis dosłowny tego, co wpisał handlowiec -- jedyna gwarancja wiernego
 				# odtworzenia wejścia kalkulatora dla zaplecza przygotowującego "ofertę

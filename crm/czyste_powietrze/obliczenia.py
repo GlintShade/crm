@@ -264,6 +264,85 @@ def _zaokragl_wynik(linie: list[dict[str, Any]], wynik: dict[str, Any]) -> dict[
 	return wynik
 
 
+_OKRES_LAT_DOMYSLNY = 5
+_OKRES_LAT_MIN, _OKRES_LAT_MAX = 1, 10
+
+
+def oblicz_finansowanie(
+	wklad_wlasny: Decimal,
+	dotacja_laczna: Decimal,
+	wejscie_finansowanie: Any,
+	stale_finansowanie: Any,
+) -> dict[str, Any] | None:
+	"""Liczy blok "Finansowanie" (rata kredytu na wkład własny + rata Trify).
+
+	``wejscie_finansowanie`` równe None/nieobecne oznacza wyłączony przełącznik -- w tym
+	KAŻDY payload sprzed tej zmiany (dawne wejścia nie znają tego klucza) -- i zwraca
+	None bez dotykania stale_finansowanie (świadomie: włączenie sprawdzania stałych dla
+	wyłączonego przełącznika zepsułoby każdy dotychczasowy wywołujący, który jeszcze nie
+	zna nowego bloku Single). Brakujące podklucze wejścia (okres_lat, wplata_gotowka)
+	dostają wartości domyślne. Wejście OBECNE, ale niepoprawne (zły typ, spoza zakresu,
+	ujemne) jest błędem głośnym, nigdy cichym fallbackiem -- patrz _blad().
+
+	rata_trify jest CELOWO niezależna od okres_lat: to osobna, jednorazowa rata programu
+	Trify, nie rata kredytu bankowego -- okres kredytowania na nią nie wpływa.
+
+	Oba wejściowe kwoty (wklad_wlasny, dotacja_laczna) to już zaokrąglone publiczne figury
+	z oblicz_oferte -- dzięki temu liczby widziane przez klienta w innych częściach oferty
+	(wklad_wlasny, dotacja_laczna) i te użyte tutaj są DOKŁADNIE te same, więc suma się
+	zgadza handlowcowi na ekranie.
+	"""
+	if wejscie_finansowanie is None:
+		return None
+	if not isinstance(wejscie_finansowanie, dict):
+		_blad("Nieprawidłowe dane finansowania.")
+
+	okres_lat = wejscie_finansowanie.get("okres_lat", _OKRES_LAT_DOMYSLNY)
+	# bool jest podklasą int w Pythonie -- bez tego jawnego odrzucenia True/False
+	# przeszłyby test "isinstance(okres_lat, int)" i dały okres_lat=1 albo 0.
+	if isinstance(okres_lat, bool) or not isinstance(okres_lat, int):
+		_blad("Okres kredytowania musi być liczbą całkowitą lat.")
+	if not (_OKRES_LAT_MIN <= okres_lat <= _OKRES_LAT_MAX):
+		_blad("Okres kredytowania musi być z zakresu 1-10 lat.")
+
+	wplata_gotowka = _decimal(wejscie_finansowanie.get("wplata_gotowka", 0), "wplata_gotowka")
+	if wplata_gotowka < _ZERO:
+		_blad("Wpłata gotówką nie może być ujemna.")
+
+	if not isinstance(stale_finansowanie, dict):
+		_blad("Brak danych stałych finansowania.")
+	oprocentowanie_mies = _decimal(stale_finansowanie.get("oprocentowanie_mies"), "oprocentowanie_mies")
+	trify_udzial = _decimal(stale_finansowanie.get("trify_udzial"), "trify_udzial")
+	trify_stawka_za_1000 = _decimal(
+		stale_finansowanie.get("trify_stawka_za_1000"), "trify_stawka_za_1000"
+	)
+	if oprocentowanie_mies < _ZERO:
+		_blad("Oprocentowanie raty nie może być ujemne.")
+
+	kwota_kredytu = max(_ZERO, wklad_wlasny - wplata_gotowka)
+	n = okres_lat * 12
+	i = oprocentowanie_mies / 100
+	if kwota_kredytu <= _ZERO:
+		rata_wkladu = _ZERO
+	elif i == _ZERO:
+		rata_wkladu = kwota_kredytu / n
+	else:
+		mnoznik = (_JEDEN + i) ** n
+		rata_wkladu = kwota_kredytu * i * mnoznik / (mnoznik - _JEDEN)
+
+	podstawa_trify_raw = dotacja_laczna * trify_udzial
+	rata_trify_raw = podstawa_trify_raw / 1000 * trify_stawka_za_1000
+
+	return {
+		"okres_lat": okres_lat,
+		"wplata_gotowka": _kwota(wplata_gotowka),
+		"kwota_kredytu": _kwota(kwota_kredytu),
+		"rata_wkladu": _kwota(rata_wkladu),
+		"podstawa_trify": _kwota(podstawa_trify_raw),
+		"rata_trify": _kwota(rata_trify_raw),
+	}
+
+
 def oblicz_oferte(
 	wejscie: dict[str, Any], katalog: dict[str, Any], limity: dict[Any, Any], stale: dict[str, Any]
 ) -> dict[str, Any]:
@@ -546,9 +625,18 @@ def oblicz_oferte(
 	# jest przycinany do zera per grupa (patrz max(_ZERO, ...) wyżej), więc jego suma z
 	# dotacja_laczna NIE jest w ogólności tożsama z sumą brutto.
 	suma_brutto = _kwota(sum((linia["brutto"] for linia in linie), _ZERO))
+	# Figury publiczne, policzone RAZ tutaj -- oblicz_finansowanie() dostaje dokładnie te
+	# same, już zaokrąglone wartości, które trafiają do wynik["wklad_wlasny"] i
+	# wynik["dotacja_laczna"] niżej, żeby liczby w bloku "Finansowanie" zgadzały się
+	# handlowcowi z resztą ekranu co do grosza.
+	wklad_wlasny = _kwota(wklad_zrodlo + wklad_co + wklad_termo)
+	dotacja_laczna = _kwota(dotacja_zrodlo + dotacja_co + dotacja_termo)
+	finansowanie = oblicz_finansowanie(
+		wklad_wlasny, dotacja_laczna, wejscie.get("finansowanie"), stale.get("finansowanie")
+	)
 	wynik = {
 		"suma_brutto": suma_brutto,
-		"wklad_wlasny": _kwota(wklad_zrodlo + wklad_co + wklad_termo),
+		"wklad_wlasny": wklad_wlasny,
 		# "prowizja_handlowa" ZOSTAJE niezmienione (kompatybilność wsteczna z bramką Vue
 		# `result.prowizja_handlowa != null` i z `custom_cp_prowizja_handlowa`) -- nowe
 		# nadprowizje Managera/Partnera żyją wyłącznie w "prowizje" (publiczne) i
@@ -562,8 +650,12 @@ def oblicz_oferte(
 		},
 		"linie": linie,
 		"grupy": grupy,
-		"dotacja_laczna": _kwota(dotacja_zrodlo + dotacja_co + dotacja_termo),
+		"dotacja_laczna": dotacja_laczna,
 		"dotacja_ograniczona_o": _kwota(dotacja_ograniczona_o),
+		# Blok "Finansowanie" (rata kredytu na wkład własny + rata Trify) -- publiczny,
+		# widoczny dla handlowca terenowego, celowo POZA "wewnetrzne" (nie niesie kosztów
+		# ani marż). None gdy przełącznik jest wyłączony -- patrz oblicz_finansowanie().
+		"finansowanie": finansowanie,
 		"wewnetrzne": {
 			"koszt_calkowity": _kwota(koszt_calkowity),
 			"marza": marza,
