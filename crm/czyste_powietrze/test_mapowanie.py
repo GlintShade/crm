@@ -45,6 +45,9 @@ def _stale() -> dict[str, Any]:
 		"m2_na_drzwi": "2",
 		"mnoznik_okna_od_elewacji": "0.10",
 		"udzial_dotacji_elewacja": "0.90",
+		"oprocentowanie_raty_mies": "1",
+		"trify_udzial_dotacji": "0.65",
+		"trify_stawka_za_1000": "25",
 		"umowa_min": "ignored",
 	}
 
@@ -125,7 +128,39 @@ class TestMapowanie(unittest.TestCase):
 		self.assertEqual(stale["m2_na_drzwi"], "2")
 		self.assertEqual(stale["mnoznik_okna_od_elewacji"], "0.10")
 		self.assertEqual(stale["udzial_dotacji_elewacja"], "0.90")
+		self.assertEqual(
+			stale["finansowanie"],
+			{"oprocentowanie_mies": "1", "trify_udzial": "0.65", "trify_stawka_za_1000": "25"},
+		)
 		self.assertNotIn("umowa_min", stale)
+
+	def test_stale_missing_oprocentowanie_raty_mies_raises(self: "TestMapowanie") -> None:
+		dokument = _stale()
+		del dokument["oprocentowanie_raty_mies"]
+
+		with self.assertRaises(CPBladMapowania):
+			stale_z_dokumentu(dokument)
+
+	def test_stale_missing_trify_udzial_dotacji_raises(self: "TestMapowanie") -> None:
+		dokument = _stale()
+		del dokument["trify_udzial_dotacji"]
+
+		with self.assertRaises(CPBladMapowania):
+			stale_z_dokumentu(dokument)
+
+	def test_stale_missing_trify_stawka_za_1000_raises(self: "TestMapowanie") -> None:
+		dokument = _stale()
+		del dokument["trify_stawka_za_1000"]
+
+		with self.assertRaises(CPBladMapowania):
+			stale_z_dokumentu(dokument)
+
+	def test_stale_trify_stawka_za_1000_none_raises(self: "TestMapowanie") -> None:
+		dokument = _stale()
+		dokument["trify_stawka_za_1000"] = None
+
+		with self.assertRaises(CPBladMapowania):
+			stale_z_dokumentu(dokument)
 
 	def test_stale_missing_mnoznik_okna_od_elewacji_raises(self: "TestMapowanie") -> None:
 		dokument = _stale()
@@ -207,6 +242,7 @@ class TestMapowanie(unittest.TestCase):
 				"okna": {"wybrana": False, "m2": None},
 				"drzwi": {"wybrana": False, "ilosc": 0},
 			},
+			"finansowanie": {"okres_lat": 5, "wplata_gotowka": 0},
 		}
 		limity = limity_z_wierszy(
 			[
@@ -224,6 +260,8 @@ class TestMapowanie(unittest.TestCase):
 
 		self.assertEqual(wynik["wklad_wlasny"], Decimal("2816.00"))
 		self.assertIn("pompa_ciepla", katalog)
+		self.assertEqual(wynik["finansowanie"]["rata_wkladu"], Decimal("62.64"))
+		self.assertEqual(wynik["finansowanie"]["rata_trify"], Decimal("572.00"))
 
 
 if __name__ == "__main__":
