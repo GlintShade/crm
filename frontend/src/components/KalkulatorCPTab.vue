@@ -309,6 +309,73 @@
               </div>
             </div>
 
+            <div class="mb-2 overflow-hidden rounded-lg border border-outline-gray-1">
+              <div class="flex items-center justify-between border-b border-outline-gray-1 bg-surface-gray-1 px-2.5 py-1.5 text-sm font-semibold text-ink-gray-8">
+                {{ __('Finansowanie') }}
+                <button
+                  type="button"
+                  role="switch"
+                  :aria-checked="form.finansowanie.wlaczone"
+                  :aria-label="__('Finansowanie')"
+                  class="kalk-switch shrink-0"
+                  :class="form.finansowanie.wlaczone ? 'kalk-switch-on' : 'kalk-switch-off'"
+                  @click="form.finansowanie.wlaczone = !form.finansowanie.wlaczone"
+                ><span class="kalk-switch-knob" /></button>
+              </div>
+              <div v-if="form.finansowanie.wlaczone" class="p-2.5">
+                <div class="grid grid-cols-2 gap-x-3 gap-y-2">
+                  <div>
+                    <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Okres kredytowania (lat)') }}</div>
+                    <select v-model.number="form.finansowanie.okresLat" class="kalk-select">
+                      <option v-for="n in OKRESY_LAT" :key="n" :value="n">{{ n }}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Wpłata gotówką (PLN)') }}</div>
+                    <input
+                      v-model="form.finansowanie.wplataGotowka"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      class="kalk-input"
+                    />
+                  </div>
+                </div>
+
+                <template v-if="hasResult && result.finansowanie">
+                  <div class="flex justify-between border-t border-outline-gray-1 py-1 mt-2 text-sm text-ink-gray-7">
+                    <span>{{ __('Wkład własny') }}</span>
+                    <span class="tabular-nums">{{ formatPln(result.wklad_wlasny) }}</span>
+                  </div>
+                  <div class="flex justify-between py-1 text-sm text-ink-gray-7">
+                    <span>{{ __('Wpłata gotówką') }}</span>
+                    <span class="tabular-nums">{{ formatPln(result.finansowanie.wplata_gotowka) }}</span>
+                  </div>
+                  <div class="flex justify-between py-1 text-sm text-ink-gray-7">
+                    <span>{{ __('Kwota kredytu') }}</span>
+                    <span class="tabular-nums">{{ formatPln(result.finansowanie.kwota_kredytu) }}</span>
+                  </div>
+                  <div class="flex justify-between py-1 text-sm text-ink-gray-7">
+                    <span>{{ __('Rata wkładu własnego ({0} lat)', [result.finansowanie.okres_lat]) }}</span>
+                    <span class="tabular-nums font-semibold text-ink-gray-9">{{ formatPln(result.finansowanie.rata_wkladu) }} /mies.</span>
+                  </div>
+                  <div class="flex justify-between border-t border-outline-gray-1 py-1 text-sm text-ink-gray-7">
+                    <span>{{ __('Rata Trify') }}</span>
+                    <span class="tabular-nums font-semibold text-ink-gray-9">{{ formatPln(result.finansowanie.rata_trify) }} /mies.</span>
+                  </div>
+                  <div class="text-xs text-ink-gray-5">
+                    {{ __('Podstawa: {0}', [formatPln(result.finansowanie.podstawa_trify)]) }}
+                  </div>
+                </template>
+                <div v-else class="mt-2 text-sm text-ink-gray-5">
+                  {{ __('Uzupełnij konfigurację, aby zobaczyć raty.') }}
+                </div>
+              </div>
+              <div v-else class="p-2.5 text-sm text-ink-gray-5">
+                {{ __('Włącz, aby policzyć raty.') }}
+              </div>
+            </div>
+
             <div v-if="hasResult">
               <div v-if="restrictionAmount > 0" class="mb-2 text-xs text-ink-gray-5">
                 {{ __('Dofinansowanie ograniczone limitem (−{0} zł)', [formatPlnAmount(result.dotacja_ograniczona_o)]) }}
@@ -604,6 +671,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   GOSPODARSTWA,
+  OKRESY_LAT,
   POZIOMY,
   PRACE_M2,
   WARIANTY_PRAC,
@@ -662,6 +730,12 @@ const result = reactive({
   // szablonie sprawdza też `prowizja_handlowa` dla kompatybilności ze
   // starszym obrazem, który tego klucza jeszcze nie zwracał.
   prowizje: null,
+  // Tak samo jak `wewnetrzne`/`prowizje` wyżej — jawny `null` od startu,
+  // NIGDY `delete`, czytany w szablonie zawsze jako właściwość
+  // (`result.finansowanie`), nigdy przez `hasOwnProperty` na tym obiekcie
+  // `reactive`. Ta pułapka ukrywała panel kosztów admina tygodniami — patrz
+  // komentarz przy `hasInternal` niżej.
+  finansowanie: null,
 })
 
 const standardLabels = {
@@ -907,6 +981,8 @@ function clearResult() {
   // the key would put us right back in a state where `hasOwnProperty` (if
   // anyone reintroduces it) can no longer see the property at all.
   result.wewnetrzne = null
+  // `= null`, never `delete` — same reasoning as `result.wewnetrzne` above.
+  result.finansowanie = null
   // `stawki`/`koszty` are deliberately NOT reset here — `podzial` is a
   // computed that reads `hasInternal`, so it collapses to an empty split on
   // its own once `wewnetrzne` is gone. Wiping them too would defeat the
@@ -978,6 +1054,7 @@ async function runCalc() {
     result.dotacja_ograniczona_o = data.dotacja_ograniczona_o
     result.linie = data.linie || []
     result.grupy = data.grupy || []
+    result.finansowanie = data.finansowanie ?? null
     resultReady.value = true
     // `data` is a plain object freshly parsed from the server response, not
     // the `reactive` `result` — `hasOwnProperty` is safe here (see the

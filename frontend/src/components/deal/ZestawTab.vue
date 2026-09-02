@@ -94,6 +94,32 @@
           <div v-if="Number(dealFields.custom_estimated_subsidy_pln) > 0" class="flex justify-between border-t border-outline-gray-2 py-0.5 pt-1 font-medium text-ink-gray-8">
             <span>{{ __('Razem') }}</span><span>{{ formatPln(dealFields.custom_estimated_subsidy_pln) }}</span>
           </div>
+
+          <!--
+            Gated on custom_cp_okres_lat > 0, not on presence of the fields:
+            they are a plain Int/Currency columns on CRM Deal, `NOT NULL
+            DEFAULT 0` in SQL, so a deal created before this feature — or one
+            where the rep left financing switched off — reads 0 regardless,
+            and that must hide the block rather than render zeroed rows.
+          -->
+          <template v-if="Number(dealFields.custom_cp_okres_lat) > 0">
+            <div class="mb-1 mt-1 border-t border-outline-gray-2 pt-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Finansowanie') }}</div>
+            <div class="flex justify-between py-0.5 text-ink-gray-7">
+              <span>{{ __('Wpłata gotówką') }}</span><span>{{ formatPln(dealFields.custom_cp_wplata_gotowka) }}</span>
+            </div>
+            <div class="flex justify-between py-0.5 text-ink-gray-7">
+              <span>{{ __('Kwota kredytu') }}</span><span>{{ formatPln(dealFields.custom_cp_kwota_kredytu) }}</span>
+            </div>
+            <div class="flex justify-between py-0.5 text-ink-gray-7">
+              <span>{{ __('Okres kredytowania') }}</span><span>{{ dealFields.custom_cp_okres_lat }} lat</span>
+            </div>
+            <div class="flex justify-between py-0.5 text-ink-gray-7">
+              <span>{{ __('Rata wkładu własnego') }}</span><span>{{ formatPln(dealFields.custom_cp_rata_wkladu) }} /mies.</span>
+            </div>
+            <div class="flex justify-between py-0.5 text-ink-gray-7">
+              <span>{{ __('Rata Trify') }}</span><span>{{ formatPln(dealFields.custom_cp_rata_trify) }} /mies.</span>
+            </div>
+          </template>
         </div>
 
         <!--
@@ -324,6 +350,11 @@ const dealSubsidy = createResource({
       'custom_cp_dotacja_co',
       'custom_cp_dotacja_termo',
       'custom_estimated_subsidy_pln',
+      'custom_cp_okres_lat',
+      'custom_cp_wplata_gotowka',
+      'custom_cp_kwota_kredytu',
+      'custom_cp_rata_wkladu',
+      'custom_cp_rata_trify',
     ],
   },
   auto: true,
@@ -502,6 +533,11 @@ const dealFields = computed(() => ({
   custom_cp_dotacja_co: 0,
   custom_cp_dotacja_termo: 0,
   custom_estimated_subsidy_pln: 0,
+  custom_cp_okres_lat: 0,
+  custom_cp_wplata_gotowka: 0,
+  custom_cp_kwota_kredytu: 0,
+  custom_cp_rata_wkladu: 0,
+  custom_cp_rata_trify: 0,
   ...(dealSubsidy.data || {}),
 }))
 const hasGroupSubsidy = computed(() =>
