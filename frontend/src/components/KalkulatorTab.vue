@@ -191,6 +191,20 @@
                   <div class="mb-0.5 text-sm text-ink-gray-5">Wpłata własna (PLN)</div>
                   <input v-model.number="sel.wplataWlasna" type="number" min="0" step="0.01" class="kalk-input" />
                 </div>
+
+                <div v-if="sel.typKlienta === 'indywidualny'" class="col-span-2">
+                  <div class="mb-0.5 text-sm text-ink-gray-5">Zasady dotacji</div>
+                  <div class="flex flex-wrap gap-1.5">
+                    <button
+                      v-for="opt in ZASADY_DOTACJI_OPTIONS" :key="opt.value"
+                      class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
+                      :class="sel.zasadyDotacji === opt.value
+                        ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base'
+                        : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
+                      @click="sel.zasadyDotacji = opt.value"
+                    >{{ opt.label }}<span v-if="Number(dotacjaLimity[opt.value]) > 0" class="opacity-70"> (do {{ formatPln(dotacjaLimity[opt.value]) }})</span></button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -246,7 +260,7 @@
                   <template v-if="sel.typKlienta === 'indywidualny'">
                     <div class="mt-1.5 border-t border-dashed border-outline-gray-2 pt-1.5">
                       <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
-                        <span>Dotacja Przydomowe Magazyny Energii</span><span>− {{ formatPln(summary.dotacja) }}</span>
+                        <span>Dotacja Przydomowe Magazyny Energii <span class="text-ink-gray-5">({{ sel.zasadyDotacji.toLowerCase() }})</span></span><span>− {{ formatPln(summary.dotacja) }}</span>
                       </div>
                       <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
                         <span>Cena po dotacji</span><span>{{ formatPln(summary.cena_po_dotacji) }}</span>
@@ -359,6 +373,10 @@ const TYP_KLIENTA_OPTIONS = [
   { value: 'indywidualny', label: 'Indywidualny' },
   { value: 'biznesowy', label: 'Biznesowy' },
 ]
+const ZASADY_DOTACJI_OPTIONS = [
+  { value: 'Nowe zasady', label: 'Nowe zasady' },
+  { value: 'Stare zasady', label: 'Stare zasady' },
+]
 
 // --- Prefill client data from the current contact --------------------------
 const c = computed(() => props.contact || {})
@@ -390,6 +408,7 @@ const sel = reactive({
   operator: '',
   kierunek: '',
   consumption: null,
+  zasadyDotacji: 'Nowe zasady',
 })
 
 const hasPv = computed(() => variantHasPv(sel.variant))
@@ -436,6 +455,10 @@ async function loadComponents() {
     // server remains authoritative and rejects an out-of-range narzut with a
     // readable error regardless of what the client enforces here.
     narzutMax.value = Number(data && data.narzut_max) || 0
+    // dotacja_limity: per-rule subsidy caps, keyed by ZASADY_DOTACJI_OPTIONS
+    // value. 0 or missing for a given key means the limit is unknown; the
+    // server remains authoritative during calc regardless of what is shown here.
+    dotacjaLimity.value = (data && data.dotacja_limity) || {}
   } catch (err) {
     errorMsg.value = extractErrorMessage(err)
   }
@@ -608,6 +631,10 @@ const isComplete = computed(() => {
 // 0 means the server reported no upper limit.
 const narzutMax = ref(0)
 
+// dotacja_limity comes from volteo_quote_components (loadComponents above);
+// keyed by ZASADY_DOTACJI_OPTIONS value, 0 or missing means unknown.
+const dotacjaLimity = ref({})
+
 const narzutValid = computed(() => {
   const n = Number(sel.narzut)
   return !isNaN(n) && n >= 0 && (narzutMax.value <= 0 || n <= narzutMax.value)
@@ -637,6 +664,7 @@ function buildCalcPayload() {
     okres_lat: Number(sel.okresLat),
     wplata_wlasna: Number(sel.wplataWlasna) || 0,
     narzut: Number(sel.narzut) || 0,
+    zasady_dotacji: sel.zasadyDotacji,
   }
 }
 
@@ -655,7 +683,7 @@ watch(
   () => [
     sel.typKlienta, sel.variant, sel.producent, sel.falownik, sel.bateria,
     sel.panel, sel.mocPvKw, sel.konstrukcja, sel.kabelM, sel.spoldzielnia, sel.ulgaPct,
-    sel.okresLat, sel.wplataWlasna, sel.narzut,
+    sel.okresLat, sel.wplataWlasna, sel.narzut, sel.zasadyDotacji,
   ],
   () => {
     if (calcTimer) clearTimeout(calcTimer)
