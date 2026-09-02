@@ -112,11 +112,12 @@ def stale_z_dokumentu(dokument: dict[str, Any]) -> dict[str, Any]:
 		"mnoznik_okna_od_elewacji": _wymagane(dokument, "mnoznik_okna_od_elewacji"),
 		"udzial_dotacji_elewacja": _wymagane(dokument, "udzial_dotacji_elewacja"),
 		# Wszystkie trzy przez _wymagane(), żeby obraz wdrożony PRZED ops/crm-cp-finansowanie.py
-		# wybuchł głośno zamiast policzyć ratę od zera zamiast prawdziwego oprocentowania.
-		# "oprocentowanie_raty_mies" jest CELOWO osobnym polem od "pmt_oprocentowanie_mies"
-		# kalkulatora OZE na tym samym Volteo Kalkulator Stale -- CP ma inne kredyty (inny bank,
-		# inne warunki) niż fotowoltaika, więc dzielenie jednej stopy między oba kalkulatory
-		# byłoby przypadkową koincydencją, nie świadomym wyborem produktowym.
+		# wybuchł głośno zamiast policzyć ratę z zerowego oprocentowania zamiast prawdziwego.
+		# "oprocentowanie_raty_mies" jest CELOWO osobnym polem na "Volteo CP Stale",
+		# niezależnym od "pmt_oprocentowanie_mies" kalkulatora OZE na "Volteo Kalkulator
+		# Stale" -- dwa różne doctype'y Single. CP ma inne kredyty (inny bank, inne warunki)
+		# niż fotowoltaika, więc dzielenie jednej stopy między oba kalkulatory byłoby
+		# przypadkową koincydencją, nie świadomym wyborem produktowym.
 		"finansowanie": {
 			"oprocentowanie_mies": _wymagane(dokument, "oprocentowanie_raty_mies"),
 			"trify_udzial": _wymagane(dokument, "trify_udzial_dotacji"),

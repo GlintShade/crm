@@ -284,8 +284,9 @@ def oblicz_finansowanie(
 	dostają wartości domyślne. Wejście OBECNE, ale niepoprawne (zły typ, spoza zakresu,
 	ujemne) jest błędem głośnym, nigdy cichym fallbackiem -- patrz _blad().
 
-	rata_trify jest CELOWO niezależna od okres_lat: to osobna, jednorazowa rata programu
-	Trify, nie rata kredytu bankowego -- okres kredytowania na nią nie wpływa.
+	rata_trify jest CELOWO niezależna od okres_lat: to osobna rata miesięczna finansowania
+	Trify, liczona wyłącznie od podstawy = dotacja_laczna x udział (stała admina), nie rata
+	kredytu bankowego -- okres kredytowania na nią nie wpływa.
 
 	Oba wejściowe kwoty (wklad_wlasny, dotacja_laczna) to już zaokrąglone publiczne figury
 	z oblicz_oferte -- dzięki temu liczby widziane przez klienta w innych częściach oferty
