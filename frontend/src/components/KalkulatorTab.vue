@@ -65,6 +65,20 @@
                     <button type="button" class="ml-1 font-medium text-ink-blue-link hover:underline" @click="applyFromConsumption">Ustaw</button>
                   </div>
                 </div>
+
+                <div v-if="sel.typKlienta === 'indywidualny'" class="col-span-2">
+                  <div class="mb-0.5 text-sm text-ink-gray-5">Zasady dotacji</div>
+                  <div class="flex flex-wrap gap-1.5">
+                    <button
+                      v-for="opt in ZASADY_DOTACJI_OPTIONS" :key="opt.value"
+                      class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
+                      :class="sel.zasadyDotacji === opt.value
+                        ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base'
+                        : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
+                      @click="sel.zasadyDotacji = opt.value"
+                    >{{ opt.label }}<span v-if="Number(dotacjaLimity[opt.value]) > 0" class="opacity-70"> (do {{ formatPln(dotacjaLimity[opt.value]) }})</span></button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -190,20 +204,6 @@
                 <div>
                   <div class="mb-0.5 text-sm text-ink-gray-5">Wpłata własna (PLN)</div>
                   <input v-model.number="sel.wplataWlasna" type="number" min="0" step="0.01" class="kalk-input" />
-                </div>
-
-                <div v-if="sel.typKlienta === 'indywidualny'" class="col-span-2">
-                  <div class="mb-0.5 text-sm text-ink-gray-5">Zasady dotacji</div>
-                  <div class="flex flex-wrap gap-1.5">
-                    <button
-                      v-for="opt in ZASADY_DOTACJI_OPTIONS" :key="opt.value"
-                      class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
-                      :class="sel.zasadyDotacji === opt.value
-                        ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base'
-                        : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
-                      @click="sel.zasadyDotacji = opt.value"
-                    >{{ opt.label }}<span v-if="Number(dotacjaLimity[opt.value]) > 0" class="opacity-70"> (do {{ formatPln(dotacjaLimity[opt.value]) }})</span></button>
-                  </div>
                 </div>
               </div>
             </div>
