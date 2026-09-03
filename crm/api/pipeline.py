@@ -33,6 +33,7 @@ import frappe
 from frappe import _
 
 from crm.permissions.org_hierarchy import BYPASS_ROLES
+from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad
 from crm.volteo_pipeline import (
 	NOTATKI,
 	OZE_RODZAJE,
@@ -164,7 +165,8 @@ def volteo_podzadania_set(
 	Pusty/`None` `data` na wpisie z `z_data=True` USUWA istniejącą datę wpisu (wpis jest
 	w całości nadpisywany nowym, nie łatany) — tak samo `note`. Zmiana jest zapisywana
 	`frappe.db.set_value(..., update_modified=False)` (bez commitu — framework commituje na
-	końcu requestu) i odnotowywana jako komentarz aktywności na szansie (`add_comment`), bo
+	końcu requestu) i odnotowywana jako komentarz `Info` przez `zapisz_slad` — ślad trafia
+	do Aktywności szansy przez czytnik komentarzy Info (`crm.api.activities`), bo
 	`db.set_value` pomija tworzenie wersji/timeline.
 
 	Sonda żywa (lokalnie, po dodaniu pola przez skrypt ops): rola `Volteo D2D Sales` musi
@@ -208,7 +210,7 @@ def volteo_podzadania_set(
 
 	if stan == "brak":
 		mapa.pop(zadanie, None)
-		tekst_komentarza = _("Cofnięto stan podzadania: {0}").format(definicja["label"])
+		tekst_komentarza = tekst_sladu("podzadanie", label=definicja["label"], stan=None, cofnieto=True)
 	else:
 		wpis = {"stan": stan, "by": frappe.session.user, "at": frappe.utils.now()}
 		if data:
@@ -217,12 +219,10 @@ def volteo_podzadania_set(
 			wpis["note"] = note
 		mapa[zadanie] = wpis
 
-		tekst_komentarza = _('Ustawiono stan podzadania „{0}” na: {1}').format(definicja["label"], stan)
-		if note:
-			tekst_komentarza = tekst_komentarza + _(' — „{0}”').format(note)
+		tekst_komentarza = tekst_sladu("podzadanie", label=definicja["label"], stan=stan, note=note)
 
 	frappe.db.set_value("CRM Deal", deal, "custom_podzadania_json", json.dumps(mapa), update_modified=False)
-	frappe.get_doc("CRM Deal", deal).add_comment("Info", tekst_komentarza)
+	zapisz_slad(deal, tekst_komentarza)
 
 	return {"ok": True, "zadanie": zadanie, "stan": stan, "stan_mapa": mapa}
 
