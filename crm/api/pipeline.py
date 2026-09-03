@@ -275,11 +275,35 @@ def advance_deal_status(deal: str, target_status: str, automation_key: str) -> b
 		if not is_forward(doc.custom_rodzaj_umowy, doc.status, target_status):
 			return False
 
+		stary_status = doc.status
+
 		# Celowo `doc.save()`, NIE `frappe.db.set_value` — tylko `.save()`
 		# przechodzi przez `add_status_change_log` na kontrolerze `CRMDeal`,
 		# więc automatyczne przejście zostaje odnotowane tak samo jak ręczne.
 		doc.status = target_status
 		doc.save(ignore_permissions=True)
+
+		# Ślad w feedzie odróżnia to przejście od ręcznej zmiany statusu — bez
+		# niego autorem wersji jest zawsze Administrator (worker Autenti / hook
+		# generowania PDF-u), więc w Aktywności nie widać, że nikt tego nie
+		# kliknął. Własny try/except: nieudany zapis śladu nie może cofnąć
+		# udanej zmiany statusu wyżej — funkcja i tak zwraca `True`.
+		try:
+			# `Volteo Automatyzacja` nie ma osobnego pola „nazwa” — `klucz` jest
+			# jednocześnie nazwą dokumentu (autoname=field:klucz), więc jedyne
+			# opisowe pole to `opis` (pełne zdanie z ops/crm-automatyzacje.py).
+			# Brak wiersza/pustego opisu -> pokaż surowy klucz automatyzacji.
+			etykieta = frappe.db.get_value("Volteo Automatyzacja", automation_key, "opis") or automation_key
+			zapisz_slad(
+				deal,
+				tekst_sladu("status_auto", automatyzacja=etykieta, stary=stary_status, nowy=target_status),
+			)
+		except Exception:
+			frappe.log_error(
+				frappe.get_traceback(),
+				f"Volteo Pipeline: ślad automatyzacji {automation_key} nie powiódł się",
+			)
+
 		return True
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), f"Volteo Pipeline: automatyzacja {automation_key} nie powiodła się")
