@@ -29,6 +29,7 @@ from crm.czyste_powietrze.obliczenia import (
 	oblicz_oferte,
 )
 from crm.koszty.rdzen import zbuduj_snapshot_cp
+from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad
 
 KALKULATOR_ROLE = {"Volteo D2D Sales", "Volteo Backend", "Volteo Core Admin", "System Manager"}
 ADMIN_ROLE = {"Volteo Core Admin", "System Manager"}
@@ -523,6 +524,14 @@ def volteo_cp_create_deal(wejscie: dict[str, Any], contact: str) -> dict[str, An
 		snapshot = zbuduj_snapshot_cp(wynik["wewnetrzne"], nazwy, frappe.utils.now())
 		deal.db_set("custom_koszty_json", json.dumps(snapshot, ensure_ascii=False))
 		deal.db_set("custom_koszty_zysk_plan", flt(snapshot["podsumowanie"]["zysk_plan"], 2))
+		# Ślad aktywności (ops#69) -- czytelny wpis w feedzie zamiast gołego "utworzył
+		# szansę" + wersji z ~24 polami. Owinięty we WŁASNY try/except: usterka zapisu
+		# śladu nie może nigdy zepsuć utworzenia szansy, które w tym miejscu już się
+		# powiodło (insert + wszystkie db_set powyżej zaszły).
+		try:
+			zapisz_slad(deal.name, tekst_sladu("kalkulator_cp", pozycje=len(wynik["linie"])))
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), "Volteo CP: błąd zapisu śladu aktywności")
 	except Exception:
 		_blad_ogolny()
 
