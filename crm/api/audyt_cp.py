@@ -27,7 +27,7 @@ komentarz `Info` po każdym przejściu (bo `db.set_value` pomija tworzenie
 wersji/timeline). Różnica od poprzednika: to zwykłe API forka (importy
 dozwolone), nie Server Script, więc logika domenowa nie jest duplikowana w
 locie tylko importowana wprost z `crm.czyste_powietrze.audyt`; i celowo ZERO
-automatyzacji rurociągu (`advance_deal_status`) — decyzja właściciela, audyt
+automatyzacji procesu (`advance_deal_status`) — decyzja właściciela, audyt
 specjalny CP niczego w statusie szansy nie przesuwa.
 """
 
@@ -62,7 +62,7 @@ REVIEWER_ROLES = BYPASS_ROLES
 """Role recenzenta (backoffice/core-admin) audytu specjalnego CP — identyczny
 zbiór co `crm.permissions.org_hierarchy.BYPASS_ROLES` (widoczność Deal/Kontakt/
 Faktura i brama `volteo_podzadania_set`), więc importujemy zamiast duplikować,
-dla spójności z resztą rurociągu CP zamiast osobnego, przypadkiem zbieżnego
+dla spójności z resztą procesu CP zamiast osobnego, przypadkiem zbieżnego
 literału."""
 
 ADMIN_ROLES = frozenset({"System Manager", "Volteo Core Admin"})
@@ -208,7 +208,7 @@ def volteo_audyt_cp_submit(deal: str) -> dict[str, Any]:
     tak jak `SUBMIT_SCRIPT` omijał Lock Guard poprzednika) — `weryfikacja_json`
     jest resetowany na `"{}"`, żeby ponowne przesłanie (po „Przywróć do
     edycji”) nie niosło nieaktualnych werdyktów z poprzedniej rundy recenzji.
-    ŻADNEJ automatyzacji rurociągu (`advance_deal_status`) — decyzja
+    ŻADNEJ automatyzacji procesu (`advance_deal_status`) — decyzja
     właściciela, zero automatyzacji statusu szansy z audytu specjalnego CP.
 
     Uprawnienia do szansy: `write` (SEC#35 — było `read`: ten endpoint

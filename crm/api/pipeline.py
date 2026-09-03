@@ -1,10 +1,10 @@
 # Copyright (c) 2026, ProEnergy and contributors
 # For license information, please see license.txt
 
-"""Warstwa frappe-owa nad `crm.volteo_pipeline` — pasek postępu rurociągu na
+"""Warstwa frappe-owa nad `crm.volteo_pipeline` — pasek postępu procesu na
 szansie sprzedaży, automatyczne przesuwanie statusu i dyspozytor powiadomień.
 
-KSZTAŁT rurociągu (kolejność kroków, notatki „co dalej”) żyje wyłącznie w
+KSZTAŁT procesu (kolejność kroków, notatki „co dalej”) żyje wyłącznie w
 `crm.volteo_pipeline` (frappe-free, testowalne bez frappe zainstalowanego
 lokalnie). Ten moduł tylko odczytuje/zapisuje dokumenty `CRM Deal` i tworzy
 powiadomienia — żadnej wiedzy o KOLEJNOŚCI statusów tu nie ma.
@@ -15,7 +15,7 @@ dla Server Scriptów; skopiowanie wzorca wywołania z innej zakładki (bez
 pełnej ścieżki) daje w runtime HTTP 417 mimo zielonych bramek lokalnych
 (patrz `crm.api.umowa` i historia z `AudytTab.vue`).
 
-Payload zwraca KSZTAŁT rurociągu (`steps`, `notes`) i osobno migawkę stanu
+Payload zwraca KSZTAŁT procesu (`steps`, `notes`) i osobno migawkę stanu
 serwera w chwili odpytania (`status`, `current_index`, `off_pipeline*`,
 `note`) — ta druga grupa pól zostaje z przyczyn diagnostycznych (sondy),
 ale front NIE czyta jej już do wyznaczenia bieżącego kroku: `resource.reload()`
@@ -60,7 +60,7 @@ def _sprawdz_dostep_do_szansy(deal: str, ptype: str = "read") -> None:
 
 @frappe.whitelist()
 def volteo_pipeline_get(deal: str) -> dict[str, Any]:
-	"""Zwraca KSZTAŁT paska rurociągu dla rodzaju umowy tej szansy (`steps`,
+	"""Zwraca KSZTAŁT paska procesu dla rodzaju umowy tej szansy (`steps`,
 	`notes`, `group`, `subtasks`) plus migawkę stanu serwera w chwili odpytania
 	(`status`, `current_index`, `off_pipeline*`, `note`).
 
@@ -70,11 +70,11 @@ def volteo_pipeline_get(deal: str) -> dict[str, Any]:
 	razie). Odczyt bieżącego STANU podzadań (zaakceptowane/błąd/nd) to osobny
 	endpoint — poza zakresem tej funkcji.
 
-	`group` to uporządkowany podzbiór statusów (kroki rurociągu plus statusy
+	`group` to uporządkowany podzbiór statusów (kroki procesu plus statusy
 	terminalne) do rozwijanej listy statusu na formularzu tej szansy — pusty,
-	gdy rodzaj umowy nie ma rurociągu.
+	gdy rodzaj umowy nie ma procesu.
 
-	Pusty `steps` (rodzaj umowy szansy bez rurociągu — np. nieustawiony) jest
+	Pusty `steps` (rodzaj umowy szansy bez procesu — np. nieustawiony) jest
 	poprawną odpowiedzią, nie błędem: frontend ukrywa wtedy pasek zamiast go
 	renderować pusty.
 
@@ -229,8 +229,8 @@ def volteo_podzadania_set(
 
 @frappe.whitelist()
 def volteo_pipeline_grupy() -> dict[str, list[str]]:
-	"""Zwraca słownik rodzaj umowy → grupa statusów (rurociąg plus statusy
-	terminalne) dla KAŻDEGO `custom_rodzaj_umowy`, który ma rurociąg.
+	"""Zwraca słownik rodzaj umowy → grupa statusów (proces plus statusy
+	terminalne) dla KAŻDEGO `custom_rodzaj_umowy`, który ma proces.
 
 	Słownictwo na poziomie rodzaju, nie konkretnej szansy — potrzebne do
 	zawężenia rozwijanej listy statusu na stronach `Deal`/`MobileDeal` oraz
@@ -253,7 +253,7 @@ def volteo_pipeline_grupy() -> dict[str, list[str]]:
 
 
 def advance_deal_status(deal: str, target_status: str, automation_key: str) -> bool:
-	"""Automatycznie przesuwa status szansy do przodu w jej rurociągu, jeśli
+	"""Automatycznie przesuwa status szansy do przodu w jej procesie, jeśli
 	automatyzacja `automation_key` jest włączona i przejście jest do przodu.
 
 	Wołane z punktów zaczepienia (generowanie PDF-u umowy, odebranie statusu
@@ -367,7 +367,7 @@ w tym dict, bez zmiany `dispatch_notification`."""
 
 
 def dispatch_notification(rule_key: str, deal: str, tekst_html: str) -> None:
-	"""Wysyła powiadomienie o automatycznym zdarzeniu na rurociągu do odbiorców
+	"""Wysyła powiadomienie o automatycznym zdarzeniu na procesie do odbiorców
 	reguły `rule_key` (wiersz `Volteo Automatyzacja`), przez włączone kanały.
 
 	Tak samo jak `advance_deal_status`, NIGDY nie rzuca — brak/wyłączona reguła,

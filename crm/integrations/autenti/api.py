@@ -10,7 +10,7 @@ Wspólny przepływ obu dokumentów żyje za modułowymi słownikami konfiguracji
 (`KONFIG_UMOWA`, `KONFIG_KREDYT`, zebrane w `KONFIGURACJE`) — jedyna różnica
 między wysyłką umowy i wysyłką formularza kredytowego to WARTOŚCI w tych
 słownikach (doctype, sposób pobrania rekordu, sposób odnalezienia PDF-u do
-wysyłki, generatory tytułu/nazw plików, i czy podpisanie przesuwa rurociąg
+wysyłki, generatory tytułu/nazw plików, i czy podpisanie przesuwa proces
 szansy), nigdy osobna kopia logiki.
 
 Wysyłka do podpisu wysyła DOKŁADNIE te bajty PDF-u, które rep już wygenerował
@@ -206,7 +206,7 @@ KONFIG_UMOWA: dict[str, Any] = {
 	"komunikat_w_toku": "Umowa jest już w trakcie podpisywania lub podpisana.",
 }
 """Konfiguracja dokumentu UMOWA dla wspólnego przepływu wysyłki/statusu/odpytywania
-poniżej. `awansuj_po_podpisie=True`: podpisanie umowy przesuwa rurociąg szansy do
+poniżej. `awansuj_po_podpisie=True`: podpisanie umowy przesuwa proces szansy do
 etapu „Umowa Podpisana” (`crm.volteo_pipeline`), analogicznie jak przed b47."""
 
 KONFIG_KREDYT: dict[str, Any] = {
@@ -737,7 +737,7 @@ def poll_autenti_status() -> None:
 					if nowy_status == "Podpisana":
 						if konfig["awansuj_po_podpisie"]:
 							# Automatyzacja: przesuwa status szansy do przodu, o ile włączona w
-							# panelu admina i przejście jest do przodu w JEJ rurociągu; nigdy
+							# panelu admina i przejście jest do przodu w JEJ procesie; nigdy
 							# nie rzuca — awaria automatyzacji nie może cofnąć już zapisanego
 							# statusu podpisu ani zablokować pobrania podpisanego pliku poniżej.
 							# Ten worker nie ma sesji wołającego (scheduler), więc `doc.save()`

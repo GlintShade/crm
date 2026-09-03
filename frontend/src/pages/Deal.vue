@@ -547,7 +547,7 @@ const title = computed(() => {
   return doc.value?.[t] || props.dealId
 })
 
-// Grupa statusów (rurociąg + terminalne) per `custom_rodzaj_umowy`, jeden
+// Grupa statusów (proces + terminalne) per `custom_rodzaj_umowy`, jeden
 // współdzielony fetch (cache klucz jak w DealPipelineBar.vue/DealNextStepNote.vue
 // dla `volteo_pipeline_get`) — sam config nie zależy od konkretnej szansy, więc
 // `auto: true` bez `params` i bez odświeżania po zmianie rodzaju wystarczy.

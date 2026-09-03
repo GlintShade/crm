@@ -2,7 +2,7 @@
 # For license information, please see license.txt
 
 """
-Ustawienia automatyzacji rurociągu — CRUD dla panelu admina
+Ustawienia automatyzacji procesu — CRUD dla panelu admina
 ======================================================================
 
 Wiersze `Volteo Automatyzacja` (jedna reguła = jeden klucz automatyzacji,
