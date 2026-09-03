@@ -41,6 +41,7 @@ from crm.api.umowa import (
 )
 from crm.integrations.autenti import logika
 from crm.integrations.autenti.client import AutentiClient
+from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad
 
 
 def _autenti_ustawienia() -> dict[str, Any]:
@@ -326,6 +327,47 @@ def autenti_kredyt_status(deal: str) -> dict[str, Any]:
 	return _status_dokumentu(deal, KONFIG_KREDYT)
 
 
+def _etykieta_dokumentu(konfig: dict[str, Any]) -> str:
+	"""Rzeczownik dokumentu do treści śladu aktywności (`tekst_sladu`): "umowę" (biernik,
+	rodzaj żeński) dla `KONFIG_UMOWA`, "formularz kredytowy" (rodzaj męski, bez odmiany w
+	tych miejscach) dla `KONFIG_KREDYT`. Wyprowadzone z `konfig["doctype"]`, nie z
+	`konfig["rodzaj"]`, żeby zawsze podążać za tą samą konfiguracją co reszta wspólnego
+	przepływu — patrz komentarz o polskiej odmianie przy `KONFIG_UMOWA`/`KONFIG_KREDYT`."""
+	if konfig["doctype"] == UMOWA_DOCTYPE:
+		return "umowę"
+	return "formularz kredytowy"
+
+
+def _slad_z_atrybucja(deal: str, tekst: str, wysylajacy: str | None = None) -> None:
+	"""Zapisuje ślad aktywności na szansie (`crm.volteo_aktywnosc.zapisz_slad`), NIGDY nie
+	rzucając — sam ślad nie może zepsuć wysyłki ani odpytywania Autenti (ta sama zasada,
+	co przy `advance_deal_status` w `poll_autenti_status`), więc każdy błąd trafia
+	wyłącznie do Error Log.
+
+	`wysylajacy`, gdy podane, przypisuje autorstwo komentarza do tego użytkownika przez
+	tymczasowy `frappe.set_user` — potrzebne wyłącznie w `_autenti_send_job`, który
+	działa w sesji workera (bez sesji wysyłającego, patrz jej docstring), więc bez tego
+	komentarz zapisałby się jako Administrator. Poprzedni użytkownik jest zawsze
+	przywracany w `finally`, żeby reszta wywołania (przed lub po tym miejscu) nie
+	działała przypadkiem pod cudzą tożsamością. Gdy `wysylajacy` jest `None` (wywołania
+	z żądania HTTP, gdzie `frappe.session.user` jest już wiarygodny, oraz ze schedulera,
+	gdzie autor Administrator jest poprawny), `set_user` w ogóle nie jest wołane.
+	"""
+	poprzedni_user = frappe.session.user
+	try:
+		if wysylajacy:
+			frappe.set_user(wysylajacy)
+		zapisz_slad(deal, tekst)
+	except Exception:
+		frappe.log_error(
+			title="Autenti: zapis śladu aktywności nie powiódł się",
+			message=f"Szansa: {deal}\n{frappe.get_traceback()}",
+		)
+	finally:
+		if wysylajacy:
+			frappe.set_user(poprzedni_user)
+
+
 def _wyslij_dokument(deal: str, konfig: dict[str, Any]) -> dict[str, Any]:
 	"""Wysyła dokument `konfig["rodzaj"]` tej szansy do podpisu przez Autenti
 	(asynchronicznie — kolejkuje `_autenti_send_job` i wraca natychmiast). Wspólne
@@ -378,6 +420,8 @@ def _wyslij_dokument(deal: str, konfig: dict[str, Any]) -> dict[str, Any]:
 		update_modified=False,
 	)
 	frappe.db.commit()
+
+	_slad_z_atrybucja(deal, tekst_sladu("autenti_wyslano", dokument=_etykieta_dokumentu(konfig)))
 
 	frappe.enqueue(
 		"crm.integrations.autenti.api._autenti_send_job",
@@ -471,6 +515,9 @@ def _autenti_send_job(deal: str, wysylajacy: str | None = None, rodzaj: str = "u
 				update_modified=False,
 			)
 			frappe.db.commit()
+			_slad_z_atrybucja(
+				deal, tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Błąd"), wysylajacy
+			)
 			return
 		pdf_bytes = plik.get_content()
 
@@ -484,6 +531,9 @@ def _autenti_send_job(deal: str, wysylajacy: str | None = None, rodzaj: str = "u
 				update_modified=False,
 			)
 			frappe.db.commit()
+			_slad_z_atrybucja(
+				deal, tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Błąd"), wysylajacy
+			)
 			return
 
 		ustawienia = _autenti_ustawienia()
@@ -504,6 +554,9 @@ def _autenti_send_job(deal: str, wysylajacy: str | None = None, rodzaj: str = "u
 				update_modified=False,
 			)
 			frappe.db.commit()
+			_slad_z_atrybucja(
+				deal, tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Błąd"), wysylajacy
+			)
 			return
 
 		handlowiec = _handlowiec(wysylajacy)
@@ -542,6 +595,9 @@ def _autenti_send_job(deal: str, wysylajacy: str | None = None, rodzaj: str = "u
 			update_modified=False,
 		)
 		frappe.db.commit()
+		_slad_z_atrybucja(
+			deal, tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Wysłana"), wysylajacy
+		)
 	except Exception as exc:
 		frappe.log_error(
 			title=f"Autenti: wysyłka {konfig['doctype']} nie powiodła się",
@@ -554,6 +610,9 @@ def _autenti_send_job(deal: str, wysylajacy: str | None = None, rodzaj: str = "u
 			update_modified=False,
 		)
 		frappe.db.commit()
+		_slad_z_atrybucja(
+			deal, tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Błąd"), wysylajacy
+		)
 
 
 def _autenti_send_umowa_job(deal: str, wysylajacy: str | None = None) -> None:
@@ -605,6 +664,7 @@ def _attach_signed_pdf(deal: str, umowa_name: str, doc_id: str, konfig: dict[str
 
 		frappe.db.set_value(konfig["doctype"], umowa_name, "signed_pdf_file", plik.file_url, update_modified=False)
 		frappe.db.commit()
+		_slad_z_atrybucja(deal, tekst_sladu("autenti_pdf", dokument=_etykieta_dokumentu(konfig)))
 	except Exception:
 		frappe.log_error(
 			title="Autenti: pobranie podpisanego pliku nie powiodło się",
@@ -634,7 +694,7 @@ def poll_autenti_status() -> None:
 			wiersze = frappe.get_all(
 				konfig["doctype"],
 				filters={"autenti_status": "Wysłana", "autenti_document_id": ["is", "set"]},
-				fields=["name", "autenti_document_id"],
+				fields=["name", "autenti_document_id", "autenti_status"],
 			)
 			if not wiersze:
 				continue
@@ -656,11 +716,23 @@ def poll_autenti_status() -> None:
 						)
 						continue
 
+					stary_status = wiersz.autenti_status
 					aktualizacja: dict[str, Any] = {"autenti_status": nowy_status}
 					if nowy_status == "Podpisana":
 						aktualizacja["signed_at"] = frappe.utils.now()
 					frappe.db.set_value(konfig["doctype"], wiersz.name, aktualizacja, update_modified=False)
 					frappe.db.commit()
+
+					if nowy_status != stary_status:
+						# Ślad tylko przy FAKTYCZNEJ zmianie stanu — `stary_status` jest tu
+						# zawsze "Wysłana" (patrz filtr `frappe.get_all` powyżej) i
+						# `logika.STATUS_MAP` nigdy nie mapuje na "Wysłana", więc ten
+						# warunek jest dziś zawsze prawdziwy; trzymany jawnie jako
+						# bezpiecznik na wypadek przyszłej zmiany mapowania.
+						_slad_z_atrybucja(
+							wiersz.name,
+							tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status=nowy_status),
+						)
 
 					if nowy_status == "Podpisana":
 						if konfig["awansuj_po_podpisie"]:
