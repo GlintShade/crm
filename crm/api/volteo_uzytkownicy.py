@@ -383,6 +383,13 @@ def widoczni_uzytkownicy() -> list[str] | None:
 	Dostępna dla każdego zalogowanego użytkownika CRM — `frappe.whitelist()`
 	bez dodatkowej bramki ról, bo nie zwraca nic poza nazwami (adresami
 	e-mail) kont User, które i tak są widoczne każdemu przez search_link.
+
+	Uwaga o `None` na froncie: Frappe nie serializuje zwróconego `None` jako
+	`"message": null` — cały klucz `message` znika z odpowiedzi JSON, więc
+	HTTP body dla wołających bez ograniczenia to dosłownie `{}`. frappe-ui
+	odczytuje to jako `response.message === undefined`, nie `null` — dlatego
+	`Link.vue` (prop `userScope`) sprawdza wynik przez luźne `== null`,
+	które łapie oba przypadki naraz.
 	"""
 	user = frappe.session.user
 
