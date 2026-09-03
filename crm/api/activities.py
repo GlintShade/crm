@@ -244,30 +244,34 @@ def get_deal_activities(name: str):
 			}
 		)
 
-	# ops#60 (R3): docinfo.assignment_logs carries "Assigned"/"Assignment
-	# Completed" comments written by frappe.desk.form.assign_to (content e.g.
-	# `Assigned to <a href="/app/user/x@y">Full Name</a>`, or a "Removed"/
-	# "Assignment completed" variant on close/unassign). Strip HTML first,
-	# then classify by prefix rather than guessing the raw markup shape.
-	for assign in docinfo.assignment_logs:
-		raw_text = frappe.utils.strip_html(assign.content or "").strip()
-		if not raw_text:
-			continue
-		if raw_text.startswith("Assigned to "):
-			text = f"przypisano do {raw_text[len('Assigned to '):].strip()}"
-		else:
-			rest = raw_text
-			for prefiks in ("Assignment completed", "Removed", "Assigned"):
-				if rest.startswith(prefiks):
-					rest = rest[len(prefiks):].strip()
-					break
-			text = f"zakończono przypisanie: {rest}" if rest else "zakończono przypisanie"
+	# ops#60 fix: docinfo.assignment_logs (frappe.desk.form.assign_to's
+	# "Assigned"/"Assignment Completed" comments) looked parseable in English,
+	# but a live probe on the pl-language site returned a fully translated
+	# sentence instead -- 'Administrator samodzielnie przydzieliło to
+	# zadanie: Przypisanie dla CRM Deal PRO/CP/26/1021' -- with no reliable
+	# assignee substring at all, so the prefix-based parsing above silently
+	# produced nonsense (or nothing) on every real assignment. Read the ToDo
+	# rows behind those comments instead: they carry allocated_to/
+	# assigned_by/status directly, independent of the site's UI language.
+	todos = frappe.get_all(
+		"ToDo",
+		filters={"reference_type": "CRM Deal", "reference_name": name},
+		fields=["name", "owner", "allocated_to", "assigned_by", "status", "creation", "modified", "modified_by"],
+		order_by="creation asc",
+		limit_page_length=200,
+	)
+	for todo in todos:
+		try:
+			pelne_imie = frappe.get_cached_value("User", todo.allocated_to, "full_name") or todo.allocated_to
+		except Exception:
+			pelne_imie = todo.allocated_to
+
 		activities.append(
 			{
-				"name": f"volteo-deal-assign-{assign.name}",
+				"name": f"volteo-deal-assign-{todo.name}",
 				"activity_type": "volteo_linked",
-				"creation": assign.creation,
-				"owner": assign.owner,
+				"creation": todo.creation,
+				"owner": todo.assigned_by or todo.owner,
 				"is_lead": False,
 				"data": {
 					"source": "CRM Deal",
@@ -275,10 +279,29 @@ def get_deal_activities(name: str):
 					"title": None,
 					"action": "assignment",
 					"doc_name": name,
-					"text": text,
+					"text": f"przypisano do {pelne_imie}",
 				},
 			}
 		)
+
+		if todo.status == "Cancelled":
+			activities.append(
+				{
+					"name": f"volteo-deal-assign-{todo.name}-cancel",
+					"activity_type": "volteo_linked",
+					"creation": todo.modified,
+					"owner": todo.modified_by,
+					"is_lead": False,
+					"data": {
+						"source": "CRM Deal",
+						"label": _("Szansa"),
+						"title": None,
+						"action": "assignment",
+						"doc_name": name,
+						"text": f"usunięto przypisanie: {pelne_imie}",
+					},
+				}
+			)
 
 	for communication in docinfo.communications + docinfo.automated_messages:
 		activity = {
