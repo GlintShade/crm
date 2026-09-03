@@ -67,6 +67,7 @@ from frappe import _
 from frappe.utils import cint, validate_email_address
 
 from crm.api import VOLTEO_POZIOMY_PROWIZJI
+from crm.permissions.org_hierarchy import BYPASS_ROLES, _in_hierarchy, _team_mem_query, hierarchy_enabled
 
 # Role, które ten moduł wolno nadać. Zamknięta biała lista — cokolwiek spoza
 # niej jest odrzucane, niezależnie od tego, kto woła (patrz docstring modułu).
@@ -349,3 +350,57 @@ def volteo_ustaw_prowizje(email: str, widzi_prowizje: int, poziom_prowizji: str)
 		"custom_widzi_prowizje": widzi_flaga,
 		"custom_poziom_prowizji": poziom_prowizji,
 	}
+
+
+@frappe.whitelist()
+def widoczni_uzytkownicy() -> list[str] | None:
+	"""Użytkownicy widoczni dla bieżącej sesji w poddrzewie Sales Hierarchy.
+
+	Ops#72: dropdown filtrów typu User (np. „Opiekun" nad listą Klienci,
+	„Doradca"/deal_owner w panelu filtrów szans) korzystał dotąd z
+	`frappe.desk.search.search_link(doctype="User")`, które zwraca WSZYSTKICH
+	aktywnych użytkowników systemowych, niezależnie od tego, kogo wołający
+	faktycznie widzi w hierarchii. Ta funkcja daje frontowi (Link.vue, prop
+	`userScope`) listę, którą może dołożyć jako dodatkowy filtr `name` do
+	tego samego wywołania search_link.
+
+	Reguły widoczności są DOKŁADNIE te same co w
+	`crm.permissions.contact_visibility._conditions` — importujemy stamtąd
+	(pośrednio, przez org_hierarchy) `BYPASS_ROLES`, `_in_hierarchy`,
+	`_team_mem_query`, `hierarchy_enabled`, zamiast kopiować logikę, żeby
+	oba miejsca nie mogły się rozjechać:
+
+	- Administrator, rola z BYPASS_ROLES (System Manager / Volteo Core Admin
+	  / Volteo Backend) albo Sales Manager SPOZA drzewa hierarchii → `None`
+	  (dla wołającego oznacza „bez dodatkowego ograniczenia" — dokładnie tak
+	  jak dziś, zanim to API istniało).
+	- W drzewie hierarchii → siebie + całe poddrzewo podwładnych
+	  (`_team_mem_query` zawiera samego managera, bo warunek to
+	  `Member.lft >= Mgr.lft`).
+	- Poza drzewem (Sales User bez roli Sales Manager, hierarchia wyłączona
+	  albo węzeł usunięty) → tylko siebie.
+
+	Dostępna dla każdego zalogowanego użytkownika CRM — `frappe.whitelist()`
+	bez dodatkowej bramki ról, bo nie zwraca nic poza nazwami (adresami
+	e-mail) kont User, które i tak są widoczne każdemu przez search_link.
+	"""
+	user = frappe.session.user
+
+	if user == "Administrator":
+		return None
+
+	roles = set(frappe.get_roles(user))
+	if roles & BYPASS_ROLES:
+		return None
+
+	in_tree = hierarchy_enabled() and _in_hierarchy(user)
+
+	# Sales Manager spoza drzewa widzi wszystkich — jak w contact_visibility.
+	if "Sales Manager" in roles and not in_tree:
+		return None
+
+	if in_tree:
+		czlonkowie = _team_mem_query(user).run(pluck=True)
+		return sorted(set(czlonkowie))
+
+	return [user]

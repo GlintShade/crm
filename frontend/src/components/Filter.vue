@@ -424,6 +424,7 @@ function getValueControl(f) {
       doctype: options,
       value: f.value,
       meLabel: etykietaMoje(props.doctype),
+      userScope: true,
     })
   } else if (typeNumber.includes(fieldtype)) {
     return h(FormControl, { type: 'number' })

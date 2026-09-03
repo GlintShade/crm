@@ -21,6 +21,7 @@
     :doctype="filter.options"
     :placeholder="filter.label"
     :meLabel="etykietaMoje(doctype)"
+    :userScope="true"
     @change="(data) => updateFilter(filter, data)"
   />
   <component
