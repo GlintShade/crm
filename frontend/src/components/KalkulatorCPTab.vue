@@ -311,12 +311,12 @@
 
             <div class="mb-2 overflow-hidden rounded-lg border border-outline-gray-1">
               <div class="flex items-center justify-between border-b border-outline-gray-1 bg-surface-gray-1 px-2.5 py-1.5 text-sm font-semibold text-ink-gray-8">
-                {{ __('Finansowanie') }}
+                {{ __('Finansowanie wkładu własnego') }}
                 <button
                   type="button"
                   role="switch"
                   :aria-checked="form.finansowanie.wlaczone"
-                  :aria-label="__('Finansowanie')"
+                  :aria-label="__('Finansowanie wkładu własnego')"
                   class="kalk-switch shrink-0"
                   :class="form.finansowanie.wlaczone ? 'kalk-switch-on' : 'kalk-switch-off'"
                   @click="form.finansowanie.wlaczone = !form.finansowanie.wlaczone"
