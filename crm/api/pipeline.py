@@ -289,11 +289,13 @@ def advance_deal_status(deal: str, target_status: str, automation_key: str) -> b
 		# kliknął. Własny try/except: nieudany zapis śladu nie może cofnąć
 		# udanej zmiany statusu wyżej — funkcja i tak zwraca `True`.
 		try:
-			# `Volteo Automatyzacja` nie ma osobnego pola „nazwa” — `klucz` jest
-			# jednocześnie nazwą dokumentu (autoname=field:klucz), więc jedyne
-			# opisowe pole to `opis` (pełne zdanie z ops/crm-automatyzacje.py).
-			# Brak wiersza/pustego opisu -> pokaż surowy klucz automatyzacji.
-			etykieta = frappe.db.get_value("Volteo Automatyzacja", automation_key, "opis") or automation_key
+			# `Volteo Automatyzacja` nie ma krótkiej etykiety: `klucz` jest już
+			# nazwą dokumentu (autoname=field:klucz), a jedyne pole opisowe,
+			# `opis`, to pełne zdanie z ops/crm-automatyzacje.py — za długie do
+			# wpisu w feedzie. Zamiast czytać dokument z bazy, klucz ze spacjami
+			# zamiast podkreśleń ("umowa_wygenerowana" -> "umowa wygenerowana")
+			# jest wystarczająco czytelną nazwą i nie wymaga zapytania.
+			etykieta = automation_key.replace("_", " ")
 			zapisz_slad(
 				deal,
 				tekst_sladu("status_auto", automatyzacja=etykieta, stary=stary_status, nowy=target_status),
