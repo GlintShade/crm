@@ -17,6 +17,15 @@ from crm.volteo_aktywnosc import (
 	linie_z_wersji,
 )
 
+#: Limit wersji (Version) czytanych bezpośrednio dla samej szansy (CRM Deal) w get_deal_activities.
+LIMIT_WERSJI_SZANSY = 200
+#: Limit rekordów powiązanych (frappe.get_list) oraz wpisów ToDo czytanych w feedzie aktywności.
+LIMIT_REKORDOW_POWIAZANYCH = 200
+#: Limit wersji (Version) czytanych per rekord powiązany w get_volteo_linked_activities.
+LIMIT_WERSJI_POWIAZANYCH = 200
+#: Limit komentarzy audytu (Comment) czytanych przy budowaniu mostka audyt -> aktywność.
+LIMIT_KOMENTARZY_AUDYTU = 500
+
 
 @frappe.whitelist()
 def get_activities(name: str):
@@ -83,7 +92,7 @@ def get_deal_activities(name: str):
 		filters={"ref_doctype": "CRM Deal", "docname": name},
 		fields=["name", "owner", "creation", "data"],
 		order_by="creation desc",
-		limit_page_length=200,
+		limit_page_length=LIMIT_WERSJI_SZANSY,
 	)
 
 	for version in versions:
@@ -258,7 +267,7 @@ def get_deal_activities(name: str):
 		filters={"reference_type": "CRM Deal", "reference_name": name},
 		fields=["name", "owner", "allocated_to", "assigned_by", "status", "creation", "modified", "modified_by"],
 		order_by="creation asc",
-		limit_page_length=200,
+		limit_page_length=LIMIT_REKORDOW_POWIAZANYCH,
 	)
 	for todo in todos:
 		try:
@@ -604,7 +613,7 @@ def get_volteo_linked_activities(name: str):
 				filters={link_field: name},
 				fields=fields,
 				order_by="creation asc",
-				limit_page_length=200,
+				limit_page_length=LIMIT_REKORDOW_POWIAZANYCH,
 				ignore_permissions=False,
 			)
 		except Exception:
@@ -680,7 +689,7 @@ def get_volteo_linked_activities(name: str):
 					filters={"ref_doctype": dt, "docname": rec.name},
 					fields=["owner", "creation", "data"],
 					order_by="creation asc",
-					limit_page_length=50,
+					limit_page_length=LIMIT_WERSJI_POWIAZANYCH,
 				)
 			except Exception:
 				frappe.log_error(
@@ -745,7 +754,7 @@ def get_volteo_linked_activities(name: str):
 					filters={"reference_doctype": audyt_doctype, "reference_name": name,
 							 "comment_type": ["in", ["Comment", "Info"]]},
 					fields=["name", "owner", "creation", "content", "comment_type"],
-					order_by="creation desc", limit_page_length=500,  # desc to keep newest rows; caller re-sorts for display
+					order_by="creation desc", limit_page_length=LIMIT_KOMENTARZY_AUDYTU,  # desc to keep newest rows; caller re-sorts for display
 				)
 				for c in comments:
 					raw = frappe.utils.strip_html(c.get("content") or "").strip()
