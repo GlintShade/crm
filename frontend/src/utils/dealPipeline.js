@@ -29,7 +29,7 @@
  */
 
 /**
- * Wyznacza indeks statusu w krokach rurociągu.
+ * Wyznacza indeks statusu w krokach procesu.
  *
  * @param {Array<{status: string, index: number}>|null|undefined} steps
  * @param {string|null|undefined} status
@@ -48,16 +48,16 @@ export function currentIndexFor(steps, status) {
  *
  * - 'hidden' — brak payloadu, albo `steps` puste/nieobecne (deal bez
  *   rodzaju albo z nierozpoznanym rodzajem — pasek się nie renderuje).
- * - 'progress' — `status` jest jednym z kroków rurociągu, a `statusType`
+ * - 'progress' — `status` jest jednym z kroków procesu, a `statusType`
  *   nie jest `'Won'` (niezależnie od tego, co mówi migawkowe
  *   `payload.current_index` — ono jest nieużywane).
- * - 'won' — albo status POZA rurociągiem ze `statusType === 'Won'` (np. OZE
- *   „Wygrana – montaż"), albo status W rurociągu ze `statusType === 'Won'`
- *   (np. CP „Projekt rozliczony", ostatni krok rurociągu, który jest
+ * - 'won' — albo status POZA procesem ze `statusType === 'Won'` (np. OZE
+ *   „Wygrana – montaż"), albo status W procesie ze `statusType === 'Won'`
+ *   (np. CP „Projekt rozliczony", ostatni krok procesu, który jest
  *   jednocześnie statusem typu Won — cały pasek renderuje się wtedy na
  *   zielono zamiast jako zwykły krok „current").
- * - 'lost' — status POZA rurociągiem, `statusType === 'Lost'`.
- * - 'unknown' — status POZA rurociągiem, a `statusType` inny/nieznany
+ * - 'lost' — status POZA procesem, `statusType === 'Lost'`.
+ * - 'unknown' — status POZA procesem, a `statusType` inny/nieznany
  *   (obcy status spoza Lost/Won, albo store statusów jeszcze nie załadowany).
  *
  * @param {{steps?: Array, notes?: Object}|null|undefined} payload
@@ -125,7 +125,7 @@ export function stepNumber(index) {
 /**
  * Notatka o następnym kroku — pokazywana tylko w trybie 'progress'; pusty
  * lub sam biały znak traktowany jak brak notatki. Czyta `payload.notes[status]`
- * (kształt, per rurociąg), NIE migawkowe `payload.note`.
+ * (kształt, per proces), NIE migawkowe `payload.note`.
  *
  * @param {{steps?: Array, notes?: Object}|null|undefined} payload
  * @param {string|null|undefined} status
@@ -144,9 +144,9 @@ export function nextStepNote(payload, status, statusType) {
  * Surowa nazwa statusu do pokazania w odznace paska poza pipeline'em
  * ('lost' / 'won' / 'unknown'); w trybie 'progress'/'hidden' brak odznaki.
  *
- * Status W rurociągu (`steps`) nigdy nie dostaje odznaki, nawet gdy jego
+ * Status W procesie (`steps`) nigdy nie dostaje odznaki, nawet gdy jego
  * `statusType === 'Won'` sprawia, że `bandMode` zwraca 'won' (np. CP
- * „Projekt rozliczony" — 12. krok rurociągu, jednocześnie status typu Won).
+ * „Projekt rozliczony" — 12. krok procesu, jednocześnie status typu Won).
  * Bez tego guarda cały zielony pasek miałby obok zdublowaną odznakę z tym
  * samym statusem — guard sprawdzony PRZED odczytaniem `mode`, żeby ten
  * przypadek nie musiał przechodzić przez gałąź 'won' poniżej.
@@ -167,7 +167,7 @@ export function offPipelineBadge(payload, status, statusType) {
 }
 
 /**
- * Grupa statusów (rurociąg plus statusy terminalne) dla danego rodzaju umowy,
+ * Grupa statusów (proces plus statusy terminalne) dla danego rodzaju umowy,
  * wyciągnięta z konfiguracji zwróconej przez `crm.api.pipeline.volteo_pipeline_grupy`
  * (`{ [rodzaj]: [nazwy statusów w kolejności] }`). Null-safe względem obu
  * argumentów — brak configu (zasób jeszcze nie załadowany / błąd fetchu) albo

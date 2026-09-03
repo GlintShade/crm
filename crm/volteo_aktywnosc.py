@@ -15,7 +15,7 @@ podaje tylko 10 najnowszych wersji, dotychczasowy czytnik
 (`crm/api/activities.py:get_deal_activities`) czytał wyłącznie
 `data["changed"][0]` (pierwszą zmianę z wersji, ignorując resztę),
 `handle_multiple_versions` sklejał wpisy tego samego autora bez limitu
-czasu, a komentarze `Info` (podzadania rurociągu) trafiały do
+czasu, a komentarze `Info` (podzadania procesu) trafiały do
 `docinfo.info_logs`, którego czytnik nie dotykał. Ten moduł niesie CAŁĄ
 czystą logikę; pozostałe pozycje paczki (czytnik w `crm/api/activities.py`,
 pisarze w `crm/api/*.py`) wyłącznie go konsumują — patrz ops#57.

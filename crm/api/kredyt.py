@@ -30,7 +30,7 @@ polegania na typie kolumny.
 Od b47 (decyzja właściciela, 2026-08-17) formularz kredytowy JEST wysyłany do
 e-podpisu przez Autenti — endpointy wysyłki/statusu/pobrania żyją w
 `crm/integrations/autenti/api.py`, analogicznie do `Volteo Umowa` (od b45).
-Co pozostaje celowo nieobsłużone: żadna automatyzacja rurociągu
+Co pozostaje celowo nieobsłużone: żadna automatyzacja procesu
 (`advance_deal_status`) nie reaguje na podpisanie formularza kredytowego —
 w odróżnieniu od umowy, kredyt nie ma własnego etapu w `crm.volteo_pipeline`
 i jego podpisanie niczego w statusie szansy nie przesuwa (patrz też komentarz
@@ -261,7 +261,7 @@ komunikatu `volteo_kredyt_pdf`, gdy dane kontaktu podstawowego są niekomplet.""
 def _sprawdz_rodzaj_oze(deal_doc: "frappe.model.document.Document") -> None:
 	"""Formularz kredytowy dotyczy wyłącznie linii OZE — `custom_rodzaj_umowy` szansy
 	musi być jedną z wartości `crm.volteo_pipeline.OZE_RODZAJE`. Czyste Powietrze ma
-	własny, odrębny rurociąg (`PIPELINE_CP`) bez etapu kredytowego, więc dostęp do
+	własny, odrębny proces (`PIPELINE_CP`) bez etapu kredytowego, więc dostęp do
 	tego formularza dla takiej szansy jest błędem danych szansy, nie stanem
 	roboczym formularza — stąd osobna, jawna bramka zamiast cichego pustego wyniku.
 	"""
@@ -591,10 +591,10 @@ def volteo_kredyt_pdf(deal: str) -> dict[str, Any]:
 	decyzja właściciela: ten PDF trafia do banku/pośrednika kredytowego, więc
 	częściowy wydruk nie ma tam żadnej wartości roboczej.
 
-	Rurociąg OZE (`crm.volteo_pipeline.PIPELINE_OZE`) nie ma etapu „Kredyt” —
+	Proces OZE (`crm.volteo_pipeline.PIPELINE_OZE`) nie ma etapu „Kredyt” —
 	w odróżnieniu od `volteo_umowa_pdf` ten endpoint celowo NIE wywołuje
 	`crm.api.pipeline.advance_deal_status`: wygenerowanie formularza kredytowego
-	nie przesuwa szansy w rurociągu.
+	nie przesuwa szansy w procesie.
 
 	Uprawnienia: rola kalkulatora + `write` na szansie (SEC#35 — było `read`:
 	generowanie mimo braku zaawansowania statusu i tak wstawia i kasuje pliki

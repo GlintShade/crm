@@ -688,7 +688,7 @@ def volteo_umowa_pdf(deal: str) -> dict[str, Any]:
 		frappe.log_error(frappe.get_traceback(), "Volteo Umowa: błąd zapisu śladu PDF")
 
 	# Automatyzacja: przesuwa status szansy do przodu, o ile włączona w panelu
-	# admina i przejście jest do przodu w JEJ rurociągu; nigdy nie rzuca — awaria
+	# admina i przejście jest do przodu w JEJ procesie; nigdy nie rzuca — awaria
 	# automatyzacji nie może cofnąć już wygenerowanego i zapisanego PDF-u.
 	advance_deal_status(deal, "Umowa Wygenerowana", "umowa_wygenerowana")
 

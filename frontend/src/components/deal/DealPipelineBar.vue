@@ -9,7 +9,7 @@
 
   Cała logika stanu (tryb paska, stan węzła, numer węzła, odznaka poza
   pipeline'em) żyje w `utils/dealPipeline.js` — ten komponent tylko renderuje
-  wynik na podstawie payloadu SERWERA (KSZTAŁT rurociągu: `steps`/`notes`, z
+  wynik na podstawie payloadu SERWERA (KSZTAŁT procesu: `steps`/`notes`, z
   `crm.api.pipeline.volteo_pipeline_get`, WOŁANY PO PEŁNEJ KROPKOWANEJ
   ŚCIEŻCE — gołe nazwy dają HTTP 417 w runtime dla API forka) i `props.status`
   (prawda kliencka — patrz komentarz w <script>). Notatka "następny krok" NIE
@@ -38,7 +38,7 @@
     :class="mode === 'lost' ? 'bg-surface-red-2' : 'bg-surface-base'"
   >
     <!-- Zawartość ograniczona do ~80% szerokości kontenera i wyśrodkowana
-         TYLKO gdy rurociąg ma niewiele węzłów (OZE, 5 kroków) — przy 12
+         TYLKO gdy proces ma niewiele węzłów (OZE, 5 kroków) — przy 12
          węzłach CP ograniczenie do 80% zostawiłoby za mało miejsca, więc tam
          zawartość zajmuje pełną szerokość i polega na overflow-x-auto niżej. -->
     <div
@@ -330,7 +330,7 @@
 // dropdownu w nagłówku) jest wtedy jeszcze w locie; serwer potrafił oddać
 // STARY status i pasek renderował poprzedni krok aż do kolejnej zmiany.
 // Rozwiązanie: serwer (`volteo_pipeline_get`) dostarcza tylko KSZTAŁT
-// rurociągu (`steps`, `notes`, `subtasks`) dla `rodzaj` — payload odświeżamy
+// procesu (`steps`, `notes`, `subtasks`) dla `rodzaj` — payload odświeżamy
 // WYŁĄCZNIE, gdy `rodzaj` się zmienia. Bieżący krok/tryb/notatkę/odznakę
 // liczymy tu, w komponencie, synchronicznie z `props.status` (jedyna prawda
 // kliencka — ustawiana przez dropdown natychmiast, bez czekania na
@@ -377,7 +377,7 @@ const resource = createResource({
   cache: ['volteo-pipeline', props.dealId],
 })
 
-// Kształt rurociągu zależy tylko od `rodzaj` — to jedyna zmiana, po której
+// Kształt procesu zależy tylko od `rodzaj` — to jedyna zmiana, po której
 // warto odpytać serwer ponownie (np. zmiana linii produktowej na szansie).
 watch(() => props.rodzaj, () => resource.reload())
 
@@ -395,7 +395,7 @@ const currentIndex = computed(() => currentIndexFor(payload.value?.steps, props.
 const mode = computed(() => bandMode(payload.value, props.status, statusType.value))
 const badgeLabel = computed(() => offPipelineBadge(payload.value, props.status, statusType.value))
 
-// Cap `sm:max-w-[80%]` (i etykiety w pełnym rozmiarze) tylko dla rurociągów
+// Cap `sm:max-w-[80%]` (i etykiety w pełnym rozmiarze) tylko dla procesów
 // z niewieloma krokami (OZE, 5) — przy 12 węzłach CP zostawiałby za mało
 // miejsca w wąskim oknie, więc tam etykiety są węższe/mniejsze (patrz użycia
 // niżej w template). Warunkowanie na `steps.length` (nie na `rodzaj`) trzyma
@@ -585,7 +585,7 @@ const etapZadania = computed(() => tasksForStage(payload.value?.subtasks, rozwin
 // Stan podzadań (b49 F3) — pobranie, edytowalność, zapis optymistyczny.
 // -----------------------------------------------------------------------
 
-// Osobne pobranie od `resource` (KSZTAŁT rurociągu) powyżej — ten payload
+// Osobne pobranie od `resource` (KSZTAŁT procesu) powyżej — ten payload
 // jest per-SZANSA (STAN, nie katalog), więc cache klucz niesie `dealId`, nie
 // `rodzaj`. Pełna kropkowana ścieżka: gołe nazwy metod dają HTTP 417 w
 // runtime dla API forka (patrz nagłówek pliku / `crm.api.umowa`).
@@ -675,7 +675,7 @@ function cancelNoteTimer(klucz) {
 // `res.stan_mapa` (serwer nadpisuje cały wpis, nie łata go — stąd
 // `buildPodzadaniePayload` zawsze wysyła KOMPLET bieżącej daty/notatki, nie
 // tylko zmienione pole). Nigdy `resource.reload()` — ten sam race co przy
-// statusie rurociągu (patrz nagłówek pliku).
+// statusie procesu (patrz nagłówek pliku).
 async function persist(klucz, { stan, data, note, zData }) {
   if (!editable.value || busyZadania[klucz]) return
 

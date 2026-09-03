@@ -23,12 +23,12 @@ from crm.volteo_pipeline import (
 
 
 class TestVolteoPipeline(unittest.TestCase):
-	def test_a_wszystkie_rodzaje_oze_dają_ten_sam_rurociąg(self: "TestVolteoPipeline") -> None:
+	def test_a_wszystkie_rodzaje_oze_dają_ten_sam_proces(self: "TestVolteoPipeline") -> None:
 		for rodzaj in OZE_RODZAJE:
 			self.assertEqual(pipeline_key_for(rodzaj), "OZE")
 			self.assertEqual(pipeline_for(rodzaj), PIPELINE_OZE)
 
-	def test_b_czyste_powietrze_ma_własny_rurociąg(self: "TestVolteoPipeline") -> None:
+	def test_b_czyste_powietrze_ma_własny_proces(self: "TestVolteoPipeline") -> None:
 		self.assertEqual(pipeline_key_for("Czyste Powietrze"), "CP")
 		self.assertEqual(pipeline_for("Czyste Powietrze"), PIPELINE_CP)
 
@@ -47,7 +47,7 @@ class TestVolteoPipeline(unittest.TestCase):
 		self.assertEqual(step_index("Fotowoltaika", "Finansowanie"), 4)
 
 	def test_e_step_index_pierwszy_środkowy_ostatni_cp(self: "TestVolteoPipeline") -> None:
-		# Rurociąg CP ma od b49 12 kroków (patrz PIPELINE_CP) — Lead pierwszy,
+		# Proces CP ma od b49 12 kroków (patrz PIPELINE_CP) — Lead pierwszy,
 		# "Audyt Energetyczny" trzeci (indeks 2), "Projekt rozliczony" ostatni
 		# (indeks 11, niesie type=Won na wierszu statusu, patrz docstring modułu).
 		self.assertEqual(step_index("Czyste Powietrze", "Lead"), 0)
@@ -56,7 +56,7 @@ class TestVolteoPipeline(unittest.TestCase):
 
 	def test_f_finansowanie_wyłącznie_w_oze(self: "TestVolteoPipeline") -> None:
 		# Do b48 "Finansowanie" był jednym wierszem statusu współdzielonym przez oba
-		# rurociągi pod różnymi indeksami. Od b49 CP ma własny krok "Finansowanie Trify"
+		# procesy pod różnymi indeksami. Od b49 CP ma własny krok "Finansowanie Trify"
 		# w jego miejsce — "Finansowanie" jest teraz statusem wyłącznie OZE.
 		self.assertEqual(step_index("Fotowoltaika", "Finansowanie"), 4)
 		self.assertEqual(step_index("Czyste Powietrze", "Finansowanie"), -1)
@@ -66,23 +66,23 @@ class TestVolteoPipeline(unittest.TestCase):
 		self.assertEqual(step_index("Fotowoltaika", "Weryfikacja Backoffice"), 3)
 		self.assertEqual(step_index("Czyste Powietrze", "Weryfikacja Backoffice"), -1)
 
-	def test_f3_oferta_docelowa_usunięta_z_obu_rurociągów(self: "TestVolteoPipeline") -> None:
+	def test_f3_oferta_docelowa_usunięta_z_obu_procesów(self: "TestVolteoPipeline") -> None:
 		self.assertEqual(step_index("Fotowoltaika", "Oferta Docelowa"), -1)
 		self.assertEqual(step_index("Czyste Powietrze", "Oferta Docelowa"), -1)
 
 	def test_f4_oferta_wstępna_i_właściwa_usunięte_z_cp(self: "TestVolteoPipeline") -> None:
-		# "Oferta Wstępna"/"Oferta Właściwa" były w rurociągu CP do b48; od b49 zastąpione
+		# "Oferta Wstępna"/"Oferta Właściwa" były w procesie CP do b48; od b49 zastąpione
 		# przez "Umowa na realizację" (z podzadaniami umowa:oferta_* — patrz PODZADANIA_CP).
 		self.assertEqual(step_index("Czyste Powietrze", "Oferta Wstępna"), -1)
 		self.assertEqual(step_index("Czyste Powietrze", "Oferta Właściwa"), -1)
 
-	def test_g_statusy_poza_rurociągiem_dają_minus_jeden(self: "TestVolteoPipeline") -> None:
+	def test_g_statusy_poza_procesem_dają_minus_jeden(self: "TestVolteoPipeline") -> None:
 		self.assertEqual(step_index("Fotowoltaika", "Przegrana"), -1)
 		self.assertEqual(step_index("Fotowoltaika", "Wygrana – montaż"), -1)
 		self.assertEqual(step_index("Czyste Powietrze", "Przegrana"), -1)
 		self.assertEqual(step_index("Czyste Powietrze", "Wygrana – montaż"), -1)
 
-	def test_h_status_poza_rurociągiem_jako_bieżący_daje_false(self: "TestVolteoPipeline") -> None:
+	def test_h_status_poza_procesem_jako_bieżący_daje_false(self: "TestVolteoPipeline") -> None:
 		self.assertFalse(is_forward("Fotowoltaika", "Przegrana", "Umowa Wygenerowana"))
 		self.assertFalse(is_forward("Fotowoltaika", "Wygrana – montaż", "Umowa Wygenerowana"))
 		self.assertFalse(is_forward("Czyste Powietrze", "Przegrana", "Dokumentacja"))
@@ -102,13 +102,13 @@ class TestVolteoPipeline(unittest.TestCase):
 		self.assertFalse(is_forward("Fotowoltaika", "Lead", "Lead"))
 		self.assertFalse(is_forward("Czyste Powietrze", "Dokumentacja", "Dokumentacja"))
 
-	def test_l_is_forward_cel_poza_rurociągiem_fałsz(self: "TestVolteoPipeline") -> None:
+	def test_l_is_forward_cel_poza_procesem_fałsz(self: "TestVolteoPipeline") -> None:
 		self.assertFalse(is_forward("Fotowoltaika", "Lead", "Przegrana"))
 		self.assertFalse(is_forward("Czyste Powietrze", "Lead", "Wygrana – montaż"))
 
 	def test_l2_is_forward_bieżący_terminalny_zawsze_fałsz(self: "TestVolteoPipeline") -> None:
-		# Terminale NIE są w rurociągu, więc jako status bieżący dają zawsze False,
-		# niezależnie od tego, że target jest dalej w rurociągu.
+		# Terminale NIE są w procesie, więc jako status bieżący dają zawsze False,
+		# niezależnie od tego, że target jest dalej w procesie.
 		self.assertFalse(is_forward("Fotowoltaika", "Wygrana – montaż", "Finansowanie"))
 		self.assertFalse(is_forward("Czyste Powietrze", "Przegrana", "Realizacja"))
 
@@ -141,11 +141,11 @@ class TestVolteoPipeline(unittest.TestCase):
 		self.assertEqual(grupa, (*PIPELINE_CP, "Przegrana"))
 		self.assertEqual(grupa[-1], "Przegrana")
 
-	def test_r_grupa_for_brak_rurociągu_daje_none(self: "TestVolteoPipeline") -> None:
+	def test_r_grupa_for_brak_procesu_daje_none(self: "TestVolteoPipeline") -> None:
 		for rodzaj in (None, "", "Nieznany"):
 			self.assertIsNone(grupa_for(rodzaj))
 
-	def test_s_grupa_for_kolejność_to_rurociąg_potem_terminale(self: "TestVolteoPipeline") -> None:
+	def test_s_grupa_for_kolejność_to_proces_potem_terminale(self: "TestVolteoPipeline") -> None:
 		grupa_oze = grupa_for("Fotowoltaika")
 		self.assertEqual(grupa_oze[: len(PIPELINE_OZE)], PIPELINE_OZE)
 		grupa_cp = grupa_for("Czyste Powietrze")

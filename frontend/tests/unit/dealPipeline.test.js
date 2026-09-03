@@ -16,8 +16,8 @@ const stepsPvMe = [
   { status: 'Umowa', index: 2 },
 ]
 
-// Rurociąg CP: „Projekt rozliczony" jest jednocześnie 12. (tu: ostatnim)
-// krokiem rurociągu ORAZ statusem typu Won (b49 F1) — w przeciwieństwie do
+// Proces CP: „Projekt rozliczony" jest jednocześnie 12. (tu: ostatnim)
+// krokiem procesu ORAZ statusem typu Won (b49 F1) — w przeciwieństwie do
 // OZE, gdzie „Wygrana – montaż" jest CAŁKOWICIE POZA `steps`.
 const stepsCp = [
   { status: 'Nowy', index: 0 },
@@ -105,13 +105,13 @@ describe('Pipeline dealu — logika węzłów paska etapów (dealPipeline)', () 
       },
     )
 
-    it('undefined statusType (store jeszcze nie załadowany) daje "unknown" dla statusu spoza rurociągu', () => {
+    it('undefined statusType (store jeszcze nie załadowany) daje "unknown" dla statusu spoza procesu', () => {
       const payload = shapePayload()
       expect(bandMode(payload, 'Przegrana', undefined)).toBe('unknown')
     })
   })
 
-  describe('bandMode — status Won OBECNY w steps (b49 F1: CP „Projekt rozliczony" jest jednocześnie 12. krokiem rurociągu i statusem Won)', () => {
+  describe('bandMode — status Won OBECNY w steps (b49 F1: CP „Projekt rozliczony" jest jednocześnie 12. krokiem procesu i statusem Won)', () => {
     it('zwraca "won" (nie "progress") gdy status jest w steps i statusType==="Won"', () => {
       const payload = shapePayload({ steps: stepsCp })
       expect(bandMode(payload, 'Projekt rozliczony', 'Won')).toBe('won')

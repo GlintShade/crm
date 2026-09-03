@@ -38,7 +38,7 @@ const resource = createResource({
 })
 
 // Ta sama zasada braku odświeżania po zmianie statusu co w DealPipelineBar.vue
-// (pełne uzasadnienie tam) — payload to tylko KSZTAŁT rurociągu per `rodzaj`,
+// (pełne uzasadnienie tam) — payload to tylko KSZTAŁT procesu per `rodzaj`,
 // więc odpytujemy serwer ponownie wyłącznie, gdy `rodzaj` się zmienia.
 watch(() => props.rodzaj, () => resource.reload())
 

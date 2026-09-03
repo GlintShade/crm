@@ -1,7 +1,7 @@
 # Copyright (c) 2026, ProEnergy and contributors
 # For license information, please see license.txt
 
-"""Definicje rurociągów statusów `CRM Deal` dla poszczególnych linii produktowych.
+"""Definicje procesów statusów `CRM Deal` dla poszczególnych linii produktowych.
 
 Moduł celowo nie importuje ``frappe`` — to jedyny sposób, żeby dało się go
 przetestować lokalnie (na tej maszynie ``frappe`` nie jest instalowalne, więc
@@ -9,35 +9,35 @@ reszta backendu ma wyłącznie bramkę składniową). Cała logika zależna od
 frameworka (odczyt/zapis statusu na dokumencie, wywołania z Server Scriptów
 czy hooków) mieszka w ``crm.api.pipeline``.
 
-KOLEJNOŚĆ etapów rurociągu żyje WYŁĄCZNIE tutaj, nigdy w `CRM Deal
+KOLEJNOŚĆ etapów procesu żyje WYŁĄCZNIE tutaj, nigdy w `CRM Deal
 Status.position` — to pole steruje jedynie kolejnością wyświetlania w
-rozwijanej liście i nie ma pojęcia o tym, że rurociąg OZE i rurociąg CP to
+rozwijanej liście i nie ma pojęcia o tym, że proces OZE i proces CP to
 dwa niezależne zbiory kroków (historycznie „Finansowanie” było jednym
-wierszem statusu współdzielonym przez oba rurociągi pod różnymi indeksami —
+wierszem statusu współdzielonym przez oba procesy pod różnymi indeksami —
 od b49 CP ma już własny krok „Finansowanie Trify” w jego miejsce, ale
 zasada zostaje: nawet gdy status JEST fizycznie współdzielony, licząc „do
 przodu” po `position`, nie da się odpowiedzieć na pytanie „do przodu
-względem czego” — trzeba znać rurociąg danej sprawy). „Weryfikacja
+względem czego” — trzeba znać proces danej sprawy). „Weryfikacja
 Backoffice” jest statusem WYŁĄCZNIE OZE — CP go nie ma.
 
-Od b49 CP ma własny, 12-krokowy rurociąg (`PIPELINE_CP`) — patrz katalog
+Od b49 CP ma własny, 12-krokowy proces (`PIPELINE_CP`) — patrz katalog
 podzadań `PODZADANIA_CP` niżej za mini-zadaniami per krok. Ostatni krok,
 „Projekt rozliczony”, niesie `type=Won` na wierszu `CRM Deal Status` — CP ma
-teraz status wygranej WEWNĄTRZ rurociągu, nie jako osobny terminal (inaczej
+teraz status wygranej WEWNĄTRZ procesu, nie jako osobny terminal (inaczej
 niż OZE, gdzie status wygranej z `TERMINALE["OZE"]` jest terminalem poza
-rurociągiem).
+procesem).
 
-Poza rurociągiem żyją statusy TERMINALNE (`TERMINALE`) — wybieralne w
+Poza procesem żyją statusy TERMINALNE (`TERMINALE`) — wybieralne w
 rozwijanej liście sprawy, ale renderowane jako stan pasma odznaki
 (wygrana/przegrana), nigdy jako ponumerowany krok. Rozwijana lista w
-formularzu sprawy pokazuje dokładnie `grupa_for(rodzaj)`: rurociąg plus
+formularzu sprawy pokazuje dokładnie `grupa_for(rodzaj)`: proces plus
 statusy terminalne, w tej kolejności.
 """
 
 import json
 
 OZE_RODZAJE: frozenset[str] = frozenset({"Fotowoltaika", "Fotowoltaika + Magazyn", "Magazyn energii"})
-"""Wartości pola `custom_rodzaj_umowy`, które mapują się na rurociąg OZE."""
+"""Wartości pola `custom_rodzaj_umowy`, które mapują się na proces OZE."""
 
 PIPELINE_OZE: tuple[str, ...] = (
 	"Lead",
@@ -46,7 +46,7 @@ PIPELINE_OZE: tuple[str, ...] = (
 	"Weryfikacja Backoffice",
 	"Finansowanie",
 )
-"""Rurociąg statusów dla linii OZE (fotowoltaika + magazyny energii), w kolejności przejścia."""
+"""Proces statusów dla linii OZE (fotowoltaika + magazyny energii), w kolejności przejścia."""
 
 PIPELINE_CP: tuple[str, ...] = (
 	"Lead",
@@ -62,22 +62,22 @@ PIPELINE_CP: tuple[str, ...] = (
 	"2 transza",
 	"Projekt rozliczony",
 )
-"""Rurociąg statusów dla linii Czyste Powietrze, w kolejności przejścia. 12 kroków; ostatni,
+"""Proces statusów dla linii Czyste Powietrze, w kolejności przejścia. 12 kroków; ostatni,
 „Projekt rozliczony”, niesie `type=Won` na wierszu `CRM Deal Status` — patrz docstring modułu."""
 
 TERMINALE: dict[str, tuple[str, ...]] = {
 	"OZE": ("Wygrana – montaż", "Przegrana"),
 	"CP": ("Przegrana",),
 }
-"""Statusy terminalne per rurociąg — wybieralne w rozwijanej liście sprawy, renderowane jako
+"""Statusy terminalne per proces — wybieralne w rozwijanej liście sprawy, renderowane jako
 stan pasma odznaki (wygrana/przegrana), nigdy jako ponumerowany krok; CP nie ma osobnego
-terminala wygranej, bo „wygraność” niesie ostatni krok rurociągu („Projekt rozliczony”)."""
+terminala wygranej, bo „wygraność” niesie ostatni krok procesu („Projekt rozliczony”)."""
 
 NOTATKI: dict[str, dict[str, str]] = {
 	"OZE": {"Umowa Podpisana": "Uzupełnij audyt i wyślij do weryfikacji."},
 	"CP": {"Dokumentacja": "Umowa na obsługę dotacji, GOPS, pełnomocnictwo"},
 }
-"""Notatka „co dalej” per rurociąg i status bieżący; brak wpisu oznacza brak notatki."""
+"""Notatka „co dalej” per proces i status bieżący; brak wpisu oznacza brak notatki."""
 
 
 STANY_PODZADAN: tuple[str, ...] = ("waiting", "accepted", "error", "nd")
@@ -330,14 +330,14 @@ PODZADANIA_CP: dict[str, tuple[dict, ...]] = {
 		},
 	),
 }
-"""Katalog podzadań (mini zadań) CP, keyed nazwą statusu rurociągu (`PIPELINE_CP`). Klucze
+"""Katalog podzadań (mini zadań) CP, keyed nazwą statusu procesu (`PIPELINE_CP`). Klucze
 podzadań mają wzorzec `<prefiks>:<zadanie>` — ten sam wzorzec (`pole:`/`foto:`) co audyt
 techniczny w `frontend/src/utils/audytWeryfikacja.js`, stabilny pod przyszły sync z
 `Volteo Audyt`. „Lead” i „Projekt rozliczony” celowo bez wpisu — brak podzadań na tych etapach."""
 
 
 def pipeline_key_for(rodzaj: str | None) -> str | None:
-	"""Zwraca klucz rurociągu ("OZE"/"CP") dla rodzaju umowy, albo None gdy nieznany/pusty/brak."""
+	"""Zwraca klucz procesu ("OZE"/"CP") dla rodzaju umowy, albo None gdy nieznany/pusty/brak."""
 	if not rodzaj:
 		return None
 	if rodzaj in OZE_RODZAJE:
@@ -348,7 +348,7 @@ def pipeline_key_for(rodzaj: str | None) -> str | None:
 
 
 def pipeline_for(rodzaj: str | None) -> tuple[str, ...] | None:
-	"""Zwraca krotkę statusów rurociągu dla rodzaju umowy, albo None gdy rodzaj nie ma rurociągu."""
+	"""Zwraca krotkę statusów procesu dla rodzaju umowy, albo None gdy rodzaj nie ma procesu."""
 	klucz = pipeline_key_for(rodzaj)
 	if klucz == "OZE":
 		return PIPELINE_OZE
@@ -358,8 +358,8 @@ def pipeline_for(rodzaj: str | None) -> tuple[str, ...] | None:
 
 
 def grupa_for(rodzaj: str | None) -> tuple[str, ...] | None:
-	"""Zwraca grupę statusów rozwijanej listy dla rodzaju umowy: rurociąg plus statusy terminalne,
-	w tej kolejności (kolejność rozwijanej listy). Zwraca None, gdy rodzaj nie ma rurociągu.
+	"""Zwraca grupę statusów rozwijanej listy dla rodzaju umowy: proces plus statusy terminalne,
+	w tej kolejności (kolejność rozwijanej listy). Zwraca None, gdy rodzaj nie ma procesu.
 	"""
 	rurociag = pipeline_for(rodzaj)
 	if rurociag is None:
@@ -370,9 +370,9 @@ def grupa_for(rodzaj: str | None) -> tuple[str, ...] | None:
 
 
 def step_index(rodzaj: str | None, status: str | None) -> int:
-	"""Zwraca indeks statusu w rurociągu danego rodzaju umowy.
+	"""Zwraca indeks statusu w procesie danego rodzaju umowy.
 
-	Zwraca -1, gdy status jest poza rurociągiem, rodzaj nie ma rurociągu albo status jest None.
+	Zwraca -1, gdy status jest poza procesem, rodzaj nie ma procesu albo status jest None.
 	"""
 	if status is None:
 		return -1
@@ -394,10 +394,10 @@ def notatka_for(rodzaj: str | None, status: str | None) -> str | None:
 
 
 def is_forward(rodzaj: str | None, current: str | None, target: str) -> bool:
-	"""Zwraca True tylko, gdy `current` i `target` są w rurociągu danego rodzaju i `current` poprzedza `target`.
+	"""Zwraca True tylko, gdy `current` i `target` są w procesie danego rodzaju i `current` poprzedza `target`.
 
-	Status bieżący spoza rurociągu (np. "Przegrana", "Wygrana montaż") zawsze daje False —
-	automatyzacja nigdy nie ma przesuwać takiej sprawy dalej. Brak rurociągu dla rodzaju daje False.
+	Status bieżący spoza procesu (np. "Przegrana", "Wygrana montaż") zawsze daje False —
+	automatyzacja nigdy nie ma przesuwać takiej sprawy dalej. Brak procesu dla rodzaju daje False.
 	"""
 	rurociag = pipeline_for(rodzaj)
 	if rurociag is None:

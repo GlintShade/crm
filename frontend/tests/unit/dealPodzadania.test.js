@@ -11,7 +11,7 @@ import {
   applyOptimistic,
 } from '@/utils/dealPodzadania'
 
-describe('Podzadania rurociągu CP — czysta logika (dealPodzadania)', () => {
+describe('Podzadania procesu CP — czysta logika (dealPodzadania)', () => {
   describe('parsePodzadania — śmieci na wejściu', () => {
     it.each([
       [null, 'null'],
