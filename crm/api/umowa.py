@@ -21,6 +21,7 @@ from frappe.utils import cint, getdate
 from crm.api.czyste_powietrze import KALKULATOR_ROLE
 from crm.api.pipeline import advance_deal_status
 from crm.integrations.autenti import logika as autenti_logika
+from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad
 from crm.volteo_naming import code_for
 from crm.volteo_umowa import (
 	brakujace_pola,
@@ -422,6 +423,12 @@ def volteo_umowa_create(deal: str) -> dict[str, Any]:
 				}
 			)
 			umowa_doc.insert()
+			try:
+				zapisz_slad(deal, tekst_sladu("umowa_utworzono"))
+			except Exception:
+				# Ślad w Aktywności to wygoda, nie warunek sukcesu — awaria zapisu
+				# śladu nie może cofnąć ani zablokować już utworzonego rekordu umowy.
+				frappe.log_error(frappe.get_traceback(), "Volteo Umowa: błąd zapisu śladu utworzenia")
 		except frappe.DuplicateEntryError:
 			# Wyścig: inna sesja/kliknięcie zdążyło wstawić rekord między sprawdzeniem a insertem.
 			umowa_doc = frappe.get_doc(DOCTYPE, deal)
@@ -672,6 +679,13 @@ def volteo_umowa_pdf(deal: str) -> dict[str, Any]:
 		plik.insert(ignore_permissions=True)
 	except Exception:
 		_blad_zapisu_pliku()
+
+	try:
+		zapisz_slad(deal, tekst_sladu("umowa_pdf"))
+	except Exception:
+		# Ślad w Aktywności to wygoda, nie warunek sukcesu — awaria zapisu śladu
+		# nie może cofnąć ani zablokować już zapisanego pliku PDF.
+		frappe.log_error(frappe.get_traceback(), "Volteo Umowa: błąd zapisu śladu PDF")
 
 	# Automatyzacja: przesuwa status szansy do przodu, o ile włączona w panelu
 	# admina i przejście jest do przodu w JEJ rurociągu; nigdy nie rzuca — awaria
