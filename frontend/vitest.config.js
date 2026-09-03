@@ -19,6 +19,7 @@ export default defineConfig({
         'src/utils/renderFieldLayoutDialog.js',
         'src/utils/pvForm.js',
         'src/utils/kredytForm.js',
+        'src/utils/etykietaMoje.js',
       ],
     },
   },

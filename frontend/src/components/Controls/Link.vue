@@ -147,13 +147,26 @@ watch(
 // `fetched` (zakończone pobieranie) od `data === null` (odpowiedź serwera:
 // "bez ograniczenia", bo Administrator/BYPASS_ROLES/Sales Manager spoza
 // drzewa) — to dwie różne rzeczy, mylenie ich zwróciłoby "jeszcze nie
-// gotowe" na zawsze dla użytkowników bez ograniczenia.
+// gotowe" na zawsze dla użytkowników bez ograniczenia. (`data === null`
+// bywa w praktyce `undefined` — patrz komentarz niżej przy `lista == null`.)
 const effectiveFilters = computed(() => {
   if (!userScopeActive.value) return props.filters
   if (!widoczniUzytkownicy.fetched) return null
 
   const lista = widoczniUzytkownicy.data
-  if (lista === null) return props.filters
+  // Frappe NIE serializuje `None` jako `"message": null` w odpowiedzi
+  // whitelisted API — dla None cały klucz `message` znika, więc HTTP body
+  // to dosłownie `{}` (zweryfikowane curl-em lokalnie). frappe-ui robi
+  // `out.data = transform(response.message)`, więc dla None `data` wychodzi
+  // jako `undefined`, nie `null`. Porównanie luźne `== null` łapie oba
+  // przypadki naraz — obydwa znaczą to samo: „bez ograniczenia".
+  if (lista == null) return props.filters
+  // Każda wartość, która dotrze inna niż tablica (np. literał `{}`
+  // z jakiegoś pośredniego cache'a albo przyszła zmiana kontraktu API),
+  // traktujemy tak samo jak „bez ograniczenia" zamiast rzucać
+  // TypeError na `.length` niżej — bez logowania, bo projekt zakazuje
+  // console.* w kodzie produkcyjnym; to ma być cichy, bezpieczny fallback.
+  if (!Array.isArray(lista)) return props.filters
 
   // W kontekstach filtrowania (jedyne dziś użycie userScope) filters nie
   // jest przekazywane (domyślne [] traktujemy jak {}); gdyby kiedyś ktoś
