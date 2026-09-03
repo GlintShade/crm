@@ -71,13 +71,23 @@ import Autocomplete from '@/components/frappe-ui/Autocomplete.vue'
 import { isTranslatable } from '@/utils'
 import { watchDebounced } from '@vueuse/core'
 import { createResource } from 'frappe-ui'
-import { useAttrs, computed, ref } from 'vue'
+import { useAttrs, computed, ref, watch } from 'vue'
 
 const props = defineProps({
   doctype: { type: String, required: true },
   filters: { type: [Array, Object, String], default: () => [] },
   modelValue: { type: String, default: '' },
   hideMe: { type: Boolean, default: false },
+  // Etykieta dla opcji "@me" (wartość zostaje '@me', tylko podpis się
+  // zmienia) — patrz etykietaMoje() w @/utils/index.js. Domyślnie surowe
+  // '@me', jak dotychczas, dla wywołań spoza kontekstów filtrowania.
+  meLabel: { type: String, default: '@me' },
+  // Ops#72: gdy true i doctype === 'User', dropdown pokazuje tylko
+  // użytkowników z poddrzewa Sales Hierarchy bieżącej sesji (patrz
+  // crm.api.volteo_uzytkownicy.widoczni_uzytkownicy) zamiast wszystkich
+  // aktywnych kont. Domyślnie false — formularze/przydziały (hideMe=true)
+  // zostają bez zmian, jak dotychczas.
+  userScope: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['update:modelValue', 'change'])
@@ -104,6 +114,60 @@ const value = computed({
 const autocomplete = ref(null)
 const text = ref('')
 
+// Ops#72: userScope tylko dla doctype='User' — na inne Linki (np. Company,
+// Contact) nie ma wpływu, nawet jeśli ktoś przekaże userScope=true przez
+// pomyłkę na komponencie, którego doctype akurat nie jest 'User'.
+const userScopeActive = computed(
+  () => props.userScope && props.doctype === 'User',
+)
+
+// Zasób dzielony między WSZYSTKIMI instancjami Link.vue na stronie (klucz
+// cache jest globalny w frappe-ui) — lista pobierana jest raz, nie per
+// dropdown.
+const widoczniUzytkownicy = createResource({
+  url: 'crm.api.volteo_uzytkownicy.widoczni_uzytkownicy',
+  cache: ['widoczni_uzytkownicy'],
+})
+
+watch(
+  userScopeActive,
+  (aktywne) => {
+    if (aktywne && !widoczniUzytkownicy.fetched && !widoczniUzytkownicy.loading) {
+      widoczniUzytkownicy.fetch()
+    }
+  },
+  { immediate: true },
+)
+
+// Filtry faktycznie wysyłane do search_link. Gdy userScope jest aktywny,
+// dokładamy ograniczenie do poddrzewa hierarchii; dopóki lista nie dotrze
+// z serwera, zwracamy `null` jako sygnał "jeszcze nie gotowe" — reload()
+// niżej wtedy nic nie wysyła, żeby pierwszy dropdown nie pokazał przez
+// moment wszystkich użytkowników zanim ograniczenie dojedzie. Rozróżniamy
+// `fetched` (zakończone pobieranie) od `data === null` (odpowiedź serwera:
+// "bez ograniczenia", bo Administrator/BYPASS_ROLES/Sales Manager spoza
+// drzewa) — to dwie różne rzeczy, mylenie ich zwróciłoby "jeszcze nie
+// gotowe" na zawsze dla użytkowników bez ograniczenia.
+const effectiveFilters = computed(() => {
+  if (!userScopeActive.value) return props.filters
+  if (!widoczniUzytkownicy.fetched) return null
+
+  const lista = widoczniUzytkownicy.data
+  if (lista === null) return props.filters
+
+  // W kontekstach filtrowania (jedyne dziś użycie userScope) filters nie
+  // jest przekazywane (domyślne [] traktujemy jak {}); gdyby kiedyś ktoś
+  // przekazał tablicę/string razem z userScope, i tak nie umiemy scalić
+  // formatu tablicowego filtrów Frappe z dict-em wymaganym przez
+  // search_link, więc bezpiecznie zaczynamy od pustego obiektu.
+  const baza =
+    props.filters && typeof props.filters === 'object' && !Array.isArray(props.filters)
+      ? { ...props.filters }
+      : {}
+  baza.name = lista.length ? ['in', lista] : ['in', ['']]
+  return baza
+})
+
 watchDebounced(
   () => autocomplete.value?.query,
   (val) => {
@@ -122,7 +186,7 @@ watchDebounced(
 )
 
 watchDebounced(
-  () => props.filters,
+  effectiveFilters,
   () => {
     reload('', true)
   },
@@ -131,12 +195,28 @@ watchDebounced(
 
 const options = createResource({
   url: 'frappe.desk.search.search_link',
-  cache: [props.doctype, text.value, props.hideMe, props.filters],
+  // meLabel i userScope muszą być w kluczu cache: bez tego dwa Linki dla
+  // doctype='User' z różnymi meLabel (np. "Moi klienci" na liście Klienci
+  // vs "Moje szanse" na liście Szanse) dzieliłyby jeden zasób frappe-ui i
+  // drugi z nich pokazałby cudzą etykietę — transform() nakłada etykietę
+  // PRZED zapisaniem do cache, cache trzyma dane PO transformie. Ten sam
+  // powód dla userScope: bez niego Link z userScope=true i Link bez niego,
+  // dla tego samego doctype/tekstu/hideMe/filters, dzieliłyby wynik —
+  // jeden pokazałby ograniczoną listę tam, gdzie druga instancja jej nie
+  // chce (albo odwrotnie).
+  cache: [
+    props.doctype,
+    text.value,
+    props.hideMe,
+    props.filters,
+    props.meLabel,
+    props.userScope,
+  ],
   method: 'POST',
   params: {
     txt: text.value,
     doctype: props.doctype,
-    filters: props.filters,
+    filters: effectiveFilters.value,
   },
   transform: (data) => {
     let allData = data.map((option) => {
@@ -148,7 +228,7 @@ const options = createResource({
     })
     if (!props.hideMe && props.doctype == 'User') {
       allData.unshift({
-        label: '@me',
+        label: props.meLabel,
         value: '@me',
       })
     }
@@ -167,6 +247,12 @@ function stripHtml(html) {
 
 function reload(val, force = false) {
   if (!props.doctype) return
+  // Ops#72: dopóki userScope jest aktywny a lista poddrzewa jeszcze nie
+  // dotarła, effectiveFilters zwraca null — nie odpalamy wyszukiwania, żeby
+  // pierwszy dropdown przez moment nie pokazał wszystkich użytkowników.
+  // Gdy lista dotrze, watchDebounced na effectiveFilters (wyżej) wywoła
+  // reload ponownie.
+  if (userScopeActive.value && effectiveFilters.value === null) return
   if (
     !force &&
     options.data?.length &&
@@ -179,7 +265,7 @@ function reload(val, force = false) {
     params: {
       txt: val,
       doctype: props.doctype,
-      filters: props.filters,
+      filters: effectiveFilters.value,
     },
   })
   options.reload()

@@ -161,6 +161,7 @@ import Link from '@/components/Controls/Link.vue'
 import Autocomplete from '@/components/frappe-ui/Autocomplete.vue'
 import DurationInput from '@/components/Controls/DurationInput.vue'
 import RatingInput from '@/components/Controls/RatingInput.vue'
+import { etykietaMoje } from '@/utils/etykietaMoje'
 import {
   FormControl,
   createResource,
@@ -418,7 +419,13 @@ function getValueControl(f) {
     if (fieldtype == 'Dynamic Link') {
       return h(FormControl, { type: 'text' })
     }
-    return h(Link, { class: 'form-control', doctype: options, value: f.value })
+    return h(Link, {
+      class: 'form-control',
+      doctype: options,
+      value: f.value,
+      meLabel: etykietaMoje(props.doctype),
+      userScope: true,
+    })
   } else if (typeNumber.includes(fieldtype)) {
     return h(FormControl, { type: 'number' })
   } else if (typeDate.includes(fieldtype) && operator == 'between') {
