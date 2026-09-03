@@ -20,6 +20,7 @@
     :value="filter.value"
     :doctype="filter.options"
     :placeholder="filter.label"
+    :meLabel="etykietaMoje(doctype)"
     @change="(data) => updateFilter(filter, data)"
   />
   <component
@@ -42,10 +43,15 @@
 import Link from '@/components/Controls/Link.vue'
 import { FormControl, DatePicker, DateTimePicker } from 'frappe-ui'
 import { useDebounceFn } from '@vueuse/core'
+import { etykietaMoje } from '@/utils/etykietaMoje'
 import { reactive, watch } from 'vue'
 
 const props = defineProps({
   filter: { type: Object, required: true },
+  // Doctype strony (Szanse/Klienci/Leady/...), NIE doctype pola filtra —
+  // ten komponent sam nie wie, na jakiej liście stoi (patrz ViewControls.vue,
+  // które ma props.doctype); potrzebny tylko do wyboru etykiety "@me".
+  doctype: { type: String, default: '' },
 })
 
 const filter = reactive(props.filter)

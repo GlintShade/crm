@@ -141,6 +141,7 @@
       >
         <QuickFilterField
           :filter="filter"
+          :doctype="doctype"
           @applyQuickFilter="(f, v) => applyQuickFilter(f, v)"
         />
       </div>

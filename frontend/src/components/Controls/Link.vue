@@ -78,6 +78,10 @@ const props = defineProps({
   filters: { type: [Array, Object, String], default: () => [] },
   modelValue: { type: String, default: '' },
   hideMe: { type: Boolean, default: false },
+  // Etykieta dla opcji "@me" (wartość zostaje '@me', tylko podpis się
+  // zmienia) — patrz etykietaMoje() w @/utils/index.js. Domyślnie surowe
+  // '@me', jak dotychczas, dla wywołań spoza kontekstów filtrowania.
+  meLabel: { type: String, default: '@me' },
 })
 
 const emit = defineEmits(['update:modelValue', 'change'])
@@ -131,7 +135,12 @@ watchDebounced(
 
 const options = createResource({
   url: 'frappe.desk.search.search_link',
-  cache: [props.doctype, text.value, props.hideMe, props.filters],
+  // meLabel musi być w kluczu cache: bez tego dwa Linki dla doctype='User'
+  // z różnymi meLabel (np. "Moi klienci" na liście Klienci vs "Moje szanse"
+  // na liście Szanse) dzieliłyby jeden zasób frappe-ui i drugi z nich
+  // pokazałby cudzą etykietę — transform() nakłada etykietę PRZED
+  // zapisaniem do cache, cache trzyma dane PO transformie.
+  cache: [props.doctype, text.value, props.hideMe, props.filters, props.meLabel],
   method: 'POST',
   params: {
     txt: text.value,
@@ -148,7 +157,7 @@ const options = createResource({
     })
     if (!props.hideMe && props.doctype == 'User') {
       allData.unshift({
-        label: '@me',
+        label: props.meLabel,
         value: '@me',
       })
     }

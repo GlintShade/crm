@@ -881,6 +881,16 @@ export function isTranslatable(doctype) {
   return translatedDoctypes.includes(doctype)
 }
 
+// Re-eksport z osobnego, lekkiego modułu (@/utils/etykietaMoje) — nie stąd
+// bezpośrednio, bo ten plik (index.js) ciągnie ~icons/* (unplugin-icons) i
+// story Pinia, których vitest.config.js świadomie nie rejestruje (patrz
+// coverage.include tamże: fieldTransforms.js, scriptHelpers.js i inne
+// czyste moduły są wydzielone z tego samego powodu — testowalność bez
+// pełnego stosu Vite). Komponenty importują funkcję z '@/utils/etykietaMoje'
+// bezpośrednio (wzorzec: parseLinkFilters w Controls/Grid.vue); ten
+// re-eksport zostaje dla wygody i zgodności z treścią issue ops#71.
+export { etykietaMoje } from './etykietaMoje'
+
 export function sanitizeHTML(html = '', options = {}) {
   if (typeof html !== 'string') return html
   return DOMPurify.sanitize(html, options)
