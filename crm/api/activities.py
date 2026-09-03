@@ -8,7 +8,7 @@ from frappe.query_builder import JoinType
 from frappe.translate import get_translated_doctypes
 
 from crm.fcrm.doctype.crm_call_log.crm_call_log import parse_call_log
-from crm.volteo_aktywnosc import linie_z_wersji
+from crm.volteo_aktywnosc import OKNO_GRUPOWANIA_S, grupuj, linie_z_wersji
 
 
 @frappe.whitelist()
@@ -241,7 +241,9 @@ def get_deal_activities(name: str):
 	activities = activities + get_volteo_linked_activities(name)
 
 	activities.sort(key=lambda x: x["creation"], reverse=True)
-	activities = handle_multiple_versions(activities)
+	# Decyzja właściciela (ops#59): grupowanie wpisów szansy w oknie 10 minut,
+	# statusy nigdy nie są sklejane (`grupuj` sam pilnuje field == "status").
+	activities = grupuj(activities, okno_s=OKNO_GRUPOWANIA_S)
 
 	return activities, calls, notes, tasks, attachments
 
