@@ -7,8 +7,15 @@ from frappe.desk.form.load import get_docinfo
 from frappe.query_builder import JoinType
 from frappe.translate import get_translated_doctypes
 
+from crm.api.koszty import ADMIN_ROLE
 from crm.fcrm.doctype.crm_call_log.crm_call_log import parse_call_log
-from crm.volteo_aktywnosc import OKNO_GRUPOWANIA_S, grupuj, linie_z_wersji
+from crm.volteo_aktywnosc import (
+	OKNO_GRUPOWANIA_S,
+	bez_znacznika,
+	czy_widoczny,
+	grupuj,
+	linie_z_wersji,
+)
 
 
 @frappe.whitelist()
@@ -200,6 +207,78 @@ def get_deal_activities(name: str):
 			"is_lead": False,
 		}
 		activities.append(activity)
+
+	# ops#60 (R3): docinfo.info_logs carries the "Info"/"Edit"/"Label" comments
+	# Frappe stores separately from ordinary comments (frappe/desk/form/load.py
+	# add_comments). "Info" is the only one that is a genuine automated trail
+	# line -- it is where pipeline subtask state (crm.api.pipeline) and every
+	# zapisz_slad() writer (W1-W6) land; "Edit"/"Label" are Frappe's own
+	# field-rename bookkeeping, not ours, so they are excluded. Visibility is
+	# gated the same way tekst_sladu()'s admin-only lines are gated everywhere
+	# else in this package: czy_widoczny checked on the RAW text (marker still
+	# attached), display text has the marker stripped by bez_znacznika.
+	roles_uzytkownika = frappe.get_roles()
+	for info in docinfo.info_logs:
+		if info.comment_type != "Info":
+			continue
+		raw_text = frappe.utils.strip_html(info.content or "").strip()
+		if not raw_text:
+			continue
+		if not czy_widoczny(raw_text, roles_uzytkownika, ADMIN_ROLE):
+			continue
+		activities.append(
+			{
+				"name": f"volteo-deal-info-{info.name}",
+				"activity_type": "volteo_linked",
+				"creation": info.creation,
+				"owner": info.owner,
+				"is_lead": False,
+				"data": {
+					"source": "CRM Deal",
+					"label": _("Szansa"),
+					"title": None,
+					"action": "info",
+					"doc_name": name,
+					"text": bez_znacznika(raw_text),
+				},
+			}
+		)
+
+	# ops#60 (R3): docinfo.assignment_logs carries "Assigned"/"Assignment
+	# Completed" comments written by frappe.desk.form.assign_to (content e.g.
+	# `Assigned to <a href="/app/user/x@y">Full Name</a>`, or a "Removed"/
+	# "Assignment completed" variant on close/unassign). Strip HTML first,
+	# then classify by prefix rather than guessing the raw markup shape.
+	for assign in docinfo.assignment_logs:
+		raw_text = frappe.utils.strip_html(assign.content or "").strip()
+		if not raw_text:
+			continue
+		if raw_text.startswith("Assigned to "):
+			text = f"przypisano do {raw_text[len('Assigned to '):].strip()}"
+		else:
+			rest = raw_text
+			for prefiks in ("Assignment completed", "Removed", "Assigned"):
+				if rest.startswith(prefiks):
+					rest = rest[len(prefiks):].strip()
+					break
+			text = f"zakończono przypisanie: {rest}" if rest else "zakończono przypisanie"
+		activities.append(
+			{
+				"name": f"volteo-deal-assign-{assign.name}",
+				"activity_type": "volteo_linked",
+				"creation": assign.creation,
+				"owner": assign.owner,
+				"is_lead": False,
+				"data": {
+					"source": "CRM Deal",
+					"label": _("Szansa"),
+					"title": None,
+					"action": "assignment",
+					"doc_name": name,
+					"text": text,
+				},
+			}
+		)
 
 	for communication in docinfo.communications + docinfo.automated_messages:
 		activity = {
