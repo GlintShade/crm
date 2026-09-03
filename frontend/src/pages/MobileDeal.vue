@@ -130,15 +130,12 @@
                       class="px-2 pb-2.5"
                       :class="[i == 0 ? 'pt-5' : 'pt-2.5']"
                     >
-                      <Section :opened="contact.opened">
-                        <template #header="{ opened, toggle }">
+                      <Section :opened="true">
+                        <template #header>
                           <div
-                            class="flex cursor-pointer items-center justify-between gap-2 pr-1 text-base leading-5 text-ink-gray-7"
+                            class="flex items-center justify-between gap-2 pr-1 text-base leading-5 text-ink-gray-7"
                           >
-                            <div
-                              class="flex h-7 items-center gap-2 truncate"
-                              @click="toggle()"
-                            >
+                            <div class="flex h-7 items-center gap-2 truncate">
                               <Avatar
                                 :label="contact.full_name"
                                 :image="contact.image"
@@ -147,22 +144,8 @@
                               <div class="truncate">
                                 {{ contact.full_name }}
                               </div>
-                              <Badge
-                                v-if="contact.is_primary"
-                                class="ml-2"
-                                variant="outline"
-                                :label="__('Primary')"
-                                theme="green"
-                              />
                             </div>
                             <div class="flex items-center">
-                              <Dropdown :options="contactOptions(contact.name)">
-                                <Button
-                                  icon="lucide-more-horizontal"
-                                  class="text-ink-gray-5"
-                                  variant="ghost"
-                                />
-                              </Dropdown>
                               <Button
                                 variant="ghost"
                                 @click="
@@ -173,13 +156,6 @@
                                 "
                               >
                                 <ArrowUpRightIcon class="h-4 w-4" />
-                              </Button>
-                              <Button variant="ghost" @click="toggle()">
-                                <span
-                                  class="lucide-chevron-right h-4 w-4 text-ink-gray-9 transition-all duration-300 ease-in-out"
-                                  :class="{ 'rotate-90': opened }"
-                                  aria-hidden="true"
-                                />
                               </Button>
                             </div>
                           </div>
@@ -286,7 +262,6 @@ import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
 import WhatsAppIcon from '@/components/Icons/WhatsAppIcon.vue'
 import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
 import ArrowUpRightIcon from '@/components/Icons/ArrowUpRightIcon.vue'
-import SuccessIcon from '@/components/Icons/SuccessIcon.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import Activities from '@/components/Activities/Activities.vue'
 import ZestawIcon from '@/components/Icons/ZestawIcon.vue'
@@ -332,7 +307,7 @@ import {
   usePageMeta,
   toast,
 } from 'frappe-ui'
-import { ref, computed, h, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 const { brand } = getSettings()
@@ -552,29 +527,6 @@ function getParsedFields(sections) {
 const showContactModal = ref(false)
 const _contact = ref({})
 
-function contactOptions(contact) {
-  let options = []
-
-  // VOLTEO: restricted D2D reps must not remove a contact from a deal.
-  if (!window.volteo_is_rep) {
-    options.push({
-      label: __('Delete'),
-      icon: 'trash-2',
-      onClick: () => removeContact(contact),
-    })
-  }
-
-  if (!contact.is_primary) {
-    options.push({
-      label: __('Set as Primary Contact'),
-      icon: h(SuccessIcon, { class: 'h-4 w-4' }),
-      onClick: () => setPrimaryContact(contact.name),
-    })
-  }
-
-  return options
-}
-
 async function addContact(contact) {
   if (dealContacts.data?.find((c) => c.name === contact)) {
     toast.error(__('Contact Already Added'))
@@ -588,28 +540,6 @@ async function addContact(contact) {
   if (d) {
     dealContacts.reload()
     toast.success(__('Contact Added'))
-  }
-}
-
-async function removeContact(contact) {
-  let d = await call('crm.fcrm.doctype.crm_deal.crm_deal.remove_contact', {
-    deal: props.dealId,
-    contact,
-  })
-  if (d) {
-    dealContacts.reload()
-    toast.success(__('Contact Removed'))
-  }
-}
-
-async function setPrimaryContact(contact) {
-  let d = await call('crm.fcrm.doctype.crm_deal.crm_deal.set_primary_contact', {
-    deal: props.dealId,
-    contact,
-  })
-  if (d) {
-    dealContacts.reload()
-    toast.success(__('Primary Contact Set'))
   }
 }
 
@@ -631,7 +561,6 @@ const dealContacts = createResource({
         mobile_no: contact.mobile_no,
         image: contact.image,
         is_primary: contact.is_primary,
-        opened: false,
       }
     })
   },

@@ -165,15 +165,12 @@
                   :key="contact.name"
                 >
                   <div class="px-2 pb-2.5" :class="[i == 0 ? 'pt-5' : 'pt-2.5']">
-                    <Section :opened="contact.opened">
-                      <template #header="{ opened, toggle }">
+                    <Section :opened="true">
+                      <template #header>
                         <div
-                          class="flex cursor-pointer items-center justify-between gap-2 pr-1 text-base leading-5 text-ink-gray-7"
+                          class="flex items-center justify-between gap-2 pr-1 text-base leading-5 text-ink-gray-7"
                         >
-                          <div
-                            class="flex h-7 items-center gap-2 truncate"
-                            @click="toggle()"
-                          >
+                          <div class="flex h-7 items-center gap-2 truncate">
                             <Avatar
                               :label="contact.full_name"
                               :image="contact.image"
@@ -182,22 +179,8 @@
                             <div class="truncate">
                               {{ contact.full_name }}
                             </div>
-                            <Badge
-                              v-if="contact.is_primary"
-                              class="ml-2"
-                              variant="outline"
-                              :label="__('Primary')"
-                              theme="green"
-                            />
                           </div>
                           <div class="flex items-center">
-                            <Dropdown :options="contactOptions(contact)">
-                              <Button
-                                icon="lucide-more-horizontal"
-                                class="text-ink-gray-5"
-                                variant="ghost"
-                              />
-                            </Dropdown>
                             <Button
                               variant="ghost"
                               :tooltip="__('View Contact')"
@@ -208,13 +191,6 @@
                                   params: { contactId: contact.name },
                                 })
                               "
-                            />
-                            <Button
-                              variant="ghost"
-                              class="transition-all duration-300 ease-in-out"
-                              :class="{ 'rotate-90': opened }"
-                              icon="lucide-chevron-right"
-                              @click="toggle()"
                             />
                           </div>
                         </div>
@@ -344,7 +320,6 @@ import WhatsAppIcon from '@/components/Icons/WhatsAppIcon.vue'
 import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
 import LinkIcon from '@/components/Icons/LinkIcon.vue'
 import ArrowUpRightIcon from '@/components/Icons/ArrowUpRightIcon.vue'
-import SuccessIcon from '@/components/Icons/SuccessIcon.vue'
 import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import Activities from '@/components/Activities/Activities.vue'
@@ -407,7 +382,6 @@ import { useOnboarding } from 'frappe-ui/frappe'
 import {
   ref,
   computed,
-  h,
   onMounted,
   onBeforeUnmount,
   nextTick,
@@ -697,29 +671,6 @@ function getParsedSections(_sections) {
 const showContactModal = ref(false)
 const _contact = ref({})
 
-function contactOptions(contact) {
-  let options = []
-
-  // VOLTEO: restricted D2D reps must not remove a contact from a deal.
-  if (!window.volteo_is_rep) {
-    options.push({
-      label: __('Remove'),
-      icon: 'trash-2',
-      onClick: () => removeContact(contact.name),
-    })
-  }
-
-  if (!contact.is_primary) {
-    options.push({
-      label: __('Set as Primary Contact'),
-      icon: h(SuccessIcon, { class: 'h-4 w-4' }),
-      onClick: () => setPrimaryContact(contact.name),
-    })
-  }
-
-  return options
-}
-
 async function addContact(contact) {
   if (dealContacts.data?.find((c) => c.name === contact)) {
     toast.error(__('Contact Already Added'))
@@ -736,38 +687,10 @@ async function addContact(contact) {
   }
 }
 
-async function removeContact(contact) {
-  let d = await call('crm.fcrm.doctype.crm_deal.crm_deal.remove_contact', {
-    deal: props.dealId,
-    contact,
-  })
-  if (d) {
-    dealContacts.reload()
-    toast.success(__('Contact Removed'))
-  }
-}
-
-async function setPrimaryContact(contact) {
-  let d = await call('crm.fcrm.doctype.crm_deal.crm_deal.set_primary_contact', {
-    deal: props.dealId,
-    contact,
-  })
-  if (d) {
-    dealContacts.reload()
-    toast.success(__('Primary Contact Set'))
-  }
-}
-
 const dealContacts = createResource({
   url: 'crm.fcrm.doctype.crm_deal.api.get_deal_contacts',
   params: { name: props.dealId },
   cache: ['deal_contacts', props.dealId],
-  transform: (data) => {
-    data.forEach((contact) => {
-      contact.opened = false
-    })
-    return data
-  },
 })
 
 if (!dealContacts.data) dealContacts.fetch()
