@@ -54,6 +54,7 @@ from crm.czyste_powietrze.audyt import (
     waliduj_werdykt,
 )
 from crm.permissions.org_hierarchy import BYPASS_ROLES
+from crm.volteo_aktywnosc import roznice_plikow_audytu
 
 DOCTYPE = "Volteo Audyt CP"
 
@@ -77,6 +78,10 @@ _SLOTY_KLUCZE = frozenset(slot["klucz"] for slot in SLOTY_DOKUMENTOW)
 """Katalog dozwolonych kluczy slotów dokumentów — zaporowa lista dla
 `lock_guard`, żeby `dokumenty_json` nie mógł znosić dowolnych kluczy spoza
 formularza."""
+
+_ETYKIETY_SLOTOW: dict[str, str] = {slot["klucz"]: slot["etykieta"] for slot in SLOTY_DOKUMENTOW}
+"""Mapa klucz slotu -> etykieta, dla `crm.volteo_aktywnosc.roznice_plikow_audytu`
+(ops#70) — `lock_guard` loguje nią zmiany plików audytu jako ślady `Info`."""
 
 
 def _is_reviewer() -> bool:
@@ -433,6 +438,17 @@ def lock_guard(doc, method: str | None = None) -> None:
     8. twarde limity — ZAWSZE (nowy i istniejący dokument): maks. `MAX_ZDJEC`
        zdjęć; każdy klucz w `dokumenty_json` musi być w katalogu slotów
        (`SLOTY_DOKUMENTOW`), nic spoza formularza nie może się tam znaleźć.
+    9. ślady zmian plików (ops#70): dla zapisu istniejącego dokumentu POZA
+       Weryfikacją (praktycznie: Szkic — Zatwierdzony i tak rzuca wcześniej w
+       regule 4), diff starych i nowych `dokumenty_json`/`zdjecia_json` (stan
+       sprzed TEGO zapisu — ten sam `stary`, który czyta reguła 6/7) przez
+       `crm.volteo_aktywnosc.roznice_plikow_audytu` daje listę tekstów, z
+       których każdy trafia jako osobny komentarz `Info` NA AUDYCIE (mostek w
+       `crm/api/activities.py:549-588` już czyta stamtąd komentarze Info i
+       pokazuje je w aktywności szansy). W Weryfikacji ślad zmiany pliku loguje
+       już reguła 7 (`resetuj_werdykty`, komunikaty z wielkiej litery) — reguła
+       9 tam celowo NIE działa, żeby nie dublować tej samej informacji w
+       feedzie; reguła 7 zostaje bez zmian.
     """
     if doc.is_new():
         if doc.status != "Szkic":
@@ -471,6 +487,19 @@ def lock_guard(doc, method: str | None = None) -> None:
         stara_weryfikacja = parsuj_mape(stary.weryfikacja_json)
         if parsuj_mape(doc.weryfikacja_json) != stara_weryfikacja:
             frappe.throw(_("Ocena elementów audytu możliwa tylko przez dedykowany przycisk."))
+
+        # Reguła 9 (ops#70): ślad zmian plików — tylko POZA Weryfikacją (tam
+        # ten sam diff już loguje reguła 7 niżej, z wielkiej litery — dublowanie
+        # by dało dwa niemal identyczne wpisy w feedzie dla tej samej zmiany).
+        if stary_status != "Weryfikacja":
+            for tekst in roznice_plikow_audytu(
+                parsuj_mape(stary.dokumenty_json),
+                parsuj_mape(doc.dokumenty_json),
+                parsuj_liste(stary.zdjecia_json),
+                parsuj_liste(doc.zdjecia_json),
+                _ETYKIETY_SLOTOW,
+            ):
+                doc.add_comment("Info", tekst)
 
         if stary_status == "Weryfikacja":
             nowa_mapa, komunikaty = resetuj_werdykty(
