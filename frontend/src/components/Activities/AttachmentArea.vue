@@ -116,6 +116,7 @@ import { Dialog, ErrorMessage, FormControl, call } from 'frappe-ui'
 import { reactive } from 'vue'
 import TimelineTimestamp from '@/components/Activities/TimelineTimestamp.vue'
 import { convertSize, isImage } from '@/utils'
+import { podzielNazwe } from '@/utils/zalaczniki'
 
 defineProps({
   attachments: { type: Array, default: () => [] },
@@ -143,10 +144,7 @@ const dialogNazwy = reactive({
 })
 
 function otworzZmianeNazwy(attachment) {
-  const nazwa = attachment.file_name || ''
-  const kropka = nazwa.lastIndexOf('.')
-  const trzon = kropka > 0 ? nazwa.slice(0, kropka) : nazwa
-  const rozszerzenie = kropka > 0 ? nazwa.slice(kropka) : ''
+  const { trzon, rozszerzenie } = podzielNazwe(attachment.file_name)
   dialogNazwy.plik = attachment
   dialogNazwy.trzon = trzon
   dialogNazwy.rozszerzenie = rozszerzenie

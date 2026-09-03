@@ -80,8 +80,16 @@
             <component :is="fileIcon(file.type)" v-else class="size-4" />
           </div>
           <div class="flex flex-col gap-1 text-sm text-ink-gray-5 truncate">
-            <div class="text-base text-ink-gray-8 truncate">
-              {{ file.name }}
+            <div class="flex items-center gap-1">
+              <FormControl
+                type="text"
+                size="sm"
+                class="w-full min-w-0"
+                v-model="file.trzon"
+                :disabled="file.uploading"
+                :placeholder="podzielNazwe(file.name).trzon"
+              />
+              <span class="text-ink-gray-5 shrink-0">{{ file.rozszerzenie }}</span>
             </div>
             <div class="mb-1">
               {{ convertSize(file.fileObj.size) }}
@@ -125,7 +133,8 @@ import FileTextIcon from '@/components/Icons/FileTextIcon.vue'
 import FileAudioIcon from '@/components/Icons/FileAudioIcon.vue'
 import FileVideoIcon from '@/components/Icons/FileVideoIcon.vue'
 import { formatDate, convertSize } from '@/utils'
-import { CircularProgressBar, createResource, toast } from 'frappe-ui'
+import { podzielNazwe } from '@/utils/zalaczniki'
+import { CircularProgressBar, FormControl, createResource, toast } from 'frappe-ui'
 import { ref, onMounted, watch, onUnmounted } from 'vue'
 
 const props = defineProps({
@@ -256,6 +265,11 @@ function addFiles(fileArray) {
     .map((file, i) => {
       let isImage = file.type?.startsWith('image')
       let sizeKb = file.size / 1024
+      // Osoba wgrywająca plik może edytować tylko trzon (rozszerzenie
+      // zostaje stałym sufiksem) — issue ops#74. `name` zostaje ORYGINALNE,
+      // bo jest kluczem `:key`/`removeFile`; nazwa wysyłana na serwer jest
+      // złożona z `trzon`+`rozszerzenie` dopiero w FilesUploader.vue.
+      let { trzon, rozszerzenie } = podzielNazwe(file.name)
       return {
         index: i,
         src: isImage ? URL.createObjectURL(file) : null,
@@ -265,6 +279,8 @@ function addFiles(fileArray) {
         type: file.type,
         optimize: sizeKb > 200 && isImage && !file.type?.includes('svg'),
         name: file.name,
+        trzon,
+        rozszerzenie,
         doc: null,
         progress: 0,
         total: 0,
