@@ -7234,6 +7234,34 @@ msgstr "utworzył(a) tę szansę"
 msgid "created this lead"
 msgstr "utworzył(a) tego leada"
 
+#. Activity feed (Aktywność) — field-change verbs and connectors rendered by
+#. update_activities_details() (Activities.vue:700) via __(activity.type) /
+#. __(activity.value); "added"/"removed" are also reused for attachment rows
+#. (parse_attachment_log() in crm/api/activities.py sets activity.data.type).
+#: frontend/src/components/Activities/Activities.vue:286 frontend/src/components/Activities/Activities.vue:354
+msgid "changed"
+msgstr "zmienił(a)"
+
+#: frontend/src/components/Activities/Activities.vue:209 frontend/src/components/Activities/Activities.vue:286 frontend/src/components/Activities/Activities.vue:354
+msgid "added"
+msgstr "dodał(a)"
+
+#: frontend/src/components/Activities/Activities.vue:209 frontend/src/components/Activities/Activities.vue:286 frontend/src/components/Activities/Activities.vue:354
+msgid "removed"
+msgstr "usunął(-ęła)"
+
+#: frontend/src/components/Activities/Activities.vue:293
+msgid "from"
+msgstr "z"
+
+#: frontend/src/components/Activities/Activities.vue:293
+msgid "as"
+msgstr "jako"
+
+#: crm/api/activities.py:947
+msgid "+{0} more"
+msgstr "+{0} więcej"
+
 #. Option for the 'Color' (Select) field in DocType 'CRM Deal Status'
 #. Option for the 'Color' (Select) field in DocType 'CRM Lead Status'
 #: crm/fcrm/doctype/crm_deal_status/crm_deal_status.json crm/fcrm/doctype/crm_lead_status/crm_lead_status.json
