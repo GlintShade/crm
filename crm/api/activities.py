@@ -8,6 +8,7 @@ from frappe.query_builder import JoinType
 from frappe.translate import get_translated_doctypes
 
 from crm.fcrm.doctype.crm_call_log.crm_call_log import parse_call_log
+from crm.volteo_aktywnosc import linie_z_wersji
 
 
 @frappe.whitelist()
@@ -63,10 +64,23 @@ def get_deal_activities(name: str):
 		}
 	)
 
-	docinfo.versions.reverse()
+	# docinfo.versions (fetched above via get_docinfo) is capped at the 10
+	# newest versions -- frappe/desk/form/load.py:get_versions hardcodes
+	# limit=10 -- which is exactly why older field changes (e.g. an early
+	# status change on a deal with many later edits) used to disappear from
+	# this feed. Fetch Version ourselves instead, uncapped up to a generous
+	# 200, newest first.
+	deal_fields_labels = {fieldname: (field.get("label") or fieldname) for fieldname, field in deal_fields.items()}
+	versions = frappe.get_all(
+		"Version",
+		filters={"ref_doctype": "CRM Deal", "docname": name},
+		fields=["name", "owner", "creation", "data"],
+		order_by="creation desc",
+		limit_page_length=200,
+	)
 
-	for version in docinfo.versions:
-		data = json.loads(version.data)
+	for version in versions:
+		version_data = json.loads(version.data)
 
 		# Frappe records custom_zestaw (BOM) child-table row adds/removes/
 		# edits under 'added' / 'removed' / 'row_changed' -- NOT under
@@ -74,11 +88,10 @@ def get_deal_activities(name: str):
 		# reads. A real BOM edit's Version can carry BOTH 'row_changed' AND
 		# 'changed' at once (e.g. editing a zestaw row alongside a plain deal
 		# field), so this must run unconditionally for every version, BEFORE
-		# the `if not data.get("changed")` gate below -- gating it on that
-		# check (as this code previously did) silently dropped exactly that
-		# case. See extract_zestaw_version_summary for the diff-shape
-		# assumptions.
-		zestaw = extract_zestaw_version_summary(data)
+		# the line-decomposition below -- gating it on 'changed' presence (as
+		# this code previously did) silently dropped exactly that case. See
+		# extract_zestaw_version_summary for the diff-shape assumptions.
+		zestaw = extract_zestaw_version_summary(version_data)
 		if zestaw:
 			activities.append(
 				{
@@ -99,56 +112,82 @@ def get_deal_activities(name: str):
 				}
 			)
 
-		if not data.get("changed"):
-			continue
+		# linie_z_wersji (crm.volteo_aktywnosc, frappe-free, unit-tested) owns
+		# the decomposition of this version's plain-field diff: every changed
+		# POLA_WLASNA_LINIA field (status, deal_owner, ...) gets its own line
+		# -- not just data["changed"][0], which used to silently drop the
+		# rest of a multi-field version -- plus contact add/remove/primary
+		# lines and at most one summary line for everything else. Must run
+		# unconditionally (no `if not version_data.get("changed"): continue`
+		# guard) because a version with an empty 'changed' can still carry
+		# 'added'/'row_changed' contact lines.
+		for i, linia in enumerate(linie_z_wersji(version_data, etykiety=deal_fields_labels, avoid=avoid_fields)):
+			if linia["rodzaj"] == "pole":
+				field = linia["field"]
+				field_option = (deal_fields.get(field) or {}).get("options") or None
+				old_value = linia["old_value"]
+				value = linia["value"]
 
-		if change := data.get("changed")[0]:
-			field = deal_fields.get(change[0], None)
-
-			if not field or change[0] in avoid_fields or (not change[1] and not change[2]):
-				continue
-
-			field_label = field.get("label") or change[0]
-			field_option = field.get("options") or None
-
-			activity_type = "changed"
-			data = {
-				"field": change[0],
-				"field_label": field_label,
-				"old_value": change[1],
-				"value": change[2],
-			}
-
-			if not change[1] and change[2]:
-				activity_type = "added"
-				data = {
-					"field": change[0],
-					"field_label": field_label,
-					"value": change[2],
-				}
-			elif change[1] and not change[2]:
-				activity_type = "removed"
-				data = {
-					"field": change[0],
-					"field_label": field_label,
-					"value": change[1],
+				activity_type = "changed"
+				activity_data = {
+					"field": field,
+					"field_label": linia["field_label"],
+					"old_value": old_value,
+					"value": value,
 				}
 
-			if data.get("value") and field_option and is_translatable(field_option):
-				data["value"] = _(data["value"])
+				if not old_value and value:
+					activity_type = "added"
+					activity_data = {
+						"field": field,
+						"field_label": linia["field_label"],
+						"value": value,
+					}
+				elif old_value and not value:
+					activity_type = "removed"
+					activity_data = {
+						"field": field,
+						"field_label": linia["field_label"],
+						"value": old_value,
+					}
 
-				if data.get("old_value"):
-					data["old_value"] = _(data["old_value"])
+				if activity_data.get("value") and field_option and is_translatable(field_option):
+					activity_data["value"] = _(activity_data["value"])
 
-		activity = {
-			"activity_type": activity_type,
-			"creation": version.creation,
-			"owner": version.owner,
-			"data": data,
-			"is_lead": False,
-			"options": field_option,
-		}
-		activities.append(activity)
+					if activity_data.get("old_value"):
+						activity_data["old_value"] = _(activity_data["old_value"])
+
+				activities.append(
+					{
+						"activity_type": activity_type,
+						"creation": version.creation,
+						"owner": version.owner,
+						"data": activity_data,
+						"is_lead": False,
+						"options": field_option,
+					}
+				)
+			else:
+				# rodzaj in ("kontakt", "podsumowanie") -- same volteo_linked
+				# shape as the custom_zestaw block above, so Activities.vue
+				# renders it via its existing generic path.
+				activities.append(
+					{
+						"name": f"volteo-deal-version-{version.name}-{i}",
+						"activity_type": "volteo_linked",
+						"creation": version.creation,
+						"owner": version.owner,
+						"is_lead": False,
+						"data": {
+							"source": "CRM Deal",
+							"label": _("Szansa"),
+							"title": None,
+							"action": "changed",
+							"doc_name": name,
+							"text": linia["text"],
+						},
+					}
+				)
 
 	for comment in docinfo.comments:
 		activity = {
