@@ -351,6 +351,45 @@ def get_deal_activities(name: str):
 	attachments = attachments + get_attachments("CRM Deal", name)
 	activities = activities + get_volteo_linked_activities(name)
 
+	# ops#63 (R6): notatki (FCRM Note) tworzone z zakładki Aktywność trafiały
+	# tylko do koszyka "notes" -- szansa nie ma zakładki Notatki, więc bez
+	# wpisu w samym feedzie ślad był niewidoczny. `notes` (koszyk z
+	# get_linked_notes, wyżej) zostaje bez zmian -- to osobny, jawny odczyt
+	# przez frappe.get_list (nie frappe.db.get_all jak get_linked_notes),
+	# żeby uszanować uprawnienia read na FCRM Note per rekord; błąd
+	# uprawnień/brakującego doctype'u nie może wysypać całego feedu.
+	try:
+		linked_notes = frappe.get_list(
+			"FCRM Note",
+			filters={"reference_doctype": "CRM Deal", "reference_docname": name},
+			fields=["name", "title", "creation", "owner"],
+			limit_page_length=LIMIT_REKORDOW_POWIAZANYCH,
+			ignore_permissions=False,
+		)
+	except Exception:
+		frappe.log_error(title="volteo_aktywnosc: get_deal_activities notes")
+		linked_notes = []
+
+	for note in linked_notes:
+		tekst = f"dodano notatkę: {note.title}" if note.title else "dodano notatkę"
+		activities.append(
+			{
+				"name": f"volteo-note-{note.name}",
+				"activity_type": "volteo_linked",
+				"creation": note.creation,
+				"owner": note.owner,
+				"is_lead": False,
+				"data": {
+					"source": "FCRM Note",
+					"label": _("Notatka"),
+					"title": note.title,
+					"action": "added",
+					"doc_name": note.name,
+					"text": tekst,
+				},
+			}
+		)
+
 	activities.sort(key=lambda x: x["creation"], reverse=True)
 	# Decyzja właściciela (ops#59): grupowanie wpisów szansy w oknie 10 minut,
 	# statusy nigdy nie są sklejane (`grupuj` sam pilnuje field == "status").
