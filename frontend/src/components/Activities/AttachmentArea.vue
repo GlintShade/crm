@@ -35,6 +35,19 @@
           <TimelineTimestamp :date="attachment.creation" />
           <div class="flex gap-1">
             <Button
+              v-if="mozeZmieniacNazwe && attachment.mozna_zmienic_nazwe"
+              :tooltip="__('Zmień nazwę')"
+              class="!size-5"
+              @click.stop="() => otworzZmianeNazwy(attachment)"
+            >
+              <template #icon>
+                <span
+                  class="lucide-pencil size-3 text-ink-gray-7"
+                  aria-hidden="true"
+                />
+              </template>
+            </Button>
+            <Button
               :tooltip="__('Delete Attachment')"
               class="!size-5"
               @click.stop="() => deleteAttachment(attachment.name)"
@@ -55,13 +68,52 @@
       />
     </div>
   </div>
+
+  <!-- Zmień nazwę załącznika (issue ops#73) -->
+  <Dialog
+    v-model:open="dialogNazwy.otwarty"
+    :title="__('Zmień nazwę załącznika')"
+    size="sm"
+    @close="zamknijZmianeNazwy"
+  >
+    <template #default>
+      <div class="flex flex-col gap-4">
+        <div class="flex items-end gap-2">
+          <FormControl
+            v-model="dialogNazwy.trzon"
+            type="text"
+            :label="__('Nazwa pliku')"
+            class="flex-1"
+            :disabled="dialogNazwy.zapis"
+          />
+          <div class="mb-1.5 text-p-base text-ink-gray-5 truncate">
+            {{ dialogNazwy.rozszerzenie }}
+          </div>
+        </div>
+        <ErrorMessage :message="dialogNazwy.blad" />
+      </div>
+    </template>
+    <template #actions>
+      <div class="flex justify-end gap-2">
+        <Button :label="__('Anuluj')" variant="outline" @click="zamknijZmianeNazwy" />
+        <Button
+          :label="__('Zapisz')"
+          variant="solid"
+          :loading="dialogNazwy.zapis"
+          :disabled="!dialogNazwy.trzon.trim()"
+          @click="zapiszNazwe"
+        />
+      </div>
+    </template>
+  </Dialog>
 </template>
 <script setup>
 import FileAudioIcon from '@/components/Icons/FileAudioIcon.vue'
 import FileTextIcon from '@/components/Icons/FileTextIcon.vue'
 import FileVideoIcon from '@/components/Icons/FileVideoIcon.vue'
 import { globalStore } from '@/stores/global'
-import { call } from 'frappe-ui'
+import { Dialog, ErrorMessage, FormControl, call } from 'frappe-ui'
+import { reactive } from 'vue'
 import TimelineTimestamp from '@/components/Activities/TimelineTimestamp.vue'
 import { convertSize, isImage } from '@/utils'
 
@@ -72,6 +124,60 @@ defineProps({
 const emit = defineEmits(['reload'])
 
 const { $dialog } = globalStore()
+
+// VOLTEO: gates the pencil (rename-attachment) icon — admins/backoffice only
+// (issue ops#73). UI convenience only; the authoritative check is the
+// BYPASS_ROLES + has_permission gate inside
+// crm.api.volteo_zmien_nazwe_zalacznika.
+const mozeZmieniacNazwe = Boolean(window.volteo_edytuje_zalaczniki)
+
+// Kształt deklarowany z góry, plik zawsze jawny `null` (nigdy usuwany kluczem)
+// — patrz pułapka hasOwnProperty-na-reactive w CLAUDE.md.
+const dialogNazwy = reactive({
+  otwarty: false,
+  plik: null,
+  trzon: '',
+  rozszerzenie: '',
+  blad: '',
+  zapis: false,
+})
+
+function otworzZmianeNazwy(attachment) {
+  const nazwa = attachment.file_name || ''
+  const kropka = nazwa.lastIndexOf('.')
+  const trzon = kropka > 0 ? nazwa.slice(0, kropka) : nazwa
+  const rozszerzenie = kropka > 0 ? nazwa.slice(kropka) : ''
+  dialogNazwy.plik = attachment
+  dialogNazwy.trzon = trzon
+  dialogNazwy.rozszerzenie = rozszerzenie
+  dialogNazwy.blad = ''
+  dialogNazwy.otwarty = true
+}
+
+function zamknijZmianeNazwy() {
+  dialogNazwy.otwarty = false
+  dialogNazwy.plik = null
+  dialogNazwy.trzon = ''
+  dialogNazwy.rozszerzenie = ''
+  dialogNazwy.blad = ''
+}
+
+async function zapiszNazwe() {
+  dialogNazwy.zapis = true
+  dialogNazwy.blad = ''
+  try {
+    await call('crm.api.volteo_zmien_nazwe_zalacznika', {
+      name: dialogNazwy.plik.name,
+      nowy_trzon: dialogNazwy.trzon,
+    })
+    dialogNazwy.otwarty = false
+    emit('reload')
+  } catch (err) {
+    dialogNazwy.blad = err?.messages?.[0] || __('Nie udało się zmienić nazwy.')
+  } finally {
+    dialogNazwy.zapis = false
+  }
+}
 
 function openFile(attachment) {
   window.open(attachment.file_url, '_blank')

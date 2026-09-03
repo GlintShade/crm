@@ -16,6 +16,7 @@ from crm.volteo_aktywnosc import (
 	grupuj,
 	linie_z_wersji,
 )
+from crm.volteo_zalaczniki import czy_plik_systemowy
 
 #: Limit wersji (Version) czytanych bezpośrednio dla samej szansy (CRM Deal) w get_deal_activities.
 LIMIT_WERSJI_SZANSY = 200
@@ -1021,7 +1022,7 @@ def extract_zestaw_version_summary(data: dict):
 
 
 def get_attachments(doctype: str, name: str):
-	return (
+	zalaczniki = (
 		frappe.db.get_all(
 			"File",
 			filters={"attached_to_doctype": doctype, "attached_to_name": name},
@@ -1039,6 +1040,19 @@ def get_attachments(doctype: str, name: str):
 		)
 		or []
 	)
+	# VOLTEO: flaga na wiersz dla ołówka zmiany nazwy w AttachmentArea.vue (issue
+	# ops#73). Pliki komentarzy/komunikacji (doctype != "CRM Deal") dostają ołówek
+	# zawsze; pliki systemowe wygenerowane dla szansy (umowa, formularz kredytowy —
+	# patrz crm.volteo_zalaczniki) go nie dostają, bo są wyszukiwane po nazwie.
+	return [
+		{
+			**wiersz,
+			"mozna_zmienic_nazwe": not (
+				doctype == "CRM Deal" and czy_plik_systemowy(wiersz.file_name, name)
+			),
+		}
+		for wiersz in zalaczniki
+	]
 
 
 def handle_multiple_versions(versions: list):
