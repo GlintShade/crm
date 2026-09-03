@@ -79,6 +79,12 @@ def get_boot():
 				"Volteo D2D Sales" in frappe.get_roles()
 				and not (set(frappe.get_roles()) & {"System Manager", "Volteo Core Admin", "Volteo Backend"})
 			),
+			# VOLTEO: gates the pencil (rename-attachment) icon in AttachmentArea.vue
+			# (issue ops#73) — UI convenience only, mirrors the volteo_is_rep pattern
+			# above. Authoritative enforcement is the BYPASS_ROLES + has_permission
+			# check inside crm.api.volteo_zmien_nazwe_zalacznika.
+			"volteo_edytuje_zalaczniki": frappe.session.user == "Administrator"
+			or bool(set(frappe.get_roles()) & {"System Manager", "Volteo Core Admin", "Volteo Backend"}),
 			# VOLTEO: first-login NDA gate — the SPA shows the signing screen (and
 			# blocks the rest of the UI) when this is true. Server-side enforcement
 			# for /api/* lives in crm.api.oswiadczenie.before_request; this boot key

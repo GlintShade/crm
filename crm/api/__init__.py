@@ -7,7 +7,9 @@ from frappe.core.api.file import get_max_file_size
 from frappe.translate import get_all_translations
 from frappe.utils import cint, cstr, split_emails, validate_email_address
 
+from crm.permissions.org_hierarchy import BYPASS_ROLES
 from crm.utils import is_frappe_version
+from crm.volteo_zalaczniki import czy_plik_systemowy, nowa_nazwa_pliku
 
 # Light sanity check only — digits, "+", spaces, dashes, parentheses; not a
 # strict phone-format validator (international formats vary too widely for
@@ -336,6 +338,56 @@ def delete_attachment(doctype: str, docname: str, file_url: str):
 	)
 	if file_name:
 		frappe.delete_doc("File", file_name)
+
+
+@frappe.whitelist(methods=["POST"])
+def volteo_zmien_nazwe_zalacznika(name: str, nowy_trzon: str) -> dict[str, str]:
+	"""Zmienia widoczną nazwę załącznika (`File.file_name`) — TYLKO nazwę: `file_url`
+	i sam plik na dysku pozostają bez zmian, rozszerzenie jest zachowywane
+	automatycznie z obecnej nazwy (patrz `crm.volteo_zalaczniki.nowa_nazwa_pliku`).
+
+	Bramka: admin (`Administrator`/`BYPASS_ROLES` — System Manager, Volteo Core
+	Admin, Volteo Backend) ORAZ `write` na dokumencie nadrzędnym (Frappe deleguje
+	`has_permission("File", ...)` do tego dokumentu). Handlowcy (Volteo D2D
+	Sales) nigdy nie przechodzą tej bramki, niezależnie od uprawnień do
+	dokumentu nadrzędnego.
+
+	Pliki generowane przez system dla szansy (umowa, formularz kredytowy) są
+	odrzucane celowo — `crm/api/umowa.py`, `crm/api/kredyt.py` i
+	`crm/integrations/autenti/api.py` wyszukują je PO NAZWIE, więc zmiana nazwy
+	pod spodem po cichu zerwałaby to wyszukiwanie.
+
+	Zapis idzie przez `frappe.db.set_value(...)`, celowo NIE przez `doc.save()`:
+	`validate()` kontrolera `File` w ogóle nie dotyka `file_name`, więc
+	`.save()` tylko odpaliłby (bez potrzeby) walidacje samego pliku na dysku
+	(rozmiar, duplikat treści, uprawnienia) dla operacji, która niczego z tego
+	nie zmienia.
+	"""
+	if frappe.session.user != "Administrator" and not (set(frappe.get_roles()) & BYPASS_ROLES):
+		frappe.throw(_("Brak uprawnień do zmiany nazwy załącznika."), frappe.PermissionError)
+
+	plik = frappe.db.get_value(
+		"File",
+		name,
+		["file_name", "attached_to_doctype", "attached_to_name"],
+		as_dict=True,
+	)
+	if not plik:
+		frappe.throw(_("Nie znaleziono załącznika."), frappe.DoesNotExistError)
+
+	if not frappe.has_permission("File", doc=name, ptype="write"):
+		frappe.throw(_("Brak uprawnień do tego załącznika."), frappe.PermissionError)
+
+	if plik.attached_to_doctype == "CRM Deal" and czy_plik_systemowy(plik.file_name, plik.attached_to_name):
+		frappe.throw(_("To plik generowany przez system — nie można zmienić jego nazwy."))
+
+	try:
+		nowa = nowa_nazwa_pliku(plik.file_name, nowy_trzon)
+	except ValueError as blad:
+		frappe.throw(str(blad))
+
+	frappe.db.set_value("File", name, "file_name", nowa)
+	return {"file_name": nowa}
 
 
 @frappe.whitelist()
