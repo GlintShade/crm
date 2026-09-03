@@ -168,14 +168,30 @@
                     <Section :opened="true">
                       <template #header>
                         <div
-                          class="flex items-center justify-between gap-2 pr-1 text-base leading-5 text-ink-gray-7"
+                          class="flex items-center justify-between gap-2 pr-1 text-base leading-5 text-ink-gray-9"
                         >
-                          <div class="flex h-7 items-center gap-2 truncate">
+                          <div
+                            class="flex h-7 min-w-0 flex-1 cursor-pointer items-center gap-2 truncate"
+                            :title="__('View Contact')"
+                            @click="
+                              router.push({
+                                name: 'Contact',
+                                params: { contactId: contact.name },
+                              })
+                            "
+                          >
                             <Avatar
+                              v-if="contact.image"
                               :label="contact.full_name"
                               :image="contact.image"
                               size="md"
                             />
+                            <div
+                              v-else
+                              class="flex h-6 w-6 shrink-0 select-none items-center justify-center rounded-full bg-surface-gray-3 text-sm uppercase text-ink-gray-9"
+                            >
+                              {{ contact.full_name?.[0] }}
+                            </div>
                             <div class="truncate">
                               {{ contact.full_name }}
                             </div>
