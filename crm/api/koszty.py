@@ -34,6 +34,7 @@ from frappe.utils import flt
 from crm.api import volteo_poziom_prowizji, volteo_widzi_prowizje
 from crm.api.umowa import _sprawdz_dostep_do_szansy
 from crm.koszty.rdzen import scal_snapshot
+from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad
 
 ADMIN_ROLE = {"Volteo Core Admin", "System Manager"}
 
@@ -111,6 +112,17 @@ def volteo_koszty_zapisz(
 		},
 		update_modified=False,
 	)
+
+	# Ślad aktywności (ops#67) -- WYŁĄCZNIE liczniki, nigdy kwota/nazwa/marża
+	# (model tajemnicy kosztów). Awaria zapisu śladu nie może ubić zapisu
+	# kosztów, który już się powiódł -- log_error zamiast throw.
+	try:
+		zapisz_slad(
+			deal,
+			tekst_sladu("koszty", pozycje=len(nowy["linie"]), dodatkowe=len(dodatkowe)),
+		)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), "Volteo Koszty: błąd zapisu śladu aktywności")
 
 	return {"koszty": nowy}
 
