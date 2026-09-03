@@ -517,6 +517,36 @@ VOLTEO_LINKED_SOURCES = [
 	},
 	{"doctype": "Volteo Audyt", "label": _("Audyt"), "link_field": "deal", "text_fields": [], "skip_version_fields": {"zdjecia_json", "zdjecia_dodatkowe_json", "weryfikacja_json"}},
 	{"doctype": "Volteo Audyt CP", "label": _("Audyt"), "link_field": "deal", "text_fields": [], "skip_version_fields": {"dokumenty_json", "zdjecia_json", "weryfikacja_json"}},
+	# ops#61 (R4): "skip_creation" -- W3 already writes an Info trace
+	# ("utworzono umowę (formularz roboczy)" / "utworzono formularz
+	# kredytowy") on the DEAL at creation time, so the generic "added" event
+	# this loop would otherwise emit for the Volteo Umowa/Volteo Kredyt
+	# record itself would duplicate that line. "skip_version_fields" excludes
+	# the Autenti integration's own fields (crm-autenti.py) -- Autenti sends/
+	# status changes already get their own dedicated trail (W2), so a plain
+	# field-diff summary would just repeat "Autenti Wysłana" noise.
+	{
+		"doctype": "Volteo Umowa",
+		"label": _("Umowa"),
+		"link_field": "deal",
+		"text_fields": ["status"],
+		"skip_creation": True,
+		"skip_version_fields": {
+			"autenti_status", "autenti_document_id", "signer_name", "signer_email",
+			"sent_by", "sent_at", "signed_at", "error_message", "signed_pdf_file",
+		},
+	},
+	{
+		"doctype": "Volteo Kredyt",
+		"label": _("Kredyt"),
+		"link_field": "deal",
+		"text_fields": ["status"],
+		"skip_creation": True,
+		"skip_version_fields": {
+			"autenti_status", "autenti_document_id", "signer_name", "signer_email",
+			"sent_by", "sent_at", "signed_at", "error_message", "signed_pdf_file",
+		},
+	},
 ]
 
 CUSTOM_ZESTAW_FIELDNAME = "custom_zestaw"
@@ -607,30 +637,39 @@ def get_volteo_linked_activities(name: str):
 			except Exception:
 				title = None
 
-			try:
-				linked_activities.append(
-					{
-						"name": f"volteo-{dt}-{rec.name}",
-						"activity_type": "volteo_linked",
-						"creation": rec.creation,
-						"owner": rec.owner,
-						"is_lead": False,
-						"data": {
-							"source": dt,
-							"label": label,
-							"title": title,
-							"action": "added",
-							"doc_name": rec.name,
-							"text": compose_volteo_linked_text(dt, "added", rec),
-						},
-					}
-				)
-			except Exception:
-				frappe.log_error(
-					title="Volteo linked activities: failed to build creation event",
-					message=f"doctype={dt} record={rec.name}\n{frappe.get_traceback()}",
-				)
-				continue
+			# ops#61 (R4): "skip_creation" sources (Volteo Umowa, Volteo
+			# Kredyt) already get an equivalent "utworzono ..." trace written
+			# on the deal by W3 at record-creation time -- emitting the
+			# generic "added" event here too would duplicate that line, so
+			# it's skipped for exactly those sources (default False, so
+			# every other source keeps its existing "added" event).
+			if source.get("skip_creation"):
+				pass
+			else:
+				try:
+					linked_activities.append(
+						{
+							"name": f"volteo-{dt}-{rec.name}",
+							"activity_type": "volteo_linked",
+							"creation": rec.creation,
+							"owner": rec.owner,
+							"is_lead": False,
+							"data": {
+								"source": dt,
+								"label": label,
+								"title": title,
+								"action": "added",
+								"doc_name": rec.name,
+								"text": compose_volteo_linked_text(dt, "added", rec),
+							},
+						}
+					)
+				except Exception:
+					frappe.log_error(
+						title="Volteo linked activities: failed to build creation event",
+						message=f"doctype={dt} record={rec.name}\n{frappe.get_traceback()}",
+					)
+					continue
 
 			if not track_changes:
 				continue
@@ -794,6 +833,26 @@ def compose_volteo_linked_text(dt: str, action: str, rec: dict, summary: str | N
 			if summary:
 				text += " — " + summary
 			return text
+
+		# ops#61 (R4): kept for shape-completeness with the other branches
+		# above even though VOLTEO_LINKED_SOURCES marks both doctypes
+		# "skip_creation" -- get_volteo_linked_activities never actually
+		# calls this with action == "added" for them (W3 already writes the
+		# equivalent Info trace on the deal at creation time), but a future
+		# change to that gate should not have to rediscover this text.
+		if dt == "Volteo Umowa":
+			if action == "added":
+				return _("utworzono umowę (formularz roboczy)")
+			if summary:
+				return _("zaktualizowano umowę: {0}").format(summary)
+			return _("zaktualizowano umowę")
+
+		if dt == "Volteo Kredyt":
+			if action == "added":
+				return _("utworzono formularz kredytowy")
+			if summary:
+				return _("zaktualizowano formularz kredytowy: {0}").format(summary)
+			return _("zaktualizowano formularz kredytowy")
 	except Exception:
 		return None
 
