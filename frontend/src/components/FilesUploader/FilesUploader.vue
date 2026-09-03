@@ -81,6 +81,7 @@
 import FilesUploaderArea from '@/components/FilesUploader/FilesUploaderArea.vue'
 import FilesUploadHandler from './filesUploaderHandler'
 import { isMobileView } from '@/composables/settings'
+import { sprawdzTrzon, zlozNazwe } from '@/utils/zalaczniki'
 import { toast } from 'frappe-ui'
 import { ref, computed } from 'vue'
 
@@ -122,6 +123,18 @@ function attachFiles() {
   if (filesUploaderArea.value.showWebLink) {
     return uploadViaWebLink()
   }
+  // Walidacja WSZYSTKICH edytowalnych nazw plików przed uploadem — jeśli
+  // którykolwiek trzon jest niepoprawny, żaden plik nie wychodzi (issue
+  // ops#74). Komunikaty lustrzane wobec serwerowych z
+  // crm/volteo_zalaczniki.py.
+  let maBlad = false
+  files.value.forEach((file) => {
+    const blad = sprawdzTrzon(file.trzon, file.rozszerzenie)
+    file.errorMessage = blad
+    if (blad) maBlad = true
+  })
+  if (maBlad) return
+
   files.value.forEach((file, i) => attachFile(file, i))
 }
 
@@ -172,8 +185,11 @@ function attachFile(file, i) {
     file.uploading = false
   })
 
+  // Wysyłamy kopię wrappera z nazwą złożoną z (ewentualnie zmienionego)
+  // trzonu — callbacki wyżej nadal mutują oryginalny `file` z domknięcia,
+  // to `filesUploaderHandler.ts` czyta tylko `.name` z pierwszego argumentu.
   uploader.value
-    .upload(file, args || {})
+    .upload({ ...file, name: zlozNazwe(file.trzon, file.rozszerzenie) }, args || {})
     .then((response) => {
       uploadedFiles.value.push(response)
       if (i === files.value.length - 1) {
