@@ -305,9 +305,19 @@ before_tests = "crm.tests.before_tests"
 # Overriding Methods
 # ------------------------------
 #
-# override_whitelisted_methods = {
-# "frappe.desk.doctype.event.event.get_events": "crm.event.get_events"
-# }
+# Straznik filtrow permlevel na whitelisted endpointach rdzenia (ops#80,
+# druga warstwa luki z ops#79) — kazdy wrapper w crm/api/volteo_filtry_guard.py
+# sprawdza filters/or_filters, po czym deleguje do oryginalu bez zmiany
+# zwracanej wartosci. Patrz docstring tego modulu.
+override_whitelisted_methods = {
+	"frappe.client.get_list": "crm.api.volteo_filtry_guard.get_list",
+	"frappe.client.get_count": "crm.api.volteo_filtry_guard.get_count",
+	"frappe.client.get_value": "crm.api.volteo_filtry_guard.get_value",
+	"frappe.desk.reportview.get": "crm.api.volteo_filtry_guard.get",
+	"frappe.desk.reportview.get_count": "crm.api.volteo_filtry_guard.reportview_get_count",
+	"frappe.desk.reportview.export_query": "crm.api.volteo_filtry_guard.export_query",
+	"frappe.desk.search.search_link": "crm.api.volteo_filtry_guard.search_link",
+}
 #
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,
