@@ -103,13 +103,30 @@ def sort_options(doctype: str):
 	# Nie oferuj sortowania po polu, po ktorym i tak nie wolno filtrowac
 	# (permlevel > 0 bez uprawnienia read) — patrz ops#79.
 	permitted = _pola_dozwolone(doctype)
+
+	# Allowlista sortowania (np. CRM Deal, ops#81) — jesli kontroler ja
+	# udostepnia, zwracamy WYLACZNIE te pola, w podanej kolejnosci, z
+	# etykietami nadpisanymi tam, gdzie krotka je podaje. Pola nieobecne w
+	# meta/liscie standardowej (np. `custom_etap_nr` przed skryptem ops z
+	# issue 3) albo niedozwolone permlevelem sa po cichu pomijane.
+	controller = get_controller(doctype)
+	if hasattr(controller, "volteo_sort_fields"):
+		by_fieldname = {field["fieldname"]: field for field in fields}
+		allowlisted = []
+		for fieldname, etykieta in controller.volteo_sort_fields():
+			if fieldname not in by_fieldname or fieldname not in permitted:
+				continue
+			label = _(etykieta) if etykieta is not None else by_fieldname[fieldname]["label"]
+			allowlisted.append({"label": label, "value": fieldname, "fieldname": fieldname})
+		return allowlisted
+
 	fields = [field for field in fields if field["fieldname"] in permitted]
 
 	return fields
 
 
 @frappe.whitelist()
-def get_filterable_fields(doctype: str):
+def get_filterable_fields(doctype: str, scope: str = "list"):
 	if not frappe.has_permission(doctype, "read"):
 		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
 
@@ -161,14 +178,35 @@ def get_filterable_fields(doctype: str):
 
 	for field in standard_fields + meta.get("fields", []):
 		if field.get("fieldname") not in restricted_fields and field.get("fieldtype") in allowed_fieldtypes:
-			field["name"] = field.get("fieldname")
-			field["label"] = _(field.get("label"))
-			field["value"] = field.get("fieldname")
-			fields.append(field)
+			fields.append(
+				{
+					**field,
+					"name": field.get("fieldname"),
+					"label": _(field.get("label")),
+					"value": field.get("fieldname"),
+				}
+			)
 
 	# Nie oferuj filtrowania po polu, po ktorym i tak nie wolno filtrowac
 	# (permlevel > 0 bez uprawnienia read) — patrz ops#79.
 	permitted = _pola_dozwolone(doctype)
+
+	# Allowlista filtrow listy szans (np. CRM Deal, ops#81) — tylko dla
+	# scope="list" (widok listy). `scope="conditions"` (reguly przypisan,
+	# SLA — `ConditionsFilter`) i kazdy inny doctype dostaja pelna liste jak
+	# dotychczas, zeby nie stracic pol w tych ustawieniach.
+	if scope == "list" and hasattr(c, "volteo_filter_fields"):
+		by_fieldname = {field["fieldname"]: field for field in fields}
+		allowlisted = []
+		for fieldname, etykieta in c.volteo_filter_fields():
+			if fieldname not in by_fieldname or fieldname not in permitted:
+				continue
+			entry = by_fieldname[fieldname]
+			if etykieta is not None:
+				entry = {**entry, "label": _(etykieta)}
+			allowlisted.append(entry)
+		return allowlisted
+
 	fields = [field for field in fields if field.get("fieldname") in permitted]
 
 	return fields
