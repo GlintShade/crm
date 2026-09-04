@@ -13,7 +13,19 @@ from pypika import Criterion
 from crm.api.views import get_views
 from crm.fcrm.doctype.crm_form_script.crm_form_script import get_form_script
 from crm.utils import is_frappe_version
-from crm.volteo_lista_szans import niedozwolone_klucze_filtrow
+from crm.volteo_lista_szans import POLA_ZAWSZE_DOZWOLONE, niedozwolone_klucze_filtrow
+
+try:
+	# Nazwy pol tabeli podrzednej ("parent", "parentfield", "parenttype"),
+	# ktore `get_permitted_fields` dokleja SAM tylko wtedy, gdy dostanie
+	# `parenttype` (patrz `_pola_dozwolone` nizej i ops#80 follow-up).
+	# `crm.volteo_lista_szans.POLA_ZAWSZE_DOZWOLONE` juz zawiera te same
+	# trzy nazwy jako literalny backstop (modul jest frappe-free) — ten
+	# import dokleja je jeszcze raz wprost z frameworka, zeby przemianowanie
+	# stalej w Frappe nie rozjechalo sie cicho z literalami.
+	from frappe.model import child_table_fields as _CHILD_TABLE_FIELDS
+except ImportError:  # pragma: no cover - tylko gdyby framework usunal stala
+	_CHILD_TABLE_FIELDS = ()
 
 COUNT_NAME = (
 	{"COUNT": "name", "as": "total_count"}
@@ -26,42 +38,61 @@ COUNT_NAME = (
 # bezpiecznik na wypadek, gdyby framework kiedys ich stamtad nie zwrocil
 # (patrz ops#79). get_permitted_fields juz je zwraca w normalnym przypadku
 # (default_fields + optional_fields z frappe/model/__init__.py), ale ta
-# lista jest tania do policzenia i nie zalezy od wersji frameworka.
-_POLA_ZAWSZE_DOZWOLONE = frozenset(
-	{
-		"name",
-		"owner",
-		"creation",
-		"modified",
-		"modified_by",
-		"docstatus",
-		"idx",
-		"_assign",
-		"_liked_by",
-		"_comments",
-		"_user_tags",
-	}
-)
+# lista jest tania do policzenia i nie zalezy od wersji frameworka. Zrodlo
+# prawdy to `crm.volteo_lista_szans.POLA_ZAWSZE_DOZWOLONE` (frappe-free, wiec
+# testowalne bez frameworka) — tutaj dokladamy jeszcze
+# `frappe.model.child_table_fields` wprost, na wypadek gdyby framework kiedys
+# przemianowal `parent`/`parentfield`/`parenttype` (ops#80 follow-up).
+_POLA_ZAWSZE_DOZWOLONE = POLA_ZAWSZE_DOZWOLONE | frozenset(_CHILD_TABLE_FIELDS)
 
 
-def _pola_dozwolone(doctype: str) -> set[str]:
+def _pola_dozwolone(doctype: str, parenttype: str | None = None) -> set[str]:
 	"""Zbior nazw pol doctype'u dostepnych BIEZACEMU uzytkownikowi do odczytu.
 
 	Pole permlevel > 0 bez uprawnienia read na tym poziomie jest wylaczone —
 	to jest zbior, po ktorym wolno filtrowac/sortowac/grupowac (patrz modul
 	`crm.volteo_lista_szans` i ops#79). Liczony raz na wywolanie whitelisted
 	metody, nie w petli.
+
+	`parenttype` (ops#80 follow-up): dla TABELI PODRZEDNEJ (child table)
+	`get_permitted_fields` doklada `parent`/`parentfield`/`parenttype` oraz
+	DocFieldy wiersza WYLACZNIE gdy dostanie `parenttype` (nazwe doctype'u
+	rodzica) — bez niego zwraca tylko `default_fields` (7 pol: name, owner,
+	creation, modified, modified_by, docstatus, idx), co bez tej poprawki
+	odrzucalo kazdy filtr typu `{parenttype: "CRM Deal", parent: <deal>}`
+	uzywany przez froncikowe odczyty tabel podrzednych (np.
+	`ZestawTab.vue`'s `Volteo Zestaw Item`). Wywolujacy, ktorzy znaja
+	rodzica (np. `crm.api.volteo_filtry_guard.get_list`, ktory dostaje
+	argument `parent`), przekazuja go tutaj; wywolania bez znanego rodzica
+	(np. `get_data` w tym module) dostaja fallback nizej.
 	"""
-	permitted = get_permitted_fields(doctype, user=frappe.session.user, permission_type="read")
-	return set(permitted) | _POLA_ZAWSZE_DOZWOLONE
+	permitted = get_permitted_fields(
+		doctype, parenttype=parenttype, user=frappe.session.user, permission_type="read"
+	)
+	dozwolone = set(permitted) | _POLA_ZAWSZE_DOZWOLONE
+
+	# Fallback dla tabeli podrzednej BEZ podanego parenttype: `permitted`
+	# powyzej jest wtedy prawie puste (patrz docstring), wiec bez tego
+	# dokladamy WLASNE pola tego doctype'u na permlevel 0 — zeby nie
+	# blokowac uzasadnionych filtrow po zwyklych polach wiersza (np.
+	# `kategoria`). Pola permlevel > 0 zostaja zablokowane tak jak
+	# dotychczas — nie sa tu dodawane.
+	meta = frappe.get_meta(doctype)
+	if meta.istable and not parenttype:
+		dozwolone |= {field.fieldname for field in meta.fields if not field.get("permlevel")}
+
+	return dozwolone
 
 
-def _sprawdz_filtry(doctype: str, filters) -> None:
+def _sprawdz_filtry(doctype: str, filters, parenttype: str | None = None) -> None:
 	"""Rzuca PermissionError, jesli `filters` odwoluje sie do pola spoza
-	`_pola_dozwolone(doctype)`. `filters` moze byc dict-em (typowy przypadek
-	w `get_data`) albo pojedynczym polem opakowanym w `{pole: None}` — patrz
-	wywolania dla `column_field`/`group_by_field` w `get_data`."""
-	permitted = _pola_dozwolone(doctype)
+	`_pola_dozwolone(doctype, parenttype)`. `filters` moze byc dict-em
+	(typowy przypadek w `get_data`) albo pojedynczym polem opakowanym w
+	`{pole: None}` — patrz wywolania dla `column_field`/`group_by_field` w
+	`get_data`. `parenttype` patrz `_pola_dozwolone` — domyslnie `None`,
+	istniejace wywolania w tym module (`get_data` i pochodne) go nie
+	przekazuja i zostaja bez zmian."""
+	permitted = _pola_dozwolone(doctype, parenttype=parenttype)
 	niedozwolone = niedozwolone_klucze_filtrow(filters, permitted)
 	if niedozwolone:
 		frappe.throw(

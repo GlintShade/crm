@@ -2,6 +2,7 @@ import unittest
 
 from crm.volteo_lista_szans import (
 	FILTER_FIELDS_DEAL,
+	POLA_ZAWSZE_DOZWOLONE,
 	SORT_FIELDS_DEAL,
 	niedozwolone_klucze_filtrow,
 )
@@ -236,6 +237,27 @@ class TestAllowlistySzans(unittest.TestCase):
 		self.assertEqual(filter_by_field["status"], "Etap")
 		self.assertEqual(filter_by_field["_assign"], "Przypisano do")
 		self.assertIsNone(filter_by_field["custom_rodzaj_umowy"])
+
+
+class TestPolaZawszeDozwolone(unittest.TestCase):
+	"""`POLA_ZAWSZE_DOZWOLONE` (ops#80 follow-up) — bezpiecznik uzywany przez
+	`crm.api.doc._pola_dozwolone`. Musi zawierac zarowno standardowe pola
+	dokumentu, jak i `frappe.model.child_table_fields`
+	(`parent`/`parenttype`/`parentfield`) — bez tych trzech kazdy filtr
+	odczytu tabeli podrzednej bez `parenttype` (np. `Volteo Zestaw Item` z
+	`ZestawTab.vue`) jest odrzucany, co bylo przyczyna regresji „brak
+	zestawu"."""
+
+	def test_a_zawiera_pola_tabeli_podrzednej(self: "TestPolaZawszeDozwolone") -> None:
+		for fieldname in ("parent", "parenttype", "parentfield"):
+			self.assertIn(fieldname, POLA_ZAWSZE_DOZWOLONE)
+
+	def test_b_zawiera_standardowe_pola_dokumentu(self: "TestPolaZawszeDozwolone") -> None:
+		for fieldname in ("_assign", "name", "modified"):
+			self.assertIn(fieldname, POLA_ZAWSZE_DOZWOLONE)
+
+	def test_c_jest_frozenset(self: "TestPolaZawszeDozwolone") -> None:
+		self.assertIsInstance(POLA_ZAWSZE_DOZWOLONE, frozenset)
 
 
 if __name__ == "__main__":
