@@ -103,7 +103,7 @@
         </div>
         <div>
           <CircularProgressBar
-            v-if="file.uploading || file.uploaded == file.total"
+            v-if="!file.failed && (file.uploading || file.uploaded == file.total)"
             :class="{
               'text-ink-green-5': file.uploaded == file.total,
             }"

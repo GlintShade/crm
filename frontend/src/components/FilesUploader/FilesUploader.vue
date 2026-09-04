@@ -135,6 +135,13 @@ function attachFiles() {
   })
   if (maBlad) return
 
+  // Świeża próba wysyłki — zdejmij ewentualny znacznik błędu z
+  // poprzedniej, żeby wiersz znów pokazywał normalny pasek postępu
+  // zamiast zostać zablokowany na koszu (ops#78).
+  files.value.forEach((file) => {
+    file.failed = false
+  })
+
   files.value.forEach((file, i) => attachFile(file, i))
 }
 
@@ -154,6 +161,25 @@ function uploadViaWebLink() {
 const uploader = ref(null)
 const fileUploadStarted = ref(false)
 const uploadedFiles = ref([])
+
+// Serwer może odrzucić plik (np. ValidationError z hooka nazw systemowych)
+// PO TYM, jak wszystkie bajty już dotarły — `file.uploaded` zdąży
+// zrównać się z `file.total` zanim przyjdzie błąd. Bez tego resetu wiersz
+// zostawał z zielonym znacznikiem ukończenia (pasek liczy się po
+// uploaded==total, nie po sukcesie), a przycisk „Załącz” kręcił się w
+// nieskończoność, bo `fileUploadStarted` nigdy nie wracał do false
+// (ops#78).
+function oznaczBlad(file, komunikat) {
+  file.uploading = false
+  file.failed = true
+  // `undefined`, nie `0` — odtwarza stan początkowy wrappera z addFiles()
+  // (bez klucza `uploaded`), żeby `uploaded == total` nie było prawdziwe
+  // i pasek nie mignął na zielono, zanim przyjdzie pierwszy event 'progress'.
+  file.uploaded = undefined
+  file.total = 0
+  file.errorMessage = komunikat
+  fileUploadStarted.value = false
+}
 
 function attachFile(file, i) {
   const args = {
@@ -178,8 +204,7 @@ function attachFile(file, i) {
     file.total = data.total
   })
   uploader.value.on('error', (error) => {
-    file.uploading = false
-    file.errorMessage = error || 'Error Uploading File'
+    oznaczBlad(file, error || 'Error Uploading File')
   })
   uploader.value.on('finish', () => {
     file.uploading = false
@@ -202,7 +227,6 @@ function attachFile(file, i) {
       }
     })
     .catch((error) => {
-      file.uploading = false
       let errorMessage = 'Error Uploading File'
       if (error?._server_messages) {
         errorMessage = JSON.parse(JSON.parse(error._server_messages)[0]).message
@@ -211,7 +235,7 @@ function attachFile(file, i) {
       } else if (typeof error === 'string') {
         errorMessage = error
       }
-      file.errorMessage = errorMessage
+      oznaczBlad(file, errorMessage)
     })
 }
 </script>
