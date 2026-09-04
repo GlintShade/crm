@@ -6,7 +6,7 @@
     :starterkit-options="{ heading: { levels: [2, 3, 4, 5, 6] } }"
     :placeholder="placeholder"
     :editable="editable"
-    :mentions="users"
+    :mentions="mentionsKonfig"
     @change="editable ? (content = $event) : null"
   >
     <template #editor="{ editor: _editor }">
@@ -110,7 +110,7 @@ const attachments = defineModel('attachments', {
 })
 const content = defineModel('content', { type: String, default: '' })
 
-const { users: usersList } = usersStore()
+const { listaWzmianek } = usersStore()
 const { capture } = useTelemetry()
 
 const textEditor = ref(null)
@@ -131,16 +131,14 @@ function removeAttachment(attachment) {
   attachments.value = attachments.value.filter((a) => a !== attachment)
 }
 
-const users = computed(() => {
-  return (
-    usersList.data?.crmUsers
-      ?.filter((user) => user.enabled)
-      .map((user) => ({
-        label: user.full_name.trimEnd(),
-        value: user.name,
-      })) || []
-  )
-})
+// Wzmianki @użytkownik (ops#75, decyzja właściciela): lista podpowiedzi z
+// dedykowanego API wg hierarchii (`usersStore().listaWzmianek()`), nie z
+// pełnego `crmUsers`. PUŁAPKA frappe-ui: TextEditor bierze `mentions` jako
+// snapshot przy montowaniu edytora — komentarz otwarty przed dociągnięciem
+// listy przez usersStore miałby wtedy pustą listę na zawsze, dlatego
+// przekazujemy obiektową formę propsa z getterem (patrz analogiczny
+// komentarz w AktualizacjeTab.vue), nie samą wartość.
+const mentionsKonfig = { mentions: () => listaWzmianek() }
 
 defineExpose({ editor })
 
