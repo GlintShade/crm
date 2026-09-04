@@ -58,15 +58,43 @@ def _wlaczone() -> bool:
 
 
 def _pdf_umowy_plik(deal: str) -> "frappe.model.document.Document | None":
-	"""Zwraca rekord `File` PDF-u umowy (niepodpisanej) tej szansy, albo `None`, gdy go brak."""
+	"""Zwraca rekord `File` NAJNOWSZEGO PDF-u umowy (niepodpisanej) tej szansy,
+	albo `None`, gdy go brak.
+
+	W odróżnieniu od pierwotnej wersji (dopasowanie po DOKŁADNEJ, stałej
+	nazwie `logika.nazwa_pliku_umowy(deal)`), dopasowanie idzie po PREFIKSIE,
+	tak jak `_pdf_kredytu_plik` niżej. Powód: Frappe nie nadpisuje pliku o
+	istniejącej nazwie przy kolejnym `insert()` — przy kolizji ścieżki na
+	dysku dokleja losowy sufiks do nazwy NOWEGO pliku (`Umowa-PRO-CP-26-1024.pdf`
+	→ `Umowa-PRO-CP-26-1024e41034.pdf`). Taka kolizja może dziś powstać nawet
+	bez żadnego błędu w tej szansie — wystarczy, że plik o dokładnie tej samej
+	nazwie zostanie wgrany pod INNĄ szansą (zob. `crm.volteo_zalaczniki.czy_nazwa_systemowa`,
+	rezerwacja nazw dla dowolnej szansy wprowadzona jako follow-up do ops#77) —
+	dopasowanie po dokładnej nazwie wtedy trwale nie znajdowałoby prawdziwego
+	PDF-u, a regeneracja by tego nie naprawiała.
+
+	Wzorzec eskejpowania `%`/`_` w prefiksie MUSI zostać zsynchronizowany z
+	`crm.api.umowa._usun_stare_pdfy_umowy` (analogicznie jak `_pdf_kredytu_plik`
+	z `crm.api.kredyt._usun_stare_pliki_kredytu`) — obie funkcje dopasowują ten
+	sam zestaw plików tym samym LIKE (jedna sprząta stare, druga szuka
+	najnowszego źródła do wysyłki); rozjazd wzorca zepsułby jedną z nich po cichu.
+
+	Podpisane PDF-y (`...-podpisana.pdf`, `logika.nazwa_pliku_podpisanego`)
+	wpinają się pod `Volteo Umowa`, nie pod `CRM Deal` — ten LIKE (filtrowany po
+	`attached_to_doctype == "CRM Deal"`) ich więc nie złapie, co jest zamierzone:
+	ta funkcja szuka źródła do WYSŁANIA do podpisu, nie już podpisanego wyniku.
+	"""
+	prefiks = logika.nazwa_pliku_umowy(deal)[: -len(".pdf")]
+	wzorzec = prefiks.replace("%", r"\%").replace("_", r"\_") + "%.pdf"
 	nazwy = frappe.get_all(
 		"File",
 		filters={
 			"attached_to_doctype": "CRM Deal",
 			"attached_to_name": deal,
-			"file_name": logika.nazwa_pliku_umowy(deal),
+			"file_name": ["like", wzorzec],
 		},
 		pluck="name",
+		order_by="creation desc",
 		limit=1,
 	)
 	if not nazwy:
@@ -78,11 +106,14 @@ def _pdf_kredytu_plik(deal: str) -> "frappe.model.document.Document | None":
 	"""Zwraca rekord `File` NAJNOWSZEGO wygenerowanego PDF-u formularza kredytowego tej
 	szansy, albo `None`, gdy go brak.
 
-	W odróżnieniu od `_pdf_umowy_plik` (dopasowanie po dokładnej, stałej nazwie), PDF-y
-	formularza kredytowego są zapisywane ZNACZNIKOWANE w czasie
-	(`Formularz-kredytowy-<deal>-YYYYMMDD-HHMMSS.pdf`, patrz `volteo_kredyt_pdf` w
-	`crm/api/kredyt.py`) — dopasowanie idzie więc po PREFIKSIE, biorąc najnowszy wpis
-	wg `creation`.
+	Podobnie jak `_pdf_umowy_plik`, dopasowanie idzie po PREFIKSIE, biorąc
+	najnowszy wpis wg `creation` — ale tu prefiks jest z definicji krótszy od
+	pełnej nazwy pliku, bo PDF-y formularza kredytowego są zapisywane
+	ZNACZNIKOWANE w czasie (`Formularz-kredytowy-<deal>-YYYYMMDD-HHMMSS.pdf`,
+	patrz `volteo_kredyt_pdf` w `crm/api/kredyt.py`), więc dopasowanie po
+	dokładnej nazwie nigdy by tu nie zadziałało (w odróżnieniu od umowy, gdzie
+	nazwa bez kolizji jest stała i dopasowanie po prefiksie jest wyborem
+	obronnym, nie koniecznym).
 
 	Wzorzec eskejpowania `%`/`_` w prefiksie MUSI zostać zsynchronizowany z
 	`crm.api.kredyt._usun_stare_pliki_kredytu` — obie funkcje dopasowują ten sam
