@@ -405,7 +405,7 @@ def etap_nr(rodzaj: str | None, status: str | None) -> int:
 	klucz = pipeline_key_for(rodzaj)
 	if klucz is None or status is None:
 		return 0
-	rurociag = pipeline_for(rodzaj)
+	pipeline = pipeline_for(rodzaj)
 	offset = 100 if klucz == "CP" else 0
 	indeks_procesu = step_index(rodzaj, status)
 	if indeks_procesu != -1:
@@ -415,7 +415,7 @@ def etap_nr(rodzaj: str | None, status: str | None) -> int:
 		indeks_terminalny = terminale.index(status)
 	except ValueError:
 		return 0
-	return offset + len(rurociag) + 1 + indeks_terminalny
+	return offset + len(pipeline) + 1 + indeks_terminalny
 
 
 def notatka_for(rodzaj: str | None, status: str | None) -> str | None:
