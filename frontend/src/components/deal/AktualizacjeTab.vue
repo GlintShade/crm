@@ -14,6 +14,11 @@
   after_insert na doctype), nie front — front tylko wysyła gotowy HTML.
   Tryb `konfig.html === false` (Montaż) zachowuje dokładny dotychczasowy
   wygląd i zachowanie: zwykła textarea, brak wzmianek.
+
+  PUŁAPKA (ops#75): TextEditor bierze `mentions` jako snapshot przy
+  montowaniu, a ta zakładka montuje się zanim usersStore się załaduje —
+  dlatego edytorowi przekazujemy `mentionsKonfig` (getter), nie `users`
+  bezpośrednio; patrz komentarz przy `mentionsKonfig` niżej.
 -->
 <template>
   <div class="flex flex-1 flex-col overflow-y-auto p-5">
@@ -42,7 +47,7 @@
           :editor-class="['prose-sm max-w-none min-h-[4rem]']"
           :placeholder="__(konfig.placeholder)"
           :editable="true"
-          :mentions="users"
+          :mentions="mentionsKonfig"
           @change="draft.tekst = $event"
         />
         <div class="mt-3 flex justify-end">
@@ -118,6 +123,14 @@ const users = computed(() => {
       })) || []
   )
 })
+
+// PUŁAPKA frappe-ui: TextEditor konfiguruje MentionExtension raz, przy
+// tworzeniu edytora (snapshot tablicy). Ta zakładka montuje się przy wejściu
+// na szansę, zanim usersStore się załaduje — więc tablica byłaby pusta na
+// zawsze. Rozszerzenie czyta listę przez toValue(), a więc getter jest
+// rozwiązywany leniwie przy każdym „@". Obiektowa forma propsa
+// ({ mentions, component }) jest jedyną, która przepuszcza getter.
+const mentionsKonfig = { mentions: () => users.value }
 
 const updates = createResource({
   url: 'frappe.client.get_list',
