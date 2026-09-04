@@ -235,7 +235,13 @@ def get_group_by_fields(doctype: str):
 	fields = [
 		field
 		for field in fields
-		if field.fieldtype not in no_value_fields and field.fieldtype in allowed_fieldtypes
+		if field.fieldtype not in no_value_fields
+		and field.fieldtype in allowed_fieldtypes
+		# Pole hidden=1 (np. custom_etap_nr, ops#82 — wewnetrzne pole
+		# sortowania, nigdy nie pokazywane wprost uzytkownikowi) nie ma co
+		# robic w "Grupuj wedlug"; to samo uzasadnienie co pominiecie takich
+		# pol w allowlistach sortowania/filtrow (crm.volteo_lista_szans).
+		and not field.hidden
 	]
 	fields = [
 		{
