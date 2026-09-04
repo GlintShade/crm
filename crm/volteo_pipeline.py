@@ -385,6 +385,39 @@ def step_index(rodzaj: str | None, status: str | None) -> int:
 		return -1
 
 
+def etap_nr(rodzaj: str | None, status: str | None) -> int:
+	"""Zwraca numer kroku procesu, do utrwalenia na dokumencie i sortowania listy
+	szans po kolejności procesu (`frappe.get_list` sortuje tylko po zwykłych
+	polach — sam proces nie da się wyrazić przez `order_by`).
+
+	`0` oznacza brak procesu dla `rodzaj` (rodzaj pusty/nieznany) albo status
+	spoza `grupa_for(rodzaj)` dla TEGO rodzaju (np. „Weryfikacja Backoffice”
+	pod „Czyste Powietrze” — status istnieje, ale nie w procesie CP). Krok
+	procesu to `step_index(...) + 1` (numeracja od 1, nie od 0, żeby 0 zostało
+	wolne jako „brak”). Status terminalny (`TERMINALE`) dostaje numer zaraz za
+	ostatnim krokiem procesu: `len(pipeline) + 1 + jego_indeks_w_TERMINALE`.
+
+	Czyste Powietrze ma przesunięcie +100 (CP „Lead” = 101 … „Projekt
+	rozliczony” = 112, „Przegrana” = 113) — bez tego przesunięcia
+	nieprzefiltrowana lista (oba rodzaje razem) przeplatałaby kroki dwóch
+	niezależnych, różnej długości procesów zamiast trzymać OZE przed CP.
+	"""
+	klucz = pipeline_key_for(rodzaj)
+	if klucz is None or status is None:
+		return 0
+	rurociag = pipeline_for(rodzaj)
+	offset = 100 if klucz == "CP" else 0
+	indeks_procesu = step_index(rodzaj, status)
+	if indeks_procesu != -1:
+		return offset + indeks_procesu + 1
+	terminale = TERMINALE.get(klucz, ())
+	try:
+		indeks_terminalny = terminale.index(status)
+	except ValueError:
+		return 0
+	return offset + len(rurociag) + 1 + indeks_terminalny
+
+
 def notatka_for(rodzaj: str | None, status: str | None) -> str | None:
 	"""Zwraca notatkę „co dalej” dla bieżącego statusu, albo None gdy brak zdefiniowanej notatki."""
 	klucz = pipeline_key_for(rodzaj)

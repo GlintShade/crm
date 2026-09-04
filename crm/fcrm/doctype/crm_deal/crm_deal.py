@@ -12,7 +12,7 @@ from crm.fcrm.doctype.crm_status_change_log.crm_status_change_log import add_sta
 from crm.fcrm.doctype.utils import add_or_remove_lost_reason_section_in_sidepanel
 from crm.permissions.org_hierarchy import BYPASS_ROLES
 from crm.volteo_lista_szans import FILTER_FIELDS_DEAL, SORT_FIELDS_DEAL
-from crm.volteo_pipeline import grupa_for, pipeline_for
+from crm.volteo_pipeline import etap_nr, grupa_for, pipeline_for
 
 
 class CRMDeal(Document):
@@ -101,6 +101,7 @@ class CRMDeal(Document):
 
 	def validate(self):
 		self.validate_status()
+		self.set_etap_nr()
 		self.set_primary_contact()
 		self.set_primary_email_mobile_no()
 		if not self.is_new() and self.has_value_changed("deal_owner") and self.deal_owner:
@@ -129,6 +130,18 @@ class CRMDeal(Document):
 				self.status = "Qualification"
 			else:
 				self.status = frappe.get_all("CRM Deal Status", {"type": "Open"}, pluck="name")[0]
+
+	def set_etap_nr(self):
+		# custom_etap_nr (ops#82) utrwala numer kroku procesu na dokumencie —
+		# frappe.get_list sortuje tylko po zwykłych polach, więc kolejność
+		# procesu (crm.volteo_pipeline) musi być zapisana, nie liczona w locie.
+		# Bezwarunkowo przy KAŻDYM zapisie (również gdy zmienia się tylko
+		# custom_rodzaj_umowy, bez zmiany status) — pole ma być zawsze
+		# zgodne z aktualną parą (rodzaj, status). Pole może nie istnieć, gdy
+		# ops/crm-etap-nr.py (Faza 1) jeszcze nie zdążył utworzyć Custom Field
+		# na tej stronie (obraz przed skryptem schematu).
+		if self.meta.has_field("custom_etap_nr"):
+			self.custom_etap_nr = etap_nr(self.get("custom_rodzaj_umowy"), self.status)
 
 	def set_primary_contact(self, contact=None):
 		if not self.contacts:

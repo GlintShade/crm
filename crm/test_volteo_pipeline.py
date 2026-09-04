@@ -10,6 +10,7 @@ from crm.volteo_pipeline import (
 	STANY_PODZADAN,
 	TERMINALE,
 	dozwolone_stany,
+	etap_nr,
 	grupa_for,
 	is_forward,
 	notatka_for,
@@ -286,6 +287,57 @@ class TestVolteoPipeline(unittest.TestCase):
 
 	def test_ao_is_forward_2_transza_do_projektu_rozliczonego(self: "TestVolteoPipeline") -> None:
 		self.assertTrue(is_forward("Czyste Powietrze", "2 transza", "Projekt rozliczony"))
+
+	# --- etap_nr: numer kroku procesu (do sortowania listy szans) -----------
+
+	def test_ap_etap_nr_oze_wartości_jawne(self: "TestVolteoPipeline") -> None:
+		self.assertEqual(etap_nr("Fotowoltaika", "Lead"), 1)
+		self.assertEqual(etap_nr("Fotowoltaika", "Umowa Wygenerowana"), 2)
+		self.assertEqual(etap_nr("Fotowoltaika", "Umowa Podpisana"), 3)
+		self.assertEqual(etap_nr("Fotowoltaika", "Weryfikacja Backoffice"), 4)
+		self.assertEqual(etap_nr("Fotowoltaika", "Finansowanie"), 5)
+		self.assertEqual(etap_nr("Fotowoltaika", "Wygrana – montaż"), 6)
+		self.assertEqual(etap_nr("Fotowoltaika", "Przegrana"), 7)
+
+	def test_aq_etap_nr_cp_wartości_jawne(self: "TestVolteoPipeline") -> None:
+		self.assertEqual(etap_nr("Czyste Powietrze", "Lead"), 101)
+		self.assertEqual(etap_nr("Czyste Powietrze", "Dokumentacja"), 102)
+		self.assertEqual(etap_nr("Czyste Powietrze", "Projekt rozliczony"), 112)
+		self.assertEqual(etap_nr("Czyste Powietrze", "Przegrana"), 113)
+
+	def test_ar_etap_nr_weryfikacja_backoffice_pod_cp_daje_zero(self: "TestVolteoPipeline") -> None:
+		# Status istnieje w słowniku CRM Deal Status, ale nie w procesie CP —
+		# to jest DOKŁADNIE różnica między "status nieznany" a "status spoza
+		# procesu tego rodzaju", więc wynik musi być 0, nie -1+1 ani wyjątek.
+		self.assertEqual(etap_nr("Czyste Powietrze", "Weryfikacja Backoffice"), 0)
+		self.assertEqual(etap_nr("Fotowoltaika", "Finansowanie Trify"), 0)
+
+	def test_as_etap_nr_nieznany_rodzaj_lub_status_daje_zero(self: "TestVolteoPipeline") -> None:
+		self.assertEqual(etap_nr("Nieznany", "Lead"), 0)
+		self.assertEqual(etap_nr("Fotowoltaika", "Status Który Nie Istnieje"), 0)
+		self.assertEqual(etap_nr("", "Lead"), 0)
+
+	def test_at_etap_nr_none_daje_zero(self: "TestVolteoPipeline") -> None:
+		self.assertEqual(etap_nr(None, "Lead"), 0)
+		self.assertEqual(etap_nr("Fotowoltaika", None), 0)
+		self.assertEqual(etap_nr(None, None), 0)
+
+	def test_au_etap_nr_każdy_rodzaj_i_każdy_status_grupy_zgodny_z_indeksem(
+		self: "TestVolteoPipeline",
+	) -> None:
+		# Dla KAŻDEGO rodzaju z procesem i KAŻDEGO członka grupa_for(rodzaj)
+		# (proces + terminale, w tej kolejności): etap_nr == indeks_w_grupie + 1,
+		# plus 100 dla CP.
+		for rodzaj in (*OZE_RODZAJE, "Czyste Powietrze"):
+			offset = 100 if pipeline_key_for(rodzaj) == "CP" else 0
+			grupa = grupa_for(rodzaj)
+			for indeks, status in enumerate(grupa):
+				self.assertEqual(etap_nr(rodzaj, status), offset + indeks + 1)
+
+	def test_av_etap_nr_oze_i_cp_się_nie_przeplatają(self: "TestVolteoPipeline") -> None:
+		najwyzszy_oze = max(etap_nr("Fotowoltaika", s) for s in grupa_for("Fotowoltaika"))
+		najnizszy_cp = min(etap_nr("Czyste Powietrze", s) for s in grupa_for("Czyste Powietrze"))
+		self.assertLess(najwyzszy_oze, najnizszy_cp)
 
 
 if __name__ == "__main__":
