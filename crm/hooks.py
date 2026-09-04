@@ -136,6 +136,7 @@ permission_query_conditions = {
 	"CRM Deal": "crm.permissions.org_hierarchy.get_deal_permission_query_conditions",
 	"Contact": "crm.permissions.contact_visibility.get_contact_permission_query_conditions",
 	"Volteo Faktura": "crm.permissions.faktura_visibility.get_faktura_permission_query_conditions",
+	"Volteo Trify Update": "crm.permissions.faktura_visibility.get_trify_permission_query_conditions",
 	"FCRM Note": "crm.permissions.child_visibility.get_note_permission_query_conditions",
 	"CRM Task": "crm.permissions.child_visibility.get_task_permission_query_conditions",
 }
@@ -154,6 +155,7 @@ has_permission = {
 		"crm.permissions.delete_lockdown.block_nonadmin_delete",
 	],
 	"Volteo Faktura": "crm.permissions.faktura_visibility.has_faktura_permission",
+	"Volteo Trify Update": "crm.permissions.faktura_visibility.has_trify_permission",
 	"FCRM Note": [
 		"crm.permissions.child_visibility.has_note_permission",
 		"crm.permissions.delete_lockdown.block_nonadmin_delete",
@@ -254,6 +256,16 @@ doc_events = {
 		# invalidate the positive-verdict cache immediately -- see
 		# crm.api.oswiadczenie._CACHE_KLUCZ.
 		"on_trash": ["crm.api.oswiadczenie.po_usunieciu_oswiadczenia"],
+	},
+	# Wpisy Trify na szansie CP (ops#75) -- doctype tworzy ops/crm-trify.py
+	# (nie istnieje jeszcze na świeżym/lokalnym site). doc_events na
+	# nieistniejącym doctype są bezpieczne -- patrz komentarz przy
+	# "Volteo Audyt CP" wyżej. after_insert, nie on_update: Backend ma prawo
+	# write na ten doctype, więc edycja istniejącego wpisu nie może ponownie
+	# wysłać powiadomienia o wzmiance.
+	"Volteo Trify Update": {
+		"validate": ["crm.api.trify.validate"],
+		"after_insert": ["crm.api.trify.after_insert"],
 	},
 }
 
