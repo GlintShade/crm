@@ -59,6 +59,11 @@ def get_hash(notification):
 	if notification.type == "Mention" and notification.notification_type_doc:
 		_hash = "#" + notification.notification_type_doc
 
+	if notification.type == "Mention" and notification.notification_type_doctype == "Volteo Trify Update":
+		# wzmianka we wpisie Trify: hash to nazwa zakładki (useActiveTabManager
+		# wybiera zakładkę po hashu), nie nazwa dokumentu jak przy komentarzu
+		_hash = "#trify"
+
 	if notification.type == "WhatsApp":
 		_hash = "#whatsapp"
 

@@ -796,6 +796,7 @@ DEAL_CASCADE_DOCTYPES = [
 	("Volteo Audyt CP", "deal"),
 	("Volteo Faktura", "deal"),
 	("Volteo Montaz Update", "deal"),
+	("Volteo Trify Update", "deal"),
 	("Volteo Oferta", "deal"),
 	("Volteo CP Oferta", "deal"),
 ]

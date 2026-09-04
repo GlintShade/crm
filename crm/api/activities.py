@@ -564,6 +564,12 @@ VOLTEO_LINKED_SOURCES = [
 		"link_field": "deal",
 		"text_fields": ["typ", "tekst"],
 	},
+	{
+		"doctype": "Volteo Trify Update",
+		"label": _("Trify"),
+		"link_field": "deal",
+		"text_fields": ["typ", "tekst"],
+	},
 	{"doctype": "Volteo Audyt", "label": _("Audyt"), "link_field": "deal", "text_fields": [], "skip_version_fields": {"zdjecia_json", "zdjecia_dodatkowe_json", "weryfikacja_json"}},
 	{"doctype": "Volteo Audyt CP", "label": _("Audyt"), "link_field": "deal", "text_fields": [], "skip_version_fields": {"dokumenty_json", "zdjecia_json", "weryfikacja_json"}},
 	# ops#61 (R4): "skip_creation" -- W3 already writes an Info trace
@@ -857,6 +863,15 @@ def compose_volteo_linked_text(dt: str, action: str, rec: dict, summary: str | N
 			tekst = (rec.get("tekst") or "").strip()
 			snippet = tekst[:80] + "…" if len(tekst) > 80 else tekst
 			text = _("dodano wpis montażu: {0}").format(typ or "—")
+			if snippet:
+				text += " — „" + snippet + "”"
+			return text
+
+		if dt == "Volteo Trify Update":
+			typ = rec.get("typ")
+			tekst = frappe.utils.strip_html(rec.get("tekst") or "").strip()  # tekst jest HTML (wzmianki)
+			snippet = tekst[:80] + "…" if len(tekst) > 80 else tekst
+			text = _("dodano wpis Trify: {0}").format(typ or "—")
 			if snippet:
 				text += " — „" + snippet + "”"
 			return text
