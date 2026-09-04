@@ -9,15 +9,17 @@
 
   Tryb `konfig.html === true` (Trify) używa edytora frappe-ui `TextEditor`
   ze wzmiankami @użytkownik — dokładnie ten sam mechanizm co komentarze
-  szansy (zob. CommentBox.vue): `users` computed niżej jest skopiowany
-  1:1 stamtąd. Powiadomienie wspomnianej osoby robi serwer (hook
-  after_insert na doctype), nie front — front tylko wysyła gotowy HTML.
-  Tryb `konfig.html === false` (Montaż) zachowuje dokładny dotychczasowy
-  wygląd i zachowanie: zwykła textarea, brak wzmianek.
+  szansy (zob. CommentBox.vue). Lista podpowiedzi pochodzi z
+  `usersStore().listaWzmianek()` — dedykowane API wg hierarchii (ops#75,
+  decyzja właściciela), nie z pełnego `crmUsers`. Powiadomienie wspomnianej
+  osoby robi serwer (hook after_insert na doctype), nie front — front tylko
+  wysyła gotowy HTML. Tryb `konfig.html === false` (Montaż) zachowuje
+  dokładny dotychczasowy wygląd i zachowanie: zwykła textarea, brak
+  wzmianek.
 
   PUŁAPKA (ops#75): TextEditor bierze `mentions` jako snapshot przy
   montowaniu, a ta zakładka montuje się zanim usersStore się załaduje —
-  dlatego edytorowi przekazujemy `mentionsKonfig` (getter), nie `users`
+  dlatego edytorowi przekazujemy `mentionsKonfig` (getter), nie listę
   bezpośrednio; patrz komentarz przy `mentionsKonfig` niżej.
 -->
 <template>
@@ -107,22 +109,10 @@ const props = defineProps({
   konfig: { type: Object, required: true },
 })
 
-const { getUser, users: usersList } = usersStore()
+const { getUser, listaWzmianek } = usersStore()
 const draft = reactive({ typ: props.konfig.typy[0], tekst: '' })
 const adding = ref(false)
 const textEditor = ref(null)
-
-// Wzmianki @użytkownik w edytorze HTML — kopia 1:1 z CommentBox.vue.
-const users = computed(() => {
-  return (
-    usersList.data?.crmUsers
-      ?.filter((user) => user.enabled)
-      .map((user) => ({
-        label: user.full_name.trimEnd(),
-        value: user.name,
-      })) || []
-  )
-})
 
 // PUŁAPKA frappe-ui: TextEditor konfiguruje MentionExtension raz, przy
 // tworzeniu edytora (snapshot tablicy). Ta zakładka montuje się przy wejściu
@@ -130,7 +120,7 @@ const users = computed(() => {
 // zawsze. Rozszerzenie czyta listę przez toValue(), a więc getter jest
 // rozwiązywany leniwie przy każdym „@". Obiektowa forma propsa
 // ({ mentions, component }) jest jedyną, która przepuszcza getter.
-const mentionsKonfig = { mentions: () => users.value }
+const mentionsKonfig = { mentions: () => listaWzmianek() }
 
 const updates = createResource({
   url: 'frappe.client.get_list',

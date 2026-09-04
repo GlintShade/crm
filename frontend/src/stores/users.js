@@ -167,6 +167,31 @@ export const usersStore = defineStore('crm-users', () => {
     return null
   }
 
+  // Wzmianki @użytkownik (ops#75, decyzja właściciela): lista podpowiedzi NIE
+  // pochodzi z pełnego `crmUsers` (zarząd + backoffice + cała hierarchia D2D),
+  // tylko z dedykowanego API `crm.api.volteo_uzytkownicy.uzytkownicy_do_wzmianek`
+  // — zarząd + backoffice + poddrzewo wołającego, posortowane po full_name,
+  // bez samego wołającego. Osobny resource, bo to inny kształt danych i inna
+  // lista filtrowania niż `users`/`usersFull` powyżej.
+  const wzmiankowalni = createResource({
+    url: 'crm.api.volteo_uzytkownicy.uzytkownicy_do_wzmianek',
+    cache: 'crm-wzmiankowalni',
+    initialData: [],
+    auto: true,
+  })
+
+  // Getter (nie computed) — TextEditor frappe-ui bierze `mentions` jako
+  // snapshot przy montowaniu edytora (patrz komentarz w AktualizacjeTab.vue
+  // przy `mentionsKonfig`), więc wołający musi przekazać `{ mentions: () =>
+  // listaWzmianek() }`, a nie samą wartość, inaczej podpowiedzi otwarte przed
+  // dociągnięciem listy zostają puste na zawsze.
+  function listaWzmianek() {
+    return (wzmiankowalni.data || []).map((u) => ({
+      label: (u.full_name || u.name).trimEnd(),
+      value: u.name,
+    }))
+  }
+
   const isCrmUser = (user) => {
     user = user || session.user
     // Case-insensitive comparison (b53, ops#45): a mixed-case invitation
@@ -184,6 +209,8 @@ export const usersStore = defineStore('crm-users', () => {
   return {
     users,
     usersFull,
+    wzmiankowalni,
+    listaWzmianek,
     allUsers: computed(() => usersFull.data?.allUsers || users.data?.allUsers),
     crmUsers: computed(() => users.data?.crmUsers),
     getUser,
