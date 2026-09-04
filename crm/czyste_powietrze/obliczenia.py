@@ -268,6 +268,37 @@ _OKRES_LAT_DOMYSLNY = 5
 _OKRES_LAT_MIN, _OKRES_LAT_MAX = 1, 10
 
 
+def _podstawa_trify_raw(dotacja_laczna: Decimal, stale_finansowanie: Any) -> Decimal | None:
+	"""Surowa (niezaokrąglona) podstawa raty Trify = dotacja_laczna x trify_udzial.
+
+	Zwraca None, gdy stale_finansowanie nie jest dict-em (w szczególności None) -- ten sam
+	kontrakt "brak bloku Single nie jest błędem" co w oblicz_finansowanie(): dopóki nikt nie
+	zasiał stałych finansowania, ani wyłączony przełącznik, ani odczyt figury głównej
+	(wynik["podstawa_trify"] w oblicz_oferte) nie mają czego liczyć -- to nie jest to samo co
+	dotacja_laczna == 0, więc None, nigdy 0, jest tu poprawnym markerem "brak danych". Gdy
+	stale_finansowanie JEST dict-em, ale ma zły/brakujący klucz trify_udzial, to nadal głośny
+	błąd przez _decimal()/_blad() -- nigdy cichy fallback.
+	"""
+	if not isinstance(stale_finansowanie, dict):
+		return None
+	trify_udzial = _decimal(stale_finansowanie.get("trify_udzial"), "trify_udzial")
+	return dotacja_laczna * trify_udzial
+
+
+def _podstawa_trify(dotacja_laczna: Decimal, stale_finansowanie: Any) -> Decimal | None:
+	"""Zaokrąglona (publiczna) podstawa raty Trify -- patrz _podstawa_trify_raw().
+
+	Używana zarówno dla wynik["podstawa_trify"] (poziom główny oblicz_oferte, ZAWSZE
+	obecna, niezależnie od przełącznika finansowania) jak i dla
+	wynik["finansowanie"]["podstawa_trify"] (przez oblicz_finansowanie, który woła
+	_podstawa_trify_raw bezpośrednio, żeby rata_trify liczyła się z SUROWEJ, niezaokrąglonej
+	podstawy) -- obie figury dostają dokładnie tę samą surową wartość na wejściu do _kwota(),
+	więc są identyczne co do grosza.
+	"""
+	raw = _podstawa_trify_raw(dotacja_laczna, stale_finansowanie)
+	return None if raw is None else _kwota(raw)
+
+
 def oblicz_finansowanie(
 	wklad_wlasny: Decimal,
 	dotacja_laczna: Decimal,
@@ -286,7 +317,10 @@ def oblicz_finansowanie(
 
 	rata_trify jest CELOWO niezależna od okres_lat: to osobna rata miesięczna finansowania
 	Trify, liczona wyłącznie od podstawy = dotacja_laczna x udział (stała admina), nie rata
-	kredytu bankowego -- okres kredytowania na nią nie wpływa.
+	kredytu bankowego -- okres kredytowania na nią nie wpływa. Ta podstawa (podstawa_trify)
+	jest liczona przez _podstawa_trify_raw/_podstawa_trify, tą samą funkcją, którą
+	oblicz_oferte() woła niezależnie od przełącznika dla wynik["podstawa_trify"] -- obie
+	figury są więc zawsze identyczne co do grosza, nawet gdy ten blok w ogóle się nie liczy.
 
 	Oba wejściowe kwoty (wklad_wlasny, dotacja_laczna) to już zaokrąglone publiczne figury
 	z oblicz_oferte -- dzięki temu liczby widziane przez klienta w innych częściach oferty
@@ -313,7 +347,6 @@ def oblicz_finansowanie(
 	if not isinstance(stale_finansowanie, dict):
 		_blad("Brak danych stałych finansowania.")
 	oprocentowanie_mies = _decimal(stale_finansowanie.get("oprocentowanie_mies"), "oprocentowanie_mies")
-	trify_udzial = _decimal(stale_finansowanie.get("trify_udzial"), "trify_udzial")
 	trify_stawka_za_1000 = _decimal(
 		stale_finansowanie.get("trify_stawka_za_1000"), "trify_stawka_za_1000"
 	)
@@ -331,7 +364,10 @@ def oblicz_finansowanie(
 		mnoznik = (_JEDEN + i) ** n
 		rata_wkladu = kwota_kredytu * i * mnoznik / (mnoznik - _JEDEN)
 
-	podstawa_trify_raw = dotacja_laczna * trify_udzial
+	# stale_finansowanie jest tu już zweryfikowane jako dict (patrz wyżej), więc helper nigdy
+	# nie zwróci None -- ta sama funkcja liczy wynik["podstawa_trify"] w oblicz_oferte(),
+	# żeby obie figury (tu i tam) były identyczne co do grosza.
+	podstawa_trify_raw = _podstawa_trify_raw(dotacja_laczna, stale_finansowanie)
 	rata_trify_raw = podstawa_trify_raw / 1000 * trify_stawka_za_1000
 
 	return {
@@ -635,6 +671,12 @@ def oblicz_oferte(
 	finansowanie = oblicz_finansowanie(
 		wklad_wlasny, dotacja_laczna, wejscie.get("finansowanie"), stale.get("finansowanie")
 	)
+	# Podstawa Trify liczona ZAWSZE, niezależnie od przełącznika finansowania (wejscie.get
+	# ("finansowanie") może być None) -- decyzja właściciela: szansa ma pokazywać kwotę
+	# Trify nawet gdy handlowiec nie włączył bloku finansowania. None znaczy WYŁĄCZNIE
+	# "stałe finansowania jeszcze nie zasiane na Volteo CP Stale" (Single bez tego bloku),
+	# nigdy "dotacja_laczna wynosi zero" -- 0 jest tu poprawną, policzoną wartością.
+	podstawa_trify = _podstawa_trify(dotacja_laczna, stale.get("finansowanie"))
 	wynik = {
 		"suma_brutto": suma_brutto,
 		"wklad_wlasny": wklad_wlasny,
@@ -653,6 +695,10 @@ def oblicz_oferte(
 		"grupy": grupy,
 		"dotacja_laczna": dotacja_laczna,
 		"dotacja_ograniczona_o": _kwota(dotacja_ograniczona_o),
+		# Podstawa raty Trify -- publiczna, ZAWSZE obecna (niezależnie od przełącznika
+		# finansowania, patrz komentarz przy jej wyliczeniu wyżej). None wyłącznie gdy stałe
+		# finansowania jeszcze nie istnieją na Volteo CP Stale -- nigdy 0 jako marker braku.
+		"podstawa_trify": podstawa_trify,
 		# Blok "Finansowanie" (rata kredytu na wkład własny + rata Trify) -- publiczny,
 		# widoczny dla handlowca terenowego, celowo POZA "wewnetrzne" (nie niesie kosztów
 		# ani marż). None gdy przełącznik jest wyłączony -- patrz oblicz_finansowanie().
