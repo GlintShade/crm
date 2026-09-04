@@ -97,25 +97,37 @@
         </div>
 
         <!--
-          Own-contribution / Trify box, separate from the subsidy box above:
-          wkład własny (custom_cp_wklad_wlasny) and Trify (custom_cp_podstawa_trify)
-          are ALWAYS shown once either is a real value, independent of whether
-          the rep switched financing on — a beneficiary's own contribution and
-          the Trify basis exist regardless of whether they chose to finance
-          them with a loan. The credit sub-block underneath (Wpłata gotówką
-          through Rata wkładu własnego) stays gated on custom_cp_okres_lat > 0,
-          not on presence of the fields: they are plain Int/Currency columns on
-          CRM Deal, `NOT NULL DEFAULT 0` in SQL, so a deal created before this
-          feature — or one where the rep left financing switched off — reads 0
-          regardless, and that must hide the credit rows rather than render
-          zeroed ones. See `hasCpFinancing` below for why it reads all three
-          value families, not just custom_rodzaj_umowy.
+          Trify box, separate from the subsidy box above: this box is now
+          Trify-first, not wkład-własny-first (owner decision, 2026-09-04).
+
+          The fixed part (always shown once hasCpFinancing is true) carries
+          only the Trify figures -- Kwota Trify, then Rata Trify gated on its
+          own value being > 0 (see below). Wkład własny beneficjenta
+          (custom_cp_wklad_wlasny) moved OUT of the fixed part and into the
+          credit sub-block below, as its first row, right after the "Kredyt
+          na wkład własny" sub-header: it is now shown only in the context of
+          the loan that covers it, per the owner's call. That field itself
+          stays WITHOUT a v-if (0 is a real value there -- it means the
+          subsidy alone covers the own contribution -- unlike the Currency/
+          Int columns below it that use 0 as "not set").
+
+          The credit sub-block (Wkład własny beneficjenta through Rata
+          wkładu własnego) stays gated on custom_cp_okres_lat > 0, not on
+          presence of the fields: they are plain Int/Currency columns on CRM
+          Deal, `NOT NULL DEFAULT 0` in SQL, so a deal created before this
+          feature -- or one where the rep left financing switched off --
+          reads 0 regardless, and that must hide the credit rows rather than
+          render zeroed ones. See `hasCpFinancing` below for why it reads all
+          three value families, not just custom_rodzaj_umowy.
+
+          Note: custom_cp_wklad_wlasny itself is ALWAYS visible elsewhere
+          regardless of this box's Kredyt gate -- the right-hand deal panel's
+          own "Finansowanie" section (depends_on keyed off custom_rodzaj_umowy)
+          always shows it. This box only controls whether Zestaw additionally
+          surfaces it inside the credit context.
         -->
         <div v-if="hasCpFinancing" class="mt-3 w-full rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-2.5 text-sm">
-          <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Finansowanie') }}</div>
-          <div class="flex justify-between py-0.5 text-ink-gray-7">
-            <span>{{ __('Wkład własny beneficjenta') }}</span><span>{{ formatPln(dealFields.custom_cp_wklad_wlasny) }}</span>
-          </div>
+          <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Finansowanie Trify') }}</div>
           <div class="flex justify-between py-0.5 text-ink-gray-7">
             <span>{{ __('Kwota Trify') }}</span><span>{{ formatPln(dealFields.custom_cp_podstawa_trify) }}</span>
           </div>
@@ -133,6 +145,9 @@
 
           <template v-if="Number(dealFields.custom_cp_okres_lat) > 0">
             <div class="mb-1 mt-1 border-t border-outline-gray-2 pt-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Kredyt na wkład własny') }}</div>
+            <div class="flex justify-between py-0.5 text-ink-gray-7">
+              <span>{{ __('Wkład własny beneficjenta') }}</span><span>{{ formatPln(dealFields.custom_cp_wklad_wlasny) }}</span>
+            </div>
             <div class="flex justify-between py-0.5 text-ink-gray-7">
               <span>{{ __('Wpłata gotówką') }}</span><span>{{ formatPln(dealFields.custom_cp_wplata_gotowka) }}</span>
             </div>
