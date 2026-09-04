@@ -21,6 +21,7 @@ from frappe.utils import cint, getdate
 from crm.api.czyste_powietrze import KALKULATOR_ROLE
 from crm.api.pipeline import advance_deal_status
 from crm.integrations.autenti import logika as autenti_logika
+from crm.permissions.file_nazwy_systemowe import plik_systemowy
 from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad
 from crm.volteo_naming import code_for
 from crm.volteo_umowa import (
@@ -676,7 +677,8 @@ def volteo_umowa_pdf(deal: str) -> dict[str, Any]:
 				"content": pdf_bytes,
 			}
 		)
-		plik.insert(ignore_permissions=True)
+		with plik_systemowy():
+			plik.insert(ignore_permissions=True)
 	except Exception:
 		_blad_zapisu_pliku()
 
