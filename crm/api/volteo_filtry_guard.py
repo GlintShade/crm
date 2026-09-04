@@ -34,12 +34,15 @@ zserializowanym JSON-em (string) — trzeba je sparsować identycznie jak to
 robi rdzeń, zanim sprawdzi się klucze.
 
 Doctype spoza tabeli (literówka, nieistniejący): sprawdzenie samo w sobie
-NIE ma prawa zamaskować naturalnego błędu rdzenia (np. ``DoesNotExistError``
+NIE ma prawa zamaskować naturalnego błędu rdzenia (``frappe.DoesNotExistError``
 przy ``frappe.get_meta`` wewnątrz ``get_permitted_fields``) własnym błędem —
-``_sprawdz_filtry_bezpiecznie`` łapie każdy wyjątek POZA ``PermissionError``
-(ten ostatni to prawidłowy wynik sprawdzenia i musi przejść dalej) i w
-takim wypadku po prostu NIE sprawdza filtrów, oddając głos oryginalnej
-metodzie rdzenia, do której wrapper i tak zaraz potem deleguje.
+``_sprawdz_filtry_bezpiecznie`` łapie WYŁĄCZNIE ten jeden wyjątek i w takim
+wypadku po prostu NIE sprawdza filtrów, oddając głos oryginalnej metodzie
+rdzenia, do której wrapper i tak zaraz potem deleguje. Żaden INNY wyjątek
+(w tym ``frappe.PermissionError`` — prawidłowy wynik sprawdzenia, który musi
+przejść dalej — ale też błąd we własnej logice strażnika czy przejściowy
+błąd bazy) nie jest połykany: to jest bramka bezpieczeństwa, więc milczące
+"fail-open" na dowolnym nieprzewidzianym wyjątku byłoby luką samo w sobie.
 """
 
 from typing import Any
@@ -85,18 +88,20 @@ def _sparsowane_filtry(wartosc: object) -> dict | list | tuple | None:
 def _sprawdz_filtry_bezpiecznie(doctype: str, filters: object) -> None:
 	"""Otacza `crm.api.doc._sprawdz_filtry` (ops#79) — liczy zbior dozwolonych
 	pol RAZ i rzuca `frappe.PermissionError`, jesli `filters` odwoluje sie do
-	pola spoza niego. Gdy `doctype` jest niepoprawny (np. `frappe.get_meta`
-	rzuca `frappe.DoesNotExistError` przy literowce), TEN blad NIE jest
-	maskowany wlasnym — jest po prostu polykany tutaj (sprawdzenie sie nie
-	odbywa), zeby zaraz potem oryginalna metoda rdzenia, do ktorej wrapper
-	deleguje, sama zglosila swoj naturalny blad. `frappe.PermissionError`
-	rzucany przez `_sprawdz_filtry` (prawidlowy wynik sprawdzenia filtrow)
-	NIE jest tutaj przechwytywany — to jest zamierzone dzialanie tej bramki."""
+	pola spoza niego. Przechwytuje WYLACZNIE `frappe.DoesNotExistError`
+	(niepoprawny/nieznany doctype, np. literowka — rzucany przez
+	`frappe.get_meta` wewnatrz `get_permitted_fields`): w tym jednym wypadku
+	sprawdzenie jest pomijane, zeby zaraz potem oryginalna metoda rdzenia, do
+	ktorej wrapper deleguje, sama zglosila swoj naturalny blad zamiast go
+	zamaskowac. Kazdy INNY wyjatek (w tym `frappe.PermissionError` —
+	prawidlowy wynik sprawdzenia filtrow — ale takze blad w samej logice
+	sprawdzania, nieoczekiwany ksztalt filtra czy przejsciowy blad bazy)
+	PROPAGUJE dalej bez zmian: to jest straznik bezpieczenstwa, wiec
+	milczace `fail-open` na dowolnym nieprzewidzianym wyjatku byloby luka
+	samo w sobie."""
 	try:
 		_sprawdz_filtry(doctype, filters)
-	except frappe.PermissionError:
-		raise
-	except Exception:
+	except frappe.DoesNotExistError:
 		return
 
 
