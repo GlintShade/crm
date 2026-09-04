@@ -1,7 +1,9 @@
 import unittest
 
+from crm.integrations.autenti.logika import nazwa_pliku_umowy, prefiks_pliku_kredytu
 from crm.volteo_zalaczniki import (
 	MAKS_DLUGOSC,
+	czy_nazwa_systemowa,
 	czy_plik_systemowy,
 	nowa_nazwa_pliku,
 	rozszerzenie,
@@ -79,6 +81,81 @@ class TestVolteoZalaczniki(unittest.TestCase):
 
 	def test_r_pusta_nazwa_pliku_nie_jest_systemowa(self: "TestVolteoZalaczniki") -> None:
 		self.assertFalse(czy_plik_systemowy("", "PRO/PV/26/1011"))
+
+	def test_s_nazwa_systemowa_umowa_pro(self: "TestVolteoZalaczniki") -> None:
+		self.assertTrue(czy_nazwa_systemowa("Umowa-PRO-CP-26-1024.pdf"))
+
+	def test_s_nazwa_systemowa_umowa_pro_kod_czteroliterowy(self: "TestVolteoZalaczniki") -> None:
+		self.assertTrue(czy_nazwa_systemowa("Umowa-PRO-PVME-26-1000e41034.pdf"))
+
+	def test_s_nazwa_systemowa_umowa_pro_kod_fallback(self: "TestVolteoZalaczniki") -> None:
+		self.assertTrue(czy_nazwa_systemowa("Umowa-PRO-XX-26-1050.pdf"))
+
+	def test_s_nazwa_systemowa_umowa_legacy_crm_deal(self: "TestVolteoZalaczniki") -> None:
+		self.assertTrue(czy_nazwa_systemowa("Umowa-CRM-DEAL-2026-00016.pdf"))
+
+	def test_s_nazwa_systemowa_formularz_kredytowy_pro(self: "TestVolteoZalaczniki") -> None:
+		self.assertTrue(
+			czy_nazwa_systemowa("Formularz-kredytowy-PRO-PV-26-1011-20260904-115057.pdf")
+		)
+
+	def test_s_nazwa_systemowa_umowa_podpisana(self: "TestVolteoZalaczniki") -> None:
+		self.assertTrue(czy_nazwa_systemowa("Umowa-PRO-CP-26-1024-podpisana.pdf"))
+
+	def test_t_nazwa_niesystemowa_umowa_najmu(self: "TestVolteoZalaczniki") -> None:
+		self.assertFalse(czy_nazwa_systemowa("Umowa-najmu.pdf"))
+
+	def test_t_nazwa_niesystemowa_umowa_pro_bez_reszty(self: "TestVolteoZalaczniki") -> None:
+		self.assertFalse(czy_nazwa_systemowa("Umowa-PRO.pdf"))
+
+	def test_t_nazwa_niesystemowa_umowa_pro_bez_numeru(self: "TestVolteoZalaczniki") -> None:
+		self.assertFalse(czy_nazwa_systemowa("Umowa-PRO-CP-26.pdf"))
+
+	def test_t_nazwa_niesystemowa_male_u_celowo(self: "TestVolteoZalaczniki") -> None:
+		# Małe "u" na początku — celowo False: generator plików systemowych
+		# zawsze pisze "Umowa-" z wielkiej litery.
+		self.assertFalse(czy_nazwa_systemowa("umowa-PRO-CP-26-1024.pdf"))
+
+	def test_t_nazwa_niesystemowa_skan(self: "TestVolteoZalaczniki") -> None:
+		self.assertFalse(czy_nazwa_systemowa("skan.pdf"))
+
+	def test_t_nazwa_niesystemowa_pusty_string(self: "TestVolteoZalaczniki") -> None:
+		self.assertFalse(czy_nazwa_systemowa(""))
+
+	def test_t_nazwa_niesystemowa_none(self: "TestVolteoZalaczniki") -> None:
+		self.assertFalse(czy_nazwa_systemowa(None))
+
+	def test_u_spojnosc_z_generatorami_dla_kilku_szans(self: "TestVolteoZalaczniki") -> None:
+		# Dla realnych szans (bieżący format PRO/... i legacy CRM-DEAL-...),
+		# nazwa wygenerowana przez generator umowy albo formularza kredytowego
+		# musi zawsze zostać rozpoznana jako systemowa przez czy_nazwa_systemowa —
+		# inaczej rezerwacja nazw nie chroniłaby własnej szansy.
+		for deal in ("PRO/PV/26/1011", "PRO/CP/26/1024", "CRM-DEAL-2026-00016"):
+			with self.subTest(deal=deal):
+				self.assertTrue(czy_nazwa_systemowa(nazwa_pliku_umowy(deal)))
+				self.assertTrue(
+					czy_nazwa_systemowa(prefiks_pliku_kredytu(deal) + "-20260904-115057.pdf")
+				)
+
+	def test_v_spojnosc_czy_plik_systemowy_implikuje_czy_nazwa_systemowa(
+		self: "TestVolteoZalaczniki",
+	) -> None:
+		# Każda nazwa, którą czy_plik_systemowy() (dla JEDNEJ szansy) uznaje za
+		# systemową, musi też zostać uznana za systemową przez czy_nazwa_systemowa()
+		# (dla DOWOLNEJ szansy) — ten drugi wzorzec musi być co najmniej tak
+		# szeroki jak pierwszy, inaczej rezerwacja nazw miałaby dziury.
+		warianty_sufiksow = ("", "-podpisana", "-podpisany", "e41034")
+		for deal in ("PRO/PV/26/1011", "PRO/CP/26/1024", "CRM-DEAL-2026-00016"):
+			nazwa_bazowa_umowy = nazwa_pliku_umowy(deal)[: -len(".pdf")]
+			prefiks_kredytu = prefiks_pliku_kredytu(deal)
+			for sufiks in warianty_sufiksow:
+				for nazwa in (
+					f"{nazwa_bazowa_umowy}{sufiks}.pdf",
+					f"{prefiks_kredytu}{sufiks}.pdf",
+				):
+					with self.subTest(deal=deal, nazwa=nazwa):
+						if czy_plik_systemowy(nazwa, deal):
+							self.assertTrue(czy_nazwa_systemowa(nazwa))
 
 
 if __name__ == "__main__":

@@ -3,10 +3,21 @@ są zarezerwowane -- żaden `File` o takiej nazwie nie może powstać poza jedny
 wyznaczonych generatorów (`crm.api.umowa`, `crm.api.kredyt`).
 
 Bez tej blokady dowolny użytkownik z prawem zapisu na szansie (`CRM Deal`) mógł
-wgrać spreparowany PDF pod nazwą pasującą do `czy_plik_systemowy()` -- np.
+wgrać spreparowany PDF pod nazwą pasującą do wzorca pliku systemowego -- np.
 `Umowa-PRO-PV-26-1011.pdf` -- a `crm/integrations/autenti/api.py::_pdf_umowy_plik`
-(dokładna nazwa, `limit=1`) mógł podpiąć do wysyłki do e-podpisu WŁAŚNIE ten
-podrzucony plik zamiast prawdziwej umowy. Zob. issue ops#77.
+(dopasowanie po nazwie, `limit=1`) mógł podpiąć do wysyłki do e-podpisu
+WŁAŚNIE ten podrzucony plik zamiast prawdziwej umowy. Zob. issue ops#77.
+
+Rezerwacja jest dla DOWOLNEJ szansy, nie tylko tej, pod którą plik akurat się
+wgrywa (`czy_nazwa_systemowa`, nie `czy_plik_systemowy`) -- bo Frappe trzyma
+wszystkie prywatne pliki w jednym katalogu na dysku. Plik `Umowa-PRO-CP-26-1024.pdf`
+wgrany na szansę `PRO/CP/26/1023` nie przeszedłby wyszukiwania po nazwie DLA
+1023 (ono filtruje po `attached_to_name`), ale zająłby ścieżkę na dysku, której
+przy generowaniu prawdziwej umowy chce użyć szansa 1024 -- kolizja dokleja
+losowy sufiks do nazwy nowo wygenerowanego, prawdziwego pliku, więc
+wyszukiwanie po dokładnej nazwie już go nie znajduje, a regeneracja PDF-u tego
+nie naprawia (kolizja powtarza się przy każdej kolejnej próbie). Zob. follow-up
+do ops#77 i docstring `czy_nazwa_systemowa` w `crm/volteo_zalaczniki.py`.
 
 Dlaczego `before_insert`, nie `validate`/`before_validate`: hook musi działać
 WYŁĄCZNIE przy wstawianiu nowego wiersza. Późniejsze zapisy prawdziwych plików
@@ -17,9 +28,9 @@ taki zapis wywalałby się z tym samym `ValidationError`, mimo że nazwy pliku
 w ogóle nie zmienia. `before_insert` odcina tylko moment powstania wiersza,
 więc żaden późniejszy, legalny zapis nie jest tym objęty.
 
-Dlaczego bez żadnego znacznika na samym `File`: `czy_plik_systemowy()` już
-dziś rozpoznaje plik systemowy PO NAZWIE (prefiks) -- to jest źródło prawdy,
-z którego korzystają `crm/api/umowa.py`, `crm/api/kredyt.py` i
+Dlaczego bez żadnego znacznika na samym `File`: `czy_nazwa_systemowa()` już
+dziś rozpoznaje plik systemowy PO NAZWIE (wzorzec prefiksu) -- to jest źródło
+prawdy, z którego korzystają `crm/api/umowa.py`, `crm/api/kredyt.py` i
 `crm/integrations/autenti/api.py` przy WYSZUKIWANIU takich plików. Dokładanie
 osobnego pola/znacznika na `File` byłoby zmianą schematu (nowa kolumna, skrypt
 ops, migracja istniejących wierszy) tylko po to, żeby zdublować informację,
@@ -35,7 +46,7 @@ from contextlib import contextmanager
 import frappe
 from frappe import _
 
-from crm.volteo_zalaczniki import czy_plik_systemowy
+from crm.volteo_zalaczniki import czy_nazwa_systemowa
 
 FLAGA = "volteo_plik_systemowy"
 """Klucz we `frappe.flags` -- ustawiany tylko wewnątrz `plik_systemowy()`,
@@ -46,24 +57,26 @@ KOMUNIKAT_ZAREZERWOWANA = "Ta nazwa jest zarezerwowana dla dokumentów generowan
 
 def blokuj_nazwy_systemowe(doc, method=None) -> None:
 	"""`before_insert` na `File`: odrzuca insert, którego `file_name` pasuje do
-	`czy_plik_systemowy()` dla szansy, pod którą plik jest podpinany -- chyba
-	że insert idzie przez `plik_systemowy()` (czyli faktycznie jest jednym z
-	generatorów).
+	wzorca nazwy pliku systemowego DOWOLNEJ szansy (`czy_nazwa_systemowa()`)
+	-- chyba że insert idzie przez `plik_systemowy()` (czyli faktycznie jest
+	jednym z generatorów).
 
-	Dotyczy wyłącznie plików podpiętych pod `CRM Deal` -- `czy_plik_systemowy`
-	sam jest zdefiniowany dla nazwy szansy, a wszystkie pozostałe generatory
-	`File` w tym repo (komentarze, oświadczenie poufności, biblioteka
-	dokumentów, podpisany PDF z Autenti) podpinają pliki pod inne doctype'y i
-	nie są tym objęte.
+	Dotyczy wyłącznie plików podpiętych pod `CRM Deal` -- pliki systemowe
+	(umowa, formularz kredytowy) w ogóle istnieją tylko dla szans, a wszystkie
+	pozostałe generatory `File` w tym repo (komentarze, oświadczenie
+	poufności, biblioteka dokumentów, podpisany PDF z Autenti) podpinają
+	pliki pod inne doctype'y i nie są tym objęte.
 	"""
 	# before_insert biegnie PRZED validate() (Document.insert() woła
 	# run_method("before_insert"), dopiero potem run_before_save_methods), więc
-	# attached_to_name może tu jeszcze być puste -- zanim Frappe zdąży to
-	# samo odrzucić. czy_plik_systemowy(nazwa, None) rzuciłoby AttributeError
-	# (HTTP 500) zamiast zwykłej walidacji Frappe, więc odcinamy to tutaj.
+	# attached_to_name może tu jeszcze być puste -- zanim Frappe zdąży to samo
+	# odrzucić. `czy_nazwa_systemowa()` sama w sobie nie potrzebuje nazwy
+	# szansy (sprawdza wzorzec, nie konkretną szansę), więc ten warunek nie
+	# chroni już przed AttributeError -- zawęża hook wyłącznie do plików
+	# faktycznie podpiętych pod jakąś szansę, zgodnie z akapitem wyżej.
 	if doc.attached_to_doctype != "CRM Deal" or not doc.attached_to_name:
 		return
-	if not czy_plik_systemowy(doc.file_name or "", doc.attached_to_name):
+	if not czy_nazwa_systemowa(doc.file_name or ""):
 		return
 	if frappe.flags.get(FLAGA):
 		return
