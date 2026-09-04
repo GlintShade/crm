@@ -68,6 +68,20 @@ from frappe.utils import cint, validate_email_address
 
 from crm.api import VOLTEO_POZIOMY_PROWIZJI
 from crm.permissions.org_hierarchy import BYPASS_ROLES, _in_hierarchy, _team_mem_query, hierarchy_enabled
+from crm.volteo_wzmianki import wybierz_wzmiankowalnych
+
+# Role, których konta liczą się jako "wszyscy użytkownicy CRM" w
+# uzytkownicy_do_wzmianek() poniżej — świadomie szerszy zbiór niż
+# NADAWALNE_ROLE (obejmuje też role platformowe/Sales*, bo bypass ma
+# pokazywać KAŻDEGO użytkownika CRM, nie tylko konta zakładane tym modułem).
+WSZYSTKIE_ROLE_CRM = (
+	"System Manager",
+	"Sales Manager",
+	"Sales User",
+	"Volteo Core Admin",
+	"Volteo Backend",
+	"Volteo D2D Sales",
+)
 
 # Role, które ten moduł wolno nadać. Zamknięta biała lista — cokolwiek spoza
 # niej jest odrzucane, niezależnie od tego, kto woła (patrz docstring modułu).
@@ -411,3 +425,83 @@ def widoczni_uzytkownicy() -> list[str] | None:
 		return sorted(set(czlonkowie))
 
 	return [user]
+
+
+@frappe.whitelist()
+def uzytkownicy_do_wzmianek() -> list[dict[str, str]]:
+	"""Użytkownicy podpowiadani po `@` przy wzmiankach (Trify i komentarze szansy, ops#75).
+
+	Decyzja właściciela 2026-09-04 — lista pokazuje WYŁĄCZNIE zarząd (rola
+	`Volteo Core Admin`) + backoffice (rola `Volteo Backend`) + podwładnych
+	wołającego w drzewie `CRM Sales Hierarchy` (jego poddrzewo). NIE
+	przełożonych, NIE inne poddrzewa, NIE użytkowników spoza drzewa. Wołający
+	z `BYPASS_ROLES` (System Manager / Volteo Core Admin / Volteo Backend)
+	albo `Administrator` widzą wszystkich użytkowników CRM. Zawsze: tylko
+	`enabled=1`, nigdy sam wołający, nigdy `Administrator`/`Guest`.
+
+	Sama reguła doboru (kogo zsumować, kiedy uciąć do "wszystkich") mieszka w
+	`crm.volteo_wzmianki.wybierz_wzmiankowalnych` — module frappe-free, patrz
+	jego docstring. Ta funkcja tylko zbiera trzy zbiory z bazy (zarząd,
+	backoffice, poddrzewo — dokładnie ten sam `_team_mem_query` co
+	`widoczni_uzytkownicy` powyżej) i "wszyscy_crm" wtedy, gdy wołający ma
+	bypass, po czym wykonuje JEDNO `frappe.get_all("User", ...)`, żeby
+	odfiltrować do `enabled=1` i pobrać `full_name` do wyświetlenia — zamiast
+	ryzykować, że lista pokaże zablokowane albo dawno wyłączone konto.
+
+	Bez `@rate_limit`: to zapytanie tylko do odczytu, tego samego kształtu co
+	`widoczni_uzytkownicy` powyżej (które też go nie ma) — zwraca wyłącznie
+	nazwy/imiona kont, które i tak są widoczne każdemu przez inne endpointy
+	wyszukiwania użytkowników. Frontend cache'uje wynik przez mechanizm
+	`cache` frappe-ui (nie odpytuje przy każdym wciśniętym `@`), więc nie ma
+	tu wzorca "jeden klawisz = jedno żądanie", który uzasadniałby limiter.
+
+	Nie ma tu `frappe.throw` dla Guest — `frappe.whitelist()` bez
+	`allow_guest=True` i tak odrzuca niezalogowane żądania, zanim ciało
+	funkcji w ogóle się wykona.
+	"""
+	user = frappe.session.user
+	role_wolajacego = set(frappe.get_roles(user))
+	bypass = user == "Administrator" or bool(role_wolajacego & BYPASS_ROLES)
+
+	zarzad = frappe.get_all(
+		"Has Role",
+		filters={"role": "Volteo Core Admin", "parenttype": "User"},
+		pluck="parent",
+	)
+	backoffice = frappe.get_all(
+		"Has Role",
+		filters={"role": "Volteo Backend", "parenttype": "User"},
+		pluck="parent",
+	)
+
+	poddrzewo = None
+	if hierarchy_enabled() and _in_hierarchy(user):
+		poddrzewo = _team_mem_query(user).run(pluck=True)
+
+	wszyscy_crm: list[str] = []
+	if bypass:
+		wszyscy_crm = frappe.get_all(
+			"Has Role",
+			filters={"role": ["in", WSZYSTKIE_ROLE_CRM], "parenttype": "User"},
+			pluck="parent",
+		)
+
+	nazwy = wybierz_wzmiankowalnych(
+		wolajacy=user,
+		role_wolajacego=role_wolajacego,
+		bypass=bypass,
+		zarzad=zarzad,
+		backoffice=backoffice,
+		poddrzewo=poddrzewo,
+		wszyscy_crm=wszyscy_crm,
+	)
+
+	if not nazwy:
+		return []
+
+	return frappe.get_all(
+		"User",
+		filters={"name": ["in", nazwy], "enabled": 1},
+		fields=["name", "full_name"],
+		order_by="full_name asc",
+	)
