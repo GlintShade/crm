@@ -411,16 +411,17 @@ def volteo_cp_create_deal(wejscie: dict[str, Any], contact: str) -> dict[str, An
 		if grupa["kod"] in pola_dotacji_grup
 	}
 
-	# Blok "Finansowanie" -- jak dotacja_grup_do_zapisu wyżej, budowany PRZED insertem, nie
-	# przez db_set(): wszystkie pięć pól (custom_cp_okres_lat, custom_cp_wplata_gotowka,
-	# custom_cp_kwota_kredytu, custom_cp_rata_wkladu, custom_cp_rata_trify) żyje na
-	# permlevel 0, więc zwykły insert() przez "Volteo D2D Sales" jest wystarczający (w
-	# odróżnieniu od custom_cp_prowizja_handlowa, permlevel 2, patrz komentarz przy
-	# db_set() niżej). Przełącznik WYŁĄCZONY (wynik["finansowanie"] is None) zostawia
-	# wszystkie pięć pól NIEUSTAWIONYCH, nie zerami -- zero byłoby fałszywym sygnałem "rata
-	# wynosi 0 zł", podczas gdy naprawdę oznacza "handlowiec nie liczył finansowania". (Te
-	# pięć pól nadal jedyne zapisywane TU dla samego bloku "Finansowanie" -- zobacz
-	# podstawa_trify_do_zapisu niżej dla szóstego, niezależnego od tego przełącznika.)
+	# Blok "Finansowanie" (rata kredytu na wkład własny) -- jak dotacja_grup_do_zapisu
+	# wyżej, budowany PRZED insertem, nie przez db_set(): wszystkie cztery pola
+	# (custom_cp_okres_lat, custom_cp_wplata_gotowka, custom_cp_kwota_kredytu,
+	# custom_cp_rata_wkladu) żyją na permlevel 0, więc zwykły insert() przez
+	# "Volteo D2D Sales" jest wystarczający (w odróżnieniu od custom_cp_prowizja_handlowa,
+	# permlevel 2, patrz komentarz przy db_set() niżej). Przełącznik WYŁĄCZONY
+	# (wynik["finansowanie"] is None) zostawia wszystkie cztery pola NIEUSTAWIONE, nie
+	# zerami -- zero byłoby fałszywym sygnałem "rata wynosi 0 zł", podczas gdy naprawdę
+	# oznacza "handlowiec nie liczył kredytu na wkład własny". custom_cp_rata_trify NIE
+	# jest tu już zapisywane (ops#76) -- rata Trify nie zależy od tego przełącznika, więc
+	# przeniosła się do trify_do_zapisu niżej, obok podstawy.
 	finansowanie_do_zapisu = (
 		{}
 		if wynik["finansowanie"] is None
@@ -429,21 +430,25 @@ def volteo_cp_create_deal(wejscie: dict[str, Any], contact: str) -> dict[str, An
 			"custom_cp_wplata_gotowka": wynik["finansowanie"]["wplata_gotowka"],
 			"custom_cp_kwota_kredytu": wynik["finansowanie"]["kwota_kredytu"],
 			"custom_cp_rata_wkladu": wynik["finansowanie"]["rata_wkladu"],
-			"custom_cp_rata_trify": wynik["finansowanie"]["rata_trify"],
 		}
 	)
 
-	# Podstawa Trify (custom_cp_podstawa_trify) -- JEDYNE pole finansowania zapisywane
-	# ZAWSZE, także przy wyłączonym przełączniku (ops#76, decyzja właściciela): szansa ma
-	# pokazywać kwotę Trify niezależnie od tego, czy handlowiec w ogóle otworzył blok
-	# finansowania. Permlevel 0, jak pozostałe pięć pól wyżej -- zwykły insert()
-	# wystarcza. wynik["podstawa_trify"] jest None wyłącznie, gdy stałe finansowania
-	# jeszcze nie istnieją na Volteo CP Stale (patrz _podstawa_trify w obliczenia.py) --
-	# wtedy pole zostaje NIEUSTAWIONE, nigdy zapisane jako zero.
-	podstawa_trify_do_zapisu = (
+	# Podstawa i rata Trify (custom_cp_podstawa_trify, custom_cp_rata_trify) -- oba pola
+	# zapisywane ZAWSZE RAZEM, także przy wyłączonym przełączniku finansowania (ops#76,
+	# decyzja właściciela): szansa ma pokazywać kwotę i ratę Trify niezależnie od tego,
+	# czy handlowiec w ogóle otworzył blok finansowania kredytu na wkład własny -- rata
+	# Trify zależy wyłącznie od dotacji i stałych, nigdy od kredytu. Permlevel 0, jak
+	# pozostałe cztery pola wyżej -- zwykły insert() wystarcza. wynik["podstawa_trify"]
+	# jest None wyłącznie, gdy stałe finansowania jeszcze nie istnieją na Volteo CP Stale
+	# (patrz _trify()/_trify_raw() w obliczenia.py, które liczą oba pola razem) -- wtedy
+	# oba pola zostają NIEUSTAWIONE, nigdy zapisane jako zero.
+	trify_do_zapisu = (
 		{}
 		if wynik.get("podstawa_trify") is None
-		else {"custom_cp_podstawa_trify": wynik["podstawa_trify"]}
+		else {
+			"custom_cp_podstawa_trify": wynik["podstawa_trify"],
+			"custom_cp_rata_trify": wynik["rata_trify"],
+		}
 	)
 
 	try:
@@ -462,7 +467,7 @@ def volteo_cp_create_deal(wejscie: dict[str, Any], contact: str) -> dict[str, An
 				"custom_cp_dotacja_ograniczona_o": wynik["dotacja_ograniczona_o"],
 				**dotacja_grup_do_zapisu,
 				**finansowanie_do_zapisu,
-				**podstawa_trify_do_zapisu,
+				**trify_do_zapisu,
 				**_cp_zrodlo_pola_do_zapisu(wejscie),
 				# Zapis dosłowny tego, co wpisał handlowiec -- jedyna gwarancja wiernego
 				# odtworzenia wejścia kalkulatora dla zaplecza przygotowującego "ofertę
