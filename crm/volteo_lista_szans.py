@@ -21,6 +21,44 @@ i przekazuje tutaj — ten moduł tylko porównuje klucze filtra z tym zbiorem.
 
 from collections.abc import Iterable, Mapping, Sequence
 
+# Allowlisty sortowania i filtrow listy szans (ops#81). Kazda krotka to
+# `(fieldname, etykieta)`; `etykieta is None` oznacza "wez etykiete ze
+# standardowej listy pol albo z meta doctype'u przez `_()`" (Property Settery
+# nadaja wtedy polskie nazwy: "Klient", "Doradca", "Telefon", "Mail",
+# "Miejscowosc", "Kod pocztowy", "Wojewodztwo", "Kwota brutto", "Data
+# zamkniecia"). Kolejnosc krotek to kolejnosc prezentacji w UI — konsumowana
+# przez `CRMDeal.volteo_sort_fields()` / `volteo_filter_fields()`
+# (`crm/fcrm/doctype/crm_deal/crm_deal.py`), `crm.api.doc.sort_options` /
+# `get_filterable_fields`, oraz przez skrypt ops `crm-lista-szans-filtry.py`
+# (normalizuje pary do samych fieldnames).
+SORT_FIELDS_DEAL: tuple[tuple[str, str | None], ...] = (
+	("modified", "Ostatnia zmiana"),
+	("creation", "Data utworzenia"),
+	("custom_etap_nr", "Etap"),
+	("lead_name", None),
+	("deal_owner", None),
+	("deal_value", None),
+	("custom_rodzaj_umowy", None),
+	("custom_install_postal_code", None),
+)
+
+FILTER_FIELDS_DEAL: tuple[tuple[str, str | None], ...] = (
+	("custom_rodzaj_umowy", None),
+	("status", "Etap"),
+	("deal_owner", None),
+	("lead_name", None),
+	("mobile_no", None),
+	("email", None),
+	("custom_install_city", None),
+	("custom_install_postal_code", None),
+	("custom_voivodeship", None),
+	("deal_value", None),
+	("modified", "Ostatnia zmiana"),
+	("creation", "Data utworzenia"),
+	("closed_date", None),
+	("_assign", "Przypisano do"),
+)
+
 
 def niedozwolone_klucze_filtrow(
 	filters: Mapping[str, object] | Sequence[object] | None,

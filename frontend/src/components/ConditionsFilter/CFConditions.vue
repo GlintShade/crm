@@ -86,7 +86,7 @@ const dropdownOptions = computed(() => {
 
 watch(
   () => props.doctype,
-  (doctype) => filterableFields.submit({ doctype }),
+  (doctype) => filterableFields.submit({ doctype, scope: 'conditions' }),
   { immediate: true },
 )
 </script>

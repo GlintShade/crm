@@ -1,8 +1,32 @@
 import unittest
 
-from crm.volteo_lista_szans import niedozwolone_klucze_filtrow
+from crm.volteo_lista_szans import (
+	FILTER_FIELDS_DEAL,
+	SORT_FIELDS_DEAL,
+	niedozwolone_klucze_filtrow,
+)
 
 PERMITTED = {"name", "status", "deal_owner", "_assign", "_liked_by", "custom_rodzaj_umowy"}
+
+# Lustrzane odbicie nazw pol standardowych, ktore `crm.api.doc` faktycznie
+# zna (sort_options' `standard_fields` + get_filterable_fields' `standard_fields`,
+# `crm/api/doc.py`) — uzywane tylko do sprawdzenia, ze allowlisty ops#81
+# odwoluja sie wylacznie do pol, ktore `doc.py` potrafi rozwiazac bez meta
+# doctype'u (poza tym owe pola sa i tak dozwolone przez `_pola_dozwolone` z
+# racji `_POLA_ZAWSZE_DOZWOLONE`).
+STANDARDOWE_POLA_DOC_PY = frozenset(
+	{
+		"name",
+		"creation",
+		"modified",
+		"modified_by",
+		"owner",
+		"_user_tags",
+		"_liked_by",
+		"_comments",
+		"_assign",
+	}
+)
 
 
 class TestVolteoListaSzans(unittest.TestCase):
@@ -116,6 +140,102 @@ class TestVolteoListaSzans(unittest.TestCase):
 		przed = set(permitted)
 		niedozwolone_klucze_filtrow({"custom_koszty_zysk_plan": [">", 0]}, permitted)
 		self.assertEqual(permitted, przed)
+
+
+class TestAllowlistySzans(unittest.TestCase):
+	"""Allowlisty sortowania/filtrow listy szans dla CRM Deal (ops#81)."""
+
+	def _sprawdz_ksztalt(
+		self: "TestAllowlistySzans", nazwa: str, allowlist: tuple
+	) -> None:
+		for wpis in allowlist:
+			self.assertIsInstance(wpis, tuple, f"{nazwa}: {wpis!r} nie jest krotka")
+			self.assertEqual(len(wpis), 2, f"{nazwa}: {wpis!r} nie ma dwoch elementow")
+			fieldname, etykieta = wpis
+			self.assertIsInstance(fieldname, str, f"{nazwa}: fieldname {wpis!r}")
+			self.assertIsInstance(
+				etykieta, (str, type(None)), f"{nazwa}: etykieta {wpis!r}"
+			)
+
+	def test_a_sort_fields_deal_ksztalt_par(self: "TestAllowlistySzans") -> None:
+		self._sprawdz_ksztalt("SORT_FIELDS_DEAL", SORT_FIELDS_DEAL)
+
+	def test_b_filter_fields_deal_ksztalt_par(self: "TestAllowlistySzans") -> None:
+		self._sprawdz_ksztalt("FILTER_FIELDS_DEAL", FILTER_FIELDS_DEAL)
+
+	def test_c_sort_fields_deal_bez_duplikatow(self: "TestAllowlistySzans") -> None:
+		fieldnames = [fieldname for fieldname, _ in SORT_FIELDS_DEAL]
+		self.assertEqual(len(fieldnames), len(set(fieldnames)))
+
+	def test_d_filter_fields_deal_bez_duplikatow(self: "TestAllowlistySzans") -> None:
+		fieldnames = [fieldname for fieldname, _ in FILTER_FIELDS_DEAL]
+		self.assertEqual(len(fieldnames), len(set(fieldnames)))
+
+	def test_e_sort_fields_deal_liczba_i_kolejnosc(self: "TestAllowlistySzans") -> None:
+		self.assertEqual(len(SORT_FIELDS_DEAL), 8)
+		self.assertEqual(
+			[fieldname for fieldname, _ in SORT_FIELDS_DEAL],
+			[
+				"modified",
+				"creation",
+				"custom_etap_nr",
+				"lead_name",
+				"deal_owner",
+				"deal_value",
+				"custom_rodzaj_umowy",
+				"custom_install_postal_code",
+			],
+		)
+
+	def test_f_filter_fields_deal_liczba_i_kolejnosc(self: "TestAllowlistySzans") -> None:
+		self.assertEqual(len(FILTER_FIELDS_DEAL), 14)
+		self.assertEqual(
+			[fieldname for fieldname, _ in FILTER_FIELDS_DEAL],
+			[
+				"custom_rodzaj_umowy",
+				"status",
+				"deal_owner",
+				"lead_name",
+				"mobile_no",
+				"email",
+				"custom_install_city",
+				"custom_install_postal_code",
+				"custom_voivodeship",
+				"deal_value",
+				"modified",
+				"creation",
+				"closed_date",
+				"_assign",
+			],
+		)
+
+	def test_g_pola_standardowe_uzyte_w_sort_fields_sa_znane_doc_py(
+		self: "TestAllowlistySzans",
+	) -> None:
+		# "modified" i "creation" nie sa DocFieldami CRM Deal — doc.py rozwiazuje
+		# je przez swoja wlasna liste standard_fields, a nie przez meta.
+		for fieldname in ("modified", "creation"):
+			self.assertIn(fieldname, STANDARDOWE_POLA_DOC_PY)
+			self.assertIn(fieldname, [f for f, _ in SORT_FIELDS_DEAL])
+
+	def test_h_pola_standardowe_uzyte_w_filter_fields_sa_znane_doc_py(
+		self: "TestAllowlistySzans",
+	) -> None:
+		for fieldname in ("modified", "creation", "_assign"):
+			self.assertIn(fieldname, STANDARDOWE_POLA_DOC_PY)
+			self.assertIn(fieldname, [f for f, _ in FILTER_FIELDS_DEAL])
+
+	def test_i_etykiety_nadpisane_tam_gdzie_oczekiwane(self: "TestAllowlistySzans") -> None:
+		sort_by_field = dict(SORT_FIELDS_DEAL)
+		self.assertEqual(sort_by_field["modified"], "Ostatnia zmiana")
+		self.assertEqual(sort_by_field["creation"], "Data utworzenia")
+		self.assertEqual(sort_by_field["custom_etap_nr"], "Etap")
+		self.assertIsNone(sort_by_field["lead_name"])
+
+		filter_by_field = dict(FILTER_FIELDS_DEAL)
+		self.assertEqual(filter_by_field["status"], "Etap")
+		self.assertEqual(filter_by_field["_assign"], "Przypisano do")
+		self.assertIsNone(filter_by_field["custom_rodzaj_umowy"])
 
 
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ from crm.fcrm.doctype.crm_service_level_agreement.utils import get_sla
 from crm.fcrm.doctype.crm_status_change_log.crm_status_change_log import add_status_change_log
 from crm.fcrm.doctype.utils import add_or_remove_lost_reason_section_in_sidepanel
 from crm.permissions.org_hierarchy import BYPASS_ROLES
+from crm.volteo_lista_szans import FILTER_FIELDS_DEAL, SORT_FIELDS_DEAL
 from crm.volteo_pipeline import grupa_for, pipeline_for
 
 
@@ -380,6 +381,18 @@ class CRMDeal(Document):
 			"last_name",
 		]
 		return {"columns": columns, "rows": rows}
+
+	# Allowlisty sortowania/filtrowania listy szans (ops#81) — patrz
+	# `crm.volteo_lista_szans` dla ksztaltu krotek i uzasadnienia. Odczytywane
+	# przez `crm.api.doc.sort_options` / `get_filterable_fields`, ktore
+	# sprawdzaja `hasattr(controller, "volteo_sort_fields"/"volteo_filter_fields")`.
+	@staticmethod
+	def volteo_sort_fields():
+		return SORT_FIELDS_DEAL
+
+	@staticmethod
+	def volteo_filter_fields():
+		return FILTER_FIELDS_DEAL
 
 	@staticmethod
 	def default_kanban_settings():
