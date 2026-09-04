@@ -1245,18 +1245,27 @@ class TestFinansowanie(unittest.TestCase):
 		wejscie_z["finansowanie"] = {"okres_lat": 5, "wplata_gotowka": 0}
 		wynik_bez = oblicz_oferte(wejscie_bez, _katalog(), copy.deepcopy(LIMITY), copy.deepcopy(STALE))
 		wynik_z = oblicz_oferte(wejscie_z, _katalog(), copy.deepcopy(LIMITY), copy.deepcopy(STALE))
-		for pole in ("wklad_wlasny", "dotacja_laczna", "suma_brutto", "prowizja_handlowa", "podstawa_trify"):
+		for pole in (
+			"wklad_wlasny",
+			"dotacja_laczna",
+			"suma_brutto",
+			"prowizja_handlowa",
+			"podstawa_trify",
+			"rata_trify",
+		):
 			self.assertEqual(wynik_bez[pole], wynik_z[pole])
 		self.assertEqual(
 			wynik_bez["wewnetrzne"]["koszt_calkowity"], wynik_z["wewnetrzne"]["koszt_calkowity"]
 		)
 
 	def test_podstawa_trify_na_poziomie_glownym_bez_finansowania(self: "TestFinansowanie") -> None:
-		# Przełącznik wyłączony (brak klucza "finansowanie" w wejściu), a podstawa Trify na
-		# poziomie głównym jest mimo to policzona -- decyzja właściciela (ops#76): szansa ma
-		# pokazywać kwotę Trify ZAWSZE, nie tylko gdy handlowiec włączył blok finansowania.
+		# Przełącznik wyłączony (brak klucza "finansowanie" w wejściu), a podstawa I RATA
+		# Trify na poziomie głównym są mimo to policzone -- decyzja właściciela (ops#76):
+		# szansa ma pokazywać kwotę i ratę Trify ZAWSZE, nie tylko gdy handlowiec włączył
+		# blok finansowania.
 		wynik = oblicz_oferte(_wejscie("najwyzszy"), _katalog(), copy.deepcopy(LIMITY), copy.deepcopy(STALE))
 		self.assertEqual(wynik["podstawa_trify"], Decimal("22880.00"))
+		self.assertEqual(wynik["rata_trify"], Decimal("572.00"))
 		self.assertIsNone(wynik["finansowanie"])
 
 	def test_podstawa_trify_glowna_rowna_subblokowi(self: "TestFinansowanie") -> None:
@@ -1265,19 +1274,38 @@ class TestFinansowanie(unittest.TestCase):
 		wynik = oblicz_oferte(wejscie, _katalog(), copy.deepcopy(LIMITY), copy.deepcopy(STALE))
 		self.assertEqual(wynik["podstawa_trify"], Decimal("22880.00"))
 		self.assertEqual(wynik["podstawa_trify"], wynik["finansowanie"]["podstawa_trify"])
+		self.assertEqual(wynik["rata_trify"], Decimal("572.00"))
+		self.assertEqual(wynik["rata_trify"], wynik["finansowanie"]["rata_trify"])
 
 	def test_podstawa_trify_none_bez_stalych_finansowania(self: "TestFinansowanie") -> None:
 		stale_bez_fin = copy.deepcopy(STALE)
 		del stale_bez_fin["finansowanie"]
 		wynik = oblicz_oferte(_wejscie("najwyzszy"), _katalog(), copy.deepcopy(LIMITY), stale_bez_fin)
 		self.assertIsNone(wynik["podstawa_trify"])
+		self.assertIsNone(wynik["rata_trify"])
 		self.assertIsNone(wynik["finansowanie"])
 		self.assertEqual(wynik["wklad_wlasny"], Decimal("2816.00"))
 
 	def test_podstawa_trify_nie_w_wewnetrzne_i_bez_podkreslenia(self: "TestFinansowanie") -> None:
 		wynik = oblicz_oferte(_wejscie(), _katalog(), copy.deepcopy(LIMITY), copy.deepcopy(STALE))
 		self.assertNotIn("podstawa_trify", wynik["wewnetrzne"])
+		self.assertNotIn("rata_trify", wynik["wewnetrzne"])
 		self.assertEqual(wynik["podstawa_trify"], Decimal("9152.00"))
+		self.assertEqual(wynik["rata_trify"], Decimal("228.80"))
+
+	def test_rata_trify_glowna_niezalezna_od_okresu_i_wplaty(self: "TestFinansowanie") -> None:
+		# rata_trify na poziomie głównym zależy wyłącznie od dotacja_laczna i stałych
+		# finansowania -- dwa wejścia z różnym okres_lat/wplata_gotowka (a więc różną
+		# kwota_kredytu/rata_wkladu) muszą dać identyczną rata_trify.
+		wejscie_a = _wejscie("najwyzszy")
+		wejscie_a["finansowanie"] = {"okres_lat": 1, "wplata_gotowka": 0}
+		wejscie_b = _wejscie("najwyzszy")
+		wejscie_b["finansowanie"] = {"okres_lat": 10, "wplata_gotowka": 2000}
+		wynik_a = oblicz_oferte(wejscie_a, _katalog(), copy.deepcopy(LIMITY), copy.deepcopy(STALE))
+		wynik_b = oblicz_oferte(wejscie_b, _katalog(), copy.deepcopy(LIMITY), copy.deepcopy(STALE))
+		self.assertEqual(wynik_a["rata_trify"], Decimal("572.00"))
+		self.assertEqual(wynik_b["rata_trify"], Decimal("572.00"))
+		self.assertNotEqual(wynik_a["finansowanie"]["rata_wkladu"], wynik_b["finansowanie"]["rata_wkladu"])
 
 	def test_oblicz_oferte_stale_bez_finansowania(self: "TestFinansowanie") -> None:
 		stale_bez_fin = copy.deepcopy(STALE)
