@@ -20,6 +20,7 @@ export default defineConfig({
         'src/utils/pvForm.js',
         'src/utils/kredytForm.js',
         'src/utils/etykietaMoje.js',
+        'src/utils/etapFiltr.js',
       ],
     },
   },
