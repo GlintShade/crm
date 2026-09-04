@@ -103,8 +103,8 @@
           the rep switched financing on — a beneficiary's own contribution and
           the Trify basis exist regardless of whether they chose to finance
           them with a loan. The credit sub-block underneath (Wpłata gotówką
-          through Rata Trify) stays gated on custom_cp_okres_lat > 0, not on
-          presence of the fields: they are plain Int/Currency columns on
+          through Rata wkładu własnego) stays gated on custom_cp_okres_lat > 0,
+          not on presence of the fields: they are plain Int/Currency columns on
           CRM Deal, `NOT NULL DEFAULT 0` in SQL, so a deal created before this
           feature — or one where the rep left financing switched off — reads 0
           regardless, and that must hide the credit rows rather than render
@@ -118,6 +118,17 @@
           </div>
           <div class="flex justify-between py-0.5 text-ink-gray-7">
             <span>{{ __('Kwota Trify') }}</span><span>{{ formatPln(dealFields.custom_cp_podstawa_trify) }}</span>
+          </div>
+          <!-- Rata Trify lives in the fixed part of the box, not the credit
+               sub-block below: it is computed from the Trify basis alone and
+               does not depend on the wkład-własny loan. It still needs its
+               own v-if here, gated on the VALUE not the key, because
+               custom_cp_rata_trify is only ever written by the API when the
+               financing switch was on -- an unfinanced/pre-feature deal reads
+               the SQL default 0, and 0 must hide the row rather than render
+               "0,00 zł /mies.". -->
+          <div v-if="Number(dealFields.custom_cp_rata_trify) > 0" class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Rata Trify') }}</span><span>{{ formatPln(dealFields.custom_cp_rata_trify) }} /mies.</span>
           </div>
 
           <template v-if="Number(dealFields.custom_cp_okres_lat) > 0">
@@ -133,9 +144,6 @@
             </div>
             <div class="flex justify-between py-0.5 text-ink-gray-7">
               <span>{{ __('Rata wkładu własnego') }}</span><span>{{ formatPln(dealFields.custom_cp_rata_wkladu) }} /mies.</span>
-            </div>
-            <div class="flex justify-between py-0.5 text-ink-gray-7">
-              <span>{{ __('Rata Trify') }}</span><span>{{ formatPln(dealFields.custom_cp_rata_trify) }} /mies.</span>
             </div>
           </template>
         </div>
