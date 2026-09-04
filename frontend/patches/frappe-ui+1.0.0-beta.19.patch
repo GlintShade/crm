@@ -1,0 +1,57 @@
+diff --git a/node_modules/frappe-ui/src/components/TextEditor/extensions/suggestion/createSuggestionExtension.ts b/node_modules/frappe-ui/src/components/TextEditor/extensions/suggestion/createSuggestionExtension.ts
+index e7f8ff6..57ca30d 100644
+--- a/node_modules/frappe-ui/src/components/TextEditor/extensions/suggestion/createSuggestionExtension.ts
++++ b/node_modules/frappe-ui/src/components/TextEditor/extensions/suggestion/createSuggestionExtension.ts
+@@ -71,14 +71,26 @@ export function createSuggestionExtension<TItem extends BaseSuggestionItem>(
+                   props: props,
+                 })
+ 
+-                if (!props.clientRect || !component.element) {
++                if (!props.clientRect) {
++                  return
++                }
++
++                // tiptap >=3.27 dispatches onStart with items: [] while the
++                // async fetch is pending; SuggestionList's root v-if renders
++                // a comment node then, so component.element (computed from
++                // the rendered component's first element child) is null.
++                // component.el is the renderer's wrapper div, which always
++                // exists, so the popup can be anchored even before items
++                // arrive.
++                const content = component.element ?? (component as any).el
++                if (!content) {
+                   return
+                 }
+ 
+                 const defaultTippyOptions: Partial<TippyProps> = {
+                   getReferenceClientRect: props.clientRect as () => DOMRect,
+                   appendTo: () => document.body,
+-                  content: component.element,
++                  content,
+                   showOnCreate: true,
+                   interactive: true,
+                   trigger: 'manual',
+@@ -89,6 +101,10 @@ export function createSuggestionExtension<TItem extends BaseSuggestionItem>(
+                   ...defaultTippyOptions,
+                   ...options.tippyOptions,
+                 })
++
++                if (!props.items?.length) {
++                  popup[0]?.hide()
++                }
+               },
+ 
+               onUpdate(props: SuggestionProps<TItem>) {
+@@ -102,6 +118,12 @@ export function createSuggestionExtension<TItem extends BaseSuggestionItem>(
+                   popup[0].setProps({
+                     getReferenceClientRect: props.clientRect as () => DOMRect,
+                   })
++
++                  if (props.items?.length) {
++                    popup[0].show()
++                  } else {
++                    popup[0].hide()
++                  }
+                 }
+               },
+ 
