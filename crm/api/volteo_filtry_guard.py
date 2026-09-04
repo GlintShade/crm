@@ -85,7 +85,7 @@ def _sparsowane_filtry(wartosc: object) -> dict | list | tuple | None:
 	return None
 
 
-def _sprawdz_filtry_bezpiecznie(doctype: str, filters: object) -> None:
+def _sprawdz_filtry_bezpiecznie(doctype: str, filters: object, parenttype: str | None = None) -> None:
 	"""Otacza `crm.api.doc._sprawdz_filtry` (ops#79) — liczy zbior dozwolonych
 	pol RAZ i rzuca `frappe.PermissionError`, jesli `filters` odwoluje sie do
 	pola spoza niego. Przechwytuje WYLACZNIE `frappe.DoesNotExistError`
@@ -98,28 +98,45 @@ def _sprawdz_filtry_bezpiecznie(doctype: str, filters: object) -> None:
 	sprawdzania, nieoczekiwany ksztalt filtra czy przejsciowy blad bazy)
 	PROPAGUJE dalej bez zmian: to jest straznik bezpieczenstwa, wiec
 	milczace `fail-open` na dowolnym nieprzewidzianym wyjatku byloby luka
-	samo w sobie."""
+	samo w sobie.
+
+	`parenttype` (ops#80 follow-up): nazwa doctype'u RODZICA, gdy `doctype`
+	jest tabela podrzedna wywolana z rodzicem znanym wywolujacemu (np.
+	`get_list`/`get_value` dostaja go jako argument `parent`) — patrz
+	`crm.api.doc._pola_dozwolone`. Bez niego zapytania o tabele podrzedne
+	(np. `Volteo Zestaw Item` z `ZestawTab.vue`) traca `parent`/`parenttype`/
+	`parentfield` z dozwolonego zbioru i kazdy taki filtr jest odrzucany."""
 	try:
-		_sprawdz_filtry(doctype, filters)
+		_sprawdz_filtry(doctype, filters, parenttype=parenttype)
 	except frappe.DoesNotExistError:
 		return
 
 
-def _waliduj(doctype: str, filters: object = None, or_filters: object = None) -> None:
+def _waliduj(
+	doctype: str,
+	filters: object = None,
+	or_filters: object = None,
+	parenttype: str | None = None,
+) -> None:
 	"""Sprawdza `filters` i `or_filters` przekazane jako argumenty Pythona
-	(endpointy `frappe.client.*` i `search_link`)."""
+	(endpointy `frappe.client.*` i `search_link`). `parenttype` patrz
+	`_sprawdz_filtry_bezpiecznie` — przekazywane dalej bez zmian do obu
+	sprawdzen (`filters` i `or_filters` dotycza tego samego doctype'u)."""
 	parsed_filters = _sparsowane_filtry(filters)
 	if parsed_filters:
-		_sprawdz_filtry_bezpiecznie(doctype, parsed_filters)
+		_sprawdz_filtry_bezpiecznie(doctype, parsed_filters, parenttype=parenttype)
 	parsed_or_filters = _sparsowane_filtry(or_filters)
 	if parsed_or_filters:
-		_sprawdz_filtry_bezpiecznie(doctype, parsed_or_filters)
+		_sprawdz_filtry_bezpiecznie(doctype, parsed_or_filters, parenttype=parenttype)
 
 
 def _waliduj_form_dict() -> None:
 	"""Sprawdza `filters`/`or_filters` czytane przez rdzen wprost z
 	`frappe.local.form_dict` (endpointy `frappe.desk.reportview.*`, ktore
-	nie maja zadnych parametrow Pythona — patrz `get_form_params()`)."""
+	nie maja zadnych parametrow Pythona — patrz `get_form_params()`).
+	Doklada `parent` z tego samego `form_dict`, jesli obecny (ops#80
+	follow-up) — jak w `_waliduj`, to nazwa doctype'u rodzica dla wywolan
+	dotyczacych tabeli podrzednej."""
 	doctype = frappe.local.form_dict.get("doctype")
 	if not doctype:
 		return
@@ -127,6 +144,7 @@ def _waliduj_form_dict() -> None:
 		doctype,
 		frappe.local.form_dict.get("filters"),
 		frappe.local.form_dict.get("or_filters"),
+		parenttype=frappe.local.form_dict.get("parent"),
 	)
 
 
@@ -145,8 +163,14 @@ def get_list(
 	or_filters: str | list[list] | dict[str, Any] | None = None,
 	expand: str | list[str] | None = None,
 ):
-	"""Strażnik nad `frappe.client.get_list` (ops#80)."""
-	_waliduj(doctype, filters, or_filters)
+	"""Strażnik nad `frappe.client.get_list` (ops#80). `parent` — nazwa
+	doctype'u rodzica, wymagana przez rdzeniowe `check_parent_permission()`
+	przy odczycie tabeli podrzednej (np. `Volteo Zestaw Item` z parent=
+	`CRM Deal` w `ZestawTab.vue`) — przekazywana dalej jako `parenttype` do
+	`_waliduj`, zeby `parent`/`parenttype`/`parentfield` w `filters` nie
+	byly odrzucane jako niedozwolone pola (ops#80 follow-up; bez tego ta
+	sama linia byla PRZYCZYNA regresji „brak zestawu” w Zestaw)."""
+	_waliduj(doctype, filters, or_filters, parenttype=parent)
 	return _rdzen_get_list(
 		doctype,
 		fields=fields,
@@ -170,7 +194,14 @@ def get_count(
 	debug: int | bool = False,
 	cache: int | bool = False,
 ):
-	"""Strażnik nad `frappe.client.get_count` (ops#80)."""
+	"""Strażnik nad `frappe.client.get_count` (ops#80). Bez `parenttype`: w tej
+	wersji Frappe rdzeniowe `frappe.client.get_count` NIE MA parametru
+	`parent` (sprawdzone w kontenerze — sygnatura to tylko `doctype`,
+	`filters`, `debug`, `cache`), wiec nie ma skad go tu wziac; wymyslanie
+	nieistniejacego parametru byloby gorsze niz jego brak. Odczyt licznika
+	tabeli podrzednej bez znanego rodzica trafia w fallback
+	`_pola_dozwolone` (permlevel-0 pola wlasne doctype'u + `POLA_ZAWSZE_
+	DOZWOLONE`, ktore i tak zawiera `parent`/`parenttype`/`parentfield`)."""
 	_waliduj(doctype, filters)
 	return _rdzen_get_count(doctype, filters=filters, debug=debug, cache=cache)
 
@@ -187,8 +218,9 @@ def get_value(
 	"""Strażnik nad `frappe.client.get_value` (ops#80). `filters` bywa samą
 	nazwą dokumentu (string, nie-JSON) — wtedy `_sparsowane_filtry` zwraca
 	`None` i sprawdzenie jest pomijane, tak jak w rdzeniu (filtr po `name`
-	jest zawsze dozwolony)."""
-	_waliduj(doctype, filters)
+	jest zawsze dozwolony). `parent` przekazywany dalej jako `parenttype` —
+	jak w `get_list` powyzej (ops#80 follow-up)."""
+	_waliduj(doctype, filters, parenttype=parent)
 	return _rdzen_get_value(doctype, fieldname, filters=filters, as_dict=as_dict, debug=debug, parent=parent)
 
 

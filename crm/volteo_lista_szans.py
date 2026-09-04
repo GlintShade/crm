@@ -21,6 +21,39 @@ i przekazuje tutaj — ten moduł tylko porównuje klucze filtra z tym zbiorem.
 
 from collections.abc import Iterable, Mapping, Sequence
 
+# Pola zawsze dozwolone do filtrowania/sortowania/grupowania, niezaleznie od
+# tego, co zwroci `get_permitted_fields` dla danego doctype'u — bezpiecznik
+# uzywany przez `crm.api.doc._pola_dozwolone` (ops#79). Trzy ostatnie pozycje
+# (`parent`, `parenttype`, `parentfield`) to `frappe.model.child_table_fields`
+# — dopisane w ops#80 follow-up, bo dla TABELI PODRZEDNEJ wywolanej BEZ
+# `parenttype` (np. `frappe.client.get_list` na `Volteo Zestaw Item` bez
+# przekazania parenttype do `get_permitted_fields`) rdzen zwraca WYLACZNIE
+# `default_fields` (7 pol) — bez `parent`/`parenttype`/`parentfield` i bez
+# ktoregokolwiek DocFielda wiersza — wiec filtr `{parenttype: ..., parent:
+# ...}` uzywany przez kazdy odczyt tabeli podrzednej (np. `ZestawTab.vue`)
+# byl odrzucany jako "niedozwolony". Ten modul jest celowo frappe-free (patrz
+# docstring modulu), wiec te trzy nazwy sa tu zapisane literalnie jako
+# backstop; `crm.api.doc` dodatkowo dokleja `frappe.model.child_table_fields`
+# wprost z frameworka, gdyby go kiedys przemianowano.
+POLA_ZAWSZE_DOZWOLONE: frozenset[str] = frozenset(
+	{
+		"name",
+		"owner",
+		"creation",
+		"modified",
+		"modified_by",
+		"docstatus",
+		"idx",
+		"_assign",
+		"_liked_by",
+		"_comments",
+		"_user_tags",
+		"parent",
+		"parenttype",
+		"parentfield",
+	}
+)
+
 # Allowlisty sortowania i filtrow listy szans (ops#81). Kazda krotka to
 # `(fieldname, etykieta)`; `etykieta is None` oznacza "wez etykiete ze
 # standardowej listy pol albo z meta doctype'u przez `_()`" (Property Settery
