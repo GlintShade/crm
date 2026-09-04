@@ -46,6 +46,7 @@ from frappe.utils import cint, getdate
 
 from crm.api.umowa import _dane_kontaktu, _podstawowy_kontakt, _sprawdz_dostep_do_szansy, _sprawdz_role
 from crm.integrations.autenti import logika as autenti_logika
+from crm.permissions.file_nazwy_systemowe import plik_systemowy
 from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad
 from crm.volteo_kredyt import GRUPY_DOCHODU, brakujace_pola, kwota_poprawna
 from crm.volteo_kredyt_pdf import zbuduj_kontekst_kredytu
@@ -705,7 +706,8 @@ def volteo_kredyt_pdf(deal: str) -> dict[str, Any]:
 				"content": pdf_bytes,
 			}
 		)
-		plik.insert(ignore_permissions=True)
+		with plik_systemowy():
+			plik.insert(ignore_permissions=True)
 	except Exception:
 		_blad_zapisu_pliku()
 

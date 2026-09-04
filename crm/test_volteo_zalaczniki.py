@@ -77,6 +77,9 @@ class TestVolteoZalaczniki(unittest.TestCase):
 	def test_q_plik_umowy_innej_szansy_nie_jest_systemowy(self: "TestVolteoZalaczniki") -> None:
 		self.assertFalse(czy_plik_systemowy("Umowa-PRO-PV-26-2222.pdf", "PRO/PV/26/1011"))
 
+	def test_r_pusta_nazwa_pliku_nie_jest_systemowa(self: "TestVolteoZalaczniki") -> None:
+		self.assertFalse(czy_plik_systemowy("", "PRO/PV/26/1011"))
+
 
 if __name__ == "__main__":
 	unittest.main()

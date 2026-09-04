@@ -4,9 +4,11 @@ import frappe
 from bs4 import BeautifulSoup
 from frappe import _
 from frappe.core.api.file import get_max_file_size
+from frappe.rate_limiter import rate_limit
 from frappe.translate import get_all_translations
 from frappe.utils import cint, cstr, split_emails, validate_email_address
 
+from crm.permissions.file_nazwy_systemowe import KOMUNIKAT_ZAREZERWOWANA
 from crm.permissions.org_hierarchy import BYPASS_ROLES
 from crm.utils import is_frappe_version
 from crm.volteo_zalaczniki import czy_plik_systemowy, nowa_nazwa_pliku
@@ -341,6 +343,7 @@ def delete_attachment(doctype: str, docname: str, file_url: str):
 
 
 @frappe.whitelist(methods=["POST"])
+@rate_limit(limit=30, seconds=60)
 def volteo_zmien_nazwe_zalacznika(name: str, nowy_trzon: str) -> dict[str, str]:
 	"""Zmienia widoczną nazwę załącznika (`File.file_name`) — TYLKO nazwę: `file_url`
 	i sam plik na dysku pozostają bez zmian, rozszerzenie jest zachowywane
@@ -355,7 +358,12 @@ def volteo_zmien_nazwe_zalacznika(name: str, nowy_trzon: str) -> dict[str, str]:
 	Pliki generowane przez system dla szansy (umowa, formularz kredytowy) są
 	odrzucane celowo — `crm/api/umowa.py`, `crm/api/kredyt.py` i
 	`crm/integrations/autenti/api.py` wyszukują je PO NAZWIE, więc zmiana nazwy
-	pod spodem po cichu zerwałaby to wyszukiwanie.
+	pod spodem po cichu zerwałaby to wyszukiwanie. Kontrolowana jest ZARÓWNO
+	nazwa źródłowa (czy plik już jest systemowy), JAK I nazwa DOCELOWA (czy
+	zmiana uczyniłaby zwykły plik systemowym) — samo sprawdzenie źródła nie
+	wystarcza: ktokolwiek z prawem zapisu na szansie mógłby przemianować
+	dowolny, obcy załącznik NA nazwę systemową i podszyć się pod wygenerowaną
+	umowę/formularz kredytowy tam, gdzie te są wyszukiwane po nazwie (ops#77).
 
 	Zapis idzie przez `frappe.db.set_value(...)`, celowo NIE przez `doc.save()`:
 	`validate()` kontrolera `File` w ogóle nie dotyka `file_name`, więc
@@ -385,6 +393,9 @@ def volteo_zmien_nazwe_zalacznika(name: str, nowy_trzon: str) -> dict[str, str]:
 		nowa = nowa_nazwa_pliku(plik.file_name, nowy_trzon)
 	except ValueError as blad:
 		frappe.throw(str(blad))
+
+	if plik.attached_to_doctype == "CRM Deal" and czy_plik_systemowy(nowa, plik.attached_to_name):
+		frappe.throw(_(KOMUNIKAT_ZAREZERWOWANA))
 
 	frappe.db.set_value("File", name, "file_name", nowa)
 	return {"file_name": nowa}

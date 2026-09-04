@@ -240,7 +240,13 @@ doc_events = {
 		# `before_insert` or plain `validate`) is the event that actually
 		# enforces this -- `before_insert` alone cannot stop the
 		# controller's own save_file() from writing a public file first.
-		"before_insert": ["crm.permissions.file_privacy.enforce_private_on_insert"],
+		# Nazwy systemowe (umowa, formularz kredytowy) są zarezerwowane -- poza
+		# generatorem (crm.permissions.file_nazwy_systemowe.plik_systemowy) nikt
+		# nie może wstawić File o takiej nazwie (ops#77).
+		"before_insert": [
+			"crm.permissions.file_privacy.enforce_private_on_insert",
+			"crm.permissions.file_nazwy_systemowe.blokuj_nazwy_systemowe",
+		],
 		"before_validate": ["crm.permissions.file_privacy.enforce_private_on_validate"],
 	},
 	# Audyt specjalny Czyste Powietrze -- doctype tworzy ops/crm-audyt-cp.py
