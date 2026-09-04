@@ -73,11 +73,12 @@
         />
         <ZestawTab v-else-if="tab.name === 'Zestaw'" :deal-id="dealId" />
         <FakturyTab v-else-if="tab.name === 'Faktury'" :deal-id="dealId" />
-        <MontazTab v-else-if="tab.name === 'Montaz'" :deal-id="dealId" />
+        <AktualizacjeTab v-else-if="tab.name === 'Montaz'" :deal-id="dealId" :konfig="MONTAZ" />
         <AudytTab v-else-if="tab.name === 'Audyt'" :deal-id="dealId" :rodzaj="doc.custom_rodzaj_umowy || ''" />
         <AudytCPTab v-else-if="tab.name === 'AudytCP'" :deal-id="dealId" />
         <UmowaTab v-else-if="tab.name === 'Umowa'" :deal-id="dealId" />
         <KredytTab v-else-if="tab.name === 'Kredyt'" :deal-id="dealId" />
+        <AktualizacjeTab v-else-if="tab.name === 'Trify'" :deal-id="dealId" :konfig="TRIFY" />
       </template>
     </Tabs>
     <Resizer
@@ -345,13 +346,15 @@ import MontazIcon from '@/components/Icons/MontazIcon.vue'
 import AudytIcon from '@/components/Icons/AudytIcon.vue'
 import UmowaIcon from '@/components/Icons/UmowaIcon.vue'
 import KredytIcon from '@/components/Icons/KredytIcon.vue'
+import TrifyIcon from '@/components/Icons/TrifyIcon.vue'
 import ZestawTab from '@/components/deal/ZestawTab.vue'
 import FakturyTab from '@/components/deal/FakturyTab.vue'
-import MontazTab from '@/components/deal/MontazTab.vue'
+import AktualizacjeTab from '@/components/deal/AktualizacjeTab.vue'
 import AudytTab from '@/components/deal/AudytTab.vue'
 import AudytCPTab from '@/components/deal/AudytCPTab.vue'
 import UmowaTab from '@/components/deal/UmowaTab.vue'
 import KredytTab from '@/components/deal/KredytTab.vue'
+import { MONTAZ, TRIFY } from '@/utils/aktualizacje'
 import DealPipelineBar from '@/components/deal/DealPipelineBar.vue'
 import DealNextStepNote from '@/components/deal/DealNextStepNote.vue'
 import OrganizationModal from '@/components/Modals/OrganizationModal.vue'
@@ -601,7 +604,8 @@ const NATIVE_TABS = [
 // Curated Polish Szansa tabs. Pliki reuses the native Attachments view and
 // Historia reuses the native Activity feed (keep their native `name` so
 // <Activities> renders them; only the visible `label` is Polish). Zestaw /
-// Faktury / Montaż / Audyt / Umowa are custom panels (see the #tab-panel branch).
+// Faktury / Montaż / Audyt / Umowa / Trify are custom panels (see the
+// #tab-panel branch).
 // Mirrors OZE_RODZAJE in crm/volteo_pipeline.py — the Kredyt tab (credit
 // application for the bank/leasing partner) only makes sense for the PV/
 // storage product lines, never for Czyste Powietrze (subsidy, not credit).
@@ -646,6 +650,12 @@ const tabs = computed(() => {
       label: __('Kredyt'),
       icon: KredytIcon,
       condition: () => OZE_RODZAJE.has(doc.value?.custom_rodzaj_umowy),
+    },
+    {
+      // Strumień wpisów o finansowaniu Trify — tylko Czyste Powietrze (pozytywna
+      // równość jak AudytCP). Dla linii OZE odpowiednikiem jest zakładka Kredyt.
+      name: 'Trify', label: __('Trify'), icon: TrifyIcon,
+      condition: () => doc.value?.custom_rodzaj_umowy === 'Czyste Powietrze',
     },
   ]
   return tabOptions.filter((tab) => (tab.condition ? tab.condition() : true))
