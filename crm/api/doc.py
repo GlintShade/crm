@@ -4,7 +4,7 @@ import frappe
 from frappe import _
 from frappe.custom.doctype.property_setter.property_setter import make_property_setter
 from frappe.desk.form.assign_to import set_status
-from frappe.model import no_value_fields
+from frappe.model import get_permitted_fields, no_value_fields
 from frappe.model.delete_doc import get_dynamic_linked_docs, get_linked_docs
 from frappe.model.document import get_controller
 from frappe.utils import make_filter_tuple
@@ -13,12 +13,61 @@ from pypika import Criterion
 from crm.api.views import get_views
 from crm.fcrm.doctype.crm_form_script.crm_form_script import get_form_script
 from crm.utils import is_frappe_version
+from crm.volteo_lista_szans import niedozwolone_klucze_filtrow
 
 COUNT_NAME = (
 	{"COUNT": "name", "as": "total_count"}
 	if is_frappe_version("16", above=True)
 	else "count(name) as total_count"
 )
+
+# Standardowe/opcjonalne pola, ktore musza zostac dozwolone do filtrowania
+# niezaleznie od tego, co zwroci get_permitted_fields dla danego doctype'u —
+# bezpiecznik na wypadek, gdyby framework kiedys ich stamtad nie zwrocil
+# (patrz ops#79). get_permitted_fields juz je zwraca w normalnym przypadku
+# (default_fields + optional_fields z frappe/model/__init__.py), ale ta
+# lista jest tania do policzenia i nie zalezy od wersji frameworka.
+_POLA_ZAWSZE_DOZWOLONE = frozenset(
+	{
+		"name",
+		"owner",
+		"creation",
+		"modified",
+		"modified_by",
+		"docstatus",
+		"idx",
+		"_assign",
+		"_liked_by",
+		"_comments",
+		"_user_tags",
+	}
+)
+
+
+def _pola_dozwolone(doctype: str) -> set[str]:
+	"""Zbior nazw pol doctype'u dostepnych BIEZACEMU uzytkownikowi do odczytu.
+
+	Pole permlevel > 0 bez uprawnienia read na tym poziomie jest wylaczone —
+	to jest zbior, po ktorym wolno filtrowac/sortowac/grupowac (patrz modul
+	`crm.volteo_lista_szans` i ops#79). Liczony raz na wywolanie whitelisted
+	metody, nie w petli.
+	"""
+	permitted = get_permitted_fields(doctype, user=frappe.session.user, permission_type="read")
+	return set(permitted) | _POLA_ZAWSZE_DOZWOLONE
+
+
+def _sprawdz_filtry(doctype: str, filters) -> None:
+	"""Rzuca PermissionError, jesli `filters` odwoluje sie do pola spoza
+	`_pola_dozwolone(doctype)`. `filters` moze byc dict-em (typowy przypadek
+	w `get_data`) albo pojedynczym polem opakowanym w `{pole: None}` — patrz
+	wywolania dla `column_field`/`group_by_field` w `get_data`."""
+	permitted = _pola_dozwolone(doctype)
+	niedozwolone = niedozwolone_klucze_filtrow(filters, permitted)
+	if niedozwolone:
+		frappe.throw(
+			_("Brak uprawnień do filtrowania po polu {0}").format(niedozwolone[0]),
+			frappe.PermissionError,
+		)
 
 
 @frappe.whitelist()
@@ -50,6 +99,11 @@ def sort_options(doctype: str):
 		field["label"] = _(field["label"])
 		field["value"] = field["fieldname"]
 		fields.append(field)
+
+	# Nie oferuj sortowania po polu, po ktorym i tak nie wolno filtrowac
+	# (permlevel > 0 bez uprawnienia read) — patrz ops#79.
+	permitted = _pola_dozwolone(doctype)
+	fields = [field for field in fields if field["fieldname"] in permitted]
 
 	return fields
 
@@ -112,6 +166,11 @@ def get_filterable_fields(doctype: str):
 			field["value"] = field.get("fieldname")
 			fields.append(field)
 
+	# Nie oferuj filtrowania po polu, po ktorym i tak nie wolno filtrowac
+	# (permlevel > 0 bez uprawnienia read) — patrz ops#79.
+	permitted = _pola_dozwolone(doctype)
+	fields = [field for field in fields if field.get("fieldname") in permitted]
+
 	return fields
 
 
@@ -165,6 +224,11 @@ def get_group_by_fields(doctype: str):
 	for field in standard_fields:
 		field["label"] = _(field["label"])
 		fields.append(field)
+
+	# Nie oferuj grupowania po polu, po ktorym i tak nie wolno filtrowac
+	# (permlevel > 0 bez uprawnienia read) — patrz ops#79.
+	permitted = _pola_dozwolone(doctype)
+	fields = [field for field in fields if field.get("fieldname") in permitted]
 
 	return fields
 
@@ -295,6 +359,13 @@ def get_data(
 	view_type = view.get("view_type") if view else None
 	group_by_field = view.get("group_by_field") if view else None
 
+	# Blokada grupowania po polu bez uprawnien odczytu (permlevel > 0) — patrz
+	# ops#79. Walidujemy natychmiast po ekstrakcji, przed jakimkolwiek uzyciem
+	# group_by_field (dopisanie do rows nizej, potem do fields=rows w
+	# frappe.get_list).
+	if group_by_field:
+		_sprawdz_filtry(doctype, {group_by_field: None})
+
 	for key in filters:
 		value = filters[key]
 		if isinstance(value, list):
@@ -310,6 +381,12 @@ def get_data(
 	if default_filters:
 		default_filters = frappe.parse_json(default_filters)
 		filters.update(default_filters)
+
+	# Blokada filtrowania po polu bez uprawnien odczytu (permlevel > 0) — patrz
+	# ops#79. Walidujemy PO scaleniu default_filters i podstawieniu @me, zeby
+	# objac kazdy filtr, ktory trafi do frappe.get_list nizej (l.374/437/448/554
+	# w wersji sprzed tej zmiany) — filters jest jedynym zrodlem tych wywolan.
+	_sprawdz_filtry(doctype, filters)
 
 	is_default = True
 	data = []
@@ -385,6 +462,12 @@ def get_data(
 	if view_type == "kanban":
 		if not rows:
 			rows = default_rows
+
+		# Blokada grupowania kanbanu po polu bez uprawnien odczytu (permlevel > 0)
+		# — patrz ops#79. Walidujemy przed jakimkolwiek uzyciem column_field jako
+		# klucza filtra nizej (column_filters, new_filters, get_records_based_on_order).
+		if column_field:
+			_sprawdz_filtry(doctype, {column_field: None})
 
 		if not kanban_columns and column_field:
 			field_meta = frappe.get_meta(doctype).get_field(column_field)
