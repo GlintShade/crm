@@ -162,6 +162,7 @@ import Autocomplete from '@/components/frappe-ui/Autocomplete.vue'
 import DurationInput from '@/components/Controls/DurationInput.vue'
 import RatingInput from '@/components/Controls/RatingInput.vue'
 import { etykietaMoje } from '@/utils/etykietaMoje'
+import { opcjeEtapu } from '@/utils/etapFiltr'
 import {
   FormControl,
   createResource,
@@ -172,6 +173,7 @@ import {
 } from 'frappe-ui'
 import { h, computed, onMounted } from 'vue'
 import { isMobileView } from '@/composables/settings'
+import { statusesStore } from '@/stores/statuses'
 
 const typeCheck = ['Check']
 const typeLink = ['Link', 'Dynamic Link']
@@ -196,6 +198,24 @@ const filterableFields = createResource({
   cache: ['filterableFields', props.doctype],
   params: { doctype: props.doctype },
 })
+
+// Filtr „Etap" (status) zawężony do procesu wybranej linii produktowej —
+// patrz `utils/etapFiltr.js`. Ten sam współdzielony fetch (cache klucz jak
+// w Deal.vue/DealModal.vue dla `volteo_pipeline_get`/`volteo_pipeline_grupy`)
+// — config nie zależy od konkretnej szansy. Tylko dla `props.doctype ===
+// 'CRM Deal'`, ale wołanie zasobu jest nieszkodliwe i tanie (cache'owane)
+// nawet gdy ten Filter stoi na innej liście — utrzymuje kod prostszym niż
+// warunkowe tworzenie zasobu.
+const { dealStatuses } = statusesStore()
+const grupyStatusow = createResource({
+  url: 'crm.api.pipeline.volteo_pipeline_grupy',
+  cache: ['volteo-pipeline-grupy'],
+  auto: true,
+})
+
+function isKnownStatus(name) {
+  return Boolean(dealStatuses.data?.some((s) => s.name === name))
+}
 
 onMounted(() => {
   if (filterableFields.data?.length) return
@@ -414,6 +434,25 @@ function getValueControl(f) {
       })),
       modelValue: f.value,
       'onUpdate:modelValue': (v) => updateValue(v, f),
+    })
+  } else if (
+    props.doctype === 'CRM Deal' &&
+    field.fieldname === 'status' &&
+    ['equals', 'not equals'].includes(operator)
+  ) {
+    // Etap zawężony do procesu aktywnego filtra „Rodzaj umowy" — patrz
+    // utils/etapFiltr.js. Operatory `in`/`not in` NIE trafiają tutaj (już
+    // przechwycone wyżej przez gałąź `['like', 'not like', 'in', 'not
+    // in'].includes(operator)`, niezmieniona).
+    return h(Autocomplete, {
+      value: f.value,
+      options: opcjeEtapu(
+        grupyStatusow.data,
+        list.value?.params?.filters?.custom_rodzaj_umowy,
+        isKnownStatus,
+        dealStatuses.data?.map((s) => s.name),
+      ),
+      onChange: (o) => updateValue(o?.value ?? '', f),
     })
   } else if (typeLink.includes(fieldtype)) {
     if (fieldtype == 'Dynamic Link') {
