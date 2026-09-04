@@ -94,16 +94,34 @@
           <div v-if="Number(dealFields.custom_estimated_subsidy_pln) > 0" class="flex justify-between border-t border-outline-gray-2 py-0.5 pt-1 font-medium text-ink-gray-8">
             <span>{{ __('Razem') }}</span><span>{{ formatPln(dealFields.custom_estimated_subsidy_pln) }}</span>
           </div>
+        </div>
 
-          <!--
-            Gated on custom_cp_okres_lat > 0, not on presence of the fields:
-            they are a plain Int/Currency columns on CRM Deal, `NOT NULL
-            DEFAULT 0` in SQL, so a deal created before this feature — or one
-            where the rep left financing switched off — reads 0 regardless,
-            and that must hide the block rather than render zeroed rows.
-          -->
+        <!--
+          Own-contribution / Trify box, separate from the subsidy box above:
+          wkład własny (custom_cp_wklad_wlasny) and Trify (custom_cp_podstawa_trify)
+          are ALWAYS shown once either is a real value, independent of whether
+          the rep switched financing on — a beneficiary's own contribution and
+          the Trify basis exist regardless of whether they chose to finance
+          them with a loan. The credit sub-block underneath (Wpłata gotówką
+          through Rata Trify) stays gated on custom_cp_okres_lat > 0, not on
+          presence of the fields: they are plain Int/Currency columns on
+          CRM Deal, `NOT NULL DEFAULT 0` in SQL, so a deal created before this
+          feature — or one where the rep left financing switched off — reads 0
+          regardless, and that must hide the credit rows rather than render
+          zeroed ones. See `hasCpFinancing` below for why it reads all three
+          value families, not just custom_rodzaj_umowy.
+        -->
+        <div v-if="hasCpFinancing" class="mt-3 w-full rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-2.5 text-sm">
+          <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Finansowanie') }}</div>
+          <div class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Wkład własny beneficjenta') }}</span><span>{{ formatPln(dealFields.custom_cp_wklad_wlasny) }}</span>
+          </div>
+          <div class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Kwota Trify') }}</span><span>{{ formatPln(dealFields.custom_cp_podstawa_trify) }}</span>
+          </div>
+
           <template v-if="Number(dealFields.custom_cp_okres_lat) > 0">
-            <div class="mb-1 mt-1 border-t border-outline-gray-2 pt-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Finansowanie') }}</div>
+            <div class="mb-1 mt-1 border-t border-outline-gray-2 pt-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Kredyt na wkład własny') }}</div>
             <div class="flex justify-between py-0.5 text-ink-gray-7">
               <span>{{ __('Wpłata gotówką') }}</span><span>{{ formatPln(dealFields.custom_cp_wplata_gotowka) }}</span>
             </div>
@@ -126,10 +144,11 @@
           PV-line offer summary (Wycena) -- mirrors the "Dotacja wg grup prac"
           box above, styled the same way, but for the fotowoltaika/magazyn
           product lines instead of Czyste Powietrze. In practice this block
-          and the CP subsidy box above are mutually exclusive: a PV deal never
-          populates custom_cp_*, and a CP deal never populates custom_netto or
-          the calculator's deal_value, so no v-else coupling between the two
-          is needed -- `showWycena` and `hasGroupSubsidy` simply never agree.
+          and the CP subsidy/financing boxes above are mutually exclusive: a
+          PV deal never populates custom_cp_*, and a CP deal never populates
+          custom_netto or the calculator's deal_value, so no v-else coupling
+          between them is needed -- `showWycena`, `hasGroupSubsidy` and
+          `hasCpFinancing` simply never agree.
         -->
         <div v-if="showWycena" class="mt-3 w-full rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-2.5 text-sm">
           <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Wycena') }}</div>
@@ -350,6 +369,8 @@ const dealSubsidy = createResource({
       'custom_cp_dotacja_co',
       'custom_cp_dotacja_termo',
       'custom_estimated_subsidy_pln',
+      'custom_cp_wklad_wlasny',
+      'custom_cp_podstawa_trify',
       'custom_cp_okres_lat',
       'custom_cp_wplata_gotowka',
       'custom_cp_kwota_kredytu',
@@ -533,6 +554,8 @@ const dealFields = computed(() => ({
   custom_cp_dotacja_co: 0,
   custom_cp_dotacja_termo: 0,
   custom_estimated_subsidy_pln: 0,
+  custom_cp_wklad_wlasny: 0,
+  custom_cp_podstawa_trify: 0,
   custom_cp_okres_lat: 0,
   custom_cp_wplata_gotowka: 0,
   custom_cp_kwota_kredytu: 0,
@@ -544,6 +567,19 @@ const hasGroupSubsidy = computed(() =>
   Number(dealFields.value.custom_cp_dotacja_zrodlo) > 0 ||
   Number(dealFields.value.custom_cp_dotacja_co) > 0 ||
   Number(dealFields.value.custom_cp_dotacja_termo) > 0,
+)
+// Own-contribution / Trify / credit box gate — read by value, never by key
+// presence (see the reactive-hasOwnProperty trap referenced throughout this
+// file). Deliberately NOT gated on custom_rodzaj_umowy: a CP deal with no
+// subsidy at all (so `hasGroupSubsidy` above is false) can still have a real
+// wkład własny and Trify basis, and those must render regardless of whether
+// the rep ever switched the credit sub-block on. An OZE deal never populates
+// any of these three field families, so this stays false there the same way
+// `hasGroupSubsidy` does.
+const hasCpFinancing = computed(() =>
+  Number(dealFields.value.custom_cp_wklad_wlasny) > 0 ||
+  Number(dealFields.value.custom_cp_podstawa_trify) > 0 ||
+  Number(dealFields.value.custom_cp_okres_lat) > 0,
 )
 // Issue #50: single source of truth for every field the commission box
 // reads, mirroring the `dealFields`/`wycenaFields` explicit-defaults pattern
