@@ -5,6 +5,8 @@ from typing import ClassVar
 from crm.volteo_aktywnosc import (
 	OKNO_GRUPOWANIA_S,
 	POLA_WLASNA_LINIA,
+	TEKST_ZASTEPCZY_CC_D2D,
+	ZNACZNIK_CC,
 	ZNACZNIK_KOSZTY,
 	ZNACZNIKI_ADMIN,
 	bez_znacznika,
@@ -13,6 +15,7 @@ from crm.volteo_aktywnosc import (
 	linie_z_wersji,
 	roznice_plikow_audytu,
 	tekst_sladu,
+	tekst_widoczny_dla,
 	zapisz_slad,
 )
 
@@ -321,6 +324,42 @@ class TestCzyWidocznyIBezZnacznika(unittest.TestCase):
 		self.assertIn(ZNACZNIK_KOSZTY, ZNACZNIKI_ADMIN)
 
 
+class TestTekstWidocznyDlaCC(unittest.TestCase):
+	"""ops#93: linia oznaczona ZNACZNIK_CC pokazuje handlowcowi tekst zastępczy
+	(nigdy nazwisko CC), a każdej innej roli tekst pełny bez znacznika."""
+
+	def test_a_handlowiec_dostaje_tekst_zastepczy(self: "TestTekstWidocznyDlaCC") -> None:
+		text = f"{ZNACZNIK_CC} przydzielono do CC: Anna Nowak"
+		self.assertEqual(tekst_widoczny_dla(text, role=["Volteo D2D Sales"]), TEKST_ZASTEPCZY_CC_D2D)
+
+	def test_b_admin_widzi_tekst_pelny_bez_znacznika(self: "TestTekstWidocznyDlaCC") -> None:
+		text = f"{ZNACZNIK_CC} przydzielono do CC: Anna Nowak"
+		self.assertEqual(
+			tekst_widoczny_dla(text, role=["Volteo Core Admin"]), "przydzielono do CC: Anna Nowak"
+		)
+
+	def test_c_backend_widzi_tekst_pelny_bez_znacznika(self: "TestTekstWidocznyDlaCC") -> None:
+		text = f"{ZNACZNIK_CC} Anna Nowak przekazał lead handlowcowi Jan Kowalski"
+		self.assertEqual(
+			tekst_widoczny_dla(text, role=["Volteo Backend"]),
+			"Anna Nowak przekazał lead handlowcowi Jan Kowalski",
+		)
+
+	def test_d_cc_sam_widzi_tekst_pelny(self: "TestTekstWidocznyDlaCC") -> None:
+		text = f"{ZNACZNIK_CC} przydzielono do CC: Anna Nowak"
+		self.assertEqual(
+			tekst_widoczny_dla(text, role=["Volteo Call Center"]), "przydzielono do CC: Anna Nowak"
+		)
+
+	def test_e_tekst_bez_znacznika_niezmieniony_dla_handlowca(self: "TestTekstWidocznyDlaCC") -> None:
+		text = "zmieniono Status: Lead → Wygrana"
+		self.assertEqual(tekst_widoczny_dla(text, role=["Volteo D2D Sales"]), text)
+
+	def test_f_bez_znacznika_zdejmuje_tez_znacznik_cc(self: "TestTekstWidocznyDlaCC") -> None:
+		text = f"{ZNACZNIK_CC} przydzielono do CC: Anna Nowak"
+		self.assertEqual(bez_znacznika(text), "przydzielono do CC: Anna Nowak")
+
+
 class TestRozniceplikowAudytu(unittest.TestCase):
 	SLOTY: ClassVar[dict[str, str]] = {
 		"dok_umowa": "Umowa na obsługę dotacji",
@@ -452,6 +491,17 @@ class TestTekstSladu(unittest.TestCase):
 		with self.assertRaises(ValueError):
 			tekst_sladu("cos_nieznanego")
 
+	def test_t_cc_przydzial_niesie_znacznik_i_nazwisko(self: "TestTekstSladu") -> None:
+		text = tekst_sladu("cc_przydzial", cc_full_name="Anna Nowak")
+		self.assertTrue(text.startswith(ZNACZNIK_CC))
+		self.assertIn("Anna Nowak", text)
+
+	def test_u_cc_przekazanie_niesie_znacznik_oba_nazwiska(self: "TestTekstSladu") -> None:
+		text = tekst_sladu("cc_przekazanie", cc_full_name="Anna Nowak", handlowiec_full_name="Jan Kowalski")
+		self.assertTrue(text.startswith(ZNACZNIK_CC))
+		self.assertIn("Anna Nowak", text)
+		self.assertIn("Jan Kowalski", text)
+
 
 class TestZapiszSladBezFrappe(unittest.TestCase):
 	def test_a_wywolanie_bez_frappe_rzuca_import_error(self: "TestZapiszSladBezFrappe") -> None:
@@ -459,6 +509,13 @@ class TestZapiszSladBezFrappe(unittest.TestCase):
 		# (a nie na poziomie modułu), inaczej cały moduł nie zaimportowałby się w ogóle.
 		with self.assertRaises(ImportError):
 			zapisz_slad("CRM-DEAL-2026-00001", "tekst")
+
+	def test_b_doctype_lead_tez_rzuca_import_error(self: "TestZapiszSladBezFrappe") -> None:
+		# Nowy parametr `doctype` (ops#93) nie zmienia tego, że funkcja wciąż robi
+		# import frappe lokalnie -- ImportError bez frappe zainstalowanego, niezależnie
+		# od wartości doctype.
+		with self.assertRaises(ImportError):
+			zapisz_slad("LEAD-2026-00001", "tekst", doctype="CRM Lead")
 
 
 if __name__ == "__main__":

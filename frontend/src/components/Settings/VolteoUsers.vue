@@ -267,7 +267,7 @@ import { usersStore } from '@/stores/users'
 
 const { getUser, allUsers } = usersStore()
 
-// Exactly the four Volteo roles the server accepts. Never offer
+// Exactly the five Volteo roles the server accepts. Never offer
 // "System Manager" here — the server refuses it, and listing it would be
 // misleading.
 const VOLTEO_ROLES = [
@@ -275,6 +275,7 @@ const VOLTEO_ROLES = [
   { value: 'Volteo Backend', label: __('Volteo Backend') },
   { value: 'Volteo Ecom Sales', label: __('Volteo Ecom Sales') },
   { value: 'Volteo Core Admin', label: __('Volteo Core Admin') },
+  { value: 'Volteo Call Center', label: __('Volteo Call Center') },
 ]
 
 const roleOptions = computed(() => VOLTEO_ROLES)

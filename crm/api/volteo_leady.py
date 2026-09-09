@@ -37,16 +37,31 @@ Definicje (zgodne z `ops/crm-leady-d2d.py`, docstring SEKCJI 2)
 
 Model uprawnień
 ----------------
-`statystyki` i `przydziel` — wyłącznie `System Manager` / `Volteo Core
-Admin` (ten sam zestaw co `crm.api.volteo_uzytkownicy`), bramkowane
-`frappe.only_for` jako pierwsza instrukcja. `mapa` jest dla każdego
-zalogowanego z prawem odczytu `CRM Lead` — i dlatego MUSI wołać
+`statystyki`, `przydziel` i `przydziel_cc`: wyłącznie `System Manager` /
+`Volteo Core Admin` (ten sam zestaw co `crm.api.volteo_uzytkownicy`),
+bramkowane `frappe.only_for` jako pierwsza instrukcja. `mapa` jest dla
+każdego zalogowanego z prawem odczytu `CRM Lead`, i dlatego MUSI wołać
 `frappe.get_list`, nie `frappe.get_all`: `get_list` przepuszcza wynik przez
 `crm/permissions/org_hierarchy.py` (permission query conditions już
 podpięte w `hooks.py` dla `CRM Lead`), więc rep dostaje tylko swoje/mu
 przypisane leady, a admin/backend (bypass w `org_hierarchy.py`) widzi
 wszystkie. `get_all` ignoruje uprawnienia i byłby wyciekiem całej bazy
 leadów do każdego repa D2D.
+
+Dwupoziomowy przydział CC->handlowiec (ops#93, issue #88)
+------------------------------------------------------------------------
+`przekaz_handlowcowi` (detal, jeden lead na wywołanie) jest dostępny dla
+Administratora/`BYPASS_ROLES` ORAZ dla CC (rola `Volteo Call Center`)
+ustawionego jako `custom_cc` na TYM konkretnym leadzie, nie dla dowolnego
+CC. `custom_cc` NIE jest zmieniane przy przekazaniu: CC zachowuje
+widoczność leada (decyzja właściciela). `handlowcy` daje CC listę
+handlowców D2D do wyboru w UI, bo `widoczni_uzytkownicy` (poddrzewo
+hierarchii) dałby CC spoza hierarchii pustą listę. Oba zapisy (`przydziel_cc`,
+`przekaz_handlowcowi`) wołają `crm.volteo_aktywnosc.zapisz_slad(...,
+doctype="CRM Lead")`, żeby przydział/przekazanie zostawiały ślad w zakładce
+Aktywność leada. `crm.api.activities.get_lead_activities` maskuje tożsamość
+CC dla roli `Volteo D2D Sales` (patrz `crm.volteo_aktywnosc.tekst_widoczny_dla`),
+bo handlowiec nie ma widzieć pola „Przypisany CC”.
 
 Pułapka None-vs-0 na `custom_lat`/`custom_lng`
 ------------------------------------------------------------------------
@@ -83,14 +98,23 @@ import frappe
 from frappe import _
 from frappe.utils import cint
 
-from crm.permissions.org_hierarchy import _ma_linie_leady
+from crm.api.doc import _sprawdz_filtry
+from crm.permissions.org_hierarchy import BYPASS_ROLES, _ma_linie_leady
+from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad
 
 DOPUSZCZONE_ROLE_WOLAJACEGO = ("System Manager", "Volteo Core Admin")
 ROLA_D2D = "Volteo D2D Sales"
+ROLA_CC = "Volteo Call Center"
 
 ILOSC_MIN = 1
 ILOSC_MAX = 100
 ILOSC_DOMYSLNA = 20
+
+#: Limit liczby leadów przydzielanych JEDNYM wywołaniem przydziel_cc (ops#93).
+#: Wyższy niż ILOSC_MAX z przydziel powyżej, bo zapis idzie przez db.set_value
+#: (bez doc.save) -- kontroler CRMLead nie ma tu nic do zrobienia dla custom_cc,
+#: w odróżnieniu od lead_owner (share_with_agent/assign_agent w validate()).
+LIMIT_PRZYDZIAL_CC = 2000
 
 
 def _mapa_typow_statusow() -> dict[str, str]:
@@ -160,7 +184,11 @@ def statystyki() -> dict:
 			skonwertowany = bool(cint(lead.converted))
 			if typ == "Open":
 				bucket["nietkniete"] += 1
-			if typ == "Ongoing":
+			# ops#93 / L04 (issue #89): "Odłożony" (On Hold, wprowadzony w
+			# migracji statusów CC) liczy się jako w toku, tak samo jak
+			# Ongoing -- lead na tym statusie nie jest ani porzucony, ani
+			# przerobiony, wciąż czeka na kolejny kontakt/spotkanie.
+			if typ in ("Ongoing", "On Hold"):
 				bucket["w_toku"] += 1
 			if typ in ("Won", "Lost") or skonwertowany:
 				bucket["przerobione"] += 1
@@ -212,24 +240,11 @@ def statystyki() -> dict:
 	}
 
 
-@frappe.whitelist()
-def przydziel(
-	handlowiec: str,
-	ilosc: int = ILOSC_DOMYSLNA,
-	wojewodztwo: str | None = None,
-	powiat: str | None = None,
-	miasto: str | None = None,
-) -> dict:
-	"""Przydziela paczkę geograficznie zwartych, nietkniętych leadów jednemu
-	handlowcowi D2D. `ilosc` jest rzutowana i przycinana do 1..100 (parametry
-	HTTP przychodzą jako stringi). Admin-only. Zapis idzie przez
-	`doc.save(ignore_permissions=True)` na każdym leadzie z osobna, żeby
-	kontroler (`crm/fcrm/doctype/crm_lead/crm_lead.py:86-96`) odpalił
-	`assign_agent`/`share_with_agent` — to jedyny sposób, żeby rep dostał
-	widoczność (ToDo + share) bez pisania nowego kodu uprawnień tutaj."""
-	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
-
-	handlowiec = (handlowiec or "").strip()
+def _waliduj_handlowca(handlowiec: str) -> None:
+	"""Waliduje, że `handlowiec` to istniejące, włączone konto z rolą `Volteo D2D
+	Sales` i dostępem do modułu Leady (`custom_linia_leady`). Wydzielone z `przydziel`
+	(ops#93), żeby `przydziel` i `przekaz_handlowcowi` rzucały identyczne komunikaty
+	błędów zamiast dryfować w dwóch kopiach tej samej logiki."""
 	if not handlowiec:
 		frappe.throw(_("Handlowiec jest wymagany."))
 	if not frappe.db.exists("User", handlowiec):
@@ -249,10 +264,52 @@ def przydziel(
 	if not _ma_linie_leady(handlowiec):
 		frappe.throw(
 			_(
-				"Użytkownik {0} nie ma dostępu do modułu Leady — włącz linię "
+				"Użytkownik {0} nie ma dostępu do modułu Leady, włącz linię "
 				"Leady w Ustawienia → Użytkownicy przed przydzieleniem."
 			).format(handlowiec)
 		)
+
+
+def _waliduj_cc(cc: str) -> None:
+	"""Waliduje, że `cc` to istniejące, włączone konto z rolą `Volteo Call Center`
+	i dostępem do modułu Leady (`custom_linia_leady`), lustro `_waliduj_handlowca`
+	powyżej, dla drugiej strony przydziału (ops#93, issue #88)."""
+	if not cc:
+		frappe.throw(_("CC jest wymagany."))
+	if not frappe.db.exists("User", cc):
+		frappe.throw(_("Użytkownik {0} nie istnieje.").format(cc))
+	if not frappe.db.get_value("User", cc, "enabled"):
+		frappe.throw(_("Konto {0} jest wyłączone.").format(cc))
+	if not frappe.db.exists("Has Role", {"parent": cc, "parenttype": "User", "role": ROLA_CC}):
+		frappe.throw(_("Użytkownik {0} nie ma roli {1}.").format(cc, ROLA_CC))
+	if not _ma_linie_leady(cc):
+		frappe.throw(
+			_(
+				"Użytkownik {0} nie ma dostępu do modułu Leady, włącz linię "
+				"Leady w Ustawienia → Użytkownicy przed przydzieleniem."
+			).format(cc)
+		)
+
+
+@frappe.whitelist()
+def przydziel(
+	handlowiec: str,
+	ilosc: int = ILOSC_DOMYSLNA,
+	wojewodztwo: str | None = None,
+	powiat: str | None = None,
+	miasto: str | None = None,
+) -> dict:
+	"""Przydziela paczkę geograficznie zwartych, nietkniętych leadów jednemu
+	handlowcowi D2D. `ilosc` jest rzutowana i przycinana do 1..100 (parametry
+	HTTP przychodzą jako stringi). Admin-only. Zapis idzie przez
+	`doc.save(ignore_permissions=True)` na każdym leadzie z osobna, żeby
+	kontroler (`crm/fcrm/doctype/crm_lead/crm_lead.py:86-96`) odpalił
+	`assign_agent`/`share_with_agent`, to jedyny sposób, żeby rep dostał
+	widoczność (ToDo + share) bez pisania nowego kodu uprawnień tutaj."""
+	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
+
+	handlowiec = (handlowiec or "").strip()
+	_waliduj_handlowca(handlowiec)
 
 	ilosc = cint(ilosc)
 	if ilosc < ILOSC_MIN:
@@ -353,3 +410,163 @@ def mapa() -> list[dict]:
 		filters={"custom_lat": ["!=", 0]},
 		limit_page_length=0,
 	)
+
+
+@frappe.whitelist()
+def przydziel_cc(cc: str, leady: str | list | None = None, filters: str | dict | None = None) -> dict:
+	"""Hurtowy przydział leadów do CC (`custom_cc`, issue #88): jawna lista nazw
+	ALBO wszystkie leady pasujące do `filters`. Admin-only (`System Manager` /
+	`Volteo Core Admin`), bramkowane `frappe.only_for` jako pierwsza instrukcja.
+
+	Leady, które mają już USTAWIONY `custom_cc` (dowolny, nie tylko inny niż `cc`),
+	są pomijane (nie nadpisujemy istniejącego przydziału po cichu, ani cudzego, ani
+	tego samego CC) i zliczane w `pominieto`, drugie wywołanie z tymi samymi
+	parametrami jest więc no-opem (wszystko trafia do `pominieto`), zgodnie z
+	kryterium akceptacji issue #93. Zmiana przydziału na innego CC idzie przez
+	`przekaz_handlowcowi`/ręczną edycję pola, nigdy przez ponowne `przydziel_cc`.
+
+	Zapis idzie przez `frappe.db.set_value` (BEZ `doc.save`): w odróżnieniu od
+	`lead_owner` (którego zmiana odpala `share_with_agent`/`assign_agent` w
+	`CRMLead.validate()`), `custom_cc` nie ma żadnej logiki kontrolera do
+	przeprowadzenia, stąd LIMIT_PRZYDZIAL_CC może być dużo wyższy niż ILOSC_MAX
+	w `przydziel` powyżej.
+
+	`leady`, po `frappe.parse_json`, musi być pojedynczym stringiem albo listą/
+	krotką samych niepustych stringów, inaczej `frappe.throw` z czytelnym
+	komunikatem zamiast niejasnego błędu dalej w funkcji. Nazwy spoza bazy (lead
+	usunięty, literówka) są pomijane i zliczane osobno w `nieznane`, zamiast
+	trafiać do `pominieto` (które oznacza konkretnie "już przydzielony") albo
+	wywoływać `DoesNotExistError` przy zapisie śladu. Zwraca
+	`{przydzielono, pominieto, nieznane, limit}`."""
+	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
+
+	cc = (cc or "").strip()
+	_waliduj_cc(cc)
+
+	leady = frappe.parse_json(leady) if leady else None
+	filters = frappe.parse_json(filters) if filters else None
+
+	if leady:
+		if isinstance(leady, str):
+			nazwy = [leady]
+		elif isinstance(leady, (list, tuple)):
+			nazwy = list(leady)
+		else:
+			frappe.throw(_("Parametr leady musi być listą nazw albo pojedynczą nazwą."))
+		if not all(isinstance(n, str) and n.strip() for n in nazwy):
+			frappe.throw(_("Lista leadów musi zawierać wyłącznie niepuste nazwy (stringi)."))
+	elif filters:
+		_sprawdz_filtry("CRM Lead", filters)
+		nazwy = frappe.get_list(
+			"CRM Lead", filters=filters, pluck="name", limit_page_length=LIMIT_PRZYDZIAL_CC
+		)
+	else:
+		frappe.throw(_("Podaj listę leadów albo filtry."))
+
+	if not nazwy:
+		return {"przydzielono": 0, "pominieto": 0, "nieznane": 0, "limit": LIMIT_PRZYDZIAL_CC}
+
+	istniejace = frappe.get_all(
+		"CRM Lead", filters={"name": ["in", nazwy]}, fields=["name", "custom_cc"]
+	)
+	obecny_cc_wg_nazwy = {row.name: row.custom_cc for row in istniejace}
+
+	cc_full_name = frappe.db.get_value("User", cc, "full_name") or cc
+
+	przydzielono = 0
+	pominieto = 0
+	nieznane = 0
+	for nazwa in nazwy:
+		# Nazwa spoza istniejace: lead o tej nazwie nie istnieje (usunięty, literówka,
+		# albo filtry/lista podane przez wołającego wskazują na coś nieistniejącego).
+		# db.set_value byłby cichym no-opem, a zapisz_slad rzuciłby DoesNotExistError
+		# przy wstawianiu Comment z referencją na nieistniejący dokument, więc taką
+		# nazwę pomijamy jawnie i liczymy osobno, zamiast dawać jej wpaść do
+		# pominieto (co sugerowałoby "już przydzielony", a nie "nie istnieje").
+		if nazwa not in obecny_cc_wg_nazwy:
+			nieznane += 1
+			continue
+		obecny_cc = obecny_cc_wg_nazwy[nazwa]
+		if obecny_cc:
+			pominieto += 1
+			continue
+		frappe.db.set_value("CRM Lead", nazwa, "custom_cc", cc, update_modified=False)
+		zapisz_slad(
+			nazwa,
+			tekst_sladu("cc_przydzial", cc_full_name=cc_full_name),
+			doctype="CRM Lead",
+		)
+		przydzielono += 1
+
+	return {
+		"przydzielono": przydzielono,
+		"pominieto": pominieto,
+		"nieznane": nieznane,
+		"limit": LIMIT_PRZYDZIAL_CC,
+	}
+
+
+@frappe.whitelist()
+def przekaz_handlowcowi(lead: str, handlowiec: str) -> dict:
+	"""Przekazuje POJEDYNCZY lead od CC do handlowca (`lead_owner`). Dozwolone dla
+	Administratora / ról `BYPASS_ROLES`, albo dla CC (rola `Volteo Call Center`)
+	ustawionego jako `custom_cc` na TYM leadzie, w przeciwnym razie
+	`frappe.PermissionError`. `custom_cc` NIE jest zmieniane: CC zachowuje
+	widoczność leada po przekazaniu (decyzja właściciela).
+
+	Zapis idzie przez `doc.save(ignore_permissions=True)`, dokładnie jak w
+	`przydziel`, żeby kontroler odpalił `share_with_agent`/`assign_agent` na rzecz
+	handlowca (ToDo + DocShare) bez pisania nowej logiki uprawnień tutaj."""
+	lead = (lead or "").strip()
+	if not lead:
+		frappe.throw(_("Lead jest wymagany."))
+	if not frappe.db.exists("CRM Lead", lead):
+		frappe.throw(_("Lead {0} nie istnieje.").format(lead))
+
+	doc = frappe.get_doc("CRM Lead", lead)
+
+	caller = frappe.session.user
+	caller_roles = set(frappe.get_roles(caller))
+	czy_bypass = caller == "Administrator" or bool(caller_roles & BYPASS_ROLES)
+	czy_wlasny_cc = ROLA_CC in caller_roles and doc.custom_cc == caller
+
+	if not (czy_bypass or czy_wlasny_cc):
+		frappe.throw(
+			_("Nie masz uprawnień do przekazania tego leada handlowcowi."),
+			frappe.PermissionError,
+		)
+
+	handlowiec = (handlowiec or "").strip()
+	_waliduj_handlowca(handlowiec)
+
+	doc.lead_owner = handlowiec
+	doc.save(ignore_permissions=True)
+
+	cc_full_name = frappe.db.get_value("User", doc.custom_cc, "full_name") or doc.custom_cc or "CC"
+	handlowiec_full_name = frappe.db.get_value("User", handlowiec, "full_name") or handlowiec
+	zapisz_slad(
+		lead,
+		tekst_sladu(
+			"cc_przekazanie",
+			cc_full_name=cc_full_name,
+			handlowiec_full_name=handlowiec_full_name,
+		),
+		doctype="CRM Lead",
+	)
+
+	return {"lead": lead, "handlowiec": handlowiec}
+
+
+@frappe.whitelist()
+def handlowcy() -> list[dict]:
+	"""Lista aktywnych handlowców D2D (`user`, `full_name`) dla ról `Volteo Call
+	Center` / `System Manager` / `Volteo Core Admin` / `Volteo Backend`, potrzebne,
+	bo `widoczni_uzytkownicy` (`Link.vue` `userScope`, `crm.api.volteo_uzytkownicy`)
+	dałby osobie CC spoza jej gałęzi hierarchii pustą listę, mimo że CC MUSI móc
+	przekazać leada dowolnemu handlowcowi D2D, nie tylko podwładnym. Inne role
+	dostają `frappe.PermissionError`."""
+	role_wolajacego = set(frappe.get_roles(frappe.session.user))
+	dopuszczone = {ROLA_CC, "System Manager", "Volteo Core Admin", "Volteo Backend"}
+	if not (role_wolajacego & dopuszczone):
+		frappe.throw(_("Brak uprawnień."), frappe.PermissionError)
+	return _aktywni_d2d_reprezentanci()

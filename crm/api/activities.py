@@ -15,6 +15,7 @@ from crm.volteo_aktywnosc import (
 	czy_widoczny,
 	grupuj,
 	linie_z_wersji,
+	tekst_widoczny_dla,
 )
 from crm.volteo_zalaczniki import czy_plik_systemowy
 
@@ -495,6 +496,41 @@ def get_lead_activities(name: str):
 			"is_lead": True,
 		}
 		activities.append(activity)
+
+	# ops#93: docinfo.info_logs carries the "Info" comments zapisz_slad() writes
+	# for CC assignment/handover (crm.api.volteo_leady.przydziel_cc /
+	# przekaz_handlowcowi) -- same mechanism ops#60 wired up for CRM Deal
+	# (get_deal_activities above). czy_widoczny/ADMIN_ROLE gate stays for parity
+	# even though no lead-side writer currently uses an admin-only marker;
+	# tekst_widoczny_dla (not bez_znacznika) additionally masks any CC identity
+	# for the Volteo D2D Sales role -- a handlowiec must never learn who the CC
+	# was, only that a handover happened (WORKSHOP.md, ops#93).
+	roles_uzytkownika = frappe.get_roles()
+	for info in docinfo.info_logs:
+		if info.comment_type != "Info":
+			continue
+		raw_text = frappe.utils.strip_html(info.content or "").strip()
+		if not raw_text:
+			continue
+		if not czy_widoczny(raw_text, roles_uzytkownika, ADMIN_ROLE):
+			continue
+		activities.append(
+			{
+				"name": f"volteo-lead-info-{info.name}",
+				"activity_type": "volteo_linked",
+				"creation": info.creation,
+				"owner": info.owner,
+				"is_lead": True,
+				"data": {
+					"source": "CRM Lead",
+					"label": _("Lead"),
+					"title": None,
+					"action": "info",
+					"doc_name": name,
+					"text": tekst_widoczny_dla(raw_text, roles_uzytkownika),
+				},
+			}
+		)
 
 	for communication in docinfo.communications + docinfo.automated_messages:
 		activity = {

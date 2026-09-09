@@ -74,6 +74,16 @@ def _permission_query_conditions(user: str | None, doctype: str):
 	DT = frappe.qb.DocType(doctype)
 	Todo = frappe.qb.DocType("ToDo").as_("_todo")
 
+	# VOLTEO (issue #88, L01): a CRM Lead assigned to a Volteo Call Center
+	# user via custom_cc is visible to that user regardless of tree
+	# membership/ownership/assignment -- OR'd into both branches below.
+	# Guarded on has_field so a site where the schema hasn't been migrated
+	# yet (ops/crm-leady-call-center.py not yet run) never builds a query
+	# referencing an unknown column ("Unknown column 'custom_cc'").
+	cc_cond = None
+	if doctype == "CRM Lead" and frappe.get_meta("CRM Lead").has_field("custom_cc"):
+		cc_cond = DT.custom_cc == user
+
 	if in_tree:
 		# Owner is the user themselves or any member of their subtree
 		q1 = (DT[owner_field] == user) | DT[owner_field].isin(_team_mem_query(user))
@@ -87,7 +97,8 @@ def _permission_query_conditions(user: str | None, doctype: str):
 				& ((Todo.allocated_to == user) | (Todo.allocated_to.isin(_team_mem_query(user))))
 			)
 		)
-		return q1 | q2
+		cond = q1 | q2
+		return cond | cc_cond if cc_cond is not None else cond
 
 	# Sales User default: own records and records directly assigned to them
 	q1 = DT[owner_field] == user
@@ -96,7 +107,8 @@ def _permission_query_conditions(user: str | None, doctype: str):
 		.select(Todo.reference_name)
 		.where((Todo.reference_type == doctype) & (Todo.status != "Cancelled") & (Todo.allocated_to == user))
 	)
-	return q1 | q2
+	cond = q1 | q2
+	return cond | cc_cond if cc_cond is not None else cond
 
 
 def get_lead_permission_query_conditions(user=None):

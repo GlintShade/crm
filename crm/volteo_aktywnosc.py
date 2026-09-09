@@ -48,6 +48,23 @@ ZNACZNIKI_ADMIN: frozenset[str] = frozenset({ZNACZNIK_KOSZTY})
 """Zbiór znaczników wiodących, których linie feedu są widoczne wyłącznie dla ról
 administracyjnych — patrz `czy_widoczny`/`bez_znacznika`."""
 
+ZNACZNIK_CC = "[volteo:cc]"
+"""Znacznik wiodący tekstu śladu, który nazywa CC (przydział/przekazanie leada,
+ops#93), w odróżnieniu od `ZNACZNIKI_ADMIN` linia NIE jest ukrywana całkowicie:
+handlowiec (rola `Volteo D2D Sales`) ma wiedzieć, że doszło do przydziału/przekazania,
+tylko nigdy nie ma poznać tożsamości CC (patrz `tekst_widoczny_dla`). Każda inna rola
+widzi tekst pełny, bez znacznika."""
+
+_ZNACZNIKI_DO_ZDJECIA: frozenset[str] = ZNACZNIKI_ADMIN | frozenset({ZNACZNIK_CC})
+"""Nadzbiór znaczników wiodących, które `bez_znacznika` potrafi zdjąć z tekstu."""
+
+ROLA_D2D = "Volteo D2D Sales"
+
+TEKST_ZASTEPCZY_CC_D2D = "Lead przekazany przez call center"
+"""Tekst zastępczy pokazywany handlowcowi (rola `Volteo D2D Sales`) zamiast KAŻDEJ
+linii śladu oznaczonej `ZNACZNIK_CC`, nigdy nazwisko CC (handlowiec nie ma widzieć
+pola „Przypisany CC”, patrz WORKSHOP.md)."""
+
 OKNO_GRUPOWANIA_S = 600
 """Maksymalny odstęp (w sekundach) między kolejnymi wpisami tego samego autora, żeby
 `grupuj` je sklejał w jeden wiersz feedu — decyzja właściciela 2026-09-03: 10 minut."""
@@ -233,6 +250,15 @@ def tekst_sladu(rodzaj: str, **dane: object) -> str:
 	if rodzaj == "audyt_zdjecia":
 		return "zmieniono zdjęcia audytu"
 
+	if rodzaj == "cc_przydzial":
+		return f"{ZNACZNIK_CC} przydzielono do CC: {dane['cc_full_name']}"
+
+	if rodzaj == "cc_przekazanie":
+		return (
+			f"{ZNACZNIK_CC} {dane['cc_full_name']} przekazał lead handlowcowi "
+			f"{dane['handlowiec_full_name']}"
+		)
+
 	raise ValueError(f"Nieznany rodzaj śladu: {rodzaj!r}")
 
 
@@ -248,10 +274,22 @@ def czy_widoczny(text: str, role: Iterable[str], admin_role: Iterable[str]) -> b
 
 def bez_znacznika(text: str) -> str:
 	"""Usuwa wiodący znacznik (np. `[volteo:koszty] `) z tekstu do wyświetlenia."""
-	for znacznik in ZNACZNIKI_ADMIN:
+	for znacznik in _ZNACZNIKI_DO_ZDJECIA:
 		if text.startswith(znacznik):
 			return text[len(znacznik) :].lstrip()
 	return text
+
+
+def tekst_widoczny_dla(text: str, role: Iterable[str]) -> str:
+	"""Tekst linii śladu gotowy do wyświetlenia danej roli (ops#93): linia oznaczona
+	`ZNACZNIK_CC` pokazuje handlowcowi (rola `Volteo D2D Sales`) `TEKST_ZASTEPCZY_CC_D2D`
+	zamiast treści (nigdy nazwiska CC); każda inna rola i każda inna linia dostaje
+	pełny tekst bez znacznika (`bez_znacznika`). Symetryczne do `czy_widoczny`, ale z
+	zamianą treści zamiast całkowitego ukrycia linii, używane tam, gdzie odbiorca ma
+	wiedzieć, że coś się wydarzyło, tylko nie wolno mu poznać jednego szczegółu."""
+	if text.startswith(ZNACZNIK_CC) and ROLA_D2D in set(role):
+		return TEKST_ZASTEPCZY_CC_D2D
+	return bez_znacznika(text)
 
 
 def roznice_plikow_audytu(
@@ -366,10 +404,33 @@ def grupuj(wpisy: list[dict], okno_s: int = OKNO_GRUPOWANIA_S) -> list[dict]:
 	return wynik
 
 
-def zapisz_slad(deal: str, tekst: str) -> None:
-	"""JEDYNE miejsce w tym pliku, które dotyka Frappe — import lokalny, w ciele funkcji,
+def zapisz_slad(name: str, tekst: str, doctype: str = "CRM Deal") -> None:
+	"""JEDYNE miejsce w tym pliku, które dotyka Frappe, import lokalny, w ciele funkcji,
 	żeby moduł importował się bez Frappe w `unittest`. Pisarze (`crm/api/*.py`) wołają to
-	jedno miejsce zamiast każdy osobno składać `add_comment`."""
+	jedno miejsce zamiast każdy osobno składać komentarz.
+
+	`doctype` domyślnie `"CRM Deal"`, zgodne wstecz z każdym dotychczasowym wołającym
+	(pozycyjne `zapisz_slad(deal, tekst)`). Od ops#93 przyjmuje też
+	`doctype="CRM Lead"` dla śladów przydziału/przekazania CC->handlowiec na leadzie.
+
+	Wstawia dokument `Comment` bezpośrednio, zamiast `frappe.get_doc(doctype,
+	name).add_comment(...)`: to drugie ładuje CAŁY dokument nadrzędny tylko po to,
+	żeby zawołać metodę, która i tak jedynie wstawia `Comment` (patrz
+	`frappe.model.document.Document.add_comment`). Przy `przydziel_cc` na 2000
+	leadów w jednym żądaniu HTTP to różnica między 2000 pełnymi `get_doc` a 2000
+	tanimi insertami. Poniższe pola to dokładnie to, co robi `add_comment`
+	wewnątrz, więc `Comment.after_insert` nadal aktualizuje licznik `_comments` na
+	dokumencie nadrzędnym bez zmian."""
 	import frappe
 
-	frappe.get_doc("CRM Deal", deal).add_comment("Info", tekst)
+	frappe.get_doc(
+		{
+			"doctype": "Comment",
+			"comment_type": "Info",
+			"reference_doctype": doctype,
+			"reference_name": name,
+			"content": tekst,
+			"comment_email": frappe.session.user,
+			"comment_by": frappe.utils.get_fullname(frappe.session.user),
+		}
+	).insert(ignore_permissions=True)
