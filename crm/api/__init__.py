@@ -224,7 +224,7 @@ def invite_by_email(
 	# Volteo-specific role assigned alongside the stock CRM role above. Kept
 	# to an explicit allowlist — anything outside it is a hard error, never a
 	# silent skip.
-	if volteo_role not in (None, "", "Volteo D2D Sales", "Volteo Backend"):
+	if volteo_role not in (None, "", "Volteo D2D Sales", "Volteo Backend", "Volteo Call Center"):
 		frappe.throw(_("Cannot invite for this Volteo role"), frappe.PermissionError)
 
 	if volteo_role == "Volteo Backend" and not (

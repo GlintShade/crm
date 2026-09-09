@@ -21,12 +21,17 @@ TEST_USERS = (
 	"backendintree@hier.test",
 	"coreadmin@hier.test",
 	"coreadminintree@hier.test",
+	"cc@hier.test",
 )
 
 # Bypass roles under test. Created in setUpClass (guarded) and removed in
 # tearDownClass so the suite is self-cleaning on a fresh site as well as one
 # where ops/crm-setup.py has already seeded them.
 BYPASS_TEST_ROLES = ("Volteo Backend", "Volteo Core Admin")
+
+# Non-bypass Volteo role under test (issue #88, L01) -- created/removed the
+# same guarded way as BYPASS_TEST_ROLES above.
+CC_TEST_ROLE = "Volteo Call Center"
 
 
 class TestOrgHierarchy(FrappeTestCase):
@@ -48,6 +53,18 @@ class TestOrgHierarchy(FrappeTestCase):
 		# Volteo Backend / Volteo Core Admin are normally seeded by
 		# ops/crm-setup.py, but a fresh test site won't have them yet.
 		cls._roles_created = [ensure_role(role) for role in BYPASS_TEST_ROLES]
+		# Volteo Call Center (issue #88, L01) -- non-bypass role, same
+		# guarded create/cleanup as the bypass roles above.
+		cls._cc_role_created = ensure_role(CC_TEST_ROLE)
+
+		# custom_cc (CRM Lead) and custom_linia_leady (User) are normally
+		# created by ops scripts (ops/crm-leady-call-center.py,
+		# ops/crm-linia-leady.py) that run against a real site, not by any
+		# fixture bundled with the app -- a fresh test site needs them
+		# created here so the CC permission-query branch (guarded on
+		# has_field in org_hierarchy.py) is actually exercised.
+		cls._cc_field_created = ensure_custom_field("CRM Lead", "custom_cc", "Link", options="User")
+		cls._linia_leady_field_created = ensure_custom_field("User", "custom_linia_leady", "Check")
 
 		# Create test users
 		make_user("manager@hier.test", roles=["Sales Manager"])
@@ -58,6 +75,17 @@ class TestOrgHierarchy(FrappeTestCase):
 		make_user("backendintree@hier.test", roles=["Volteo Backend"])
 		make_user("coreadmin@hier.test", roles=["Volteo Core Admin"])
 		make_user("coreadminintree@hier.test", roles=["Volteo Core Admin"])
+		make_user("cc@hier.test", roles=[CC_TEST_ROLE])
+		# Every non-bypass test user needs the custom_linia_leady flag (issue
+		# #27's gate, unchanged by issue #88 -- WORKSHOP.md: "CC musi mieć
+		# flagę Leady w Ustawienia -> Użytkownicy") set explicitly: it is a
+		# fresh Custom Field on this test site (see ensure_custom_field call
+		# above), so every dynamically-created test user reads back
+		# None/0 -- i.e. denied -- unless set here. BYPASS_ROLES users don't
+		# need it (their _ma_linie_leady short-circuits on role), but setting
+		# it is harmless for them too.
+		for _user in TEST_USERS:
+			frappe.db.set_value("User", _user, "custom_linia_leady", 1, update_modified=False)
 
 		# Build hierarchy
 		mgr = make_hierarchy_node("manager@hier.test", is_group=1)
@@ -85,7 +113,19 @@ class TestOrgHierarchy(FrappeTestCase):
 		for role, created in zip(BYPASS_TEST_ROLES, cls._roles_created, strict=True):
 			if created:
 				frappe.delete_doc("Role", role, force=True, ignore_permissions=True)
+		if cls._cc_role_created:
+			frappe.delete_doc("Role", CC_TEST_ROLE, force=True, ignore_permissions=True)
+		if cls._cc_field_created:
+			frappe.delete_doc(
+				"Custom Field", "CRM Lead-custom_cc", force=True, ignore_permissions=True
+			)
+		if cls._linia_leady_field_created:
+			frappe.delete_doc(
+				"Custom Field", "User-custom_linia_leady", force=True, ignore_permissions=True
+			)
 		frappe.db.commit()  # nosemgrep: persist teardown cleanup of committed fixtures
+		frappe.clear_cache(doctype="CRM Lead")
+		frappe.clear_cache(doctype="User")
 		super().tearDownClass()
 
 	def tearDown(self):
@@ -149,6 +189,46 @@ class TestOrgHierarchy(FrappeTestCase):
 		lead = make_lead("outsider@hier.test")
 		assign_todo("CRM Lead", lead.name, "rep1@hier.test")
 		self.assertTrue(has_lead_permission(lead, "read", "manager@hier.test"))
+
+	# ------------------------------------------------------------------
+	# Lead permissions -- custom_cc (issue #88, L01)
+	# ------------------------------------------------------------------
+
+	def test_cc_can_read_lead_assigned_via_custom_cc(self):
+		# The lead is owned by outsider (outside cc's tree entirely -- cc has
+		# no tree node at all) and never assigned via ToDo: only custom_cc
+		# grants access here.
+		lead = make_lead("outsider@hier.test")
+		frappe.db.set_value("CRM Lead", lead.name, "custom_cc", "cc@hier.test", update_modified=False)
+		self.assertTrue(has_lead_permission(lead, "read", "cc@hier.test"))
+		self.assertTrue(has_lead_permission(lead, "write", "cc@hier.test"))
+
+	def test_cc_cannot_read_lead_not_assigned_to_them(self):
+		lead = make_lead("outsider@hier.test")
+		# custom_cc left unset -- no ownership, no assignment, no CC grant.
+		self.assertFalse(has_lead_permission(lead, "read", "cc@hier.test"))
+
+	def test_cc_cannot_read_lead_assigned_to_a_different_cc(self):
+		lead = make_lead("outsider@hier.test")
+		frappe.db.set_value("CRM Lead", lead.name, "custom_cc", "manager@hier.test", update_modified=False)
+		self.assertFalse(has_lead_permission(lead, "read", "cc@hier.test"))
+
+	def test_query_conditions_for_cc_reference_custom_cc(self):
+		# The permission-query branch (used for list views) must reference the
+		# custom_cc column, not just the single-doc has_permission path.
+		cond = get_lead_permission_query_conditions("cc@hier.test")
+		self.assertIn("custom_cc", cond)
+
+	def test_query_conditions_for_plain_rep_also_reference_custom_cc(self):
+		# custom_cc is OR'd into every non-bypass user's query, whether or not
+		# they hold the CC role -- any user COULD in principle be someone's
+		# custom_cc. It only ever MATCHES rows where custom_cc equals that
+		# specific user, so this doesn't widen a plain rep's actual access
+		# (the D2D-facing sibling/outsider tests above already prove that in
+		# practice); this only confirms the SQL fragment is always emitted
+		# once the field exists on the site.
+		cond = get_lead_permission_query_conditions("rep1@hier.test")
+		self.assertIn("custom_cc", cond)
 
 	# ------------------------------------------------------------------
 	# Deal permissions
@@ -273,6 +353,31 @@ def ensure_role(role_name: str) -> bool:
 	frappe.get_doc({"doctype": "Role", "role_name": role_name, "desk_access": 1}).insert(
 		ignore_permissions=True
 	)
+	return True
+
+
+def ensure_custom_field(doctype: str, fieldname: str, fieldtype: str, options: str | None = None) -> bool:
+	"""Create a bare `Custom Field` if missing. Mirrors `ensure_role` above: returns
+	True iff this call created it, so the caller only tears down what it created.
+
+	custom_cc / custom_linia_leady are normally seeded by ops scripts
+	(ops/crm-leady-call-center.py, ops/crm-linia-leady.py) that run against a real
+	site, not by any fixture bundled with the app -- a fresh test site has neither,
+	so the org_hierarchy.py `has_field` guard would otherwise skip the branch this
+	suite exists to exercise."""
+	name = f"{doctype}-{fieldname}"
+	if frappe.db.exists("Custom Field", name):
+		return False
+	frappe.get_doc(
+		{
+			"doctype": "Custom Field",
+			"dt": doctype,
+			"fieldname": fieldname,
+			"fieldtype": fieldtype,
+			"options": options,
+			"label": fieldname,
+		}
+	).insert(ignore_permissions=True)
 	return True
 
 

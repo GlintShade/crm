@@ -288,6 +288,7 @@ const volteoRoleOptions = computed(() => {
   return [
     { value: '', label: __('None') },
     { value: 'Volteo D2D Sales', label: __('D2D Sales Rep') },
+    { value: 'Volteo Call Center', label: __('Call Center') },
     ...(isVolteoAdmin()
       ? [{ value: 'Volteo Backend', label: __('Backoffice') }]
       : []),
@@ -297,6 +298,7 @@ const volteoRoleOptions = computed(() => {
 const volteoRoleMap = {
   'Volteo D2D Sales': __('D2D Sales Rep'),
   'Volteo Backend': __('Backoffice'),
+  'Volteo Call Center': __('Call Center'),
 }
 
 // Sales User has stock read on CRM Sales Hierarchy, so this list resource

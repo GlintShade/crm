@@ -81,6 +81,7 @@ WSZYSTKIE_ROLE_CRM = (
 	"Volteo Core Admin",
 	"Volteo Backend",
 	"Volteo D2D Sales",
+	"Volteo Call Center",
 )
 
 # Role, które ten moduł wolno nadać. Zamknięta biała lista — cokolwiek spoza
@@ -91,6 +92,7 @@ NADAWALNE_ROLE = (
 	"Volteo Backend",
 	"Volteo Ecom Sales",
 	"Volteo Core Admin",
+	"Volteo Call Center",
 )
 
 # Kto może wołać którąkolwiek funkcję tego modułu.
