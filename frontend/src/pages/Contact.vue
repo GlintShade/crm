@@ -133,9 +133,6 @@
                   </div>
                   <div class="flex flex-col gap-2 truncate text-ink-gray-9">
                     <div class="truncate text-3xl-medium">
-                      <span v-if="contact.doc.salutation">
-                        {{ contact.doc.salutation + ' ' }}
-                      </span>
                       <span>{{ contact.doc.full_name }}</span>
                     </div>
                     <div
