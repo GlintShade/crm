@@ -360,6 +360,20 @@ class CRMLead(Document):
 			}
 		)
 
+		# VOLTEO (ops#92): the Lead splits the address into custom_install_address
+		# (street) + custom_nr_domu (house number) so CC/handlowiec see them as two
+		# quick-filterable fields; CRM Deal has a single address field. The generic
+		# field-copy loop above already copied the bare street name into
+		# new_deal.custom_install_address (same fieldname on both doctypes -- see
+		# ops/crm-leady-pola.py for why that name is load-bearing); splice the house
+		# number back on here so the Deal keeps getting one combined "Ulica Nr" value.
+		# A no-op when custom_nr_domu is empty (pre-ops#92 leads, or an address that
+		# rozbij_adres()/backfill couldn't parse and left whole in custom_install_address).
+		nr_domu = (self.get("custom_nr_domu") or "").strip()
+		if nr_domu:
+			ulica = (new_deal.custom_install_address or "").strip()
+			new_deal.custom_install_address = f"{ulica} {nr_domu}".strip() if ulica else nr_domu
+
 		if self.first_responded_on:
 			new_deal.update(
 				{
