@@ -115,7 +115,10 @@ class CRMInvitation(Document):
 			frappe.throw(_("Invalid or expired key"))
 
 		if self._przeterminowane():
-			self.db_set("status", "Expired", update_modified=False)
+			# The throw below aborts this request and Frappe rolls back the
+			# transaction on error, so the Expired flip must be committed
+			# explicitly here or it is lost on the real allow_guest POST path.
+			self.db_set("status", "Expired", update_modified=False, commit=True)
 			frappe.throw(_("Invalid or expired key"))
 
 		user = self.create_user_if_not_exists()
