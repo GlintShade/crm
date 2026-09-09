@@ -204,6 +204,9 @@
           <div v-if="Number(wycenaFields.custom_kabel_m) > 0" class="flex justify-between py-0.5 text-ink-gray-7">
             <span>{{ __('Dodatkowy kabel') }}</span><span>{{ wycenaFields.custom_kabel_m }} m</span>
           </div>
+          <div v-if="wycenaFields.custom_licznik_dodatkowy" class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Dodatkowy licznik') }}</span><span>{{ wycenaFields.custom_licznik_dodatkowy }}</span>
+          </div>
 
           <div class="mb-1 mt-1 border-t border-outline-gray-2 pt-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Cena') }}</div>
           <div class="flex justify-between py-0.5 text-ink-gray-7">
@@ -471,6 +474,7 @@ const dealWycena = createResource({
       'custom_pv_power_kwp',
       'custom_konstrukcja',
       'custom_kabel_m',
+      'custom_licznik_dodatkowy',
       'custom_netto',
       'custom_vat_pct',
       'deal_value',
@@ -673,6 +677,7 @@ const wycenaFields = computed(() => ({
   custom_pv_power_kwp: 0,
   custom_konstrukcja: '',
   custom_kabel_m: 0,
+  custom_licznik_dodatkowy: '',
   custom_netto: 0,
   custom_vat_pct: 0,
   deal_value: 0,

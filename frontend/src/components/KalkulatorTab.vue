@@ -161,6 +161,13 @@
                     <option value="Tak">Tak</option>
                   </select>
                 </div>
+                <div v-if="licznikDostepny(sel.producent)">
+                  <div class="mb-0.5 text-sm text-ink-gray-5">Dodatkowy licznik (stary falownik / mikrofalowniki)<span v-if="licznikCena > 0"> · +{{ formatPln(licznikCena) }} netto</span></div>
+                  <select v-model="sel.licznik" class="kalk-select">
+                    <option value="Nie">Nie</option>
+                    <option value="Tak">Tak</option>
+                  </select>
+                </div>
 
                 <div>
                   <div class="mb-0.5 text-sm text-ink-gray-5">Operator energetyczny</div>
@@ -345,6 +352,7 @@ import {
   variantHasPv,
   variantHasBattery,
   producentOptionsFor,
+  licznikDostepny,
   panelLabel,
   buildMocOptionsForPanel,
   snapMocToPanel,
@@ -401,6 +409,7 @@ const sel = reactive({
   konstrukcja: '',
   kabelM: 0,
   spoldzielnia: 'Nie',
+  licznik: 'Nie',
   ulgaPct: 19,
   okresLat: 5,
   wplataWlasna: 0,
@@ -430,7 +439,11 @@ watch(
 // Reset downstream picks whenever producent changes (cascade rule).
 watch(
   () => sel.producent,
-  () => { sel.falownik = ''; sel.bateria = '' },
+  () => {
+    sel.falownik = ''
+    sel.bateria = ''
+    if (!licznikDostepny(sel.producent)) sel.licznik = 'Nie'
+  },
 )
 
 // --- Catalog (names + non-secret tags only — no prices ever fetched) -------
@@ -459,6 +472,10 @@ async function loadComponents() {
     // value. 0 or missing for a given key means the limit is unknown; the
     // server remains authoritative during calc regardless of what is shown here.
     dotacjaLimity.value = (data && data.dotacja_limity) || {}
+    // licznik_dodatkowy: customer list price of the "Dodatkowy licznik"
+    // add-on, for display in the label only. 0 or missing means unknown; the
+    // server remains authoritative and computes the actual amount at calc.
+    licznikCena.value = Number(data && data.licznik_dodatkowy) || 0
   } catch (err) {
     errorMsg.value = extractErrorMessage(err)
   }
@@ -635,6 +652,11 @@ const narzutMax = ref(0)
 // keyed by ZASADY_DOTACJI_OPTIONS value, 0 or missing means unknown.
 const dotacjaLimity = ref({})
 
+// licznik_dodatkowy comes from volteo_quote_components (loadComponents
+// above); 0 or missing means the price is unknown, so the label shows no
+// amount. Display only, server stays authoritative.
+const licznikCena = ref(0)
+
 const narzutValid = computed(() => {
   const n = Number(sel.narzut)
   return !isNaN(n) && n >= 0 && (narzutMax.value <= 0 || n <= narzutMax.value)
@@ -660,6 +682,7 @@ function buildCalcPayload() {
     moc_pv_kw: hasPv.value ? Number(sel.mocPvKw) || 0 : 0,
     kabel_m: Number(sel.kabelM) || 0,
     spoldzielnia: sel.spoldzielnia,
+    licznik_dodatkowy: sel.licznik,
     ulga_pct: Number(sel.ulgaPct),
     okres_lat: Number(sel.okresLat),
     wplata_wlasna: Number(sel.wplataWlasna) || 0,
@@ -682,7 +705,7 @@ let calcTimer = null
 watch(
   () => [
     sel.typKlienta, sel.variant, sel.producent, sel.falownik, sel.bateria,
-    sel.panel, sel.mocPvKw, sel.konstrukcja, sel.kabelM, sel.spoldzielnia, sel.ulgaPct,
+    sel.panel, sel.mocPvKw, sel.konstrukcja, sel.kabelM, sel.spoldzielnia, sel.licznik, sel.ulgaPct,
     sel.okresLat, sel.wplataWlasna, sel.narzut, sel.zasadyDotacji,
   ],
   () => {

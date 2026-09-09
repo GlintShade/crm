@@ -10,6 +10,7 @@ import {
   variantHasPv,
   variantHasBattery,
   producentOptionsFor,
+  licznikDostepny,
   buildMocOptions,
   panelLabel,
   buildMocOptionsForPanel,
@@ -64,6 +65,22 @@ describe('PV form logic', () => {
     it('offers Sigenergy/Deye for PV+Magazyn and Magazyn-only', () => {
       expect(producentOptionsFor(VARIANT_PV_BAT)).toEqual(['Sigenergy', 'Deye'])
       expect(producentOptionsFor(VARIANT_BAT)).toEqual(['Sigenergy', 'Deye'])
+    })
+  })
+
+  describe('licznikDostepny', () => {
+    it('is false for FoxESS', () => {
+      expect(licznikDostepny('FoxESS')).toBe(false)
+    })
+
+    it('is false for an empty or unset producent', () => {
+      expect(licznikDostepny('')).toBe(false)
+      expect(licznikDostepny(undefined)).toBe(false)
+    })
+
+    it('is true for Sigenergy and Deye', () => {
+      expect(licznikDostepny('Sigenergy')).toBe(true)
+      expect(licznikDostepny('Deye')).toBe(true)
     })
   })
 

@@ -33,6 +33,10 @@ const DEFINICJA_GRUP = [
       ['k_montaz_mag', 'Montaż magazynu'],
       ['k_akcesoria', 'Akcesoria'],
       ['k_kabel', 'Kabel'],
+      // Etykieta "Dodatkowy licznik" jest CELOWO zduplikowana w
+      // `koszty_linie` silnika ops (patrz komentarz u góry pliku): zmieniaj
+      // oba miejsca razem.
+      ['k_licznik', 'Dodatkowy licznik'],
     ],
   },
   {
