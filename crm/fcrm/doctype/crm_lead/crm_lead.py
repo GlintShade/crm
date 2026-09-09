@@ -436,30 +436,15 @@ class CRMLead(Document):
 	def get_non_filterable_fields():
 		return ["converted"]
 
-	# VOLTEO (ops#94): lista leadow dla przeplywu CC (przydzial paczek,
-	# telefon z mapy, "Kolejny kontakt"/"Termin spotkania", przekazanie do
-	# handlowca) zamiast starego B2B/e-mail-first widoku. Kolejnosc kolumn
-	# jest DOSLOWNA z nagrania wlasciciela (issue ops#94) i celowo bez maila
-	# (telefon jest tu podstawowym kanalem kontaktu, patrz komentarz nad
-	# SORT_FIELDS_LEAD w crm.volteo_lista_szans).
-	#
-	# Dwie pseudo-kolumny dziela klucz z realnym polem (ten sam wzorzec co
-	# "Szczegoly" w crm_deal.py:default_list_data, pelne wyjasnienie
-	# pulapki z `rows`/`meta.get_field` zyje tam):
-	#   - "Szczegoly" dzieli `key: "name"` — przycisk (render po stronie
-	#     Vue) nawiguje do leada po `name`, ktory i tak jest zawsze w rows.
-	#   - "Komentarze" dzieli `key: "_comment_count"` — TO pole NIE jest
-	#     prawdziwym DocFieldem (w przeciwienstwie do "name"), wiec samo
-	#     dolozenie go do `rows` by wywalilo zapytanie SQL w
-	#     `crm.api.doc.get_data` ("Unknown column") — ta funkcja zostala w
-	#     ramach ops#94 rozszerzona, zeby wyciagac "_comment_count" z listy
-	#     pol SQL przed zapytaniem i doliczac go per wiersz osobnym
-	#     zapytaniem po stronie backendu (patrz `crm/api/doc.py`, komentarz
-	#     "VOLTEO (ops#94)" przy `frappe.get_list` w nie-kanbanowej galezi
-	#     `get_data`). Render (ikona + licznik, klik otwiera
-	#     `KomentarzeLeadaModal.vue` bez nawigacji) jest po stronie Vue w
-	#     `LeadsListView.vue`, rozpoznawany po etykiecie "Komentarze",
-	#     tak samo jak "Szczegoly".
+	# VOLTEO (ops#94): kolejnosc kolumn listy leadow jest doslowna z
+	# nagrania wlasciciela (issue ops#94), dopasowana do przeplywu CC,
+	# celowo bez maila. Dwie pseudo-kolumny dziela klucz z realnym polem
+	# (wzorzec "Szczegoly" z crm_deal.py:default_list_data): "Szczegoly"
+	# dzieli `key: "name"`, "Komentarze" dzieli `key: "_comment_count"`,
+	# ktore nie jest prawdziwym DocFieldem, wiec `crm.api.doc.get_data`
+	# obsluguje je specjalnie (patrz komentarz "VOLTEO (ops#94)" tamze).
+	# Render (ikona + licznik, klik otwiera `KomentarzeLeadaModal.vue` bez
+	# nawigacji) jest po stronie Vue w `LeadsListView.vue`.
 	@staticmethod
 	def default_list_data():
 		columns = [
@@ -526,8 +511,8 @@ class CRMLead(Document):
 				"width": "10rem",
 			},
 			{
-				# Permlevel 2 (issue ops#89) — dla `Volteo D2D Sales` (handlowca)
-				# pole przychodzi puste, nie znika z kolumn: `meta.get_field`
+				# Permlevel 2 (issue ops#89): dla `Volteo D2D Sales` (handlowca)
+				# pole przychodzi puste, nie znika z kolumn. `meta.get_field`
 				# w `get_data` sprawdza tylko `hidden`, nie permlevel, a
 				# `get_permitted_fields` po stronie `frappe.get_list` sam
 				# wytnie wartosc z wiersza dla wywolujacego bez odczytu.
@@ -627,7 +612,7 @@ class CRMLead(Document):
 		]
 		return {"columns": columns, "rows": rows}
 
-	# Allowlisty sortowania/filtrowania listy leadow (ops#94) — patrz
+	# Allowlisty sortowania/filtrowania listy leadow (ops#94): patrz
 	# `crm.volteo_lista_szans` dla ksztaltu krotek i uzasadnienia. Odczytywane
 	# przez `crm.api.doc.sort_options` / `get_filterable_fields`, ktore
 	# sprawdzaja `hasattr(controller, "volteo_sort_fields"/"volteo_filter_fields")`.

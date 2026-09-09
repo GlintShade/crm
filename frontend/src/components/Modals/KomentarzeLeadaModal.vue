@@ -1,28 +1,10 @@
 <!--
   VOLTEO (ops#94): pseudo-kolumna "Komentarze" na liście leadów otwiera ten
-  modal zamiast nawigować do leada (klik ma `@click.stop.prevent` w
-  LeadsListView.vue) — CC ma zobaczyć i dodać komentarz bez opuszczania
-  listy. Celowo reużywalny (props `docname`/`doctype`, jedna zamontowana
-  instancja na widok, patrz LeadsListView.vue): to samo okno ma posłużyć
-  panelowi na mapie leadów (issue ops#94, "Kontekst wspólny").
-
-  Historia komentarzy renderowana przez `CommentArea.vue` (ten sam komponent
-  co w zakładce Aktywności — edycja/usuwanie własnego komentarza działają
-  bez dodatkowego kodu), pole dodania przez `CommentBox.vue` (bogaty edytor:
-  wzmianki @, załączniki, emoji — jak w Aktywności). Zapis idzie tą samą
-  ścieżką co reszta aplikacji: `crm.api.comment.add_comment`
-  (`reference_doctype`/`reference_name`/`content`/`attachments`), wzorowane
-  1:1 na `CommunicationArea.vue::sendComment`.
-
-  `Comment` nie ma pola `owner_name` (CommentArea.vue je wymaga) — ale
-  `crm.api.comment.add_comment` zapisuje `comment_by` jako
-  `get_fullname(frappe.session.user)` w momencie tworzenia, więc mapujemy
-  `owner_name: c.comment_by || c.owner` zamiast dociągać osobne zapytanie.
-  Załączniki komentarzy CELOWO nie są tu pobierane (uproszczenie zakresu
-  ops#94 — `frappe.client.get_list` na `Comment` i tak nie umie zjoinować
-  `File`, patrz analogiczny komentarz w `AudytTab.vue`); `CommentArea.vue`
-  renderuje pustą listę załączników, co jest bezpieczne (warunek
-  `v-if="activity.attachments?.length"`).
+  modal zamiast nawigować do leada, żeby CC mógł dodać komentarz bez
+  opuszczania listy. Reużywalny (props docname/doctype, jedna instancja na
+  widok), bo ma posłużyć też panelowi na mapie leadów (issue ops#94).
+  Historia idzie przez CommentArea.vue, dodawanie przez CommentBox.vue i
+  crm.api.comment.add_comment, tak samo jak w zakładce Aktywności.
 -->
 <template>
   <Dialog v-model:open="show" :options="{ size: '3xl' }">

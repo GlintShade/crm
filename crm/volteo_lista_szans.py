@@ -93,21 +93,16 @@ FILTER_FIELDS_DEAL: tuple[tuple[str, str | None], ...] = (
 )
 
 # Allowlisty sortowania i filtrow listy leadow (ops#94), ten sam ksztalt i te
-# same konsumenty jak SORT_FIELDS_DEAL / FILTER_FIELDS_DEAL wyzej —
+# same konsumenty jak SORT_FIELDS_DEAL / FILTER_FIELDS_DEAL wyzej:
 # `CRMLead.volteo_sort_fields()` / `volteo_filter_fields()`
 # (`crm/fcrm/doctype/crm_lead/crm_lead.py`), `crm.api.doc.sort_options` /
 # `get_filterable_fields`, oraz skrypt ops `crm-lista-leadow.py`. Kolejnosc
-# krotek to kolejnosc prezentacji w UI. Etykiety nadpisane tam, gdzie kolumna
-# listy leadow (ops#94 issue) uzywa innej nazwy niz standardowa etykieta pola
-# ("Status CC" zamiast "Status", "Przypisany CC"/"Przypisany handlowiec"
-# zamiast "Custom Cc"/"Lead Owner", "Zasady" zamiast pelnej nazwy pola
-# przelacznika dotacji, "Ulica" zamiast "Install Address" — patrz
-# `custom_install_address` w CLAUDE.md, "Kolejny kontakt"/"Termin
-# spotkania"/"Obecne produkty"/"Status zrodla"/"Zrodlo" jak w kolumnach
-# listy). `email` jest CELOWO poza obiema listami — ops#94 przenosi liste
-# leadow z modelu "email-first" (B2B) na "telefon-first" (B2C/D2D, patrz
-# "Bez e-maila" w kolumnach), wiec filtr/sort po mailu nie jest oferowany
-# tu tak samo jak nie jest kolumna.
+# krotek to kolejnosc prezentacji w UI, etykiety nadpisane tam, gdzie kolumna
+# listy leadow (ops#94) uzywa innej nazwy niz standardowa etykieta pola.
+# `email` jest CELOWO poza obiema listami: ops#94 przenosi liste leadow z
+# modelu "email-first" (B2B) na "telefon-first" (B2C/D2D, patrz "Bez
+# e-maila" w kolumnach), wiec filtr/sort po mailu nie jest oferowany tu tak
+# samo jak nie jest kolumna.
 SORT_FIELDS_LEAD: tuple[tuple[str, str | None], ...] = (
 	("modified", "Ostatnia zmiana"),
 	("creation", "Data utworzenia"),

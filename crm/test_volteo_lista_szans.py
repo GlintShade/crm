@@ -339,7 +339,7 @@ class TestAllowlistyLeadow(unittest.TestCase):
 		self.assertIsNone(filter_by_field["custom_status_handlowy"])
 
 	def test_j_email_poza_obiema_allowlistami(self: "TestAllowlistyLeadow") -> None:
-		# ops#94: lista leadow jest "bez e-maila" (kolumny i filtry) — patrz
+		# ops#94: lista leadow jest "bez e-maila" (kolumny i filtry), patrz
 		# komentarz w crm.volteo_lista_szans nad SORT_FIELDS_LEAD.
 		self.assertNotIn("email", [f for f, _ in SORT_FIELDS_LEAD])
 		self.assertNotIn("email", [f for f, _ in FILTER_FIELDS_LEAD])
