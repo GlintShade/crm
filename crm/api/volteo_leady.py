@@ -49,6 +49,25 @@ przypisane leady, a admin/backend (bypass w `org_hierarchy.py`) widzi
 wszystkie. `get_all` ignoruje uprawnienia i byłby wyciekiem całej bazy
 leadów do każdego repa D2D.
 
+Statystyki per CC i kaskada powiatu (issue #104)
+------------------------------------------------------------------------
+`statystyki` zwraca teraz też klucz `cc`: per aktywna osoba CC liczniki
+`przydzielone` (wszystkie leady z `custom_cc = ta osoba`), `obdzwonione`
+(status inny niż typu Open, czyli inny niż jedyny status "Nowy" -- patrz
+"Typy statusów, nigdy nazwy" powyżej), `umowione` (status typu Won, czyli
+"Umówiony", jedyny status tego typu od issue #121) i `przekazane` (lead ma
+już niepuste `lead_owner`). Jedno zapytanie `frappe.get_all` grupujące po
+`custom_cc`, bez N+1 -- ten sam wzorzec co pętla `handlowcy` obok.
+
+`powiaty(wojewodztwo)` daje frontowi (`LeadyPrzydzial.vue`) kaskadę selecta
+Powiat od wybranego województwa: bez tego endpointu select powiatu byłby
+albo niezależną globalną agregacją (stary stan, patrz komentarz w
+`LeadyPrzydzial.vue`), albo front musiałby wołać strażnikowany
+`frappe.client.get_list`/`get_count` z filtrem po `custom_voivodeship`, co
+strażnik (`crm.api.volteo_filtry_guard`) i tak by przepuścił (pole jest na
+allowliście), ale to dodatkowy niepotrzebny endpoint ogólnego przeznaczenia
+zamiast wąskiego, celowego.
+
 Dwupoziomowy przydział CC->handlowiec (ops#93, issue #88)
 ------------------------------------------------------------------------
 `przekaz_handlowcowi` (detal, jeden lead na wywołanie) jest dostępny dla
@@ -152,9 +171,10 @@ def _aktywni_d2d_reprezentanci() -> list[dict]:
 
 @frappe.whitelist()
 def statystyki() -> dict:
-	"""Per-rep liczniki (przydzielone/nietknięte/w_toku/przerobione)
-	dla każdego aktywnego handlowca D2D, plus pula nieprzydzielonych nietkniętych
-	leadów z rozkładem per województwo/powiat. Admin-only."""
+	"""Per-rep liczniki (przydzielone/nietknięte/w_toku/przerobione) dla każdego
+	aktywnego handlowca D2D, per-CC liczniki (przydzielone/obdzwonione/umowione/
+	przekazane, issue #104) dla każdej aktywnej osoby CC, plus pula nieprzydzielonych
+	nietkniętych leadów z rozkładem per województwo/powiat. Admin-only."""
 	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
 
 	status_type_map = _mapa_typow_statusow()
@@ -203,6 +223,53 @@ def statystyki() -> dict:
 		for r in reprezentanci
 	]
 
+	# Statystyki per CC (issue #104), lustro pętli handlowców powyżej. Jedno
+	# zapytanie frappe.get_all grupujące po custom_cc, bez N+1 -- patrz
+	# docstring modułu "Statystyki per CC i kaskada powiatu".
+	cc_reprezentanci = _aktywni_cc_reprezentanci()
+	cc_names = [r.name for r in cc_reprezentanci]
+
+	cc_liczniki = {
+		name: {
+			"przydzielone": 0,
+			"obdzwonione": 0,
+			"umowione": 0,
+			"przekazane": 0,
+		}
+		for name in cc_names
+	}
+
+	if cc_names:
+		leady_cc = frappe.get_all(
+			"CRM Lead",
+			filters={"custom_cc": ["in", cc_names]},
+			fields=["custom_cc", "status", "lead_owner"],
+		)
+		for lead in leady_cc:
+			bucket = cc_liczniki[lead.custom_cc]
+			bucket["przydzielone"] += 1
+			typ = status_type_map.get(lead.status)
+			# "obdzwonione" = status INNY niż typu Open (jedyny status typu
+			# Open to "Nowy") -- rozstrzygane po type, nigdy po literale, tak
+			# jak reszta tego modułu (patrz "Typy statusów, nigdy nazwy").
+			if typ != "Open":
+				bucket["obdzwonione"] += 1
+			# "umowione" = status typu Won (jedyny taki status to "Umówiony"
+			# od issue #121, patrz ops/crm-leady-call-center.py sekcja VERIFY).
+			if typ == "Won":
+				bucket["umowione"] += 1
+			if (lead.lead_owner or "").strip():
+				bucket["przekazane"] += 1
+
+	cc = [
+		{
+			"user": r.name,
+			"full_name": r.full_name,
+			**cc_liczniki[r.name],
+		}
+		for r in cc_reprezentanci
+	]
+
 	# Pula: nietknięte leady bez ownera, wg tej samej definicji co
 	# ops/crm-leady-d2d.py — status typu Open AND ifnull(lead_owner,'')=''.
 	open_status_names = _nazwy_statusow_typu(status_type_map, "Open")
@@ -231,12 +298,40 @@ def statystyki() -> dict:
 
 	return {
 		"handlowcy": handlowcy,
+		"cc": cc,
 		"pula": {
 			"razem": len(pula_wiersze),
 			"wojewodztwa": per_wojewodztwo,
 			"powiaty": per_powiat,
 		},
 	}
+
+
+@frappe.whitelist()
+def powiaty(wojewodztwo: str) -> list[str]:
+	"""Lista unikalnych powiatów występujących wśród leadów danego województwa,
+	posortowana rosnąco -- kaskada selecta Powiat w `LeadyPrzydzial.vue` (issue
+	#104), niezależna od globalnej agregacji `statystyki().pula.powiaty` (patrz
+	docstring modułu "Statystyki per CC i kaskada powiatu"). Admin-only, jak
+	pozostałe funkcje w tym module poza `mapa`/`przekaz_handlowcowi`/`handlowcy`.
+
+	Pusty `wojewodztwo` zwraca pustą listę -- front wtedy pokazuje niezawężoną
+	pulę powiatów zamiast pustego selecta (patrz `powiatOptions` w
+	`LeadyPrzydzial.vue`)."""
+	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
+
+	wojewodztwo = (wojewodztwo or "").strip()
+	if not wojewodztwo:
+		return []
+
+	return frappe.get_list(
+		"CRM Lead",
+		filters={"custom_voivodeship": wojewodztwo, "custom_powiat": ["is", "set"]},
+		pluck="custom_powiat",
+		distinct=True,
+		order_by="custom_powiat asc",
+		limit_page_length=0,
+	)
 
 
 def _waliduj_handlowca(handlowiec: str) -> None:
@@ -424,10 +519,22 @@ def mapa() -> list[dict]:
 
 
 @frappe.whitelist()
-def przydziel_cc(cc: str, leady: str | list | None = None, filters: str | dict | None = None) -> dict:
+def przydziel_cc(
+	cc: str,
+	leady: str | list | None = None,
+	filters: str | dict | None = None,
+	ilosc: int | None = None,
+) -> dict:
 	"""Hurtowy przydział leadów do CC (`custom_cc`, issue #88): jawna lista nazw
 	ALBO wszystkie leady pasujące do `filters`. Admin-only (`System Manager` /
 	`Volteo Core Admin`), bramkowane `frappe.only_for` jako pierwsza instrukcja.
+
+	`ilosc` (issue #104, opcjonalny, TYLKO ze ścieżką `filters`): ogranicza
+	liczbę leadów pobranych do przetworzenia do zapytania -- jak `ilosc` w
+	`przydziel` powyżej ogranicza paczkę handlowca. Rzutowana (`cint`) i
+	przycinana do 1..`LIMIT_PRZYDZIAL_CC`; `None`/pominięte zachowuje stare
+	zachowanie (limit = `LIMIT_PRZYDZIAL_CC`). Ignorowana ze ścieżką `leady`
+	-- tam liczba jest już jawna, podana przez wołającego.
 
 	Leady, które mają już USTAWIONY `custom_cc` (dowolny, nie tylko inny niż `cc`),
 	są pomijane (nie nadpisujemy istniejącego przydziału po cichu, ani cudzego, ani
@@ -468,8 +575,15 @@ def przydziel_cc(cc: str, leady: str | list | None = None, filters: str | dict |
 			frappe.throw(_("Lista leadów musi zawierać wyłącznie niepuste nazwy (stringi)."))
 	elif filters:
 		_sprawdz_filtry("CRM Lead", filters)
+		limit = LIMIT_PRZYDZIAL_CC
+		if ilosc is not None:
+			limit = cint(ilosc)
+			if limit < 1:
+				limit = 1
+			elif limit > LIMIT_PRZYDZIAL_CC:
+				limit = LIMIT_PRZYDZIAL_CC
 		nazwy = frappe.get_list(
-			"CRM Lead", filters=filters, pluck="name", limit_page_length=LIMIT_PRZYDZIAL_CC
+			"CRM Lead", filters=filters, pluck="name", limit_page_length=limit
 		)
 	else:
 		frappe.throw(_("Podaj listę leadów albo filtry."))
