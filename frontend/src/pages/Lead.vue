@@ -17,6 +17,11 @@
         :actions="document.actions"
       />
       <AssignTo v-model="assignees.data" doctype="CRM Lead" :docname="leadId" />
+      <PrzekazHandlowcowi
+        v-if="isCallCenter() || isVolteoAdmin()"
+        :docname="leadId"
+        @przekazano="onPrzekazano"
+      />
       <Dropdown
         v-if="doc && document.statuses"
         :options="statuses"
@@ -47,8 +52,40 @@
       :tabs="tabs"
       class="flex flex-1 overflow-hidden flex-col [&_[role='tab']]:px-0 [&_[role='tab']]:shrink-0 [&_[role='tablist']]:px-5 [&_[role='tablist']::-webkit-scrollbar]:h-0 [&_[role='tablist']]:min-h-[45px] [&_[role='tablist']]:gap-7.5 [&_[role='tabpanel']:not([hidden])]:flex [&_[role='tabpanel']:not([hidden])]:grow"
     >
-      <template #tab-panel>
+      <template #tab-panel="{ tab }">
+        <div
+          v-if="tab.name === 'Details'"
+          class="flex flex-1 flex-col overflow-y-auto"
+        >
+          <SLASection
+            v-if="doc.sla_status"
+            v-model="doc"
+            @updateField="updateField"
+          />
+          <div
+            v-if="sections.data"
+            class="flex flex-1 flex-col justify-between overflow-hidden"
+          >
+            <SidePanelLayout
+              :sections="sections.data"
+              doctype="CRM Lead"
+              :docname="leadId"
+              @reload="sections.reload"
+              @beforeFieldChange="beforeStatusChange"
+              @afterFieldChange="reloadResources"
+            />
+          </div>
+          <div v-if="uwagiImportWiersze.length" class="border-t p-4">
+            <div class="mb-2 text-sm text-ink-gray-5">
+              {{ __('Uwagi (import)') }}
+            </div>
+            <div class="whitespace-pre-line text-base text-ink-gray-8">{{
+              uwagiImportWiersze.join('\n')
+            }}</div>
+          </div>
+        </div>
         <Activities
+          v-else
           ref="activities"
           v-model:reload="reload"
           v-model:tabIndex="tabIndex"
@@ -281,6 +318,7 @@ import LostReasonModal from '@/components/Modals/LostReasonModal.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import Activities from '@/components/Activities/Activities.vue'
 import AssignTo from '@/components/AssignTo.vue'
+import PrzekazHandlowcowi from '@/components/PrzekazHandlowcowi.vue'
 import FilesUploader from '@/components/FilesUploader/FilesUploader.vue'
 import SidePanelLayout from '@/components/SidePanelLayout.vue'
 import SLASection from '@/components/SLASection.vue'
@@ -299,6 +337,7 @@ import {
 import { getView } from '@/utils/view'
 import { getSettings } from '@/stores/settings'
 import { globalStore } from '@/stores/global'
+import { usersStore } from '@/stores/users'
 import { statusesStore } from '@/stores/statuses'
 import { getMeta } from '@/stores/meta'
 import { useDocument } from '@/data/document'
@@ -323,6 +362,7 @@ import { useStorage } from '@vueuse/core'
 
 const { brand } = getSettings()
 const { $dialog, $socket, makeCall } = globalStore()
+const { isCallCenter, isVolteoAdmin } = usersStore()
 const { statusOptions, getLeadStatus } = statusesStore()
 const { doctypeMeta } = getMeta('CRM Lead')
 
@@ -355,6 +395,25 @@ const {
 const canDelete = computed(() => permissions.data?.permissions?.delete || false)
 
 const doc = computed(() => document.doc || {})
+
+// VOLTEO (issue #96): `custom_uwagi_import` (ops/crm-leady-pola.py, Small
+// Text) skleja wpisy z kilku zrodel/wierszy CSV znakiem " | "
+// (crm.volteo_leady_import._linia_uwag) -- rozbijamy z powrotem na osobne
+// wiersze, zeby CC czytal opis instalacji (falownik, moc, dach) po kolei,
+// nie jako jeden dlugi ciag.
+const uwagiImportWiersze = computed(() => {
+  const surowe = doc.value.custom_uwagi_import || ''
+  return surowe
+    .split(' | ')
+    .map((wiersz) => wiersz.trim())
+    .filter(Boolean)
+})
+
+function onPrzekazano() {
+  document.reload()
+  reloadResources({ lead_owner: true })
+  activities.value?.all_activities?.reload()
+}
 
 onMounted(async () => {
   if (document.doc) await triggerOnRender()
@@ -439,6 +498,15 @@ usePageMeta(() => {
 
 const tabs = computed(() => {
   let tabOptions = [
+    // VOLTEO (issue #96): zakladka "Szczegóły" jako pierwsza, zeby CC od
+    // razu widzial dane leada po otwarciu karty (wzorzec MobileLead.vue,
+    // zakladka Details) -- domyslna zakladka ustawiona nizej w
+    // useActiveTabManager(tabs, 'lastLeadTab', 'details').
+    {
+      name: 'Details',
+      label: __('Details'),
+      icon: DetailsIcon,
+    },
     {
       name: 'Activity',
       label: __('Activity'),
@@ -484,7 +552,11 @@ const tabs = computed(() => {
   return tabOptions.filter((tab) => (tab.condition ? tab.condition() : true))
 })
 
-const { tabIndex, changeTabTo } = useActiveTabManager(tabs, 'lastLeadTab')
+const { tabIndex, changeTabTo } = useActiveTabManager(
+  tabs,
+  'lastLeadTab',
+  'details',
+)
 
 const sections = createResource({
   url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_sidepanel_sections',
@@ -528,7 +600,12 @@ function deleteLead() {
 function openEmailBox() {
   let currentTab = tabs.value[tabIndex.value]
   if (!['Emails', 'Comments', 'Activities'].includes(currentTab.name)) {
-    activities.value.changeTabTo('emails')
+    // VOLTEO (issue #96): zakladka "Details" nie montuje <Activities> (patrz
+    // #tab-panel nizej), wiec activities.value bylby null, gdy uzytkownik
+    // klika "Send an Email" ze "Szczegółów". changeTabTo tutaj to funkcja
+    // strony (useActiveTabManager), dziala na tym samym tabIndex bez wzgledu
+    // na to, czy <Activities> jest aktualnie zamontowany.
+    changeTabTo('emails')
   }
   nextTick(() => (activities.value.emailBox.show = true))
 }

@@ -147,6 +147,19 @@ export const usersStore = defineStore('crm-users', () => {
     return isAdmin(email) || getUser(email).is_volteo_admin === true
   }
 
+  // Rola CC (Call Center, cykl b58, issue #88): w odroznieniu od
+  // is_volteo_admin, ktory jest precomputowany serwerowo w
+  // crm.api.session.get_users, tu wystarczy sprawdzic surowa tablice
+  // `roles` -- get_users juz ja wypelnia WSZYSTKIMI rolami usera (nie
+  // tylko CRM_ALLOWED_ROLES), wiec 'Volteo Call Center' jest w niej,
+  // jesli user ma te role. Bez bypassu dla adminow -- miejsca uzycia
+  // (np. przycisk 'Przekaz handlowcowi' w Lead.vue) same skladaja
+  // isCallCenter() || isVolteoAdmin(), zeby nie ukrywac tej drugiej
+  // logiki tutaj.
+  function isCallCenter(email) {
+    return getUser(email).roles?.includes('Volteo Call Center') === true
+  }
+
   function isWebsiteUser(email) {
     return getUser(email).user_type === 'Website User'
   }
@@ -217,6 +230,7 @@ export const usersStore = defineStore('crm-users', () => {
     isAdmin,
     isManager,
     isVolteoAdmin,
+    isCallCenter,
     isSalesUser,
     isTelephonyAgent,
     getUserRole,
