@@ -630,13 +630,16 @@ def osoby_cc() -> list[dict]:
 	]
 
 
-DOCTYPES_KOMENTARZE = ("CRM Lead", "CRM Deal")
+DOCTYPES_KOMENTARZE = ("CRM Lead", "CRM Deal", "Volteo Audyt", "Volteo Audyt CP")
 
 
 @frappe.whitelist()
 def komentarze(doctype: str, name: str) -> list[dict]:
 	"""Komentarze dokumentu dla `KomentarzeLeadaModal.vue` (reuzywanego tez przez
-	`LeadSzybkiPodglad.vue` i `LeadsListView.vue`, pseudokolumna "Komentarze").
+	`LeadSzybkiPodglad.vue` i `LeadsListView.vue`, pseudokolumna "Komentarze") oraz
+	dla `AudytTab.vue` i `AudytCPTab.vue` (watek komentarzy w zakladce Audyt na
+	szansie, doctype `Volteo Audyt` / `Volteo Audyt CP`, name == nazwa szansy;
+	issue #118).
 
 	Od b57 `crm.api.volteo_filtry_guard` bramkuje kazdy core endpoint
 	przyjmujacy `filters` przez `crm.api.doc._pola_dozwolone`, a

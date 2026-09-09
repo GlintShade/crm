@@ -918,18 +918,21 @@ async function setVerdict(elementKey, status, note) {
 }
 
 // --- Comments ----------------------------------------------------------------
+// VOLTEO: nie wolamy tu frappe.client.get_list z filtrem po
+// reference_doctype/reference_name -- crm.api.volteo_filtry_guard (od b57)
+// bramkuje filtry po polach, ktorych Comment nie udostepnia do odczytu
+// niektorym rolom (get_permitted_fields zwraca wtedy dla Comment tylko
+// siedem default_fields), wiec taki filtr byl odrzucany z toastem "Brak
+// uprawnień do filtrowania po polu reference_doctype" (issue #118). Uzywamy
+// crm.api.volteo_leady.komentarze, ktora sprawdza has_permission na samym
+// dokumencie Volteo Audyt i czyta Comment przez get_all (patrz docstring tej
+// funkcji w crm/api/volteo_leady.py) -- ten sam wzorzec co
+// KomentarzeLeadaModal.vue.
 const commentsResource = createResource({
-  url: 'frappe.client.get_list',
+  url: 'crm.api.volteo_leady.komentarze',
   params: {
-    doctype: 'Comment',
-    filters: {
-      reference_doctype: 'Volteo Audyt',
-      reference_name: props.dealId,
-      comment_type: 'Comment',
-    },
-    fields: ['name', 'comment_by', 'comment_email', 'content', 'creation'],
-    order_by: 'creation asc',
-    limit_page_length: 200,
+    doctype: 'Volteo Audyt',
+    name: props.dealId,
   },
   auto: true,
 })
