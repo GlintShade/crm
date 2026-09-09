@@ -60,7 +60,16 @@
           <div
             v-if="sections.data"
             class="flex flex-1 flex-col justify-between overflow-hidden"
+            style="--sidepanel-column-max-height: none"
           >
+            <!-- VOLTEO (issue #122b): panel leada to od #122 jedna plaska
+                 sekcja bez etykiety z 33 polami (ops/crm-leady-panel-plaski.py).
+                 Zdejmujemy wewnetrzny limit 300px z SidePanelLayout.vue tak
+                 samo jak LeadSzybkiPodglad.vue (ops#112), zeby ta jedna
+                 kolumna nigdy nie byla ucieta gradientem/scrollem -- ta
+                 zakladka ma wlasny scroll strony (overflow-y-auto na
+                 nadrzednym .sections w SidePanelLayout.vue), wiec brak
+                 wewnetrznego limitu nie psuje wygladu. -->
             <SidePanelLayout
               :sections="sections.data"
               doctype="CRM Lead"
@@ -227,7 +236,11 @@
         <div
           v-if="sections.data"
           class="flex flex-1 flex-col justify-between overflow-hidden"
+          style="--sidepanel-column-max-height: none"
         >
+          <!-- VOLTEO (issue #122b): patrz komentarz przy zakladce Szczegoly
+               wyzej -- ta sama jedna plaska sekcja/33 pola, ten sam zdjety
+               limit, zeby prawy panel boczny nie byl ucinany do 300px. -->
           <SidePanelLayout
             :sections="sections.data"
             doctype="CRM Lead"

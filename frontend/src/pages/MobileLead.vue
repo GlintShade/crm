@@ -69,7 +69,11 @@
           <div
             v-if="sections.data"
             class="flex flex-1 flex-col justify-between overflow-hidden"
+            style="--sidepanel-column-max-height: none"
           >
+            <!-- VOLTEO (issue #122b): jedna plaska sekcja/33 pola (issue
+                 #122), patrz analogiczny komentarz w Lead.vue -- zdejmujemy
+                 wewnetrzny limit 300px, zeby lista pol nie byla ucinana. -->
             <SidePanelLayout
               :sections="sections.data"
               doctype="CRM Lead"

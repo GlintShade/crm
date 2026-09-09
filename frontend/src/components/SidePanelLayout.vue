@@ -467,12 +467,26 @@ const _sections = computed(() => {
   if (!props.sections?.length) return []
   let editButtonAdded = false
   return props.sections.map((section) => {
-    if (section.columns?.length) {
-      section.columns[0].fields = section.columns[0].fields.map((field) => {
-        return parsedField(field)
-      })
+    // Klonujemy sekcje/kolumny zamiast mutowac obiekty z props.sections
+    // (sections.data, dzielone miedzy panelem bocznym a zakladka
+    // Szczegoly na tej samej stronie leada -- oba uzywaja TEGO SAMEGO
+    // createResource). Mutacja w miejscu wywolywala niekonczaca sie
+    // petle reaktywnosci Vue: kazde przeliczenie tego computed nadpisywalo
+    // wspoldzielone dane, co oznaczalo dla DRUGIEJ instancji SidePanelLayout,
+    // ze jej wlasny _sections jest "brudny", wiec ona rowniez przeliczala
+    // i nadpisywala te same dane, wzajemnie odswiezajac sie w nieskonczonosc
+    // (potwierdzone CDP Debugger.pause: stos zawieszony w tej funkcji).
+    let _section = { ...section }
+    if (_section.columns?.length) {
+      _section.columns = [
+        {
+          ..._section.columns[0],
+          fields: _section.columns[0].fields.map((field) => parsedField(field)),
+        },
+        ..._section.columns.slice(1),
+      ]
     }
-    let _section = parsedSection(section, editButtonAdded)
+    _section = parsedSection(_section, editButtonAdded)
     if (_section.showEditButton) {
       editButtonAdded = true
     }
