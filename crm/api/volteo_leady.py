@@ -395,7 +395,14 @@ def mapa() -> list[dict]:
 	`crm/permissions/org_hierarchy.py`: rep dostaje tylko swoje/przypisane
 	leady, admin/backend wszystkie. `custom_lat != 0` odcina leady bez
 	geokodu (kolumna NOT NULL DEFAULT 0 — 0 znaczy "nie ustawiono", nie
-	prawdziwą współrzędną)."""
+	prawdziwą współrzędną).
+
+	Issue #97 (panel „Szybki podgląd"): dołożone pięć pól potrzebnych do
+	dymka pinezki i nagłówka panelu (`custom_cc`, `custom_import_source`,
+	`custom_posiadane_produkty`, `custom_status_zrodla`, `mobile_no`).
+	`custom_cc` siedzi na permlevel 2 (`ops/crm-leady-call-center.py`), więc
+	`get_list` i tak wytnie go dla `Volteo D2D Sales` — nie trzeba tego
+	obsługiwać ręcznie tutaj."""
 	return frappe.get_list(
 		"CRM Lead",
 		fields=[
@@ -406,6 +413,11 @@ def mapa() -> list[dict]:
 			"custom_lng",
 			"lead_owner",
 			"custom_install_city",
+			"custom_cc",
+			"custom_import_source",
+			"custom_posiadane_produkty",
+			"custom_status_zrodla",
+			"mobile_no",
 		],
 		filters={"custom_lat": ["!=", 0]},
 		limit_page_length=0,
