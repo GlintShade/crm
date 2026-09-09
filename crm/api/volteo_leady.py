@@ -569,4 +569,11 @@ def handlowcy() -> list[dict]:
 	dopuszczone = {ROLA_CC, "System Manager", "Volteo Core Admin", "Volteo Backend"}
 	if not (role_wolajacego & dopuszczone):
 		frappe.throw(_("Brak uprawnień."), frappe.PermissionError)
-	return _aktywni_d2d_reprezentanci()
+	# _aktywni_d2d_reprezentanci() zwraca wiersze frappe.get_all z kluczami
+	# "name"/"full_name" (nazwy pol doctype User), nie "user". Przemapowane tutaj
+	# na "user", zgodnie z docstringiem powyzej i z tym samym ksztaltem, jaki
+	# statystyki() buduje z tych samych wierszy kilka funkcji dalej.
+	return [
+		{"user": rep["name"], "full_name": rep["full_name"]}
+		for rep in _aktywni_d2d_reprezentanci()
+	]
