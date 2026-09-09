@@ -75,8 +75,85 @@
           :placeholder="__('Szukaj miasta…')"
         />
 
+        <Popover placement="bottom-end">
+          <template #target="{ togglePopover }">
+            <Button
+              icon="settings"
+              :label="__('Ustawienia mapy')"
+              @click="togglePopover"
+            />
+          </template>
+          <template #body>
+            <div
+              class="my-2 flex w-72 flex-col gap-4 rounded-lg bg-surface-elevation-2 p-3 text-sm shadow-2xl ring-1 ring-black ring-opacity-5 focus:outline-none"
+            >
+              <div>
+                <div class="mb-1.5 font-medium text-ink-gray-8">
+                  {{ __('Kolor pinezek według') }}
+                </div>
+                <FormControl
+                  v-model="trybKolorowania"
+                  type="select"
+                  variant="outline"
+                  class="w-full"
+                  :options="opcjeKolorowania"
+                />
+              </div>
+
+              <div>
+                <div class="mb-1.5 font-medium text-ink-gray-8">
+                  {{ __('Pola w dymku pinezki') }}
+                </div>
+                <div class="flex flex-col gap-1.5">
+                  <FormControl
+                    v-model="ustawieniaDymka.zrodlo"
+                    type="checkbox"
+                    :label="__('Źródło')"
+                  />
+                  <FormControl
+                    v-model="ustawieniaDymka.produkty"
+                    type="checkbox"
+                    :label="__('Obecne produkty')"
+                  />
+                  <FormControl
+                    v-model="ustawieniaDymka.statusZrodla"
+                    type="checkbox"
+                    :label="__('Status źródła')"
+                  />
+                  <FormControl
+                    v-model="ustawieniaDymka.terminSpotkania"
+                    type="checkbox"
+                    :label="__('Termin spotkania')"
+                  />
+                </div>
+              </div>
+            </div>
+          </template>
+        </Popover>
+
         <div class="ml-auto shrink-0 text-sm text-ink-gray-5">
           {{ __('{0} z {1} leadów z lokalizacją', [leadyPrzefiltrowane.length, stan.leady.length]) }}
+        </div>
+      </div>
+
+      <!-- Legenda kolorowania wg Handlowca/CC (issue #101). Tryb Status ma już
+           swoją legendę w chipach filtrów statusu powyżej, więc tutaj się nie
+           powtarza. -->
+      <div
+        v-if="legendaAktywna.length"
+        class="flex flex-wrap items-center gap-3 border-b border-outline-gray-2 px-4 py-2 text-sm"
+      >
+        <div
+          v-for="wpis in legendaAktywna"
+          :key="wpis.klucz"
+          class="flex items-center gap-1.5"
+        >
+          <span
+            class="h-2 w-2 shrink-0 rounded-full"
+            :style="{ backgroundColor: wpis.kolor }"
+          />
+          <span class="text-ink-gray-7">{{ etykietaLegendy(wpis.klucz) }}</span>
+          <span class="text-ink-gray-4">({{ wpis.liczba }})</span>
         </div>
       </div>
 
@@ -131,10 +208,24 @@ import { sessionStore } from '@/stores/session'
 import { statusesStore } from '@/stores/statuses'
 import { colorNameFromParsed } from '@/utils/statusColors'
 import { widocznyLead } from '@/utils/mapaFiltry'
+import { formatDate } from '@/utils'
 import {
+  KOLOR_BRAK,
+  hashString,
+  kolorDlaUzytkownika,
+  legenda,
+  poleObecneWDanych,
+  wczytajTrybKolorowania,
+  wczytajUstawieniaDymka,
+  zapiszTrybKolorowania,
+  zapiszUstawieniaDymka,
+} from '@/utils/mapaKolory'
+import {
+  Button,
   ErrorMessage,
   FormControl,
   LoadingIndicator,
+  Popover,
   createResource,
   usePageMeta,
 } from 'frappe-ui'
@@ -223,6 +314,72 @@ function kolorStatusu(status) {
   const nazwa = colorNameFromParsed(parsed)
   return HEX_PO_NAZWIE_KOLORU[nazwa] || HEX_PO_NAZWIE_KOLORU.gray
 }
+
+// --- Ustawienia mapy: kolor pinezek + pola dymku (issue #101) --------------------
+
+// "Kolor pinezek według": Status CC (domyślny, jak dotąd) / Handlowiec
+// (lead_owner) / CC (custom_cc). Wybór zapamiętany w localStorage, żeby CC
+// nie musiał ustawiać go po każdym wejściu na mapę.
+const trybKolorowania = ref(wczytajTrybKolorowania())
+watch(trybKolorowania, (tryb) => {
+  zapiszTrybKolorowania(tryb)
+  rysujMarkery()
+})
+
+// `custom_cc` jest na permlevel 2 -- `frappe.get_list` w mapa() wycina go z
+// odpowiedzi dla ról bez odczytu (Volteo D2D Sales). Gdy klucza nie ma w
+// ogóle w danych, opcja "CC" znika z selecta zamiast pokazywać tryb, który
+// zawsze koloruje wszystko na szaro.
+const czyCcDostepne = computed(() => poleObecneWDanych(stan.leady, 'custom_cc'))
+
+const opcjeKolorowania = computed(() => {
+  const opcje = [
+    { label: __('Status CC'), value: 'status' },
+    { label: __('Handlowiec'), value: 'handlowiec' },
+  ]
+  if (czyCcDostepne.value) opcje.push({ label: __('CC'), value: 'cc' })
+  return opcje
+})
+
+// Serwer wycofał opcję spod nóg (rola się zmieniła / dane odświeżone) --
+// cofamy do domyślnego trybu zamiast zostawiać "cc" wybrane na zawsze na szaro.
+watch(czyCcDostepne, (dostepne) => {
+  if (!dostepne && trybKolorowania.value === 'cc') {
+    trybKolorowania.value = 'status'
+  }
+})
+
+function kolorLeada(lead) {
+  if (trybKolorowania.value === 'handlowiec') {
+    return lead.lead_owner ? kolorDlaUzytkownika(lead.lead_owner) : KOLOR_BRAK
+  }
+  if (trybKolorowania.value === 'cc') {
+    return lead.custom_cc ? kolorDlaUzytkownika(lead.custom_cc) : KOLOR_BRAK
+  }
+  return kolorStatusu(lead.status)
+}
+
+// Legenda nad mapą: tylko dla Handlowiec/CC -- tryb Status ma już swoją
+// legendę w chipach filtrów statusu (statusyZListy powyżej), powtarzanie
+// jej tutaj byłoby zbędne. Liczona z leadów PO filtrach, żeby liczniki
+// odpowiadały temu, co faktycznie widać na mapie.
+const legendaAktywna = computed(() => {
+  if (trybKolorowania.value === 'status') return []
+  return legenda(leadyPrzefiltrowane.value, trybKolorowania.value, {
+    brakEtykiety: BRAK_STATUSU,
+  })
+})
+
+function etykietaLegendy(klucz) {
+  if (klucz === BRAK_STATUSU) return BRAK_STATUSU
+  return getUser(klucz).full_name || klucz
+}
+
+// "Pola w dymku pinezki": cztery pola opcjonalne, zapamiętane w localStorage.
+// Tytuł/miasto/status w dymku zostają zawsze widoczne (to nie są pola z tej
+// listy w issue, tylko podstawowa tożsamość pinezki).
+const ustawieniaDymka = reactive(wczytajUstawieniaDymka())
+watch(ustawieniaDymka, (wartosc) => zapiszUstawieniaDymka({ ...wartosc }), { deep: true })
 
 // --- Filtry --------------------------------------------------------------------
 
@@ -337,14 +494,8 @@ function patchujLeada(patch) {
 // współrzędne i inaczej stałyby jeden na drugim. Hash nazwy leada (stabilny
 // identyfikator, np. CRM-LEAD-2026-00123) daje deterministyczne przesunięcie:
 // ten sam lead zawsze ląduje w tym samym miejscu między przeładowaniami.
-function hashString(str) {
-  let hash = 0
-  for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) - hash + str.charCodeAt(i)
-    hash |= 0
-  }
-  return hash
-}
+// `hashString` (issue #101) przeniesiony do utils/mapaKolory.js, żeby
+// kolorowanie wg użytkownika mogło użyć tego samego algorytmu.
 
 const JITTER_DEG = 0.005
 
@@ -392,7 +543,7 @@ function rysujMarkery() {
     const lng = Number(lead.custom_lng) + jitterOffset(lead.name, 'lng')
     if (!isFinite(lat) || !isFinite(lng)) continue
 
-    const kolor = kolorStatusu(lead.status)
+    const kolor = kolorLeada(lead)
     const marker = L.circleMarker([lat, lng], {
       radius: 6,
       color: kolor,
@@ -441,11 +592,18 @@ function budujDymek(lead) {
   status.textContent = lead.status || BRAK_STATUSU
   container.appendChild(status)
 
+  // Pola w dymku (issue #101): tylko te, które użytkownik zostawił zaznaczone
+  // w popoverze ustawień (domyślnie wszystkie cztery). Termin spotkania
+  // formatowany przez formatDate() -- Datetime z serwera, nie surowy string.
   const wiersze = [
-    [__('Źródło'), lead.custom_import_source],
-    [__('Obecne produkty'), lead.custom_posiadane_produkty],
-    [__('Status źródła'), lead.custom_status_zrodla],
-  ]
+    ustawieniaDymka.zrodlo && [__('Źródło'), lead.custom_import_source],
+    ustawieniaDymka.produkty && [__('Obecne produkty'), lead.custom_posiadane_produkty],
+    ustawieniaDymka.statusZrodla && [__('Status źródła'), lead.custom_status_zrodla],
+    ustawieniaDymka.terminSpotkania && [
+      __('Termin spotkania'),
+      lead.custom_termin_spotkania ? formatDate(lead.custom_termin_spotkania) : '',
+    ],
+  ].filter(Boolean)
   for (const [label, value] of wiersze) {
     if (!value) continue
     const row = document.createElement('div')

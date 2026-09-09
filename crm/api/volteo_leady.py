@@ -401,7 +401,10 @@ def mapa() -> list[dict]:
 	`custom_posiadane_produkty`, `custom_status_zrodla`, `mobile_no`).
 	`custom_cc` siedzi na permlevel 2 (`ops/crm-leady-call-center.py`), więc
 	`get_list` i tak wytnie go dla `Volteo D2D Sales`, nie trzeba tego
-	obsługiwać ręcznie tutaj."""
+	obsługiwać ręcznie tutaj.
+
+	Issue #101 (ustawienia mapy, pole dymku "termin spotkania"): dołożone
+	`custom_termin_spotkania`, bez zmiany reszty kontraktu."""
 	return frappe.get_list(
 		"CRM Lead",
 		fields=[
@@ -416,6 +419,7 @@ def mapa() -> list[dict]:
 			"custom_import_source",
 			"custom_posiadane_produkty",
 			"custom_status_zrodla",
+			"custom_termin_spotkania",
 			"mobile_no",
 		],
 		filters={"custom_lat": ["!=", 0]},
