@@ -599,7 +599,7 @@ def osoby_cc() -> list[dict]:
 	"""Lista aktywnych osób CC (`user`, `full_name`), posortowana po nazwisku,
 	dla selecta w modalu masowego przydziału `PrzydzielCCModal.vue` (issue #95).
 	Admin-only (`System Manager` / `Volteo Core Admin`), tak jak `przydziel_cc`,
-	który tej listy jest źródłem wyboru — w odróżnieniu od `handlowcy()` powyżej
+	który tej listy jest źródłem wyboru, w odróżnieniu od `handlowcy()` powyżej
 	(dostępnej też dla samego CC, żeby mógł przekazać lead handlowcowi),
 	wołający tu musi mieć uprawnienia do PRZYDZIELANIA leadów osobom CC, nie
 	tylko do przekazania pojedynczego leada dalej."""
