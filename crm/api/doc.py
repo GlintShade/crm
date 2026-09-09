@@ -45,6 +45,14 @@ COUNT_NAME = (
 # przemianowal `parent`/`parentfield`/`parenttype` (ops#80 follow-up).
 _POLA_ZAWSZE_DOZWOLONE = POLA_ZAWSZE_DOZWOLONE | frozenset(_CHILD_TABLE_FIELDS)
 
+# Pseudo-pola listy (issue #117): NIE sa prawdziwymi DocFieldami (wiec
+# get_permitted_fields ich nie zwroci), ale musza przezyc filtrowanie
+# columns/rows w get_data ponizej. "_comment_count" dzieli klucz kolumny
+# "Komentarze" z default_list_data() na CRM Lead (ops#94). Reszta
+# pseudo-pol (name, _assign, _liked_by, _comments...) jest juz w
+# _POLA_ZAWSZE_DOZWOLONE powyzej.
+_POLA_LISTY_ZAWSZE_DOZWOLONE = _POLA_ZAWSZE_DOZWOLONE | frozenset({"_comment_count"})
+
 
 def _pola_dozwolone(doctype: str, parenttype: str | None = None) -> set[str]:
 	"""Zbior nazw pol doctype'u dostepnych BIEZACEMU uzytkownikowi do odczytu.
@@ -99,6 +107,24 @@ def _sprawdz_filtry(doctype: str, filters, parenttype: str | None = None) -> Non
 			_("Brak uprawnień do filtrowania po polu {0}").format(niedozwolone[0]),
 			frappe.PermissionError,
 		)
+
+
+def _odfiltruj_niedozwolone_klucze(doctype: str, klucze: list) -> list:
+	"""Zwraca `klucze` (nazwy pol z `rows`/`kanban_fields` w `get_data`) bez
+	tych, do ktorych biezacy uzytkownik nie ma odczytu na poziomie permlevel
+	(issue #117), pseudo-pola listy (`_POLA_LISTY_ZAWSZE_DOZWOLONE`) zawsze
+	przezywaja. Kolejnosc zachowana."""
+	dozwolone = _pola_dozwolone(doctype) | _POLA_LISTY_ZAWSZE_DOZWOLONE
+	return [klucz for klucz in klucze if klucz in dozwolone]
+
+
+def _odfiltruj_niedozwolone_kolumny(doctype: str, columns: list) -> list:
+	"""Jak `_odfiltruj_niedozwolone_klucze`, ale dla `columns` w `get_data`
+	(lista dictow z kluczem "key"), zeby handlowiec dostal calkowity brak
+	naglowka kolumny pola permlevel > 0 (np. "Przypisany CC" na CRM Lead),
+	nie tylko pusta wartosc w komorkach (issue #117)."""
+	dozwolone = _pola_dozwolone(doctype) | _POLA_LISTY_ZAWSZE_DOZWOLONE
+	return [column for column in columns if column.get("key") in dozwolone]
 
 
 @frappe.whitelist()
@@ -515,6 +541,16 @@ def get_data(
 			rows = default_rows
 			columns = _list.default_list_data().get("columns")
 
+		# VOLTEO (issue #117): filtrowanie po permlevel TUTAJ, na finalnych
+		# columns/rows, niezaleznie od zrodla (custom_view przeslany przez
+		# klienta, zapisany CRM View Settings, albo default_list_data()) --
+		# bez tego pole permlevel > 0 bez odczytu (np. custom_cc na CRM Lead
+		# dla Volteo D2D Sales) renderowalo sie jako naglowek kolumny z pusta
+		# wartoscia zamiast znikac calkowicie. Zapisane widoki NIE sa
+		# modyfikowane, filtr dziala wylacznie przy odczycie.
+		columns = _odfiltruj_niedozwolone_kolumny(doctype, columns)
+		rows = _odfiltruj_niedozwolone_klucze(doctype, rows)
+
 		# check if rows has all keys from columns if not add them
 		for column in columns:
 			if column.get("key") not in rows:
@@ -611,6 +647,13 @@ def get_data(
 		for field in kanban_fields:
 			if field not in rows:
 				rows.append(field)
+
+		# VOLTEO (issue #117): jak w gałęzi niekanban powyzej -- rows/
+		# kanban_fields sa juz w tym miejscu w pelni ustalone (defaultowe
+		# albo przeslane przez klienta), wiec filtrujemy je RAZ, przed
+		# zapytaniem do bazy nizej.
+		rows = _odfiltruj_niedozwolone_klucze(doctype, rows)
+		kanban_fields = _odfiltruj_niedozwolone_klucze(doctype, kanban_fields)
 
 		for kc in kanban_columns:
 			column_filters = {column_field: kc.get("name")}
