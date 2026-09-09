@@ -333,6 +333,17 @@ def get_quick_filters(doctype: str, cached: bool = True):
 	else:
 		fields = [field for field in meta.fields if field.in_standard_filter]
 
+	# VOLTEO (ops#94): przed ta zmiana get_quick_filters nie sprawdzal
+	# permlevel wcale, wiec pole permlevel > 0 (np. "Przypisany CC" na CRM
+	# Lead, bez odczytu dla `Volteo D2D Sales`) wyswietlaloby sie w pasku
+	# kazdemu, tak jak ops#79 juz naprawil dla sort_options/
+	# get_filterable_fields/get_group_by_fields (patrz `_pola_dozwolone`).
+	# Global Settings dalej moze wymienic pole niedozwolone, filtrujemy
+	# dopiero tutaj po stronie odczytu, konfiguracja w bazie zostaje
+	# nietknieta.
+	permitted = _pola_dozwolone(doctype)
+	fields = [field for field in fields if field.get("fieldname") in permitted]
+
 	for field in fields:
 		options = field.get("options")
 		if field.get("fieldtype") == "Select" and options and isinstance(options, str):
@@ -522,10 +533,18 @@ def get_data(
 		if group_by_field and group_by_field not in rows:
 			rows.append(group_by_field)
 
+		# VOLTEO (ops#94): "_comment_count" nie jest prawdziwym DocFieldem, wiec
+		# psulby zapytanie SQL wprost w `fields`. Wycinamy je z listy pol PRZED
+		# `frappe.get_list`, a po pobraniu danych doliczamy JEDNYM zapytaniem
+		# grupowanym po "reference_name" (nie N+1 per wiersz). `rows` samo w
+		# sobie zostaje nietkniete, bo jest zwracane wprost do frontendu.
+		chce_licznik_komentarzy = "_comment_count" in rows
+		sql_rows = [row for row in rows if row != "_comment_count"]
+
 		data = (
 			frappe.get_list(
 				doctype,
-				fields=rows,
+				fields=sql_rows,
 				filters=filters,
 				order_by=order_by,
 				page_length=page_length,
@@ -533,6 +552,24 @@ def get_data(
 			or []
 		)
 		data = parse_list_data(data, doctype)
+
+		if chce_licznik_komentarzy:
+			nazwy = [d.get("name") for d in data if d.get("name")]
+			mapa_licznikow = {}
+			if nazwy:
+				for wiersz in frappe.get_all(
+					"Comment",
+					filters={
+						"reference_doctype": doctype,
+						"reference_name": ["in", nazwy],
+						"comment_type": "Comment",
+					},
+					fields=["reference_name", "count(name) as n"],
+					group_by="reference_name",
+				):
+					mapa_licznikow[wiersz.reference_name] = wiersz.n
+			for d in data:
+				d["_comment_count"] = mapa_licznikow.get(d.get("name"), 0)
 
 	if view_type == "kanban":
 		if not rows:

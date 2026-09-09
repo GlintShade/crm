@@ -2,8 +2,10 @@ import unittest
 
 from crm.volteo_lista_szans import (
 	FILTER_FIELDS_DEAL,
+	FILTER_FIELDS_LEAD,
 	POLA_ZAWSZE_DOZWOLONE,
 	SORT_FIELDS_DEAL,
+	SORT_FIELDS_LEAD,
 	niedozwolone_klucze_filtrow,
 )
 
@@ -237,6 +239,110 @@ class TestAllowlistySzans(unittest.TestCase):
 		self.assertEqual(filter_by_field["status"], "Etap")
 		self.assertEqual(filter_by_field["_assign"], "Przypisano do")
 		self.assertIsNone(filter_by_field["custom_rodzaj_umowy"])
+
+
+def _sprawdz_ksztalt_par(test_case: unittest.TestCase, nazwa: str, allowlist: tuple) -> None:
+	"""Wspolny ksztalt allowlist ops#81/ops#94: krotka par (fieldname, etykieta_lub_None)."""
+	for wpis in allowlist:
+		test_case.assertIsInstance(wpis, tuple, f"{nazwa}: {wpis!r} nie jest krotka")
+		test_case.assertEqual(len(wpis), 2, f"{nazwa}: {wpis!r} nie ma dwoch elementow")
+		fieldname, etykieta = wpis
+		test_case.assertIsInstance(fieldname, str, f"{nazwa}: fieldname {wpis!r}")
+		test_case.assertIsInstance(etykieta, (str, type(None)), f"{nazwa}: etykieta {wpis!r}")
+
+
+class TestAllowlistyLeadow(unittest.TestCase):
+	"""Allowlisty sortowania/filtrow listy leadow dla CRM Lead (ops#94)."""
+
+	def test_a_sort_fields_lead_ksztalt_par(self: "TestAllowlistyLeadow") -> None:
+		_sprawdz_ksztalt_par(self, "SORT_FIELDS_LEAD", SORT_FIELDS_LEAD)
+
+	def test_b_filter_fields_lead_ksztalt_par(self: "TestAllowlistyLeadow") -> None:
+		_sprawdz_ksztalt_par(self, "FILTER_FIELDS_LEAD", FILTER_FIELDS_LEAD)
+
+	def test_c_sort_fields_lead_bez_duplikatow(self: "TestAllowlistyLeadow") -> None:
+		fieldnames = [fieldname for fieldname, _ in SORT_FIELDS_LEAD]
+		self.assertEqual(len(fieldnames), len(set(fieldnames)))
+
+	def test_d_filter_fields_lead_bez_duplikatow(self: "TestAllowlistyLeadow") -> None:
+		fieldnames = [fieldname for fieldname, _ in FILTER_FIELDS_LEAD]
+		self.assertEqual(len(fieldnames), len(set(fieldnames)))
+
+	def test_e_sort_fields_lead_liczba_i_kolejnosc(self: "TestAllowlistyLeadow") -> None:
+		self.assertEqual(len(SORT_FIELDS_LEAD), 8)
+		self.assertEqual(
+			[fieldname for fieldname, _ in SORT_FIELDS_LEAD],
+			[
+				"modified",
+				"creation",
+				"status",
+				"lead_name",
+				"lead_owner",
+				"custom_cc",
+				"custom_kolejny_kontakt",
+				"custom_termin_spotkania",
+			],
+		)
+
+	def test_f_filter_fields_lead_liczba_i_kolejnosc(self: "TestAllowlistyLeadow") -> None:
+		self.assertEqual(len(FILTER_FIELDS_LEAD), 21)
+		self.assertEqual(
+			[fieldname for fieldname, _ in FILTER_FIELDS_LEAD],
+			[
+				"status",
+				"custom_status_handlowy",
+				"custom_cc",
+				"lead_owner",
+				"lead_name",
+				"mobile_no",
+				"custom_zasady_dotacji",
+				"custom_posiadane_produkty",
+				"custom_install_address",
+				"custom_nr_domu",
+				"custom_install_postal_code",
+				"custom_install_city",
+				"custom_voivodeship",
+				"custom_powiat",
+				"custom_status_zrodla",
+				"custom_import_source",
+				"custom_kolejny_kontakt",
+				"custom_termin_spotkania",
+				"modified",
+				"creation",
+				"_assign",
+			],
+		)
+
+	def test_g_pola_standardowe_uzyte_w_sort_fields_sa_znane_doc_py(
+		self: "TestAllowlistyLeadow",
+	) -> None:
+		for fieldname in ("modified", "creation"):
+			self.assertIn(fieldname, STANDARDOWE_POLA_DOC_PY)
+			self.assertIn(fieldname, [f for f, _ in SORT_FIELDS_LEAD])
+
+	def test_h_pola_standardowe_uzyte_w_filter_fields_sa_znane_doc_py(
+		self: "TestAllowlistyLeadow",
+	) -> None:
+		for fieldname in ("modified", "creation", "_assign"):
+			self.assertIn(fieldname, STANDARDOWE_POLA_DOC_PY)
+			self.assertIn(fieldname, [f for f, _ in FILTER_FIELDS_LEAD])
+
+	def test_i_etykiety_nadpisane_tam_gdzie_oczekiwane(self: "TestAllowlistyLeadow") -> None:
+		sort_by_field = dict(SORT_FIELDS_LEAD)
+		self.assertEqual(sort_by_field["modified"], "Ostatnia zmiana")
+		self.assertEqual(sort_by_field["status"], "Status CC")
+		self.assertEqual(sort_by_field["custom_cc"], "Przypisany CC")
+
+		filter_by_field = dict(FILTER_FIELDS_LEAD)
+		self.assertEqual(filter_by_field["status"], "Status CC")
+		self.assertEqual(filter_by_field["_assign"], "Przypisano do")
+		self.assertIsNone(filter_by_field["custom_status_handlowy"])
+
+	def test_j_email_poza_obiema_allowlistami(self: "TestAllowlistyLeadow") -> None:
+		# ops#94: lista leadow jest "bez e-maila" (kolumny i filtry), patrz
+		# komentarz w crm.volteo_lista_szans nad SORT_FIELDS_LEAD.
+		self.assertNotIn("email", [f for f, _ in SORT_FIELDS_LEAD])
+		self.assertNotIn("email", [f for f, _ in FILTER_FIELDS_LEAD])
 
 
 class TestPolaZawszeDozwolone(unittest.TestCase):

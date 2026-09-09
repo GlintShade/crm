@@ -92,6 +92,52 @@ FILTER_FIELDS_DEAL: tuple[tuple[str, str | None], ...] = (
 	("_assign", "Przypisano do"),
 )
 
+# Allowlisty sortowania i filtrow listy leadow (ops#94), ten sam ksztalt i te
+# same konsumenty jak SORT_FIELDS_DEAL / FILTER_FIELDS_DEAL wyzej:
+# `CRMLead.volteo_sort_fields()` / `volteo_filter_fields()`
+# (`crm/fcrm/doctype/crm_lead/crm_lead.py`), `crm.api.doc.sort_options` /
+# `get_filterable_fields`, oraz skrypt ops `crm-lista-leadow.py`. Kolejnosc
+# krotek to kolejnosc prezentacji w UI, etykiety nadpisane tam, gdzie kolumna
+# listy leadow (ops#94) uzywa innej nazwy niz standardowa etykieta pola.
+# `email` jest CELOWO poza obiema listami: ops#94 przenosi liste leadow z
+# modelu "email-first" (B2B) na "telefon-first" (B2C/D2D, patrz "Bez
+# e-maila" w kolumnach), wiec filtr/sort po mailu nie jest oferowany tu tak
+# samo jak nie jest kolumna.
+SORT_FIELDS_LEAD: tuple[tuple[str, str | None], ...] = (
+	("modified", "Ostatnia zmiana"),
+	("creation", "Data utworzenia"),
+	("status", "Status CC"),
+	("lead_name", "Klient"),
+	("lead_owner", "Przypisany handlowiec"),
+	("custom_cc", "Przypisany CC"),
+	("custom_kolejny_kontakt", "Kolejny kontakt"),
+	("custom_termin_spotkania", "Termin spotkania"),
+)
+
+FILTER_FIELDS_LEAD: tuple[tuple[str, str | None], ...] = (
+	("status", "Status CC"),
+	("custom_status_handlowy", None),
+	("custom_cc", "Przypisany CC"),
+	("lead_owner", "Przypisany handlowiec"),
+	("lead_name", "Klient"),
+	("mobile_no", "Telefon"),
+	("custom_zasady_dotacji", "Zasady"),
+	("custom_posiadane_produkty", "Obecne produkty"),
+	("custom_install_address", "Ulica"),
+	("custom_nr_domu", "Nr domu"),
+	("custom_install_postal_code", "Kod pocztowy"),
+	("custom_install_city", "Miejscowość"),
+	("custom_voivodeship", None),
+	("custom_powiat", None),
+	("custom_status_zrodla", "Status źródła"),
+	("custom_import_source", "Źródło"),
+	("custom_kolejny_kontakt", "Kolejny kontakt"),
+	("custom_termin_spotkania", "Termin spotkania"),
+	("modified", "Ostatnia zmiana"),
+	("creation", "Data utworzenia"),
+	("_assign", "Przypisano do"),
+)
+
 
 def niedozwolone_klucze_filtrow(
 	filters: Mapping[str, object] | Sequence[object] | None,

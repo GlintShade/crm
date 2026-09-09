@@ -15,6 +15,7 @@ from crm.fcrm.doctype.crm_status_change_log.crm_status_change_log import (
 	add_status_change_log,
 )
 from crm.fcrm.doctype.utils import add_or_remove_lost_reason_section_in_sidepanel
+from crm.volteo_lista_szans import FILTER_FIELDS_LEAD, SORT_FIELDS_LEAD
 
 
 class CRMLead(Document):
@@ -449,39 +450,109 @@ class CRMLead(Document):
 	def get_non_filterable_fields():
 		return ["converted"]
 
+	# VOLTEO (ops#94): kolejnosc kolumn listy leadow jest doslowna z
+	# nagrania wlasciciela (issue ops#94), dopasowana do przeplywu CC,
+	# celowo bez maila. Dwie pseudo-kolumny dziela klucz z realnym polem
+	# (wzorzec "Szczegoly" z crm_deal.py:default_list_data): "Szczegoly"
+	# dzieli `key: "name"`, "Komentarze" dzieli `key: "_comment_count"`,
+	# ktore nie jest prawdziwym DocFieldem, wiec `crm.api.doc.get_data`
+	# obsluguje je specjalnie (patrz komentarz "VOLTEO (ops#94)" tamze).
+	# Render (ikona + licznik, klik otwiera `KomentarzeLeadaModal.vue` bez
+	# nawigacji) jest po stronie Vue w `LeadsListView.vue`.
 	@staticmethod
 	def default_list_data():
-		# VOLTEO: B2C column set — `organization` is a hidden B2B field here
-		# (crm-setup.py §11), replaced with the install-site city and
-		# voivodeship that actually matter for a residential lead.
 		columns = [
 			{
-				# "Szczegóły" celowo dzieli key: "name" z tego samego powodu co
-				# analogiczna kolumna w crm_deal.py:default_list_data (pełne
-				# wyjaśnienie pułapki z `rows`/`meta.get_field` żyje tam).
 				"label": "Szczegóły",
 				"type": "Data",
 				"key": "name",
 				"width": "7rem",
 			},
 			{
-				"label": "Name",
+				"label": "Klient",
 				"type": "Data",
 				"key": "lead_name",
-				"width": "12rem",
+				"width": "11rem",
 			},
 			{
-				"label": "Status",
+				"label": "Komentarze",
+				"type": "Data",
+				"key": "_comment_count",
+				"width": "7rem",
+			},
+			{
+				"label": "Zasady",
+				"type": "Select",
+				"key": "custom_zasady_dotacji",
+				"width": "8rem",
+			},
+			{
+				"label": "Telefon",
+				"type": "Data",
+				"key": "mobile_no",
+				"width": "11rem",
+			},
+			{
+				"label": "Status CC",
 				"type": "Link",
 				"options": "CRM Lead Status",
 				"key": "status",
 				"width": "8rem",
 			},
 			{
-				"label": "Mobile No.",
+				"label": "Kolejny kontakt",
+				"type": "Date",
+				"key": "custom_kolejny_kontakt",
+				"width": "8rem",
+			},
+			{
+				"label": "Termin spotkania",
+				"type": "Datetime",
+				"key": "custom_termin_spotkania",
+				"width": "10rem",
+			},
+			{
+				"label": "Obecne produkty",
 				"type": "Data",
-				"key": "mobile_no",
-				"width": "11rem",
+				"key": "custom_posiadane_produkty",
+				"width": "10rem",
+			},
+			{
+				"label": "Przypisany handlowiec",
+				"type": "Link",
+				"options": "User",
+				"key": "lead_owner",
+				"width": "10rem",
+			},
+			{
+				# Permlevel 2 (issue ops#89): dla `Volteo D2D Sales` (handlowca)
+				# pole przychodzi puste, nie znika z kolumn. `meta.get_field`
+				# w `get_data` sprawdza tylko `hidden`, nie permlevel, a
+				# `get_permitted_fields` po stronie `frappe.get_list` sam
+				# wytnie wartosc z wiersza dla wywolujacego bez odczytu.
+				"label": "Przypisany CC",
+				"type": "Link",
+				"options": "User",
+				"key": "custom_cc",
+				"width": "10rem",
+			},
+			{
+				"label": "Ulica",
+				"type": "Data",
+				"key": "custom_install_address",
+				"width": "10rem",
+			},
+			{
+				"label": "Nr domu",
+				"type": "Data",
+				"key": "custom_nr_domu",
+				"width": "6rem",
+			},
+			{
+				"label": "Kod pocztowy",
+				"type": "Data",
+				"key": "custom_install_postal_code",
+				"width": "8rem",
 			},
 			{
 				"label": "Miejscowość",
@@ -496,13 +567,31 @@ class CRMLead(Document):
 				"width": "10rem",
 			},
 			{
-				"label": "Assigned To",
-				"type": "Text",
-				"key": "_assign",
+				"label": "Powiat",
+				"type": "Data",
+				"key": "custom_powiat",
+				"width": "8rem",
+			},
+			{
+				"label": "Status handlowy",
+				"type": "Select",
+				"key": "custom_status_handlowy",
 				"width": "10rem",
 			},
 			{
-				"label": "Last Modified",
+				"label": "Status źródła",
+				"type": "Select",
+				"key": "custom_status_zrodla",
+				"width": "10rem",
+			},
+			{
+				"label": "Źródło",
+				"type": "Data",
+				"key": "custom_import_source",
+				"width": "8rem",
+			},
+			{
+				"label": "Ostatnia zmiana",
 				"type": "Datetime",
 				"key": "modified",
 				"width": "8rem",
@@ -511,22 +600,43 @@ class CRMLead(Document):
 		rows = [
 			"name",
 			"lead_name",
-			"status",
-			"email",
+			"_comment_count",
+			"custom_zasady_dotacji",
 			"mobile_no",
+			"status",
+			"custom_kolejny_kontakt",
+			"custom_termin_spotkania",
+			"custom_posiadane_produkty",
+			"lead_owner",
+			"custom_cc",
+			"custom_install_address",
+			"custom_nr_domu",
+			"custom_install_postal_code",
 			"custom_install_city",
 			"custom_voivodeship",
-			"lead_owner",
-			"first_name",
-			"sla_status",
-			"response_by",
-			"first_response_time",
-			"first_responded_on",
+			"custom_powiat",
+			"custom_status_handlowy",
+			"custom_status_zrodla",
+			"custom_import_source",
 			"modified",
-			"_assign",
+			# Nie sa osobnymi kolumnami, ale karmia awatar w pseudo-kolumnie
+			# "Klient" (patrz `Leads.vue::parseRows`, galaz `row == 'lead_name'`).
+			"first_name",
 			"image",
 		]
 		return {"columns": columns, "rows": rows}
+
+	# Allowlisty sortowania/filtrowania listy leadow (ops#94): patrz
+	# `crm.volteo_lista_szans` dla ksztaltu krotek i uzasadnienia. Odczytywane
+	# przez `crm.api.doc.sort_options` / `get_filterable_fields`, ktore
+	# sprawdzaja `hasattr(controller, "volteo_sort_fields"/"volteo_filter_fields")`.
+	@staticmethod
+	def volteo_sort_fields():
+		return SORT_FIELDS_LEAD
+
+	@staticmethod
+	def volteo_filter_fields():
+		return FILTER_FIELDS_LEAD
 
 	@staticmethod
 	def default_kanban_settings():

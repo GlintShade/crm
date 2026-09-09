@@ -430,7 +430,17 @@ function parseRows(rows, columns = []) {
         ['Date', 'Datetime'].includes(fieldType) &&
         !['modified', 'creation'].includes(row)
       ) {
-        _rows[row] = formatDate(lead[row], '', true, fieldType == 'Datetime')
+        // ops#94: {label, value} zamiast gołego stringa -- "Kolejny kontakt"
+        // (Date) i "Termin spotkania" (Datetime) mają nosić surową wartość
+        // obok sformatowanej, bo przyszła edycja inline tych dwóch pól
+        // (osobne zadanie) potrzebuje surowej daty, nie tylko jej napisu.
+        // `ListRowItem.vue` (frappe-ui) już rozróżnia obiekt od prymitywu
+        // (`getValue()`), więc żadna inna zmiana renderowania nie jest
+        // potrzebna.
+        _rows[row] = {
+          label: formatDate(lead[row], '', true, fieldType == 'Datetime'),
+          value: lead[row],
+        }
       }
 
       if (fieldType && fieldType == 'Currency') {
@@ -485,6 +495,17 @@ function parseRows(rows, columns = []) {
         _rows[row] = {
           label: lead.lead_owner && getUser(lead.lead_owner).full_name,
           ...(lead.lead_owner && getUser(lead.lead_owner)),
+        }
+      } else if (row == 'custom_cc') {
+        // ops#94, "Przypisany CC" -- ten sam kształt co "lead_owner"
+        // powyżej (avatar + full_name). Dla handlowca (permlevel 2, bez
+        // odczytu) `lead.custom_cc` przychodzi puste z backendu (nie ta
+        // gałąź renderuje pustkę -- robi to sam brak wartości), więc
+        // komórka po prostu zostaje pusta, bez żadnej dodatkowej logiki
+        // tutaj.
+        _rows[row] = {
+          label: lead.custom_cc && getUser(lead.custom_cc).full_name,
+          ...(lead.custom_cc && getUser(lead.custom_cc)),
         }
       } else if (row == '_assign') {
         let assignees = JSON.parse(lead._assign || '[]')
