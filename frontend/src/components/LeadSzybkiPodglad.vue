@@ -37,7 +37,7 @@
 -->
 <template>
   <div
-    class="absolute inset-y-0 right-0 z-[1000] flex w-[340px] shrink-0 flex-col overflow-hidden border-l border-outline-gray-2 bg-surface-white shadow-lg dark:bg-surface-gray-1"
+    class="absolute inset-y-0 right-0 z-[1000] flex w-[340px] shrink-0 flex-col overflow-hidden border-l border-outline-gray-2 bg-surface-elevation-1 shadow-lg"
   >
     <div
       class="flex items-start justify-between gap-2 border-b border-outline-gray-2 px-3 py-2.5"

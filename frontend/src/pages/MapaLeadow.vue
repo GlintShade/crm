@@ -43,7 +43,7 @@
             type="button"
             class="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm transition-colors"
             :class="
-              aktywneStatusy.has(s.status)
+              !wylaczoneStatusy.has(s.status)
                 ? 'border-outline-gray-3 bg-surface-gray-3 text-ink-gray-8'
                 : 'border-outline-gray-2 text-ink-gray-5 hover:bg-surface-gray-1'
             "
@@ -84,7 +84,7 @@
       <div class="relative min-h-0 flex-1">
         <div
           v-if="initialLoading"
-          class="absolute inset-0 z-[1000] flex items-center justify-center bg-surface-white/70 dark:bg-surface-gray-1/70"
+          class="absolute inset-0 z-[1000] flex items-center justify-center bg-surface-elevation-1/70"
         >
           <LoadingIndicator class="size-8" />
         </div>
@@ -130,6 +130,7 @@ import { usersStore } from '@/stores/users'
 import { sessionStore } from '@/stores/session'
 import { statusesStore } from '@/stores/statuses'
 import { colorNameFromParsed } from '@/utils/statusColors'
+import { widocznyLead } from '@/utils/mapaFiltry'
 import {
   ErrorMessage,
   FormControl,
@@ -160,7 +161,6 @@ const listResource = createResource({
   onSuccess: (data) => {
     stan.leady = data || []
     blad.value = ''
-    aktywneStatusy.value = new Set(stan.leady.map((lead) => lead.status || BRAK_STATUSU))
   },
   onError: (err) => {
     blad.value = extractErrorMessage(err) || __('Nie udało się wczytać leadów z mapy')
@@ -237,16 +237,21 @@ const statusyZListy = computed(() => {
     .sort((a, b) => b.liczba - a.liczba)
 })
 
-const aktywneStatusy = ref(new Set())
+// Zbiór statusów WYŁĄCZONYCH przez użytkownika (ops#113), nie AKTYWNYCH.
+// Domyślnie pusty -- lead jest widoczny, dopóki jego status nie zostanie
+// wyłączony ręcznie kliknięciem chipa. Zobacz komentarz w mapaFiltry.js
+// po pełne wyjaśnienie, dlaczego poprzednia (odwrotna) semantyka gubiła
+// pinezkę po zmianie statusu z panelu "Szybki podgląd".
+const wylaczoneStatusy = ref(new Set())
 
 function toggleStatus(status) {
-  const next = new Set(aktywneStatusy.value)
+  const next = new Set(wylaczoneStatusy.value)
   if (next.has(status)) {
     next.delete(status)
   } else {
     next.add(status)
   }
-  aktywneStatusy.value = next
+  wylaczoneStatusy.value = next
 }
 
 const unikalniWlasciciele = computed(() =>
@@ -286,14 +291,12 @@ watch(filtrMiasto, (val) => {
 })
 
 const leadyPrzefiltrowane = computed(() => {
-  const miasto = filtrMiastoDebounced.value.trim().toLowerCase()
-  return stan.leady.filter((lead) => {
-    const status = lead.status || BRAK_STATUSU
-    if (!aktywneStatusy.value.has(status)) return false
-    if (filtrHandlowiec.value && lead.lead_owner !== filtrHandlowiec.value) return false
-    if (miasto && !(lead.custom_install_city || '').toLowerCase().includes(miasto)) return false
-    return true
-  })
+  const filtry = {
+    wylaczone: wylaczoneStatusy.value,
+    handlowiec: filtrHandlowiec.value,
+    miasto: filtrMiastoDebounced.value,
+  }
+  return stan.leady.filter((lead) => widocznyLead(lead, filtry, BRAK_STATUSU))
 })
 
 watch(leadyPrzefiltrowane, () => rysujMarkery())
