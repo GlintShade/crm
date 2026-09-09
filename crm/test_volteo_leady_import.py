@@ -7,10 +7,14 @@ from crm.volteo_leady_import import (
 	mapuj_zainteresowanie,
 	normalizuj_date,
 	normalizuj_kod,
+	normalizuj_produkty,
 	normalizuj_telefon,
 	normalizuj_wojewodztwo,
+	rozbij_adres,
 	rozdziel_imie_nazwisko,
+	status_zrodla_z_uwag,
 	wczytaj_wiersze,
+	zasady_z_uwag,
 	zbuduj_leada,
 )
 
@@ -145,6 +149,165 @@ class TestMapujZainteresowanie(unittest.TestCase):
 
 	def test_i_wolny_tekst_daje_none(self: "TestMapujZainteresowanie") -> None:
 		self.assertIsNone(mapuj_zainteresowanie("zużywa 720 kw na 2 miesiące"))
+
+
+class TestNormalizujProdukty(unittest.TestCase):
+	def test_a_pojedynczy_token_z_product_interest(self: "TestNormalizujProdukty") -> None:
+		self.assertEqual(normalizuj_produkty("Fotowoltaika", ""), "PV")
+
+	def test_b_zlozenie_z_product_interest_zachowuje_kanoniczna_kolejnosc(
+		self: "TestNormalizujProdukty",
+	) -> None:
+		# "Pompa ciepła + Fotowoltaika" -> mimo kolejnosci w tekscie, wynik to PV+PC
+		# (kanoniczna kolejnosc KOLEJNOSC_PRODUKTOW, nie kolejnosc wystapienia).
+		self.assertEqual(normalizuj_produkty("Pompa ciepła + Fotowoltaika", ""), "PV+PC")
+
+	def test_c_magazyn_energii(self: "TestNormalizujProdukty") -> None:
+		self.assertEqual(normalizuj_produkty("Magazyn energii", ""), "ME")
+
+	def test_d_fraza_arago_z_uwag_piec_na_pellet(self: "TestNormalizujProdukty") -> None:
+		self.assertEqual(normalizuj_produkty("", "klient ma piec na pellet od 2019"), "PP")
+
+	def test_e_fraza_arago_termomodernizacja_i_rekuperacja(self: "TestNormalizujProdukty") -> None:
+		wynik = normalizuj_produkty("", "termomodernizacja, rekuperacja")
+		self.assertEqual(wynik, "TERMO+REKU")
+
+	def test_f_audyt_okna_grunt(self: "TestNormalizujProdukty") -> None:
+		wynik = normalizuj_produkty("", "audyt energetyczny wykonany, okna i drzwi wymienione, dzierżawa gruntów rozważana")
+		self.assertEqual(wynik, "AUDYT+OKNA+GRUNT")
+
+	def test_g_lacza_product_interest_i_uwagi_naraz(self: "TestNormalizujProdukty") -> None:
+		wynik = normalizuj_produkty("Fotowoltaika + Pompa ciepła", "rekuperacja")
+		self.assertEqual(wynik, "PV+PC+REKU")
+
+	def test_h_wszystkie_dziewiec_naraz_w_kanonicznej_kolejnosci(self: "TestNormalizujProdukty") -> None:
+		wynik = normalizuj_produkty(
+			"Magazyn energii + Fotowoltaika + Pompa ciepła",
+			"piec na pellet, termomodernizacja, rekuperacja, audyt energetyczny, "
+			"okna i drzwi, dzierżawa gruntów",
+		)
+		self.assertEqual(wynik, "PV+ME+PC+PP+AUDYT+TERMO+REKU+OKNA+GRUNT")
+
+	def test_i_puste_daje_pusty_string(self: "TestNormalizujProdukty") -> None:
+		self.assertEqual(normalizuj_produkty("", ""), "")
+
+	def test_j_nieznana_fraza_pomijana_bez_wyjatku(self: "TestNormalizujProdukty") -> None:
+		# "klimatyzacja" nie jest zadnym z 9 kanonicznych tokenow - ma zostac po
+		# prostu pominieta, bez wyjatku, dokladnie jak nierozpoznany token w
+		# mapuj_zainteresowanie.
+		wynik = normalizuj_produkty("", "klient chce klimatyzację")
+		self.assertEqual(wynik, "")
+
+	def test_k_nieznana_fraza_obok_znanej_zostaje_tylko_znana(self: "TestNormalizujProdukty") -> None:
+		wynik = normalizuj_produkty("", "klimatyzacja i rekuperacja")
+		self.assertEqual(wynik, "REKU")
+
+	def test_l_male_i_wielkie_litery_bez_znaczenia(self: "TestNormalizujProdukty") -> None:
+		self.assertEqual(normalizuj_produkty("FOTOWOLTAIKA", ""), "PV")
+
+
+class TestStatusZrodlaZUwag(unittest.TestCase):
+	def test_a_historia_wygrana(self: "TestStatusZrodlaZUwag") -> None:
+		self.assertEqual(status_zrodla_z_uwag("[HISTORIA] wygrana", "SD"), "Wygrana")
+
+	def test_b_historia_przegrana(self: "TestStatusZrodlaZUwag") -> None:
+		self.assertEqual(status_zrodla_z_uwag("[HISTORIA] przegrana", "SD"), "Przegrana")
+
+	def test_c_historia_nieaktualna(self: "TestStatusZrodlaZUwag") -> None:
+		self.assertEqual(status_zrodla_z_uwag("[HISTORIA] nieaktualna", "SD"), "Nieaktualna")
+
+	def test_d_historia_otwarta_daje_potencjal(self: "TestStatusZrodlaZUwag") -> None:
+		self.assertEqual(status_zrodla_z_uwag("[HISTORIA] otwarta", "SD"), "Potencjał")
+
+	def test_e_kilka_wpisow_priorytet_wygrana_ponad_potencjal(self: "TestStatusZrodlaZUwag") -> None:
+		uwagi = "[HISTORIA] otwarta | [HISTORIA] wygrana"
+		self.assertEqual(status_zrodla_z_uwag(uwagi, "SD"), "Wygrana")
+
+	def test_f_kilka_wpisow_priorytet_potencjal_ponad_przegrana(self: "TestStatusZrodlaZUwag") -> None:
+		uwagi = "[HISTORIA] przegrana | [HISTORIA] otwarta"
+		self.assertEqual(status_zrodla_z_uwag(uwagi, "SD"), "Potencjał")
+
+	def test_g_kilka_wpisow_priorytet_przegrana_ponad_nieaktualna(self: "TestStatusZrodlaZUwag") -> None:
+		uwagi = "[HISTORIA] nieaktualna | [HISTORIA] przegrana"
+		self.assertEqual(status_zrodla_z_uwag(uwagi, "SD"), "Przegrana")
+
+	def test_h_brak_historii_zrodlo_cc_daje_potencjal(self: "TestStatusZrodlaZUwag") -> None:
+		self.assertEqual(status_zrodla_z_uwag("", "CC"), "Potencjał")
+
+	def test_i_brak_historii_zrodlo_sd_daje_potencjal(self: "TestStatusZrodlaZUwag") -> None:
+		self.assertEqual(status_zrodla_z_uwag("", "SD"), "Potencjał")
+
+	def test_j_brak_historii_zrodlo_unia_sd_cc_daje_potencjal(self: "TestStatusZrodlaZUwag") -> None:
+		self.assertEqual(status_zrodla_z_uwag("", "SD+CC"), "Potencjał")
+
+	def test_k_brak_historii_zrodlo_arg_daje_none(self: "TestStatusZrodlaZUwag") -> None:
+		self.assertIsNone(status_zrodla_z_uwag("", "ARG"))
+
+	def test_l_zupelnie_puste_daje_none(self: "TestStatusZrodlaZUwag") -> None:
+		self.assertIsNone(status_zrodla_z_uwag("", ""))
+
+
+class TestZasadyZUwag(unittest.TestCase):
+	def test_a_token_nowe(self: "TestZasadyZUwag") -> None:
+		self.assertEqual(zasady_z_uwag("[SD] notatka, NOWE"), "Nowe zasady")
+
+	def test_b_token_stare(self: "TestZasadyZUwag") -> None:
+		self.assertEqual(zasady_z_uwag("[SD] notatka, STARE"), "Stare zasady")
+
+	def test_c_male_litery_tez_dzialaja(self: "TestZasadyZUwag") -> None:
+		self.assertEqual(zasady_z_uwag("[SD] notatka, nowe"), "Nowe zasady")
+
+	def test_d_brak_tokenu_daje_none(self: "TestZasadyZUwag") -> None:
+		self.assertIsNone(zasady_z_uwag("[SD] zwykla notatka bez znacznika"))
+
+	def test_e_puste_daje_none(self: "TestZasadyZUwag") -> None:
+		self.assertIsNone(zasady_z_uwag(""))
+
+	def test_f_oba_tokeny_naraz_sprzeczne_daje_none(self: "TestZasadyZUwag") -> None:
+		uwagi = "[SD] notatka, STARE | [ARG] notatka, NOWE"
+		self.assertIsNone(zasady_z_uwag(uwagi))
+
+	def test_g_slowo_zawierajace_nowe_jako_podciag_nie_lapie_sie(self: "TestZasadyZUwag") -> None:
+		# "odnowe" zawiera "nowe" jako podciag - dopasowanie ma byc CALYM slowem.
+		self.assertIsNone(zasady_z_uwag("planuje odnowę dachu"))
+
+
+class TestRozbijAdres(unittest.TestCase):
+	def test_a_ulica_z_numerem(self: "TestRozbijAdres") -> None:
+		self.assertEqual(rozbij_adres("Kwiatowa 19", "Poznań"), ("Kwiatowa", "19"))
+
+	def test_b_numer_z_litera(self: "TestRozbijAdres") -> None:
+		self.assertEqual(rozbij_adres("Kwiatowa 19A", "Poznań"), ("Kwiatowa", "19A"))
+
+	def test_c_numer_z_ukosnikiem(self: "TestRozbijAdres") -> None:
+		self.assertEqual(rozbij_adres("Polna 5/2", "Poznań"), ("Polna", "5/2"))
+
+	def test_d_wieloczlonowa_nazwa_ulicy(self: "TestRozbijAdres") -> None:
+		self.assertEqual(
+			rozbij_adres("Aleje Jerozolimskie 120", "Warszawa"), ("Aleje Jerozolimskie", "120")
+		)
+
+	def test_e_wies_bez_ulicy_sam_numer_bierze_miasto(self: "TestRozbijAdres") -> None:
+		# reguła "Zbożowo 5, 64-300 Zbożowo" z issue ops#92
+		self.assertEqual(rozbij_adres("5", "Zbożowo"), ("Zbożowo", "5"))
+
+	def test_f_sam_numer_z_litera_bierze_miasto(self: "TestRozbijAdres") -> None:
+		self.assertEqual(rozbij_adres("5A", "Zbożowo"), ("Zbożowo", "5A"))
+
+	def test_g_sam_numer_bez_miasta_nierozpoznane(self: "TestRozbijAdres") -> None:
+		self.assertIsNone(rozbij_adres("5", ""))
+
+	def test_h_brak_liczby_na_koncu_nierozpoznane(self: "TestRozbijAdres") -> None:
+		self.assertIsNone(rozbij_adres("Rynek", "Kraków"))
+
+	def test_i_puste_nierozpoznane(self: "TestRozbijAdres") -> None:
+		self.assertIsNone(rozbij_adres("", "Kraków"))
+		self.assertIsNone(rozbij_adres("   ", "Kraków"))
+
+	def test_j_juz_sama_nazwa_ulicy_z_myslnikiem_bez_numeru_nierozpoznane(
+		self: "TestRozbijAdres",
+	) -> None:
+		self.assertIsNone(rozbij_adres("Plac Wolności", "Poznań"))
 
 
 class TestRozdzielImieNazwisko(unittest.TestCase):
@@ -373,6 +536,21 @@ class TestDeduplikuj(unittest.TestCase):
 		self.assertEqual(rekord["imie"], "Adam Banik")
 		self.assertEqual(rekord["nazwisko"], "")
 
+	def test_o_nr_domu_pochodzi_od_tego_samego_zwyciezcy_co_ulica(self: "TestDeduplikuj") -> None:
+		# issue ops#92: arkusz z osobną kolumną "Nr domu" (nowszy format) - musi
+		# przyjść z TEGO SAMEGO wiersza co "Ulica" (ogólny zwycięzca rankingu).
+		wiersz = _wiersz(Ulica="Kwiatowa", **{"Nr domu": "19A"})
+		wynik = deduplikuj([wiersz])
+		rekord = wynik["+48502103270"]
+		self.assertEqual(rekord["ulica"], "Kwiatowa")
+		self.assertEqual(rekord["nr_domu"], "19A")
+
+	def test_p_brak_kolumny_nr_domu_daje_pusty_string(self: "TestDeduplikuj") -> None:
+		# stary format arkusza (bez kolumny "Nr domu") - klucz musi istnieć i być pusty,
+		# nie brakujący, żeby zbuduj_leada mógł bezpiecznie użyć .get().
+		wynik = deduplikuj([_wiersz()])
+		self.assertEqual(wynik["+48502103270"]["nr_domu"], "")
+
 
 class TestZbudujLeada(unittest.TestCase):
 	def test_a_fallback_imienia_gdy_puste(self: "TestZbudujLeada") -> None:
@@ -439,6 +617,58 @@ class TestZbudujLeada(unittest.TestCase):
 		lead = zbuduj_leada(rekord)
 		self.assertEqual(lead["first_name"], "DARK TRADE SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ")
 		self.assertEqual(lead["last_name"], "")
+
+	def test_g_produkty_status_zrodla_zasady_koniec_do_konca(self: "TestZbudujLeada") -> None:
+		# issue ops#91 - trzy nowe pola strukturalne wyprowadzone z product_interest
+		# (rachunek_na_mc) i uwagi (uwagi z [HISTORIA]/STARE-NOWE) razem.
+		rekord = {
+			"telefon": "+48502103270",
+			"imie": "Jan",
+			"rachunek_na_mc": "PC",
+			"uwagi": "[SD] notatka, rekuperacja, NOWE | [HISTORIA] wygrana",
+			"zrodlo": "SD",
+		}
+		lead = zbuduj_leada(rekord)
+		self.assertEqual(lead["custom_posiadane_produkty"], "PC+REKU")
+		self.assertEqual(lead["custom_status_zrodla"], "Wygrana")
+		self.assertEqual(lead["custom_zasady_dotacji"], "Nowe zasady")
+
+	def test_h_brak_danych_trzy_nowe_pola_daja_none(self: "TestZbudujLeada") -> None:
+		rekord = {"telefon": "+48502103270", "imie": "Jan", "zrodlo": "ARG"}
+		lead = zbuduj_leada(rekord)
+		self.assertIsNone(lead["custom_posiadane_produkty"])
+		self.assertIsNone(lead["custom_status_zrodla"])
+		self.assertIsNone(lead["custom_zasady_dotacji"])
+
+	def test_i_nr_domu_juz_osobno_uzyty_wprost(self: "TestZbudujLeada") -> None:
+		# issue ops#92 - arkusz nowego formatu z kolumną "Nr domu" osobno.
+		rekord = {
+			"telefon": "+48502103270",
+			"imie": "Jan",
+			"ulica": "Kwiatowa",
+			"nr_domu": "19A",
+			"miasto": "Poznań",
+		}
+		lead = zbuduj_leada(rekord)
+		self.assertEqual(lead["custom_install_address"], "Kwiatowa")
+		self.assertEqual(lead["custom_nr_domu"], "19A")
+
+	def test_j_wies_bez_ulicy_sam_numer_rozbity_na_import(self: "TestZbudujLeada") -> None:
+		# stary format: "Ulica" = sam numer, wieś w "miasto" - jedyny przypadek
+		# stosowany PRZY IMPORCIE, per issue ops#92.
+		rekord = {"telefon": "+48502103270", "imie": "Jan", "ulica": "5", "miasto": "Zbożowo"}
+		lead = zbuduj_leada(rekord)
+		self.assertEqual(lead["custom_install_address"], "Zbożowo")
+		self.assertEqual(lead["custom_nr_domu"], "5")
+
+	def test_k_ulica_i_numer_sklejone_nie_sa_rozbijane_przy_imporcie(self: "TestZbudujLeada") -> None:
+		# ogólne rozbicie "Ulica Numer" jest ŚWIADOMIE zarezerwowane dla backfillu
+		# (ops/crm-leady-pola-import.py), nie dla nowych importów - patrz docstring
+		# zbuduj_leada. custom_install_address zostaje niezmieniony, tak jak dziś.
+		rekord = {"telefon": "+48502103270", "imie": "Jan", "ulica": "Słoneczna 2", "miasto": "Poznań"}
+		lead = zbuduj_leada(rekord)
+		self.assertEqual(lead["custom_install_address"], "Słoneczna 2")
+		self.assertEqual(lead["custom_nr_domu"], "")
 
 
 if __name__ == "__main__":
