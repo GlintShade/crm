@@ -109,7 +109,24 @@
       </div>
     </div>
 
-    <div class="min-h-0 flex-1 overflow-y-auto">
+    <!-- VOLTEO (ops#112 followup): panel jest waski (w-[340px], patrz korzen
+         wyzej), wiec te same pola co na Lead.vue zajmuja tu wiecej pionowej
+         przestrzeni (mniej miejsca na wartosc = czestszy zawijanie). Sekcje
+         z wieloma polami (np. "Kwalifikacja", 12 pol) przekraczaly wtedy
+         wewnetrzny limit SidePanelLayout.vue (.column max-height: 300px) i
+         FadedScrollableDiv rysowal blaknace gradientowe "wieko" (mask-image)
+         na ostatnim widocznym polu -- to byla prawdziwa "winieta" z klik-testu,
+         nie przeswitujaca mapa (to bylo osobne, juz naprawione). Zdejmujemy
+         limit WYLACZNIE w tym panelu przez zmienna CSS
+         --sidepanel-column-max-height (patrz SidePanelLayout.vue), zeby
+         Lead.vue/Deal.vue/Contact.vue i inni konsumenci tego komponentu
+         zachowali dotychczasowy wyglad. Caly panel ma wlasny scroll (klasa
+         ponizej), wiec brak limitu per-sekcja nie psuje ogolnej wysokosci --
+         przybywa tylko jeden spojny scroll zamiast zagniezdzonego. -->
+    <div
+      class="min-h-0 flex-1 overflow-y-auto"
+      style="--sidepanel-column-max-height: none"
+    >
       <SidePanelLayout
         v-if="sections.data"
         :sections="sections.data"

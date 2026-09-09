@@ -660,7 +660,11 @@ function firstVisibleIndex() {
 }
 
 .sections .section .column {
-  max-height: 300px;
+  /* Domyslnie 300px (Lead.vue, Deal.vue, Contact.vue itp. -- bez zmian).
+     Wywolujacy moze podniesc/zdjac ten limit przez zmienna CSS
+     --sidepanel-column-max-height na dowolnym przodku (np. LeadSzybkiPodglad.vue),
+     bez dotykania tego pliku ani zmiany wygladu istniejacych stron. */
+  max-height: var(--sidepanel-column-max-height, 300px);
 }
 .sections .section:last-of-type .column {
   max-height: none;
