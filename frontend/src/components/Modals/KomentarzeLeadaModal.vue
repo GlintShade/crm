@@ -89,23 +89,25 @@ const commentEmpty = computed(() => {
   return !newCommentContent.value || newCommentContent.value === '<p></p>'
 })
 
-function filtryZapytania(docname) {
+// VOLTEO: nie wolamy tu frappe.client.get_list z filtrem po
+// reference_doctype/reference_name -- crm.api.volteo_filtry_guard bramkuje
+// filtry po polach, ktorych Comment nie udostepnia do odczytu roli Volteo
+// Call Center ani Volteo D2D Sales (get_permitted_fields zwraca dla obu
+// tylko siedem default_fields), wiec taki filtr byl odrzucany z toastem
+// "Brak uprawnień do filtrowania po polu reference_doctype" mimo poprawnego
+// zapisu. crm.api.volteo_leady.komentarze sprawdza has_permission na
+// dokumencie nadrzednym i czyta Comment przez get_all (patrz docstring tej
+// funkcji w crm/api/volteo_leady.py).
+function parametryZapytania(docname) {
   return {
-    doctype: 'Comment',
-    filters: {
-      reference_doctype: props.doctype,
-      reference_name: docname,
-      comment_type: 'Comment',
-    },
-    fields: ['name', 'owner', 'comment_by', 'comment_email', 'content', 'creation'],
-    order_by: 'creation asc',
-    limit_page_length: 200,
+    doctype: props.doctype,
+    name: docname,
   }
 }
 
 const commentsResource = createResource({
-  url: 'frappe.client.get_list',
-  params: filtryZapytania(props.docname),
+  url: 'crm.api.volteo_leady.komentarze',
+  params: parametryZapytania(props.docname),
   auto: false,
 })
 
@@ -121,7 +123,7 @@ const comments = computed(() => {
 })
 
 function reloadComments() {
-  commentsResource.update({ params: filtryZapytania(props.docname) })
+  commentsResource.update({ params: parametryZapytania(props.docname) })
   return commentsResource.reload()
 }
 

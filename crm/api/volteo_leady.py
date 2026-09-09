@@ -628,3 +628,51 @@ def osoby_cc() -> list[dict]:
 		{"user": cc["name"], "full_name": cc["full_name"]}
 		for cc in _aktywni_cc_reprezentanci()
 	]
+
+
+DOCTYPES_KOMENTARZE = ("CRM Lead", "CRM Deal")
+
+
+@frappe.whitelist()
+def komentarze(doctype: str, name: str) -> list[dict]:
+	"""Komentarze dokumentu dla `KomentarzeLeadaModal.vue` (reuzywanego tez przez
+	`LeadSzybkiPodglad.vue` i `LeadsListView.vue`, pseudokolumna "Komentarze").
+
+	Od b57 `crm.api.volteo_filtry_guard` bramkuje kazdy core endpoint
+	przyjmujacy `filters` przez `crm.api.doc._pola_dozwolone`, a
+	`get_permitted_fields("Comment", ...)` zwraca dla ról `Volteo Call
+	Center` i `Volteo D2D Sales` wylacznie siedem `default_fields`
+	(`name`/`owner`/`creation`/`modified`/`modified_by`/`docstatus`/`idx`),
+	bez `reference_doctype`/`reference_name`/`comment_type`. Modal wolal
+	wprost `frappe.client.get_list` filtrujac po tych trzech polach, wiec
+	strażnik odrzucal zapytanie z komunikatem "Brak uprawnień do
+	filtrowania po polu reference_doctype", mimo ze sam komentarz zapisywal
+	sie poprawnie (zapis idzie inna sciezka, `crm.api.comment.add_comment`,
+	nieobjeta tym strażnikiem, i byl widoczny w Aktywnosci na karcie leada).
+
+	Ta funkcja NIE wola strażnikowanego `frappe.client.get_list` -- czyta
+	`Comment` przez `frappe.get_all` (ktore ignoruje uprawnienia), dopiero
+	PO jawnym sprawdzeniu `frappe.has_permission` na dokumencie nadrzednym,
+	dokladnie tak jak `crm.api.activities.get_lead_activities` juz robi dla
+	Aktywnosci. Komentarze nie niosa zadnej tajemnicy kosztow/prowizji --
+	widzi je kazdy, kto widzi dokument nadrzedny, wiec brak tu dodatkowego
+	filtrowania tresci."""
+	if doctype not in DOCTYPES_KOMENTARZE:
+		frappe.throw(_("Nieobsługiwany typ dokumentu."))
+
+	if not frappe.has_permission(doctype, "read", name):
+		frappe.throw(
+			_("Brak uprawnień do odczytu tego dokumentu."), frappe.PermissionError
+		)
+
+	return frappe.get_all(
+		"Comment",
+		filters={
+			"reference_doctype": doctype,
+			"reference_name": name,
+			"comment_type": "Comment",
+		},
+		fields=["name", "owner", "comment_by", "comment_email", "content", "creation"],
+		order_by="creation asc",
+		limit_page_length=200,
+	)
