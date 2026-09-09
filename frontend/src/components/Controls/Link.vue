@@ -139,6 +139,71 @@ watch(
   { immediate: true },
 )
 
+// Issue #119: dropdown zawezony do waskiej, dedykowanej listy uzytkownikow
+// (np. tylko aktywni handlowcy D2D dla "Przypisany handlowiec", tylko osoby
+// CC dla "Przypisany CC" w panelu bocznym leada). SidePanelLayout.vue (poza
+// zakresem tego fixu) zawsze doklada wlasny filtr do KAZDEGO Linku
+// fieldtype='User': { name: [...crmUsers], ignore_user_type: 1, ...
+// (parseLinkFilters(field.link_filters) || {}) } -- ten SPREAD NA KONCU jest
+// jedynym kanalem, ktorym Property Setter `link_filters` skonfigurowany na
+// konkretnym DocField (np. ops/crm-leady-call-center.py) moze przemycic tu
+// dodatkowy sygnal. Klucze ponizej sa znacznikami czysto klienckimi: serwer
+// (search_link, przez crm.api.volteo_filtry_guard) ich nie zna i nie
+// powinien ich zobaczyc, wiec effectiveFilters nizej ZAWSZE je usuwa z
+// filtrow faktycznie wysylanych, niezaleznie od tego czy pobranie danych sie
+// powiodlo.
+const ZNACZNIKI_ZAKRESOW_UZYTKOWNIKOW = {
+  volteo_scope_handlowcy: 'crm.api.volteo_leady.handlowcy',
+  volteo_scope_cc: 'crm.api.volteo_leady.osoby_cc',
+}
+
+function usunZnacznikiZakresow(filters) {
+  if (!filters || typeof filters !== 'object' || Array.isArray(filters)) return filters
+  const bezZnacznikow = { ...filters }
+  for (const klucz of Object.keys(ZNACZNIKI_ZAKRESOW_UZYTKOWNIKOW)) {
+    delete bezZnacznikow[klucz]
+  }
+  return bezZnacznikow
+}
+
+// Jeden zasob frappe-ui na znacznik (dzielony miedzy wszystkimi instancjami
+// Link.vue na stronie, tak jak widoczniUzytkownicy powyzej), z cichym
+// fallbackiem przy PermissionError: wolajacy bez uprawnien do wywolania
+// waskiego endpointu (np. handlowiec D2D wobec crm.api.volteo_leady.
+// handlowcy(), ktora dopuszcza tylko CC/System Manager/Volteo Core Admin/
+// Volteo Backend) NIE dostaje bledu w UI -- effectiveFilters nizej po prostu
+// spada do bazowych filtrow SidePanelLayout (globalna lista crmUsers), czyli
+// zachowania sprzed tego fixu, zamiast wywalic caly dropdown.
+const zakresyUzytkownikow = Object.fromEntries(
+  Object.entries(ZNACZNIKI_ZAKRESOW_UZYTKOWNIKOW).map(([znacznik, url]) => [
+    znacznik,
+    createResource({ url, cache: [znacznik] }),
+  ]),
+)
+
+const aktywnyZnacznikZakresu = computed(() => {
+  if (props.doctype !== 'User') return null
+  if (!props.filters || typeof props.filters !== 'object' || Array.isArray(props.filters)) {
+    return null
+  }
+  return (
+    Object.keys(ZNACZNIKI_ZAKRESOW_UZYTKOWNIKOW).find((znacznik) => props.filters[znacznik] === true) ||
+    null
+  )
+})
+
+watch(
+  aktywnyZnacznikZakresu,
+  (znacznik) => {
+    if (!znacznik) return
+    const zasob = zakresyUzytkownikow[znacznik]
+    if (!zasob.fetched && !zasob.loading && !zasob.error) {
+      zasob.fetch()
+    }
+  },
+  { immediate: true },
+)
+
 // Filtry faktycznie wysyłane do search_link. Gdy userScope jest aktywny,
 // dokładamy ograniczenie do poddrzewa hierarchii; dopóki lista nie dotrze
 // z serwera, zwracamy `null` jako sygnał "jeszcze nie gotowe" — reload()
@@ -150,7 +215,27 @@ watch(
 // gotowe" na zawsze dla użytkowników bez ograniczenia. (`data === null`
 // bywa w praktyce `undefined` — patrz komentarz niżej przy `lista == null`.)
 const effectiveFilters = computed(() => {
-  if (!userScopeActive.value) return props.filters
+  // Issue #119: znacznik zakresu (custom_cc/lead_owner w panelu bocznym) ma
+  // pierwszeństwo przed userScope, na dziś się nie pokrywają (userScope to
+  // wyłącznie paski filtrów list, znacznik wyłącznie Linki w SidePanelLayout),
+  // ale gdyby kiedyś się spotkały na jednym Linku, węższy, jawnie
+  // skonfigurowany na polu zakres powinien wygrać.
+  const znacznik = aktywnyZnacznikZakresu.value
+  if (znacznik) {
+    const zasob = zakresyUzytkownikow[znacznik]
+    // Błąd (najczęściej PermissionError, wołający bez roli dopuszczonej do
+    // tego wąskiego endpointu, patrz komentarz przy zakresyUzytkownikow
+    // wyżej): cichy fallback do bazowych filtrów SidePanelLayout, zamiast
+    // trzymać dropdown wiecznie pustym/w stanie ładowania.
+    if (zasob.error) return usunZnacznikiZakresow(props.filters)
+    if (!zasob.fetched) return null
+    const lista = Array.isArray(zasob.data) ? zasob.data : []
+    const baza = usunZnacznikiZakresow(props.filters) || {}
+    baza.name = lista.length ? ['in', lista.map((osoba) => osoba.user)] : ['in', ['']]
+    return baza
+  }
+
+  if (!userScopeActive.value) return usunZnacznikiZakresow(props.filters)
   if (!widoczniUzytkownicy.fetched) return null
 
   const lista = widoczniUzytkownicy.data
@@ -160,13 +245,13 @@ const effectiveFilters = computed(() => {
   // `out.data = transform(response.message)`, więc dla None `data` wychodzi
   // jako `undefined`, nie `null`. Porównanie luźne `== null` łapie oba
   // przypadki naraz — obydwa znaczą to samo: „bez ograniczenia".
-  if (lista == null) return props.filters
+  if (lista == null) return usunZnacznikiZakresow(props.filters)
   // Każda wartość, która dotrze inna niż tablica (np. literał `{}`
   // z jakiegoś pośredniego cache'a albo przyszła zmiana kontraktu API),
   // traktujemy tak samo jak „bez ograniczenia" zamiast rzucać
   // TypeError na `.length` niżej — bez logowania, bo projekt zakazuje
   // console.* w kodzie produkcyjnym; to ma być cichy, bezpieczny fallback.
-  if (!Array.isArray(lista)) return props.filters
+  if (!Array.isArray(lista)) return usunZnacznikiZakresow(props.filters)
 
   // W kontekstach filtrowania (jedyne dziś użycie userScope) filters nie
   // jest przekazywane (domyślne [] traktujemy jak {}); gdyby kiedyś ktoś
@@ -175,7 +260,7 @@ const effectiveFilters = computed(() => {
   // search_link, więc bezpiecznie zaczynamy od pustego obiektu.
   const baza =
     props.filters && typeof props.filters === 'object' && !Array.isArray(props.filters)
-      ? { ...props.filters }
+      ? usunZnacznikiZakresow(props.filters)
       : {}
   baza.name = lista.length ? ['in', lista] : ['in', ['']]
   return baza
@@ -264,8 +349,11 @@ function reload(val, force = false) {
   // dotarła, effectiveFilters zwraca null — nie odpalamy wyszukiwania, żeby
   // pierwszy dropdown przez moment nie pokazał wszystkich użytkowników.
   // Gdy lista dotrze, watchDebounced na effectiveFilters (wyżej) wywoła
-  // reload ponownie.
-  if (userScopeActive.value && effectiveFilters.value === null) return
+  // reload ponownie. Issue #119: ten sam "jeszcze nie gotowe" stan dotyczy
+  // aktywnego znacznika zakresu (custom_cc/lead_owner), dopóki jego zasób
+  // się nie pobierze (albo nie zwróci błędu, wtedy effectiveFilters już nie
+  // jest null, patrz gałąź zasob.error wyżej).
+  if ((userScopeActive.value || aktywnyZnacznikZakresu.value) && effectiveFilters.value === null) return
   if (
     !force &&
     options.data?.length &&
