@@ -22,7 +22,7 @@ Typy statusów, nigdy nazwy
 `CRM Lead Status.type` (Open/Ongoing/On Hold/Won/Lost) jest jedynym źródłem
 semantyki — nazwy (`lead_status`) to UI i mogą się zmienić bez ostrzeżenia.
 Każda funkcja tu buduje mapę nazwa->type raz i rozstrzyga po niej; żadna nie
-ma zaszytego literału `"Nowy"` / `"Skonwertowany"` w warunku SQL.
+ma zaszytego literału `"Nowy"` / `"Umówiony"` w warunku SQL.
 
 Definicje (zgodne z `ops/crm-leady-d2d.py`, docstring SEKCJI 2)
 ------------------------------------------------------------------------
@@ -31,9 +31,10 @@ Definicje (zgodne z `ops/crm-leady-d2d.py`, docstring SEKCJI 2)
 - **nietknięty** (per rep, w `statystyki`) = lead PRZYDZIELONY temu repowi
   (`lead_owner = rep`), którego status wciąż jest typu Open — rep go
   jeszcze nie ruszył.
-- **przerobiony** = status typu Won LUB Lost, LUB `converted = 1`.
+- **przerobiony** = status typu Won LUB Lost, LUB `converted = 1` (`converted`
+  jest historycznym znacznikiem konwersji leada na szansę, funkcja usunięta
+  w issue #115 -- pole zostaje na leadach sprzed tej zmiany).
 - **w toku** = status typu Ongoing.
-- **skonwertowany** = `converted = 1`.
 
 Model uprawnień
 ----------------
@@ -151,7 +152,7 @@ def _aktywni_d2d_reprezentanci() -> list[dict]:
 
 @frappe.whitelist()
 def statystyki() -> dict:
-	"""Per-rep liczniki (przydzielone/nietknięte/w_toku/przerobione/skonwertowane)
+	"""Per-rep liczniki (przydzielone/nietknięte/w_toku/przerobione)
 	dla każdego aktywnego handlowca D2D, plus pula nieprzydzielonych nietkniętych
 	leadów z rozkładem per województwo/powiat. Admin-only."""
 	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
@@ -166,7 +167,6 @@ def statystyki() -> dict:
 			"nietkniete": 0,
 			"w_toku": 0,
 			"przerobione": 0,
-			"skonwertowane": 0,
 		}
 		for name in rep_names
 	}
@@ -181,7 +181,6 @@ def statystyki() -> dict:
 			bucket = liczniki[lead.lead_owner]
 			bucket["przydzielone"] += 1
 			typ = status_type_map.get(lead.status)
-			skonwertowany = bool(cint(lead.converted))
 			if typ == "Open":
 				bucket["nietkniete"] += 1
 			# ops#93 / L04 (issue #89): "Odłożony" (On Hold, wprowadzony w
@@ -190,10 +189,10 @@ def statystyki() -> dict:
 			# przerobiony, wciąż czeka na kolejny kontakt/spotkanie.
 			if typ in ("Ongoing", "On Hold"):
 				bucket["w_toku"] += 1
-			if typ in ("Won", "Lost") or skonwertowany:
+			# `converted = 1` przetrwa jako historyczny znacznik (issue #115),
+			# leady sprzed usunięcia konwersji mogą go jeszcze nosić.
+			if typ in ("Won", "Lost") or cint(lead.converted):
 				bucket["przerobione"] += 1
-			if skonwertowany:
-				bucket["skonwertowane"] += 1
 
 	handlowcy = [
 		{
