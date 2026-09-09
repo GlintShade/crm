@@ -4,8 +4,12 @@
 from unittest.mock import patch
 
 import frappe
-from frappe.utils import cint
+from frappe.utils import add_days, cint, now
 
+from crm.fcrm.doctype.crm_invitation.crm_invitation import (
+	expire_invitations,
+	waznosc_zaproszenia_dni,
+)
 from crm.tests import CRMTestCase as FrappeTestCase
 
 
@@ -156,3 +160,91 @@ class TestCRMInvitation(FrappeTestCase):
 			frappe.db.get_value("CRM Invitation", invitation.name, "email"),
 			"test.case.b53@example.com",
 		)
+
+	def _set_waznosc_dni(self, wartosc):
+		"""Write FCRM Settings.custom_zaproszenie_dni_waznosci and register a
+		cleanup that restores whatever value (or absence) was there before."""
+		poprzednia = frappe.db.get_singles_dict("FCRM Settings").get("custom_zaproszenie_dni_waznosci")
+		frappe.db.set_single_value("FCRM Settings", "custom_zaproszenie_dni_waznosci", wartosc)
+		self.addCleanup(
+			lambda: frappe.db.set_single_value(
+				"FCRM Settings", "custom_zaproszenie_dni_waznosci", poprzednia
+			)
+		)
+
+	def _backdate(self, invitation, days):
+		"""Rewrite `creation` N days into the past and reload the doc."""
+		frappe.db.set_value(
+			"CRM Invitation",
+			invitation.name,
+			"creation",
+			add_days(now(), -days),
+			update_modified=False,
+		)
+		invitation.reload()
+		return invitation
+
+	def test_waznosc_default_when_unset(self):
+		"""ops#86: with no Single value at all, or a non-positive one, the
+		fallback DOMYSLNA_WAZNOSC_DNI (7) applies; a positive string value is
+		coerced with cint."""
+		with patch.object(frappe.db, "get_singles_dict", return_value={}):
+			self.assertEqual(waznosc_zaproszenia_dni(), 7)
+
+		with patch.object(
+			frappe.db,
+			"get_singles_dict",
+			return_value={"custom_zaproszenie_dni_waznosci": "0"},
+		):
+			self.assertEqual(waznosc_zaproszenia_dni(), 7)
+
+		with patch.object(
+			frappe.db,
+			"get_singles_dict",
+			return_value={"custom_zaproszenie_dni_waznosci": "14"},
+		):
+			self.assertEqual(waznosc_zaproszenia_dni(), 14)
+
+	def test_expire_invitations_keeps_six_day_old_pending(self):
+		self._set_waznosc_dni(7)
+		invitation = self.make_invitation(email="six-day@example.com")
+		self._backdate(invitation, 6)
+
+		expire_invitations()
+
+		invitation.reload()
+		self.assertEqual(invitation.status, "Pending")
+
+	def test_expire_invitations_expires_eight_day_old(self):
+		self._set_waznosc_dni(7)
+		invitation = self.make_invitation(email="eight-day@example.com")
+		self._backdate(invitation, 8)
+
+		expire_invitations()
+
+		invitation.reload()
+		self.assertEqual(invitation.status, "Expired")
+
+	def test_expire_invitations_respects_longer_window(self):
+		self._set_waznosc_dni(14)
+		invitation = self.make_invitation(email="longer-window@example.com")
+		self._backdate(invitation, 8)
+
+		expire_invitations()
+
+		invitation.reload()
+		self.assertEqual(invitation.status, "Pending")
+
+	def test_accept_rejects_stale_pending_invitation(self):
+		"""ops#86: accept() must not rely solely on the lazy daily scheduler
+		to catch a stale Pending invitation, since that scheduler can lag up
+		to 24h or be paused entirely."""
+		self._set_waznosc_dni(7)
+		invitation = self.make_invitation(email="stale-accept@example.com")
+		self._backdate(invitation, 8)
+
+		with self.assertRaises(frappe.ValidationError):
+			invitation.accept()
+
+		invitation.reload()
+		self.assertEqual(invitation.status, "Expired")

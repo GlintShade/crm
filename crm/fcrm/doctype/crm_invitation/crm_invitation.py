@@ -4,7 +4,30 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import cint
+from frappe.utils import add_days, cint, get_datetime, now
+
+# Was upstream 3 (hardcoded). Owner decision 2026-09-09, ops#86: default validity
+# window for a CRM Invitation link is now 7 days, overridable via FCRM Settings.
+DOMYSLNA_WAZNOSC_DNI = 7
+
+
+def waznosc_zaproszenia_dni() -> int:
+	"""Return the configured invitation validity window in days.
+
+	The value is read from `FCRM Settings.custom_zaproszenie_dni_waznosci`, a
+	Custom Field created by `ops/crm-zaproszenia-waznosc.py`. On a site where
+	that script has not run yet, the key is simply absent from the Singles
+	dict and the fallback below applies.
+
+	NEVER use `frappe.db.get_single_value` here: it returns 0 for a Single
+	field that was never written, indistinguishable from a real, deliberate
+	zero (see the project's None-vs-0 trap). `get_singles_dict` is the only
+	way to tell "unset" from "zero".
+	"""
+	wartosc = cint(frappe.db.get_singles_dict("FCRM Settings").get("custom_zaproszenie_dni_waznosci"))
+	if wartosc <= 0:
+		return DOMYSLNA_WAZNOSC_DNI
+	return wartosc
 
 
 class CRMInvitation(Document):
@@ -75,8 +98,24 @@ class CRMInvitation(Document):
 		frappe.only_for(["System Manager", "Sales Manager"], True)
 		self.accept()
 
+	def _przeterminowane(self) -> bool:
+		"""True if this Pending invitation is older than the configured
+		validity window.
+
+		The daily `expire_invitations()` scheduler is lazy (up to 24 h of
+		slack before it runs) and stops entirely if the scheduler itself is
+		paused, so `accept()` must also enforce the window here rather than
+		trusting the status field alone.
+		"""
+		granica = add_days(now(), -waznosc_zaproszenia_dni())
+		return get_datetime(self.creation) < get_datetime(granica)
+
 	def accept(self):
 		if self.status != "Pending":
+			frappe.throw(_("Invalid or expired key"))
+
+		if self._przeterminowane():
+			self.db_set("status", "Expired", update_modified=False)
 			frappe.throw(_("Invalid or expired key"))
 
 		user = self.create_user_if_not_exists()
@@ -228,10 +267,8 @@ class CRMInvitation(Document):
 
 
 def expire_invitations():
-	"""expire invitations after 3 days"""
-	from frappe.utils import add_days, now
-
-	days = 3
+	"""expire Pending invitations older than the configured validity window, default 7 days"""
+	days = waznosc_zaproszenia_dni()
 	invitations_to_expire = frappe.db.get_all(
 		"CRM Invitation", filters={"status": "Pending", "creation": ["<", add_days(now(), -days)]}
 	)
