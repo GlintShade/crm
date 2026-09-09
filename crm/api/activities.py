@@ -9,6 +9,7 @@ from frappe.translate import get_translated_doctypes
 
 from crm.api.koszty import ADMIN_ROLE
 from crm.fcrm.doctype.crm_call_log.crm_call_log import parse_call_log
+from crm.permissions.org_hierarchy import BYPASS_ROLES
 from crm.volteo_aktywnosc import (
 	OKNO_GRUPOWANIA_S,
 	bez_znacznika,
@@ -506,6 +507,17 @@ def get_lead_activities(name: str):
 	# for the Volteo D2D Sales role -- a handlowiec must never learn who the CC
 	# was, only that a handover happened (WORKSHOP.md, ops#93).
 	roles_uzytkownika = frappe.get_roles()
+	# frappe.get_roles("Administrator") returns EVERY role defined on the site
+	# (Frappe's own behaviour for the superuser account), including "Volteo D2D
+	# Sales" even though no such Has Role row exists -- tekst_widoczny_dla would
+	# otherwise mask the CC's identity from the Administrator too, which is
+	# backwards (Administrator/BYPASS_ROLES must see the full trail, same as
+	# every other admin-only view in this codebase). Resolved the same way
+	# org_hierarchy.py resolves it everywhere else: explicit Administrator/
+	# BYPASS_ROLES check wins over whatever frappe.get_roles() happens to report.
+	czy_widoczny_bez_maskowania_cc = frappe.session.user == "Administrator" or bool(
+		set(roles_uzytkownika) & BYPASS_ROLES
+	)
 	for info in docinfo.info_logs:
 		if info.comment_type != "Info":
 			continue
@@ -514,6 +526,10 @@ def get_lead_activities(name: str):
 			continue
 		if not czy_widoczny(raw_text, roles_uzytkownika, ADMIN_ROLE):
 			continue
+		if czy_widoczny_bez_maskowania_cc:
+			tekst_widoczny = bez_znacznika(raw_text)
+		else:
+			tekst_widoczny = tekst_widoczny_dla(raw_text, roles_uzytkownika)
 		activities.append(
 			{
 				"name": f"volteo-lead-info-{info.name}",
@@ -527,7 +543,7 @@ def get_lead_activities(name: str):
 					"title": None,
 					"action": "info",
 					"doc_name": name,
-					"text": tekst_widoczny_dla(raw_text, roles_uzytkownika),
+					"text": tekst_widoczny,
 				},
 			}
 		)
