@@ -576,18 +576,13 @@ async function setVerdict(elementKey, vStatus, note) {
 }
 
 // --- Comments ----------------------------------------------------------------
+// VOLTEO: patrz komentarz w AudytTab.vue -- ten sam wzorzec (issue #118):
+// crm.api.volteo_leady.komentarze zamiast strazonego frappe.client.get_list.
 const commentsResource = createResource({
-  url: 'frappe.client.get_list',
+  url: 'crm.api.volteo_leady.komentarze',
   params: {
-    doctype: 'Comment',
-    filters: {
-      reference_doctype: 'Volteo Audyt CP',
-      reference_name: props.dealId,
-      comment_type: 'Comment',
-    },
-    fields: ['name', 'comment_by', 'comment_email', 'content', 'creation'],
-    order_by: 'creation asc',
-    limit_page_length: 200,
+    doctype: 'Volteo Audyt CP',
+    name: props.dealId,
   },
   auto: true,
 })

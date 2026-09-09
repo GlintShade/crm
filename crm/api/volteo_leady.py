@@ -630,13 +630,16 @@ def osoby_cc() -> list[dict]:
 	]
 
 
-DOCTYPES_KOMENTARZE = ("CRM Lead", "CRM Deal")
+DOCTYPES_KOMENTARZE = ("CRM Lead", "CRM Deal", "Volteo Audyt", "Volteo Audyt CP")
 
 
 @frappe.whitelist()
 def komentarze(doctype: str, name: str) -> list[dict]:
 	"""Komentarze dokumentu dla `KomentarzeLeadaModal.vue` (reuzywanego tez przez
-	`LeadSzybkiPodglad.vue` i `LeadsListView.vue`, pseudokolumna "Komentarze").
+	`LeadSzybkiPodglad.vue` i `LeadsListView.vue`, pseudokolumna "Komentarze") oraz
+	dla `AudytTab.vue` i `AudytCPTab.vue` (watek komentarzy w zakladce Audyt na
+	szansie, doctype `Volteo Audyt` / `Volteo Audyt CP`, name == nazwa szansy;
+	issue #118).
 
 	Od b57 `crm.api.volteo_filtry_guard` bramkuje kazdy core endpoint
 	przyjmujacy `filters` przez `crm.api.doc._pola_dozwolone`, a
@@ -659,6 +662,18 @@ def komentarze(doctype: str, name: str) -> list[dict]:
 	filtrowania tresci."""
 	if doctype not in DOCTYPES_KOMENTARZE:
 		frappe.throw(_("Nieobsługiwany typ dokumentu."))
+
+	# `Volteo Audyt`/`Volteo Audyt CP` maja autoname `field:deal` i nie istnieja,
+	# dopoki audyt nie zostanie utworzony -- `frappe.has_permission` na
+	# nieistniejacym dokumencie rzuca `frappe.DoesNotExistError`, a nie
+	# `PermissionError`, wiec bez tego sprawdzenia zakladka Audyt dostawalaby
+	# blad zamiast pustego watku komentarzy dla kazdej szansy bez jeszcze
+	# utworzonego audytu. Dawne `frappe.client.get_list` po prostu zwracalo
+	# pusta liste w tym przypadku (filtr po nieistniejacym reference_name nie
+	# rzuca wyjatku) -- ten fallback zachowuje to samo zachowanie i nie
+	# ujawnia nic o istnieniu dokumentu ponad to, co juz wiadomo wywolujacemu.
+	if not frappe.db.exists(doctype, name):
+		return []
 
 	if not frappe.has_permission(doctype, "read", name):
 		frappe.throw(
