@@ -663,6 +663,18 @@ def komentarze(doctype: str, name: str) -> list[dict]:
 	if doctype not in DOCTYPES_KOMENTARZE:
 		frappe.throw(_("Nieobsługiwany typ dokumentu."))
 
+	# `Volteo Audyt`/`Volteo Audyt CP` maja autoname `field:deal` i nie istnieja,
+	# dopoki audyt nie zostanie utworzony -- `frappe.has_permission` na
+	# nieistniejacym dokumencie rzuca `frappe.DoesNotExistError`, a nie
+	# `PermissionError`, wiec bez tego sprawdzenia zakladka Audyt dostawalaby
+	# blad zamiast pustego watku komentarzy dla kazdej szansy bez jeszcze
+	# utworzonego audytu. Dawne `frappe.client.get_list` po prostu zwracalo
+	# pusta liste w tym przypadku (filtr po nieistniejacym reference_name nie
+	# rzuca wyjatku) -- ten fallback zachowuje to samo zachowanie i nie
+	# ujawnia nic o istnieniu dokumentu ponad to, co juz wiadomo wywolujacemu.
+	if not frappe.db.exists(doctype, name):
+		return []
+
 	if not frappe.has_permission(doctype, "read", name):
 		frappe.throw(
 			_("Brak uprawnień do odczytu tego dokumentu."), frappe.PermissionError
