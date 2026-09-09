@@ -8926,3 +8926,31 @@ msgstr "Czy na pewno chcesz odłączyć {0} powiązany(ch) dokument(ów)?"
 # nowy string: kaskada usuwania z bezpiecznikiem Autenti - DeleteLinkedDocModal.vue (b52, ops#97dd7e99, cykl leadowy - tlumaczenia)
 msgid "Are you sure you want to delete {0} - {1}?"
 msgstr "Czy na pewno chcesz usunąć {0} - {1}?"
+
+# nowy string: lista zaproszen pokazuje teraz Expired obok Pending, tytul sekcji zmieniony na Invitations - InviteUserPage.vue (b58, zaproszenia resend)
+msgid "Invitations"
+msgstr "Zaproszenia"
+
+# nowy string: przycisk ponownego wysylania wygaslego/oczekujacego zaproszenia - InviteUserPage.vue (b58, zaproszenia resend)
+msgid "Resend Invitation"
+msgstr "Wyślij ponownie"
+
+# nowy string: potwierdzenie po udanym ponownym wyslaniu zaproszenia - InviteUserPage.vue, crm.api.resend_invitation (b58, zaproszenia resend)
+msgid "Invitation resent to {0}"
+msgstr "Zaproszenie wysłane ponownie do {0}"
+
+# nowy string: crm.api.invite_by_email teraz zwraca to_invite: [] gdy adres jest juz zaproszony/uzytkownikiem - frontend musi to zglosic, nie toastowac sukcesu (b58, zaproszenia resend)
+msgid "No invitation was sent: {0} is already invited or already a user"
+msgstr "Nie wysłano zaproszenia: {0} ma już zaproszenie lub konto"
+
+# nowy string: crm.api.resend_invitation, blad gdy podana nazwa CRM Invitation nie istnieje (b58, zaproszenia resend)
+msgid "Invitation not found"
+msgstr "Nie znaleziono zaproszenia"
+
+# nowy string: crm.api.resend_invitation, blad przy probie ponownego wyslania zaproszenia juz przyjetego (b58, zaproszenia resend)
+msgid "Invitation already accepted"
+msgstr "Zaproszenie zostało już przyjęte"
+
+# nowy string: data wyslania zaproszenia w nawiasie przy wierszu listy - InviteUserPage.vue (b58, zaproszenia resend)
+msgid "sent {0}"
+msgstr "wysłano {0}"
