@@ -74,6 +74,29 @@ KLUCZ_STARE_NOWE = "_stare_nowe"
 """Klucz nadawany drugiej (w kolejności występowania) bezimiennej kolumnie nagłówka —
 niesie znacznik `STARE`/`NOWE`."""
 
+_WZOR_SAM_NUMER = re.compile(r"^\d+[A-Za-z]?(?:/\d+[A-Za-z]?)?$")
+"""Cała wartość adresu to sam numer domu (wieś bez nazwy ulicy) - `rozbij_adres`."""
+
+_WZOR_ULICA_I_NUMER = re.compile(r"^(.+)\s+(\d+[A-Za-z]?(?:/\d+[A-Za-z]?)?)$")
+"""Ulica + numer domu (z opcjonalną literą/ukośnikiem) na końcu - `rozbij_adres`."""
+
+_WZOR_KOD_POCZTOWY = re.compile(r"^\d{2}-\d{3}$")
+"""Wygląda jak polski kod pocztowy, nie nazwa ulicy - straż w `rozbij_adres` przeciwko np. '62-300 300' (kod pocztowy wpisany w kolumnie Ulica)."""
+
+_HISTORIA_DO_STATUS: dict[str, str] = {
+	"wygrana": "Wygrana",
+	"przegrana": "Przegrana",
+	"nieaktualna": "Nieaktualna",
+	"otwarta": "Potencjał",
+}
+"""Mapowanie wartości `[HISTORIA] <wartość>` z uwag na opcję `custom_status_zrodla`
+(issue ops#91) - `otwarta` (brak rozstrzygnięcia szansy sprzed importu) staje się
+`Potencjał`, nie osobną, nieistniejącą opcją."""
+
+_PRIORYTET_STATUSU_ZRODLA: tuple[str, ...] = ("Wygrana", "Potencjał", "Przegrana", "Nieaktualna")
+"""Gdy jeden lead niesie kilka wpisów `[HISTORIA]` (kilka wierszy CSV w tej samej grupie
+dedupu - patrz `deduplikuj`), ten priorytet rozstrzyga, który status źródła wygrywa."""
+
 MARKERY_FIRMY: frozenset[str] = frozenset(
 	{
 		"SPÓŁKA",
@@ -238,6 +261,91 @@ def mapuj_zainteresowanie(surowe: str) -> str | None:
 	return " + ".join(rozpoznane)
 
 
+KOLEJNOSC_PRODUKTOW: tuple[str, ...] = (
+	"PV",
+	"ME",
+	"PC",
+	"PP",
+	"AUDYT",
+	"TERMO",
+	"REKU",
+	"OKNA",
+	"GRUNT",
+)
+"""Kanoniczna, stała kolejność tokenów `custom_posiadane_produkty` (issue ops#91) -
+zawsze w tej kolejności, niezależnie od kolejności dopasowania w tekście źródłowym."""
+
+_FRAZY_PRODUKTOW: tuple[tuple[str, str], ...] = (
+	("fotowoltaika", "PV"),
+	("magazyn energii", "ME"),
+	("pompa ciepła", "PC"),
+	("piec na pellet", "PP"),
+	("termomodernizacja", "TERMO"),
+	("rekuperacja", "REKU"),
+	("audyt energetyczny", "AUDYT"),
+	("okna i drzwi", "OKNA"),
+	("dzierżawa gruntów", "GRUNT"),
+)
+"""Frazy szukane bez rozróżniania wielkości liter, żeby zbudować `custom_posiadane_produkty`
+(issue ops#91): pierwsze trzy to etykiety, jakie zwraca `mapuj_zainteresowanie` z kolumny
+`Rachunek na mc` (Fotowoltaika/Magazyn energii/Pompa ciepła); pozostałe sześć to nazewnictwo
+Arago, jakie pojawia się w wolnym tekście `custom_uwagi_import` (piec na pellet, termomodernizacja,
+rekuperacja, audyt energetyczny, okna i drzwi, dzierżawa gruntów) - te NIE mają odpowiednika
+w kolumnie `Rachunek na mc`, tylko w notatkach."""
+
+
+def normalizuj_produkty(product_interest: str, uwagi: str) -> str:
+	"""Buduje wartość `custom_posiadane_produkty`: kanoniczne tokeny połączone `+`,
+	zawsze w stałej kolejności `KOLEJNOSC_PRODUKTOW` (nie w kolejności wystąpienia
+	w tekście źródłowym).
+
+	Szuka fraz z `_FRAZY_PRODUKTOW` (bez rozróżniania wielkości liter) w połączeniu
+	`product_interest` + `uwagi` - jedna funkcja obsługuje oba źródła na raz, bo przy
+	przyszłych importach `zbuduj_leada` ma pod ręką obie wartości jednocześnie, a przy
+	backfillu istniejących leadów te same dwa pola już leżą w bazie.
+
+	Fraza, która nie pasuje do żadnego z dziewięciu tokenów, jest po prostu pomijana -
+	bez wyjątku - dokładnie jak nierozpoznany token w `mapuj_zainteresowanie`. Brak
+	jakiegokolwiek dopasowania zwraca pusty string (nie `None`): to pole `Data`, a puste
+	`""` jest naturalną wartością "brak znanych produktów", spójną z tym, co idzie do
+	`CRM Lead`/`CRM Deal` wprost bez dalszego mapowania na `None`.
+	"""
+	tekst = f"{product_interest or ''} {uwagi or ''}".lower()
+	znalezione = {token for fraza, token in _FRAZY_PRODUKTOW if fraza in tekst}
+	return "+".join(token for token in KOLEJNOSC_PRODUKTOW if token in znalezione)
+
+
+def rozbij_adres(adres: str, miasto: str) -> tuple[str, str] | None:
+	"""Rozbija `custom_install_address` (dziś: ulica i numer domu razem, kolumna `Ulica`
+	verbatim) na `(ulica, numer_domu)` - issue ops#92.
+
+	Numer domu rozpoznaje literę i ukośnik na końcu (`19A`, `5/2`). Gdy CAŁA wartość
+	`adres` to sam numer - przy wsiach bez nazwy ulicy `custom_install_address` bywa
+	właśnie samym numerem, a wieś leży w `custom_install_city` (patrz WORKSHOP.md) -
+	ulicą staje się `miasto` (reguła „Zbożowo 5, 64-300 Zbożowo"): zwraca
+	`(miasto, numer)`. Wszystko nierozpoznane - pusty `adres`, brak liczby na końcu,
+	sam numer bez `miasto` do podstawienia, albo ulica po rozbiciu pusta lub
+	wyglądająca jak kod pocztowy (dwie cyfry, myślnik, trzy cyfry - np. źle wpisane "62-300 300" -
+	prawdziwa produkcyjna anomalia danych) - zwraca `None`: zero zgadywania,
+	wywołujący ma zostawić oryginalną wartość bez zmian.
+	"""
+	tekst = (adres or "").strip()
+	if not tekst:
+		return None
+	if _WZOR_SAM_NUMER.match(tekst):
+		miasto_czyste = (miasto or "").strip()
+		if not miasto_czyste:
+			return None
+		return miasto_czyste, tekst
+	dopasowanie = _WZOR_ULICA_I_NUMER.match(tekst)
+	if dopasowanie:
+		ulica = dopasowanie.group(1).strip()
+		if not ulica or _WZOR_KOD_POCZTOWY.match(ulica):
+			return None
+		return ulica, dopasowanie.group(2)
+	return None
+
+
 def _wyglada_na_firme(tekst: str) -> bool:
 	"""Czy wielowyrazowy tekst z kolumny `Imię` wygląda na nazwę firmy, nie osobę.
 
@@ -394,6 +502,59 @@ def _linia_uwag(wiersz: dict[str, str]) -> str:
 	return f"[{zrodlo}] " + ", ".join(fragmenty)
 
 
+def status_zrodla_z_uwag(uwagi: str, zrodlo: str) -> str | None:
+	"""Wyprowadza `custom_status_zrodla` z tekstu uwag (issue ops#91).
+
+	Szuka wszystkich wpisów `[HISTORIA] <wartość>` (tak jak je składa `_linia_uwag`
+	z kolumny `_historia_wyniku`) i mapuje je przez `_HISTORIA_DO_STATUS`. Gdy jeden
+	lead niesie kilka takich wpisów (kilka wierszy CSV w tej samej grupie dedupu),
+	rozstrzyga `_PRIORYTET_STATUSU_ZRODLA` (Wygrana > Potencjał > Przegrana > Nieaktualna).
+
+	Brak jakiegokolwiek wpisu `[HISTORIA]` - lead bez historii szansy sprzed importu -
+	daje `Potencjał`, ale TYLKO gdy `zrodlo` zawiera `CC` lub `SD` (osoba call center
+	albo telemarketing miała z nim kontakt); dla samego `ARG` (baza zakupiona, zero
+	kontaktu) zwraca `None` - brak wartości, nie zgadywanie.
+	"""
+	tekst = uwagi or ""
+	dopasowania = re.findall(r"\[HISTORIA\]\s*(\w+)", tekst)
+	statusy = {
+		_HISTORIA_DO_STATUS[dopasowanie.lower()]
+		for dopasowanie in dopasowania
+		if dopasowanie.lower() in _HISTORIA_DO_STATUS
+	}
+	if statusy:
+		for kandydat in _PRIORYTET_STATUSU_ZRODLA:
+			if kandydat in statusy:
+				return kandydat
+	zrodlo_upper = (zrodlo or "").upper()
+	if "CC" in zrodlo_upper or "SD" in zrodlo_upper:
+		return "Potencjał"
+	return None
+
+
+def zasady_z_uwag(uwagi: str) -> str | None:
+	"""Wyprowadza `custom_zasady_dotacji` z tokenu `STARE`/`NOWE` w tekście uwag
+	(issue ops#91) - literały identyczne jak `CRM Deal.custom_zasady_dotacji`
+	(`"Nowe zasady"` / `"Stare zasady"`), żeby `create_deal()` przepisał wartość
+	na szansę po nazwie pola bez żadnego dodatkowego mapowania.
+
+	Dopasowanie jest CASE-SENSITIVE i szuka CAŁEGO słowa (nie podciągu) - `_linia_uwag`
+	dokleja token wyłącznie WIELKIMI literami (kolumna `_stare_nowe` niesie `STARE`/`NOWE`
+	verbatim z CSV), więc dopasowanie bez rozróżniania wielkości liter łapałoby zwykłe
+	polskie słowa z wolnego tekstu uwag ("nowe okna", "stare panele") jako fałszywe
+	trafienia - naprawiony bug, nie teoretyczne ryzyko (złapał się na prawdziwych danych
+	lokalnych). Brak tokenu, albo obecność OBU naraz (sprzeczne wpisy w grupie dedupu,
+	patrz `deduplikuj`) - zero zgadywania, zwraca `None`.
+	"""
+	tekst = uwagi or ""
+	tokeny = set(re.findall(r"\b(STARE|NOWE)\b", tekst))
+	if tokeny == {"NOWE"}:
+		return "Nowe zasady"
+	if tokeny == {"STARE"}:
+		return "Stare zasady"
+	return None
+
+
 def deduplikuj(wiersze: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
 	"""Deduplikuje wiersze CSV po znormalizowanym numerze telefonu.
 
@@ -414,7 +575,10 @@ def deduplikuj(wiersze: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
 	wersji obecnej gdzie indziej w tej samej grupie telefonu (ops#30).
 
 	Zwraca `dict[telefon, rekord]`, gdzie `rekord` jest już gotowy do
-	przekazania do `zbuduj_leada`.
+	przekazania do `zbuduj_leada`. `nr_domu` (issue ops#92 - kolumna `Nr domu`,
+	obecna tylko w nowszych arkuszach) pochodzi od TEGO SAMEGO zwycięzcy co
+	`ulica` - `Ulica`/`Nr domu` opisują to samo miejsce, więc muszą pochodzić
+	z jednego wiersza, nie mieszać się między wierszami grupy.
 	"""
 	grupy: dict[str, list[dict[str, str]]] = {}
 	for wiersz in wiersze:
@@ -454,6 +618,7 @@ def deduplikuj(wiersze: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
 			"miasto": _tekst_albo_puste(zwyciezca.get("Miasto")),
 			"kod_pocztowy": _tekst_albo_puste(zwyciezca.get("Kod pocztowy")),
 			"ulica": _tekst_albo_puste(zwyciezca.get("Ulica")),
+			"nr_domu": _tekst_albo_puste(zwyciezca.get("Nr domu")),
 			"rachunek_na_mc": _tekst_albo_puste(zwyciezca.get("Rachunek na mc")),
 			"data": _tekst_albo_puste(zwyciezca.get("Data")),
 			"zrodlo": "+".join(zrodla_unikalne),
@@ -470,23 +635,61 @@ def zbuduj_leada(rekord: dict[str, Any]) -> dict[str, Any]:
 	`"Kontakt"`, gdy wynikowe imię jest puste — `lead_name` nie może być
 	pusty. Świadomie BEZ `lead_owner` — przypisanie właściciela to osobny
 	krok poza tym modułem.
+
+	Adres (issue ops#92): gdy `rekord["nr_domu"]` już przyszedł osobno z kolumny
+	`Nr domu` (nowsze arkusze), używa go wprost i `ulica` zostaje bez zmian.
+	Dla starego formatu (bez kolumny `Nr domu`) stosuje `rozbij_adres` TYLKO
+	wtedy, gdy cała wartość `Ulica` to sam numer domu (wieś bez nazwy ulicy) -
+	dokładnie tak, jak prosi issue ops#92 ("ta sama heurystyka dla starego
+	formatu (Ulica = sam numer)"). Świadomie NIE rozbija ogólnego przypadku
+	"Ulica Numer" sklejonego w jedno pole przy imporcie - to zostaje wyłącznie
+	zadaniem backfillu (`ops/crm-leady-pola-import.py`) na już zaimportowanych
+	leadach, żeby nie zmieniać zachowania dla arkuszy, które i tak wkrótce
+	dostaną osobną kolumnę `Nr domu`. Nierozpoznane zostaje bez zmian: cały
+	tekst trafia do `custom_install_address`, `custom_nr_domu` zostaje pusty -
+	zero zgadywania.
+
+	Trzy pola strukturalne z importu (issue ops#91) - `custom_posiadane_produkty`,
+	`custom_status_zrodla`, `custom_zasady_dotacji` - są wyprowadzane z tych samych
+	dwóch wartości (`custom_product_interest` świeżo policzone niżej i `uwagi`),
+	dokładnie tą samą logiką, jakiej backfill w `ops/crm-leady-pola-import.py` używa
+	dla już istniejących leadów (źródło prawdy: ten moduł).
 	"""
 	first_name, last_name = rozdziel_imie_nazwisko(
 		rekord.get("imie", "") or "", rekord.get("nazwisko", "") or ""
 	)
+
+	ulica_surowa = rekord.get("ulica", "") or ""
+	nr_domu_surowy = rekord.get("nr_domu", "") or ""
+	miasto = rekord.get("miasto", "") or ""
+	if nr_domu_surowy:
+		ulica_ostateczna, nr_domu_ostateczny = ulica_surowa, nr_domu_surowy
+	elif _WZOR_SAM_NUMER.match(ulica_surowa.strip()):
+		rozbite = rozbij_adres(ulica_surowa, miasto)
+		ulica_ostateczna, nr_domu_ostateczny = rozbite if rozbite else (ulica_surowa, "")
+	else:
+		ulica_ostateczna, nr_domu_ostateczny = ulica_surowa, ""
+
+	uwagi = rekord.get("uwagi", "") or ""
+	product_interest = mapuj_zainteresowanie(rekord.get("rachunek_na_mc", "") or "")
+
 	return {
 		"first_name": first_name if first_name else "Kontakt",
 		"last_name": last_name,
 		"mobile_no": rekord.get("telefon", "") or "",
 		"status": "Nowy",
 		"business_line": "D2D",
-		"custom_install_address": rekord.get("ulica", "") or "",
-		"custom_install_city": rekord.get("miasto", "") or "",
+		"custom_install_address": ulica_ostateczna,
+		"custom_nr_domu": nr_domu_ostateczny,
+		"custom_install_city": miasto,
 		"custom_install_postal_code": normalizuj_kod(rekord.get("kod_pocztowy", "") or ""),
 		"custom_powiat": rekord.get("powiat", "") or "",
 		"custom_voivodeship": normalizuj_wojewodztwo(rekord.get("wojewodztwo", "") or ""),
 		"custom_import_source": rekord.get("zrodlo", "") or "",
 		"custom_import_date": normalizuj_date(rekord.get("data", "") or ""),
-		"custom_uwagi_import": rekord.get("uwagi", "") or "",
-		"custom_product_interest": mapuj_zainteresowanie(rekord.get("rachunek_na_mc", "") or ""),
+		"custom_uwagi_import": uwagi,
+		"custom_product_interest": product_interest,
+		"custom_posiadane_produkty": normalizuj_produkty(product_interest or "", uwagi) or None,
+		"custom_status_zrodla": status_zrodla_z_uwag(uwagi, rekord.get("zrodlo", "") or ""),
+		"custom_zasady_dotacji": zasady_z_uwag(uwagi),
 	}
