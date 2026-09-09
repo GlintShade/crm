@@ -127,14 +127,14 @@
           @update:modelValue="(val) => (widziProwizje = Boolean(val))"
         />
       </div>
-      <template v-if="pendingInvitations.data?.length">
+      <template v-if="sortedInvitations.length">
         <div class="flex flex-col gap-4">
           <div class="flex items-center justify-between text-base-semibold">
-            <div>{{ __('Pending Invites') }}</div>
+            <div>{{ __('Invitations') }}</div>
           </div>
           <ul class="flex flex-col gap-1">
             <li
-              v-for="user in pendingInvitations.data"
+              v-for="user in sortedInvitations"
               :key="user.name"
               class="flex items-center justify-between px-2 py-1 rounded-lg bg-surface-gray-2"
             >
@@ -152,15 +152,42 @@
                     · {{ user.mobile_no }}
                   </template>
                 </span>
+                <Badge
+                  v-if="user.status === 'Pending'"
+                  variant="subtle"
+                  theme="orange"
+                  :label="__('Pending')"
+                  class="ml-1"
+                />
+                <Badge
+                  v-else
+                  variant="subtle"
+                  theme="red"
+                  :label="__('Expired')"
+                  class="ml-1"
+                />
                 <span class="text-ink-gray-5">
                   ({{ roleMap[user.role]
                   }}<template v-if="user.volteo_role">
                     · {{ volteoRoleMap[user.volteo_role] }}</template
                   >
-                  · {{ linieLabel(user) }} · {{ prowizjeLabel(user) }})
+                  · {{ linieLabel(user) }} · {{ prowizjeLabel(user) }}
+                  <template v-if="sentDateLabel(user)">
+                    · {{ __('sent {0}', [sentDateLabel(user)]) }}</template
+                  >)
                 </span>
               </div>
-              <div>
+              <div class="flex items-center">
+                <Button
+                  :tooltip="__('Resend Invitation')"
+                  icon="lucide-refresh-cw"
+                  variant="ghost"
+                  :loading="
+                    resendInvitation.loading &&
+                    resendInvitation.params.name === user.name
+                  "
+                  @click="resendInvitation.submit({ name: user.name })"
+                />
                 <Button
                   :tooltip="__('Delete Invitation')"
                   icon="lucide-x"
@@ -189,6 +216,7 @@ import {
   createListResource,
   createResource,
   FormControl,
+  Badge,
 } from 'frappe-ui'
 import { ref, computed } from 'vue'
 
@@ -250,7 +278,12 @@ const inviteeExistMessage = computed(() => {
   if (!isValidEmail.value) return null
   if (!pendingInvitations.data?.length) return null
 
-  const exists = pendingInvitations.data.some((user) => user.email === trimmed)
+  // Only a Pending row blocks the form - an Expired invitee no longer does,
+  // since the backend now replaces the expired row on a fresh invite
+  // instead of silently doing nothing (crm.api.invite_by_email).
+  const exists = pendingInvitations.data.some(
+    (user) => user.email === trimmed && user.status === 'Pending',
+  )
   if (!exists) return null
 
   return __('User with email {0} already invited', [trimmed])
@@ -350,7 +383,21 @@ const inviteByEmail = createResource({
       poziom_prowizji: poziomProwizji.value,
     }
   },
-  onSuccess() {
+  onSuccess(data) {
+    // The backend returns HTTP 200 with `to_invite: []` when every address
+    // was already invited or already a user (e.g. a stale request retried
+    // after the fact) - that is NOT success, and must not be toasted or
+    // reset the form, or a real "nothing happened" case looks identical to
+    // a real send. See invite_by_email's "existing_invites"/"existing_members"
+    // in crm/api/__init__.py.
+    if (!data?.to_invite?.length) {
+      toast.error(
+        __('No invitation was sent: {0} is already invited or already a user', [
+          email.value.trim(),
+        ]),
+      )
+      return
+    }
     role.value = 'Sales User'
     volteoRole.value = 'Volteo D2D Sales'
     hierarchyParent.value = ''
@@ -375,10 +422,13 @@ const inviteByEmail = createResource({
   },
 })
 
+// Includes Expired rows too (not just Pending): an expired invitation must
+// stay visible so it can be resent, instead of silently vanishing from the
+// list - see resendInvitation below and crm.api.resend_invitation.
 const pendingInvitations = createListResource({
   type: 'list',
   doctype: 'CRM Invitation',
-  filters: { status: 'Pending' },
+  filters: { status: ['in', ['Pending', 'Expired']] },
   fields: [
     'name',
     'email',
@@ -392,10 +442,47 @@ const pendingInvitations = createListResource({
     'linia_leady',
     'widzi_prowizje',
     'poziom_prowizji',
+    'status',
+    'creation',
+    'email_sent_at',
   ],
+  orderBy: 'creation desc',
   pageLength: 999,
   auto: true,
 })
+
+// Pending first, then Expired, newest first within each group. The list
+// resource above already orders by creation desc, but that alone would
+// interleave the two statuses - sort again here so every Pending row
+// renders above every Expired one.
+const sortedInvitations = computed(() => {
+  const rows = pendingInvitations.data || []
+  const rank = (row) => (row.status === 'Pending' ? 0 : 1)
+  return [...rows].sort((a, b) => {
+    const diff = rank(a) - rank(b)
+    if (diff !== 0) return diff
+    return new Date(b.creation) - new Date(a.creation)
+  })
+})
+
+const resendInvitation = createResource({
+  url: 'crm.api.resend_invitation',
+  onSuccess(data) {
+    pendingInvitations.reload()
+    toast.success(__('Invitation resent to {0}', [data.email]))
+  },
+  onError(err) {
+    toast.error(err?.messages?.[0] || err.message)
+  },
+})
+
+// `creation` arrives as a full datetime string ("2026-09-09 12:34:56.789");
+// show only the date part in the grey parenthetical next to each row.
+function sentDateLabel(user) {
+  const raw = user.email_sent_at || user.creation
+  if (!raw) return ''
+  return String(raw).slice(0, 10)
+}
 
 // Rows created before ops/crm-invitation-linie-telefon.py ran carry
 // undefined/None for linia_oze/linia_cp — render those as the legacy

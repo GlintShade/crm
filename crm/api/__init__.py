@@ -293,11 +293,19 @@ def invite_by_email(
 	if len(email_list) > 1:
 		frappe.throw(_("Invite one person at a time"))
 	existing_members = frappe.db.get_all("User", filters={"email": ["in", email_list]}, pluck="email")
+	# Only a Pending invitation blocks a re-invite. An Expired row must not:
+	# it corresponds to no User (existing_members already catches Accepted
+	# invitations, since those always have a matching User) and no live
+	# invite link, so counting it here silently swallowed every resend
+	# attempt for an already-expired address (returned to_invite: [] with
+	# HTTP 200, and the frontend toasted success regardless - see
+	# resend_invitation() below for the actual fix).
 	existing_invites = frappe.db.get_all(
 		"CRM Invitation",
 		filters={
 			"email": ["in", email_list],
 			"role": ["in", ["System Manager", "Sales Manager", "Sales User"]],
+			"status": "Pending",
 		},
 		pluck="email",
 	)
@@ -305,6 +313,16 @@ def invite_by_email(
 	to_invite = list(set(email_list) - set(existing_members) - set(existing_invites))
 
 	for email in to_invite:
+		# At most one live row per email: drop any prior Expired rows for
+		# this address before inserting the new one, so a resend never
+		# leaves stale Expired history sitting alongside the fresh Pending
+		# invitation.
+		stale_expired = frappe.db.get_all(
+			"CRM Invitation", filters={"email": email, "status": "Expired"}, pluck="name"
+		)
+		for stale_name in stale_expired:
+			frappe.delete_doc("CRM Invitation", stale_name, ignore_permissions=True)
+
 		frappe.get_doc(
 			doctype="CRM Invitation",
 			email=email,
@@ -326,6 +344,75 @@ def invite_by_email(
 		"existing_invites": existing_invites,
 		"to_invite": to_invite,
 	}
+
+
+@frappe.whitelist()
+def resend_invitation(name: str):
+	"""Resend an Expired (or still-Pending) invitation.
+
+	The old row is never flipped back to Pending in place: expiry is derived
+	from `creation` (`CRMInvitation._przeterminowane()`), so a status-only
+	reset would still read as expired at accept-time. Instead a fresh
+	`CRM Invitation` is created (fresh `key`/`creation`/`status` via
+	`before_insert`, fresh email via `after_insert`) copying the old row's
+	Volteo fields, and the old row is deleted only once that insert has
+	succeeded.
+	"""
+	frappe.only_for(["Sales Manager", "System Manager", "Volteo Core Admin"], True)
+
+	try:
+		old = frappe.get_doc("CRM Invitation", name)
+	except frappe.DoesNotExistError:
+		frappe.throw(_("Invitation not found"))
+
+	if old.status == "Accepted":
+		frappe.throw(_("Invitation already accepted"))
+
+	# Same escalation guard as invite_by_email above: only_for lets any of
+	# Sales Manager / System Manager / Volteo Core Admin through, but a
+	# Sales Manager (or a Volteo Core Admin, for the Backoffice case) must
+	# not be able to use resend to reissue a role they were never allowed
+	# to invite in the first place. Without this a Volteo Core Admin could
+	# resend an expired System Manager invitation that only a System
+	# Manager was allowed to create.
+	user_roles = frappe.get_roles(frappe.session.user)
+
+	if old.role == "System Manager" and "System Manager" not in user_roles:
+		frappe.throw(_("You are not allowed to invite System Managers"), frappe.PermissionError)
+
+	if old.role == "Sales Manager" and "System Manager" not in user_roles:
+		frappe.throw(_("You are not allowed to invite Sales Managers"), frappe.PermissionError)
+
+	if old.get("volteo_role") == "Volteo Backend" and not (
+		"System Manager" in user_roles or "Volteo Core Admin" in user_roles
+	):
+		frappe.throw(_("You are not allowed to invite Backoffice users"), frappe.PermissionError)
+
+	if frappe.db.exists("User", {"email": old.email}):
+		frappe.throw(_("User with email {0} already exists").format(old.email))
+
+	# Volteo fields are site Custom Fields, not part of the doctype JSON, so
+	# `.get()` is mandatory here - same reasoning as `accept()` reading
+	# `volteo_role`/`hierarchy_parent`/etc. in crm_invitation.py.
+	new = frappe.get_doc(
+		doctype="CRM Invitation",
+		email=old.get("email"),
+		role=old.get("role"),
+		volteo_role=old.get("volteo_role"),
+		hierarchy_parent=old.get("hierarchy_parent"),
+		first_name=old.get("first_name"),
+		last_name=old.get("last_name"),
+		mobile_no=old.get("mobile_no"),
+		linia_oze=old.get("linia_oze"),
+		linia_cp=old.get("linia_cp"),
+		linia_leady=old.get("linia_leady"),
+		widzi_prowizje=old.get("widzi_prowizje"),
+		poziom_prowizji=old.get("poziom_prowizji"),
+	).insert(ignore_permissions=True)
+
+	frappe.delete_doc("CRM Invitation", old.name, ignore_permissions=True)
+
+	return {"name": new.name, "email": new.email}
 
 
 @frappe.whitelist(methods=["DELETE", "POST"])

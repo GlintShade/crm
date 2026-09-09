@@ -6,6 +6,7 @@ from unittest.mock import patch
 import frappe
 from frappe.utils import add_days, cint, now
 
+from crm.api import invite_by_email, resend_invitation
 from crm.fcrm.doctype.crm_invitation.crm_invitation import (
 	expire_invitations,
 	waznosc_zaproszenia_dni,
@@ -248,3 +249,119 @@ class TestCRMInvitation(FrappeTestCase):
 
 		invitation.reload()
 		self.assertEqual(invitation.status, "Expired")
+
+	def test_resend_invitation_on_expired_row_creates_new_pending(self):
+		"""crm.api.resend_invitation on an Expired row must create a fresh
+		Pending row carrying the same email and Volteo fields, and delete
+		the old Expired row - a status-only flip would still read as
+		expired at accept-time, since expiry is derived from `creation`."""
+		old = self.make_invitation(
+			email="resend-expired@example.com",
+			role="Sales User",
+			volteo_role="Volteo D2D Sales",
+			first_name="Jan",
+			last_name="Testowy",
+			mobile_no="+48 111 222 333",
+			linia_oze=0,
+			linia_cp=1,
+			linia_leady=1,
+			widzi_prowizje=0,
+			poziom_prowizji="Manager",
+		)
+		old.status = "Expired"
+		old.save(ignore_permissions=True)
+		old_name = old.name
+
+		with patch.object(frappe, "sendmail"):
+			result = resend_invitation(name=old_name)
+
+		self.assertFalse(frappe.db.exists("CRM Invitation", old_name))
+
+		new = frappe.get_doc("CRM Invitation", result["name"])
+		self.assertEqual(new.email, "resend-expired@example.com")
+		self.assertEqual(new.status, "Pending")
+		self.assertTrue(new.key)
+		self.assertEqual(new.volteo_role, "Volteo D2D Sales")
+		self.assertEqual(new.first_name, "Jan")
+		self.assertEqual(new.last_name, "Testowy")
+		self.assertEqual(new.mobile_no, "+48 111 222 333")
+		self.assertEqual(cint(new.linia_oze), 0)
+		self.assertEqual(cint(new.linia_cp), 1)
+		self.assertEqual(cint(new.linia_leady), 1)
+		self.assertEqual(cint(new.widzi_prowizje), 0)
+		self.assertEqual(new.poziom_prowizji, "Manager")
+
+	def test_resend_invitation_on_accepted_row_raises(self):
+		"""An Accepted invitation has already produced a User; resending it
+		makes no sense and must be refused outright."""
+		invitation = self.make_invitation(email="resend-accepted@example.com")
+		invitation.accept()
+
+		with self.assertRaises(frappe.ValidationError):
+			resend_invitation(name=invitation.name)
+
+	def test_resend_invitation_by_sales_manager_on_system_manager_invite_denied(self):
+		"""crm.api.resend_invitation must apply the same escalation guard as
+		invite_by_email (crm/api/__init__.py): only_for lets Sales Manager /
+		System Manager / Volteo Core Admin through, but a caller without
+		System Manager must still be refused when resending an invitation
+		for the System Manager role - otherwise a Sales Manager (or a
+		Volteo Core Admin, for the Backoffice case) could use resend to
+		reissue a role they were never allowed to invite in the first
+		place. Uses a real test user with the Sales Manager role and
+		`frappe.set_user`, following the pattern in
+		crm/api/test_umowa_kredyt_audyt_perms.py (`_make_user` + `add_roles`
+		+ scoped `frappe.set_user`), since that is the only precedent in
+		this codebase for a non-Administrator caller in a test."""
+		old = self.make_invitation(
+			email="resend-escalation@example.com", role="System Manager"
+		)
+		old.status = "Expired"
+		old.save(ignore_permissions=True)
+
+		caller_email = "resend-caller-sales-manager@example.com"
+		if frappe.db.exists("User", caller_email):
+			caller = frappe.get_doc("User", caller_email)
+		else:
+			caller = frappe.get_doc(
+				doctype="User",
+				email=caller_email,
+				first_name="Sales",
+				last_name="Manager Caller",
+				send_welcome_email=0,
+			).insert(ignore_permissions=True)
+		caller.add_roles("Sales Manager")
+
+		self.addCleanup(lambda: frappe.set_user("Administrator"))
+		frappe.set_user(caller_email)
+
+		with self.assertRaises(frappe.PermissionError):
+			resend_invitation(name=old.name)
+
+	def test_invite_by_email_reinvites_expired_address(self):
+		"""crm.api.invite_by_email's duplicate guard must count only Pending
+		invitations. An address whose sole invitation is Expired must come
+		back in `to_invite`, and afterwards exactly one row (Pending) must
+		exist for that email - the prior Expired row is replaced, not kept
+		alongside the new one."""
+		old = self.make_invitation(email="reinvite-expired@example.com")
+		old.status = "Expired"
+		old.save(ignore_permissions=True)
+
+		with patch.object(frappe, "sendmail"):
+			result = invite_by_email(
+				emails="reinvite-expired@example.com",
+				role="Sales User",
+				first_name="Anna",
+				last_name="Nowak",
+			)
+
+		self.assertIn("reinvite-expired@example.com", result["to_invite"])
+
+		rows = frappe.db.get_all(
+			"CRM Invitation",
+			filters={"email": "reinvite-expired@example.com"},
+			fields=["name", "status"],
+		)
+		self.assertEqual(len(rows), 1)
+		self.assertEqual(rows[0].status, "Pending")
