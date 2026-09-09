@@ -28,13 +28,22 @@
     :items="showDeleteDocModal.items"
     :reload="reload"
   />
+  <PrzydzielCCModal
+    v-if="showPrzydzielCCModal"
+    v-model="showPrzydzielCCModal"
+    :selections="selectedValues"
+    :list="list"
+    @reload="reload"
+  />
 </template>
 
 <script setup>
 import EditValueModal from '@/components/Modals/EditValueModal.vue'
 import AssignmentModal from '@/components/Modals/AssignmentModal.vue'
+import PrzydzielCCModal from '@/components/Modals/PrzydzielCCModal.vue'
 import { setupListCustomizations } from '@/utils'
 import { globalStore } from '@/stores/global'
+import { usersStore } from '@/stores/users'
 import { useTelemetry } from 'frappe-ui/frappe'
 import { call, toast } from 'frappe-ui'
 import { ref, onMounted, watch } from 'vue'
@@ -72,6 +81,7 @@ const list = defineModel({ type: Object })
 const router = useRouter()
 
 const { $dialog, $socket } = globalStore()
+const { isVolteoAdmin } = usersStore()
 const { capture } = useTelemetry()
 
 const showEditModal = ref(false)
@@ -137,6 +147,19 @@ function deleteValues(selections, unselectAll) {
 
 const showAssignmentModal = ref(false)
 const bulkAssignees = ref([])
+
+const showPrzydzielCCModal = ref(false)
+
+// VOLTEO (issue #95): "Przypisz do CC" -- lustro assignValues powyzej,
+// ale bez pola-modelu dedykowanego pod dane modalu (selectedValues jest
+// juz dzielone z EditValueModal/AssignmentModal, PrzydzielCCModal czyta z
+// niego wprost). unselectAllAction.value ustawiony tak samo jak w innych
+// akcjach, zeby wspolny reload() nizej odznaczyl wiersze po sukcesie.
+function assignToCC(selections, unselectAll) {
+  showPrzydzielCCModal.value = true
+  selectedValues.value = selections
+  unselectAllAction.value = unselectAll
+}
 
 function assignValues(selections, unselectAll) {
   showAssignmentModal.value = true
@@ -210,6 +233,15 @@ function bulkActions(selections, unselectAll) {
       label: __('Convert to Deal'),
       onClick: () => convertToDeal(selections, unselectAll),
     })
+    // VOLTEO (issue #95): masowy przydzial do CC, tylko dla adminow -- CC i
+    // D2D nie widza tej pozycji w menu, serwer (crm.api.volteo_leady.
+    // przydziel_cc) egzekwuje to samo niezaleznie (frappe.only_for).
+    if (isVolteoAdmin()) {
+      actions.push({
+        label: __('Przypisz do CC'),
+        onClick: () => assignToCC(selections, unselectAll),
+      })
+    }
   }
 
   customBulkActions.value.forEach((action) => {
