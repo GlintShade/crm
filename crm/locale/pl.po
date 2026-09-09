@@ -1241,6 +1241,10 @@ msgstr "Nie można zaprosić do tej roli."
 msgid "Cannot move a manager under one of their own reports"
 msgstr "Nie można przenieść przełożonego pod jednego z jego podwładnych"
 
+#: crm/fcrm/doctype/crm_sales_hierarchy/crm_sales_hierarchy.py:92
+msgid "Cannot remove hierarchy node {0}: pending invitation(s) for {1} still point to it. Cancel them first or wait until they are accepted."
+msgstr "Nie można usunąć węzła hierarchii {0}: oczekujące zaproszenie dla {1} wciąż na niego wskazuje. Anuluj je albo poczekaj na akceptację."
+
 #: crm/integrations/erpnext/utils.py:64
 msgid "Cannot rename: an unrelated {0} '{1}' already exists on the other side. Resolve manually first."
 msgstr "Nie można zmienić nazwy: po drugiej stronie istnieje już niepowiązany dokument {0} „{1}”. Rozwiąż konflikt ręcznie."
