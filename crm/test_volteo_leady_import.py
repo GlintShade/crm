@@ -254,8 +254,10 @@ class TestZasadyZUwag(unittest.TestCase):
 	def test_b_token_stare(self: "TestZasadyZUwag") -> None:
 		self.assertEqual(zasady_z_uwag("[SD] notatka, STARE"), "Stare zasady")
 
-	def test_c_male_litery_tez_dzialaja(self: "TestZasadyZUwag") -> None:
-		self.assertEqual(zasady_z_uwag("[SD] notatka, nowe"), "Nowe zasady")
+	def test_c_male_litery_nie_dzialaja_juz_case_sensitive(self: "TestZasadyZUwag") -> None:
+		# Import wstawia token WYLACZNIE wielkimi literami ("_stare_nowe" -> "STARE"/"NOWE").
+		# Male litery to zwykly wolny tekst notatek, NIE token - dopasowanie case-sensitive.
+		self.assertIsNone(zasady_z_uwag("[SD] notatka, nowe"))
 
 	def test_d_brak_tokenu_daje_none(self: "TestZasadyZUwag") -> None:
 		self.assertIsNone(zasady_z_uwag("[SD] zwykla notatka bez znacznika"))
@@ -270,6 +272,19 @@ class TestZasadyZUwag(unittest.TestCase):
 	def test_g_slowo_zawierajace_nowe_jako_podciag_nie_lapie_sie(self: "TestZasadyZUwag") -> None:
 		# "odnowe" zawiera "nowe" jako podciag - dopasowanie ma byc CALYM slowem.
 		self.assertIsNone(zasady_z_uwag("planuje odnowę dachu"))
+
+	def test_h_zwykle_polskie_slowo_nowe_okna_nie_daje_falszywego_trafienia(
+		self: "TestZasadyZUwag",
+	) -> None:
+		# Regresja: "nowe okna" w wolnym tekscie notatek NIE jest tokenem "NOWE".
+		self.assertIsNone(zasady_z_uwag("klient ma nowe okna"))
+
+	def test_i_male_litery_w_notatce_obok_prawdziwego_tokenu_wielkimi(
+		self: "TestZasadyZUwag",
+	) -> None:
+		# "stare" (male litery, wolny tekst) nie liczy sie jako token - liczy sie
+		# tylko wielkoliterowy "NOWE" dolaczony przez import.
+		self.assertEqual(zasady_z_uwag("ma stare panele, NOWE"), "Nowe zasady")
 
 
 class TestRozbijAdres(unittest.TestCase):
@@ -308,6 +323,19 @@ class TestRozbijAdres(unittest.TestCase):
 		self: "TestRozbijAdres",
 	) -> None:
 		self.assertIsNone(rozbij_adres("Plac Wolności", "Poznań"))
+
+	def test_k_kod_pocztowy_jako_ulica_nierozpoznane(self: "TestRozbijAdres") -> None:
+		# Produkcyjna anomalia danych: "62-300 300" w kolumnie Ulica (kod pocztowy
+		# wpisany przez pomylke, po nim jeszcze liczba) - bez straznika regex
+		# mechanicznie rozbilby to na ulica="62-300"/numer="300", co jest bez sensu.
+		self.assertIsNone(rozbij_adres("62-300 300", "Poznań"))
+
+	def test_l_kod_pocztowy_sam_bez_numeru_juz_nierozpoznany_wczesniej(
+		self: "TestRozbijAdres",
+	) -> None:
+		# "62-300" samo (bez trailing liczby) i tak juz nie pasuje do zadnego wzorca -
+		# potwierdza, ze straznik w SEKCJI ulica+numer nie jest jedyna droga do None.
+		self.assertIsNone(rozbij_adres("62-300", "Poznań"))
 
 
 class TestRozdzielImieNazwisko(unittest.TestCase):

@@ -80,6 +80,9 @@ _WZOR_SAM_NUMER = re.compile(r"^\d+[A-Za-z]?(?:/\d+[A-Za-z]?)?$")
 _WZOR_ULICA_I_NUMER = re.compile(r"^(.+)\s+(\d+[A-Za-z]?(?:/\d+[A-Za-z]?)?)$")
 """Ulica + numer domu (z opcjonalną literą/ukośnikiem) na końcu - `rozbij_adres`."""
 
+_WZOR_KOD_POCZTOWY = re.compile(r"^\d{2}-\d{3}$")
+"""Wygląda jak polski kod pocztowy, nie nazwa ulicy - straż w `rozbij_adres` przeciwko np. '62-300 300' (kod pocztowy wpisany w kolumnie Ulica)."""
+
 _HISTORIA_DO_STATUS: dict[str, str] = {
 	"wygrana": "Wygrana",
 	"przegrana": "Przegrana",
@@ -321,7 +324,9 @@ def rozbij_adres(adres: str, miasto: str) -> tuple[str, str] | None:
 	właśnie samym numerem, a wieś leży w `custom_install_city` (patrz WORKSHOP.md) -
 	ulicą staje się `miasto` (reguła „Zbożowo 5, 64-300 Zbożowo"): zwraca
 	`(miasto, numer)`. Wszystko nierozpoznane - pusty `adres`, brak liczby na końcu,
-	albo sam numer bez `miasto` do podstawienia - zwraca `None`: zero zgadywania,
+	sam numer bez `miasto` do podstawienia, albo ulica po rozbiciu pusta lub
+	wyglądająca jak kod pocztowy (dwie cyfry, myślnik, trzy cyfry - np. źle wpisane "62-300 300" -
+	prawdziwa produkcyjna anomalia danych) - zwraca `None`: zero zgadywania,
 	wywołujący ma zostawić oryginalną wartość bez zmian.
 	"""
 	tekst = (adres or "").strip()
@@ -334,7 +339,10 @@ def rozbij_adres(adres: str, miasto: str) -> tuple[str, str] | None:
 		return miasto_czyste, tekst
 	dopasowanie = _WZOR_ULICA_I_NUMER.match(tekst)
 	if dopasowanie:
-		return dopasowanie.group(1).strip(), dopasowanie.group(2)
+		ulica = dopasowanie.group(1).strip()
+		if not ulica or _WZOR_KOD_POCZTOWY.match(ulica):
+			return None
+		return ulica, dopasowanie.group(2)
 	return None
 
 
@@ -530,12 +538,16 @@ def zasady_z_uwag(uwagi: str) -> str | None:
 	(`"Nowe zasady"` / `"Stare zasady"`), żeby `create_deal()` przepisał wartość
 	na szansę po nazwie pola bez żadnego dodatkowego mapowania.
 
-	Dopasowanie jest bez rozróżniania wielkości liter i szuka CAŁEGO słowa (nie
-	podciągu). Brak tokenu, albo obecność OBU naraz (sprzeczne wpisy w grupie
-	dedupu, patrz `deduplikuj`) - zero zgadywania, zwraca `None`.
+	Dopasowanie jest CASE-SENSITIVE i szuka CAŁEGO słowa (nie podciągu) - `_linia_uwag`
+	dokleja token wyłącznie WIELKIMI literami (kolumna `_stare_nowe` niesie `STARE`/`NOWE`
+	verbatim z CSV), więc dopasowanie bez rozróżniania wielkości liter łapałoby zwykłe
+	polskie słowa z wolnego tekstu uwag ("nowe okna", "stare panele") jako fałszywe
+	trafienia - naprawiony bug, nie teoretyczne ryzyko (złapał się na prawdziwych danych
+	lokalnych). Brak tokenu, albo obecność OBU naraz (sprzeczne wpisy w grupie dedupu,
+	patrz `deduplikuj`) - zero zgadywania, zwraca `None`.
 	"""
 	tekst = uwagi or ""
-	tokeny = {dopasowanie.upper() for dopasowanie in re.findall(r"\b(STARE|NOWE)\b", tekst, flags=re.IGNORECASE)}
+	tokeny = set(re.findall(r"\b(STARE|NOWE)\b", tekst))
 	if tokeny == {"NOWE"}:
 		return "Nowe zasady"
 	if tokeny == {"STARE"}:
@@ -627,14 +639,14 @@ def zbuduj_leada(rekord: dict[str, Any]) -> dict[str, Any]:
 	Adres (issue ops#92): gdy `rekord["nr_domu"]` już przyszedł osobno z kolumny
 	`Nr domu` (nowsze arkusze), używa go wprost i `ulica` zostaje bez zmian.
 	Dla starego formatu (bez kolumny `Nr domu`) stosuje `rozbij_adres` TYLKO
-	wtedy, gdy cała wartość `Ulica` to sam numer domu (wieś bez nazwy ulicy) —
+	wtedy, gdy cała wartość `Ulica` to sam numer domu (wieś bez nazwy ulicy) -
 	dokładnie tak, jak prosi issue ops#92 ("ta sama heurystyka dla starego
 	formatu (Ulica = sam numer)"). Świadomie NIE rozbija ogólnego przypadku
-	"Ulica Numer" sklejonego w jedno pole przy imporcie — to zostaje wyłącznie
+	"Ulica Numer" sklejonego w jedno pole przy imporcie - to zostaje wyłącznie
 	zadaniem backfillu (`ops/crm-leady-pola-import.py`) na już zaimportowanych
 	leadach, żeby nie zmieniać zachowania dla arkuszy, które i tak wkrótce
 	dostaną osobną kolumnę `Nr domu`. Nierozpoznane zostaje bez zmian: cały
-	tekst trafia do `custom_install_address`, `custom_nr_domu` zostaje pusty —
+	tekst trafia do `custom_install_address`, `custom_nr_domu` zostaje pusty -
 	zero zgadywania.
 
 	Trzy pola strukturalne z importu (issue ops#91) - `custom_posiadane_produkty`,
