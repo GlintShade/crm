@@ -9,7 +9,6 @@ from frappe.desk.form.assign_to import _add as assign
 from frappe.model.document import Document
 from frappe.utils import validate_email_address
 
-from crm.fcrm.doctype.crm_deal.crm_deal import sanitize_deal_input
 from crm.fcrm.doctype.crm_service_level_agreement.utils import get_sla
 from crm.fcrm.doctype.crm_status_change_log.crm_status_change_log import (
 	add_status_change_log,
@@ -107,6 +106,19 @@ class CRMLead(Document):
 			else:
 				self.status = frappe.get_all("CRM Lead Status", {"type": "Open"}, pluck="name")[0]
 
+		# VOLTEO (issue #115): lead-to-deal conversion was removed, so a lead
+		# now finishes its life at a manually chosen "Skonwertowany" status
+		# instead of a conversion call that used to set both `status` and
+		# `converted` together. Set `converted` here whenever that status is
+		# reached, matching the old one-way semantics (never auto-reset back
+		# to 0, same as before), so existing readers of the flag keep working
+		# off the manual status: the Twilio call-routing lookups in
+		# crm.integrations.api and crm.integrations.twilio.twilio_handler,
+		# the CC stats counter in crm.api.volteo_leady, and the default
+		# Leads list filter (frontend/src/pages/Leads.vue, converted: 0).
+		if self.status == "Skonwertowany":
+			self.converted = 1
+
 	def set_full_name(self):
 		if self.first_name:
 			self.lead_name = " ".join(
@@ -200,225 +212,6 @@ class CRMLead(Document):
 					flags={"ignore_share_permission": True, "ignore_permissions": True},
 				)
 
-	def create_contact(self, existing_contact=None, throw=True):
-		if not self.lead_name:
-			self.set_full_name()
-			self.set_lead_name()
-
-		existing_contact = existing_contact or self.contact_exists(throw)
-		if existing_contact:
-			self.update_lead_contact(existing_contact)
-			return existing_contact
-
-		contact = frappe.new_doc("Contact")
-		contact.update(
-			{
-				"first_name": self.first_name or self.lead_name,
-				"last_name": self.last_name,
-				"salutation": self.salutation,
-				"gender": self.gender,
-				"designation": self.job_title,
-				"company_name": self.organization,
-				"image": self.image or "",
-			}
-		)
-
-		if self.email:
-			contact.append("email_ids", {"email_id": self.email, "is_primary": 1})
-
-		if self.phone:
-			contact.append("phone_nos", {"phone": self.phone, "is_primary_phone": 1})
-
-		if self.mobile_no:
-			contact.append("phone_nos", {"phone": self.mobile_no, "is_primary_mobile_no": 1})
-
-		contact.insert(ignore_permissions=True)
-		contact.reload()  # load changes by hooks on contact
-
-		return contact.name
-
-	def create_organization(self, existing_organization=None):
-		if not self.organization and not existing_organization:
-			return
-
-		existing_organization = existing_organization or frappe.db.exists(
-			"CRM Organization", {"organization_name": self.organization}
-		)
-		if existing_organization:
-			self.db_set("organization", existing_organization)
-			return existing_organization
-
-		organization = frappe.new_doc("CRM Organization")
-		organization.update(
-			{
-				"organization_name": self.organization,
-				"website": self.website,
-				"territory": self.territory,
-				"industry": self.industry,
-				"annual_revenue": self.annual_revenue,
-			}
-		)
-		organization.insert(ignore_permissions=True)
-		return organization.name
-
-	def update_lead_contact(self, contact):
-		contact = frappe.get_cached_doc("Contact", contact)
-		frappe.db.set_value(
-			"CRM Lead",
-			self.name,
-			{
-				"salutation": contact.salutation,
-				"first_name": contact.first_name,
-				"last_name": contact.last_name,
-				"email": contact.email_id,
-				"mobile_no": contact.mobile_no,
-			},
-		)
-
-	def contact_exists(self, throw=True):
-		email_exist = frappe.db.exists("Contact Email", {"email_id": self.email})
-		phone_exist = frappe.db.exists("Contact Phone", {"phone": self.phone})
-		mobile_exist = frappe.db.exists("Contact Phone", {"phone": self.mobile_no})
-
-		doctype = "Contact Email" if email_exist else "Contact Phone"
-		name = email_exist or phone_exist or mobile_exist
-
-		if name:
-			text = "Email" if email_exist else "Phone" if phone_exist else "Mobile No"
-			data = self.email if email_exist else self.phone if phone_exist else self.mobile_no
-
-			value = "{0}: {1}".format(text, data)
-
-			contact = frappe.db.get_value(doctype, name, "parent")
-
-			if throw:
-				frappe.throw(
-					_("Contact already exists with {0}").format(value),
-					title=_("Contact Already Exists"),
-				)
-			return contact
-
-		return False
-
-	def create_deal(self, contact, organization, deal=None):
-		new_deal = frappe.new_doc("CRM Deal")
-
-		lead_deal_map = {
-			"lead_owner": "deal_owner",
-		}
-
-		restricted_fieldtypes = [
-			"Tab Break",
-			"Section Break",
-			"Column Break",
-			"HTML",
-			"Button",
-			"Attach",
-		]
-		restricted_map_fields = [
-			"name",
-			"naming_series",
-			"creation",
-			"owner",
-			"modified",
-			"modified_by",
-			"idx",
-			"docstatus",
-			"status",
-			"email",
-			"mobile_no",
-			"phone",
-			"sla",
-			"sla_status",
-			"response_by",
-			"first_response_time",
-			"first_responded_on",
-			"communication_status",
-			"sla_creation",
-			"status_change_log",
-		]
-
-		for field in self.meta.fields:
-			if field.fieldtype in restricted_fieldtypes:
-				continue
-			if field.fieldname in restricted_map_fields:
-				continue
-
-			fieldname = field.fieldname
-			if field.fieldname in lead_deal_map:
-				fieldname = lead_deal_map[field.fieldname]
-
-			if hasattr(new_deal, fieldname):
-				if fieldname == "organization":
-					new_deal.update({fieldname: organization})
-				else:
-					new_deal.update({fieldname: self.get(field.fieldname)})
-
-		new_deal.update(
-			{
-				"lead": self.name,
-				"contacts": [{"contact": contact}],
-			}
-		)
-
-		# VOLTEO (ops#92): the Lead splits the address into custom_install_address
-		# (street) + custom_nr_domu (house number) so CC/handlowiec see them as two
-		# quick-filterable fields; CRM Deal has a single address field. The generic
-		# field-copy loop above already copied the bare street name into
-		# new_deal.custom_install_address (same fieldname on both doctypes -- see
-		# ops/crm-leady-pola.py for why that name is load-bearing); splice the house
-		# number back on here so the Deal keeps getting one combined "Ulica Nr" value.
-		# A no-op when custom_nr_domu is empty (pre-ops#92 leads, or an address that
-		# rozbij_adres()/backfill couldn't parse and left whole in custom_install_address).
-		nr_domu = (self.get("custom_nr_domu") or "").strip()
-		if nr_domu:
-			ulica = (new_deal.custom_install_address or "").strip()
-			new_deal.custom_install_address = f"{ulica} {nr_domu}".strip() if ulica else nr_domu
-
-		if self.first_responded_on:
-			new_deal.update(
-				{
-					"sla_creation": self.sla_creation,
-					"response_by": self.response_by,
-					"sla_status": self.sla_status,
-					"communication_status": self.communication_status,
-					"first_response_time": self.first_response_time,
-					"first_responded_on": self.first_responded_on,
-				}
-			)
-
-		if deal:
-			# VOLTEO (ops#32): sanitize the caller-controlled `deal` payload before it lands on
-			# the document -- see crm.fcrm.doctype.crm_deal.crm_deal.sanitize_deal_input for
-			# what it strips (system keys, non-CRM-Deal-meta keys, and for a non-bypass caller
-			# every permlevel>0 field plus an out-of-pipeline status).
-			new_deal.update(sanitize_deal_input(deal))
-
-		# deal_owner is server-derived above (mapped from self.lead_owner by the field loop) --
-		# never from the caller's `deal` dict for a non-bypass caller, since sanitize_deal_input
-		# already stripped it at permlevel 1. Captured before insert() because insert() itself
-		# silently strips permlevel-1 fields for a non-privileged creator (same mechanism as
-		# crm/api/czyste_powietrze.py:437); a bypass caller's `deal_owner` survives sanitization
-		# and is mapped in naturally, so this still honors it.
-		target_owner = new_deal.deal_owner or frappe.session.user
-
-		new_deal.insert()
-		new_deal.db_set("deal_owner", target_owner)
-
-		# db_set() does not run validate()/after_insert(), so CRMDeal.after_insert's own
-		# share_with_agent + assign_agent (triggered when deal_owner is already set going into
-		# insert()) never fires here -- deal_owner is only known after db_set. Replicate it
-		# explicitly, same as crm_deal.create_deal; both helpers are idempotent.
-		if target_owner != frappe.session.user:
-			new_deal.share_with_agent(target_owner)
-		new_deal.assign_agent(target_owner)
-
-		for user in self.get_assigned_users():
-			if user and user != new_deal.deal_owner:
-				new_deal.assign_agent(user)
-
-		return new_deal.name
-
 	def set_sla(self):
 		"""
 		Find an SLA to apply to the lead.
@@ -442,9 +235,6 @@ class CRMLead(Document):
 		sla = frappe.get_last_doc("CRM Service Level Agreement", {"name": self.sla})
 		if sla:
 			sla.apply(self)
-
-	def convert_to_deal(self, deal=None):
-		return convert_to_deal(lead=self.name, doc=self, deal=deal)
 
 	@staticmethod
 	def get_non_filterable_fields():
@@ -653,32 +443,3 @@ class CRMLead(Document):
 			"title_field": "lead_name",
 			"kanban_fields": '["custom_install_city", "email", "mobile_no", "_assign", "modified"]',
 		}
-
-
-@frappe.whitelist()
-def convert_to_deal(
-	lead: str,
-	doc: Document | None = None,
-	deal: str | dict | None = None,
-	existing_contact: str | None = None,
-	existing_organization: str | None = None,
-):
-	if not (doc and doc.flags.get("ignore_permissions")) and not frappe.has_permission(
-		"CRM Lead", "write", lead
-	):
-		frappe.throw(_("Not allowed to convert Lead to Deal"), frappe.PermissionError)
-
-	lead = frappe.get_cached_doc("CRM Lead", lead)
-	# VOLTEO: statuses were renamed to Polish in ops/crm-setup.py §9 — the
-	# upstream "Qualified" terminal status no longer exists, so this
-	# condition was silently dead (converted=1 still got set, status did
-	# not). "Skonwertowany" is the current terminal status after conversion.
-	if frappe.db.exists("CRM Lead Status", "Skonwertowany"):
-		lead.db_set("status", "Skonwertowany")
-	lead.db_set("converted", 1)
-	if lead.sla and frappe.db.exists("CRM Communication Status", "Replied"):
-		lead.db_set("communication_status", "Replied")
-	contact = lead.create_contact(existing_contact, False)
-	organization = lead.create_organization(existing_organization)
-	_deal = lead.create_deal(contact, organization, deal)
-	return _deal

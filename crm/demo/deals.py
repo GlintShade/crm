@@ -15,48 +15,75 @@ from crm.demo.utils import (
 
 
 def create_demo_deals(lead_names, demo_users):
-	"""Convert seven leads into deals and add deal-specific activity."""
-	from crm.fcrm.doctype.crm_lead.crm_lead import convert_to_deal
+	"""Create seven demo deals from leads and add deal-specific activity.
+
+	VOLTEO (issue #115): the lead-to-deal conversion feature was removed from
+	the product; a lead now ends its life at a manually chosen "Skonwertowany"
+	status instead. This demo-data generator (upstream Frappe CRM's "Getting
+	Started" seed, wired via setup_wizard_complete / FCRM Settings.restore_demo_data,
+	never exercised on Volteo's own production or local data) still needs
+	deals derived from leads for its comment/communication/version narrative,
+	so it builds them directly with the still-alive generic helpers from
+	crm_deal.py instead of the removed conversion path.
+	"""
+	from crm.fcrm.doctype.crm_deal.crm_deal import create_contact, create_organization
 
 	session_user, owner_1, owner_2, _ = resolve_owners(demo_users)
 	_full_names = build_full_names(session_user)
 
-	# leads[0] Alice, [3] David, [7] Henry, [8] Iris, [9] Jack → 5 active/won deals
-	# leads[10] Karen, [11] Leo → 2 lost deals
-	d_alice = convert_to_deal(
-		lead=lead_names[0],
-		deal={"status": "Demo/Making", "deal_value": 120000, "probability": 50, "deal_owner": session_user},
+	def _deal_from_lead(lead_name, deal_fields):
+		lead = frappe.get_doc("CRM Lead", lead_name)
+		lead_dict = lead.as_dict()
+		contact = create_contact(lead_dict)
+		organization = lead_dict.get("organization") or create_organization(lead_dict)
+		new_deal = frappe.new_doc("CRM Deal")
+		new_deal.update(
+			{
+				"lead": lead_name,
+				"organization": organization,
+				"contacts": [{"contact": contact, "is_primary": 1}] if contact else [],
+			}
+		)
+		new_deal.update(deal_fields)
+		new_deal.insert(ignore_permissions=True)
+		return new_deal.name
+
+	# leads[0] Alice, [3] David, [7] Henry, [8] Iris, [9] Jack -> 5 active/won deals
+	# leads[10] Karen, [11] Leo -> 2 lost deals
+	d_alice = _deal_from_lead(
+		lead_names[0],
+		{"status": "Demo/Making", "deal_value": 120000, "probability": 50, "deal_owner": session_user},
 	)
-	d_david = convert_to_deal(
-		lead=lead_names[3],
-		deal={"status": "Proposal/Quotation", "deal_value": 45000, "probability": 70, "deal_owner": owner_1},
+	d_david = _deal_from_lead(
+		lead_names[3],
+		{"status": "Proposal/Quotation", "deal_value": 45000, "probability": 70, "deal_owner": owner_1},
 	)
-	d_henry = convert_to_deal(
-		lead=lead_names[7],
-		deal={"status": "Negotiation", "deal_value": 85000, "probability": 60, "deal_owner": owner_2},
+	d_henry = _deal_from_lead(
+		lead_names[7],
+		{"status": "Negotiation", "deal_value": 85000, "probability": 60, "deal_owner": owner_2},
 	)
-	d_iris = convert_to_deal(
-		lead=lead_names[8],
-		deal={"status": "Qualification", "deal_value": 60000, "probability": 35, "deal_owner": session_user},
+	d_iris = _deal_from_lead(
+		lead_names[8],
+		{"status": "Qualification", "deal_value": 60000, "probability": 35, "deal_owner": session_user},
 	)
-	d_jack = convert_to_deal(
-		lead=lead_names[9],
-		deal={"status": "Won", "deal_value": 175000, "probability": 100, "deal_owner": owner_1},
+	d_jack = _deal_from_lead(
+		lead_names[9],
+		{"status": "Won", "deal_value": 175000, "probability": 100, "deal_owner": owner_1},
 	)
-	d_karen = convert_to_deal(
-		lead=lead_names[10],
-		deal={
+	d_karen = _deal_from_lead(
+		lead_names[10],
+		{
 			"status": "Lost",
 			"deal_value": 95000,
 			"probability": 0,
 			"deal_owner": owner_2,
 			"lost_reason": "Competition",
-			"lost_notes": "Prospect chose a competitor offering deeper BI integrations out of the box. Price was not the issue — feature parity was.",
+			"lost_notes": "Prospect chose a competitor offering deeper BI integrations out of the box. Price was not the issue, feature parity was.",
 		},
 	)
-	d_leo = convert_to_deal(
-		lead=lead_names[11],
-		deal={
+	d_leo = _deal_from_lead(
+		lead_names[11],
+		{
 			"status": "Lost",
 			"deal_value": 55000,
 			"probability": 0,
@@ -67,7 +94,7 @@ def create_demo_deals(lead_names, demo_users):
 	)
 
 	deal_names_list = [d_alice, d_david, d_henry, d_iris, d_jack, d_karen, d_leo]
-	# Converted lead indices — must match deal_names_list order
+	# Converted lead indices, must match deal_names_list order
 	_converted_lead_indices = [0, 3, 7, 8, 9, 10, 11]
 	# Days ago each deal was created (always after its lead)
 	_deal_days = [50, 37, 18, 11, 24, 9, 5]
@@ -122,7 +149,6 @@ def create_demo_deals(lead_names, demo_users):
 		"comments": comment_names,
 		"communications": communication_names,
 	}
-
 
 def _create_deal_comments(deal_names, session_user, owner_1, owner_2, full_names, now):
 	comments_data = [

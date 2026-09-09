@@ -165,7 +165,6 @@ import BrushCleaningIcon from '~icons/lucide/brush-cleaning'
 import LucideLayoutDashboard from '~icons/lucide/layout-dashboard'
 import CRMLogo from '@/components/Icons/CRMLogo.vue'
 import InviteIcon from '@/components/Icons/InviteIcon.vue'
-import ConvertIcon from '@/components/Icons/ConvertIcon.vue'
 import CommentIcon from '@/components/Icons/CommentIcon.vue'
 import EmailIcon from '@/components/Icons/EmailIcon.vue'
 import StepsIcon from '@/components/Icons/StepsIcon.vue'
@@ -399,12 +398,6 @@ const { user } = sessionStore()
 const { users, isManager } = usersStore()
 const { isOnboardingStepsCompleted, setUp } = useOnboarding('frappecrm')
 
-async function getFirstLead() {
-  let firstLead = localStorage.getItem('firstLead' + user)
-  if (firstLead) return firstLead
-  return await call('crm.api.onboarding.get_first_lead')
-}
-
 async function getFirstDeal() {
   let firstDeal = localStorage.getItem('firstDeal' + user)
   if (firstDeal) return firstDeal
@@ -450,34 +443,6 @@ const steps = reactive([
       capture('onboarding_step_clicked_invite_your_team')
     },
     condition: () => isManager(),
-  },
-  {
-    name: 'convert_lead_to_deal',
-    title: __('Convert lead to deal'),
-    icon: markRaw(ConvertIcon),
-    completed: false,
-    dependsOn: 'create_first_lead',
-    onClick: async () => {
-      minimize.value = true
-      capture('onboarding_step_clicked_convert_lead_to_deal')
-      currentStep.value = {
-        title: __('Convert lead to deal'),
-        buttonLabel: __('Convert'),
-        videoURL: '/assets/crm/videos/convertToDeal.mov',
-        onClick: async () => {
-          showIntermediateModal.value = false
-          currentStep.value = {}
-
-          let lead = await getFirstLead()
-          if (lead) {
-            router.push({ name: 'Lead', params: { leadId: lead } })
-          } else {
-            router.push({ name: 'Leads' })
-          }
-        },
-      }
-      showIntermediateModal.value = true
-    },
   },
   {
     name: 'create_first_task',
@@ -570,7 +535,7 @@ const steps = reactive([
     title: __('Change deal status'),
     icon: markRaw(StepsIcon),
     completed: false,
-    dependsOn: 'convert_lead_to_deal',
+    dependsOn: 'create_first_lead',
     onClick: async () => {
       minimize.value = true
       capture('onboarding_step_clicked_change_deal_status')

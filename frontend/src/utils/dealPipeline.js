@@ -201,13 +201,12 @@ export function filterKnown(names, isKnown) {
   return names.filter((name) => isKnown(name))
 }
 
-// VOLTEO — issue #16: per-user product-line access switch. `custom_rodzaj_umowy`
+// VOLTEO (issue #16): per-user product-line access switch. `custom_rodzaj_umowy`
 // (CRM Deal, Select) carries three OZE variants and one Czyste Powietrze variant;
-// the deal-creation modals (DealModal.vue, ConvertToDealModal.vue) filter its
-// options down to the lines the current user is switched on for, mirroring the
-// server-side gate in crm.api.volteo_ma_linie. Bypass-role users get both flags
-// `true` from boot (crm/www/crm.py::get_boot), so no separate admin branch is
-// needed here.
+// the deal-creation modal (DealModal.vue) filters its options down to the lines
+// the current user is switched on for, mirroring the server-side gate in
+// crm.api.volteo_ma_linie. Bypass-role users get both flags `true` from boot
+// (crm/www/crm.py::get_boot), so no separate admin branch is needed here.
 const RODZAJE_UMOWY_OZE = new Set([
   'Fotowoltaika',
   'Fotowoltaika + Magazyn',

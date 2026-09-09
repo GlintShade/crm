@@ -39,11 +39,6 @@
           </Button>
         </template>
       </Dropdown>
-      <Button
-        :label="__('Convert to Deal')"
-        variant="solid"
-        @click="showConvertToDealModal = true"
-      />
     </template>
   </LayoutHeader>
   <div v-if="doc.name" class="flex h-full overflow-hidden">
@@ -267,11 +262,6 @@
     :errorTitle="errorTitle"
     :errorMessage="errorMessage"
   />
-  <ConvertToDealModal
-    v-if="showConvertToDealModal"
-    v-model="showConvertToDealModal"
-    :lead="doc"
-  />
   <FilesUploader
     v-model="showFilesUploader"
     doctype="CRM Lead"
@@ -324,7 +314,6 @@ import SidePanelLayout from '@/components/SidePanelLayout.vue'
 import SLASection from '@/components/SLASection.vue'
 import TasksSection from '@/components/TasksSection.vue'
 import CustomActions from '@/components/CustomActions.vue'
-import ConvertToDealModal from '@/components/Modals/ConvertToDealModal.vue'
 import SidebarLink from '@/components/SidebarLink.vue'
 import CollapseSidebar from '@/components/Icons/CollapseSidebar.vue'
 import {
@@ -378,7 +367,6 @@ const activities = ref(null)
 const errorTitle = ref('')
 const errorMessage = ref('')
 const showDeleteLinkedDocModal = ref(false)
-const showConvertToDealModal = ref(false)
 const showFilesUploader = ref(false)
 const isSidePanelCollapsed = useStorage('isLeadSidePanelCollapsed', false)
 

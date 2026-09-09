@@ -1306,10 +1306,6 @@ msgstr "Wykres"
 msgid "Chart Type"
 msgstr "Typ wykresu"
 
-#: frontend/src/components/Modals/ConvertToDealModal.vue:29 frontend/src/components/Modals/ConvertToDealModal.vue:55
-msgid "Choose Existing"
-msgstr "Wybierz istniejące"
-
 #: frontend/src/components/Modals/DealModal.vue:44
 msgid "Choose Existing Contact"
 msgstr "Wybierz istniejącego klienta"
@@ -1592,10 +1588,6 @@ msgstr "Zaktualizowano dane klienta"
 msgid "Contact Us"
 msgstr "Skontaktuj się z nami"
 
-#: crm/fcrm/doctype/crm_lead/crm_lead.py:289
-msgid "Contact already exists with Email: {0}"
-msgstr "Klient z adresem e-mail {0} już istnieje."
-
 #: frontend/src/pages/Contact.vue:289
 msgid "Contact image updated"
 msgstr "Zaktualizowano zdjęcie klienta"
@@ -1624,26 +1616,10 @@ msgstr "Treść jest wymagana"
 msgid "Controls how numbers are displayed (e.g., commas, decimal separators)"
 msgstr "Określa sposób wyświetlania liczb (np. separatory tysięcy i miejsc dziesiętnych)"
 
-#: frontend/src/components/Layouts/AppSidebar.vue:405 frontend/src/components/ListBulkActions.vue:86 frontend/src/components/Modals/ConvertToDealModal.vue:83 frontend/src/pages/MobileLead.vue:54
-msgid "Convert"
-msgstr "Konwertuj"
-
-#: frontend/src/components/Layouts/AppSidebar.vue:396 frontend/src/components/Layouts/AppSidebar.vue:404
-msgid "Convert lead to deal"
-msgstr "Konwertuj leada na szansę"
-
-#: frontend/src/components/ListBulkActions.vue:78 frontend/src/components/ListBulkActions.vue:195 frontend/src/components/Modals/ConvertToDealModal.vue:7 frontend/src/pages/Lead.vue:38
-msgid "Convert to Deal"
-msgstr "Konwertuj na szansę"
-
 #. Label of the converted (Check) field in DocType 'CRM Lead'
 #: crm/fcrm/doctype/crm_lead/crm_lead.json
 msgid "Converted"
 msgstr "Skonwertowano"
-
-#: frontend/src/components/ListBulkActions.vue:94
-msgid "Converted Successfully"
-msgstr "Pomyślnie przekonwertowano"
 
 #: frontend/src/utils/index.js:405
 msgid "Copied to Clipboard"
@@ -2652,10 +2628,6 @@ msgstr "Wystąpił błąd"
 #: frontend/src/components/Settings/LeadSyncing/FailureLogs.vue:139
 msgid "Error Syncing Lead"
 msgstr "Błąd synchronizacji leada"
-
-#: frontend/src/components/Modals/ConvertToDealModal.vue:173
-msgid "Error converting to deal: {0}"
-msgstr "Błąd podczas konwersji na szansę: {0}"
 
 #: frontend/src/components/Settings/LeadSyncing/LeadSyncSourceForm.vue:290
 msgid "Error creating Lead Sync Source"
@@ -4383,14 +4355,6 @@ msgstr "Nowe zadanie"
 msgid "New Template"
 msgstr "Nowy szablon"
 
-#: frontend/src/components/Modals/ConvertToDealModal.vue:67
-msgid "New contact will be created based on the person's details"
-msgstr "Nowy klient zostanie utworzony na podstawie danych osoby"
-
-#: frontend/src/components/Modals/ConvertToDealModal.vue:42
-msgid "New organization will be created based on the data in details section"
-msgstr "Nowa organizacja zostanie utworzona na podstawie danych w sekcji szczegółów"
-
 #: frontend/src/components/Modals/ChangePasswordModal.vue:123
 msgid "New password cannot be the same as current password"
 msgstr "Nowe hasło nie może być takie samo jak obecne hasło"
@@ -4585,10 +4549,6 @@ msgstr "Nie zsynchronizowano"
 #: crm/fcrm/doctype/crm_deal/crm_deal.py:355
 msgid "Not allowed to add contact to Deal"
 msgstr "Brak uprawnień do dodania klienta do szansy"
-
-#: crm/fcrm/doctype/crm_lead/crm_lead.py:497
-msgid "Not allowed to convert Lead to Deal"
-msgstr "Nie można przekonwertować leada na szansę"
 
 #: crm/fcrm/doctype/crm_deal/crm_deal.py:366
 msgid "Not allowed to remove contact from Deal"
@@ -5039,14 +4999,6 @@ msgstr "Wybierz walutę przed zapisaniem."
 #: crm/lead_syncing/doctype/lead_sync_source/lead_sync_source.py:67
 msgid "Please select a lead gen form before syncing!"
 msgstr "Wybierz formularz generowania leadów przed synchronizacją!"
-
-#: frontend/src/components/Modals/ConvertToDealModal.vue:133
-msgid "Please select an existing contact"
-msgstr "Wybierz istniejącego klienta"
-
-#: frontend/src/components/Modals/ConvertToDealModal.vue:138
-msgid "Please select an existing organization"
-msgstr "Wybierz istniejącą organizację"
 
 #: crm/fcrm/doctype/crm_holiday_list/crm_holiday_list.py:55
 msgid "Please select weekly off day"
@@ -8561,10 +8513,6 @@ msgstr "Zaktualizowano klienta"
 # przeniesione z produkcyjnej tabeli Translation (2026-08-17)
 msgid "Contact removed"
 msgstr "Usunięto klienta"
-
-# przeniesione z produkcyjnej tabeli Translation (2026-08-17)
-msgid "Contact already exists with {0}"
-msgstr "Klient z {0} już istnieje"
 
 # przeniesione z produkcyjnej tabeli Translation (2026-08-17)
 msgid "Contact already added"
