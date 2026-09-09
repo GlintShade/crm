@@ -80,6 +80,15 @@
               size="sm"
             />
           </div>
+          <div v-else-if="column.key === 'custom_cc'">
+            <Avatar
+              v-if="item.full_name"
+              class="flex items-center"
+              :image="item.user_image"
+              :label="item.full_name"
+              size="sm"
+            />
+          </div>
           <div v-else-if="column.key === 'mobile_no' && item">
             <PhoneIcon class="h-4 w-4" />
           </div>
@@ -94,6 +103,14 @@
             >
               {{ __('Szczegóły') }}
             </Button>
+          </div>
+          <div
+            v-else-if="column.label === 'Komentarze'"
+            class="flex cursor-pointer items-center gap-1 text-ink-gray-6"
+            @click.stop.prevent="() => openComments(row)"
+          >
+            <CommentIcon class="h-4 w-4" />
+            <span v-if="item">{{ item }}</span>
           </div>
           <div
             v-else-if="
@@ -224,11 +241,19 @@
     @loadMore="emit('loadMore')"
   />
   <ListBulkActions ref="listBulkActionsRef" v-model="list" doctype="CRM Lead" />
+  <KomentarzeLeadaModal
+    v-model="showComments"
+    :docname="commentsDocname"
+    doctype="CRM Lead"
+    @commentAdded="onCommentAdded"
+  />
 </template>
 
 <script setup>
 import HeartIcon from '@/components/Icons/HeartIcon.vue'
 import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
+import CommentIcon from '@/components/Icons/CommentIcon.vue'
+import KomentarzeLeadaModal from '@/components/Modals/KomentarzeLeadaModal.vue'
 import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
 import RatingInput from '@/components/Controls/RatingInput.vue'
 import MultipleAvatar from '@/components/MultipleAvatar.vue'
@@ -299,6 +324,27 @@ function leadRoute(row) {
 
 function goToLead(row) {
   router.push(leadRoute(row))
+}
+
+// VOLTEO (ops#94): pseudo-kolumna "Komentarze" -- jedna zamontowana
+// instancja modala na cala liste (nie jedna na wiersz), docname przelaczany
+// przy kolejnym kliknieciu. Klik ma `@click.stop.prevent` (patrz szablon),
+// wiec nie nawiguje do leada, w przeciwienstwie do reszty wiersza.
+const showComments = ref(false)
+const commentsDocname = ref('')
+
+function openComments(row) {
+  commentsDocname.value = row.name
+  showComments.value = true
+}
+
+// Po dodaniu komentarza przeladowuje cala liste (ten sam mechanizm co
+// `ListBulkActions` uzywa po akcjach masowych) -- `_comment_count` jest
+// liczony po stronie backendu (patrz `crm/api/doc.py`, komentarz
+// "VOLTEO (ops#94)" przy `get_data`), wiec przeladowanie jest jedynym
+// pewnym sposobem, zeby licznik w wierszu odzwierciedlal realny stan.
+function onCommentAdded() {
+  list.value?.reload?.()
 }
 
 const isLikeFilterApplied = computed(() => {
