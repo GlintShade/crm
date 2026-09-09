@@ -577,3 +577,42 @@ def handlowcy() -> list[dict]:
 		{"user": rep["name"], "full_name": rep["full_name"]}
 		for rep in _aktywni_d2d_reprezentanci()
 	]
+
+
+def _aktywni_cc_reprezentanci() -> list[dict]:
+	"""Userzy `enabled=1` z rolą `Volteo Call Center`, posortowani po nazwisku.
+	Lustro `_aktywni_d2d_reprezentanci` powyżej, dla drugiej strony przydziału
+	(issue #88/#93/#95): `osoby_cc` niżej daje adminowi listę CC do wyboru w
+	modalu masowego przydziału `PrzydzielCCModal.vue`, tak jak
+	`_aktywni_d2d_reprezentanci` daje listę handlowców w `przydziel`/
+	`handlowcy`."""
+	nazwy = frappe.get_all(
+		"Has Role",
+		filters={"parenttype": "User", "role": ROLA_CC},
+		pluck="parent",
+	)
+	if not nazwy:
+		return []
+	return frappe.get_all(
+		"User",
+		filters={"name": ["in", nazwy], "enabled": 1},
+		fields=["name", "full_name"],
+		order_by="full_name asc",
+	)
+
+
+@frappe.whitelist()
+def osoby_cc() -> list[dict]:
+	"""Lista aktywnych osób CC (`user`, `full_name`), posortowana po nazwisku,
+	dla selecta w modalu masowego przydziału `PrzydzielCCModal.vue` (issue #95).
+	Admin-only (`System Manager` / `Volteo Core Admin`), tak jak `przydziel_cc`,
+	który tej listy jest źródłem wyboru, w odróżnieniu od `handlowcy()` powyżej
+	(dostępnej też dla samego CC, żeby mógł przekazać lead handlowcowi),
+	wołający tu musi mieć uprawnienia do PRZYDZIELANIA leadów osobom CC, nie
+	tylko do przekazania pojedynczego leada dalej."""
+	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
+	# Ten sam ksztalt co handlowcy(): klucz "user", nie "name" (modal czyta cc.user).
+	return [
+		{"user": cc["name"], "full_name": cc["full_name"]}
+		for cc in _aktywni_cc_reprezentanci()
+	]

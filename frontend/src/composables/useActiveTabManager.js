@@ -2,8 +2,13 @@ import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDebounceFn, useStorage } from '@vueuse/core'
 
-export function useActiveTabManager(tabs, storageKey) {
-  const activeTab = useStorage(storageKey, 'activity')
+export function useActiveTabManager(tabs, storageKey, defaultTab = 'activity') {
+  // VOLTEO (issue #96): Lead.vue potrzebuje domyslnej zakladki "Szczegóły"
+  // (tab name 'details') zamiast dotychczasowej 'activity', zeby CC od razu
+  // widzial dane leada po otwarciu karty. Trzeci parametr jest opcjonalny i
+  // domyslnie zachowuje dotychczasowe zachowanie dla Deal.vue/MobileDeal.vue/
+  // MobileLead.vue, ktore go nie przekazuja.
+  const activeTab = useStorage(storageKey, defaultTab)
   const route = useRoute()
   const router = useRouter()
 
