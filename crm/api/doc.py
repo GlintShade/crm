@@ -333,6 +333,20 @@ def get_quick_filters(doctype: str, cached: bool = True):
 	else:
 		fields = [field for field in meta.fields if field.in_standard_filter]
 
+	# VOLTEO (ops#94): przed ta zmiana get_quick_filters nie sprawdzal
+	# permlevel wcale — pole permlevel > 0 skonfigurowane w pasku szybkim
+	# (np. "Przypisany CC" na CRM Lead, permlevel 2, bez odczytu dla
+	# `Volteo D2D Sales`) wyswietlaloby sie w pasku KAZDEMU uzytkownikowi,
+	# nawet temu bez uprawnienia do odczytu wartosci tego pola — ten sam
+	# rodzaj luki, ktora ops#79 zamknal juz dla sort_options/
+	# get_filterable_fields/get_group_by_fields (patrz `_pola_dozwolone`).
+	# Global Settings dalej moze WYMIENIC pole niedozwolone (np. gdy admin
+	# doda je z UI) — filtrujemy dopiero tutaj, po stronie odczytu, wiec
+	# konfiguracja w bazie zostaje nietknieta, a pasek po prostu chowa pole
+	# dla uzytkownikow bez odczytu.
+	permitted = _pola_dozwolone(doctype)
+	fields = [field for field in fields if field.get("fieldname") in permitted]
+
 	for field in fields:
 		options = field.get("options")
 		if field.get("fieldtype") == "Select" and options and isinstance(options, str):
@@ -522,10 +536,25 @@ def get_data(
 		if group_by_field and group_by_field not in rows:
 			rows.append(group_by_field)
 
+		# VOLTEO (ops#94): "_comment_count" nie jest prawdziwym DocFieldem —
+		# to pole pseudo-kolumny "Komentarze" na liscie leadow (wzorzec
+		# analogiczny do "Szczegoly"/key="name", ale tu zadne realne pole
+		# nie niesie potrzebnej wartosci, wiec trzeba je doliczyc osobno).
+		# Wyciagamy je z listy pol SQL PRZED wywolaniem frappe.get_list
+		# (inaczej "Unknown column"), a po pobraniu danych doliczamy per
+		# wiersz JEDNYM zapytaniem na dokument, tak jak `getCounts` robi to
+		# dla kanbanu (nizej w tym pliku) — tu tylko licznik komentarzy, nie
+		# cztery liczniki naraz, zeby nie mnozyc zapytan dla widokow, ktore
+		# go nie prosza. `rows` samo w sobie zostaje NIETKNIETE, bo jest
+		# zwracane wprost do frontendu (`parseRows` iteruje po nim, zeby
+		# wiedziec, ktore klucze przepisac z wiersza danych).
+		chce_licznik_komentarzy = "_comment_count" in rows
+		sql_rows = [row for row in rows if row != "_comment_count"]
+
 		data = (
 			frappe.get_list(
 				doctype,
-				fields=rows,
+				fields=sql_rows,
 				filters=filters,
 				order_by=order_by,
 				page_length=page_length,
@@ -533,6 +562,17 @@ def get_data(
 			or []
 		)
 		data = parse_list_data(data, doctype)
+
+		if chce_licznik_komentarzy:
+			for d in data:
+				d["_comment_count"] = frappe.db.count(
+					"Comment",
+					filters={
+						"reference_doctype": doctype,
+						"reference_name": d.get("name"),
+						"comment_type": "Comment",
+					},
+				)
 
 	if view_type == "kanban":
 		if not rows:
