@@ -285,7 +285,7 @@ def _waliduj_cc(cc: str) -> None:
 	if not _ma_linie_leady(cc):
 		frappe.throw(
 			_(
-				"Użytkownik {0} nie ma dostępu do modułu Leady — włącz linię "
+				"Użytkownik {0} nie ma dostępu do modułu Leady, włącz linię "
 				"Leady w Ustawienia → Użytkownicy przed przydzieleniem."
 			).format(cc)
 		)
