@@ -31,6 +31,13 @@
         >
           <HeartIcon class="h-4 w-4" />
         </Button>
+        <div
+          v-else-if="column.label === 'Komentarze'"
+          class="flex items-center text-ink-gray-5"
+          :title="__('Komentarze')"
+        >
+          <CommentIcon class="h-4 w-4" />
+        </div>
       </ListHeaderItem>
     </ListHeader>
     <ListRows

@@ -493,6 +493,12 @@ class CRMLead(Document):
 				"width": "11rem",
 			},
 			{
+				"label": "E-mail",
+				"type": "Data",
+				"key": "email",
+				"width": "12rem",
+			},
+			{
 				"label": "Status CC",
 				"type": "Link",
 				"options": "CRM Lead Status",
@@ -603,6 +609,7 @@ class CRMLead(Document):
 			"_comment_count",
 			"custom_zasady_dotacji",
 			"mobile_no",
+			"email",
 			"status",
 			"custom_kolejny_kontakt",
 			"custom_termin_spotkania",
