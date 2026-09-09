@@ -4,6 +4,7 @@ import { usersStore } from '@/stores/users'
 import { sessionStore } from '@/stores/session'
 import { viewsStore } from '@/stores/views'
 import { isStaleChunkError, shouldReload } from '@/utils/chunkReload'
+import { czyZablokowana } from '@/utils/strazTras'
 
 let personaChecked = false
 export const PERSONA_DONE_KEY = 'crm_persona_captured'
@@ -296,6 +297,21 @@ router.beforeEach(async (to, from, next) => {
     isLoggedIn &&
     window.volteo_linia_cp === false &&
     volteoCpRoutes.includes(to.name) &&
+    to.name !== 'Not Permitted'
+  ) {
+    return next({ name: 'Not Permitted' })
+  }
+
+  // VOLTEO: leads route guard (issue ops#106). window.hide_leads is injected
+  // server-side (crm/www/crm.py, get_boot) and already drives the sidebar/mobile
+  // sidebar entries (AppSidebar.vue, MobileSidebar.vue, condition `!window.hide_leads`,
+  // issue ops#26), but until now a user without the Leady flag could still reach
+  // /leads or /mapa-leadow directly by URL and land on a page the server returns
+  // empty data for, instead of a clear "Not Permitted". Pure guard logic lives in
+  // utils/strazTras.js so it is unit-testable without importing this router.
+  if (
+    isLoggedIn &&
+    czyZablokowana(to.name, { hideLeads: window.hide_leads }) &&
     to.name !== 'Not Permitted'
   ) {
     return next({ name: 'Not Permitted' })
