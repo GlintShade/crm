@@ -401,7 +401,7 @@ def mapa() -> list[dict]:
 	dymka pinezki i nagłówka panelu (`custom_cc`, `custom_import_source`,
 	`custom_posiadane_produkty`, `custom_status_zrodla`, `mobile_no`).
 	`custom_cc` siedzi na permlevel 2 (`ops/crm-leady-call-center.py`), więc
-	`get_list` i tak wytnie go dla `Volteo D2D Sales` — nie trzeba tego
+	`get_list` i tak wytnie go dla `Volteo D2D Sales`, nie trzeba tego
 	obsługiwać ręcznie tutaj."""
 	return frappe.get_list(
 		"CRM Lead",
