@@ -368,6 +368,26 @@ def resend_invitation(name: str):
 	if old.status == "Accepted":
 		frappe.throw(_("Invitation already accepted"))
 
+	# Same escalation guard as invite_by_email above: only_for lets any of
+	# Sales Manager / System Manager / Volteo Core Admin through, but a
+	# Sales Manager (or a Volteo Core Admin, for the Backoffice case) must
+	# not be able to use resend to reissue a role they were never allowed
+	# to invite in the first place. Without this a Volteo Core Admin could
+	# resend an expired System Manager invitation that only a System
+	# Manager was allowed to create.
+	user_roles = frappe.get_roles(frappe.session.user)
+
+	if old.role == "System Manager" and "System Manager" not in user_roles:
+		frappe.throw(_("You are not allowed to invite System Managers"), frappe.PermissionError)
+
+	if old.role == "Sales Manager" and "System Manager" not in user_roles:
+		frappe.throw(_("You are not allowed to invite Sales Managers"), frappe.PermissionError)
+
+	if old.get("volteo_role") == "Volteo Backend" and not (
+		"System Manager" in user_roles or "Volteo Core Admin" in user_roles
+	):
+		frappe.throw(_("You are not allowed to invite Backoffice users"), frappe.PermissionError)
+
 	if frappe.db.exists("User", {"email": old.email}):
 		frappe.throw(_("User with email {0} already exists").format(old.email))
 

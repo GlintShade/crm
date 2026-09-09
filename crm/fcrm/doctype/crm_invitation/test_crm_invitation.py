@@ -300,6 +300,44 @@ class TestCRMInvitation(FrappeTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			resend_invitation(name=invitation.name)
 
+	def test_resend_invitation_by_sales_manager_on_system_manager_invite_denied(self):
+		"""crm.api.resend_invitation must apply the same escalation guard as
+		invite_by_email (crm/api/__init__.py): only_for lets Sales Manager /
+		System Manager / Volteo Core Admin through, but a caller without
+		System Manager must still be refused when resending an invitation
+		for the System Manager role - otherwise a Sales Manager (or a
+		Volteo Core Admin, for the Backoffice case) could use resend to
+		reissue a role they were never allowed to invite in the first
+		place. Uses a real test user with the Sales Manager role and
+		`frappe.set_user`, following the pattern in
+		crm/api/test_umowa_kredyt_audyt_perms.py (`_make_user` + `add_roles`
+		+ scoped `frappe.set_user`), since that is the only precedent in
+		this codebase for a non-Administrator caller in a test."""
+		old = self.make_invitation(
+			email="resend-escalation@example.com", role="System Manager"
+		)
+		old.status = "Expired"
+		old.save(ignore_permissions=True)
+
+		caller_email = "resend-caller-sales-manager@example.com"
+		if frappe.db.exists("User", caller_email):
+			caller = frappe.get_doc("User", caller_email)
+		else:
+			caller = frappe.get_doc(
+				doctype="User",
+				email=caller_email,
+				first_name="Sales",
+				last_name="Manager Caller",
+				send_welcome_email=0,
+			).insert(ignore_permissions=True)
+		caller.add_roles("Sales Manager")
+
+		self.addCleanup(lambda: frappe.set_user("Administrator"))
+		frappe.set_user(caller_email)
+
+		with self.assertRaises(frappe.PermissionError):
+			resend_invitation(name=old.name)
+
 	def test_invite_by_email_reinvites_expired_address(self):
 		"""crm.api.invite_by_email's duplicate guard must count only Pending
 		invitations. An address whose sole invitation is Expired must come
