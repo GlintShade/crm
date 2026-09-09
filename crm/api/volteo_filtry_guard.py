@@ -61,6 +61,66 @@ from crm.api.doc import _sprawdz_filtry
 # oba miejsca zamiast duplikowac logike sprawdzania filtrow — patrz docstring
 # wyzej i brief ops#80.
 
+# Issue #119: `frappe.core.doctype.user.user.py` (get_query dla Linkow do
+# User) rozpoznaje `ignore_user_type` jako WLASNY klucz specjalny w
+# `filters` (nie nazwe pola dokumentu) i sam go usuwa z filtra przed zbudowaniem SQL
+# (`filters.pop("ignore_user_type", None)`, zweryfikowane w kontenerze).
+# `SidePanelLayout.vue` doklada ten klucz do KAZDEGO Linku fieldtype="User"
+# (options="User"), zeby dropdown pokazywal tez konta spoza "System User"
+# (np. role bez pelnego dostepu do Desk). `_sprawdz_filtry` w doc.py zna
+# tylko NAZWY POL dokumentu, wiec traktowal ten klucz jak odwolanie do
+# nieistniejacego pola i odrzucal cale zapytanie 403-ka -- to byl faktyczny
+# powod pustej listy w polu "Przypisany handlowiec" (lead_owner) w panelu
+# bocznym leada, tak dla Administratora jak i dla kazdej innej sesji: ten sam
+# kod SidePanelLayout.vue jedzie dla wszystkich rol. Zamiast rozluzniac
+# `_sprawdz_filtry` globalnie (zmiana w doc.py, poza zakresem tego agenta),
+# ten jeden klucz jest zdejmowany WYLACZNIE z kopii uzywanej do walidacji w
+# `search_link` ponizej -- oryginalny slownik `filters` (z kluczem nadal
+# obecnym) jedzie bez zmian do `_rdzen_search_link`, bo to rdzen Frappe, nie
+# ten straznik, ma go po cichu usunac.
+KLUCZE_SPECJALNE_SEARCH_LINK = frozenset({"ignore_user_type"})
+
+
+def _filtry_do_walidacji_search_link(filters: object) -> object:
+	"""Zwraca kopie `filters` bez kluczy z `KLUCZE_SPECJALNE_SEARCH_LINK`, do
+	uzytku WYLACZNIE przy wywolaniu `_waliduj` w `search_link` ponizej.
+	Dziala tylko na dict-ach (jedyny ksztalt, w ktorym te klucze specjalne
+	moga wystapic obok normalnych filtrow pol) -- kazdy inny ksztalt
+	(lista/krotka/string/None) wraca bez zmian, `_sparsowane_filtry` i tak
+	go zinterpretuje tak samo jak dotychczas."""
+	if isinstance(filters, dict):
+		return {k: v for k, v in filters.items() if k not in KLUCZE_SPECJALNE_SEARCH_LINK}
+	return filters
+
+
+# Issue #119 (uzupelnienie): znaczniki zakresu Link.vue (volteo_scope_cc,
+# volteo_scope_handlowcy, patrz Property Setter link_filters w
+# ops/crm-leady-call-center.py) to sygnal WYLACZNIE dla SPA forka -- w
+# odroznieniu od ignore_user_type wyzej, rdzen Frappe ich nie zna i nie ma
+# gdzie ich zdjac. `link_filters` na DocField dziala GENERYCZNIE w calym
+# Frappe, wiec standardowy Desk (/app, formularz rdzenia, nie SPA forka)
+# rowniez wysle te klucze do search_link. Straznik odrzucilby je jak kazde
+# inne nieznane pole (403), a gdyby jednak dotarly do rdzenia, ten dostalby
+# odwolanie do nieistniejacej kolumny w warunku SQL. Dlatego te klucze sa
+# zdejmowane CALKOWICIE, zarowno z kopii do walidacji, jak i z filtrow
+# faktycznie wysylanych do `_rdzen_search_link` -- SPA i tak sklada dropdown
+# sam z listy zwroconej przez dedykowany endpoint (handlowcy()/osoby_cc()),
+# nie z filtra przekazanego do search_link, wiec brak tego klucza po stronie
+# rdzenia niczego nie psuje.
+ZNACZNIKI_ZAKRESOW = frozenset({"volteo_scope_handlowcy", "volteo_scope_cc"})
+
+
+def _bez_znacznikow_zakresow(filters: object) -> object:
+	"""Zwraca kopie `filters` bez kluczy z `ZNACZNIKI_ZAKRESOW`. Wynik tej
+	funkcji jedzie DALEJ do `_rdzen_search_link` (w przeciwienstwie do
+	`_filtry_do_walidacji_search_link` powyzej, ktorej wynik sluzy WYLACZNIE
+	do walidacji) -- te klucze nie maja prawa dotrzec do rdzenia Frappe w
+	ogole, patrz komentarz przy `ZNACZNIKI_ZAKRESOW` wyzej. Dziala tylko na
+	dict-ach, tak jak `_filtry_do_walidacji_search_link`."""
+	if isinstance(filters, dict):
+		return {k: v for k, v in filters.items() if k not in ZNACZNIKI_ZAKRESOW}
+	return filters
+
 
 def _sparsowane_filtry(wartosc: object) -> dict | list | tuple | None:
 	"""Sprowadza `filters`/`or_filters` do postaci, ktora rozumie
@@ -268,8 +328,22 @@ def search_link(
 ):
 	"""Strażnik nad `frappe.desk.search.search_link` (ops#80) — Link-dropdowny
 	(np. `userScope` w `Link.vue`) i wyszukiwarka globalna wołają ten endpoint
-	wprost z przeglądarki."""
-	_waliduj(doctype, filters)
+	wprost z przeglądarki.
+
+	Issue #119: `_waliduj` widzi filtry PO zdjęciu `ignore_user_type`
+	(patrz `_filtry_do_walidacji_search_link` i komentarz nad nim wyżej).
+	`_rdzen_search_link` niżej dostaje oryginalny `filters`, z tym kluczem
+	nadal obecnym, bez żadnej zmiany zachowania rdzenia Frappe.
+
+	Issue #119 (uzupelnienie): `ZNACZNIKI_ZAKRESOW` (volteo_scope_cc,
+	volteo_scope_handlowcy) sa zdejmowane NAJPIERW, calkowicie, zanim
+	`filters` w ogole trafi do walidacji albo do `_rdzen_search_link` --
+	patrz komentarz przy `ZNACZNIKI_ZAKRESOW`/`_bez_znacznikow_zakresow`
+	wyzej. Desk (/app) wysyla te znaczniki tak samo jak SPA forka (bo
+	`link_filters` na DocField dziala generycznie), ale rdzen Frappe ich nie
+	zna."""
+	filters = _bez_znacznikow_zakresow(filters)
+	_waliduj(doctype, _filtry_do_walidacji_search_link(filters))
 	return _rdzen_search_link(
 		doctype,
 		txt,
