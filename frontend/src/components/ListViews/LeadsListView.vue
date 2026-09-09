@@ -66,6 +66,11 @@
               "
             />
           </div>
+          <!-- VOLTEO (issue #99): "status" jest teraz zawsze edytowana
+               inline (patrz galaz KOLUMNY_INLINE w #default nizej), wiec ta
+               galaz musi wygrac PRZED starym prefixem-indykatorem ponizej,
+               ktory teraz obsluguje juz tylko kolumny spoza KOLUMNY_INLINE. -->
+          <div v-else-if="KOLUMNY_INLINE.has(column.key)" />
           <div v-else-if="column.key === 'status'">
             <IndicatorIcon :class="item.color" />
           </div>
@@ -119,6 +124,13 @@
             <CommentIcon class="h-4 w-4" />
             <span v-if="item">{{ item }}</span>
           </div>
+          <LeadInlineCell
+            v-else-if="KOLUMNY_INLINE.has(column.key)"
+            :row="row"
+            :column="column"
+            :item="item"
+            @saved="(patch) => onInlineSaved(row, patch)"
+          />
           <div
             v-else-if="
               [
@@ -261,12 +273,14 @@ import HeartIcon from '@/components/Icons/HeartIcon.vue'
 import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
 import CommentIcon from '@/components/Icons/CommentIcon.vue'
 import KomentarzeLeadaModal from '@/components/Modals/KomentarzeLeadaModal.vue'
+import LeadInlineCell from '@/components/ListViews/LeadInlineCell.vue'
 import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
 import RatingInput from '@/components/Controls/RatingInput.vue'
 import MultipleAvatar from '@/components/MultipleAvatar.vue'
 import ListBulkActions from '@/components/ListBulkActions.vue'
 import ListRows from '@/components/ListViews/ListRows.vue'
 import ListFooterVolteo from '@/components/ListFooterVolteo.vue'
+import { KOLUMNY_INLINE, nowaListaZPodmienionymPolem } from '@/utils/leadyInline'
 import { isTranslatable, formatDuration } from '@/utils'
 import {
   Avatar,
@@ -352,6 +366,23 @@ function openComments(row) {
 // pewnym sposobem, zeby licznik w wierszu odzwierciedlal realny stan.
 function onCommentAdded() {
   list.value?.reload?.()
+}
+
+// VOLTEO (issue #99): LeadInlineCell.vue zapisuje przez set_value samo i
+// emituje tylko surowa pare {fieldname, value} po udanym zapisie. Podmiana
+// idzie na SUROWYCH danych listy (list.data.data), nie na juz sparsowanych
+// `rows` -- Leads.vue::rows to computed zalezny od list.data.data, wiec po
+// tej podmianie parseRows sam przeliczy kolor statusu / etykiete daty, bez
+// duplikowania tej logiki tutaj. Podmiana jest niemutowalna: nowa tablica z
+// jednym nowym obiektem wiersza (patrz nowaListaZPodmienionymPolem).
+function onInlineSaved(row, { fieldname, value }) {
+  if (!list.value?.data?.data) return
+  list.value.data.data = nowaListaZPodmienionymPolem(
+    list.value.data.data,
+    row.name,
+    fieldname,
+    value,
+  )
 }
 
 const isLikeFilterApplied = computed(() => {
