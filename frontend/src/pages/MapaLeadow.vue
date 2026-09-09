@@ -91,9 +91,13 @@
         <div :id="mapId" class="h-full w-full" />
 
         <!-- VOLTEO (issue #97, L08): panel "Szybki podglad" po kliknieciu
-             pinezki -- absolutnie pozycjonowany NAD mapa (z-[1000], nad
-             kontrolkami Leafleta), zeby otwarcie nie zmienialo pozycji/zoomu
-             (brak invalidateSize, mapa nie kurczy sie w flexie). Klucz
+             pinezki -- LeadSzybkiPodglad.vue pozycjonuje sie sam (absolute
+             inset-y-0 right-0 z-[1000], nad kontrolkami Leafleta), zeby
+             otwarcie nie zmienialo pozycji/zoomu mapy (brak invalidateSize,
+             mapa nie kurczy sie w flexie). Pozycjonowanie NIE jest przekazane
+             przez `class` z tego miejsca, bo komponent ma wiecej niz jeden
+             korzen (panel + LostReasonModal + KomentarzeLeadaModal) -- Vue
+             cicho gubi attrs przekazane do multi-root komponentu. Klucz
              :key="wybranyLead.name" wymusza pelny remount przy zmianie
              zaznaczonego leada, zeby wewnetrzny useDocument() w panelu
              zaladowal wlasciwy dokument zamiast trzymac poprzedni. -->
@@ -101,7 +105,6 @@
           v-if="wybranyLead"
           :key="wybranyLead.name"
           :lead="wybranyLead"
-          class="absolute inset-y-0 right-0 z-[1000]"
           @zamknij="wybranyLead = null"
           @zaktualizowano="patchujLeada"
         />

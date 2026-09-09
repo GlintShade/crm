@@ -2,7 +2,11 @@
   VOLTEO (issue #97, L08): panel boczny "Szybki podglad" leada na mapie
   leadow. Klik w pinezke (MapaLeadow.vue) otwiera ten panel zamiast
   nawigowac na strone /leads/<id> -- CC ogladajacy 11 tys. pinezek nie moze
-  tracic pozycji/zoomu mapy przy kazdym kliknieciu.
+  tracic pozycji/zoomu mapy przy kazdym kliknieciu. Panel pozycjonuje sie
+  sam (absolute inset-y-0 right-0 z-[1000] na korzeniu ponizej) zamiast
+  przyjmowac `class` od rodzica -- ma wiecej niz jeden korzen (panel +
+  LostReasonModal + KomentarzeLeadaModal), a Vue cicho gubi attrs
+  przekazane do multi-root komponentu.
 
   Reuzywane komponenty, nie duplikowane:
   - SidePanelLayout.vue (ta sama zakladka "Szczegoly" co Lead.vue) --
@@ -33,7 +37,7 @@
 -->
 <template>
   <div
-    class="flex h-full w-[340px] shrink-0 flex-col overflow-hidden border-l border-outline-gray-2 bg-surface-white shadow-lg dark:bg-surface-gray-1"
+    class="absolute inset-y-0 right-0 z-[1000] flex w-[340px] shrink-0 flex-col overflow-hidden border-l border-outline-gray-2 bg-surface-white shadow-lg dark:bg-surface-gray-1"
   >
     <div
       class="flex items-start justify-between gap-2 border-b border-outline-gray-2 px-3 py-2.5"
