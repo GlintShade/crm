@@ -89,6 +89,25 @@
           <LoadingIndicator class="size-8" />
         </div>
         <div :id="mapId" class="h-full w-full" />
+
+        <!-- VOLTEO (issue #97, L08): panel "Szybki podglad" po kliknieciu
+             pinezki -- LeadSzybkiPodglad.vue pozycjonuje sie sam (absolute
+             inset-y-0 right-0 z-[1000], nad kontrolkami Leafleta), zeby
+             otwarcie nie zmienialo pozycji/zoomu mapy (brak invalidateSize,
+             mapa nie kurczy sie w flexie). Pozycjonowanie NIE jest przekazane
+             przez `class` z tego miejsca, bo komponent ma wiecej niz jeden
+             korzen (panel + LostReasonModal + KomentarzeLeadaModal) -- Vue
+             cicho gubi attrs przekazane do multi-root komponentu. Klucz
+             :key="wybranyLead.name" wymusza pelny remount przy zmianie
+             zaznaczonego leada, zeby wewnetrzny useDocument() w panelu
+             zaladowal wlasciwy dokument zamiast trzymac poprzedni. -->
+        <LeadSzybkiPodglad
+          v-if="wybranyLead"
+          :key="wybranyLead.name"
+          :lead="wybranyLead"
+          @zamknij="wybranyLead = null"
+          @zaktualizowano="patchujLeada"
+        />
       </div>
 
       <!-- Atrybucje (wymóg licencyjny OSM + GeoNames) -->
@@ -106,11 +125,11 @@
 <script setup>
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import ViewBreadcrumbs from '@/components/ViewBreadcrumbs.vue'
+import LeadSzybkiPodglad from '@/components/LeadSzybkiPodglad.vue'
 import { usersStore } from '@/stores/users'
 import { sessionStore } from '@/stores/session'
 import { statusesStore } from '@/stores/statuses'
 import { colorNameFromParsed } from '@/utils/statusColors'
-import router from '@/router'
 import {
   ErrorMessage,
   FormControl,
@@ -279,6 +298,36 @@ const leadyPrzefiltrowane = computed(() => {
 
 watch(leadyPrzefiltrowane, () => rysujMarkery())
 
+// --- Panel "Szybki podgląd" (issue #97, L08) ------------------------------
+
+const wybranyLead = ref(null)
+
+// Immutable patch (coding-style.md: nowe obiekty, nie mutacja) -- panel
+// emituje tylko status i/lub lead_owner (jedyne pola, po ktorych mapa
+// przebarwia/filtruje pinezke), wiec merge'ujemy wylacznie te dwa klucze,
+// jesli sa obecne w patchu.
+function patchujLeada(patch) {
+  if (!patch?.name) return
+  const idx = stan.leady.findIndex((lead) => lead.name === patch.name)
+  if (idx === -1) return
+
+  const zaktualizowany = { ...stan.leady[idx] }
+  if (Object.hasOwn(patch, 'status')) zaktualizowany.status = patch.status
+  if (Object.hasOwn(patch, 'lead_owner')) {
+    zaktualizowany.lead_owner = patch.lead_owner
+  }
+
+  stan.leady = [
+    ...stan.leady.slice(0, idx),
+    zaktualizowany,
+    ...stan.leady.slice(idx + 1),
+  ]
+
+  if (wybranyLead.value?.name === patch.name) {
+    wybranyLead.value = zaktualizowany
+  }
+}
+
 // --- Mikro-jitter deterministyczny ---------------------------------------------
 
 // Piny z tego samego kodu pocztowego geokodują się na (prawie) identyczne
@@ -348,7 +397,10 @@ function rysujMarkery() {
       fillColor: kolor,
       fillOpacity: 0.75,
     })
-    marker.bindPopup(() => budujPopup(lead))
+    marker.bindTooltip(() => budujDymek(lead), { direction: 'top' })
+    marker.on('click', () => {
+      wybranyLead.value = lead
+    })
     marker.addTo(markerLayer)
   }
 
@@ -361,11 +413,15 @@ function rysujMarkery() {
   }
 }
 
+// Dymek pinezki (hover, Leaflet Tooltip) -- skrot: nazwa, miasto, status,
+// zrodlo importu, obecne produkty, status zrodla. Klik w pinezke otwiera
+// panel LeadSzybkiPodglad.vue (patrz marker.on('click', ...) wyzej) zamiast
+// nawigowac -- "Otworz leada" zyje teraz w naglowku tego panelu, nie tutaj.
 // Budowane przez DOM (nie string HTML) — bezpieczne wobec lead_name z
 // dowolną treścią i nie wymaga v-html.
-function budujPopup(lead) {
+function budujDymek(lead) {
   const container = document.createElement('div')
-  container.className = 'flex flex-col gap-1'
+  container.className = 'flex flex-col gap-0.5'
 
   const title = document.createElement('div')
   title.className = 'text-sm font-medium text-ink-gray-9'
@@ -382,14 +438,18 @@ function budujPopup(lead) {
   status.textContent = lead.status || BRAK_STATUSU
   container.appendChild(status)
 
-  const link = document.createElement('button')
-  link.type = 'button'
-  link.className = 'mt-1 self-start text-sm text-ink-blue-3 underline'
-  link.textContent = __('Otwórz leada')
-  link.addEventListener('click', () => {
-    router.push({ name: 'Lead', params: { leadId: lead.name } })
-  })
-  container.appendChild(link)
+  const wiersze = [
+    [__('Źródło'), lead.custom_import_source],
+    [__('Obecne produkty'), lead.custom_posiadane_produkty],
+    [__('Status źródła'), lead.custom_status_zrodla],
+  ]
+  for (const [label, value] of wiersze) {
+    if (!value) continue
+    const row = document.createElement('div')
+    row.className = 'text-xs text-ink-gray-5'
+    row.textContent = `${label}: ${value}`
+    container.appendChild(row)
+  }
 
   return container
 }
