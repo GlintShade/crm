@@ -67,6 +67,18 @@ export function producentOptionsFor(variant) {
 }
 
 /**
+ * Sprawdza, czy dla danego producenta dostępny jest dodatek "Dodatkowy
+ * licznik" (potrzebny przy zachowaniu starego falownika lub mikrofalowników).
+ * Dostępny tylko dla Sigenergy i Deye, nigdy dla FoxESS.
+ *
+ * @param {string} producent - wybrany producent falownika
+ * @returns {boolean} czy dodatek jest dostępny do wyboru
+ */
+export function licznikDostepny(producent) {
+  return producent === 'Sigenergy' || producent === 'Deye'
+}
+
+/**
  * Buduje listę opcji mocy PV: MOC_MIN_KW–MOC_MAX_KW co MOC_STEP_KW, z etykietą
  * pokazującą szacowaną liczbę paneli (moc * 2). Wyłącznie prezentacja — nie
  * wylicza cen.

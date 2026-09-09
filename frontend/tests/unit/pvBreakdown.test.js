@@ -12,6 +12,7 @@ const pelnyBreakdown = {
   k_montaz_mag: 900,
   k_akcesoria: 1000,
   k_kabel: 1100,
+  k_licznik: 150,
   marza_proenergy: 1200,
   marza_sps: 1300,
   bonus_liderki: 1400,
@@ -21,7 +22,7 @@ const pelnyBreakdown = {
 const kluczeGrup = ['hurtownia', 'montaz', 'marze']
 const kluczePozycji = [
   ['k_falownik', 'k_bateria', 'k_panele', 'k_konstrukcja', 'k_sterownik', 'k_spoldzielnia'],
-  ['kilometrowka', 'k_montaz_pv', 'k_montaz_mag', 'k_akcesoria', 'k_kabel'],
+  ['kilometrowka', 'k_montaz_pv', 'k_montaz_mag', 'k_akcesoria', 'k_kabel', 'k_licznik'],
   ['marza_proenergy', 'marza_sps', 'bonus_liderki'],
 ]
 
@@ -35,20 +36,20 @@ describe('grupujBreakdown', () => {
 
     expect(grupy.map((grupa) => grupa.klucz)).toEqual(kluczeGrup)
     expect(grupy.map((grupa) => grupa.pozycje.map((pozycja) => pozycja.klucz))).toEqual(kluczePozycji)
-    expect(grupy.map((grupa) => grupa.suma)).toEqual([2100, 4500, 3900])
+    expect(grupy.map((grupa) => grupa.suma)).toEqual([2100, 4650, 3900])
     expect(wszystkiePozycje(grupy).map((pozycja) => pozycja.kwota)).toEqual([
-      100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400,
+      100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 150, 1200, 1300, 1400,
     ])
   })
 
-  it('suma grup obejmuje dokładnie 14 wartości, bez net_base', () => {
+  it('suma grup obejmuje dokładnie 15 wartości, bez net_base', () => {
     const grupy = grupujBreakdown(pelnyBreakdown)
     const sumaWejscia = Object.entries(pelnyBreakdown)
       .filter(([klucz]) => klucz !== 'net_base')
       .reduce((suma, [, kwota]) => suma + kwota, 0)
 
     expect(grupy.reduce((suma, grupa) => suma + grupa.suma, 0)).toBe(sumaWejscia)
-    expect(wszystkiePozycje(grupy)).toHaveLength(14)
+    expect(wszystkiePozycje(grupy)).toHaveLength(15)
   })
 
   it('umieszcza kilometrowke w montazu, a spoldzielnie w hurtowni', () => {
