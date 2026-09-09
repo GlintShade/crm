@@ -268,7 +268,7 @@ class CRMLead(Document):
 				"label": "Komentarze",
 				"type": "Data",
 				"key": "_comment_count",
-				"width": "7rem",
+				"width": "3.5rem",
 			},
 			{
 				"label": "Zasady",
