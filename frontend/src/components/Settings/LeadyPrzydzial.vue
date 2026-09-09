@@ -105,7 +105,6 @@
               <th class="px-4 py-2.5 text-right font-medium">{{ __('Nietknięte') }}</th>
               <th class="px-4 py-2.5 text-right font-medium">{{ __('W toku') }}</th>
               <th class="px-4 py-2.5 text-right font-medium">{{ __('Przerobione') }}</th>
-              <th class="px-4 py-2.5 text-right font-medium">{{ __('Skonwertowane') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -115,7 +114,6 @@
               <td class="px-4 py-2.5 text-right text-ink-gray-8">{{ rep.nietkniete }}</td>
               <td class="px-4 py-2.5 text-right text-ink-gray-8">{{ rep.w_toku }}</td>
               <td class="px-4 py-2.5 text-right text-ink-gray-8">{{ rep.przerobione }}</td>
-              <td class="px-4 py-2.5 text-right text-ink-gray-8">{{ rep.skonwertowane }}</td>
             </tr>
           </tbody>
         </table>

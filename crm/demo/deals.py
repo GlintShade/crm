@@ -18,9 +18,10 @@ def create_demo_deals(lead_names, demo_users):
 	"""Create seven demo deals from leads and add deal-specific activity.
 
 	VOLTEO (issue #115): the lead-to-deal conversion feature was removed from
-	the product; a lead now ends its life at a manually chosen "Skonwertowany"
-	status instead. This demo-data generator (upstream Frappe CRM's "Getting
-	Started" seed, wired via setup_wizard_complete / FCRM Settings.restore_demo_data,
+	the product; a lead simply ends its life on a manually chosen terminal
+	status now, no conversion call involved. This demo-data generator
+	(upstream Frappe CRM's "Getting Started" seed, wired via
+	setup_wizard_complete / FCRM Settings.restore_demo_data,
 	never exercised on Volteo's own production or local data) still needs
 	deals derived from leads for its comment/communication/version narrative,
 	so it builds them directly with the still-alive generic helpers from

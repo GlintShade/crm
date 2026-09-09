@@ -106,19 +106,6 @@ class CRMLead(Document):
 			else:
 				self.status = frappe.get_all("CRM Lead Status", {"type": "Open"}, pluck="name")[0]
 
-		# VOLTEO (issue #115): lead-to-deal conversion was removed, so a lead
-		# now finishes its life at a manually chosen "Skonwertowany" status
-		# instead of a conversion call that used to set both `status` and
-		# `converted` together. Set `converted` here whenever that status is
-		# reached, matching the old one-way semantics (never auto-reset back
-		# to 0, same as before), so existing readers of the flag keep working
-		# off the manual status: the Twilio call-routing lookups in
-		# crm.integrations.api and crm.integrations.twilio.twilio_handler,
-		# the CC stats counter in crm.api.volteo_leady, and the default
-		# Leads list filter (frontend/src/pages/Leads.vue, converted: 0).
-		if self.status == "Skonwertowany":
-			self.converted = 1
-
 	def set_full_name(self):
 		if self.first_name:
 			self.lead_name = " ".join(
