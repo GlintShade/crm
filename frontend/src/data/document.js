@@ -347,14 +347,6 @@ export function useDocument(doctype, docname, resourceOverrides = {}) {
     await trigger(handler)
   }
 
-  async function triggerConvertToDeal() {
-    const args = Array.from(arguments)
-    const handler = async function () {
-      await (this.convertToDeal?.(...args) || this.convert_to_deal?.(...args))
-    }
-    await trigger(handler)
-  }
-
   function setFieldHtml(fieldname, html) {
     const cache = documentsCache[doctype][docname || '']
     if (!cache.fieldHtmlMap) cache.fieldHtmlMap = {}
@@ -391,7 +383,6 @@ export function useDocument(doctype, docname, resourceOverrides = {}) {
     triggerOnRowRemove,
     setupFormScript,
     triggerOnCreateLead,
-    triggerConvertToDeal,
     setFieldHtml,
   }
 }
