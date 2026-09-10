@@ -132,6 +132,13 @@ export function poleObecneWDanych(leady, pole) {
 
 export const KLUCZ_KOLOR = 'volteo.mapa.kolor'
 export const KLUCZ_DYMEK = 'volteo.mapa.dymek'
+export const KLUCZ_KLASTROWANIE = 'volteo.mapa.klastrowanie'
+
+// Domyślnie WŁĄCZONE (issue #101, klastrowanie przy oddaleniu) -- przy ~9900
+// pinezkach dla admina klastrowanie jest korzyścią, nie ograniczeniem, więc
+// próg wejścia jest odwrotny niż przy dymku/kolorowaniu: trzeba świadomie
+// wyłączyć, nie świadomie włączyć.
+export const DOMYSLNE_KLASTROWANIE = true
 
 export function domyslneUstawieniaDymka() {
   return {
@@ -188,6 +195,28 @@ export function wczytajUstawieniaDymka() {
 export function zapiszUstawieniaDymka(ustawienia) {
   try {
     localStorage.setItem(KLUCZ_DYMEK, JSON.stringify(ustawienia))
+  } catch (e) {
+    /* brak localStorage -- ustawienie po prostu nie przetrwa przeładowania */
+  }
+}
+
+/**
+ * @returns {boolean}
+ */
+export function wczytajKlastrowanie() {
+  try {
+    const surowy = localStorage.getItem(KLUCZ_KLASTROWANIE)
+    if (surowy === 'true') return true
+    if (surowy === 'false') return false
+  } catch (e) {
+    /* localStorage niedostępny (tryb prywatny itp.) -- domyślne ustawienie */
+  }
+  return DOMYSLNE_KLASTROWANIE
+}
+
+export function zapiszKlastrowanie(wlaczone) {
+  try {
+    localStorage.setItem(KLUCZ_KLASTROWANIE, wlaczone ? 'true' : 'false')
   } catch (e) {
     /* brak localStorage -- ustawienie po prostu nie przetrwa przeładowania */
   }

@@ -1,4 +1,5 @@
 import {
+  DOMYSLNE_KLASTROWANIE,
   DOMYSLNY_TRYB_KOLOROWANIA,
   KOLOR_BRAK,
   domyslneUstawieniaDymka,
@@ -6,8 +7,10 @@ import {
   kolorDlaUzytkownika,
   legenda,
   poleObecneWDanych,
+  wczytajKlastrowanie,
   wczytajTrybKolorowania,
   wczytajUstawieniaDymka,
+  zapiszKlastrowanie,
   zapiszTrybKolorowania,
   zapiszUstawieniaDymka,
 } from '@/utils/mapaKolory'
@@ -188,5 +191,26 @@ describe('trwałość ustawień w localStorage', () => {
       statusZrodla: true,
       terminSpotkania: true,
     })
+  })
+
+  it('domyślnie klastrowanie jest włączone, gdy nic nie zapisano', () => {
+    expect(wczytajKlastrowanie()).toBe(DOMYSLNE_KLASTROWANIE)
+    expect(wczytajKlastrowanie()).toBe(true)
+  })
+
+  it('zapisane wyłączenie klastrowania wraca po odczycie', () => {
+    zapiszKlastrowanie(false)
+    expect(wczytajKlastrowanie()).toBe(false)
+  })
+
+  it('zapisane włączenie klastrowania wraca po odczycie', () => {
+    zapiszKlastrowanie(false)
+    zapiszKlastrowanie(true)
+    expect(wczytajKlastrowanie()).toBe(true)
+  })
+
+  it('uszkodzona wartość w localStorage nie wybucha, wraca domyślne ustawienie', () => {
+    localStorage.setItem('volteo.mapa.klastrowanie', 'coś-nieznanego')
+    expect(wczytajKlastrowanie()).toBe(DOMYSLNE_KLASTROWANIE)
   })
 })
