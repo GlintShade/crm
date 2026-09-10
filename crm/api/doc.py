@@ -13,7 +13,13 @@ from pypika import Criterion
 from crm.api.views import get_views
 from crm.fcrm.doctype.crm_form_script.crm_form_script import get_form_script
 from crm.utils import is_frappe_version
+from crm.volteo_grupy_filtrow import klucze_z_grup, waliduj_grupy, wydziel_grupy
 from crm.volteo_lista_szans import POLA_ZAWSZE_DOZWOLONE, niedozwolone_klucze_filtrow, podstaw_dzis
+
+# Bezpiecznik rozmiaru unii w `rozwin_grupy` (issue #129): patrz jej
+# docstring. Chroni zapytanie `name in [...]` przed nieograniczonym
+# kosztem, gdyby grupy filtrów dopasowały praktycznie całą tabelę.
+LIMIT_UNIA_GRUP = 20000
 
 # Pola standardowe, ktore SA typu Datetime w rdzeniu Frappe mimo ze nie maja
 # wlasnego wpisu w `meta.fields` (`frappe.get_meta(doctype).get_field(...)`
@@ -179,6 +185,97 @@ def _sprawdz_filtry(doctype: str, filters, parenttype: str | None = None) -> Non
 			_("Brak uprawnień do filtrowania po polu {0}").format(niedozwolone[0]),
 			frappe.PermissionError,
 		)
+
+
+def rozwin_grupy(doctype: str, filters: dict) -> dict:
+	"""Rozwija zarezerwowany klucz `volteo_grupy` (issue #129, grupy filtrów
+	ORAZ/ALBO w oknie „Filtr" listy leadów) na zwykły filtr `name in
+	[...]`, żeby `get_data`/`crm.api.volteo_leady.mapa`/`przydziel_cc`
+	mogły dalej operować na płaskim słowniku filtrów bez świadomości grup.
+
+	Wołać PO `_podstaw_me`/`_podstaw_dzis` i PO scaleniu `default_filters`
+	do `filters` (tak jak w `get_data` niżej), PRZED `_sprawdz_filtry`:
+	ten strażnik nie zna klucza `volteo_grupy` i odrzuciłby go jak każde
+	inne nieznane pole (fail closed - patrz `crm.volteo_grupy_filtrow`,
+	docstring `KLUCZ_GRUP`, celowo NIE zmieniony przez ten issue, żeby ta
+	sama bramka nadal odrzucała klucz na endpointach rdzenia,
+	`crm.api.volteo_filtry_guard`, gdzie grupy pozostają NIEDOZWOLONE).
+
+	`crm.volteo_grupy_filtrow.wydziel_grupy` wydziela `(filtry_bez_grup,
+	grupy)` z `filters` (frappe-free, testowalne osobno). Pusta lista grup
+	(albo brak klucza) zwraca `filtry_bez_grup` bez zmian - "Pusta lista
+	grup = brak wpływu" (kontrakt issue #129), stare widoki bez klucza
+	przechodzą przez tę funkcję identycznie jak dotąd.
+
+	Dla NIEPUSTEJ listy grup: `waliduj_grupy` (kształt - lista słowników,
+	limity `MAX_GRUP`/`MAX_WARUNKOW_W_GRUPIE`, zakaz zagnieżdżenia) rzuca
+	`ValueError` przy złym kształcie, złapane tu i przekazane do
+	`frappe.throw` (domyślnie `frappe.ValidationError`). `klucze_z_grup`
+	daje jeden łączny pre-check permlevel na kluczach ZE WSZYSTKICH grup
+	naraz, PRZED wykonaniem jakiegokolwiek zapytania dla pojedynczej grupy
+	- fail fast, bez efektów ubocznych zapytań do wcześniejszych grup,
+	gdyby dopiero któraś PÓŹNIEJSZA grupa odwoływała się do niedozwolonego
+	pola. Potem, dla KAŻDEJ grupy z osobna: `_sprawdz_filtry` (ten sam
+	strażnik, tym razem na samej tej grupie) i `frappe.get_list(doctype,
+	filters=grupa ORAZ filtry_bez_grup, pluck="name", limit_page_length=0)`
+	- `filtry_bez_grup` (już zawiera scalone `default_filters`, patrz wyżej)
+	jest doklejany do KAŻDEJ grupy, nie tylko do finalnego wyniku: to
+	czysto wydajnościowe (np. `custom_cc="ja"` zawęża zapytanie KAŻDEJ
+	grupy zamiast dociągać wszystkie pasujące wiersze WSZYSTKICH
+	użytkowników i dopiero na końcu je odcinać) - algebraicznie unia
+	wyników z tym zawężeniem w każdej grupie i bez niego (a potem
+	odcięcie na końcu) daje IDENTYCZNY finalny zbiór `name`, bo
+	`custom_cc=ja ORAZ (A LUB B)` == `(custom_cc=ja ORAZ A) LUB
+	(custom_cc=ja ORAZ B)` (rozdzielność ORAZ względem LUB). Wartość
+	pola współdzielonego między grupą a `filtry_bez_grup` (rzadki
+	przypadek - czemu użytkownik miałby filtrować to samo pole i wspólnie,
+	i w grupie - kontrakt tego nie precyzuje): grupa wygrywa jako
+	bardziej szczegółowa (`{**filtry_bez_grup, **grupa}`).
+
+	`frappe.get_list` (NIE `get_all`): permission query conditions
+	(`crm/permissions/org_hierarchy.py` i pokrewne) działają automatycznie
+	dla każdej grupy z osobna, tak samo jak dla głównego zapytania.
+
+	Unia nazw ze wszystkich grup (zbiór, bez duplikatów) > `LIMIT_UNIA_GRUP`
+	(20000) -> `frappe.throw` po polsku - bezpiecznik rozmiaru zapytania
+	`name in [...]` w wyniku. Pusta unia (żadna grupa nic nie dopasowała)
+	daje świadomie `name in [""]` (0 wyników), NIE brak filtra w ogóle -
+	inaczej brak dopasowań w grupach cicho zamieniłby się w "pokaż
+	wszystko", odwrotność zamierzonej semantyki ALBO.
+
+	Zwraca NOWY dict (immutability): `filtry_bez_grup` z dodanym kluczem
+	`"name"`. Jeśli `filtry_bez_grup` miało już własny filtr po `name`
+	(rzadkie w praktyce - UI nie oferuje filtrowania po `name` w oknie
+	„Filtr" grup), zostaje on NADPISANY przez unię grup - kontrakt issue
+	#129 opisuje to wprost jako "dokładany", bez rozstrzygania takiego
+	konfliktu, więc zachowanie jest zgodne z brzmieniem issue."""
+	filtry_bez_grup, grupy = wydziel_grupy(filters)
+	if not grupy:
+		return filtry_bez_grup
+
+	try:
+		waliduj_grupy(grupy)
+	except ValueError as e:
+		frappe.throw(str(e))
+
+	_sprawdz_filtry(doctype, dict.fromkeys(klucze_z_grup(grupy)))
+
+	nazwy: set = set()
+	for grupa in grupy:
+		_sprawdz_filtry(doctype, grupa)
+		grupa_polaczona = {**filtry_bez_grup, **grupa}
+		nazwy.update(
+			frappe.get_list(doctype, filters=grupa_polaczona, pluck="name", limit_page_length=0)
+		)
+
+	if len(nazwy) > LIMIT_UNIA_GRUP:
+		frappe.throw(
+			_("Zbyt wiele wyników pasujących do grup filtrów (limit {0}).").format(LIMIT_UNIA_GRUP)
+		)
+
+	wynik = dict(filtry_bez_grup)
+	wynik["name"] = ["in", sorted(nazwy) if nazwy else [""]]
+	return wynik
 
 
 def _odfiltruj_niedozwolone_klucze(doctype: str, klucze: list) -> list:
@@ -556,6 +653,14 @@ def get_data(
 	if default_filters:
 		default_filters = frappe.parse_json(default_filters)
 		filters.update(default_filters)
+
+	# VOLTEO (issue #129): rozwija ewentualny klucz "volteo_grupy" (grupy
+	# filtrów ORAZ/ALBO) na zwykly filtr "name in [...]" -- PO scaleniu
+	# default_filters (rozwin_grupy dokleja "filtry_bez_grup", ktore juz je
+	# zawiera, do KAZDEJ grupy, patrz jej docstring), PRZED _sprawdz_filtry
+	# nizej (ktora nie zna tego klucza i odrzucilaby go jak kazde inne
+	# nieznane pole). Bez klucza w filters ta funkcja jest no-opem.
+	filters = frappe._dict(rozwin_grupy(doctype, filters))
 
 	# Blokada filtrowania po polu bez uprawnien odczytu (permlevel > 0) — patrz
 	# ops#79. Walidujemy PO scaleniu default_filters i podstawieniu @me/@dzis,
