@@ -198,7 +198,15 @@ watch(
     if (!znacznik) return
     const zasob = zakresyUzytkownikow[znacznik]
     if (!zasob.fetched && !zasob.loading && !zasob.error) {
-      zasob.fetch()
+      // Dopuszczalny, oczekiwany PermissionError (patrz komentarz przy
+      // zakresyUzytkownikow wyzej): frappe-ui sam ustawia zasob.error
+      // reaktywnie, ale lezaca pod spodem obietnica fetch() sama zostaje
+      // odrzucona bez dopietego handlera, wiec przegladarka zglasza ja jako
+      // nieobsluzony wyjatek (pageerror). Wolajacy tutaj swiadomie NIE czeka
+      // na fetch() (wynik czyta sie reaktywnie przez zasob.error/zasob.data),
+      // wiec dopinamy pusty catch wylacznie po to, zeby nie ujawniac tego
+      // jako pageerror.
+      zasob.fetch().catch(() => {})
     }
   },
   { immediate: true },

@@ -90,6 +90,7 @@
                               'HTML',
                               'Geolocation',
                               'Text Editor',
+                              'User',
                             ].includes(field.fieldtype)
                           "
                           class="flex h-7 cursor-pointer items-center px-2 py-1 text-ink-gray-5"
@@ -154,6 +155,7 @@
                             __('Select') + ' ' + field.label + '...'
                           "
                           :hideMe="true"
+                          :disabled="Boolean(field.read_only)"
                           @change="(v) => fieldChange(v, field)"
                         >
                           <template v-if="doc[field.fieldname]" #prefix>

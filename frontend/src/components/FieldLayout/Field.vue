@@ -35,6 +35,7 @@
           'HTML',
           'Geolocation',
           'Text Editor',
+          'User',
         ].includes(field.fieldtype)
       "
       v-model="data[field.fieldname]"
@@ -128,6 +129,7 @@
       :filters="field.filters"
       :placeholder="getPlaceholder(field)"
       :hideMe="true"
+      :disabled="Boolean(field.read_only)"
       @change="(v) => fieldChange(v, field)"
     >
       <template #prefix>
