@@ -293,6 +293,7 @@ import { callEnabled } from '@/composables/telephony'
 import { useBroadcast } from '@/composables/useBroadcast'
 import { formatDate, timeAgo, website, formatTime } from '@/utils'
 import { timestampCell } from '@/composables/useTimelinePreferences'
+import { zasadyDotacjiBadge } from '@/utils/zasadyDotacji'
 import { useOnboarding, useTelemetry } from 'frappe-ui/frappe'
 import { Avatar, Tooltip, Dropdown } from 'frappe-ui'
 import { useRoute } from 'vue-router'
@@ -470,6 +471,12 @@ function parseRows(rows, columns = []) {
           label: lead.status,
           color: getLeadStatus(lead.status)?.color,
         }
+      } else if (row == 'custom_zasady_dotacji') {
+        // Wspólne mapowanie z utils/zasadyDotacji.js (patrz też dymek mapy
+        // i "Szybki podgląd", jeśli kiedyś zaczną pokazywać to pole -- na
+        // razie nie pokazują). Pusta/nierozpoznana wartość -> pusty badge.
+        let badge = zasadyDotacjiBadge(lead.custom_zasady_dotacji)
+        _rows[row] = { label: badge?.etykieta || '', color: badge?.kolor || '' }
       } else if (row == 'sla_status') {
         let value = lead.sla_status
         let tooltipText = value

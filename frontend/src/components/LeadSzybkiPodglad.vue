@@ -71,6 +71,9 @@
     <div
       class="flex flex-wrap items-center gap-1.5 border-b border-outline-gray-2 px-3 py-2"
     >
+      <span v-if="doc.status" class="text-sm text-ink-gray-5">{{
+        __('Status CC')
+      }}</span>
       <Dropdown v-if="doc.status" :options="statuses" placement="bottom-start">
         <template #default="{ open }">
           <Button

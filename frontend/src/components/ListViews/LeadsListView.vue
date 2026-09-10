@@ -195,6 +195,28 @@
               "
             />
           </div>
+          <div
+            v-else-if="column.key === 'custom_zasady_dotacji'"
+            class="truncate text-base"
+          >
+            <Badge
+              v-if="item.label"
+              variant="subtle"
+              :theme="item.color"
+              size="md"
+              :label="item.label"
+              @click="
+                (event) =>
+                  emit('applyFilter', {
+                    event,
+                    idx,
+                    column,
+                    item,
+                    firstColumn: columns[0],
+                  })
+              "
+            />
+          </div>
           <div v-else-if="column.type === 'Check'">
             <FormControl
               type="checkbox"

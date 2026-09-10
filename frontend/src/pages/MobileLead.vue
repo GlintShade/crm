@@ -8,7 +8,10 @@
           <Icon v-if="item.icon" :icon="item.icon" class="mr-2 h-4" />
         </template>
       </Breadcrumbs>
-      <div class="absolute right-0">
+      <div class="absolute right-0 flex items-center gap-2">
+        <span v-if="doc" class="text-sm text-ink-gray-5">{{
+          __('Status CC')
+        }}</span>
         <Dropdown
           v-if="doc"
           :options="

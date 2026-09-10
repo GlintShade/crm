@@ -22,6 +22,10 @@
         :docname="leadId"
         @przekazano="onPrzekazano"
       />
+      <span
+        v-if="doc && document.statuses"
+        class="text-sm text-ink-gray-5"
+      >{{ __('Status CC') }}</span>
       <Dropdown
         v-if="doc && document.statuses"
         :options="statuses"
@@ -240,9 +244,12 @@
         >
           <!-- VOLTEO (issue #122b): patrz komentarz przy zakladce Szczegoly
                wyzej -- ta sama jedna plaska sekcja/33 pola, ten sam zdjety
-               limit, zeby prawy panel boczny nie byl ucinany do 300px. -->
+               limit, zeby prawy panel boczny nie byl ucinany do 300px.
+               :sections tutaj to sectionsBezEmailaWPrawymPanelu, NIE
+               sections.data -- e-mail zostaje widoczny w zakladce
+               "Szczegoly" (patrz uzycie wyzej), znika tylko z tego panelu. -->
           <SidePanelLayout
-            :sections="sections.data"
+            :sections="sectionsBezEmailaWPrawymPanelu"
             doctype="CRM Lead"
             :docname="leadId"
             @reload="sections.reload"
@@ -564,6 +571,31 @@ const sections = createResource({
   cache: ['sidePanelSections', 'CRM Lead'],
   params: { doctype: 'CRM Lead' },
   auto: true,
+})
+
+// E-mail znika tylko z PRAWEGO panelu bocznego karty leada, nie z zakladki
+// "Szczegoly" (ta zostaje na pelnym sections.data). Obie instancje
+// SidePanelLayout dziela TEN SAM createResource (sections), wiec ten
+// computed musi zwracac NOWE obiekty sekcji/kolumn/pol -- SidePanelLayout.vue
+// sam klonuje props.sections przed uzyciem (patrz komentarz przy _sections
+// tamze, naprawiony w a9ad499a po nieskonczonej petli reaktywnosci
+// spowodowanej mutacja w miejscu wspoldzielonych danych), ale gdyby ten
+// computed mutowal sections.data bezposrednio, zakladka "Szczegoly" (druga
+// instancja tego samego zasobu) stracilaby pole email razem z panelem.
+const sectionsBezEmailaWPrawymPanelu = computed(() => {
+  if (!sections.data?.length) return sections.data
+  return sections.data.map((section) => {
+    if (!section.columns?.length) return section
+    return {
+      ...section,
+      columns: section.columns.map((column) => ({
+        ...column,
+        fields: (column.fields || []).filter(
+          (field) => field.fieldname !== 'email',
+        ),
+      })),
+    }
+  })
 })
 
 async function triggerStatusChange(value) {
