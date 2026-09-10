@@ -2,6 +2,7 @@
   <LayoutHeader>
     <template #left-header>
       <ViewBreadcrumbs v-model="viewControls" routeName="Leads" />
+      <WidokiLeadowPasek tryb="typ" />
     </template>
     <template #right-header>
       <CustomActions
@@ -16,7 +17,7 @@
       />
     </template>
   </LayoutHeader>
-  <WidokiLeadowPasek />
+  <WidokiLeadowPasek tryb="filtry" />
   <ViewControls
     ref="viewControls"
     v-model="leads"
