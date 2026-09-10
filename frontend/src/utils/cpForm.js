@@ -16,9 +16,10 @@ export const PROGI_KWOTY = {
   wieloosobowe: { niski: 1300, sredni: 2250 },
 }
 // Kredytowanie wkładu własnego (sekcja "Finansowanie"): okres w latach,
-// wybierany z zamkniętej listy 1..10, domyślnie 5 lat.
+// wybierany z zamkniętej listy 1..10, domyślnie 10 lat (decyzja właściciela
+// 2026-09-10, było 5).
 export const OKRESY_LAT = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-export const OKRES_LAT_DOMYSLNY = 5
+export const OKRES_LAT_DOMYSLNY = 10
 
 /**
  * Create the initial state of the Czyste Powietrze form.

@@ -411,7 +411,7 @@ const sel = reactive({
   spoldzielnia: 'Nie',
   licznik: 'Nie',
   ulgaPct: 19,
-  okresLat: 5,
+  okresLat: 10, // domyślny okres finansowania 10 lat (decyzja właściciela 2026-09-10, było 5)
   wplataWlasna: 0,
   narzut: 0,
   operator: '',
