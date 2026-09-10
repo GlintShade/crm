@@ -29,7 +29,7 @@
             @click="reload()"
           />
           <SortBy
-            v-if="route.params.viewType !== 'kanban'"
+            v-if="!['kanban', 'mapa'].includes(route.params.viewType)"
             v-model="list"
             :doctype="doctype"
             :hideLabel="isMobileView"
@@ -42,7 +42,7 @@
             @update="updateKanbanSettings"
           />
           <ColumnSettings
-            v-else-if="!options.hideColumnsButton"
+            v-else-if="!options.hideColumnsButton && route.params.viewType !== 'mapa'"
             v-model="list"
             :doctype="doctype"
             :hideLabel="isMobileView"
@@ -176,7 +176,7 @@
           @update="updateFilter"
         />
         <SortBy
-          v-if="route.params.viewType !== 'kanban'"
+          v-if="!['kanban', 'mapa'].includes(route.params.viewType)"
           v-model="list"
           :doctype="doctype"
           @update="updateSort"
@@ -188,7 +188,7 @@
           @update="updateKanbanSettings"
         />
         <ColumnSettings
-          v-else-if="!options.hideColumnsButton"
+          v-else-if="!options.hideColumnsButton && route.params.viewType !== 'mapa'"
           v-model="list"
           :doctype="doctype"
           @update="(isDefault) => updateColumns(isDefault)"
@@ -211,7 +211,7 @@
                     }),
                   condition: () =>
                     !options.hideColumnsButton &&
-                    route.params.viewType !== 'kanban',
+                    !['kanban', 'mapa'].includes(route.params.viewType),
                 },
                 {
                   label: __('Export'),
@@ -219,7 +219,7 @@
                   onClick: () => (showExportDialog = true),
                   condition: () =>
                     !options.hideColumnsButton &&
-                    route.params.viewType !== 'kanban',
+                    !['kanban', 'mapa'].includes(route.params.viewType),
                 },
                 {
                   label: __('Customize Quick Filters'),
@@ -344,6 +344,10 @@ import { isMobileView } from '@/composables/settings'
 import Draggable from 'vuedraggable'
 import _ from 'lodash'
 import ImportIcon from '~icons/lucide/import'
+// VOLTEO (issue #100): ikona widoku Mapa dla Leadów, ten sam import co
+// AppSidebar.vue/MobileSidebar.vue miały dla starej pozycji menu "Mapa leadów".
+import MapaIcon from '~icons/lucide/map'
+import { typWidokuDoZapisu } from '@/utils/widokLeady'
 
 const props = defineProps({
   doctype: { type: String, required: true },
@@ -398,13 +402,29 @@ function getViewType() {
       label: __('Kanban'),
       icon: markRaw(KanbanIcon),
     },
+    // VOLTEO (issue #100): widok Mapa dla Leadów. `route.params.viewType`
+    // pozostaje 'mapa' na trasie -- WYŁĄCZNIE persystencja (CRM View
+    // Settings.type) przechodzi przez typWidokuDoZapisu() gdzieś indziej w
+    // tym pliku, bo backend nie zna typu 'mapa' (patrz utils/widokLeady.js).
+    mapa: {
+      name: 'mapa',
+      label: __('Mapa'),
+      icon: markRaw(MapaIcon),
+    },
   }
 
   return types[viewType]
 }
 
 const currentView = computed(() => {
-  let _view = getView(route.query.view, route.params.viewType, props.doctype)
+  // VOLTEO (issue #100): typWidokuDoZapisu() tutaj, żeby Mapa znalazła TEN SAM
+  // zapisany standardowy widok co Tabela (persystencja zna tylko 'list'), a nie
+  // szukała nieistniejącego 'CRM Lead mapa' i cicho traciła etykietę/filtry.
+  let _view = getView(
+    route.query.view,
+    typWidokuDoZapisu(route.params.viewType),
+    props.doctype,
+  )
   return {
     name: _view?.name || getViewType().name,
     label:
@@ -464,9 +484,20 @@ watch(updatedPageCount, (value) => {
 })
 
 function getParams() {
-  let _view = getView(route.query.view, route.params.viewType, props.doctype)
+  // VOLTEO (issue #100): Mapa i Tabela dzielą jeden standardowy widok --
+  // typWidokuDoZapisu('mapa') === 'list' znajduje TEN SAM zapisany widok
+  // (CRM View Settings nie zna typu 'mapa') i, jeśli żaden zapisany widok
+  // jeszcze nie istnieje, sprowadza fallback 'mapa' do 'list' zanim
+  // view_type trafi do view.value.type i dalej do create_or_update_standard_view
+  // (Select field, options "list\ngroup_by\nkanban" -- zapis dosłownego
+  // "mapa" tam rzuciłby ValidationError po stronie serwera).
+  let _view = getView(
+    route.query.view,
+    typWidokuDoZapisu(route.params.viewType),
+    props.doctype,
+  )
   const view_name = _view?.name || ''
-  const view_type = _view?.type || route.params.viewType || 'list'
+  const view_type = _view?.type || typWidokuDoZapisu(route.params.viewType) || 'list'
   const filters = (_view?.filters && JSON.parse(_view.filters)) || {}
   const order_by = _view?.order_by || 'modified desc'
   const group_by_field = _view?.group_by_field || 'owner'
@@ -523,7 +554,13 @@ list.value = createResource({
   params: getParams(),
   cache: [props.doctype, route.query.view, route.params.viewType],
   onSuccess(data) {
-    let cv = getView(route.query.view, route.params.viewType, props.doctype)
+    // VOLTEO (issue #100): patrz komentarz w getParams() -- sama typWidokuDoZapisu()
+    // aliasy, żeby nigdy nie zapisać 'mapa' jako view_type.
+    let cv = getView(
+      route.query.view,
+      typWidokuDoZapisu(route.params.viewType),
+      props.doctype,
+    )
     let params = list.value.params ? list.value.params : getParams()
     defaultParams.value = {
       doctype: props.doctype,
@@ -532,7 +569,7 @@ list.value = createResource({
       default_filters: props.filters,
       view: {
         custom_view_name: cv?.name || '',
-        view_type: cv?.type || route.params.viewType || 'list',
+        view_type: cv?.type || typWidokuDoZapisu(route.params.viewType) || 'list',
         group_by_field: params?.view?.group_by_field || 'owner',
       },
       column_field: data.column_field,
@@ -605,6 +642,23 @@ if (allowedViews.includes('list')) {
     onClick() {
       viewUpdated.value = false
       router.push({ name: route.name, params: { viewType: 'list' } })
+    },
+  })
+}
+// VOLTEO (issue #100): przełącznik Mapa dla Leadów. Wstawiony TUŻ PO 'list'
+// i PRZED 'kanban', żeby dropdown pokazywał Tabela / Mapa / (reszta) -- ta
+// kolejność wynika z kolejności bloków if() w tym skrypcie, NIE z kolejności
+// wpisów w options.allowedViews (ten drugi to tylko allowlist). Router push
+// używa surowego 'mapa' (parametr TRASY), nigdy typWidokuDoZapisu() -- alias
+// dotyczy wyłącznie PERSYSTENCJI (patrz getParams()/onSuccess powyżej).
+if (allowedViews.includes('mapa')) {
+  standardViews.push({
+    name: 'mapa',
+    label: __(props.options?.defaultViewName) || __('Mapa'),
+    icon: markRaw(MapaIcon),
+    onClick() {
+      viewUpdated.value = false
+      router.push({ name: route.name, params: { viewType: 'mapa' } })
     },
   })
 }
@@ -1332,8 +1386,17 @@ defineExpose({
 })
 
 // Watchers
+// VOLTEO (issue #100): typWidokuDoZapisu() tutaj też -- inaczej przełączenie
+// Tabela<->Mapa dla TEGO SAMEGO zapisanego widoku wyglądałoby jak zmiana
+// widoku (getView zwracałby raz obiekt, raz null) i wywoływałoby zbędny
+// dodatkowy reload() ponad ten, który już robi watcher route/viewType niżej.
 watch(
-  () => getView(route.query.view, route.params.viewType, props.doctype),
+  () =>
+    getView(
+      route.query.view,
+      typWidokuDoZapisu(route.params.viewType),
+      props.doctype,
+    ),
   (value, old_value) => {
     if (_.isEqual(value, old_value)) return
     reload()

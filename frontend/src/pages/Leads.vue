@@ -25,7 +25,7 @@
     doctype="CRM Lead"
     :filters="{ converted: 0 }"
     :options="{
-      allowedViews: ['list', 'group_by', 'kanban'],
+      allowedViews: ['list', 'mapa', 'group_by', 'kanban'],
     }"
   />
   <KanbanView
@@ -232,6 +232,11 @@
       </div>
     </template>
   </KanbanView>
+  <MapaLeadow
+    v-else-if="route.params.viewType == 'mapa'"
+    :list="leads"
+    @ustawFiltr="(f) => viewControls.updateFilter(f)"
+  />
   <LeadsListView
     v-else-if="leads.data && rows.length"
     ref="leadsListView"
@@ -280,6 +285,7 @@ import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
 import LeadsIcon from '@/components/Icons/LeadsIcon.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import LeadsListView from '@/components/ListViews/LeadsListView.vue'
+import MapaLeadow from '@/components/MapaLeadow.vue'
 import EmptyState from '@/components/ListViews/EmptyState.vue'
 import KanbanView from '@/components/Kanban/KanbanView.vue'
 import LeadModal from '@/components/Modals/LeadModal.vue'

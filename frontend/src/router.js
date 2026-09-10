@@ -62,10 +62,19 @@ const routes = [
     component: () => import('@/pages/DokumentyCzystePowietrze.vue'),
   },
   {
-    // VOLTEO: Mapa leadów (b52, ops#26) — piny geokodowanych leadów na Leaflet/OSM.
+    // VOLTEO: Mapa leadów (b52, ops#26)  -  od issue #100 nie jest już osobną
+    // stroną: przełącznik Tabela/Mapa żyje w ViewControls.vue jako
+    // route.params.viewType == 'mapa' na trasie 'Leads' (MapaLeadow.vue
+    // przeniesiony do components/, renderowany warunkowo z Leads.vue), żeby
+    // dzielić filtry/quick filters/zapisane widoki z Tabelą. Ta trasa
+    // zostaje WYŁĄCZNIE jako przekierowanie dla starych bookmarków/linków  - 
+    // nazwa 'MapaLeadow' też zostaje, bo utils/strazTras.js (issue ops#106)
+    // wciąż blokuje ją flagą hide_leads, i to działa niezmienione: strażnik
+    // uruchamia się na TEJ nawigacji (do 'MapaLeadow'), zanim przekierowanie
+    // zdąży przejść na 'Leads' (który jest bramkowany tą samą flagą).
     path: '/mapa-leadow',
     name: 'MapaLeadow',
-    component: () => import('@/pages/MapaLeadow.vue'),
+    redirect: { name: 'Leads', params: { viewType: 'mapa' } },
   },
   {
     alias: '/leads',
@@ -413,7 +422,13 @@ router.beforeEach(async (to, from, next) => {
     }
 
     const viewType = to.params?.viewType ?? ''
-    const standardViewTypes = ['list', 'kanban', 'group_by']
+    // VOLTEO (issue #100): 'mapa' dopisane na końcu, żeby nie zmieniać
+    // priorytetu istniejącej pętli "znajdź domyślny zapisany widok" niżej  - 
+    // 'mapa' nigdy nie jest zapisanym typem widoku (patrz utils/widokLeady.js),
+    // więc ten wpis nigdy tam nie trafia; jedyny cel to uznanie viewType=='mapa'
+    // za ZNANY standardowy typ, zamiast traktowania '/leads/view/mapa' jako
+    // nazwy zapisanego widoku i cichego przekierowania na 'list'.
+    const standardViewTypes = ['list', 'kanban', 'group_by', 'mapa']
 
     if (!viewType) {
       const doctypeMap = {
