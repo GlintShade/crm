@@ -146,7 +146,7 @@ import ReloadIcon from '@/components/Icons/ReloadIcon.vue'
 import Autocomplete from '@/components/frappe-ui/Autocomplete.vue'
 import { isTouchScreenDevice } from '@/utils'
 import { getMeta } from '@/stores/meta'
-import { Popover } from 'frappe-ui'
+import { createResource, Popover } from 'frappe-ui'
 import Draggable from 'vuedraggable'
 import { computed, ref } from 'vue'
 import { watchOnce } from '@vueuse/core'
@@ -197,6 +197,25 @@ const rows = computed({
 
 const { getFields } = getMeta(props.doctype)
 
+// Lista nazw pol, do ktorych biezacy uzytkownik ma odczyt permlevel
+// (`crm.api.doc.pola_dozwolone`). `getFields()` ponizej wywoluje rdzeniowe
+// `frappe.desk.form.load.getdoctype`, ktore zwraca WSZYSTKIE pola
+// doctype'u, takze permlevel > 0 (np. "Przypisany CC" na CRM Lead, pola
+// kosztow/prowizji na CRM Deal), bez tego filtra handlowiec widzial takie
+// pole w "Dodaj kolumne", ale po dodaniu kolumna byla pusta, bo `get_data`
+// i tak wycina jej dane po stronie serwera (issue #117). Cache per
+// doctype, wiec kolejne otwarcia okna "Kolumny" na tej samej liscie nie
+// odpytuja serwera ponownie.
+const dozwolonePola = createResource({
+  url: 'crm.api.doc.pola_dozwolone',
+  cache: ['PolaDozwolone', props.doctype],
+  params: { doctype: props.doctype },
+})
+
+if (!dozwolonePola.data?.length && !dozwolonePola.loading) {
+  dozwolonePola.fetch()
+}
+
 const fields = computed(() => {
   const _fields = getFields({ withStandardFields: true }) || []
   if (!_fields.length) return []
@@ -206,7 +225,16 @@ const fields = computed(() => {
     existingFields = columns.value.map((column) => column.key)
   }
 
-  return _fields.filter((field) => {
+  // Dopoki lista dozwolonych pol jeszcze sie laduje, pokaz ostroznie tylko
+  // pola bez ograniczenia permlevel (`!field.permlevel` obejmuje zarowno
+  // permlevel === 0, jak i pola standardowe z getStandardFieldsMeta(),
+  // ktore w ogole nie maja tej wlasciwosci), zamiast krotko pokazac pelna,
+  // niefiltrowaną liste.
+  const dostepnePola = dozwolonePola.data
+    ? _fields.filter((field) => dozwolonePola.data.includes(field.fieldname))
+    : _fields.filter((field) => !field.permlevel)
+
+  return dostepnePola.filter((field) => {
     return (
       !columns.value.find((column) => column.key === field.fieldname) &&
       !existingFields.includes(field.fieldname)
