@@ -158,13 +158,16 @@
 <script setup>
 import FilterIcon from '@/components/Icons/FilterIcon.vue'
 import Link from '@/components/Controls/Link.vue'
+import LinkMultiSelect from '@/components/Controls/LinkMultiSelect.vue'
 import Autocomplete from '@/components/frappe-ui/Autocomplete.vue'
 import DurationInput from '@/components/Controls/DurationInput.vue'
 import RatingInput from '@/components/Controls/RatingInput.vue'
 import { etykietaMoje } from '@/utils/etykietaMoje'
 import { opcjeEtapu } from '@/utils/etapFiltr'
+import { parsujWartoscWielokrotna } from '@/utils/filtrWielokrotny'
 import {
   FormControl,
+  MultiSelect,
   createResource,
   Popover,
   DatePicker,
@@ -421,6 +424,35 @@ function getValueControl(f) {
       modelValue: f.value,
       'onUpdate:modelValue': (v) => updateValue(v, f),
     })
+  } else if (
+    ['in', 'not in'].includes(operator) &&
+    typeSelect.includes(fieldtype)
+  ) {
+    // Issue #103: "jest jednym z" / "nie jest jednym z" na polu Select —
+    // wielokrotny wybór z opcji pola (tych samych, co przy operatorze
+    // równości), zamiast pola tekstowego z wartościami po przecinku.
+    // Serializacja bez zmian: modelValue MultiSelect to tablica stringów,
+    // dokładnie ten kształt, jakiego oczekuje transformIn/parseFilters.
+    return h(MultiSelect, {
+      options: getSelectOptions(options).map((o) => ({ label: o, value: o })),
+      modelValue: parsujWartoscWielokrotna(f.value),
+      'onUpdate:modelValue': (v) => updateValue(v, f),
+    })
+  } else if (
+    ['in', 'not in'].includes(operator) &&
+    typeLink.includes(fieldtype) &&
+    fieldtype !== 'Dynamic Link'
+  ) {
+    // Issue #103: to samo dla pól Link (poza Dynamic Link, gdzie doctype
+    // docelowy zmienia się per wiersz i nie ma jednego stałego katalogu do
+    // przeszukania) — wyszukiwanie przez frappe.desk.search.search_link,
+    // jak dziś przy operatorze równości (Link.vue), tylko z wielokrotnym
+    // wyborem (LinkMultiSelect.vue).
+    return h(LinkMultiSelect, {
+      doctype: options,
+      modelValue: parsujWartoscWielokrotna(f.value),
+      'onUpdate:modelValue': (v) => updateValue(v, f),
+    })
   } else if (['like', 'not like', 'in', 'not in'].includes(operator)) {
     return h(FormControl, { type: 'text' })
   } else if (typeSelect.includes(fieldtype) || typeCheck.includes(fieldtype)) {
@@ -573,10 +605,17 @@ function updateValue(value, filter) {
 }
 
 function updateOperator(filter) {
-  filter.value = getDefaultValue(filter.field)
-
-  if (filter.operator === 'is' || filter.operator === 'is not') {
+  if (['in', 'not in'].includes(filter.operator)) {
+    // Issue #103: in/not in na Select/Link (i wszędzie indziej, dla
+    // spójności) startuje z tablicą pustą, nie ze skalarnym domyślnym
+    // (np. pierwszą opcją Select) — MultiSelect/LinkMultiSelect oczekują
+    // modelValue = tablica; poprzedni skalarny default działał tylko
+    // przypadkiem, bo pole tekstowe akceptuje dowolny typ.
+    filter.value = []
+  } else if (filter.operator === 'is' || filter.operator === 'is not') {
     filter.value = 'set'
+  } else {
+    filter.value = getDefaultValue(filter.field)
   }
   apply()
 }
@@ -622,6 +661,17 @@ function placeholder(f) {
   if (f.operator === 'between') {
     return __('01/01/2022 to 01/31/2022')
   } else if (f.operator === 'in' || f.operator === 'not in') {
+    // Issue #103: Select i Link (poza Dynamic Link) mają teraz kontrolkę
+    // wielokrotnego wyboru (MultiSelect/LinkMultiSelect) zamiast pola
+    // tekstowego — ten placeholder trafia tylko do jej `placeholder` prop
+    // (etykieta pustego stanu), nie do treści wpisywanej przez przecinek.
+    if (
+      typeSelect.includes(f.field.fieldtype) ||
+      (typeLink.includes(f.field.fieldtype) &&
+        f.field.fieldtype !== 'Dynamic Link')
+    ) {
+      return __('Select options')
+    }
     if (typeNumber.includes(f.field.fieldtype)) {
       return __('100, 200, 300')
     }
