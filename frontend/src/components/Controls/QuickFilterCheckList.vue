@@ -1,5 +1,5 @@
 <template>
-  <Popover placement="bottom-start">
+  <Popover placement="bottom-start" @close="wyslijTeraz">
     <template #target="{ togglePopover }">
       <button
         type="button"
@@ -110,7 +110,7 @@ import {
   Popover,
   createResource,
 } from 'frappe-ui'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { scalOpcjeZZaznaczonymi } from '@/utils/filtrWielokrotny'
 import {
   etykietaChipaFiltraSzybkiego,
@@ -126,7 +126,42 @@ const props = defineProps({
 
 const model = defineModel({ type: Array, default: () => [] })
 
-const wybrane = computed(() => (Array.isArray(model.value) ? model.value : []))
+// Issue #127 follow-up (smoke, 2026-09-10): klikanie kilku checkboxow pod
+// rzad wywolywalo za kazdym razem create_or_update_standard_view +
+// przeladowanie listy, wiec rownolegle zapisy blokowaly sie nawzajem
+// (QueryDeadlockError). `lokalneWybrane` to stan UI, zmieniany NATYCHMIAST
+// na kazdy klik (checkboxy odpowiadaja bez opoznienia); `model.value =`
+// (czyli emisja `update:modelValue` do rodzica, ktora wyzwala zapis widoku)
+// jest debounce'owana -- do rodzica trafia tylko OSTATNIA wartosc po
+// CZAS_DEBOUNCE_MS pauzy w klikaniu. "Wyczysc" i zamkniecie popovera (patrz
+// `@close="wyslijTeraz"` na <Popover> powyzej -- lapie klikniecie poza
+// popover, Escape i wywolanie `close()`, nie tylko przycisk "Wyczysc")
+// wysylaja ostatnia wartosc natychmiast, zeby zamkniecie przed uplywem
+// debounce'a nie zgubilo wyboru.
+const CZAS_DEBOUNCE_MS = 400
+
+const lokalneWybrane = ref(Array.isArray(model.value) ? [...model.value] : [])
+let debounceTimerWybor = null
+
+// Zewnetrzna zmiana `model.value` (np. zaladowanie innego zapisanego widoku
+// albo "Wyczysc wszystkie filtry" gdzie indziej) -- pomijana, gdy juz
+// odpowiada lokalnemu stanowi (w tym echo naszej wlasnej wysylki), zeby nie
+// przerywac w toku wpisywania niczym, co sami wlasnie wyslalismy.
+watch(
+  () => model.value,
+  (nowaWartosc) => {
+    const tablica = Array.isArray(nowaWartosc) ? nowaWartosc : []
+    const bezZmian =
+      tablica.length === lokalneWybrane.value.length &&
+      tablica.every((v) => lokalneWybrane.value.includes(v))
+    if (bezZmian) return
+    clearTimeout(debounceTimerWybor)
+    debounceTimerWybor = null
+    lokalneWybrane.value = [...tablica]
+  },
+)
+
+const wybrane = computed(() => lokalneWybrane.value)
 
 const jestLink = computed(() => props.fieldtype === 'Link')
 
@@ -135,10 +170,25 @@ function jestZaznaczona(wartosc) {
 }
 
 function przelacz(wartosc) {
-  model.value = przelaczWartoscWielokrotna(wybrane.value, wartosc)
+  lokalneWybrane.value = przelaczWartoscWielokrotna(lokalneWybrane.value, wartosc)
+  clearTimeout(debounceTimerWybor)
+  debounceTimerWybor = setTimeout(wyslijTeraz, CZAS_DEBOUNCE_MS)
+}
+
+// Flush natychmiastowy -- no-op, gdy nie ma nic w toku (debounceTimerWybor
+// juz wyzerowany), wiec bezpieczny do wywolania z @close nawet gdy popover
+// zamyka sie bez zadnej oczekujacej zmiany.
+function wyslijTeraz() {
+  if (!debounceTimerWybor) return
+  clearTimeout(debounceTimerWybor)
+  debounceTimerWybor = null
+  model.value = lokalneWybrane.value
 }
 
 function wyczysc() {
+  clearTimeout(debounceTimerWybor)
+  debounceTimerWybor = null
+  lokalneWybrane.value = []
   model.value = []
 }
 
@@ -146,6 +196,8 @@ function wyczyscIZamknij(close) {
   wyczysc()
   close()
 }
+
+onBeforeUnmount(wyslijTeraz)
 
 // --- Select: opcje statyczne ---
 const opcjeStatyczne = computed(() =>

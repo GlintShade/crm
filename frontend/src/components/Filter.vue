@@ -664,11 +664,21 @@ function ustawDzis(f) {
 }
 
 function wyczyscDzis(f) {
+  // Wraca do pustej wartosci pola (getDefaultValue: null dla Date/Datetime),
+  // co samo z siebie chowa chip (czyDzis sprawdza f.value === '@dzis') i
+  // pokazuje z powrotem picker -- v-else w szablonie. Wysylanie pustej
+  // wartosci przez apply() ponizej to ISTNIEJACE zachowanie tego komponentu,
+  // nie cos nowego: setfilter()/updateFilter() wyzej robia dokladnie to samo
+  // (apply() od razu po getDefaultValue()) przy kazdej zmianie pola/operatora.
   updateValue(getDefaultValue(f.field), f)
 }
 
 function updateValue(value, filter) {
-  value = value.target ? value.target.value : value
+  // `value` bywa `null`/`undefined` (np. wyczyscDzis powyzej dla pol
+  // Date/Datetime) -- `value.target` na null/undefined rzuca TypeError
+  // zanim ternary zdazy sprawdzic warunek, wiec dostep przez optional
+  // chaining zamiast bezposredniego `value.target`.
+  value = value?.target ? value.target.value : value
   if (filter.operator === 'between') {
     filter.value = [value.split(',')[0], value.split(',')[1]]
   } else {
