@@ -106,9 +106,12 @@ import ListIcon from '@/components/Icons/ListIcon.vue'
 import MapaIcon from '~icons/lucide/map'
 import { isMobileView } from '@/composables/settings'
 import { viewsStore } from '@/stores/views'
-import { FeatherIcon } from 'frappe-ui'
+import { czyWidokDozwolony } from '@/utils/widokiDozwolone'
+import { FeatherIcon, createResource } from 'frappe-ui'
 import { computed, markRaw } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+
+const DOCTYPE = 'CRM Lead'
 
 const props = defineProps({
   tryb: {
@@ -122,6 +125,25 @@ const route = useRoute()
 const router = useRouter()
 
 const { views: wszystkieWidoki } = viewsStore()
+
+// Headless G5 (klik-test wlasciciela 2026-09-10): handlowiec widzial na
+// pasku widok publiczny "Do obdzwonienia" filtrujacy po `custom_cc`
+// (permlevel 2, niedozwolone dla Volteo D2D Sales) - klik dawal 403 z
+// get_data i pusta tabele bez komunikatu. Ten sam wzorzec co
+// ColumnSettings.vue: jedna odpowiedz na doctype (cache), lista pol
+// dozwolonych biezacemu uzytkownikowi. Uzywana ponizej w `zapisaneWidoki`
+// (via `czyWidokDozwolony`, `utils/widokiDozwolone.js`) do odsiania
+// widokow, ktorych filtry (gorny poziom + wnetrze `volteo_grupy`) siegaja
+// po pole spoza tej listy.
+const dozwolonePola = createResource({
+  url: 'crm.api.doc.pola_dozwolone',
+  cache: ['PolaDozwolone', DOCTYPE],
+  params: { doctype: DOCTYPE },
+})
+
+if (!dozwolonePola.data?.length && !dozwolonePola.loading) {
+  dozwolonePola.fetch()
+}
 
 const typyWidoku = [
   { key: 'list', label: __('List'), icon: markRaw(ListIcon) },
@@ -156,7 +178,8 @@ const zapisaneWidoki = computed(() => {
     (widok) =>
       widok.dt === 'CRM Lead' &&
       (widok.type || 'list') === 'list' &&
-      !widok.is_standard,
+      !widok.is_standard &&
+      czyWidokDozwolony(widok, dozwolonePola.data),
   )
   const wlasne = listowe.filter((widok) => !widok.pinned && !widok.public)
   const publiczne = listowe.filter(

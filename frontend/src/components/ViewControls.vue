@@ -353,6 +353,7 @@ import ImportIcon from '~icons/lucide/import'
 // AppSidebar.vue/MobileSidebar.vue miały dla starej pozycji menu "Mapa leadów".
 import MapaIcon from '~icons/lucide/map'
 import { typWidokuDoZapisu } from '@/utils/widokLeady'
+import { czyWidokDozwolony } from '@/utils/widokiDozwolone'
 
 const props = defineProps({
   doctype: { type: String, required: true },
@@ -371,6 +372,24 @@ const { brand } = getSettings()
 const { $dialog } = globalStore()
 const { reload: reloadView, getDefaultView, getView } = viewsStore()
 const { isManager } = usersStore()
+
+// Headless G5 (klik-test wlasciciela 2026-09-10): handlowiec (Volteo D2D
+// Sales) widzial w tym rozwijanym przelaczniku (sekcje Saved/Public/
+// Pinned Views) widoki publiczne filtrujace po polu spoza jego permlevel
+// (np. custom_cc na CRM Lead) - klik dawal 403 z get_data i pusta tabele
+// bez komunikatu. Ten sam wzorzec co ColumnSettings.vue: jedna odpowiedz
+// na doctype (cache), uzywana ponizej w `viewsDropdownOptions` (via
+// `czyWidokDozwolony`, `utils/widokiDozwolone.js`) do odsiania takich
+// widokow z wszystkich trzech sekcji.
+const dozwolonePola = createResource({
+  url: 'crm.api.doc.pola_dozwolone',
+  cache: ['PolaDozwolone', props.doctype],
+  params: { doctype: props.doctype },
+})
+
+if (!dozwolonePola.data?.length && !dozwolonePola.loading) {
+  dozwolonePola.fetch()
+}
 
 const list = defineModel({ type: Object, default: () => ({}) })
 // These are event counters, not booleans: pages emit them via `loadMore++`
@@ -570,6 +589,30 @@ function getParams() {
   }
 }
 
+// Precedent: DokumentyLista.vue/MapaLeadow.vue's extractErrorMessage() -
+// call()/createResource throw an error whose Polish server message lives
+// in err.messages[0], not under _server_messages/exception.
+function extractErrorMessage(err) {
+  try {
+    if (err?.messages?.length && err.messages[0]) return err.messages[0]
+    if (err && err._server_messages) {
+      const msgs = JSON.parse(err._server_messages)
+      if (msgs && msgs.length) {
+        const first = JSON.parse(msgs[0])
+        return first.message || ''
+      }
+    }
+    if (err && err.exception) {
+      const parts = String(err.exception).split(': ')
+      return parts[parts.length - 1] || ''
+    }
+    if (err && err.message) return err.message
+  } catch (e) {
+    /* fall through */
+  }
+  return ''
+}
+
 list.value = createResource({
   url: 'crm.api.doc.get_data',
   params: getParams(),
@@ -602,6 +645,19 @@ list.value = createResource({
       page_length: params.page_length,
       page_length_count: params.page_length_count,
     }
+  },
+  onError(err) {
+    // Headless G5 (klik-test wlasciciela 2026-09-10): wejscie na widok,
+    // ktorego filtry siegaja po pole spoza permlevel biezacego
+    // uzytkownika (np. custom_cc na CRM Lead, wpisane wprost w URL jako
+    // ?view=<id>, wiec gatowanie w viewsDropdownOptions/WidokiLeadowPasek
+    // nie ma szansy zadzialac - element nigdy nie byl klikniety) konczylo
+    // sie 403-ka z get_data i CICHA pusta tabela, bez zadnego komunikatu.
+    // Minimalna zmiana: pokaz Polski komunikat serwera (err.messages[0] -
+    // patrz DokumentyLista.vue's extractErrorMessage(), ten sam wzorzec).
+    toast.error(
+      extractErrorMessage(err) || __('Nie udało się wczytać listy'),
+    )
   },
 })
 
@@ -744,11 +800,14 @@ const viewsDropdownOptions = computed(() => {
         })
       }
     })
-    let publicViews = list.value.data.views.filter((v) => v.public)
-    let savedViews = list.value.data.views.filter(
+    let widoczneWidoki = list.value.data.views.filter((v) =>
+      czyWidokDozwolony(v, dozwolonePola.data),
+    )
+    let publicViews = widoczneWidoki.filter((v) => v.public)
+    let savedViews = widoczneWidoki.filter(
       (v) => !v.pinned && !v.public && !v.is_standard,
     )
-    let pinnedViews = list.value.data.views.filter((v) => v.pinned)
+    let pinnedViews = widoczneWidoki.filter((v) => v.pinned)
 
     if (savedViews.length) {
       _views.push({
