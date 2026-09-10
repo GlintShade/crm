@@ -118,7 +118,7 @@ import frappe
 from frappe import _
 from frappe.utils import cint
 
-from crm.api.doc import _sprawdz_filtry
+from crm.api.doc import _podstaw_me, _sprawdz_filtry, convert_filter_to_tuple
 from crm.permissions.org_hierarchy import BYPASS_ROLES, _ma_linie_leady
 from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad
 
@@ -483,13 +483,42 @@ def przydziel(
 
 
 @frappe.whitelist()
-def mapa() -> list[dict]:
+def mapa(
+	filters: str | dict | None = None,
+	default_filters: str | dict | None = None,
+) -> list[dict]:
 	"""Leady z geokodem dla widoku mapy. `frappe.get_list` (NIGDY `get_all` —
 	patrz docstring modułu) przepuszcza wynik przez scoping z
 	`crm/permissions/org_hierarchy.py`: rep dostaje tylko swoje/przypisane
 	leady, admin/backend wszystkie. `custom_lat != 0` odcina leady bez
 	geokodu (kolumna NOT NULL DEFAULT 0 — 0 znaczy "nie ustawiono", nie
 	prawdziwą współrzędną).
+
+	Issue #100 (jedna pozycja „Leady", przełącznik widoku Tabela/Mapa):
+	`filters`/`default_filters` to DOKŁADNIE ten sam kontrakt, jaki
+	`ViewControls.vue` wysyła do `crm.api.doc.get_data`, Mapa czyta je z
+	`props.list.params` (ten sam zasób co Tabela) i przekazuje tu bez
+	zmian, więc oba widoki dzielą filtry, quick filters i zapisane widoki.
+	Oba parametry mogą przyjść jako JSON string (tak wysyła `createResource`)
+	albo już jako dict/None. `@me` podstawiane przez `_podstaw_me` (ten sam
+	moduł co `get_data`, patrz jego docstring) WYŁĄCZNIE w `filters`  -  zgodnie
+	z zachowaniem `get_data`, `default_filters` scala się PO podstawieniu,
+	bez własnego `@me` (statyczny filtr `{"converted": 0}` z `Leads.vue` i
+	tak nigdy go nie zawiera). `_sprawdz_filtry` (ten sam strażnik permlevel
+	co `get_data`/`przydziel_cc`) rzuca `PermissionError`, jeśli scalone
+	filtry odwołują się do pola bez uprawnienia odczytu (np. `custom_cc` dla
+	`Volteo D2D Sales`)  -  sprawdzane PO scaleniu, tak jak w `get_data`.
+
+	`convert_filter_to_tuple` (już istniejący w `crm.api.doc`, oparty o
+	`frappe.utils.make_filter_tuple`) zamienia scalony dict na listę krotek
+	`[doctype, pole, operator, wartość]`, ta sama funkcja, której rdzeń
+	Frappe używa wszędzie indziej do tego samego celu, więc poprawnie
+	rozumie zarówno skalarną wartość (operator "="), jak i wartość-listę
+	`[operator, wartość]` (`"in"`, `"like"`, `"timespan"`, …) bez ręcznego
+	przepisywania tej logiki tutaj. Warunek geokodu dokładany jest jako
+	OSOBNA krotka na końcu (nie scalany do `filters` przed konwersją), żeby
+	nigdy nie mógł zostać po cichu nadpisany, gdyby kiedyś `custom_lat`
+	trafił na listę filtrowalnych pól leadów.
 
 	Issue #97 (panel „Szybki podgląd"): dołożone pięć pól potrzebnych do
 	dymka pinezki i nagłówka panelu (`custom_cc`, `custom_import_source`,
@@ -500,6 +529,21 @@ def mapa() -> list[dict]:
 
 	Issue #101 (ustawienia mapy, pole dymku "termin spotkania"): dołożone
 	`custom_termin_spotkania`, bez zmiany reszty kontraktu."""
+	filters = frappe.parse_json(filters) if isinstance(filters, str) else (filters or {})
+	default_filters = (
+		frappe.parse_json(default_filters)
+		if isinstance(default_filters, str)
+		else (default_filters or {})
+	)
+
+	filters = _podstaw_me(filters)
+	filters = {**filters, **default_filters}
+
+	_sprawdz_filtry("CRM Lead", filters)
+
+	filtry_tuples = convert_filter_to_tuple("CRM Lead", filters)
+	filtry_tuples = [*filtry_tuples, ["CRM Lead", "custom_lat", "!=", 0]]
+
 	return frappe.get_list(
 		"CRM Lead",
 		fields=[
@@ -517,7 +561,7 @@ def mapa() -> list[dict]:
 			"custom_termin_spotkania",
 			"mobile_no",
 		],
-		filters={"custom_lat": ["!=", 0]},
+		filters=filtry_tuples,
 		limit_page_length=0,
 	)
 

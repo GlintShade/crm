@@ -1,210 +1,196 @@
 <!--
-  Mapa leadów D2D (b52, ops#26) — piny geokodowanych leadów na OSM/Leaflet.
+  Mapa leadów D2D (b52, ops#26) - piny geokodowanych leadów na Leaflet/OSM.
 
-  Dane: `crm.api.volteo_leady.mapa` (frappe.get_list, więc scoping ról robi
-  serwer przez crm/permissions/org_hierarchy.py — rep dostaje tylko swoje
-  leady, admin/backend wszystkie; ta strona nie implementuje żadnej logiki
-  uprawnień). Endpoint zwraca WYŁĄCZNIE leady z ustawionym geokodem
-  (custom_lat != 0) — licznik "N leadów bez współrzędnych" jest tu celowo
-  pominięty: policzenie go wymagałoby albo osobnego wywołania statystyk,
-  albo zmiany API, a ten issue miał wyraźny zakaz dotykania mapa() (konflikt
-  plików z issue #24). Z tego samego powodu brak tu filtra województwa —
-  mapa() nie zwraca custom_voivodeship.
+  Od issue #100 to NIE osobna strona: jedna pozycja menu "Leady" ma
+  przełącznik widoku Tabela/Mapa w ViewControls.vue (route.params.viewType
+  == 'mapa' na trasie 'Leads'), a ten komponent renderuje się z Leads.vue
+  obok LeadsListView/KanbanView, dzieląc LayoutHeader/ViewBreadcrumbs oraz
+  filtry/quick filters/zapisane widoki z Tabelą - stąd BRAK tu własnego
+  LayoutHeader, ViewBreadcrumbs, usePageMeta i własnych filtrów po stronie
+  klienta (dawne pola "Handlowiec"/"Miasto" usunięte, bo dubluje je teraz
+  prawdziwy Filter/QuickFilterField w ViewControls). Prop `list` to WPROST
+  ten sam zasób `crm.api.doc.get_data`, który napędza Tabelę (przekazywany
+  przez Leads.vue jako `:list="leads"`) - ten komponent czyta z niego
+  WYŁĄCZNIE `list.params.filters`/`list.params.default_filters` (bieżące
+  filtry), nigdy `list.data` (dane Tabeli), i odpytuje `mapa()` osobno z
+  tymi samymi filtrami. Watcher na `list.data` (nie na `.params`) czeka, aż
+  Tabela SKOŃCZY odświeżanie z nowymi filtrami, zanim mapa() zostanie
+  wywołana z tymi parametrami - bez tego mapa ścigałaby się z Tabelą o to,
+  które `.params` są aktualne.
+
+  Dane: `crm.api.volteo_leady.mapa(filters, default_filters)` (frappe.get_list,
+  więc scoping ról robi serwer przez crm/permissions/org_hierarchy.py: rep
+  dostaje tylko swoje leady, admin/backend wszystkie; serwer też odrzuca
+  filtrowanie po polu bez uprawnień, np. custom_cc dla Volteo D2D Sales).
+  Endpoint zwraca WYŁĄCZNIE leady z ustawionym geokodem (custom_lat != 0).
 
   Leaflet ładowany leniwie (wzorzec: Controls/GeolocationControl.vue
-  L203-272) — tylko warstwa OSM, `preferCanvas: true` bo ~11 tys. pinów.
-  Piny to L.circleMarker (wektor na canvasie), więc — inaczej niż w
-  GeolocationControl — nie trzeba łatać ikon markerów przez ?url.
+  L203-272) - tylko warstwa OSM, `preferCanvas: true` bo ~11 tys. pinów.
+  Piny to L.circleMarker (wektor na canvasie), więc - inaczej niż w
+  GeolocationControl - nie trzeba łatać ikon markerów przez ?url.
 
   Kolory pinów: hex są w porządku na canvasie Leafleta (to rysowanie na
-  mapie, nie UI motywu) — CLAUDE.md pozwala na to wyraźnie. Reszta interfejsu
+  mapie, nie UI motywu) - CLAUDE.md pozwala na to wyraźnie. Reszta interfejsu
   wokół mapy (filtry, stopka, spinner) trzyma się wyłącznie tokenów
   ink-*/surface-*/outline-* jak wszędzie indziej.
 -->
 <template>
-  <div class="flex h-full flex-col overflow-hidden">
-    <LayoutHeader>
-      <template #left-header>
-        <ViewBreadcrumbs routeName="MapaLeadow" />
-      </template>
-    </LayoutHeader>
+  <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <ErrorMessage class="mx-4 mt-3" :message="blad" />
 
-    <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <ErrorMessage class="mx-4 mt-3" :message="blad" />
-
-      <!-- Filtry -->
-      <div
-        class="flex flex-wrap items-center gap-3 border-b border-outline-gray-2 px-4 py-3"
-      >
-        <div class="flex flex-wrap items-center gap-1.5">
-          <button
-            v-for="s in statusyZListy"
-            :key="s.status"
-            type="button"
-            class="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm transition-colors"
-            :class="
-              !wylaczoneStatusy.has(s.status)
-                ? 'border-outline-gray-3 bg-surface-gray-3 text-ink-gray-8'
-                : 'border-outline-gray-2 text-ink-gray-5 hover:bg-surface-gray-1'
-            "
-            @click="toggleStatus(s.status)"
-          >
-            <span
-              class="h-2 w-2 shrink-0 rounded-full"
-              :style="{ backgroundColor: kolorStatusu(s.status) }"
-            />
-            <span>{{ s.status }}</span>
-            <span class="text-ink-gray-4">({{ s.liczba }})</span>
-          </button>
-        </div>
-
-        <FormControl
-          v-if="pokazSelectHandlowca"
-          v-model="filtrHandlowiec"
-          type="select"
-          variant="outline"
-          class="w-52"
-          :options="opcjeHandlowcow"
-        />
-
-        <FormControl
-          v-model="filtrMiasto"
-          type="text"
-          variant="outline"
-          class="w-52"
-          :placeholder="__('Szukaj miasta…')"
-        />
-
-        <Popover placement="bottom-end">
-          <template #target="{ togglePopover }">
-            <Button
-              icon="settings"
-              :label="__('Ustawienia mapy')"
-              @click="togglePopover"
-            />
-          </template>
-          <template #body>
-            <div
-              class="my-2 flex w-72 flex-col gap-4 rounded-lg bg-surface-elevation-2 p-3 text-sm shadow-2xl ring-1 ring-black ring-opacity-5 focus:outline-none"
-            >
-              <div>
-                <div class="mb-1.5 font-medium text-ink-gray-8">
-                  {{ __('Kolor pinezek według') }}
-                </div>
-                <FormControl
-                  v-model="trybKolorowania"
-                  type="select"
-                  variant="outline"
-                  class="w-full"
-                  :options="opcjeKolorowania"
-                />
-              </div>
-
-              <div>
-                <div class="mb-1.5 font-medium text-ink-gray-8">
-                  {{ __('Pola w dymku pinezki') }}
-                </div>
-                <div class="flex flex-col gap-1.5">
-                  <FormControl
-                    v-model="ustawieniaDymka.zrodlo"
-                    type="checkbox"
-                    :label="__('Źródło')"
-                  />
-                  <FormControl
-                    v-model="ustawieniaDymka.produkty"
-                    type="checkbox"
-                    :label="__('Obecne produkty')"
-                  />
-                  <FormControl
-                    v-model="ustawieniaDymka.statusZrodla"
-                    type="checkbox"
-                    :label="__('Status źródła')"
-                  />
-                  <FormControl
-                    v-model="ustawieniaDymka.terminSpotkania"
-                    type="checkbox"
-                    :label="__('Termin spotkania')"
-                  />
-                </div>
-              </div>
-            </div>
-          </template>
-        </Popover>
-
-        <div class="ml-auto shrink-0 text-sm text-ink-gray-5">
-          {{ __('{0} z {1} leadów z lokalizacją', [leadyPrzefiltrowane.length, stan.leady.length]) }}
-        </div>
-      </div>
-
-      <!-- Legenda kolorowania wg Handlowca/CC (issue #101). Tryb Status ma już
-           swoją legendę w chipach filtrów statusu powyżej, więc tutaj się nie
-           powtarza. -->
-      <div
-        v-if="legendaAktywna.length"
-        class="flex flex-wrap items-center gap-3 border-b border-outline-gray-2 px-4 py-2 text-sm"
-      >
-        <div
-          v-for="wpis in legendaAktywna"
-          :key="wpis.klucz"
-          class="flex items-center gap-1.5"
+    <!-- Filtry (wyłącznie chipy widoczności statusów, lokalne dla mapy - patrz
+         docstring wyżej dlaczego pola Handlowiec/Miasto zniknęły stąd). -->
+    <div
+      class="flex flex-wrap items-center gap-3 border-b border-outline-gray-2 px-4 py-3"
+    >
+      <div class="flex flex-wrap items-center gap-1.5">
+        <button
+          v-for="s in statusyZListy"
+          :key="s.status"
+          type="button"
+          class="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm transition-colors"
+          :class="
+            !wylaczoneStatusy.has(s.status)
+              ? 'border-outline-gray-3 bg-surface-gray-3 text-ink-gray-8'
+              : 'border-outline-gray-2 text-ink-gray-5 hover:bg-surface-gray-1'
+          "
+          @click="toggleStatus(s.status)"
         >
           <span
             class="h-2 w-2 shrink-0 rounded-full"
-            :style="{ backgroundColor: wpis.kolor }"
+            :style="{ backgroundColor: kolorStatusu(s.status) }"
           />
-          <span class="text-ink-gray-7">{{ etykietaLegendy(wpis.klucz) }}</span>
-          <span class="text-ink-gray-4">({{ wpis.liczba }})</span>
-        </div>
+          <span>{{ s.status }}</span>
+          <span class="text-ink-gray-4">({{ s.liczba }})</span>
+        </button>
       </div>
 
-      <!-- Mapa -->
-      <div class="relative min-h-0 flex-1">
-        <div
-          v-if="initialLoading"
-          class="absolute inset-0 z-[1000] flex items-center justify-center bg-surface-elevation-1/70"
-        >
-          <LoadingIndicator class="size-8" />
-        </div>
-        <div :id="mapId" class="h-full w-full" />
+      <Popover placement="bottom-end">
+        <template #target="{ togglePopover }">
+          <Button
+            icon="settings"
+            :label="__('Ustawienia mapy')"
+            @click="togglePopover"
+          />
+        </template>
+        <template #body>
+          <div
+            class="my-2 flex w-72 flex-col gap-4 rounded-lg bg-surface-elevation-2 p-3 text-sm shadow-2xl ring-1 ring-black ring-opacity-5 focus:outline-none"
+          >
+            <div>
+              <div class="mb-1.5 font-medium text-ink-gray-8">
+                {{ __('Kolor pinezek według') }}
+              </div>
+              <FormControl
+                v-model="trybKolorowania"
+                type="select"
+                variant="outline"
+                class="w-full"
+                :options="opcjeKolorowania"
+              />
+            </div>
 
-        <!-- VOLTEO (issue #97, L08): panel "Szybki podglad" po kliknieciu
-             pinezki -- LeadSzybkiPodglad.vue pozycjonuje sie sam (absolute
-             inset-y-0 right-0 z-[1000], nad kontrolkami Leafleta), zeby
-             otwarcie nie zmienialo pozycji/zoomu mapy (brak invalidateSize,
-             mapa nie kurczy sie w flexie). Pozycjonowanie NIE jest przekazane
-             przez `class` z tego miejsca, bo komponent ma wiecej niz jeden
-             korzen (panel + LostReasonModal + KomentarzeLeadaModal) -- Vue
-             cicho gubi attrs przekazane do multi-root komponentu. Klucz
-             :key="wybranyLead.name" wymusza pelny remount przy zmianie
-             zaznaczonego leada, zeby wewnetrzny useDocument() w panelu
-             zaladowal wlasciwy dokument zamiast trzymac poprzedni. -->
-        <LeadSzybkiPodglad
-          v-if="wybranyLead"
-          :key="wybranyLead.name"
-          :lead="wybranyLead"
-          @zamknij="wybranyLead = null"
-          @zaktualizowano="patchujLeada"
-        />
+            <div>
+              <div class="mb-1.5 font-medium text-ink-gray-8">
+                {{ __('Pola w dymku pinezki') }}
+              </div>
+              <div class="flex flex-col gap-1.5">
+                <FormControl
+                  v-model="ustawieniaDymka.zrodlo"
+                  type="checkbox"
+                  :label="__('Źródło')"
+                />
+                <FormControl
+                  v-model="ustawieniaDymka.produkty"
+                  type="checkbox"
+                  :label="__('Obecne produkty')"
+                />
+                <FormControl
+                  v-model="ustawieniaDymka.statusZrodla"
+                  type="checkbox"
+                  :label="__('Status źródła')"
+                />
+                <FormControl
+                  v-model="ustawieniaDymka.terminSpotkania"
+                  type="checkbox"
+                  :label="__('Termin spotkania')"
+                />
+              </div>
+            </div>
+          </div>
+        </template>
+      </Popover>
+
+      <div class="ml-auto shrink-0 text-sm text-ink-gray-5">
+        {{ __('{0} z {1} leadów z lokalizacją', [leadyPrzefiltrowane.length, stan.leady.length]) }}
       </div>
+    </div>
 
-      <!-- Atrybucje (wymóg licencyjny OSM + GeoNames) -->
+    <!-- Legenda kolorowania wg Handlowca/CC (issue #101). Tryb Status ma już
+         swoją legendę w chipach filtrów statusu powyżej, więc tutaj się nie
+         powtarza. -->
+    <div
+      v-if="legendaAktywna.length"
+      class="flex flex-wrap items-center gap-3 border-b border-outline-gray-2 px-4 py-2 text-sm"
+    >
       <div
-        class="border-t border-outline-gray-2 px-4 py-1.5 text-xs text-ink-gray-4"
+        v-for="wpis in legendaAktywna"
+        :key="wpis.klucz"
+        class="flex items-center gap-1.5"
       >
-        {{ __('© OpenStreetMap contributors') }}
-        ·
-        {{ __('kody pocztowe: GeoNames, CC-BY 4.0') }}
+        <span
+          class="h-2 w-2 shrink-0 rounded-full"
+          :style="{ backgroundColor: wpis.kolor }"
+        />
+        <span class="text-ink-gray-7">{{ etykietaLegendy(wpis.klucz) }}</span>
+        <span class="text-ink-gray-4">({{ wpis.liczba }})</span>
       </div>
+    </div>
+
+    <!-- Mapa -->
+    <div class="relative min-h-0 flex-1">
+      <div
+        v-if="initialLoading"
+        class="absolute inset-0 z-[1000] flex items-center justify-center bg-surface-elevation-1/70"
+      >
+        <LoadingIndicator class="size-8" />
+      </div>
+      <div :id="mapId" class="h-full w-full" />
+
+      <!-- VOLTEO (issue #97, L08): panel "Szybki podglad" po kliknieciu
+           pinezki -- LeadSzybkiPodglad.vue pozycjonuje sie sam (absolute
+           inset-y-0 right-0 z-[1000], nad kontrolkami Leafleta), zeby
+           otwarcie nie zmienialo pozycji/zoomu mapy (brak invalidateSize,
+           mapa nie kurczy sie w flexie). Pozycjonowanie NIE jest przekazane
+           przez `class` z tego miejsca, bo komponent ma wiecej niz jeden
+           korzen (panel + LostReasonModal + KomentarzeLeadaModal) -- Vue
+           cicho gubi attrs przekazane do multi-root komponentu. Klucz
+           :key="wybranyLead.name" wymusza pelny remount przy zmianie
+           zaznaczonego leada, zeby wewnetrzny useDocument() w panelu
+           zaladowal wlasciwy dokument zamiast trzymac poprzedni. -->
+      <LeadSzybkiPodglad
+        v-if="wybranyLead"
+        :key="wybranyLead.name"
+        :lead="wybranyLead"
+        @zamknij="wybranyLead = null"
+        @zaktualizowano="patchujLeada"
+      />
+    </div>
+
+    <!-- Atrybucje (wymóg licencyjny OSM + GeoNames) -->
+    <div
+      class="border-t border-outline-gray-2 px-4 py-1.5 text-xs text-ink-gray-4"
+    >
+      {{ __('© OpenStreetMap contributors') }}
+      ·
+      {{ __('kody pocztowe: GeoNames, CC-BY 4.0') }}
     </div>
   </div>
 </template>
 
 <script setup>
-import LayoutHeader from '@/components/LayoutHeader.vue'
-import ViewBreadcrumbs from '@/components/ViewBreadcrumbs.vue'
 import LeadSzybkiPodglad from '@/components/LeadSzybkiPodglad.vue'
 import { usersStore } from '@/stores/users'
-import { sessionStore } from '@/stores/session'
 import { statusesStore } from '@/stores/statuses'
 import { colorNameFromParsed } from '@/utils/statusColors'
 import { widocznyLead } from '@/utils/mapaFiltry'
@@ -227,17 +213,23 @@ import {
   LoadingIndicator,
   Popover,
   createResource,
-  usePageMeta,
 } from 'frappe-ui'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
-usePageMeta(() => {
-  return { title: __('Mapa leadów') }
+const props = defineProps({
+  // Zasób ViewControls (crm.api.doc.get_data) - patrz docstring pliku. Ten
+  // komponent czyta z niego wyłącznie .params.filters/.params.default_filters.
+  list: { type: Object, required: true },
 })
+
+// Nie wołany w tej iteracji (chipy statusów to lokalny przełącznik
+// widoczności, patrz komentarz przy wylaczoneStatusy niżej) - zdefiniowany,
+// żeby nasłuch @ustawFiltr w Leads.vue miał do czego się podpiąć w
+// przyszłej iteracji, bez kolejnej zmiany kontraktu tego komponentu.
+const emit = defineEmits(['ustawFiltr'])
 
 const mapId = `mapa-leadow-${Math.random().toString(36).slice(2)}`
 
-const { user: currentUser } = sessionStore()
 const { getUser } = usersStore()
 const { getLeadStatus } = statusesStore()
 
@@ -246,9 +238,8 @@ const { getLeadStatus } = statusesStore()
 const stan = reactive({ leady: [] })
 const blad = ref('')
 
-const listResource = createResource({
+const mapaResource = createResource({
   url: 'crm.api.volteo_leady.mapa',
-  auto: true,
   onSuccess: (data) => {
     stan.leady = data || []
     blad.value = ''
@@ -258,9 +249,26 @@ const listResource = createResource({
   },
 })
 
-const initialLoading = computed(() => listResource.loading && !listResource.data)
+// VOLTEO (issue #100): odpytanie mapy dopiero PO tym, jak Tabela skończy
+// własne odświeżenie z nowymi filtrami (.data, nie .params) - patrz
+// docstring pliku po pełne wyjaśnienie wyścigu, którego to unika.
+// `immediate: true`, żeby pierwsze wejście na widok Mapa (zanim Tabela w
+// ogóle zdąży coś załadować) też odpytało od razu, z filtrami, jakie
+// ViewControls ustawiło synchronicznie przy tworzeniu zasobu `list`.
+watch(
+  () => props.list.data,
+  () => {
+    mapaResource.submit({
+      filters: JSON.stringify(props.list.params?.filters || {}),
+      default_filters: JSON.stringify(props.list.params?.default_filters || {}),
+    })
+  },
+  { immediate: true },
+)
 
-// Precedent: DokumentyLista.vue's extractErrorMessage() — call()/createResource
+const initialLoading = computed(() => mapaResource.loading && !mapaResource.data)
+
+// Precedent: DokumentyLista.vue's extractErrorMessage() - call()/createResource
 // throw an error whose Polish server message lives in err.messages[0], not
 // under _server_messages/exception.
 function extractErrorMessage(err) {
@@ -288,10 +296,10 @@ function extractErrorMessage(err) {
 
 const BRAK_STATUSU = __('(brak)')
 
-// Leaflet rysuje na <canvas> — potrzebuje realnego koloru CSS, nie klasy
+// Leaflet rysuje na <canvas> - potrzebuje realnego koloru CSS, nie klasy
 // Tailwind. Mapa nazwa->hex odpowiada w przybliżeniu odcieniowi, jaki
 // parseColor() (utils/index.js) generuje dla statusów w reszcie CRM (-600,
-// poza gray/green -700 i black -> ink-gray-9) — piny są więc spójne
+// poza gray/green -700 i black -> ink-gray-9) - piny są więc spójne
 // kolorystycznie z badge'ami/przyciskami statusów gdzie indziej w appce.
 const HEX_PO_NAZWIE_KOLORU = {
   black: '#18181b',
@@ -381,7 +389,7 @@ function etykietaLegendy(klucz) {
 const ustawieniaDymka = reactive(wczytajUstawieniaDymka())
 watch(ustawieniaDymka, (wartosc) => zapiszUstawieniaDymka({ ...wartosc }), { deep: true })
 
-// --- Filtry --------------------------------------------------------------------
+// --- Filtry (chipy widoczności statusów) ----------------------------------------
 
 const statusyZListy = computed(() => {
   const liczniki = new Map()
@@ -396,9 +404,12 @@ const statusyZListy = computed(() => {
 
 // Zbiór statusów WYŁĄCZONYCH przez użytkownika (ops#113), nie AKTYWNYCH.
 // Domyślnie pusty -- lead jest widoczny, dopóki jego status nie zostanie
-// wyłączony ręcznie kliknięciem chipa. Zobacz komentarz w mapaFiltry.js
-// po pełne wyjaśnienie, dlaczego poprzednia (odwrotna) semantyka gubiła
-// pinezkę po zmianie statusu z panelu "Szybki podgląd".
+// wyłączony ręcznie kliknięciem chipa. To LOKALNY (nieserwerowy) przełącznik
+// widoczności pinezek na tej mapie -- w odróżnieniu od Filter/QuickFilterField
+// w ViewControls, który steruje tym, JAKIE leady w ogóle przychodzą z serwera
+// (issue #100). Zobacz komentarz w mapaFiltry.js po pełne wyjaśnienie,
+// dlaczego poprzednia (odwrotna) semantyka gubiła pinezkę po zmianie statusu
+// z panelu "Szybki podgląd".
 const wylaczoneStatusy = ref(new Set())
 
 function toggleStatus(status) {
@@ -411,48 +422,8 @@ function toggleStatus(status) {
   wylaczoneStatusy.value = next
 }
 
-const unikalniWlasciciele = computed(() =>
-  [...new Set(stan.leady.map((lead) => lead.lead_owner).filter(Boolean))],
-)
-
-// Select handlowca pokazuje się tylko gdy zwrócone dane zawierają cudzego
-// lead_owner — czyli de facto tylko dla admina/backoffice'u. Serwerowy
-// scoping (org_hierarchy.py) i tak ogranicza szeregowego repa do jego
-// własnych leadów, więc dla niego ta gałąź nigdy nie jest prawdziwa.
-const pokazSelectHandlowca = computed(() => {
-  const wlasciciele = unikalniWlasciciele.value
-  if (wlasciciele.length > 1) return true
-  return wlasciciele.length === 1 && wlasciciele[0] !== currentUser.value
-})
-
-const opcjeHandlowcow = computed(() => [
-  { label: __('Wszyscy handlowcy'), value: '' },
-  ...unikalniWlasciciele.value.map((email) => ({
-    label: getUser(email).full_name || email,
-    value: email,
-  })),
-])
-
-const filtrHandlowiec = ref('')
-const filtrMiasto = ref('')
-
-// Lekki debounce (200ms) na wyszukiwarce miasta — bez niego każde
-// naciśnięcie klawisza czyściłoby i przerysowywało do 11 tys. circleMarkerów.
-const filtrMiastoDebounced = ref('')
-let miastoTimer = null
-watch(filtrMiasto, (val) => {
-  clearTimeout(miastoTimer)
-  miastoTimer = setTimeout(() => {
-    filtrMiastoDebounced.value = val
-  }, 200)
-})
-
 const leadyPrzefiltrowane = computed(() => {
-  const filtry = {
-    wylaczone: wylaczoneStatusy.value,
-    handlowiec: filtrHandlowiec.value,
-    miasto: filtrMiastoDebounced.value,
-  }
+  const filtry = { wylaczone: wylaczoneStatusy.value }
   return stan.leady.filter((lead) => widocznyLead(lead, filtry, BRAK_STATUSU))
 })
 
@@ -521,7 +492,7 @@ async function initMap() {
 
   mapInstance = L.map(mapId, { preferCanvas: true }).setView([52.0, 19.3], 6)
 
-  // TYLKO warstwa OSM (Stadia wymaga klucza na niedev domenach — nie używać).
+  // TYLKO warstwa OSM (Stadia wymaga klucza na niedev domenach - nie używać).
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution:
@@ -571,7 +542,7 @@ function rysujMarkery() {
 // zrodlo importu, obecne produkty, status zrodla. Klik w pinezke otwiera
 // panel LeadSzybkiPodglad.vue (patrz marker.on('click', ...) wyzej) zamiast
 // nawigowac -- "Otworz leada" zyje teraz w naglowku tego panelu, nie tutaj.
-// Budowane przez DOM (nie string HTML) — bezpieczne wobec lead_name z
+// Budowane przez DOM (nie string HTML) - bezpieczne wobec lead_name z
 // dowolną treścią i nie wymaga v-html.
 function budujDymek(lead) {
   const container = document.createElement('div')
@@ -584,7 +555,7 @@ function budujDymek(lead) {
 
   const city = document.createElement('div')
   city.className = 'text-sm text-ink-gray-6'
-  city.textContent = lead.custom_install_city || '—'
+  city.textContent = lead.custom_install_city || '-'
   container.appendChild(city)
 
   const status = document.createElement('div')
@@ -624,8 +595,5 @@ function destroyMap() {
 }
 
 onMounted(() => initMap())
-onBeforeUnmount(() => {
-  clearTimeout(miastoTimer)
-  destroyMap()
-})
+onBeforeUnmount(() => destroyMap())
 </script>

@@ -92,6 +92,36 @@ def _pola_dozwolone(doctype: str, parenttype: str | None = None) -> set[str]:
 	return dozwolone
 
 
+def _podstaw_me(filters: dict) -> dict:
+	"""Podstawia frappe.session.user za literal "@me" (takze wewnatrz "%@me%"
+	w filtrach LIKE, uzywanych przez operator LIKE) w wartosciach `filters`.
+	Wyciagnieta z `get_data` (issue #100), zeby `crm.api.volteo_leady.mapa`
+	mogla podstawiac "@me" identycznie jak SPA forka zamiast duplikowac te
+	sama logike osobno dla mapy leadow.
+
+	Zwraca NOWY dict i nie mutuje ani `filters`, ani zagniezdzonych list w
+	jego wartosciach (coding-style.md: immutability)  -  oryginalny kod w
+	`get_data` mutowal listy w miejscu, co bylo nieszkodliwe dopoki jedynym
+	wolajacym byl ten sam request; wspoldzielenie z drugim wolajacym usuwa
+	to bezpieczne zalozenie."""
+	wynik: dict = {}
+	for key, value in filters.items():
+		if isinstance(value, list):
+			nowa_wartosc = list(value)
+			if "@me" in nowa_wartosc:
+				nowa_wartosc[nowa_wartosc.index("@me")] = frappe.session.user
+			elif "%@me%" in nowa_wartosc:
+				for i, v in enumerate(nowa_wartosc):
+					if v == "%@me%":
+						nowa_wartosc[i] = "%" + frappe.session.user + "%"
+			wynik[key] = nowa_wartosc
+		elif value == "@me":
+			wynik[key] = frappe.session.user
+		else:
+			wynik[key] = value
+	return wynik
+
+
 def _sprawdz_filtry(doctype: str, filters, parenttype: str | None = None) -> None:
 	"""Rzuca PermissionError, jesli `filters` odwoluje sie do pola spoza
 	`_pola_dozwolone(doctype, parenttype)`. `filters` moze byc dict-em
@@ -482,17 +512,7 @@ def get_data(
 	if group_by_field:
 		_sprawdz_filtry(doctype, {group_by_field: None})
 
-	for key in filters:
-		value = filters[key]
-		if isinstance(value, list):
-			if "@me" in value:
-				value[value.index("@me")] = frappe.session.user
-			elif "%@me%" in value:
-				index = [i for i, v in enumerate(value) if v == "%@me%"]
-				for i in index:
-					value[i] = "%" + frappe.session.user + "%"
-		elif value == "@me":
-			filters[key] = frappe.session.user
+	filters = frappe._dict(_podstaw_me(filters))
 
 	if default_filters:
 		default_filters = frappe.parse_json(default_filters)
