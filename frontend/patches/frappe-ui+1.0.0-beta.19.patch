@@ -1,3 +1,63 @@
+diff --git a/node_modules/frappe-ui/src/components/Menu/MenuRenderContentAsChild.vue b/node_modules/frappe-ui/src/components/Menu/MenuRenderContentAsChild.vue
+index aab0324..a9d96d9 100644
+--- a/node_modules/frappe-ui/src/components/Menu/MenuRenderContentAsChild.vue
++++ b/node_modules/frappe-ui/src/components/Menu/MenuRenderContentAsChild.vue
+@@ -1,19 +1,44 @@
+-<script setup lang="ts">
+-import { cloneVNode, useAttrs, type VNode } from 'vue'
++<script lang="ts">
++import { cloneVNode, defineComponent, type VNode } from 'vue'
+ import { getFirstRenderableElement } from '../../utils/vnode'
+ 
+-const props = defineProps<{
+-  content?: VNode | VNode[]
+-}>()
++// Hoisted to module scope on purpose: the `:is` binding below must always
++// resolve to the SAME component reference across re-renders. The previous
++// implementation created a fresh `{ render: renderRootNode }` object
++// literal inline in the template on every render; Vue's patch algorithm
++// treats a changed `:is` reference as a different component type and fully
++// unmounts the old instance before mounting a new one, instead of patching
++// the existing DOM node in place. Any attrs flowing through this wrapper
++// (for example `data-highlighted`/`tabindex`, which reka-ui's menu items
++// toggle on pointermove/focus/blur) therefore destroyed and recreated the
++// rendered element on every hover, which could race a real mouse click's
++// mousedown/mouseup pair and silently drop the click (observed in
++// Chromium; WebKit's click synthesis tolerated it).
++const RenderRootNode = defineComponent({
++  name: 'MenuRenderContentAsChildRoot',
++  props: {
++    content: {
++      type: [Object, Array] as unknown as () => VNode | VNode[] | undefined,
++      default: undefined,
++    },
++  },
++  setup(props, { attrs }) {
++    return () => {
++      const node = getFirstRenderableElement(props.content)
++      return node ? cloneVNode(node, attrs) : null
++    }
++  },
++})
++</script>
+ 
+-const attrs = useAttrs()
++<script setup lang="ts">
++import type { VNode } from 'vue'
+ 
+-function renderRootNode() {
+-  const node = getFirstRenderableElement(props.content)
+-  return node ? cloneVNode(node, attrs) : null
+-}
++defineProps<{
++  content?: VNode | VNode[]
++}>()
+ </script>
+ 
+ <template>
+-  <component :is="{ render: renderRootNode }" />
++  <RenderRootNode :content="content" />
+ </template>
 diff --git a/node_modules/frappe-ui/src/components/TextEditor/extensions/suggestion/createSuggestionExtension.ts b/node_modules/frappe-ui/src/components/TextEditor/extensions/suggestion/createSuggestionExtension.ts
 index e7f8ff6..57ca30d 100644
 --- a/node_modules/frappe-ui/src/components/TextEditor/extensions/suggestion/createSuggestionExtension.ts
