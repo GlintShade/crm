@@ -4,20 +4,20 @@
       <div class="flex items-center">
         <Button
           :label="__('Filter')"
-          :class="filters?.size ? 'rounded-r-none' : ''"
+          :class="liczbaWarunkow ? 'rounded-r-none' : ''"
           :iconLeft="FilterIcon"
           @click="togglePopover"
         >
-          <template v-if="filters?.size" #suffix>
+          <template v-if="liczbaWarunkow" #suffix>
             <div
               class="flex h-5 w-5 items-center justify-center rounded-[5px] bg-surface-base pt-px text-xs-medium text-ink-gray-8 shadow-sm"
             >
-              {{ filters.size }}
+              {{ liczbaWarunkow }}
             </div>
           </template>
         </Button>
         <Button
-          v-if="filters?.size"
+          v-if="liczbaWarunkow"
           :tooltip="__('Clear All Filters')"
           class="rounded-l-none border-l"
           icon="lucide-x"
@@ -164,7 +164,7 @@
             </div>
           </template>
           <div
-            v-else
+            v-else-if="!grupy.length"
             class="mb-3 flex h-7 items-center px-3 text-sm text-ink-gray-5"
           >
             {{ __('Empty - Choose a field to filter by') }}
@@ -187,13 +187,138 @@
               </template>
             </Autocomplete>
             <Button
-              v-if="filters?.size"
+              v-if="liczbaWarunkow"
               class="!text-ink-gray-5"
               variant="ghost"
               :label="__('Clear All Filters')"
               @click="clearfilter(close)"
             />
           </div>
+          <!-- Issue #129: grupy filtrów ORAZ/ALBO. Sekcja pod listą
+          warunków wspólnych powyżej -- każda grupa to ramka z własną
+          listą warunków (ten sam kontrolki co warunki wspólne: pole,
+          operator, wartość, przycisk "Dziś" na datach), oddzielona od
+          kolejnej etykietą "ALBO". -->
+          <div
+            v-if="grupy.length"
+            class="mt-3 border-t border-outline-gray-2 pt-3"
+          >
+            <div class="mb-2 px-1 text-sm text-ink-gray-5">
+              {{ __('Lead pasuje, gdy spełnia dowolną z grup:') }}
+            </div>
+            <template v-for="(grupa, gi) in grupy" :key="'volteo-grupa-' + gi">
+              <div
+                v-if="gi > 0"
+                class="my-1 text-center text-xs-medium uppercase text-ink-gray-4"
+              >
+                {{ __('ALBO') }}
+              </div>
+              <div class="mb-2 rounded border border-outline-gray-2 p-2">
+                <div class="mb-2 flex items-center justify-between">
+                  <div class="text-sm-medium text-ink-gray-7">
+                    {{ __('Grupa {0}', [gi + 1]) }}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    icon="lucide-x"
+                    :tooltip="__('Usuń grupę')"
+                    @click="removeGroup(gi)"
+                  />
+                </div>
+                <div
+                  v-for="(f, fi) in grupa"
+                  :key="'volteo-warunek-' + gi + '-' + fi"
+                  class="mb-2 flex items-center gap-2"
+                >
+                  <div id="fieldname" class="!min-w-[120px] flex-1">
+                    <Autocomplete
+                      :value="f.field.fieldname"
+                      :options="availableGroupFilters(gi)"
+                      :placeholder="__('First Name')"
+                      @change="(e) => updateGroupFilter(e, gi, fi)"
+                    />
+                  </div>
+                  <div id="operator">
+                    <FormControl
+                      v-model="f.operator"
+                      type="select"
+                      :options="getOperators(f.field.fieldtype, f.field.fieldname)"
+                      :placeholder="__('Equals')"
+                      @update:modelValue="() => updateOperator(f)"
+                    />
+                  </div>
+                  <div id="value" class="!min-w-[120px] flex-1">
+                    <div
+                      v-if="czyPrzyciskDzis(f) && czyDzis(f)"
+                      class="flex h-7 items-center justify-between gap-1 rounded border border-outline-gray-2 px-2 text-sm text-ink-gray-8"
+                    >
+                      <span>{{ __('Today') }}</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon="lucide-x"
+                        @click="wyczyscDzis(f)"
+                      />
+                    </div>
+                    <div v-else class="flex items-center gap-1">
+                      <component
+                        :is="getValueControl(f)"
+                        v-model="f.value"
+                        :placeholder="placeholder(f)"
+                        class="flex-1"
+                        @change="(v) => updateValue(v, f)"
+                      />
+                      <Button
+                        v-if="czyPrzyciskDzis(f)"
+                        variant="ghost"
+                        size="sm"
+                        :label="__('Today')"
+                        @click="ustawDzis(f)"
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    class="flex"
+                    variant="ghost"
+                    icon="lucide-x"
+                    @click="removeGroupFilter(gi, fi)"
+                  />
+                </div>
+                <Autocomplete
+                  value=""
+                  :options="availableGroupFilters(gi)"
+                  :placeholder="__('First Name')"
+                  @change="(e) => setGroupFilter(e, gi)"
+                >
+                  <template #target="{ togglePopover }">
+                    <Button
+                      class="!text-ink-gray-5"
+                      variant="ghost"
+                      :label="__('Dodaj warunek')"
+                      iconLeft="plus"
+                      @click="togglePopover()"
+                    />
+                  </template>
+                </Autocomplete>
+              </div>
+            </template>
+            <Button
+              v-if="grupy.length < MAX_GRUP"
+              class="!text-ink-gray-5"
+              variant="ghost"
+              :label="__('Dodaj grupę')"
+              iconLeft="plus"
+              @click="addGroup"
+            />
+          </div>
+          <Button
+            v-else
+            class="mt-1 !text-ink-gray-5"
+            variant="ghost"
+            :label="__('Dodaj grupę')"
+            iconLeft="plus"
+            @click="addGroup"
+          />
         </div>
       </div>
     </template>
@@ -213,6 +338,18 @@ import {
   parsujWartoscWielokrotna,
 } from '@/utils/filtrWielokrotny'
 import {
+  MAX_GRUP,
+  MAX_WARUNKOW_W_GRUPIE,
+  dodajGrupe,
+  dodajWarunekDoGrupy,
+  liczbaWarunkowLacznie,
+  polaczGrupy,
+  podmienWarunekWGrupy,
+  usunGrupe,
+  usunWarunekZGrupy,
+  wydzielGrupy,
+} from '@/utils/grupyFiltrow'
+import {
   FormControl,
   MultiSelect,
   createResource,
@@ -221,7 +358,7 @@ import {
   DateTimePicker,
   DateRangePicker,
 } from 'frappe-ui'
-import { h, computed, onMounted } from 'vue'
+import { h, computed, ref, watch, onMounted } from 'vue'
 import { isMobileView } from '@/composables/settings'
 import { statusesStore } from '@/stores/statuses'
 
@@ -306,6 +443,61 @@ const availableFilters = computed(() => {
   return filterableFields.data.filter(
     (field) => !selectedFieldNames.has(field.fieldname),
   )
+})
+
+// Issue #129: grupy filtrów ORAZ/ALBO ("Grupy ALBO" w sekcji poniżej
+// listy warunków wspólnych). `grupy` trzyma tablicę tablic wierszy
+// warunków -- ten sam kształt wiersza co `filters` wyżej ({ field,
+// fieldname, operator, value }), więc getValueControl/getOperators/
+// updateValue/updateOperator/czyPrzyciskDzis i inne funkcje niżej
+// (parametryzowane wyłącznie samym wierszem `f`, nie tym, skąd pochodzi)
+// działają na warunkach wewnątrz grupy BEZ ŻADNEJ zmiany -- tylko
+// operacje STRUKTURALNE (dodaj/usuń warunek, dodaj/usuń grupę) mają
+// swoje własne funkcje niżej, delegujące do czystych helperów w
+// grupyFiltrow.js (immutability, coding-style.md).
+//
+// W odróżnieniu od `filters` (computed, mutowany w miejscu przez
+// `.add()`/`.delete()` na Set-ie i odczytywany na nowo z `list.value`
+// dopiero po `apply()`, wzorzec sprzed tego issue) `grupy` jest zwykłym
+// `ref` synchronizowanym `watch`-em: `apply()` NIGDY nie wysyła grupy o
+// zerowej liczbie warunków (patrz `polaczGrupy` -- pusta grupa
+// dopasowałaby WSZYSTKIE wiersze w zapytaniu backendu, zepsułoby to
+// semantykę ALBO), więc gdyby `grupy` była computed jak `filters`,
+// dodanie grupy bez żadnego warunku zniknęłoby natychmiast z widoku przy
+// najbliższym odczycie (nic nie zostało wysłane, więc "z powrotem" nie
+// ma czego odtworzyć). Dlatego `dodajGrupa()` niżej zawsze wstawia
+// pierwszy warunek OD RAZU (domyślne pole), więc grupa nigdy nie jest
+// faktycznie pusta w stanie UI -- ten sam efekt uboczny (nigdy nie wysyłać
+// pustej grupy) jest więc osiągnięty bez potrzeby utrzymywania osobnego,
+// niewysyłanego stanu "placeholder pustej grupy".
+function grupaZDict(dict) {
+  if (!filterableFields.data) return []
+  return Array.from(convertFilters(filterableFields.data, dict))
+}
+
+function wyliczGrupy() {
+  if (!list.value?.data || !filterableFields.data) return []
+  let allFilters = list.value?.params?.filters || list.value.data?.params?.filters
+  if (!allFilters) return []
+  const { grupy: surowe } = wydzielGrupy(allFilters)
+  return surowe.map(grupaZDict)
+}
+
+// `computed`, nie ręcznie wyliczone źródła `watch`: Vue śledzi WSZYSTKIE
+// reaktywne odczyty wewnątrz `wyliczGrupy` (list.value?.data,
+// list.value?.params?.filters, filterableFields.data) automatycznie, bez
+// ręcznego wymieniania każdego z osobna -- odporniejsze niż lista
+// źródeł, którą łatwo przypadkiem zostawić niekompletną. `wyliczGrupy`
+// buduje za każdym razem NOWĄ tablicę, więc `grupyPochodne` zmienia
+// tożsamość (i budzi poniższy `watch`) przy KAŻDYM przeliczeniu, także
+// echo własnego `apply()` -- nieszkodliwe: `addGroup()` zawsze wstawia
+// pierwszy warunek od razu (patrz komentarz przy `grupy` niżej), więc
+// nigdy nie ma lokalnego stanu "pusta grupa-placeholder", którego
+// odtworzenie z powrotem z `list.value.params.filters` mogłoby zgubić.
+const grupyPochodne = computed(wyliczGrupy)
+const grupy = ref(grupyPochodne.value)
+watch(grupyPochodne, (nowe) => {
+  grupy.value = nowe
 })
 
 function removeCommonFilters(commonFilters, allFilters) {
@@ -637,8 +829,65 @@ function removeFilter(index) {
   apply()
 }
 
+// Issue #129: operacje strukturalne na grupy -- dodanie/usunięcie CAŁEJ
+// grupy albo pojedynczego warunku wewnątrz grupy. Wszystkie delegują do
+// czystych, testowanych osobno helperów w grupyFiltrow.js (immutability)
+// i kończą wywołaniem `apply()`, tak jak odpowiedniki dla filtrów
+// wspólnych wyżej.
+function zbudujWarunek(data) {
+  return {
+    field: {
+      label: data.label,
+      fieldname: data.fieldname,
+      fieldtype: data.fieldtype,
+      options: data.options,
+    },
+    fieldname: data.fieldname,
+    operator: getDefaultOperator(data.fieldtype),
+    value: getDefaultValue(data),
+  }
+}
+
+function availableGroupFilters(groupIndex) {
+  if (!filterableFields.data) return []
+  const uzyte = new Set((grupy.value[groupIndex] || []).map((f) => f.fieldname))
+  return filterableFields.data.filter((field) => !uzyte.has(field.fieldname))
+}
+
+function addGroup() {
+  if (grupy.value.length >= MAX_GRUP) return
+  const pierwszePole = filterableFields.data?.[0]
+  if (!pierwszePole) return
+  grupy.value = dodajGrupe(grupy.value, [zbudujWarunek(pierwszePole)])
+  apply()
+}
+
+function removeGroup(groupIndex) {
+  grupy.value = usunGrupe(grupy.value, groupIndex)
+  apply()
+}
+
+function setGroupFilter(data, groupIndex) {
+  if (!data) return
+  if ((grupy.value[groupIndex]?.length ?? 0) >= MAX_WARUNKOW_W_GRUPIE) return
+  grupy.value = dodajWarunekDoGrupy(grupy.value, groupIndex, zbudujWarunek(data))
+  apply()
+}
+
+function updateGroupFilter(data, groupIndex, condIndex) {
+  if (!data.fieldname) return
+  grupy.value = podmienWarunekWGrupy(grupy.value, groupIndex, condIndex, zbudujWarunek(data))
+  apply()
+}
+
+function removeGroupFilter(groupIndex, condIndex) {
+  grupy.value = usunWarunekZGrupy(grupy.value, groupIndex, condIndex)
+  apply()
+}
+
 function clearfilter(close) {
   filters.value.clear()
+  grupy.value = []
   apply()
   close()
 }
@@ -706,8 +955,29 @@ function apply() {
       value: f.value,
     })
   })
-  emit('update', parseFilters(_filters))
+  const filtryWspolne = parseFilters(_filters)
+
+  // Issue #129: każda grupa serializowana tą samą `parseFilters` co
+  // filtry wspólne wyżej (ten sam kształt wiersza, ten sam operatorMap/
+  // transformIn), a `polaczGrupy` doklada wynik pod `volteo_grupy` --
+  // pomijając grupy o zerowej liczbie warunków (patrz jej JSDoc), czego
+  // w praktyce i tak nie ma, bo `addGroup()` zawsze wstawia pierwszy
+  // warunek od razu (patrz komentarz przy deklaracji `grupy` wyżej).
+  // Tak jak `_filters` wyżej: kopie zwykłych obiektów, NIE same wiersze
+  // z `grupy.value` -- `transformIn` w `parseFilters` mutuje `.value` (np.
+  // dokleja "%...%"), a wiersze w `grupy.value` muszą zostać nietknięte,
+  // żeby edycja w popupie nadal pokazywała wartość wpisaną przez
+  // użytkownika, nie jej opakowaną, "przewodową" postać.
+  const grupyWire = grupy.value.map((warunki) =>
+    parseFilters(
+      warunki.map((f) => ({ fieldname: f.fieldname, operator: f.operator, value: f.value })),
+    ),
+  )
+
+  emit('update', polaczGrupy(filtryWspolne, grupyWire))
 }
+
+const liczbaWarunkow = computed(() => liczbaWarunkowLacznie(filters.value.size, grupy.value))
 
 function parseFilters(filters) {
   const filtersArray = Array.from(filters)
