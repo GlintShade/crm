@@ -3,6 +3,7 @@ import unittest
 from typing import ClassVar
 
 from crm.volteo_aktywnosc import (
+	AUTOR_ZASTEPCZY_CC,
 	OKNO_GRUPOWANIA_S,
 	POLA_WLASNA_LINIA,
 	TEKST_ZASTEPCZY_CC_D2D,
@@ -13,6 +14,7 @@ from crm.volteo_aktywnosc import (
 	czy_widoczny,
 	grupuj,
 	linie_z_wersji,
+	maskuj_autora_cc,
 	roznice_plikow_audytu,
 	tekst_sladu,
 	tekst_widoczny_dla,
@@ -358,6 +360,61 @@ class TestTekstWidocznyDlaCC(unittest.TestCase):
 	def test_f_bez_znacznika_zdejmuje_tez_znacznik_cc(self: "TestTekstWidocznyDlaCC") -> None:
 		text = f"{ZNACZNIK_CC} przydzielono do CC: Anna Nowak"
 		self.assertEqual(bez_znacznika(text), "przydzielono do CC: Anna Nowak")
+
+
+class TestMaskujAutoraCC(unittest.TestCase):
+	"""Fix 2026-09-10 (decyzja właściciela): tożsamość autora wpisu/komentarza
+	(owner/comment_by/comment_email/full_name/owner_name/user_image) musi być
+	zamaskowana dla handlowca, gdy autor ma rolę Volteo Call Center -- osobny
+	problem od tekstu śladu (TestTekstWidocznyDlaCC powyżej), bo nawet
+	bezosobowy tekst nie chroni tożsamości, jeśli `owner` wpisu wciąż niesie
+	prawdziwy e-mail CC (front rozwiązuje go na prawdziwe imię/awatar)."""
+
+	def test_a_autor_cc_handlowiec_maskuje_wszystkie_pola(self: "TestMaskujAutoraCC") -> None:
+		wpis = {
+			"owner": "cc.test@proenergy.pro",
+			"comment_by": "Oskar Testowy",
+			"comment_email": "cc.test@proenergy.pro",
+			"content": "Dzwoniłem, klient prosi o telefon jutro.",
+			"user_image": "/files/oskar.jpg",
+		}
+		wynik = maskuj_autora_cc(wpis, autorzy_cc={"cc.test@proenergy.pro"}, maskuj=True)
+		self.assertEqual(wynik["owner"], AUTOR_ZASTEPCZY_CC)
+		self.assertEqual(wynik["comment_by"], AUTOR_ZASTEPCZY_CC)
+		self.assertEqual(wynik["comment_email"], AUTOR_ZASTEPCZY_CC)
+		self.assertIsNone(wynik["user_image"])
+		self.assertEqual(wynik["content"], wpis["content"])
+		self.assertNotIn("cc.test@proenergy.pro", str(wynik))
+		self.assertNotIn("Oskar", str(wynik))
+
+	def test_b_autor_cc_admin_nie_maskuje(self: "TestMaskujAutoraCC") -> None:
+		wpis = {"owner": "cc.test@proenergy.pro", "comment_by": "Oskar Testowy"}
+		wynik = maskuj_autora_cc(wpis, autorzy_cc={"cc.test@proenergy.pro"}, maskuj=False)
+		self.assertEqual(wynik["owner"], "cc.test@proenergy.pro")
+		self.assertEqual(wynik["comment_by"], "Oskar Testowy")
+
+	def test_c_autor_nie_cc_handlowiec_nie_maskuje(self: "TestMaskujAutoraCC") -> None:
+		wpis = {"owner": "handlowiec@proenergy.pro", "comment_by": "Jan Kowalski"}
+		wynik = maskuj_autora_cc(wpis, autorzy_cc={"cc.test@proenergy.pro"}, maskuj=True)
+		self.assertEqual(wynik["owner"], "handlowiec@proenergy.pro")
+		self.assertEqual(wynik["comment_by"], "Jan Kowalski")
+
+	def test_d_nie_mutuje_wejscia(self: "TestMaskujAutoraCC") -> None:
+		wpis = {"owner": "cc.test@proenergy.pro"}
+		maskuj_autora_cc(wpis, autorzy_cc={"cc.test@proenergy.pro"}, maskuj=True)
+		self.assertEqual(wpis["owner"], "cc.test@proenergy.pro")
+
+	def test_e_brakujace_pole_pomijane_bez_bledu(self: "TestMaskujAutoraCC") -> None:
+		wpis = {"owner": "cc.test@proenergy.pro", "content": "tresc"}
+		wynik = maskuj_autora_cc(wpis, autorzy_cc={"cc.test@proenergy.pro"}, maskuj=True)
+		self.assertNotIn("comment_by", wynik)
+		self.assertNotIn("user_image", wynik)
+
+	def test_f_autor_bez_ownera_uzywa_comment_email(self: "TestMaskujAutoraCC") -> None:
+		wpis = {"comment_email": "cc.test@proenergy.pro", "comment_by": "Oskar Testowy"}
+		wynik = maskuj_autora_cc(wpis, autorzy_cc={"cc.test@proenergy.pro"}, maskuj=True)
+		self.assertEqual(wynik["comment_email"], AUTOR_ZASTEPCZY_CC)
+		self.assertEqual(wynik["comment_by"], AUTOR_ZASTEPCZY_CC)
 
 
 class TestRozniceplikowAudytu(unittest.TestCase):

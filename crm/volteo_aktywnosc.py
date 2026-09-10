@@ -292,6 +292,61 @@ def tekst_widoczny_dla(text: str, role: Iterable[str]) -> str:
 	return bez_znacznika(text)
 
 
+AUTOR_ZASTEPCZY_CC = "Call center"
+"""Wartość podstawiana pod pola tożsamości AUTORA wpisu (`owner`, `comment_by`,
+`comment_email`, `full_name`, `owner_name`), gdy autor ma rolę `Volteo Call Center`,
+a odbiorca (handlowiec, rola `Volteo D2D Sales`, bez ról admin/backoffice/CC) nie ma
+poznać, KTÓRA osoba CC to była (decyzja właściciela 2026-09-10). `TEKST_ZASTEPCZY_CC_D2D`
+powyżej maskuje TREŚĆ linii śladu przekazania; ta stała maskuje TOŻSAMOŚĆ AUTORA wpisu
+(w tym zwykłych komentarzy CC, które nie niosą żadnego znacznika). To dwie różne rzeczy,
+oba potrzebne, bo tekst może być bezosobowy, a mimo to `owner`/awatar wpisu i tak zdradza,
+kto pisał. Celowo bez znaku "@": `usersStore().getUser` we froncie (jeśli `owner` trafi
+tam nierozpoznany) dzieli e-mail po "@" i pokazuje pierwszy kawałek jako etykietę i
+inicjał awatara. String bez "@" wraca z tego podziału NIEZMIENIONY, więc jedna wartość
+zasila i etykietę tekstową, i awatar, bez osobnej logiki po stronie frontu."""
+
+_POLA_TOZSAMOSCI_AUTORA: tuple[str, ...] = (
+	"owner",
+	"comment_by",
+	"comment_email",
+	"full_name",
+	"owner_name",
+)
+"""Pola wpisu (aktywności albo komentarza), które `maskuj_autora_cc` podmienia, gdy
+obecne. Nadzbiór pól używanych w praktyce przez `crm.api.activities.get_lead_activities`
+(`owner`) i `crm.api.volteo_leady.komentarze` (`owner`, `comment_by`, `comment_email`)."""
+
+
+def maskuj_autora_cc(wpis: dict, autorzy_cc: Iterable[str], maskuj: bool) -> dict:
+	"""Zwraca NOWY dict: kopię `wpis` (aktywność albo komentarz) z polami tożsamości
+	autora (`_POLA_TOZSAMOSCI_AUTORA`) podmienionymi na `AUTOR_ZASTEPCZY_CC`, gdy
+	`maskuj` jest prawdziwe ORAZ autor wpisu (`wpis.get("owner")`, a gdy brak,
+	`wpis.get("comment_email")`) jest w zbiorze `autorzy_cc`. W przeciwnym razie
+	zwraca płytką kopię `wpis` bez zmian, nigdy nie mutuje wejścia.
+
+	Wołający ustala `autorzy_cc` (userzy z rolą `Volteo Call Center`, patrz
+	`crm.permissions.org_hierarchy.czy_autor_ma_role_cc`) i `maskuj` (czy WOŁAJĄCY,
+	nie autor, ma widzieć pełną tożsamość, zwykle `ROLA_D2D in frappe.get_roles()`).
+	Ta funkcja jest czysta i nie dotyka Frappe, więc jest testowalna bez `frappe`
+	zainstalowanego lokalnie (patrz nagłówek modułu).
+
+	`user_image`, gdy obecne w `wpis`, idzie na `None` (neutralny awatar zamiast
+	prawdziwego zdjęcia CC).
+	"""
+	nowy = dict(wpis)
+	if not maskuj:
+		return nowy
+	autor = nowy.get("owner") or nowy.get("comment_email")
+	if not autor or autor not in set(autorzy_cc):
+		return nowy
+	for pole in _POLA_TOZSAMOSCI_AUTORA:
+		if pole in nowy:
+			nowy[pole] = AUTOR_ZASTEPCZY_CC
+	if "user_image" in nowy:
+		nowy["user_image"] = None
+	return nowy
+
+
 def roznice_plikow_audytu(
 	stare_dok: dict,
 	nowe_dok: dict,

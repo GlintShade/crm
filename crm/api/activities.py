@@ -9,13 +9,15 @@ from frappe.translate import get_translated_doctypes
 
 from crm.api.koszty import ADMIN_ROLE
 from crm.fcrm.doctype.crm_call_log.crm_call_log import parse_call_log
-from crm.permissions.org_hierarchy import BYPASS_ROLES
+from crm.permissions.org_hierarchy import BYPASS_ROLES, czy_autor_ma_role_cc
 from crm.volteo_aktywnosc import (
 	OKNO_GRUPOWANIA_S,
+	ROLA_D2D,
 	bez_znacznika,
 	czy_widoczny,
 	grupuj,
 	linie_z_wersji,
+	maskuj_autora_cc,
 	tekst_widoczny_dla,
 )
 from crm.volteo_zalaczniki import czy_plik_systemowy
@@ -33,11 +35,28 @@ LIMIT_KOMENTARZY_AUDYTU = 500
 @frappe.whitelist()
 def get_activities(name: str):
 	if frappe.db.exists("CRM Deal", name):
-		return get_deal_activities(name)
+		wynik = get_deal_activities(name)
 	elif frappe.db.exists("CRM Lead", name):
-		return get_lead_activities(name)
+		wynik = get_lead_activities(name)
 	else:
 		frappe.throw(_("Document not found"), frappe.DoesNotExistError)
+
+	# 2026-09-10: get_docinfo("", ..., name), called inside get_deal_activities/
+	# get_lead_activities above purely as a local data source, has a side
+	# effect Frappe does behind the scenes -- it writes frappe.response["docinfo"]
+	# directly, and Frappe's HTTP handler serialises the WHOLE frappe.response
+	# object back to the caller, not just this function's return value. That
+	# means the raw, UNMASKED info_logs/comments/versions (real CC name in
+	# plain text, e.g. "[volteo:cc] Oskar Testowy przekazał lead...") were
+	# shipped over the wire alongside the correctly-masked `message` payload --
+	# invisible in the rendered page (the Vue layer only ever reads `message`),
+	# but trivially visible in the browser's network tab, which defeats the
+	# whole point of maskuj_autora_cc/tekst_widoczny_dla above. Every caller
+	# of this whitelisted endpoint gets the fully-processed `message` list
+	# already; nothing downstream reads the raw `docinfo` side-channel, so it
+	# is safe to drop before the response leaves the server.
+	frappe.response.pop("docinfo", None)
+	return wynik
 
 
 def get_deal_activities(name: str):
@@ -418,6 +437,15 @@ def get_lead_activities(name: str):
 		"sla",
 		"first_response_time",
 		"first_responded_on",
+		# 2026-09-10: `custom_cc` (permlevel 2, Link -> User) carries the CC's
+		# raw email/name in a Version diff whenever it is changed through a
+		# full doc.save() (not through przydziel_cc/przekaz_handlowcowi, which
+		# write via db.set_value and never create a Version -- see
+		# crm.api.volteo_leady module docstring). Without this exclusion a
+		# plain "field changed" line would leak exactly the identity that the
+		# masking below (maskuj_autora_cc / tekst_widoczny_dla) exists to hide
+		# from a handlowiec (owner decision 2026-09-10).
+		"custom_cc",
 	]
 
 	doc = frappe.db.get_values("CRM Lead", name, ["creation", "owner"])[0]
@@ -486,26 +514,16 @@ def get_lead_activities(name: str):
 		}
 		activities.append(activity)
 
-	for comment in docinfo.comments:
-		activity = {
-			"name": comment.name,
-			"activity_type": "comment",
-			"creation": comment.creation,
-			"owner": comment.owner,
-			"content": comment.content,
-			"attachments": get_attachments("Comment", comment.name),
-			"is_lead": True,
-		}
-		activities.append(activity)
-
-	# ops#93: docinfo.info_logs carries the "Info" comments zapisz_slad() writes
-	# for CC assignment/handover (crm.api.volteo_leady.przydziel_cc /
-	# przekaz_handlowcowi) -- same mechanism ops#60 wired up for CRM Deal
-	# (get_deal_activities above). czy_widoczny/ADMIN_ROLE gate stays for parity
-	# even though no lead-side writer currently uses an admin-only marker;
-	# tekst_widoczny_dla (not bez_znacznika) additionally masks any CC identity
-	# for the Volteo D2D Sales role -- a handlowiec must never learn who the CC
-	# was, only that a handover happened (WORKSHOP.md, ops#93).
+	# 2026-09-10 (owner decision): a handlowiec (Volteo D2D Sales, without any
+	# admin/backoffice/CC role) must never see WHICH person handled a lead as
+	# CC -- not in the trace text (tekst_widoczny_dla below already covered
+	# that, ops#93) and not in the AUTHOR of any activity/comment entry
+	# (owner/avatar), which is the gap this fix closes: the frontend resolves
+	# `activity.owner` to a real name/photo client-side (usersStore.getUser),
+	# so leaving the real CC email in `owner` leaks identity even when the
+	# text itself is masked. roles_uzytkownika/czy_widoczny_bez_maskowania_cc
+	# are computed once, up front, and reused by both the comments loop and
+	# the info_logs loop below.
 	roles_uzytkownika = frappe.get_roles()
 	# frappe.get_roles("Administrator") returns EVERY role defined on the site
 	# (Frappe's own behaviour for the superuser account), including "Volteo D2D
@@ -518,6 +536,52 @@ def get_lead_activities(name: str):
 	czy_widoczny_bez_maskowania_cc = frappe.session.user == "Administrator" or bool(
 		set(roles_uzytkownika) & BYPASS_ROLES
 	)
+	# maskuj_tozsamosc_cc mirrors tekst_widoczny_dla's own criterion (ROLA_D2D
+	# present) rather than inventing a second policy -- same feature, same
+	# file, one rule. Reuses czy_widoczny_bez_maskowania_cc (computed above)
+	# rather than testing ROLA_D2D alone: frappe.get_roles("Administrator")
+	# returns EVERY role on the site (the same superuser quirk documented
+	# above), so without this guard Administrator would incorrectly get
+	# maskuj_tozsamosc_cc=True and would see "Call center" instead of the
+	# real CC on every comment (caught live by a headless probe on
+	# 2026-09-10 before this guard was added -- Administrator's OWN comment
+	# entries were fine since they never match autorzy_cc, but a comment
+	# actually authored by CC was masked even for Administrator). Volteo Call
+	# Center itself is deliberately NOT masked from its own colleagues (a CC
+	# user has no D2D role), matching "Volteo Core Admin/Backend/Call Center
+	# see the real person, jak dziś".
+	maskuj_tozsamosc_cc = (not czy_widoczny_bez_maskowania_cc) and ROLA_D2D in set(roles_uzytkownika)
+	autorzy_role_cache: dict[str, bool] = {}
+	autorzy_cc = {
+		autor
+		for autor in {c.owner for c in docinfo.comments} | {i.owner for i in docinfo.info_logs}
+		if autor and czy_autor_ma_role_cc(autor, autorzy_role_cache)
+	}
+
+	for comment in docinfo.comments:
+		activity = {
+			"name": comment.name,
+			"activity_type": "comment",
+			"creation": comment.creation,
+			"owner": comment.owner,
+			"content": comment.content,
+			"attachments": get_attachments("Comment", comment.name),
+			"is_lead": True,
+		}
+		activities.append(maskuj_autora_cc(activity, autorzy_cc, maskuj_tozsamosc_cc))
+
+	# ops#93: docinfo.info_logs carries the "Info" comments zapisz_slad() writes
+	# for CC assignment/handover (crm.api.volteo_leady.przydziel_cc /
+	# przekaz_handlowcowi) -- same mechanism ops#60 wired up for CRM Deal
+	# (get_deal_activities above). czy_widoczny/ADMIN_ROLE gate stays for parity
+	# even though no lead-side writer currently uses an admin-only marker;
+	# tekst_widoczny_dla (not bez_znacznika) additionally masks any CC identity
+	# for the Volteo D2D Sales role -- a handlowiec must never learn who the CC
+	# was, only that a handover happened (WORKSHOP.md, ops#93). maskuj_autora_cc
+	# (2026-09-10) additionally masks the entry's own `owner` -- the trace for
+	# a handover is written by the CC themselves (zapisz_slad sets
+	# comment_email = frappe.session.user), so without this the author shown
+	# above the masked text would still be the CC's real name/avatar.
 	for info in docinfo.info_logs:
 		if info.comment_type != "Info":
 			continue
@@ -530,23 +594,22 @@ def get_lead_activities(name: str):
 			tekst_widoczny = bez_znacznika(raw_text)
 		else:
 			tekst_widoczny = tekst_widoczny_dla(raw_text, roles_uzytkownika)
-		activities.append(
-			{
-				"name": f"volteo-lead-info-{info.name}",
-				"activity_type": "volteo_linked",
-				"creation": info.creation,
-				"owner": info.owner,
-				"is_lead": True,
-				"data": {
-					"source": "CRM Lead",
-					"label": _("Lead"),
-					"title": None,
-					"action": "info",
-					"doc_name": name,
-					"text": tekst_widoczny,
-				},
-			}
-		)
+		wpis = {
+			"name": f"volteo-lead-info-{info.name}",
+			"activity_type": "volteo_linked",
+			"creation": info.creation,
+			"owner": info.owner,
+			"is_lead": True,
+			"data": {
+				"source": "CRM Lead",
+				"label": _("Lead"),
+				"title": None,
+				"action": "info",
+				"doc_name": name,
+				"text": tekst_widoczny,
+			},
+		}
+		activities.append(maskuj_autora_cc(wpis, autorzy_cc, maskuj_tozsamosc_cc))
 
 	for communication in docinfo.communications + docinfo.automated_messages:
 		activity = {

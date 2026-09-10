@@ -49,6 +49,37 @@ def _ma_linie_leady(user: str) -> bool:
 	return bool(frappe.db.get_value("User", user, "custom_linia_leady"))
 
 
+ROLA_CALL_CENTER = "Volteo Call Center"
+
+
+def czy_autor_ma_role_cc(autor: str, cache: dict[str, bool] | None = None) -> bool:
+	"""True, gdy `autor` (nazwa `User`) ma rolę `Volteo Call Center`.
+
+	Pomocnik dla maskowania tożsamości CC w Aktywności i Komentarzach leada
+	(decyzja właściciela 2026-09-10, patrz `crm.volteo_aktywnosc.maskuj_autora_cc`,
+	`crm.api.activities.get_lead_activities`, `crm.api.volteo_leady.komentarze`).
+
+	`Administrator` jest jawnie wyłączony: `frappe.get_roles("Administrator")`
+	zwraca KAŻDĄ rolę zdefiniowaną na stronie (zachowanie Frappe dla
+	superusera), więc bez tego wyjątku wpis autorstwa Administratora
+	zostałby błędnie zamaskowany jako CC. To ta sama pułapka, którą
+	`get_lead_activities` już rozwiązuje dla maskowania tekstu śladu
+	(ops#93, sonda-cc F1); patrz `czy_widoczny_bez_maskowania_cc` tamże.
+
+	`cache`, gdy podany, to dict współdzielony przez wołającego w obrębie
+	jednego żądania: unika powtórnego `frappe.get_roles()` dla tego samego
+	autora przy pętli po wielu wpisach (wielu komentarzy/aktywności tego
+	samego CC na jednym leadzie).
+	"""
+	if autor == "Administrator":
+		return False
+	if cache is not None:
+		if autor not in cache:
+			cache[autor] = ROLA_CALL_CENTER in frappe.get_roles(autor)
+		return cache[autor]
+	return ROLA_CALL_CENTER in frappe.get_roles(autor)
+
+
 def hierarchy_enabled() -> bool:
 	return bool(frappe.db.get_single_value("FCRM Settings", "enable_sales_hierarchy"))
 

@@ -119,8 +119,8 @@ from frappe import _
 from frappe.utils import cint
 
 from crm.api.doc import _podstaw_me, _sprawdz_filtry, convert_filter_to_tuple
-from crm.permissions.org_hierarchy import BYPASS_ROLES, _ma_linie_leady
-from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad
+from crm.permissions.org_hierarchy import BYPASS_ROLES, _ma_linie_leady, czy_autor_ma_role_cc
+from crm.volteo_aktywnosc import maskuj_autora_cc, tekst_sladu, zapisz_slad
 
 DOPUSZCZONE_ROLE_WOLAJACEGO = ("System Manager", "Volteo Core Admin")
 ROLA_D2D = "Volteo D2D Sales"
@@ -860,7 +860,7 @@ def komentarze(doctype: str, name: str) -> list[dict]:
 			_("Brak uprawnień do odczytu tego dokumentu."), frappe.PermissionError
 		)
 
-	return frappe.get_all(
+	wiersze = frappe.get_all(
 		"Comment",
 		filters={
 			"reference_doctype": doctype,
@@ -871,3 +871,35 @@ def komentarze(doctype: str, name: str) -> list[dict]:
 		order_by="creation asc",
 		limit_page_length=200,
 	)
+
+	# 2026-09-10 (owner decision): komentarz dodany przez CC (rola Volteo Call
+	# Center) na leadzie musi ukrywać tożsamość autora przed handlowcem (rola
+	# Volteo D2D Sales, bez ról admin/backoffice/CC) -- ten sam problem i to
+	# samo rozwiązanie co crm.api.activities.get_lead_activities dla zakładki
+	# Aktywność (ops#93 + fix 2026-09-10): tam maskowany jest tekst śladu I
+	# owner wpisu, tu nie ma znacznika tekstowego do zdjęcia (to zwykły
+	# komentarz), więc maskowane jest wyłącznie pole tożsamości autora. Poza
+	# leadami (Volteo Audyt/Volteo Audyt CP, CRM Deal) CC nigdy nie pisze
+	# komentarzy, więc autorzy_cc tam wychodzi pusty i maskuj_autora_cc jest
+	# no-opem.
+	# frappe.get_roles("Administrator") returns EVERY role defined on the
+	# site (Frappe's superuser quirk, documented in
+	# crm.api.activities.get_lead_activities and
+	# crm.permissions.org_hierarchy.czy_autor_ma_role_cc) -- without the
+	# Administrator/BYPASS_ROLES exclusion below, Administrator would get
+	# maskuj=True and see "Call center" instead of the real CC on every
+	# comment (caught live by a headless probe on 2026-09-10 before this
+	# guard was added).
+	role_wolajacego = frappe.get_roles()
+	maskuj = (
+		frappe.session.user != "Administrator"
+		and not (set(role_wolajacego) & BYPASS_ROLES)
+		and ROLA_D2D in role_wolajacego
+	)
+	autorzy_role_cache: dict[str, bool] = {}
+	autorzy_cc = {
+		wiersz["owner"]
+		for wiersz in wiersze
+		if wiersz.get("owner") and czy_autor_ma_role_cc(wiersz["owner"], autorzy_role_cache)
+	}
+	return [maskuj_autora_cc(wiersz, autorzy_cc, maskuj) for wiersz in wiersze]
