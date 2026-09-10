@@ -7,13 +7,22 @@ from frappe.desk.form.assign_to import set_status
 from frappe.model import get_permitted_fields, no_value_fields
 from frappe.model.delete_doc import get_dynamic_linked_docs, get_linked_docs
 from frappe.model.document import get_controller
-from frappe.utils import make_filter_tuple
+from frappe.utils import add_days, make_filter_tuple, nowdate
 from pypika import Criterion
 
 from crm.api.views import get_views
 from crm.fcrm.doctype.crm_form_script.crm_form_script import get_form_script
 from crm.utils import is_frappe_version
-from crm.volteo_lista_szans import POLA_ZAWSZE_DOZWOLONE, niedozwolone_klucze_filtrow
+from crm.volteo_lista_szans import POLA_ZAWSZE_DOZWOLONE, niedozwolone_klucze_filtrow, podstaw_dzis
+
+# Pola standardowe, ktore SA typu Datetime w rdzeniu Frappe mimo ze nie maja
+# wlasnego wpisu w `meta.fields` (`frappe.get_meta(doctype).get_field(...)`
+# zwraca `None` dla nich): bezpiecznik dla `_podstaw_dzis` (issue #128),
+# zeby filtr `{"modified": ["<=", "@dzis"]}` (obecny w FILTER_FIELDS_DEAL
+# i FILTER_FIELDS_LEAD, `crm/volteo_lista_szans.py`) dostal ten sam
+# caly-dzien-Datetime traktowanie co pole custom Datetime, zamiast cicho
+# przejsc jako "nie-Datetime" i objac tylko polnoc dnia dzisiejszego.
+_STANDARDOWE_POLA_DATETIME = frozenset({"creation", "modified"})
 
 try:
 	# Nazwy pol tabeli podrzednej ("parent", "parentfield", "parenttype"),
@@ -120,6 +129,35 @@ def _podstaw_me(filters: dict) -> dict:
 		else:
 			wynik[key] = value
 	return wynik
+
+
+def _podstaw_dzis(filters: dict, doctype: str) -> dict:
+	"""Podstawia literal "@dzis" za dzisiejsza date (issue #128, analogicznie
+	do `_podstaw_me` powyzej dla "@me"). Cienki wrapper: liczy `dzis`
+	(`frappe.utils.nowdate()`, data w strefie site), `jutro` (dzien pozniej,
+	uzywany WYLACZNIE dla operatora "<=" na polu Datetime -- patrz docstring
+	`crm.volteo_lista_szans.podstaw_dzis`) i funkcje `czy_datetime`
+	sprawdzajaca typ pola przez `frappe.get_meta(doctype)`, po czym oddaje
+	cala robote frappe-free rdzeniowi `podstaw_dzis`. Wywolywany w tym samym
+	miejscu co `_podstaw_me`, w `get_data` ponizej i w
+	`crm.api.volteo_leady.mapa`.
+
+	`_STANDARDOWE_POLA_DATETIME` (modul, wyzej) to bezpiecznik dla pol
+	standardowych bez wlasnego DocField (np. "modified"/"creation", ktore
+	`FILTER_FIELDS_DEAL`/`FILTER_FIELDS_LEAD` udostepniaja jako filtrowalne,
+	patrz `crm/volteo_lista_szans.py`) -- `meta.get_field` zwraca dla nich
+	`None`, mimo ze SA Datetime w rdzeniu."""
+	dzis = nowdate()
+	jutro = add_days(dzis, 1)
+	meta = frappe.get_meta(doctype)
+
+	def czy_datetime(fieldname: str) -> bool:
+		if fieldname in _STANDARDOWE_POLA_DATETIME:
+			return True
+		field = meta.get_field(fieldname)
+		return bool(field) and field.fieldtype == "Datetime"
+
+	return podstaw_dzis(filters, dzis, jutro, czy_datetime)
 
 
 def _sprawdz_filtry(doctype: str, filters, parenttype: str | None = None) -> None:
@@ -513,14 +551,15 @@ def get_data(
 		_sprawdz_filtry(doctype, {group_by_field: None})
 
 	filters = frappe._dict(_podstaw_me(filters))
+	filters = frappe._dict(_podstaw_dzis(filters, doctype))
 
 	if default_filters:
 		default_filters = frappe.parse_json(default_filters)
 		filters.update(default_filters)
 
 	# Blokada filtrowania po polu bez uprawnien odczytu (permlevel > 0) — patrz
-	# ops#79. Walidujemy PO scaleniu default_filters i podstawieniu @me, zeby
-	# objac kazdy filtr, ktory trafi do frappe.get_list nizej (l.374/437/448/554
+	# ops#79. Walidujemy PO scaleniu default_filters i podstawieniu @me/@dzis,
+	# zeby objac kazdy filtr, ktory trafi do frappe.get_list nizej (l.374/437/448/554
 	# w wersji sprzed tej zmiany) — filters jest jedynym zrodlem tych wywolan.
 	_sprawdz_filtry(doctype, filters)
 

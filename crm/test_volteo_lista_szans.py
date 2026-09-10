@@ -7,6 +7,7 @@ from crm.volteo_lista_szans import (
 	SORT_FIELDS_DEAL,
 	SORT_FIELDS_LEAD,
 	niedozwolone_klucze_filtrow,
+	podstaw_dzis,
 )
 
 PERMITTED = {"name", "status", "deal_owner", "_assign", "_liked_by", "custom_rodzaj_umowy"}
@@ -432,6 +433,105 @@ class TestPolaZawszeDozwolone(unittest.TestCase):
 	def test_c_jest_frozenset(self: "TestPolaZawszeDozwolone") -> None:
 		self.assertIsInstance(POLA_ZAWSZE_DOZWOLONE, frozenset)
 
+
+
+class TestPodstawDzis(unittest.TestCase):
+	"""`podstaw_dzis` (issue #128, analogiczne do `_podstaw_me` w
+	`crm.api.doc` dla "@me") -- rdzen frappe-free, `dzis`/`jutro`/
+	`czy_datetime` sa tu wstrzykiwane wprost, tak jak w produkcji przekazuje
+	je `crm.api.doc._podstaw_dzis` (`dzis = nowdate()`,
+	`jutro = add_days(dzis, 1)`, `czy_datetime` z `frappe.get_meta`)."""
+
+	DZIS = "2026-09-10"
+	JUTRO = "2026-09-11"
+
+	def _czy_datetime(self: "TestPodstawDzis", pole: str) -> bool:
+		# Lustrzane odbicie realnych pol leadow: custom_kolejny_kontakt jest
+		# Date, custom_termin_spotkania i "modified" sa Datetime.
+		return pole in {"custom_termin_spotkania", "modified"}
+
+	def test_a_skalar(self: "TestPodstawDzis") -> None:
+		filtry = {"custom_kolejny_kontakt": "@dzis"}
+		wynik = podstaw_dzis(filtry, self.DZIS, self.JUTRO, self._czy_datetime)
+		self.assertEqual(wynik, {"custom_kolejny_kontakt": self.DZIS})
+
+	def test_b_operator_wartosc_pole_date(self: "TestPodstawDzis") -> None:
+		# custom_kolejny_kontakt to Date, nie Datetime -- operator "<=" zostaje
+		# bez zmian, tylko wartosc podstawiona.
+		filtry = {"custom_kolejny_kontakt": ["<=", "@dzis"]}
+		wynik = podstaw_dzis(filtry, self.DZIS, self.JUTRO, self._czy_datetime)
+		self.assertEqual(wynik, {"custom_kolejny_kontakt": ["<=", self.DZIS]})
+
+	def test_c_operator_lte_na_datetime_przesuwa_na_jutro(self: "TestPodstawDzis") -> None:
+		# custom_termin_spotkania to Datetime -- "<= @dzis" objelby TYLKO
+		# polnoc, wiec operator zamieniany na "<" z "jutro".
+		filtry = {"custom_termin_spotkania": ["<=", "@dzis"]}
+		wynik = podstaw_dzis(filtry, self.DZIS, self.JUTRO, self._czy_datetime)
+		self.assertEqual(wynik, {"custom_termin_spotkania": ["<", self.JUTRO]})
+
+	def test_d_operator_gte_na_datetime_zostaje_bez_zmian(self: "TestPodstawDzis") -> None:
+		# ">=" na Datetime poprawnie obejmuje caly dzien od polnocy -- tylko
+		# "<=" dostaje specjalne traktowanie.
+		filtry = {"custom_termin_spotkania": [">=", "@dzis"]}
+		wynik = podstaw_dzis(filtry, self.DZIS, self.JUTRO, self._czy_datetime)
+		self.assertEqual(wynik, {"custom_termin_spotkania": [">=", self.DZIS]})
+
+	def test_e_between_oba_konce(self: "TestPodstawDzis") -> None:
+		filtry = {"custom_kolejny_kontakt": ["between", ["@dzis", "@dzis"]]}
+		wynik = podstaw_dzis(filtry, self.DZIS, self.JUTRO, self._czy_datetime)
+		self.assertEqual(wynik, {"custom_kolejny_kontakt": ["between", [self.DZIS, self.DZIS]]})
+
+	def test_f_between_jeden_koniec(self: "TestPodstawDzis") -> None:
+		filtry = {"custom_kolejny_kontakt": ["between", ["@dzis", "2026-12-31"]]}
+		wynik = podstaw_dzis(filtry, self.DZIS, self.JUTRO, self._czy_datetime)
+		self.assertEqual(wynik, {"custom_kolejny_kontakt": ["between", [self.DZIS, "2026-12-31"]]})
+
+	def test_g_in_lista(self: "TestPodstawDzis") -> None:
+		filtry = {"custom_kolejny_kontakt": ["in", ["@dzis", "2026-01-01"]]}
+		wynik = podstaw_dzis(filtry, self.DZIS, self.JUTRO, self._czy_datetime)
+		self.assertEqual(wynik, {"custom_kolejny_kontakt": ["in", [self.DZIS, "2026-01-01"]]})
+
+	def test_h_not_in_lista(self: "TestPodstawDzis") -> None:
+		filtry = {"custom_kolejny_kontakt": ["not in", ["@dzis"]]}
+		wynik = podstaw_dzis(filtry, self.DZIS, self.JUTRO, self._czy_datetime)
+		self.assertEqual(wynik, {"custom_kolejny_kontakt": ["not in", [self.DZIS]]})
+
+	def test_i_brak_literalu_bez_zmian(self: "TestPodstawDzis") -> None:
+		filtry = {
+			"status": "Odłożony",
+			"deal_owner": "@me",
+			"lead_name": ["like", "%Kowalski%"],
+			"creation": ["between", ["2026-01-01", "2026-01-31"]],
+		}
+		wynik = podstaw_dzis(filtry, self.DZIS, self.JUTRO, self._czy_datetime)
+		self.assertEqual(wynik, filtry)
+
+	def test_j_lista_niestandardowej_dlugosci_bez_zmian(self: "TestPodstawDzis") -> None:
+		# Ksztalt spoza czterech udokumentowanych (skalar / [op, wartosc] /
+		# between / in) -- wraca bez zmian, bez proby zgadywania.
+		filtry = {"custom_kolejny_kontakt": ["@dzis"]}
+		wynik = podstaw_dzis(filtry, self.DZIS, self.JUTRO, self._czy_datetime)
+		self.assertEqual(wynik, filtry)
+
+	def test_k_none_bez_zmian(self: "TestPodstawDzis") -> None:
+		filtry = {"custom_kolejny_kontakt": None}
+		wynik = podstaw_dzis(filtry, self.DZIS, self.JUTRO, self._czy_datetime)
+		self.assertIsNone(wynik["custom_kolejny_kontakt"])
+
+	def test_l_nie_mutuje_oryginalu(self: "TestPodstawDzis") -> None:
+		oryginalna_lista = ["between", ["@dzis", "2026-12-31"]]
+		filtry = {"custom_kolejny_kontakt": oryginalna_lista}
+		podstaw_dzis(filtry, self.DZIS, self.JUTRO, self._czy_datetime)
+		self.assertEqual(oryginalna_lista, ["between", ["@dzis", "2026-12-31"]])
+		self.assertEqual(filtry, {"custom_kolejny_kontakt": oryginalna_lista})
+
+	def test_m_zwraca_nowy_dict(self: "TestPodstawDzis") -> None:
+		filtry = {"status": "Odłożony"}
+		wynik = podstaw_dzis(filtry, self.DZIS, self.JUTRO, self._czy_datetime)
+		self.assertIsNot(wynik, filtry)
+
+	def test_n_puste_filtry(self: "TestPodstawDzis") -> None:
+		self.assertEqual(podstaw_dzis({}, self.DZIS, self.JUTRO, self._czy_datetime), {})
 
 if __name__ == "__main__":
 	unittest.main()

@@ -69,12 +69,34 @@
                   />
                 </div>
                 <div id="value" class="w-full">
-                  <component
-                    :is="getValueControl(f)"
-                    v-model="f.value"
-                    :placeholder="placeholder(f)"
-                    @change="(v) => updateValue(v, f)"
-                  />
+                  <div
+                    v-if="czyPrzyciskDzis(f) && czyDzis(f)"
+                    class="flex h-7 w-full items-center justify-between rounded border border-outline-gray-2 px-2 text-sm text-ink-gray-8"
+                  >
+                    <span>{{ __('Today') }}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon="lucide-x"
+                      @click="wyczyscDzis(f)"
+                    />
+                  </div>
+                  <div v-else class="flex items-center gap-1">
+                    <component
+                      :is="getValueControl(f)"
+                      v-model="f.value"
+                      :placeholder="placeholder(f)"
+                      class="flex-1"
+                      @change="(v) => updateValue(v, f)"
+                    />
+                    <Button
+                      v-if="czyPrzyciskDzis(f)"
+                      variant="ghost"
+                      size="sm"
+                      :label="__('Today')"
+                      @click="ustawDzis(f)"
+                    />
+                  </div>
                 </div>
               </div>
               <div v-else class="flex items-center justify-between gap-2">
@@ -102,12 +124,34 @@
                     />
                   </div>
                   <div id="value" class="!min-w-[140px]">
-                    <component
-                      :is="getValueControl(f)"
-                      v-model="f.value"
-                      :placeholder="placeholder(f)"
-                      @change="(v) => updateValue(v, f)"
-                    />
+                    <div
+                      v-if="czyPrzyciskDzis(f) && czyDzis(f)"
+                      class="flex h-7 items-center justify-between gap-1 rounded border border-outline-gray-2 px-2 text-sm text-ink-gray-8"
+                    >
+                      <span>{{ __('Today') }}</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon="lucide-x"
+                        @click="wyczyscDzis(f)"
+                      />
+                    </div>
+                    <div v-else class="flex items-center gap-1">
+                      <component
+                        :is="getValueControl(f)"
+                        v-model="f.value"
+                        :placeholder="placeholder(f)"
+                        class="flex-1"
+                        @change="(v) => updateValue(v, f)"
+                      />
+                      <Button
+                        v-if="czyPrzyciskDzis(f)"
+                        variant="ghost"
+                        size="sm"
+                        :label="__('Today')"
+                        @click="ustawDzis(f)"
+                      />
+                    </div>
                   </div>
                 </div>
                 <Button
@@ -187,6 +231,12 @@ const typeNumber = ['Float', 'Int', 'Currency', 'Percent']
 const typeSelect = ['Select']
 const typeString = ['Data', 'Long Text', 'Small Text', 'Text Editor', 'Text']
 const typeDate = ['Date', 'Datetime']
+// Issue #128: operatory jednowartościowe pola daty, dla których przycisk
+// "Dziś" ma sens -- `between` (DateRangePicker, dwie wartości) i `timespan`/
+// `is`/`is not` (własne kontrolki, patrz getValueControl) są celowo
+// wykluczone, backend (`crm.volteo_lista_szans.podstaw_dzis`) i tak rozumie
+// literał "@dzis" tylko w kształcie skalar/[operator, wartość].
+const OPERATORY_JEDNOWARTOSCIOWE_DZIS = ['equals', 'not equals', '>', '<', '>=', '<=']
 const typeDuration = ['Duration']
 const typeRating = ['Rating']
 
@@ -591,6 +641,30 @@ function clearfilter(close) {
   filters.value.clear()
   apply()
   close()
+}
+
+// Issue #128: placeholder daty "@dzis" (analogiczny do "@me" dla
+// użytkownika, patrz `crm.api.doc._podstaw_me`/`_podstaw_dzis`). Widoczny
+// wyłącznie dla pól Date/Datetime z operatorem jednowartościowym -- `between`
+// ma własną kontrolkę (DateRangePicker) i jest tu celowo pominięty (patrz
+// brief issue #128: "operator between z @dzis: dopuszczalne pominąć").
+function czyPrzyciskDzis(f) {
+  return (
+    typeDate.includes(f.field.fieldtype) &&
+    OPERATORY_JEDNOWARTOSCIOWE_DZIS.includes(f.operator)
+  )
+}
+
+function czyDzis(f) {
+  return f.value === '@dzis'
+}
+
+function ustawDzis(f) {
+  updateValue('@dzis', f)
+}
+
+function wyczyscDzis(f) {
+  updateValue(getDefaultValue(f.field), f)
 }
 
 function updateValue(value, filter) {

@@ -118,7 +118,7 @@ import frappe
 from frappe import _
 from frappe.utils import cint
 
-from crm.api.doc import _podstaw_me, _sprawdz_filtry, convert_filter_to_tuple
+from crm.api.doc import _podstaw_dzis, _podstaw_me, _sprawdz_filtry, convert_filter_to_tuple
 from crm.permissions.org_hierarchy import BYPASS_ROLES, _ma_linie_leady
 from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad
 
@@ -517,10 +517,15 @@ def mapa(
 	moduł co `get_data`, patrz jego docstring) WYŁĄCZNIE w `filters`  -  zgodnie
 	z zachowaniem `get_data`, `default_filters` scala się PO podstawieniu,
 	bez własnego `@me` (statyczny filtr `{"converted": 0}` z `Leads.vue` i
-	tak nigdy go nie zawiera). `_sprawdz_filtry` (ten sam strażnik permlevel
-	co `get_data`/`przydziel_cc`) rzuca `PermissionError`, jeśli scalone
-	filtry odwołują się do pola bez uprawnienia odczytu (np. `custom_cc` dla
-	`Volteo D2D Sales`)  -  sprawdzane PO scaleniu, tak jak w `get_data`.
+	tak nigdy go nie zawiera). Issue #128: `@dzis` podstawiane analogicznie
+	przez `_podstaw_dzis` (ten sam moduł, ten sam `filters`-only zakres, tuż
+	po `@me`), dla dat pól CC (`custom_kolejny_kontakt`, Date) i handlowca
+	(`custom_termin_spotkania`, Datetime) -- patrz widok „Kolejny kontakt do
+	dziś" (`ops/crm-lista-leadow.py` KROK 4). `_sprawdz_filtry` (ten sam
+	strażnik permlevel co `get_data`/`przydziel_cc`) rzuca `PermissionError`,
+	jeśli scalone filtry odwołują się do pola bez uprawnienia odczytu (np.
+	`custom_cc` dla `Volteo D2D Sales`)  -  sprawdzane PO scaleniu, tak jak w
+	`get_data`.
 
 	`convert_filter_to_tuple` (już istniejący w `crm.api.doc`, oparty o
 	`frappe.utils.make_filter_tuple`) zamienia scalony dict na listę krotek
@@ -550,6 +555,7 @@ def mapa(
 	)
 
 	filters = _podstaw_me(filters)
+	filters = _podstaw_dzis(filters, "CRM Lead")
 	filters = {**filters, **default_filters}
 
 	_sprawdz_filtry("CRM Lead", filters)

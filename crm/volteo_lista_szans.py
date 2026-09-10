@@ -19,7 +19,7 @@ reszta backendu ma wyłącznie bramkę składniową). Sam zbiór "dozwolonych p�
 i przekazuje tutaj — ten moduł tylko porównuje klucze filtra z tym zbiorem.
 """
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 
 # Pola zawsze dozwolone do filtrowania/sortowania/grupowania, niezaleznie od
 # tego, co zwroci `get_permitted_fields` dla danego doctype'u — bezpiecznik
@@ -244,3 +244,90 @@ def niedozwolone_klucze_filtrow(
 			niedozwolone.append(klucz)
 
 	return niedozwolone
+
+
+def podstaw_dzis(
+	filters: Mapping[str, object],
+	dzis: str,
+	jutro: str,
+	czy_datetime: Callable[[str], bool],
+) -> dict:
+	"""Podstawia literal ``"@dzis"`` w wartościach ``filters`` za dzisiejszą
+	datę (``dzis``, format ``YYYY-MM-DD`` jak ``frappe.utils.nowdate()``, w
+	strefie site). Analogiczne do ``crm.api.doc._podstaw_me`` dla ``"@me"``
+	(issue #128, decyzja właściciela 2026-09-10, opcja B). Ten moduł jest
+	frappe-free (patrz docstring modułu), więc ``crm.api.doc._podstaw_dzis``
+	wylicza ``dzis``/``jutro`` (``frappe.utils.nowdate()`` /
+	``add_days(nowdate(), 1)``) i funkcję sprawdzającą typ pola
+	(``frappe.get_meta(doctype)``) i przekazuje je tutaj jako argumenty --
+	ten moduł sam nie wie nic o meta doctype'u ani o dacie.
+
+	Obsługiwane kształty wartości filtra (te same, które rozumie
+	``frappe.utils.make_filter_tuple``):
+	  - skalar ``"@dzis"`` -> ``dzis``;
+	  - ``[operator, "@dzis"]`` -> ``[operator, dzis]``, chyba że ``operator``
+	    to ``"<="`` na polu Datetime (patrz niżej);
+	  - ``["between", [od, do]]`` -> każdy element wewnętrznej listy równy
+	    ``"@dzis"`` zamieniany osobno (jeden, drugi albo oba);
+	  - ``["in"/"not in", [...]]`` -> każdy element listy równy ``"@dzis"``
+	    zamieniany.
+	Wartości bez literału ``"@dzis"`` w żadnej z powyższych pozycji wracają
+	bez zmian. Zwracany jest zawsze NOWY dict (immutability, patrz
+	coding-style.md) i nowe listy tam, gdzie cokolwiek faktycznie się
+	zmieniło -- reszta wartości (i sam obiekt filters) nie jest mutowana.
+
+	Datetime + operator ``"<="``: ``"<=" @dzis`` na polu Datetime objąłby
+	TYLKO północ (00:00:00) dnia dzisiejszego -- rekord z godziną 10:00
+	zostałby odcięty. Zamiast tego operator zamieniany jest na ``"<"`` z
+	wartością ``jutro`` (podaną przez wołającego, format ``YYYY-MM-DD``,
+	``add_days(nowdate(), 1)``), co obejmuje cały dzień dzisiejszy do
+	23:59:59.999... Pozostałe operatory (``">="``, ``">"``, ``"<"``,
+	składniki ``"between"``, ``"in"``) na polu Datetime zostają z
+	``dzis``/``jutro`` bez zmiany operatora -- ``">="`` poprawnie obejmuje
+	cały dzień od północy. Operator ``"="`` na polu Datetime dopasuje
+	praktycznie WYŁĄCZNIE rekord z czasem dokładnie ``00:00:00`` -- to znana,
+	zaakceptowana niedoskonałość (patrz brief issue #128), celowo nie
+	naprawiana tutaj.
+
+	``czy_datetime(fieldname)`` decyduje, czy dane pole jest typu Datetime;
+	wołający odpowiada za poprawność tej funkcji (w ``crm.api.doc`` to
+	``frappe.get_meta(doctype).get_field(fieldname)``, z osobnym bezpiecznikiem
+	dla pól standardowych bez własnego DocField, np. ``modified``/``creation``,
+	które SĄ Datetime w rdzeniu mimo braku wpisu w ``meta.fields``)."""
+	wynik: dict = {}
+	for pole, wartosc in filters.items():
+		wynik[pole] = _podstaw_wartosc_dzis(pole, wartosc, dzis, jutro, czy_datetime)
+	return wynik
+
+
+def _podstaw_wartosc_dzis(
+	pole: str,
+	wartosc: object,
+	dzis: str,
+	jutro: str,
+	czy_datetime: Callable[[str], bool],
+) -> object:
+	"""Podstawianie dla JEDNEJ wartości filtra -- wydzielone z `podstaw_dzis`
+	żeby ta funkcja została czytelną pętlą po `filters.items()`. Patrz
+	docstring `podstaw_dzis` dla pełnego opisu obsługiwanych kształtów."""
+	if wartosc == "@dzis":
+		return dzis
+	if not isinstance(wartosc, list) or len(wartosc) != 2:
+		return wartosc
+
+	operator, argument = wartosc
+	operator_l = operator.lower() if isinstance(operator, str) else operator
+
+	if operator_l in ("between", "in", "not in") and isinstance(argument, list):
+		if "@dzis" not in argument:
+			return wartosc
+		nowy_argument = [dzis if element == "@dzis" else element for element in argument]
+		return [operator, nowy_argument]
+
+	if argument != "@dzis":
+		return wartosc
+
+	if operator_l == "<=" and czy_datetime(pole):
+		return ["<", jutro]
+
+	return [operator, dzis]
