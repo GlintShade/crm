@@ -118,7 +118,7 @@ import frappe
 from frappe import _
 from frappe.utils import cint
 
-from crm.api.doc import _podstaw_dzis, _podstaw_me, _sprawdz_filtry, convert_filter_to_tuple
+from crm.api.doc import _podstaw_dzis, _podstaw_me, _sprawdz_filtry, convert_filter_to_tuple, rozwin_grupy
 from crm.permissions.org_hierarchy import BYPASS_ROLES, _ma_linie_leady, czy_autor_ma_role_cc
 from crm.volteo_aktywnosc import maskuj_autora_cc, tekst_sladu, zapisz_slad
 
@@ -546,7 +546,16 @@ def mapa(
 	obsługiwać ręcznie tutaj.
 
 	Issue #101 (ustawienia mapy, pole dymku "termin spotkania"): dołożone
-	`custom_termin_spotkania`, bez zmiany reszty kontraktu."""
+	`custom_termin_spotkania`, bez zmiany reszty kontraktu.
+
+	Issue #129 (grupy filtrów ORAZ/ALBO): `rozwin_grupy` (ten sam helper co
+	`crm.api.doc.get_data`) rozwija ewentualny klucz `volteo_grupy` na
+	`name in [...]` -- wołany PO scaleniu `default_filters` (tak samo jak
+	w `get_data`), PRZED `_sprawdz_filtry`, żeby ten strażnik nie odrzucił
+	klucza jako nieznane pole. Bez klucza w `filters` to no-op -- widok
+	mapy dzieli DOKŁADNIE ten sam kontrakt filtrów co lista (patrz akapit
+	o issue #100 wyżej), więc widok „Do obdzwonienia" (grupy) działa
+	identycznie na obu."""
 	filters = frappe.parse_json(filters) if isinstance(filters, str) else (filters or {})
 	default_filters = (
 		frappe.parse_json(default_filters)
@@ -557,6 +566,8 @@ def mapa(
 	filters = _podstaw_me(filters)
 	filters = _podstaw_dzis(filters, "CRM Lead")
 	filters = {**filters, **default_filters}
+
+	filters = rozwin_grupy("CRM Lead", filters)
 
 	_sprawdz_filtry("CRM Lead", filters)
 
@@ -622,7 +633,15 @@ def przydziel_cc(
 	usunięty, literówka) są pomijane i zliczane osobno w `nieznane`, zamiast
 	trafiać do `pominieto` (które oznacza konkretnie "już przydzielony") albo
 	wywoływać `DoesNotExistError` przy zapisie śladu. Zwraca
-	`{przydzielono, pominieto, nieznane, limit}`."""
+	`{przydzielono, pominieto, nieznane, limit}`.
+
+	Issue #129 (grupy filtrów ORAZ/ALBO): ścieżka `filters` przechodzi
+	przez `rozwin_grupy` (ten sam helper co `get_data`/`mapa`), więc admin
+	może przydzielić CC "wszystkim pasującym do reguły Remigiusza"
+	dokładnie tym samym widokiem, którego używa lista/mapa -- zamiast
+	osobno odrzucać grupy tutaj polskim komunikatem (druga opcja z brief
+	issue #129), wybrano spójność: jeden helper, jedno miejsce prawdy o
+	tym, jak grupy się rozwijają."""
 	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
 
 	cc = (cc or "").strip()
@@ -641,6 +660,7 @@ def przydziel_cc(
 		if not all(isinstance(n, str) and n.strip() for n in nazwy):
 			frappe.throw(_("Lista leadów musi zawierać wyłącznie niepuste nazwy (stringi)."))
 	elif filters:
+		filters = rozwin_grupy("CRM Lead", filters)
 		_sprawdz_filtry("CRM Lead", filters)
 		limit = LIMIT_PRZYDZIAL_CC
 		if ilosc is not None:
