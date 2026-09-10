@@ -329,6 +329,11 @@ import { usersStore } from '@/stores/users'
 import { getMeta } from '@/stores/meta'
 import { isEmoji } from '@/utils'
 import {
+  czyWielokrotnyFiltrSzybki,
+  rozpakujWartoscFiltraSzybkiego,
+  spakujWartoscFiltraSzybkiego,
+} from '@/utils/filtrSzybki'
+import {
   Tooltip,
   createResource,
   Dropdown,
@@ -863,9 +868,20 @@ const quickFilterList = computed(() => {
   let filters = quickFilters.data || []
 
   filters.forEach((filter) => {
-    filter['value'] = filter.fieldtype == 'Check' ? false : ''
+    // Issue #127: pola z checkboxową listą wielokrotnego wyboru (Select i
+    // Link poza User/Etapem, patrz czyWielokrotnyFiltrSzybki) dostają
+    // domyślną wartość [] zamiast '', i odtwarzają zaznaczenia z kształtu
+    // ["in", [...]]: kształt, który przed tą zmianą ten kod w ogóle nie
+    // rozpoznawał (wpadał w gałąź "nierozpoznana tablica" niżej i chip
+    // wracał pusty mimo zapisanego filtra).
+    const jestWielokrotny = czyWielokrotnyFiltrSzybki(props.doctype, filter)
+    filter['value'] = filter.fieldtype == 'Check' ? false : jestWielokrotny ? [] : ''
     if (list.value.params?.filters[filter.fieldname]) {
       let value = list.value.params.filters[filter.fieldname]
+      if (jestWielokrotny) {
+        filter['value'] = rozpakujWartoscFiltraSzybkiego(value)
+        return
+      }
       if (Array.isArray(value)) {
         if (
           (['Check', 'Select', 'Link', 'Date', 'Datetime'].includes(
@@ -909,7 +925,19 @@ function setupNewQuickFilters(filters) {
 function applyQuickFilter(filter, value) {
   let filters = { ...list.value.params.filters }
   let field = filter.fieldname
-  if (value) {
+  if (Array.isArray(value)) {
+    // Issue #127: QuickFilterCheckList emituje zawsze tablicę (może być
+    // pusta). Serializacja: 0 -> klucz usunięty, 1 -> dotychczasowy
+    // skalarny kształt, N -> ["in", [...]], ten sam format co operator
+    // "jest jednym z" w rozwijanym Filter.vue (issue #103).
+    const packed = spakujWartoscFiltraSzybkiego(value)
+    if (packed === undefined) {
+      delete filters[field]
+    } else {
+      filters[field] = packed
+    }
+    filter['value'] = value
+  } else if (value) {
     if (
       ['Check', 'Select', 'Link', 'Date', 'Datetime'].includes(filter.fieldtype)
     ) {
