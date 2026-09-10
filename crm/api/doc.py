@@ -248,7 +248,22 @@ def rozwin_grupy(doctype: str, filters: dict) -> dict:
 	(rzadkie w praktyce - UI nie oferuje filtrowania po `name` w oknie
 	„Filtr" grup), zostaje on NADPISANY przez unię grup - kontrakt issue
 	#129 opisuje to wprost jako "dokładany", bez rozstrzygania takiego
-	konfliktu, więc zachowanie jest zgodne z brzmieniem issue."""
+	konfliktu, więc zachowanie jest zgodne z brzmieniem issue.
+
+	Fix (issue #129, po scaleniu): `_podstaw_me`/`_podstaw_dzis` wołane w
+	`get_data`/`mapa` PRZED tą funkcją podstawiają placeholdery WYŁĄCZNIE
+	na najwyższym poziomie `filters` - nie schodzą w głąb listy pod
+	`volteo_grupy`, więc "@me"/"@dzis" WEWNĄTRZ warunku grupy (np. widok
+	"Do obdzwonienia", `{"custom_kolejny_kontakt": ["<=", "@dzis"]}` w
+	grupie) docierały do `frappe.get_list` jako litera string: dla pola
+	Date/Datetime rdzeń Frappe rzucał `ValidationError` z `getdate()`, dla
+	"@me" po cichu nie dopasowywał żadnego wiersza. Dlatego każda grupa
+	jest tutaj przepuszczana przez TE SAME dwie funkcje, PO walidacji
+	kształtu (`waliduj_grupy` już zagwarantowała, że każda grupa jest
+	słownikiem): `_podstaw_dzis(_podstaw_me(grupa), doctype)`. Grupa jest
+	płaskim słownikiem identycznym w kształcie do `filters` najwyższego
+	poziomu (zakaz zagnieżdżenia w `waliduj_grupy`), więc te same funkcje
+	są tu bezpiecznie stosowane ponownie bez żadnej zmiany w nich samych."""
 	filtry_bez_grup, grupy = wydziel_grupy(filters)
 	if not grupy:
 		return filtry_bez_grup
@@ -257,6 +272,8 @@ def rozwin_grupy(doctype: str, filters: dict) -> dict:
 		waliduj_grupy(grupy)
 	except ValueError as e:
 		frappe.throw(str(e))
+
+	grupy = [_podstaw_dzis(_podstaw_me(grupa), doctype) for grupa in grupy]
 
 	_sprawdz_filtry(doctype, dict.fromkeys(klucze_z_grup(grupy)))
 
