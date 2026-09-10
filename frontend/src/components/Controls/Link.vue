@@ -88,6 +88,14 @@ const props = defineProps({
   // aktywnych kont. Domyślnie false — formularze/przydziały (hideMe=true)
   // zostają bez zmian, jak dotychczas.
   userScope: { type: Boolean, default: false },
+  // Issue K1: komparator (a, b) => number stosowany do wyniku search_link
+  // PO stronie klienta, po transform() nizej, zanim trafi do Autocomplete.
+  // search_link nie ma zadnego uzywalnego pola sortowania poza tekstowym
+  // dopasowaniem do wpisywanej frazy (relevance_sorter w frappe/desk/
+  // search.py), wiec ustalona kolejnosc (np. 6 powodow odrzucenia leada w
+  // LostReasonModal.vue) musi byc wymuszona tutaj. `null` (domyslnie) =
+  // bez zmiany istniejacego zachowania dla kazdego innego wywolania Linka.
+  sortComparator: { type: Function, default: null },
 })
 
 const emit = defineEmits(['update:modelValue', 'change'])
@@ -337,6 +345,9 @@ const options = createResource({
         label: props.meLabel,
         value: '@me',
       })
+    }
+    if (props.sortComparator) {
+      allData = [...allData].sort(props.sortComparator)
     }
     return allData
   },

@@ -145,12 +145,22 @@ class CRMLead(Document):
 	def validate_lost_reason(self):
 		"""
 		Validate the lost reason if the status is set to "Lost".
+
+		Issue K1 (decyzja wlasciciela 2026-09-10, ops/crm-leady-powody-odrzucenia.py):
+		slownik CRM Lost Reason dla leadow zastapil "Other" powodem "Inny"
+		(rename "Inny powod" -> "Inny"), notatka jest wiec wymagana dla "Inny".
+		"Other" zostaje w sprawdzeniu jako defensywny fallback (Deal wciaz moze
+		go teoretycznie uzywac na innych srodowiskach) - patrz CRM Deal.
+		validate_lost_reason, ktory nie zostal zmieniony poza tym samym
+		fallbackiem.
 		"""
 		if self.status and frappe.get_cached_value("CRM Lead Status", self.status, "type") == "Lost":
 			if not self.lost_reason:
 				frappe.throw(_("Please specify a reason for losing the lead."), frappe.ValidationError)
-			elif self.lost_reason == "Other" and not self.lost_notes:
-				frappe.throw(_("Please specify the reason for losing the lead."), frappe.ValidationError)
+			elif self.lost_reason in ("Other", "Inny") and not self.lost_notes:
+				frappe.throw(
+					_('Dla powodu "Inny" wymagana jest notatka.'), frappe.ValidationError
+				)
 		if self.has_value_changed("status"):
 			add_or_remove_lost_reason_section_in_sidepanel(self)
 

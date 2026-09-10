@@ -648,11 +648,18 @@ function statusLabel(status) {
 
 const showLostReasonModal = ref(false)
 
+// Issue K1: "Inny" zastapil "Other" jako powod leada wymagajacy notatki
+// (patrz LostReasonModal.vue, WYMAGA_NOTATKI). Ten zbior musi obejmowac oba,
+// zeby lead z juz ustawionym lost_reason="Inny" bez notatki (np. z okresu
+// przed migracja) nadal otwieral modal zamiast zapisywac sie wprost i
+// oberwac ValidationError z serwera bez wyjasnienia w UI.
+const LEAD_WYMAGA_NOTATKI = new Set(['Other', 'Inny'])
+
 function setLostReason() {
   if (
     getLeadStatus(document.doc.status).type !== 'Lost' ||
-    (document.doc.lost_reason && document.doc.lost_reason !== 'Other') ||
-    (document.doc.lost_reason === 'Other' && document.doc.lost_notes)
+    (document.doc.lost_reason && !LEAD_WYMAGA_NOTATKI.has(document.doc.lost_reason)) ||
+    (LEAD_WYMAGA_NOTATKI.has(document.doc.lost_reason) && document.doc.lost_notes)
   ) {
     document.save.submit(null, {
       onSuccess: () => sections.reload(),

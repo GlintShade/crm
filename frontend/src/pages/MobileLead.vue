@@ -372,11 +372,15 @@ async function triggerStatusChange(value) {
 
 const showLostReasonModal = ref(false)
 
+// Issue K1: "Inny" zastapil "Other" jako powod leada wymagajacy notatki,
+// patrz komentarz przy tym samym wzorcu w pages/Lead.vue.
+const LEAD_WYMAGA_NOTATKI = new Set(['Other', 'Inny'])
+
 function setLostReason() {
   if (
     getLeadStatus(doc.value.status).type !== 'Lost' ||
-    (doc.value.lost_reason && doc.value.lost_reason !== 'Other') ||
-    (doc.value.lost_reason === 'Other' && doc.value.lost_notes)
+    (doc.value.lost_reason && !LEAD_WYMAGA_NOTATKI.has(doc.value.lost_reason)) ||
+    (LEAD_WYMAGA_NOTATKI.has(doc.value.lost_reason) && doc.value.lost_notes)
   ) {
     document.save.submit()
     return
