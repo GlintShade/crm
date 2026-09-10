@@ -55,3 +55,57 @@ index e7f8ff6..57ca30d 100644
                  }
                },
  
+diff --git a/node_modules/frappe-ui/src/components/TimePicker/TimePicker.vue b/node_modules/frappe-ui/src/components/TimePicker/TimePicker.vue
+index 37f25e6..162995e 100644
+--- a/node_modules/frappe-ui/src/components/TimePicker/TimePicker.vue
++++ b/node_modules/frappe-ui/src/components/TimePicker/TimePicker.vue
+@@ -70,6 +70,7 @@
+           style="transform-origin: var(--reka-popover-content-transform-origin)"
+           role="listbox"
+           :aria-activedescendant="activeDescendantId"
++          @pointerdown.capture="onPanelPointerDown"
+         >
+           <button
+             v-for="(opt, idx) in displayedOptions"
+@@ -288,6 +289,30 @@ function onInteractOutside(event: Event) {
+     event.preventDefault()
+   }
+ }
++
++// VOLTEO PATCH (issue #99 follow-up, WebKit): WebKit does not give a
++// clicked <button> focus by default (Chromium/Firefox do), so a click on an
++// option below fires mousedown on the button but leaves e.relatedTarget
++// null on the trigger input's blur -- the panelRef.value?.contains(next)
++// check in onBlur below can never see the button as the new focus target,
++// so onBlur ran commitTyped + isOpen=false immediately, unmounting the
++// panel before mouseup, so the click on the option never fired at all
++// (confirmed with Playwright webkit: pointerdown/mousedown land on the
++// button, mouseup lands back on the trigger input, no click event ever
++// dispatched). suppressBlurClose is a second, focus-independent signal set
++// on pointerdown anywhere in the panel (capture phase, so it runs before
++// blur) and cleared on the next global pointerup (after the browser has
++// already dispatched click, if any) -- it keeps the panel mounted long
++// enough for the option's own click handler to run in every browser.
++const suppressBlurClose = ref(false)
++function onPanelPointerDown() {
++  suppressBlurClose.value = true
++  const clear = () => {
++    suppressBlurClose.value = false
++  }
++  document.addEventListener('pointerup', clear, { once: true, capture: true })
++}
++
+ const uid = Math.random().toString(36).slice(2, 9)
+ 
+ const isOpen = ref(false)
+@@ -510,6 +535,10 @@ function onBlur(e: FocusEvent) {
+   // Clicks inside the popover panel re-focus options; treat those as still-focused.
+   const next = e.relatedTarget as Node | null
+   if (next && panelRef.value?.contains(next)) return
++  // VOLTEO PATCH (issue #99 follow-up, WebKit): see suppressBlurClose above
++  // -- relatedTarget is unreliable in WebKit for a button click, so this is
++  // the fallback signal that a panel interaction is in progress.
++  if (suppressBlurClose.value) return
+   commitTyped(displayValue.value)
+   isOpen.value = false
+ }
