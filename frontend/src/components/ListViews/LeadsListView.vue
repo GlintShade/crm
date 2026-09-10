@@ -354,22 +354,16 @@ function onInlineSaved(row, { fieldname, value }) {
   )
 }
 
-// Bulk actions (selection checkboxes + the select banner) są ukryte dla
-// handlowca (rola Volteo D2D Sales, decyzja właściciela 2026-09-10): rep nie
-// widzi ani checkboxów wierszy, ani paska akcji, jaki by się otworzył po ich
-// zaznaczeniu. Handlowiec to każdy, kto nie jest adminem, backoffice'em ani
-// CC -- odwrotnie niż DealsListView.vue (samo isVolteoAdmin()), tu dochodzą
-// isCallCenter() i przynależność do roli "Volteo Backend" (bez dedykowanego
-// helpera w usersStore, więc czytane wprost z surowej tablicy `roles`, tak
-// jak isCallCenter robi to dla swojej roli). Administrator, Volteo Core
-// Admin, Volteo Backend i Volteo Call Center pozostają bez zmian.
-const { isVolteoAdmin, isCallCenter, getUser } = usersStore()
-const canSelectRows = computed(
-  () =>
-    isVolteoAdmin() ||
-    isCallCenter() ||
-    getUser().roles?.includes('Volteo Backend') === true,
-)
+// Bulk actions (selection checkboxes + the select banner) są ukryte zarówno
+// dla handlowca (rola Volteo D2D Sales), jak i dla backoffice'u (rola
+// Volteo Backend) -- decyzja właściciela 2026-09-10 (opcja B): Volteo
+// Backend na liście leadów ma być traktowany jak handlowiec, bez checkboxów
+// i bez paska akcji masowych. Akcje masowe zostają tylko dla adminów
+// (isVolteoAdmin()) i CC (isCallCenter()) -- odwrotnie niż DealsListView.vue
+// (samo isVolteoAdmin()), tu dochodzi isCallCenter(). Administrator, Volteo
+// Core Admin i Volteo Call Center pozostają bez zmian.
+const { isVolteoAdmin, isCallCenter } = usersStore()
+const canSelectRows = computed(() => isVolteoAdmin() || isCallCenter())
 
 const isLikeFilterApplied = computed(() => {
   return list.value.params?.filters?._liked_by ? true : false
