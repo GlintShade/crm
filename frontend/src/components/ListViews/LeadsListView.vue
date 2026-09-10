@@ -281,7 +281,14 @@
     }"
     @loadMore="emit('loadMore')"
   />
-  <ListBulkActions ref="listBulkActionsRef" v-model="list" doctype="CRM Lead" />
+  <ListBulkActions
+    ref="listBulkActionsRef"
+    v-model="list"
+    doctype="CRM Lead"
+    :options="{
+      hideAssign: true,
+    }"
+  />
   <KomentarzeLeadaModal
     v-model="showComments"
     :docname="commentsDocname"

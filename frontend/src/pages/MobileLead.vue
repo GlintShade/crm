@@ -41,9 +41,8 @@
   </LayoutHeader>
   <div
     v-if="doc.name"
-    class="flex h-12 items-center justify-between gap-2 border-b px-3 py-2.5"
+    class="flex h-12 items-center justify-end gap-2 border-b px-3 py-2.5"
   >
-    <AssignTo v-model="assignees.data" doctype="CRM Lead" :docname="leadId" />
     <div class="flex items-center gap-2">
       <CustomActions
         v-if="document._actions?.length"
@@ -136,7 +135,6 @@ import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
 import LostReasonModal from '@/components/Modals/LostReasonModal.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import Activities from '@/components/Activities/Activities.vue'
-import AssignTo from '@/components/AssignTo.vue'
 import SidePanelLayout from '@/components/SidePanelLayout.vue'
 import SLASection from '@/components/SLASection.vue'
 import CustomActions from '@/components/CustomActions.vue'

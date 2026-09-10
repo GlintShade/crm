@@ -16,7 +16,6 @@
         v-if="document.actions?.length"
         :actions="document.actions"
       />
-      <AssignTo v-model="assignees.data" doctype="CRM Lead" :docname="leadId" />
       <PrzekazHandlowcowi
         v-if="isCallCenter() || isVolteoAdmin()"
         :docname="leadId"
@@ -327,7 +326,6 @@ import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
 import LostReasonModal from '@/components/Modals/LostReasonModal.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import Activities from '@/components/Activities/Activities.vue'
-import AssignTo from '@/components/AssignTo.vue'
 import PrzekazHandlowcowi from '@/components/PrzekazHandlowcowi.vue'
 import FilesUploader from '@/components/FilesUploader/FilesUploader.vue'
 import SidePanelLayout from '@/components/SidePanelLayout.vue'
