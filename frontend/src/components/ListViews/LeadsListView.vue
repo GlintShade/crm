@@ -4,7 +4,6 @@
     :columns="columns"
     :rows="rows"
     :options="{
-      getRowRoute: leadRoute,
       selectable: canSelectRows,
       showTooltip: options.showTooltip,
       resizeColumn: options.resizeColumn,
@@ -41,7 +40,7 @@
       </ListHeaderItem>
     </ListHeader>
     <ListRows
-      v-slot="{ idx, column, item, row }"
+      v-slot="{ column, item, row }"
       :rows="rows"
       doctype="CRM Lead"
     >
@@ -51,20 +50,7 @@
             v-if="column.key === '_assign'"
             class="flex items-center truncate"
           >
-            <MultipleAvatar
-              :avatars="item"
-              size="sm"
-              @click="
-                (event) =>
-                  emit('applyFilter', {
-                    event,
-                    idx,
-                    column,
-                    item,
-                    firstColumn: columns[0],
-                  })
-              "
-            />
+            <MultipleAvatar :avatars="item" size="sm" />
           </div>
           <!-- VOLTEO (issue #99): "status" jest teraz zawsze edytowana
                inline (patrz galaz KOLUMNY_INLINE w #default nizej), wiec ta
@@ -142,16 +128,6 @@
               ].includes(column.key)
             "
             class="truncate text-base"
-            @click="
-              (event) =>
-                emit('applyFilter', {
-                  event,
-                  idx,
-                  column,
-                  item,
-                  firstColumn: columns[0],
-                })
-            "
           >
             <Tooltip :text="item.label">
               <div>{{ item.timeAgo }}</div>
@@ -183,16 +159,6 @@
               :theme="item.color"
               size="md"
               :label="item.value"
-              @click="
-                (event) =>
-                  emit('applyFilter', {
-                    event,
-                    idx,
-                    column,
-                    item,
-                    firstColumn: columns[0],
-                  })
-              "
             />
           </div>
           <div
@@ -205,16 +171,6 @@
               :theme="item.color"
               size="md"
               :label="item.label"
-              @click="
-                (event) =>
-                  emit('applyFilter', {
-                    event,
-                    idx,
-                    column,
-                    item,
-                    firstColumn: columns[0],
-                  })
-              "
             />
           </div>
           <div v-else-if="column.type === 'Check'">
@@ -231,31 +187,8 @@
             class="!opacity-100 flex-nowrap overflow-auto"
             :disabled="true"
             :max="column.options || 5"
-            @click="
-              (event) =>
-                emit('applyFilter', {
-                  event,
-                  idx,
-                  column,
-                  item,
-                  firstColumn: columns[0],
-                })
-            "
           />
-          <div
-            v-else-if="label"
-            class="truncate text-base"
-            @click="
-              (event) =>
-                emit('applyFilter', {
-                  event,
-                  idx,
-                  column,
-                  item,
-                  firstColumn: columns[0],
-                })
-            "
-          >
+          <div v-else-if="label" class="truncate text-base">
             {{ getLabel(label, column) }}
           </div>
         </template>
@@ -363,9 +296,14 @@ function getLabel(label, column) {
   return label
 }
 
-// Same destination the default row click already navigates to (see
-// getRowRoute below) — kept as one function so the "Szczegóły" button and
-// the row-level link never drift apart.
+// VOLTEO (zgloszenie wlasciciela 2026-09-10): lista leadow nie ma juz
+// nawigacji ani filtrowania po kliknieciu w wiersz/komorke. ListView nie
+// dostaje juz "getRowRoute" w opcjach (patrz szablon), wiec caly wiersz
+// przestal byc linkiem, a klikniecie w dowolna komorke poza dozwolonymi
+// wyjatkami (checkbox, "Szczegoly", "Komentarze", cztery pola edytowane
+// inline) nic juz nie robi. Jedyne miejsce, ktore nadal otwiera leada, to
+// przycisk "Szczegoly" (patrz goToLead nizej), wiec ta funkcja zostaje
+// jedynym zrodlem trasy leada.
 function leadRoute(row) {
   return {
     name: 'Lead',
