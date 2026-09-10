@@ -153,7 +153,17 @@ def _nazwy_statusow_typu(status_type_map: dict[str, str], typ: str) -> list[str]
 
 
 def _aktywni_d2d_reprezentanci() -> list[dict]:
-	"""Userzy `enabled=1` z rolą `Volteo D2D Sales`, posortowani po nazwisku."""
+	"""Userzy `enabled=1` z rolą `Volteo D2D Sales` i włączoną linią Leady
+	(`custom_linia_leady`), posortowani po nazwisku. Filtr linii Leady jest
+	bramkowany `has_field`, żeby strona bez tego pola (schemat jeszcze nie
+	przeprowadzony) nie budowała zapytania po nieznanej kolumnie, tak jak
+	`crm.permissions.org_hierarchy._permission_query_conditions` bramkuje
+	`custom_cc`. Bez tego filtra ten helper karmił `handlowcy()` (lista w
+	`PrzekazHandlowcowi.vue` i `LeadSzybkiPodglad.vue`) oraz panel „Przydział
+	leadów" (Ustawienia) osobami bez dostępu do modułu Leady, mimo że
+	`przydziel`/`przekaz_handlowcowi` i tak takiego handlowca odrzuca przez
+	`_waliduj_handlowca`: widoczny na liście, ale odrzucany przy zapisie, co
+	jest mylącym interfejsem (zgłoszenie właściciela 2026-09-10)."""
 	nazwy = frappe.get_all(
 		"Has Role",
 		filters={"parenttype": "User", "role": ROLA_D2D},
@@ -161,9 +171,12 @@ def _aktywni_d2d_reprezentanci() -> list[dict]:
 	)
 	if not nazwy:
 		return []
+	filtry = {"name": ["in", nazwy], "enabled": 1}
+	if frappe.get_meta("User").has_field("custom_linia_leady"):
+		filtry["custom_linia_leady"] = 1
 	return frappe.get_all(
 		"User",
-		filters={"name": ["in", nazwy], "enabled": 1},
+		filters=filtry,
 		fields=["name", "full_name"],
 		order_by="full_name asc",
 	)
@@ -753,12 +766,15 @@ def handlowcy() -> list[dict]:
 
 
 def _aktywni_cc_reprezentanci() -> list[dict]:
-	"""Userzy `enabled=1` z rolą `Volteo Call Center`, posortowani po nazwisku.
-	Lustro `_aktywni_d2d_reprezentanci` powyżej, dla drugiej strony przydziału
+	"""Userzy `enabled=1` z rolą `Volteo Call Center` i włączoną linią Leady
+	(`custom_linia_leady`), posortowani po nazwisku. Lustro
+	`_aktywni_d2d_reprezentanci` powyżej, dla drugiej strony przydziału
 	(issue #88/#93/#95): `osoby_cc` niżej daje adminowi listę CC do wyboru w
 	modalu masowego przydziału `PrzydzielCCModal.vue`, tak jak
 	`_aktywni_d2d_reprezentanci` daje listę handlowców w `przydziel`/
-	`handlowcy`."""
+	`handlowcy`. Filtr linii Leady bramkowany tak samo `has_field`: CC bez
+	tej linii i tak jest odrzucany przez `_waliduj_cc` w `przydziel_cc`, więc
+	powinien też znikać z listy wyboru, nie tylko z zapisu."""
 	nazwy = frappe.get_all(
 		"Has Role",
 		filters={"parenttype": "User", "role": ROLA_CC},
@@ -766,9 +782,12 @@ def _aktywni_cc_reprezentanci() -> list[dict]:
 	)
 	if not nazwy:
 		return []
+	filtry = {"name": ["in", nazwy], "enabled": 1}
+	if frappe.get_meta("User").has_field("custom_linia_leady"):
+		filtry["custom_linia_leady"] = 1
 	return frappe.get_all(
 		"User",
-		filters={"name": ["in", nazwy], "enabled": 1},
+		filters=filtry,
 		fields=["name", "full_name"],
 		order_by="full_name asc",
 	)
