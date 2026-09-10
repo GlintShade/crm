@@ -92,6 +92,17 @@
 
             <div>
               <div class="mb-1.5 font-medium text-ink-gray-8">
+                {{ __('Wyświetlanie pinezek') }}
+              </div>
+              <FormControl
+                v-model="klastrowanie"
+                type="checkbox"
+                :label="__('Klastrowanie przy oddaleniu')"
+              />
+            </div>
+
+            <div>
+              <div class="mb-1.5 font-medium text-ink-gray-8">
                 {{ __('Pola w dymku pinezki') }}
               </div>
               <div class="flex flex-col gap-1.5">
@@ -201,8 +212,10 @@ import {
   kolorDlaUzytkownika,
   legenda,
   poleObecneWDanych,
+  wczytajKlastrowanie,
   wczytajTrybKolorowania,
   wczytajUstawieniaDymka,
+  zapiszKlastrowanie,
   zapiszTrybKolorowania,
   zapiszUstawieniaDymka,
 } from '@/utils/mapaKolory'
@@ -332,6 +345,18 @@ const trybKolorowania = ref(wczytajTrybKolorowania())
 watch(trybKolorowania, (tryb) => {
   zapiszTrybKolorowania(tryb)
   rysujMarkery()
+})
+
+// "Klastrowanie przy oddaleniu" (issue #101): grupuje pinezki w klastry
+// przy niskim zoomie (L.markerClusterGroup zamiast L.featureGroup) - ważne
+// przy ~9900 pinezkach dla admina, mniej istotne dla CC/handlowca z
+// kilkudziesięcioma. Domyślnie włączone. Przełączenie w locie przebudowuje
+// TYLKO warstwę Leafleta (przebudujWarstwe), dane z API zostają w pamięci -
+// bez ponownego odpytania serwera.
+const klastrowanie = ref(wczytajKlastrowanie())
+watch(klastrowanie, (wlaczone) => {
+  zapiszKlastrowanie(wlaczone)
+  przebudujWarstwe()
 })
 
 // `custom_cc` jest na permlevel 2 -- `frappe.get_list` w mapa() wycina go z
@@ -486,8 +511,17 @@ let dopasowanoWidok = false
 async function initMap() {
   if (!L) {
     await import('leaflet/dist/leaflet.css')
+    // leaflet.markercluster CSS (spiderfy/coverage) - ikona samego klastra
+    // jest własna (ikonaKlastra, divIcon na tokenach Tailwind), ale te dwa
+    // arkusze niosą pozostałe style pluginu (np. nogi "spiderfy").
+    await import('leaflet.markercluster/dist/MarkerCluster.css')
+    await import('leaflet.markercluster/dist/MarkerCluster.Default.css')
     const leafletModule = await import('leaflet')
     L = leafletModule.default ?? leafletModule
+    // Wzorzec identyczny jak leaflet-draw w Controls/GeolocationControl.vue:
+    // plugin dołącza się efektem ubocznym do tego samego singletona L, więc
+    // import dopiero PO przypisaniu L.
+    await import('leaflet.markercluster')
   }
 
   mapInstance = L.map(mapId, { preferCanvas: true }).setView([52.0, 19.3], 6)
@@ -499,8 +533,60 @@ async function initMap() {
       '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(mapInstance)
 
-  markerLayer = L.featureGroup().addTo(mapInstance)
+  markerLayer = utworzWarstweMarkerow().addTo(mapInstance)
 
+  rysujMarkery()
+}
+
+// Warstwa markerów zależna od ustawienia "Klastrowanie przy oddaleniu":
+// L.markerClusterGroup gdy włączone, zwykły L.featureGroup jak dotąd gdy
+// wyłączone. L.circleMarker (wektor na canvasie) działa w obu - markercluster
+// wymaga tylko getLatLng(), którą circleMarker implementuje.
+function utworzWarstweMarkerow() {
+  if (klastrowanie.value) {
+    return L.markerClusterGroup({
+      chunkedLoading: true,
+      disableClusteringAtZoom: 13,
+      spiderfyOnMaxZoom: true,
+      showCoverageOnHover: false,
+      maxClusterRadius: 60,
+      iconCreateFunction: ikonaKlastra,
+    })
+  }
+  return L.featureGroup()
+}
+
+// Ikona klastra: divIcon na tokenach semantycznych frappe-ui (dopasowanie do
+// ciemnego motywu), nie domyślny zielono-żółty styl pluginu - domyślny
+// className pluginu ('marker-cluster*') celowo pominięty, więc
+// MarkerCluster.Default.css nie nadpisuje wyglądu.
+function ikonaKlastra(cluster) {
+  const liczba = cluster.getChildCount()
+  const rozmiar =
+    liczba < 10 ? 'h-8 w-8 text-xs' : liczba < 100 ? 'h-10 w-10 text-sm' : 'h-12 w-12 text-base'
+  return L.divIcon({
+    html: `<div class="flex ${rozmiar} items-center justify-center rounded-full border-2 border-outline-gray-3 bg-surface-gray-3 font-semibold text-ink-gray-9 shadow-md">${liczba}</div>`,
+    // Nadpisuje domyślny className opcji divIcon ('leaflet-div-icon', tło
+    // #fff + obramowanie w leaflet.css) - bez tego wewnętrzny div dostawałby
+    // sprzeczne białe tło spod spodu.
+    className: 'volteo-mapa-klaster',
+    iconSize: L.point(40, 40, true),
+  })
+}
+
+// Przełączenie klastrowania w locie (watch(klastrowanie, ...) wyżej): usuwa
+// starą warstwę z mapy, tworzy nową wg aktualnego ustawienia i rysuje z
+// danych już w pamięci (stan.leady) - bez ponownego zapytania do serwera.
+// rysujMarkery() zawsze robi clearLayers()+odtwarza WSZYSTKIE markery od
+// zera (już tak działało dla zmiany trybu kolorowania), więc nie trzeba
+// clusterGroup.refreshClusters() - nie ma markera, na którym robilibyśmy
+// setStyle in-place.
+function przebudujWarstwe() {
+  if (!L || !mapInstance) return
+  if (markerLayer) {
+    mapInstance.removeLayer(markerLayer)
+  }
+  markerLayer = utworzWarstweMarkerow().addTo(mapInstance)
   rysujMarkery()
 }
 
