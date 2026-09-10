@@ -1349,3 +1349,29 @@ def delete_bulk_docs(doctype: str, items: str | list, delete_linked: bool = Fals
 	frappe.clear_messages()
 
 	return {"total": len(items), "deleted": deleted, "failed": failed}
+
+
+@frappe.whitelist()
+def pola_dozwolone(doctype: str) -> list[str]:
+	"""Posortowana lista nazw pol doctype'u dostepnych BIEZACEMU uzytkownikowi
+	do odczytu (permlevel), do filtrowania listy pol oferowanych w oknie
+	"Kolumny" po stronie frontu (`ColumnSettings.vue`).
+
+	Zanim ten endpoint powstal, `ColumnSettings.vue` budowal liste "Dodaj
+	kolumne" z `getMeta(doctype).getFields()`, ktore wywoluje rdzeniowe
+	`frappe.desk.form.load.getdoctype` i zwraca WSZYSTKIE pola doctype'u,
+	takze permlevel > 0 (np. "Przypisany CC" na `CRM Lead`, pola
+	kosztow/prowizji na `CRM Deal`). Handlowiec (`Volteo D2D Sales`) mogl
+	wiec dodac taka kolumne, po czym `get_data` w tym module i tak wycinal
+	jej dane przez `_odfiltruj_niedozwolone_kolumny` (issue #117): kolumna
+	zostawala pusta zamiast wcale sie nie pojawic. Ten endpoint zwraca
+	dokladnie ten sam zbior nazw, ktory `_odfiltruj_niedozwolone_kolumny`
+	uzywa do wycinania kolumn w `get_data`
+	(`_pola_dozwolone(doctype) | _POLA_LISTY_ZAWSZE_DOZWOLONE`), zeby lista
+	"Dodaj kolumne" byla spojna z tym, co faktycznie trafi do danych.
+	"""
+	if not frappe.has_permission(doctype, "read"):
+		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
+
+	dozwolone = _pola_dozwolone(doctype) | _POLA_LISTY_ZAWSZE_DOZWOLONE
+	return sorted(dozwolone)
