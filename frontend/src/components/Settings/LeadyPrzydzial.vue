@@ -158,7 +158,7 @@
         <table class="w-full border-collapse text-sm">
           <thead>
             <tr class="bg-surface-gray-2 text-ink-gray-5">
-              <th class="px-4 py-2.5 text-left font-medium">{{ __('CC') }}</th>
+              <th class="px-4 py-2.5 text-left font-medium">CC</th>
               <th class="px-4 py-2.5 text-right font-medium">{{ __('Przydzielone') }}</th>
               <th class="px-4 py-2.5 text-right font-medium">{{ __('Obdzwonione') }}</th>
               <th class="px-4 py-2.5 text-right font-medium">{{ __('Umówione') }}</th>
@@ -223,7 +223,7 @@ const LIMIT_PRZYDZIAL_CC = 2000
 const tryb = ref('handlowiec')
 const trybOptions = [
   { label: __('Handlowiec'), value: 'handlowiec' },
-  { label: __('CC'), value: 'cc' },
+  { label: 'CC', value: 'cc' },
 ]
 
 function emptyForm() {

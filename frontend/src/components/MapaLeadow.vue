@@ -370,7 +370,7 @@ const opcjeKolorowania = computed(() => {
     { label: __('Status CC'), value: 'status' },
     { label: __('Handlowiec'), value: 'handlowiec' },
   ]
-  if (czyCcDostepne.value) opcje.push({ label: __('CC'), value: 'cc' })
+  if (czyCcDostepne.value) opcje.push({ label: 'CC', value: 'cc' })
   return opcje
 })
 
