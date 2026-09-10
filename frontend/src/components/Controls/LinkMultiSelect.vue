@@ -17,14 +17,21 @@
 // (Filter.vue, issue #103). Odpowiednik Link.vue (pojedynczy wybór przez
 // frappe.desk.search.search_link + Autocomplete), tylko na frappe-ui
 // MultiSelect i z modelValue = tablica stringów (dokładnie ten kształt,
-// jakiego oczekuje transformIn/parseFilters w Filter.vue dla in/not in —
+// jakiego oczekuje transformIn/parseFilters w Filter.vue dla in/not in,
 // żadnej zmiany serializacji filtra).
 //
 // Świadomie węższe niż Link.vue: bez obsługi "@me" i bez `userScope`
-// (zawężenia do poddrzewa Sales Hierarchy) — issue #103 explicite nie
-// wymaga tego dla operatora in/not in. Gdyby to było kiedyś potrzebne,
-// przenieść odpowiedni fragment z Link.vue tutaj, a nie odwrotnie
-// (LinkMultiSelect ma zostać prostszy z założenia).
+// (zawężenia do poddrzewa Sales Hierarchy). Nie dlatego, że to niepotrzebne
+// w ogóle: Filter.vue (patrz czyWielokrotnyWybor w utils/filtrWielokrotny.js)
+// w ogóle NIE renderuje tego komponentu dla pól Link, których
+// `options === 'User'` (np. lead_owner, custom_cc, deal_owner,
+// custom_opiekun) - te zostają na dotychczasowym polu tekstowym, właśnie
+// żeby nie ominąć zakresów, jakie Link.vue nakłada na pola User
+// (`userScope`, znaczniki `volteo_scope_handlowcy`/`volteo_scope_cc`) i nie
+// pokazać handlowcowi pełnej listy użytkowników zamiast zawężonej. Ten
+// komponent więc z założenia nigdy nie dostaje doctype='User'; gdyby to się
+// kiedyś zmieniło, przenieść odpowiedni fragment z Link.vue tutaj, a nie
+// odwrotnie (LinkMultiSelect ma zostać prostszy z założenia).
 import { scalOpcjeZZaznaczonymi } from '@/utils/filtrWielokrotny'
 import { MultiSelect, createResource } from 'frappe-ui'
 import { computed, onMounted, ref, watch } from 'vue'
@@ -46,7 +53,7 @@ const wartosc = computed({
 // Każda etykieta kiedykolwiek zwrócona przez search_link zostaje tutaj, żeby
 // zaznaczone "chipy" pozostały czytelne (prawdziwa etykieta, nie goły
 // value) nawet gdy kolejne zapytanie zawęzi wyniki i akurat pominie już
-// wybraną wartość — ten sam wzorzec co przykład "Async Options" w
+// wybraną wartość: ten sam wzorzec co przykład "Async Options" w
 // dokumentacji frappe-ui MultiSelect.
 const znaneEtykiety = ref(new Map())
 
@@ -66,7 +73,7 @@ const zasob = createResource({
 })
 
 // Lista pokazywana w popoverze: wyniki ostatniego zapytania, plus każda
-// aktualnie zaznaczona wartość, której w tych wynikach nie ma — najpierw z
+// aktualnie zaznaczona wartość, której w tych wynikach nie ma, najpierw z
 // `znaneEtykiety` (prawdziwa etykieta z wcześniejszego zapytania), a gdy i
 // tam jej nie ma (np. wartość z wczytanego zapisanego widoku, sprzed
 // jakiegokolwiek zapytania w tej sesji), placeholder `{label: value, value}`

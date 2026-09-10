@@ -1,4 +1,8 @@
-import { parsujWartoscWielokrotna, scalOpcjeZZaznaczonymi } from './filtrWielokrotny'
+import {
+  czyWielokrotnyWybor,
+  parsujWartoscWielokrotna,
+  scalOpcjeZZaznaczonymi,
+} from './filtrWielokrotny'
 
 describe('parsujWartoscWielokrotna', () => {
   it('tablica stringów → ta sama tablica, przycięta', () => {
@@ -80,5 +84,40 @@ describe('scalOpcjeZZaznaczonymi', () => {
     expect(
       scalOpcjeZZaznaczonymi(opcjeStatusow, ['Nowy', 'Nowy']),
     ).toEqual(opcjeStatusow)
+  })
+})
+describe('czyWielokrotnyWybor', () => {
+  it('Select + in/not in → true', () => {
+    expect(czyWielokrotnyWybor({ fieldtype: 'Select', options: 'A\nB' }, 'in')).toBe(true)
+    expect(czyWielokrotnyWybor({ fieldtype: 'Select', options: 'A\nB' }, 'not in')).toBe(true)
+  })
+
+  it('Link (options != User) + in/not in → true', () => {
+    expect(czyWielokrotnyWybor({ fieldtype: 'Link', options: 'CRM Lead Status' }, 'in')).toBe(true)
+    expect(czyWielokrotnyWybor({ fieldtype: 'Link', options: 'CRM Deal Status' }, 'not in')).toBe(true)
+  })
+
+  it('Link z options === "User" (lead_owner, custom_cc, deal_owner, custom_opiekun...) → false, zostaje pole tekstowe', () => {
+    expect(czyWielokrotnyWybor({ fieldtype: 'Link', options: 'User' }, 'in')).toBe(false)
+    expect(czyWielokrotnyWybor({ fieldtype: 'Link', options: 'User' }, 'not in')).toBe(false)
+  })
+
+  it('Dynamic Link → false, doctype zmienia się per wiersz', () => {
+    expect(czyWielokrotnyWybor({ fieldtype: 'Dynamic Link', options: 'reference_doctype' }, 'in')).toBe(false)
+  })
+
+  it('inny operator (equals, like...) → zawsze false, nawet dla Select/Link', () => {
+    expect(czyWielokrotnyWybor({ fieldtype: 'Select', options: 'A\nB' }, 'equals')).toBe(false)
+    expect(czyWielokrotnyWybor({ fieldtype: 'Link', options: 'CRM Lead Status' }, 'like')).toBe(false)
+  })
+
+  it('inny fieldtype (Data, Int...) na in/not in → false, zostaje pole tekstowe', () => {
+    expect(czyWielokrotnyWybor({ fieldtype: 'Data', options: null }, 'in')).toBe(false)
+    expect(czyWielokrotnyWybor({ fieldtype: 'Int', options: null }, 'not in')).toBe(false)
+  })
+
+  it('brak pola → false', () => {
+    expect(czyWielokrotnyWybor(null, 'in')).toBe(false)
+    expect(czyWielokrotnyWybor(undefined, 'in')).toBe(false)
   })
 })
