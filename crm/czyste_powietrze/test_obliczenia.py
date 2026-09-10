@@ -1127,9 +1127,9 @@ class TestFinansowanie(unittest.TestCase):
 
 	def test_helper_pusty_slownik_uzywa_domyslnych(self: "TestFinansowanie") -> None:
 		wynik = oblicz_finansowanie(Decimal("15000"), Decimal("0"), {}, self._stale_fin())
-		self.assertEqual(wynik["okres_lat"], 5)
+		self.assertEqual(wynik["okres_lat"], 10)
 		self.assertEqual(wynik["wplata_gotowka"], Decimal("0.00"))
-		self.assertEqual(wynik["rata_wkladu"], Decimal("333.67"))
+		self.assertEqual(wynik["rata_wkladu"], Decimal("215.21"))
 
 	def test_trify_niezalezna_od_okresu(self: "TestFinansowanie") -> None:
 		wynik_1y = oblicz_finansowanie(
@@ -1218,10 +1218,10 @@ class TestFinansowanie(unittest.TestCase):
 		self.assertEqual(
 			wynik["finansowanie"],
 			{
-				"okres_lat": 5,
+				"okres_lat": 10,
 				"wplata_gotowka": Decimal("0.00"),
 				"kwota_kredytu": Decimal("2816.00"),
-				"rata_wkladu": Decimal("62.64"),
+				"rata_wkladu": Decimal("40.40"),
 				"podstawa_trify": Decimal("22880.00"),
 				"rata_trify": Decimal("572.00"),
 			},

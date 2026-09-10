@@ -264,7 +264,7 @@ def _zaokragl_wynik(linie: list[dict[str, Any]], wynik: dict[str, Any]) -> dict[
 	return wynik
 
 
-_OKRES_LAT_DOMYSLNY = 5
+_OKRES_LAT_DOMYSLNY = 10  # decyzja właściciela 2026-09-10, było 5
 _OKRES_LAT_MIN, _OKRES_LAT_MAX = 1, 10
 
 

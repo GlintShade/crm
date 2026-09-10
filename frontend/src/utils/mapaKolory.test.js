@@ -193,20 +193,20 @@ describe('trwałość ustawień w localStorage', () => {
     })
   })
 
-  it('domyślnie klastrowanie jest włączone, gdy nic nie zapisano', () => {
+  it('domyślnie klastrowanie jest wyłączone, gdy nic nie zapisano', () => {
     expect(wczytajKlastrowanie()).toBe(DOMYSLNE_KLASTROWANIE)
-    expect(wczytajKlastrowanie()).toBe(true)
-  })
-
-  it('zapisane wyłączenie klastrowania wraca po odczycie', () => {
-    zapiszKlastrowanie(false)
     expect(wczytajKlastrowanie()).toBe(false)
   })
 
   it('zapisane włączenie klastrowania wraca po odczycie', () => {
-    zapiszKlastrowanie(false)
     zapiszKlastrowanie(true)
     expect(wczytajKlastrowanie()).toBe(true)
+  })
+
+  it('zapisane wyłączenie klastrowania wraca po odczycie', () => {
+    zapiszKlastrowanie(true)
+    zapiszKlastrowanie(false)
+    expect(wczytajKlastrowanie()).toBe(false)
   })
 
   it('uszkodzona wartość w localStorage nie wybucha, wraca domyślne ustawienie', () => {

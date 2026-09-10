@@ -47,7 +47,7 @@ describe('Czyste Powietrze form logic', () => {
 
     it('exports the credit period options and their default', () => {
       expect(OKRESY_LAT).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-      expect(OKRES_LAT_DOMYSLNY).toBe(5)
+      expect(OKRES_LAT_DOMYSLNY).toBe(10)
     })
   })
 
@@ -240,7 +240,7 @@ describe('Czyste Powietrze form logic', () => {
           okna: { wybrana: false, reczne: false, m2: '' },
           drzwi: { wybrana: false, ilosc: '' },
         },
-        finansowanie: { wlaczone: false, okresLat: 5, wplataGotowka: '' },
+        finansowanie: { wlaczone: false, okresLat: 10, wplataGotowka: '' },
       })
     })
 
@@ -265,7 +265,7 @@ describe('Czyste Powietrze form logic', () => {
       first.finansowanie.okresLat = 9
       first.finansowanie.wplataGotowka = '5000'
 
-      expect(second.finansowanie).toEqual({ wlaczone: false, okresLat: 5, wplataGotowka: '' })
+      expect(second.finansowanie).toEqual({ wlaczone: false, okresLat: 10, wplataGotowka: '' })
       expect(first.finansowanie).not.toBe(second.finansowanie)
     })
   })
@@ -624,7 +624,7 @@ describe('Czyste Powietrze form logic', () => {
         const form = pustyFormularz()
         form.finansowanie.wlaczone = true
 
-        expect(buildWejscie(form).finansowanie).toEqual({ okres_lat: 5, wplata_gotowka: 0 })
+        expect(buildWejscie(form).finansowanie).toEqual({ okres_lat: 10, wplata_gotowka: 0 })
       })
 
       it.each([

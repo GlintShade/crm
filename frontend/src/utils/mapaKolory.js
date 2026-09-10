@@ -134,11 +134,11 @@ export const KLUCZ_KOLOR = 'volteo.mapa.kolor'
 export const KLUCZ_DYMEK = 'volteo.mapa.dymek'
 export const KLUCZ_KLASTROWANIE = 'volteo.mapa.klastrowanie'
 
-// Domyślnie WŁĄCZONE (issue #101, klastrowanie przy oddaleniu) -- przy ~9900
-// pinezkach dla admina klastrowanie jest korzyścią, nie ograniczeniem, więc
-// próg wejścia jest odwrotny niż przy dymku/kolorowaniu: trzeba świadomie
-// wyłączyć, nie świadomie włączyć.
-export const DOMYSLNE_KLASTROWANIE = true
+// Domyślnie WYŁĄCZONE (decyzja właściciela 2026-09-10, zmiana względem
+// pierwotnej decyzji z issue #101). Zapisane wcześniej ustawienie użytkownika
+// w localStorage ma pierwszeństwo nad tą domyślną wartością (patrz
+// wczytajKlastrowanie niżej).
+export const DOMYSLNE_KLASTROWANIE = false
 
 export function domyslneUstawieniaDymka() {
   return {
