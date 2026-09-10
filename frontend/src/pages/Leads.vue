@@ -16,6 +16,7 @@
       />
     </template>
   </LayoutHeader>
+  <WidokiLeadowPasek :views="leads.data?.views || []" />
   <ViewControls
     ref="viewControls"
     v-model="leads"
@@ -274,6 +275,7 @@
 
 <script setup>
 import ViewBreadcrumbs from '@/components/ViewBreadcrumbs.vue'
+import WidokiLeadowPasek from '@/components/WidokiLeadowPasek.vue'
 import MultipleAvatar from '@/components/MultipleAvatar.vue'
 import CustomActions from '@/components/CustomActions.vue'
 import EmailAtIcon from '@/components/Icons/EmailAtIcon.vue'

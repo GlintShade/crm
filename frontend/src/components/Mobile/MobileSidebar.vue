@@ -210,6 +210,14 @@ function bezZbednychDividerow(items) {
   })
 }
 
+// VOLTEO (pasek widokow leadow, 2026-09-10): ten sam filtr co w
+// AppSidebar.vue - patrz komentarz tam. Globalny viewsStore() miesza
+// widoki wszystkich doctype'ow, a publiczne widoki leadow maja teraz
+// wlasny pasek chipow nad lista (WidokiLeadowPasek.vue).
+function publiczneWidokiBezLeadow() {
+  return getPublicViews().filter((view) => view.dt !== 'CRM Lead')
+}
+
 const allViews = computed(() => {
   let _views = [
     {
@@ -221,11 +229,11 @@ const allViews = computed(() => {
       ),
     },
   ]
-  if (getPublicViews().length) {
+  if (publiczneWidokiBezLeadow().length) {
     _views.push({
       name: 'Public Views',
       opened: true,
-      views: parseView(getPublicViews()),
+      views: parseView(publiczneWidokiBezLeadow()),
     })
   }
 

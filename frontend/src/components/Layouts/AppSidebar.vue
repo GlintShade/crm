@@ -317,6 +317,16 @@ function bezZbednychDividerow(items) {
   })
 }
 
+// VOLTEO (pasek widokow leadow, 2026-09-10): panel boczny "Public Views"
+// czerpie z globalnego magazynu widokow (viewsStore() bez doctype - patrz
+// stores/views.js), ktory miesza widoki wszystkich doctype'ow. Publiczne
+// widoki listy leadow maja teraz wlasny pasek chipow nad lista
+// (WidokiLeadowPasek.vue) i nie moga zarazem duplikowac sie w tym panelu -
+// odfiltrowujemy po `dt`, sekcja znika sama, gdy nic innego nie zostaje.
+function publiczneWidokiBezLeadow() {
+  return getPublicViews().filter((view) => view.dt !== 'CRM Lead')
+}
+
 const allViews = computed(() => {
   let _views = [
     {
@@ -333,11 +343,11 @@ const allViews = computed(() => {
       ),
     },
   ]
-  if (getPublicViews().length) {
+  if (publiczneWidokiBezLeadow().length) {
     _views.push({
       name: 'Public Views',
       opened: true,
-      views: parseView(getPublicViews()),
+      views: parseView(publiczneWidokiBezLeadow()),
     })
   }
 
