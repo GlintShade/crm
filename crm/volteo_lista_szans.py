@@ -142,23 +142,60 @@ FILTER_FIELDS_LEAD: tuple[tuple[str, str | None], ...] = (
 def niedozwolone_klucze_filtrow(
 	filters: Mapping[str, object] | Sequence[object] | None,
 	permitted: Iterable[str],
+	doctype: str | None = None,
 ) -> list[object]:
 	"""Zwraca listę kluczy pól z `filters`, których nie ma w zbiorze `permitted`.
 
 	`filters` może być:
-	  - `dict`: `{fieldname: wartość}` albo `{fieldname: [operator, wartość]}` —
-	    kluczem jest bezpośrednio nazwa pola;
-	  - listą/krotką trójek `[fieldname, operator, wartość]` albo czwórek
-	    `[doctype, fieldname, operator, wartość]` (standardowy format filtrów
-	    Frappe) — nazwa pola to odpowiednio pierwszy albo drugi element;
+	  - `dict`: `{fieldname: wartość}` albo `{fieldname: [operator, wartość]}`.
+	    Kluczem jest bezpośrednio nazwa pola;
+	  - listą/krotką trójek `[fieldname, operator, wartość]` (rdzeń Frappe
+	    dokłada tu domyślnie filtrowany `doctype`) albo list o 4 LUB WIĘCEJ
+	    elementach, `[doctype, fieldname, operator, wartość, ...]`. Nazwa
+	    pola to odpowiednio pierwszy albo DRUGI element. To dokładnie sposób,
+	    w jaki rdzeń rozpoznaje kształt filtra (`frappe.utils.data.get_filter`,
+	    zweryfikowane w kontenerze): `len(f) == 3` dokleja doctype z przodu,
+	    `len(f) > 4` OBCINA do pierwszych 4 elementów, `len(f) == 4` bierze
+	    wprost. W obu ostatnich przypadkach nazwa pola to zawsze `f[1]`.
+	    Desk (`/app`) wysyła filtry list-view jako piątki
+	    `[doctype, fieldname, operator, wartość, hidden]`. To właśnie ten
+	    piąty element ("hidden", bool) sprawiał, że starsza wersja tej
+	    funkcji (sprawdzająca tylko długości 3 i 4) traktowała całą piątkę
+	    jako nieznany kształt i odrzucała KAŻDY filtr Desk, w tym zwykłe
+	    `["CRM Lead", "converted", "=", 0, False]` na polu bez permlevel;
 	  - listą zagnieżdżonych `dict`-ów (rzadziej spotykane, ale obsługiwane
 	    tak samo jak `dict` główny).
 
 	Klucz nie będący `str`, klucz zawierający kropkę (dostęp przez join do
 	powiązanego doctype'u, np. `"user.email"`) albo wpis o nieoczekiwanym
-	kształcie (nie 3 ani 4 elementy) jest zawsze traktowany jako niedozwolony,
-	niezależnie od `permitted` — nie da się bezpiecznie wywnioskować, że nie
+	kształcie (nie 3 ani 4-lub-więcej elementów, np. 0/1/2, rdzeń sam by to
+	odrzucił jako niepoprawny filtr) jest zawsze traktowany jako niedozwolony,
+	niezależnie od `permitted`. Nie da się bezpiecznie wywnioskować, że nie
 	omija to ograniczenia permlevel.
+
+	`doctype` (opcjonalnie, domyślnie `None`): nazwa filtrowanego doctype'u,
+	używana WYŁĄCZNIE do rozpoznania wpisów 4-lub-więcej-elementowych, które
+	wskazują INNY doctype niż `doctype` w elemencie [0], czyli filtr po polu
+	dołączonym przez JOIN (np. tabela podrzędna) w widoku Report. Rdzeniowe
+	`DatabaseQuery.append_table` sprawdza wtedy tylko podstawowe uprawnienie
+	"read" do TEGO doctype'u jako całości, NIE permlevel konkretnego pola w
+	nim, a ten moduł jest celowo frappe-free (patrz docstring modułu) i nie
+	zna allowlisty pól tego drugiego doctype'u, więc nie da się bezpiecznie
+	sprawdzić takiego wpisu wprost. Dlatego KAŻDY wpis, którego element [0]
+	różni się od `doctype`, jest zawsze traktowany jako niedozwolony,
+	niezależnie od tego, czy nazwa pola akurat pasuje do `permitted`. To
+	świadomie bardziej restrykcyjne niż "sprawdź względem allowlisty
+	wskazanego doctype'u" (druga opcja z brief ops#124): żadna znana ścieżka
+	wywołania (SPA forka używa wyłącznie dict-ów i trójek, patrz docstring
+	modułu i `crm/api/volteo_filtry_guard.py`) nigdy nie wysyła takich
+	wpisów, więc to zawężenie niczego nie blokuje w praktyce. Blokuje
+	wyłącznie hipotetyczny filtr Report View z JOIN-em po innym doctype,
+	którego ten strażnik i tak nie potrafi bezpiecznie zweryfikować. Fail
+	open na takim wpisie byłby luką: nazwa pola mogłaby przypadkiem pasować
+	do `permitted` głównego doctype'u, a w rzeczywistości odnosić się do
+	wrażliwego pola innego doctype'u o tej samej nazwie. Gdy `doctype` nie
+	jest podany (domyślnie `None`, zachowanie sprzed ops#124), porównanie
+	jest pomijane, sprawdzane jest wyłącznie pole, tak jak dotychczas.
 
 	Nie mutuje żadnego z argumentów. Zwraca listę (nie zbiór) zachowującą
 	kolejność pierwszego wystąpienia, bez duplikatów.
@@ -167,28 +204,43 @@ def niedozwolone_klucze_filtrow(
 		return []
 
 	permitted_set = set(permitted)
-	surowe_klucze: list[object] = []
+	# Para (klucz, wymus_niedozwolony). `wymus_niedozwolony=True` omija
+	# sprawdzenie wzgledem `permitted_set` i zawsze laduje w wyniku (patrz
+	# akapit o `doctype` w docstringu wyzej).
+	surowe_wpisy: list[tuple[object, bool]] = []
 
 	if isinstance(filters, Mapping):
-		surowe_klucze.extend(filters.keys())
+		surowe_wpisy.extend((klucz, False) for klucz in filters.keys())
 	else:
 		for wpis in filters:
 			if isinstance(wpis, Mapping):
-				surowe_klucze.extend(wpis.keys())
-			elif isinstance(wpis, (list, tuple)) and len(wpis) == 4:
-				surowe_klucze.append(wpis[1])
+				surowe_wpisy.extend((klucz, False) for klucz in wpis.keys())
 			elif isinstance(wpis, (list, tuple)) and len(wpis) == 3:
-				surowe_klucze.append(wpis[0])
+				surowe_wpisy.append((wpis[0], False))
+			elif isinstance(wpis, (list, tuple)) and len(wpis) >= 4:
+				# [doctype, fieldname, operator, wartosc, ...]. Nazwa pola to
+				# zawsze f[1], niezaleznie od tego, ile elementow jest ZA
+				# wartoscia (Desk dokleja piaty element "hidden"; rdzen i tak
+				# obcina wszystko od piatego wzwyz, patrz get_filter powyzej).
+				doctype_wpisu = wpis[0]
+				wymus_niedozwolony = doctype is not None and doctype_wpisu != doctype
+				surowe_wpisy.append((wpis[1], wymus_niedozwolony))
 			else:
-				# Kształt nieznany — nie da się bezpiecznie wydobyć nazwy pola,
-				# traktujemy cały wpis jako niedozwolony (domyślnie bezpiecznie).
-				surowe_klucze.append(wpis)
+				# Ksztalt nieznany (0/1/2 elementy). Nie da sie bezpiecznie
+				# wydobyc nazwy pola, traktujemy caly wpis jako niedozwolony
+				# (domyslnie bezpiecznie).
+				surowe_wpisy.append((wpis, False))
 
 	niedozwolone: list[object] = []
-	for klucz in surowe_klucze:
+	for klucz, wymus_niedozwolony in surowe_wpisy:
 		if klucz in niedozwolone:
 			continue
-		if not isinstance(klucz, str) or "." in klucz or klucz not in permitted_set:
+		if (
+			wymus_niedozwolony
+			or not isinstance(klucz, str)
+			or "." in klucz
+			or klucz not in permitted_set
+		):
 			niedozwolone.append(klucz)
 
 	return niedozwolone

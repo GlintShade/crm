@@ -75,6 +75,69 @@ class TestVolteoListaSzans(unittest.TestCase):
 			["custom_cp_nadprowizja_manager"],
 		)
 
+	def test_f2_lista_piatek_doctype_fieldname_operator_wartosc_hidden(
+		self: "TestVolteoListaSzans",
+	) -> None:
+		# Format wysylany przez Desk (/app) dla kazdego filtra listy:
+		# [doctype, fieldname, operator, wartosc, hidden]. Regresja ops#124.
+		filters = [
+			["CRM Deal", "status", "=", "Lead", False],
+			["CRM Deal", "custom_cp_nadprowizja_manager", ">", 0, True],
+		]
+		self.assertEqual(
+			niedozwolone_klucze_filtrow(filters, PERMITTED),
+			["custom_cp_nadprowizja_manager"],
+		)
+
+	def test_f3_lista_szostek_i_wiecej_nadal_pole_na_indeksie_1(
+		self: "TestVolteoListaSzans",
+	) -> None:
+		# Rdzen (frappe.utils.data.get_filter) obcina wszystko od piatego
+		# elementu wzwyz do pierwszych 4. Nazwa pola to zawsze f[1]
+		# niezaleznie od tego, ile elementow jest za wartoscia.
+		filters = [["CRM Deal", "status", "=", "Lead", False, "cos-jeszcze", 123]]
+		self.assertEqual(niedozwolone_klucze_filtrow(filters, PERMITTED), [])
+
+	def test_f4_regresja_desk_converted_crm_lead(self: "TestVolteoListaSzans") -> None:
+		# Dokladny wpis z symptomu ops#124: Administrator w /app/crm-lead
+		# dostawal "Brak uprawnien do filtrowania po polu ['CRM Lead',
+		# 'converted', '=', 0, False]" bo caly wpis piatkowy byl traktowany
+		# jako jeden niedozwolony "klucz".
+		permitted = PERMITTED | {"converted"}
+		filters = [["CRM Lead", "converted", "=", 0, False]]
+		self.assertEqual(niedozwolone_klucze_filtrow(filters, permitted, doctype="CRM Lead"), [])
+
+	def test_f5_permlevel_pole_w_piatce_nadal_odrzucone(self: "TestVolteoListaSzans") -> None:
+		# Kryterium akceptacji ops#124: filtr po polu permlevel 2 w formie
+		# piatkowej Desk musi zostac odrzucony tak samo jak w formie czworkowej.
+		filters = [["CRM Lead", "custom_cc", "=", "x", False]]
+		self.assertEqual(
+			niedozwolone_klucze_filtrow(filters, PERMITTED, doctype="CRM Lead"),
+			["custom_cc"],
+		)
+
+	def test_f6_inny_doctype_w_elemencie_0_zawsze_niedozwolony_gdy_doctype_podany(
+		self: "TestVolteoListaSzans",
+	) -> None:
+		# ops#124: wpis wskazujacy INNY doctype niz filtrowany (JOIN po
+		# tabeli podrzednej) jest odrzucany bez wzgledu na to, czy nazwa pola
+		# akurat pasuje do `permitted` glownego doctype'u. Ten modul nie zna
+		# allowlisty drugiego doctype'u i nie moze bezpiecznie zweryfikowac
+		# takiego wpisu.
+		filters = [["Volteo Zestaw Item", "status", "=", "Lead"]]
+		self.assertEqual(
+			niedozwolone_klucze_filtrow(filters, PERMITTED, doctype="CRM Deal"),
+			["status"],
+		)
+
+	def test_f7_inny_doctype_dozwolony_gdy_doctype_nie_podany_wstecznie(
+		self: "TestVolteoListaSzans",
+	) -> None:
+		# Bez `doctype` (domyslne None, zachowanie sprzed ops#124) porownanie
+		# jest pomijane, sprawdzane jest tylko pole.
+		filters = [["Volteo Zestaw Item", "status", "=", "Lead"]]
+		self.assertEqual(niedozwolone_klucze_filtrow(filters, PERMITTED), [])
+
 	def test_g_krotki_rownowazne_listom(self: "TestVolteoListaSzans") -> None:
 		filters = (("status", "=", "Lead"), ("custom_koszty_json", "=", "{}"))
 		self.assertEqual(niedozwolone_klucze_filtrow(filters, PERMITTED), ["custom_koszty_json"])
@@ -91,9 +154,13 @@ class TestVolteoListaSzans(unittest.TestCase):
 		self.assertEqual(niedozwolone_klucze_filtrow(filters, PERMITTED), [123])
 
 	def test_j_wpis_o_nieoczekiwanym_ksztalcie_niedozwolony(self: "TestVolteoListaSzans") -> None:
-		filters = [["status"], ["a", "b", "c", "d", "e"]]
+		# 0/1/2 elementy. Rdzen sam odrzucilby taki filtr jako niepoprawny
+		# (frappe.utils.data.get_filter rzuca dla dlugosci innej niz 3 i
+		# innej niz >=4); 4-lub-wiecej i dokladnie 3 to teraz ROZPOZNANE
+		# ksztalty (patrz test_f/test_f2/test_f3), nie "nieoczekiwane".
+		filters = [[], ["status"], ["a", "b"]]
 		wynik = niedozwolone_klucze_filtrow(filters, PERMITTED)
-		self.assertEqual(wynik, [["status"], ["a", "b", "c", "d", "e"]])
+		self.assertEqual(wynik, [[], ["status"], ["a", "b"]])
 
 	def test_k_zagniezdzone_dicty_w_liscie(self: "TestVolteoListaSzans") -> None:
 		filters = [{"status": "Lead"}, {"custom_koszty_zysk_plan": [">", 0]}]

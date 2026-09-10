@@ -99,9 +99,13 @@ def _sprawdz_filtry(doctype: str, filters, parenttype: str | None = None) -> Non
 	`{pole: None}` — patrz wywolania dla `column_field`/`group_by_field` w
 	`get_data`. `parenttype` patrz `_pola_dozwolone` — domyslnie `None`,
 	istniejace wywolania w tym module (`get_data` i pochodne) go nie
-	przekazuja i zostaja bez zmian."""
+	przekazuja i zostaja bez zmian. `doctype` jedzie dalej do
+	`niedozwolone_klucze_filtrow` (ops#124) wylacznie po to, zeby wpisy
+	listowe wskazujace INNY doctype w elemencie [0] (JOIN po tabeli
+	podrzednej w widoku Report) byly zawsze odrzucane, patrz docstring tej
+	funkcji w `crm.volteo_lista_szans`."""
 	permitted = _pola_dozwolone(doctype, parenttype=parenttype)
-	niedozwolone = niedozwolone_klucze_filtrow(filters, permitted)
+	niedozwolone = niedozwolone_klucze_filtrow(filters, permitted, doctype=doctype)
 	if niedozwolone:
 		frappe.throw(
 			_("Brak uprawnień do filtrowania po polu {0}").format(niedozwolone[0]),
