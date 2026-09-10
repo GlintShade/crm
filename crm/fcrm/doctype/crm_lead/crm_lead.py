@@ -261,7 +261,7 @@ class CRMLead(Document):
 				"label": "Zasady",
 				"type": "Select",
 				"key": "custom_zasady_dotacji",
-				"width": "8rem",
+				"width": "5.5rem",
 			},
 			{
 				"label": "Telefon",
