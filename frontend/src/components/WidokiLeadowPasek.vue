@@ -60,27 +60,38 @@
 // biezace query (w tym `?view`) - Mapa i Lista to dwie reprezentacje tego
 // samego zapisanego widoku typu "list" (patrz utils/widokLeady.js).
 //
-// Prawa grupa listuje zapisane widoki tego doctype'u (props.views, ten sam
-// zbior co ViewControls.vue czerpie z `leads.data.views` w Leads.vue),
-// ograniczone do type=="list" (alias Mapa->Lista), bez is_standard,
-// posortowane wlasne -> publiczne -> przypiete, bez duplikatow. Klikniecie
-// nawiguje tym samym ksztaltem push co ViewControls.vue (`standardViews`/
-// `viewsDropdownOptions` onClick), zeby jego watchery na route.query.view
-// przeladowaly liste tak samo, jakby uzytkownik wybral widok z rozwijanego
-// przelacznika.
+// Prawa grupa listuje zapisane widoki. ŹRÓDŁO CELOWO NIE jest
+// `leads.data.views` z ViewControls.vue (wersja sprzed klik-testu
+// wlasciciela czerpala stamtad): ten zasob ma DWA watchery na
+// route.query.view/route.params.viewType (linie ok. 1409 i 1423
+// ViewControls.vue), z ktorych drugi ma zlamany warunek wczesnego wyjscia
+// (`value[1] === value[0]` porownuje string z obiektem trasy, zawsze
+// false), wiec reload() odpala sie DWUKROTNIE przy kazdej zmianie widoku -
+// dwa nakladajace sie zapytania do crm.api.doc.get_data bez gwarancji
+// kolejnosci odpowiedzi. Zamiast tego pasek czerpie z globalnego,
+// niezaleznego magazynu `viewsStore()` (ten sam, z ktorego korzystaja
+// AppSidebar.vue/MobileSidebar.vue dla "Public Views" i "Pinned Views") -
+// jeden wspoldzielony zasob (cache 'crm-views'), bez zadnego watchera na
+// trase, wiec stabilny niezaleznie od tego, ktory zapisany widok jest
+// aktywny. Filtrowany lokalnie do type=="list" (alias Mapa->Lista, patrz
+// utils/widokLeady.js), bez is_standard, tylko dt=="CRM Lead" (magazyn
+// jest globalny, miesza doctype'y), posortowany wlasne -> publiczne ->
+// przypiete, bez duplikatow. Klikniecie nawiguje tym samym ksztaltem push
+// co ViewControls.vue (`standardViews`/`viewsDropdownOptions` onClick),
+// zeby jego watchery na route.query.view przeladowaly liste tak samo,
+// jakby uzytkownik wybral widok z rozwijanego przelacznika.
 import ListIcon from '@/components/Icons/ListIcon.vue'
 import MapaIcon from '~icons/lucide/map'
 import { isMobileView } from '@/composables/settings'
+import { viewsStore } from '@/stores/views'
 import { FeatherIcon } from 'frappe-ui'
 import { computed, markRaw } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
-const props = defineProps({
-  views: { type: Array, default: () => [] },
-})
-
 const route = useRoute()
 const router = useRouter()
+
+const { views: wszystkieWidoki } = viewsStore()
 
 const typyWidoku = [
   { key: 'list', label: __('List'), icon: markRaw(ListIcon) },
@@ -111,8 +122,11 @@ function wybierzTyp(viewType) {
 // duplikatow (widok publiczny-i-przypiety naraz liczy sie raz, w grupie
 // publicznych).
 const zapisaneWidoki = computed(() => {
-  const listowe = (props.views || []).filter(
-    (widok) => (widok.type || 'list') === 'list' && !widok.is_standard,
+  const listowe = (wszystkieWidoki.data || []).filter(
+    (widok) =>
+      widok.dt === 'CRM Lead' &&
+      (widok.type || 'list') === 'list' &&
+      !widok.is_standard,
   )
   const wlasne = listowe.filter((widok) => !widok.pinned && !widok.public)
   const publiczne = listowe.filter(

@@ -16,7 +16,7 @@
       />
     </template>
   </LayoutHeader>
-  <WidokiLeadowPasek :views="leads.data?.views || []" />
+  <WidokiLeadowPasek />
   <ViewControls
     ref="viewControls"
     v-model="leads"
