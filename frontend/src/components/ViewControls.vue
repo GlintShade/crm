@@ -425,11 +425,27 @@ const currentView = computed(() => {
     typWidokuDoZapisu(route.params.viewType),
     props.doctype,
   )
+
+  // VOLTEO (issue #100, poprawka po scaleniu): `_view` powyżej to zawsze
+  // zapisany widok TYPU 'list' (alias) -- jego własna etykieta/ikona
+  // (np. "Lista") nie może wygrać nad "Mapa" dla widoku standardowego,
+  // inaczej przycisk bieżącego widoku pokazuje ikonę mapy, ale etykietę
+  // "Lista". Dla widoku NIESTANDARDOWEGO (własna nazwa użytkownika)
+  // etykieta/ikona zostają jego własne, tak jak dotychczas -- taki widok
+  // i tak nigdy nie ma route.params.viewType == 'mapa' w praktyce (patrz
+  // standardViews niżej, przycisk "Mapa" zawsze nawiguje bez query.view),
+  // ale to sprawdzenie jest tu jawne, nie założone. usePageMeta niżej
+  // czyta ten sam `currentView.value.label`, więc poprawka naprawia razem
+  // przycisk widoku i tytuł karty przeglądarki ("Leads - Mapa").
+  const jestMapaStandardowa =
+    route.params.viewType === 'mapa' && (!_view || _view.is_standard)
+
   return {
     name: _view?.name || getViewType().name,
-    label:
-      _view?.label || props.options?.defaultViewName || getViewType().label,
-    icon: _view?.icon || getViewType().icon,
+    label: jestMapaStandardowa
+      ? getViewType().label
+      : _view?.label || props.options?.defaultViewName || getViewType().label,
+    icon: jestMapaStandardowa ? getViewType().icon : _view?.icon || getViewType().icon,
     is_standard: !_view || _view.is_standard,
   }
 })
