@@ -4,18 +4,33 @@
   leada. LeadsListView.vue renderuje ten komponent dla kolumn z
   utils/leadyInline.js::KOLUMNY_INLINE, PRZED generyczna galazia etykiety.
 
-  Wrapper ma `@click.stop @dblclick.stop`, celowo BEZ `.prevent`: caly
-  wiersz to `<router-link>` (frappe-ui ListRow.vue) z wlasnym `onClick`
-  (nawigacja do leada) -- `.stop` wystarczy, zeby klik w ta komorke nie
-  nawigowal i nie trafial do generycznej galezi
-  `ViewControls.vue::applyFilter` (ktora zreszta w ogole nie jest juz
-  osiagalna dla tych kolumn, bo ten komponent renderuje sie wczesniej w
-  lancuchu v-else-if w LeadsListView.vue). `.prevent` jest pominiety celowo:
-  psulby domyslne zachowanie klikniecia w select/picker (fokus, otwarcie
-  kalendarza). frappe-ui `Dropdown` (status) renderuje liste opcji w
+  Wrapper ma `@click.stop.prevent @dblclick.stop` (poprawka po klik-tescie
+  wlasciciela, issue #99 follow-up): caly wiersz to `<router-link>`
+  (frappe-ui ListRow.vue), ktore renderuje sie jako prawdziwy `<a href>`.
+  Samo `.stop` NIE WYSTARCZA: stopPropagation() blokuje wylacznie to, zeby
+  zdarzenie dotarlo do WLASNEGO listenera RouterLink na tym `<a>` (ten,
+  ktory normalnie wywoluje preventDefault() i robi SPA router.push), ale
+  natywna akcja domyslna przegladarki dla klikniecia w `<a href>`
+  (pelna nawigacja) i tak sie wykonuje, bo o niej decyduje WYLACZNIE flaga
+  `event.defaultPrevented` w momencie zakonczenia dispatchu, niezaleznie od
+  tego, czy event zdazyl dotrzec do listenera na samym `<a>`. Bez `.prevent`
+  klik w komorke Kolejny kontakt / Termin spotkania powodowal wiec PELNE
+  przeladowanie strony na widok leada zamiast otwarcia pickera (potwierdzone
+  Playwright: elementFromPoint trafial poprawnie w input, ale bubble-fazowy
+  listener na document nigdy nie zobaczyl zdarzenia 'click', bo
+  stopPropagation przerwal bubblowanie wczesniej -- mimo to nawigacja i tak
+  zaszla, bo nic nie wywolalo preventDefault). `.prevent` na tym wrapperze
+  (przodku kontrolek) jest bezpieczny mimo ze kontrolki sa NIZEJ w drzewie:
+  wlasne handlery inputu/przycisku/selecta (target zdarzenia) i tak
+  odpalaja sie PRZED naszym, bo listener na targecie zawsze biegnie przed
+  listenerami na przodkach w fazie bubble -- `.prevent` na przodku tylko
+  dopisuje defaultPrevented=true PO fakcie, co i tak wystarczy, zeby
+  zablokowac natywna nawigacje `<a>`. Ten sam wzorzec `.stop.prevent` juz
+  dziala w tym pliku obok (galezie "Szczegoly" i "Komentarze" w
+  LeadsListView.vue). frappe-ui `Dropdown` (status) renderuje liste opcji w
   portalu (reka-ui) poza drzewem wiersza, wiec klik w sama opcje i tak nie
-  dociera do wrappera ponizej -- `.stop` tutaj dotyczy tylko klikniecia
-  OTWIERAJACEGO dropdown/picker/select.
+  dociera do wrappera ponizej -- `.stop.prevent` tutaj dotyczy tylko
+  klikniecia OTWIERAJACEGO dropdown/picker/select.
 
   Zapis idzie zawsze przez `frappe.client.set_value` (serwer robi
   doc.save -> validate), NIGDY optymistycznie: pickery/select sa bound do
@@ -36,7 +51,7 @@
   wartosci sprzed edycji, rownej biezacej komorce -- brak emitu).
 -->
 <template>
-  <div class="flex items-center" @click.stop @dblclick.stop>
+  <div class="flex items-center" @click.stop.prevent @dblclick.stop>
     <Dropdown
       v-if="column.key === 'status'"
       :options="opcjeStatusu"
@@ -73,6 +88,7 @@
     <DatePicker
       v-else-if="column.key === 'custom_kolejny_kontakt'"
       :value="wartosc"
+      :format="formatDaty"
       variant="outline"
       input-class="border-none text-sm text-ink-gray-8"
       :disabled="zapisywanie"
@@ -82,6 +98,7 @@
     <DateTimePicker
       v-else-if="column.key === 'custom_termin_spotkania'"
       :value="wartosc"
+      :format="formatDatyCzasu"
       variant="outline"
       input-class="border-none text-sm text-ink-gray-8"
       :disabled="zapisywanie"
@@ -104,7 +121,7 @@ import { useDocument } from '@/data/document'
 import { getMeta } from '@/stores/meta'
 import { statusesStore } from '@/stores/statuses'
 import { surowaWartoscKomorki } from '@/utils/leadyInline'
-import { isTranslatable } from '@/utils'
+import { isTranslatable, getFormat } from '@/utils'
 import {
   Button,
   DatePicker,
@@ -130,6 +147,16 @@ const meta = getMeta('CRM Lead')
 function statusLabel(status) {
   return isTranslatable('CRM Lead Status') ? __(status) : status
 }
+
+// Format jawnie liczony przez getFormat('', '', ..., ..., false) (piaty
+// argument withDate=false zwraca sam wzorzec, nie sformatowana date) --
+// dokladnie ten sam wzorzec co SidePanelLayout.vue. Bez tego DatePicker
+// pokazuje surowa wartosc bez formatowania, a DateTimePicker doklada
+// sekundy: window.sysdefaults.time_format (System Settings.time_format,
+// teraz "HH:mm") jest czytany dopiero wewnatrz getFormat, wiec pomijajac
+// ten prop traci sie kontrole nad formatem systemowym.
+const formatDaty = computed(() => getFormat('', '', true, false, false))
+const formatDatyCzasu = computed(() => getFormat('', '', true, true, false))
 
 const wartosc = computed(() => surowaWartoscKomorki(props.column, props.item))
 
