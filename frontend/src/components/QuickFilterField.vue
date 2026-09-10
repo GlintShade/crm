@@ -6,21 +6,20 @@
     type="checkbox"
     @change.stop="updateFilter(filter, $event.target.checked)"
   />
-  <FormControl
-    v-else-if="filter.fieldtype === 'Select'"
-    v-model="filter.value"
-    class="form-control cursor-pointer [&_select]:cursor-pointer"
-    type="select"
-    :options="filter.options"
-    :placeholder="filter.label"
-    @update:modelValue="updateFilter(filter, $event)"
-  />
   <Autocomplete
     v-else-if="doctype === 'CRM Deal' && filter.fieldname === 'status'"
     :value="filter.value"
     :options="opcjeEtapuFiltra"
     :placeholder="filter.label"
     @change="(o) => updateFilter(filter, o?.value ?? '')"
+  />
+  <QuickFilterCheckList
+    v-else-if="jestWielokrotny"
+    :label="filter.label"
+    :fieldtype="filter.fieldtype"
+    :options="filter.options"
+    :modelValue="parsujWartoscWielokrotna(filter.value)"
+    @update:modelValue="(wartosci) => updateFilter(filter, wartosci)"
   />
   <Link
     v-else-if="filter.fieldtype === 'Link'"
@@ -49,11 +48,14 @@
 </template>
 <script setup>
 import Link from '@/components/Controls/Link.vue'
+import QuickFilterCheckList from '@/components/Controls/QuickFilterCheckList.vue'
 import Autocomplete from '@/components/frappe-ui/Autocomplete.vue'
 import { FormControl, DatePicker, DateTimePicker, createResource } from 'frappe-ui'
 import { useDebounceFn } from '@vueuse/core'
 import { etykietaMoje } from '@/utils/etykietaMoje'
 import { opcjeEtapu } from '@/utils/etapFiltr'
+import { parsujWartoscWielokrotna } from '@/utils/filtrWielokrotny'
+import { czyWielokrotnyFiltrSzybki } from '@/utils/filtrSzybki'
 import { statusesStore } from '@/stores/statuses'
 import { computed, reactive, watch } from 'vue'
 
@@ -93,6 +95,13 @@ const opcjeEtapuFiltra = computed(() =>
     isKnownStatus,
     dealStatuses.data?.map((s) => s.name),
   ),
+)
+
+// Issue #127: Select i Link (poza User i Etapem na CRM Deal, patrz JSDoc
+// czyWielokrotnyFiltrSzybki) dostają checkboxową listę wielokrotnego
+// wyboru zamiast pojedynczego pola.
+const jestWielokrotny = computed(() =>
+  czyWielokrotnyFiltrSzybki(props.doctype, filter),
 )
 
 const emit = defineEmits(['applyQuickFilter'])
