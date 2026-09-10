@@ -5,7 +5,7 @@
     :rows="rows"
     :options="{
       getRowRoute: leadRoute,
-      selectable: options.selectable,
+      selectable: canSelectRows,
       showTooltip: options.showTooltip,
       resizeColumn: options.resizeColumn,
     }"
@@ -261,7 +261,7 @@
         </template>
       </ListRowItem>
     </ListRows>
-    <ListSelectBanner>
+    <ListSelectBanner v-if="canSelectRows">
       <template #actions="{ selections, unselectAll }">
         <Dropdown
           :options="listBulkActionsRef.bulkActions(selections, unselectAll)"
@@ -282,6 +282,7 @@
     @loadMore="emit('loadMore')"
   />
   <ListBulkActions
+    v-if="canSelectRows"
     ref="listBulkActionsRef"
     v-model="list"
     doctype="CRM Lead"
@@ -322,6 +323,7 @@ import {
   Tooltip,
 } from 'frappe-ui'
 import { sessionStore } from '@/stores/session'
+import { usersStore } from '@/stores/users'
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -413,6 +415,23 @@ function onInlineSaved(row, { fieldname, value }) {
     value,
   )
 }
+
+// Bulk actions (selection checkboxes + the select banner) są ukryte dla
+// handlowca (rola Volteo D2D Sales, decyzja właściciela 2026-09-10): rep nie
+// widzi ani checkboxów wierszy, ani paska akcji, jaki by się otworzył po ich
+// zaznaczeniu. Handlowiec to każdy, kto nie jest adminem, backoffice'em ani
+// CC -- odwrotnie niż DealsListView.vue (samo isVolteoAdmin()), tu dochodzą
+// isCallCenter() i przynależność do roli "Volteo Backend" (bez dedykowanego
+// helpera w usersStore, więc czytane wprost z surowej tablicy `roles`, tak
+// jak isCallCenter robi to dla swojej roli). Administrator, Volteo Core
+// Admin, Volteo Backend i Volteo Call Center pozostają bez zmian.
+const { isVolteoAdmin, isCallCenter, getUser } = usersStore()
+const canSelectRows = computed(
+  () =>
+    isVolteoAdmin() ||
+    isCallCenter() ||
+    getUser().roles?.includes('Volteo Backend') === true,
+)
 
 const isLikeFilterApplied = computed(() => {
   return list.value.params?.filters?._liked_by ? true : false
