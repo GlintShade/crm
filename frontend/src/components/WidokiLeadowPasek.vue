@@ -119,6 +119,12 @@ const props = defineProps({
     required: true,
     validator: (v) => ['typ', 'filtry'].includes(v),
   },
+  // Headless G6 (klik-test wlasciciela 2026-09-11): referencja do
+  // ViewControls.vue (ta sama, ktora Leads.vue trzyma w `viewControls` i
+  // v-modeluje do ViewBreadcrumbs), potrzebna WYLACZNIE w trybie "filtry"
+  // do wywolania `updateFilter({})` w `wyczyscWidok()` - patrz komentarz
+  // tam. Brak w trybie "typ" (segmentowany przelacznik nie czysci filtrow).
+  viewControls: { type: Object, default: null },
 })
 
 const route = useRoute()
@@ -212,12 +218,39 @@ function wybierzWidok(widok) {
   })
 }
 
-function wyczyscWidok() {
+// Headless G6 (klik-test wlasciciela 2026-09-11): samo usuniecie `?view`
+// z trasy NIE wystarcza. Po powrocie na widok standardowy `getParams()` w
+// ViewControls.vue czyta jego WLASNE, PERSYSTOWANE filtry - a te sa
+// auto-zapisywane (create_or_update_standard_view) przy kazdej zmianie
+// filtrow, GDY route.query.view jest puste. Jesli grupa/filtr zostaly
+// zbudowane PRZED zapisaniem nazwanego widoku, standardowy widok niesie
+// TE SAME filtry, wiec sama nawigacja wraca do przefiltrowanej listy bez
+// zadnego wskaznika w URL. Fix: po usunieciu `?view` wywolaj TA SAMA
+// sciezke czyszczenia co "x" przy przycisku "Filtr" (Filter.vue's
+// clearfilter() -> apply() -> @update -> updateFilter w ViewControls.vue,
+// wystawione przez defineExpose) - `updateFilter({})` resetuje filtry W
+// PAMIECI i, poniewaz route.query.view jest juz puste, persystuje to
+// zerowanie na widok standardowy (createOrUpdateStandardView wewnatrz
+// updateFilter). Kolejnosc jest load-bearing w DWA sposoby: (1)
+// `await router.push` musi zakonczyc sie PRZED updateFilter, inaczej
+// `route.query.view` widziane przez updateFilter/
+// createOrUpdateStandardView byloby jeszcze stare; (2) `getParams()`
+// (ekspozycja: patrz komentarz przy defineExpose w ViewControls.vue)
+// musi byc wywolana PO tym push, PRZED updateFilter - odswieza
+// `view.value` do tozsamosci WIDOKU STANDARDOWEGO (poprawna etykieta,
+// route_name...), zamiast zostawiac ja przy nazwanym widoku, ktory
+// wlasnie opuszczono. Bez tego `createOrUpdateStandardView()` wewnatrz
+// updateFilter nadpisuje etykiete standardowego widoku NA etykiete
+// opuszczonego widoku (zaobserwowane empirycznie przy pierwszej wersji
+// tego fixa: "Lista" -> "Test x" w Version log).
+async function wyczyscWidok() {
   const { view: _pomijane, ...pozostaleQuery } = route.query
-  router.push({
+  await router.push({
     name: 'Leads',
     params: { viewType: aktywnyTyp.value },
     query: pozostaleQuery,
   })
+  props.viewControls?.getParams()
+  props.viewControls?.updateFilter({})
 }
 </script>

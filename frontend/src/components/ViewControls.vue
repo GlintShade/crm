@@ -1486,6 +1486,31 @@ defineExpose({
   viewsDropdownOptions,
   currentView,
   updateSelections,
+  // Headless G6 (klik-test wlasciciela 2026-09-11): wystawione dla
+  // WidokiLeadowPasek.vue's wyczyscWidok() - "x" na chipie zapisanego
+  // widoku musi wyczyscic filtry TA SAMA sciezka co "x" przy przycisku
+  // "Filtr" (Filter.vue's clearfilter() -> apply() -> @update ->
+  // updateFilter tutaj), bo sam router.push bez ?view NIE wystarcza: gdy
+  // route.query.view jest puste, getParams() spada na widok standardowy
+  // uzytkownika, ktory create_or_update_standard_view auto-zapisuje przy
+  // KAZDEJ zmianie filtrow bez aktywnego ?view - jesli te filtry byly
+  // ustawione PRZED zapisaniem nazwanego widoku, standardowy widok niesie
+  // TE SAME filtry i "czyszczenie" samej trasy po prostu wraca do nich.
+  //
+  // `getParams` musi byc wywolana PRZED `updateFilter` po stronie
+  // wolajacego (nie jest to zrobione tutaj automatycznie) - inaczej
+  // `view.value` zostaje jeszcze przy tozsamosci WLASNIE OPUSZCZONEGO
+  // nazwanego widoku (np. etykieta "Test x"), a `updateFilter`
+  // persystuje `view.value` WPROST na widok standardowy przez
+  // `createOrUpdateStandardView()`: bez odswiezenia `view.value` ten
+  // zapis NADPISUJE etykiete standardowego widoku uzytkownika NA
+  // etykiete nazwanego widoku, z ktorego wlasnie wyszedl (zaobserwowane
+  // w Version log podczas testow tego fixa - `label: Lista -> Test x`).
+  // `getParams()` jest czysta/synchroniczna (ustawia `view.value` jako
+  // efekt uboczny, zero sieci), wiec bezpiecznie wywolac ja bez await
+  // tuz przed `updateFilter`.
+  getParams,
+  updateFilter,
 })
 
 // Watchers

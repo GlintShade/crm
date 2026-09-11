@@ -17,7 +17,7 @@
       />
     </template>
   </LayoutHeader>
-  <WidokiLeadowPasek tryb="filtry" />
+  <WidokiLeadowPasek tryb="filtry" :viewControls="viewControls" />
   <ViewControls
     ref="viewControls"
     v-model="leads"
