@@ -3,9 +3,9 @@
     <template #default>
       <div class="-mt-3 mb-4 text-p-base text-ink-gray-7">
         {{
-          __('Please provide a reason for marking this {0} as lost', [
-            doctype.toLowerCase().replace('crm ', ''),
-          ])
+          jestLeadem
+            ? __('Please provide a reason for marking this lead as lost')
+            : __('Please provide a reason for marking this deal as lost')
         }}
       </div>
       <div class="flex flex-col gap-3">

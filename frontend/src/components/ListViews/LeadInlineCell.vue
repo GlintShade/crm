@@ -181,7 +181,7 @@ async function zapiszWartosc(fieldname, wartoscDoZapisu) {
     emit('saved', { fieldname, value: wartoscDoZapisu ?? '' })
     toast.success(__('Zapisano'))
   } catch (err) {
-    toast.error(err.messages?.[0] || __('Nie udalo sie zapisac'))
+    toast.error(err.messages?.[0] || __('Nie udało się zapisać'))
   } finally {
     zapisywanie.value = false
   }

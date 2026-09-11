@@ -2480,11 +2480,11 @@ msgstr "Puste"
 
 #: frontend/src/components/Filter.vue:126
 msgid "Empty - Choose a field to filter by"
-msgstr "Puste – wybierz pole do filtrowania"
+msgstr "Puste: wybierz pole do filtrowania"
 
 #: frontend/src/components/SortBy.vue:130
 msgid "Empty - Choose a field to sort by"
-msgstr "Puste – wybierz pole do sortowania"
+msgstr "Puste: wybierz pole do sortowania"
 
 #: crm/fcrm/doctype/crm_form_script/crm_form_script.js:30 frontend/src/components/Settings/ERPNextSettings.vue:287 frontend/src/components/Settings/Hierarchy/Hierarchy.vue:72 frontend/src/components/Settings/Telephony/ExotelSettings.vue:117 frontend/src/components/Settings/Telephony/TwilioSettings.vue:124
 msgid "Enable"
@@ -4509,7 +4509,7 @@ msgstr "Żaden użytkownik nie pasuje do bieżącego filtra."
 
 #: frontend/src/components/ListViews/EmptyState.vue:37 frontend/src/pages/MobileOrganization.vue:145
 msgid "No {0} Found"
-msgstr "{0} — brak wyników"
+msgstr "{0}: brak wyników"
 
 #: frontend/src/components/PrimaryDropdown.vue:33
 msgid "No {0} available"
@@ -4517,7 +4517,7 @@ msgstr "Brak dostępnych {0}"
 
 #: frontend/src/pages/MobileContact.vue:153
 msgid "No {0} found"
-msgstr "{0} — brak wyników"
+msgstr "{0}: brak wyników"
 
 #: frontend/src/components/Controls/Grid.vue:27
 msgid "No."
@@ -8954,3 +8954,51 @@ msgstr "Zaproszenie zostało już przyjęte"
 # nowy string: data wyslania zaproszenia w nawiasie przy wierszu listy - InviteUserPage.vue (b58, zaproszenia resend)
 msgid "sent {0}"
 msgstr "wysłano {0}"
+
+
+# Volteo b58: leady dla CC
+# audyt tlumaczen b58: QuickFilterCheckList.vue / LinkMultiSelect.vue - lista
+# rozwijana z wyszukiwaniem uzywana m.in. przy filtrach CC (brak wynikow)
+msgid "No results"
+msgstr "Brak wyników"
+
+# Volteo b58: leady dla CC
+# audyt tlumaczen b58: Filter.vue / LinkMultiSelect.vue - placeholder pola
+# wielokrotnego wyboru (np. operator "In"/"Not in" w filtrze leadow)
+msgid "Select options"
+msgstr "Wybierz opcje"
+
+# Volteo b58: leady dla CC
+# audyt tlumaczen b58: InviteUserPage.vue - etykieta roli Volteo Call Center
+# przy zapraszaniu nowego uzytkownika (rownolegle do "D2D Sales Rep" i
+# "Backoffice"); celowo "Call center" literalem, nie "dzwoniacy"
+# (terminologia-cc-nie-dzwoniacy)
+msgid "Call Center"
+msgstr "Call center"
+
+# Volteo b58: leady dla CC
+# audyt tlumaczen b58: ListBulkActions.vue - potwierdzenie czyszczenia
+# masowego przypisania (dialog przy zaznaczonych leadach/szansach)
+msgid "Are you sure you want to clear assignment for {0} item(s)?"
+msgstr "Czy na pewno chcesz wyczyścić przypisanie dla {0} elementów?"
+
+# Volteo b58: leady dla CC
+# audyt tlumaczen b58: ViewControls.vue - potwierdzenie usuniecia zapisanego
+# widoku (dotyczy tez paska widokow leadow, WidokiLeadowPasek.vue)
+msgid "Are you sure you want to delete \"{0}\" view?"
+msgstr "Czy na pewno chcesz usunąć widok \"{0}\"?"
+
+# Volteo b58: leady dla CC
+# audyt tlumaczen b58: LostReasonModal.vue - dla leada osobny wariant zdania
+# (rodzaj meski "leada"), bo doctype nie moze byc wstawiany surowym
+# angielskim slowem do polskiego zdania (patrz tez wariant dla szansy:
+# msgid "Please provide a reason for marking this deal as lost")
+msgid "Please provide a reason for marking this lead as lost"
+msgstr "Podaj powód oznaczenia tego leada jako straconego"
+
+# Volteo b58: leady dla CC
+# audyt tlumaczen b58: TasksSection.vue - panel boczny strony leada
+# (widoczne na zrzucie I18N-e, poza scisla lista plikow b58, ale bezposrednio
+# widoczny angielski napis w wymaganym zrzucie ekranu)
+msgid "No Tasks"
+msgstr "Brak zadań"
