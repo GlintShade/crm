@@ -47,7 +47,7 @@
             <Checkbox
               :modelValue="jestZaznaczona(opcja.value)"
               :label="opcja.label"
-              @update:modelValue="przelacz(opcja.value)"
+              @update:modelValue="(zaznaczona) => przelacz(opcja.value, zaznaczona)"
             />
           </div>
           <div
@@ -114,7 +114,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { scalOpcjeZZaznaczonymi } from '@/utils/filtrWielokrotny'
 import {
   etykietaChipaFiltraSzybkiego,
-  przelaczWartoscWielokrotna,
+  ustawWartoscWielokrotna,
 } from '@/utils/filtrSzybki'
 
 const props = defineProps({
@@ -169,8 +169,15 @@ function jestZaznaczona(wartosc) {
   return wybrane.value.includes(wartosc)
 }
 
-function przelacz(wartosc) {
-  lokalneWybrane.value = przelaczWartoscWielokrotna(lokalneWybrane.value, wartosc)
+// Bierze zaznaczona wprost ze zdarzenia checkboxa (nie przelacza wzgledem
+// wlasnego stanu) -- patrz komentarz przy ustawWartoscWielokrotna w
+// utils/filtrSzybki.js: frappe-ui's Checkbox.vue emituje update:modelValue
+// DWA RAZY na jedno klikniecie (blad biblioteki, poza zakresem tej
+// poprawki), a przelaczanie zamiast ustawiania kasowalo wlasny efekt przy
+// drugiej, zbednej emisji tego samego klikniecia -- checkbox wygladal na
+// zaznaczony (natywny stan DOM), ale do filtra nic nie trafialo.
+function przelacz(wartosc, zaznaczona) {
+  lokalneWybrane.value = ustawWartoscWielokrotna(lokalneWybrane.value, wartosc, zaznaczona)
   clearTimeout(debounceTimerWybor)
   debounceTimerWybor = setTimeout(wyslijTeraz, CZAS_DEBOUNCE_MS)
 }

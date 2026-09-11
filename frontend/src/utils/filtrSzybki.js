@@ -94,10 +94,47 @@ export function czyWielokrotnyFiltrSzybki(doctype, filter) {
 /**
  * Przełącza pojedynczą wartość w tablicy zaznaczonych (dodaje, gdy jej nie
  * ma, usuwa, gdy jest), immutable, zwraca nową tablicę.
+ *
+ * UWAGA: to funkcja przełączająca (toggle), nie ustawiająca (set) -- wołana
+ * dwa razy z tym samym argumentem daje inny wynik niż raz (dodaje, potem
+ * usuwa). Bezpieczna tylko tam, gdzie wywołanie odpowiada dokładnie jednemu
+ * kliknięciu użytkownika. Do obsługi zdarzenia checkboxa (który niesie
+ * własny stan zaznaczenia) użyj ustawWartoscWielokrotna poniżej -- patrz
+ * jej komentarz po co.
  */
 export function przelaczWartoscWielokrotna(wybrane, wartosc) {
   const lista = parsujWartoscWielokrotna(wybrane)
   return lista.includes(wartosc)
     ? lista.filter((w) => w !== wartosc)
     : [...lista, wartosc]
+}
+
+/**
+ * Ustawia przynależność pojedynczej wartości w tablicy zaznaczonych wprost
+ * (dodaje, gdy zaznaczona=true i jej jeszcze nie ma; usuwa, gdy
+ * zaznaczona=false i jest), immutable, zwraca nową tablicę.
+ *
+ * W przeciwieństwie do przelaczWartoscWielokrotna, ta funkcja jest
+ * idempotentna: wywołana dwa razy z tymi samymi argumentami daje ten sam
+ * wynik co raz. To naprawia regresję z QuickFilterCheckList.vue (issue
+ * #127 follow-up, 2026-09-11): frappe-ui's Checkbox.vue (onChange) emituje
+ * update:modelValue DWA RAZY na jedno kliknięcie (raz przez efekt uboczny
+ * defineModel przy `model.value = next`, raz jawnym `emit(...)` zaraz po --
+ * pre-existing błąd biblioteki, poza zakresem tej poprawki). Gdy handler
+ * odbierający zdarzenie ignorował przekazaną wartość i tylko przełączał
+ * (poprzednie `@update:modelValue="przelacz(opcja.value)"`), podwójna
+ * emisja dodawała wartość i natychmiast ją usuwała w tym samym kliknięciu
+ * -- checkbox wizualnie się zaznaczał (natywny stan DOM, którego Vue nie
+ * nadpisywało, bo z jego punktu widzenia `:checked` się nie zmieniło), ale
+ * filtr nigdy nie trafiał do żądania. Ustawianie zamiast przełączania
+ * usuwa ten problem u źródła: dwie identyczne emisje dają dwukrotnie ten
+ * sam, poprawny wynik.
+ */
+export function ustawWartoscWielokrotna(wybrane, wartosc, zaznaczona) {
+  const lista = parsujWartoscWielokrotna(wybrane)
+  const jestJuz = lista.includes(wartosc)
+  if (zaznaczona) {
+    return jestJuz ? lista : [...lista, wartosc]
+  }
+  return jestJuz ? lista.filter((w) => w !== wartosc) : lista
 }

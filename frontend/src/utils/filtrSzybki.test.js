@@ -4,6 +4,7 @@ import {
   przelaczWartoscWielokrotna,
   rozpakujWartoscFiltraSzybkiego,
   spakujWartoscFiltraSzybkiego,
+  ustawWartoscWielokrotna,
 } from './filtrSzybki'
 
 describe('rozpakujWartoscFiltraSzybkiego', () => {
@@ -180,6 +181,57 @@ describe('przelaczWartoscWielokrotna', () => {
   it('nie mutuje wejściowej tablicy (immutability)', () => {
     const wejscie = ['Nowy']
     const wynik = przelaczWartoscWielokrotna(wejscie, 'Odłożony')
+    expect(wejscie).toEqual(['Nowy'])
+    expect(wynik).not.toBe(wejscie)
+  })
+})
+
+// Regresja 2026-09-11 (issue #127 follow-up): frappe-ui's Checkbox.vue
+// emituje update:modelValue dwa razy na jedno kliknięcie z tym samym
+// argumentem. ustawWartoscWielokrotna (w przeciwieństwie do
+// przelaczWartoscWielokrotna) musi być idempotentna wobec tego -- ta sama
+// para (wartość, zaznaczona) wywołana dwukrotnie musi dać ten sam wynik co
+// raz, patrz komentarz przy funkcji w filtrSzybki.js.
+describe('ustawWartoscWielokrotna', () => {
+  it('zaznaczona=true, wartości nie ma -> dodana na końcu', () => {
+    expect(ustawWartoscWielokrotna(['Nowy'], 'Odłożony', true)).toEqual([
+      'Nowy',
+      'Odłożony',
+    ])
+  })
+
+  it('zaznaczona=false, wartość jest -> usunięta', () => {
+    expect(
+      ustawWartoscWielokrotna(['Nowy', 'Odłożony'], 'Nowy', false),
+    ).toEqual(['Odłożony'])
+  })
+
+  it('idempotentność: dwa wywołania zaznaczona=true z tą samą wartością dają ten sam wynik co jedno', () => {
+    let wynik = ustawWartoscWielokrotna([], 'Nowy', true)
+    wynik = ustawWartoscWielokrotna(wynik, 'Nowy', true)
+    expect(wynik).toEqual(['Nowy'])
+  })
+
+  it('idempotentność: dwa wywołania zaznaczona=false z tą samą wartością dają ten sam wynik co jedno', () => {
+    let wynik = ustawWartoscWielokrotna(['Nowy'], 'Nowy', false)
+    wynik = ustawWartoscWielokrotna(wynik, 'Nowy', false)
+    expect(wynik).toEqual([])
+  })
+
+  it('pusta lista wejściowa -> tablica jednoelementowa (zaznaczona=true)', () => {
+    expect(ustawWartoscWielokrotna([], 'Nowy', true)).toEqual(['Nowy'])
+    expect(ustawWartoscWielokrotna(null, 'Nowy', true)).toEqual(['Nowy'])
+  })
+
+  it('zaznaczona=false, wartości nie ma -> lista bez zmian', () => {
+    expect(ustawWartoscWielokrotna(['Odłożony'], 'Nowy', false)).toEqual([
+      'Odłożony',
+    ])
+  })
+
+  it('nie mutuje wejściowej tablicy (immutability)', () => {
+    const wejscie = ['Nowy']
+    const wynik = ustawWartoscWielokrotna(wejscie, 'Odłożony', true)
     expect(wejscie).toEqual(['Nowy'])
     expect(wynik).not.toBe(wejscie)
   })
