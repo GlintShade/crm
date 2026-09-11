@@ -439,24 +439,76 @@ def get_lead_activities(name: str):
 		"first_responded_on",
 		# 2026-09-10: `custom_cc` (permlevel 2, Link -> User) carries the CC's
 		# raw email/name in a Version diff whenever it is changed through a
-		# full doc.save() (not through przydziel_cc/przekaz_handlowcowi, which
-		# write via db.set_value and never create a Version -- see
-		# crm.api.volteo_leady module docstring). Without this exclusion a
-		# plain "field changed" line would leak exactly the identity that the
-		# masking below (maskuj_autora_cc / tekst_widoczny_dla) exists to hide
-		# from a handlowiec (owner decision 2026-09-10).
+		# full doc.save() (not through przydziel_cc, which writes via
+		# `frappe.db.set_value` and never creates a Version). Without this
+		# exclusion a plain "field changed" line would leak exactly the
+		# identity that the masking below (maskuj_autora_cc / tekst_widoczny_dla)
+		# exists to hide from a handlowiec (owner decision 2026-09-10).
 		"custom_cc",
 	]
 
+	# 2026-09-10 (owner decision, extended same day after a klik-test caught a
+	# gap): a handlowiec (Volteo D2D Sales, without any admin/backoffice/CC
+	# role) must never see WHICH person handled a lead as CC -- not in the
+	# trace text (tekst_widoczny_dla below already covered that, ops#93), not
+	# in the AUTHOR of a comment/info_logs entry (first fix, same day), and
+	# not in a plain Version-diff line either: `przekaz_handlowcowi`
+	# (crm.api.volteo_leady) writes `lead_owner` through `doc.save()`, which
+	# DOES create a Version owned by the CC who called it (unlike
+	# `przydziel_cc`'s `db.set_value`, which never creates one) -- a klik-test
+	# on 2026-09-10 found the line "Oskar Testowy dodany Przypisany handlowiec
+	# as Handlowiec Testowy" still naming the CC. roles_uzytkownika/
+	# czy_widoczny_bez_maskowania_cc/maskuj_tozsamosc_cc/autorzy_cc are
+	# therefore computed once, up front -- before ANY activity is built, not
+	# just before the comments loop as in the first pass of this fix -- and
+	# reused by the creation entry, the Version loop, the comments loop, and
+	# the info_logs loop below. autorzy_cc scans version/comment/info_logs
+	# owners together so a CC who only ever appears as a Version owner (never
+	# posted a comment) is still caught.
+	roles_uzytkownika = frappe.get_roles()
+	# frappe.get_roles("Administrator") returns EVERY role defined on the site
+	# (Frappe's own behaviour for the superuser account), including "Volteo D2D
+	# Sales" even though no such Has Role row exists -- tekst_widoczny_dla would
+	# otherwise mask the CC's identity from the Administrator too, which is
+	# backwards (Administrator/BYPASS_ROLES must see the full trail, same as
+	# every other admin-only view in this codebase). Resolved the same way
+	# org_hierarchy.py resolves it everywhere else: explicit Administrator/
+	# BYPASS_ROLES check wins over whatever frappe.get_roles() happens to report.
+	czy_widoczny_bez_maskowania_cc = frappe.session.user == "Administrator" or bool(
+		set(roles_uzytkownika) & BYPASS_ROLES
+	)
+	# maskuj_tozsamosc_cc mirrors tekst_widoczny_dla's own criterion (ROLA_D2D
+	# present) rather than inventing a second policy -- same feature, same
+	# file, one rule. Reuses czy_widoczny_bez_maskowania_cc rather than
+	# testing ROLA_D2D alone, for the Administrator superuser quirk above.
+	# Volteo Call Center itself is deliberately NOT masked from its own
+	# colleagues (a CC user has no D2D role), matching "Volteo Core
+	# Admin/Backend/Call Center see the real person, jak dziś".
+	maskuj_tozsamosc_cc = (not czy_widoczny_bez_maskowania_cc) and ROLA_D2D in set(roles_uzytkownika)
+	autorzy_role_cache: dict[str, bool] = {}
+	autorzy_cc = {
+		autor
+		for autor in (
+			{v.owner for v in docinfo.versions}
+			| {c.owner for c in docinfo.comments}
+			| {i.owner for i in docinfo.info_logs}
+		)
+		if autor and czy_autor_ma_role_cc(autor, autorzy_role_cache)
+	}
+
 	doc = frappe.db.get_values("CRM Lead", name, ["creation", "owner"])[0]
 	activities = [
-		{
-			"activity_type": "creation",
-			"creation": doc[0],
-			"owner": doc[1],
-			"data": _("created this lead"),
-			"is_lead": True,
-		}
+		maskuj_autora_cc(
+			{
+				"activity_type": "creation",
+				"creation": doc[0],
+				"owner": doc[1],
+				"data": _("created this lead"),
+				"is_lead": True,
+			},
+			autorzy_cc,
+			maskuj_tozsamosc_cc,
+		)
 	]
 
 	docinfo.versions.reverse()
@@ -512,51 +564,13 @@ def get_lead_activities(name: str):
 			"is_lead": True,
 			"options": field_option,
 		}
-		activities.append(activity)
-
-	# 2026-09-10 (owner decision): a handlowiec (Volteo D2D Sales, without any
-	# admin/backoffice/CC role) must never see WHICH person handled a lead as
-	# CC -- not in the trace text (tekst_widoczny_dla below already covered
-	# that, ops#93) and not in the AUTHOR of any activity/comment entry
-	# (owner/avatar), which is the gap this fix closes: the frontend resolves
-	# `activity.owner` to a real name/photo client-side (usersStore.getUser),
-	# so leaving the real CC email in `owner` leaks identity even when the
-	# text itself is masked. roles_uzytkownika/czy_widoczny_bez_maskowania_cc
-	# are computed once, up front, and reused by both the comments loop and
-	# the info_logs loop below.
-	roles_uzytkownika = frappe.get_roles()
-	# frappe.get_roles("Administrator") returns EVERY role defined on the site
-	# (Frappe's own behaviour for the superuser account), including "Volteo D2D
-	# Sales" even though no such Has Role row exists -- tekst_widoczny_dla would
-	# otherwise mask the CC's identity from the Administrator too, which is
-	# backwards (Administrator/BYPASS_ROLES must see the full trail, same as
-	# every other admin-only view in this codebase). Resolved the same way
-	# org_hierarchy.py resolves it everywhere else: explicit Administrator/
-	# BYPASS_ROLES check wins over whatever frappe.get_roles() happens to report.
-	czy_widoczny_bez_maskowania_cc = frappe.session.user == "Administrator" or bool(
-		set(roles_uzytkownika) & BYPASS_ROLES
-	)
-	# maskuj_tozsamosc_cc mirrors tekst_widoczny_dla's own criterion (ROLA_D2D
-	# present) rather than inventing a second policy -- same feature, same
-	# file, one rule. Reuses czy_widoczny_bez_maskowania_cc (computed above)
-	# rather than testing ROLA_D2D alone: frappe.get_roles("Administrator")
-	# returns EVERY role on the site (the same superuser quirk documented
-	# above), so without this guard Administrator would incorrectly get
-	# maskuj_tozsamosc_cc=True and would see "Call center" instead of the
-	# real CC on every comment (caught live by a headless probe on
-	# 2026-09-10 before this guard was added -- Administrator's OWN comment
-	# entries were fine since they never match autorzy_cc, but a comment
-	# actually authored by CC was masked even for Administrator). Volteo Call
-	# Center itself is deliberately NOT masked from its own colleagues (a CC
-	# user has no D2D role), matching "Volteo Core Admin/Backend/Call Center
-	# see the real person, jak dziś".
-	maskuj_tozsamosc_cc = (not czy_widoczny_bez_maskowania_cc) and ROLA_D2D in set(roles_uzytkownika)
-	autorzy_role_cache: dict[str, bool] = {}
-	autorzy_cc = {
-		autor
-		for autor in {c.owner for c in docinfo.comments} | {i.owner for i in docinfo.info_logs}
-		if autor and czy_autor_ma_role_cc(autor, autorzy_role_cache)
-	}
+		# maskuj_autora_cc only touches identity fields (owner/comment_by/...),
+		# never `data`, so the field-diff values themselves (e.g. the
+		# handlowiec's name in a lead_owner "added" line) are untouched --
+		# only WHO made the change is masked, matching the creation entry and
+		# the comments/info_logs loops below (autorzy_cc/maskuj_tozsamosc_cc
+		# computed once, up front, see the block above avoid_fields).
+		activities.append(maskuj_autora_cc(activity, autorzy_cc, maskuj_tozsamosc_cc))
 
 	for comment in docinfo.comments:
 		activity = {

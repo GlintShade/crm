@@ -416,6 +416,36 @@ class TestMaskujAutoraCC(unittest.TestCase):
 		self.assertEqual(wynik["comment_email"], AUTOR_ZASTEPCZY_CC)
 		self.assertEqual(wynik["comment_by"], AUTOR_ZASTEPCZY_CC)
 
+	def test_g_wpis_wersji_lead_owner_maskuje_ownera_nie_dane(self: "TestMaskujAutoraCC") -> None:
+		"""Fix 2026-09-10 (druga runda, po klik-teście): przekaz_handlowcowi
+		zapisuje lead_owner przez doc.save(), co tworzy Version z ownerem = CC
+		-- kształt dokładnie taki, jaki get_lead_activities buduje z pętli po
+		docinfo.versions. Musi zamaskować `owner`, ale NIE wolno ruszyć
+		`data` (tam jest nazwisko HANDLOWCA, nie CC)."""
+		wpis = {
+			"activity_type": "added",
+			"owner": "cc.test@proenergy.pro",
+			"data": {
+				"field": "lead_owner",
+				"field_label": "Przypisany handlowiec",
+				"value": "handlowiec.test@proenergy.pro",
+			},
+			"is_lead": True,
+			"options": "User",
+		}
+		wynik = maskuj_autora_cc(wpis, autorzy_cc={"cc.test@proenergy.pro"}, maskuj=True)
+		self.assertEqual(wynik["owner"], AUTOR_ZASTEPCZY_CC)
+		self.assertEqual(wynik["data"], wpis["data"])
+		self.assertNotIn("cc.test@proenergy.pro", str(wynik))
+
+	def test_h_wpis_utworzenia_leada_przez_cc_maskuje_ownera(self: "TestMaskujAutoraCC") -> None:
+		"""Wpis "created this lead" przechodzi przez tę samą funkcję co Version/
+		comment/info_logs -- gdyby lead kiedyś powstał z konta CC, handlowiec
+		nie ma zobaczyć kto go utworzył."""
+		wpis = {"activity_type": "creation", "owner": "cc.test@proenergy.pro", "data": "created this lead", "is_lead": True}
+		wynik = maskuj_autora_cc(wpis, autorzy_cc={"cc.test@proenergy.pro"}, maskuj=True)
+		self.assertEqual(wynik["owner"], AUTOR_ZASTEPCZY_CC)
+
 
 class TestRozniceplikowAudytu(unittest.TestCase):
 	SLOTY: ClassVar[dict[str, str]] = {
