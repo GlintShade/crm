@@ -240,7 +240,7 @@ class TestKontaktBlok(unittest.TestCase):
 		self.assertEqual(kontekst["nr_domu"], "5")
 		self.assertEqual(kontekst["nr_lokalu"], "12")
 
-	def test_b_brakujace_pola_kontaktu_dajapuste_stringi(self: "TestKontaktBlok") -> None:
+	def test_b_brakujace_pola_kontaktu_daja_puste_stringi(self: "TestKontaktBlok") -> None:
 		kontakt = _kontakt(custom_pesel=None, mobile_no=None, email=None)
 		kontekst = zbuduj_kontekst_kredytu(_kredyt(), kontakt, _DZIS)
 		self.assertEqual(kontekst["pesel"], "")

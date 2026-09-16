@@ -1234,6 +1234,165 @@ describe('Kredyt form logic', () => {
       })
     })
   })
+
+  describe('invariant (ops#149): wymagane => widoczne dla pełnej matrycy stanów', () => {
+    // Pełna kombinatoryka: 2^6 stanów przełączników sześciu grup dochodu x
+    // dwie niepuste wartości praca_okres x trzy warianty
+    // dzialalnosc_forma_opodatkowania x cztery kombinacje Tak/Nie dwóch pól
+    // "taki sam" adresu. Sprawdzane są wyłącznie te pola formularza, które
+    // są dyskryminatorami w WARUNKI_WIDOCZNOSCI/brakujacePola (praca_okres,
+    // dzialalnosc_forma_opodatkowania, adres_*_taki_sam) i sześć
+    // przełączników grup: pozostałe pola każdej grupy zostają puste, bo
+    // ich konkretna wartość nie wpływa ani na wymagalność (brakujacePola),
+    // ani na widoczność (poleWidoczne): obie funkcje patrzą tylko na
+    // dyskryminatory, nigdy na treść samych pól danych.
+    //
+    // Stan pustego praca_okres jest CELOWO pominięty w tej matrycy: to jest
+    // dokładnie ten sam przejściowy stan, który opisuje i pokrywa test
+    // "ops#147 regression: praca_okres_od transient state" wyżej w tym
+    // pliku: backend wymaga praca_okres_od nawet przy pustym Selekcie
+    // (patrz polaGrupyWymagane w kredytForm.js), a czysta reguła
+    // WARUNKI_WIDOCZNOSCI wtedy go chowa; jedyny sposób, w jaki aplikacja
+    // faktycznie się z tego wychodzi, to siatka bezpieczeństwa
+    // brakujacePola -> widocznePola (trzeci argument, nigdy `[]`).
+    // Dublowanie tego już udokumentowanego, jawnego wyjątku w matrycy
+    // poniżej tylko przesłoniłoby, że to jest DOKŁADNIE ten sam przypadek,
+    // nie nowy.
+    const PRZELACZNIKI_GRUP = GRUPY.map((g) => g.wlaczone)
+    const PRACA_OKRES_WARTOSCI = ['Czas określony', 'Czas nieokreślony']
+    const DZIALALNOSC_FORMA_WARTOSCI = ['', 'inne', 'ryczałt']
+    const ADRES_TAKI_SAM_WARTOSCI = ['Tak', 'Nie']
+
+    function kombinacjeBool(n) {
+      if (n === 0) return [[]]
+      const reszta = kombinacjeBool(n - 1)
+      return reszta.flatMap((r) => [
+        [...r, false],
+        [...r, true],
+      ])
+    }
+
+    const wszystkiePola = [...BASE_FIELDS, ...GRUPY.flatMap((g) => g.fields)].map((fn) => ({
+      fieldname: fn,
+    }))
+
+    const przelacznikiCombos = kombinacjeBool(PRZELACZNIKI_GRUP.length)
+
+    it('brakujacePola(form) jest podzbiorem fieldnames z widocznePola(wszystkiePola, form, []) dla każdej kombinacji', () => {
+      let sprawdzonych = 0
+      przelacznikiCombos.forEach((wartosciPrzelacznikow) => {
+        PRACA_OKRES_WARTOSCI.forEach((pracaOkres) => {
+          DZIALALNOSC_FORMA_WARTOSCI.forEach((dzialalnoscForma) => {
+            ADRES_TAKI_SAM_WARTOSCI.forEach((zameldowanieTakiSam) => {
+              ADRES_TAKI_SAM_WARTOSCI.forEach((korespondencjaTakiSam) => {
+                const form = defaultForm()
+                PRZELACZNIKI_GRUP.forEach((klucz, i) => {
+                  form[klucz] = wartosciPrzelacznikow[i]
+                })
+                form.praca_okres = pracaOkres
+                form.dzialalnosc_forma_opodatkowania = dzialalnoscForma
+                form.adres_zameldowania_taki_sam = zameldowanieTakiSam
+                form.adres_korespondencji_taki_sam = korespondencjaTakiSam
+
+                const braki = brakujacePola(form)
+                const widoczneNazwy = widocznePola(wszystkiePola, form, []).map(
+                  (f) => f.fieldname,
+                )
+                braki.forEach((pole) => {
+                  expect(widoczneNazwy).toContain(pole)
+                })
+                sprawdzonych += 1
+              })
+            })
+          })
+        })
+      })
+
+      // Bezpiecznik: gdyby generator kombinacji kiedyś przypadkiem zwrócił
+      // pustą listę (np. literówka w PRZELACZNIKI_GRUP albo w jednej z
+      // wartości powyżej), wszystkie `expect` w pętli wyżej przeszłyby
+      // bezobjawowo (zero iteracji = zero asercji): ten test dopilnowuje,
+      // że faktycznie sprawdzono każdą z zadeklarowanych kombinacji.
+      expect(sprawdzonych).toBe(przelacznikiCombos.length * 2 * 3 * 2 * 2)
+    })
+  })
+
+  describe('allowlist (ops#149): buildDane(defaultForm()) mirrors crm/api/kredyt.py::_DANE_POLA_DOZWOLONE', () => {
+    // Retyped literal mirror of crm/api/kredyt.py's `_DANE_POLA_DOZWOLONE`
+    // (54 names), the exact same deliberate duplication pattern as
+    // ETYKIETY_KANON_DOCTYPE below (no runtime bridge between the Python
+    // and JS suites, so both sides independently retype the canon and a
+    // divergence in either fails its own side). buildDane() is what
+    // actually leaves the browser as the save payload, so this is the test
+    // that would catch a field silently added to GRUPY/BASE_FIELDS without
+    // a matching addition to the server allowlist (or vice versa).
+    const DANE_POLA_DOZWOLONE_KANON = [
+      'miejsce_urodzenia',
+      'rodzaj_dokumentu',
+      'seria_numer_dokumentu',
+      'data_wydania_dokumentu',
+      'data_waznosci_dokumentu',
+      'adres_zameldowania_taki_sam',
+      'adres_zameldowania',
+      'adres_korespondencji_taki_sam',
+      'adres_korespondencji',
+      'wyksztalcenie',
+      'stan_cywilny',
+      'liczba_osob_na_utrzymaniu',
+      'kwota_800_plus',
+      'dochod_wspolmalzonka',
+      'zrodlo_dochodu_malzonka',
+      'oplaty_miesieczne',
+      'suma_zobowiazan',
+      'numer_rachunku',
+      'praca_wlaczone',
+      'praca_forma',
+      'praca_data_zatrudnienia',
+      'praca_okres',
+      'praca_okres_od',
+      'praca_okres_do',
+      'praca_nip',
+      'praca_nazwa_zakladu',
+      'praca_adres_telefon',
+      'praca_kwota_dochodu',
+      'emerytura_wlaczone',
+      'emerytura_numer_swiadczenia',
+      'emerytura_od_kiedy',
+      'emerytura_kwota_dochodu',
+      'renta_wlaczone',
+      'renta_numer_swiadczenia',
+      'renta_od_kiedy',
+      'renta_kwota_dochodu',
+      'dzialalnosc_wlaczone',
+      'dzialalnosc_forma_opodatkowania',
+      'dzialalnosc_forma_inna',
+      'dzialalnosc_nip',
+      'dzialalnosc_nazwa',
+      'dzialalnosc_adres',
+      'dzialalnosc_telefon',
+      'dzialalnosc_od_kiedy',
+      'dzialalnosc_kwota_dochodu',
+      'gospodarstwo_wlaczone',
+      'gospodarstwo_nip',
+      'gospodarstwo_od_kiedy',
+      'gospodarstwo_kwota_dochodu',
+      'inne_wlaczone',
+      'inne_1_typ',
+      'inne_1_kwota',
+      'inne_2_typ',
+      'inne_2_kwota',
+    ]
+
+    it('kanon ma dokładnie 54 unikalne nazwy pól', () => {
+      expect(DANE_POLA_DOZWOLONE_KANON.length).toBe(54)
+      expect(new Set(DANE_POLA_DOZWOLONE_KANON).size).toBe(54)
+    })
+
+    it('Object.keys(buildDane(defaultForm())) jest zbiorem równym kanonowi', () => {
+      const klucze = Object.keys(buildDane(defaultForm())).sort()
+      expect(klucze).toEqual([...DANE_POLA_DOZWOLONE_KANON].sort())
+    })
+  })
 })
 
 // Mirror of ops/crm-kredyt.py's `KREDYT_FIELDS` labels (the doctype canon,

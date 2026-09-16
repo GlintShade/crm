@@ -17,7 +17,29 @@ from datetime import date
 from typing import Any
 
 from crm.volteo_kredyt_mapa import LICZBA_STRON_KREDYT, MAPA_KREDYT
-from crm.volteo_kredyt_pdf import zbuduj_kontekst_kredytu
+from crm.volteo_kredyt_pdf import (
+	ADRES_NIE,
+	ADRES_TAK,
+	FORMA_INNE,
+	FORMA_KPIR,
+	FORMA_RYCZALT,
+	FORMA_UMOWA_DZIELO,
+	FORMA_UMOWA_O_PRACE,
+	FORMA_UMOWA_ZLECENIE,
+	OKRES_CZAS_NIEOKRESLONY,
+	OKRES_CZAS_OKRESLONY,
+	STAN_KAWALER_PANNA,
+	STAN_MALZENSTWO_ROZDZIELNOSC,
+	STAN_MALZENSTWO_WSPOLNOTA,
+	STAN_ROZWIEDZIONY,
+	STAN_SEPARACJA,
+	STAN_WDOWIEC_WDOWA,
+	WYKSZTALCENIE_PODSTAWOWE,
+	WYKSZTALCENIE_SREDNIE,
+	WYKSZTALCENIE_WYZSZE,
+	WYKSZTALCENIE_ZAWODOWE,
+	zbuduj_kontekst_kredytu,
+)
 from crm.volteo_umowa_mapa import SZEROKOSC_STRONY_PT, WYSOKOSC_STRONY_PT, Pole
 
 # ---------------------------------------------------------------------------
@@ -63,14 +85,35 @@ def _kredyt_wszystko_wlaczone(**nadpisania: Any) -> dict[str, Any]:
 	też wyszły niepuste) — żadna wartość kontekstu nie wypadnie pusta z powodu
 	reguły "brak danych = pustka", więc test kluczy-bez-pozycji nie pomyli
 	"brak pozycji w mapie" z "wartość akurat pusta w tym fixture".
+
+	Pola tu wypełnione muszą być OBECNYMI polami `Volteo Kredyt` (patrz
+	`ops/crm-kredyt.py::KREDYT_FIELDS`), nie wycofanymi 2026-08-15
+	(`ops/crm-kredyt.py::POLA_DO_USUNIECIA`: `rodzaj_seria_numer_dokumentu`,
+	`dzialalnosc_adres_telefon`): te dwa stare pola nie istnieją w
+	`zbuduj_kontekst_kredytu()`, więc gdyby fixture je niosła zamiast
+	`rodzaj_dokumentu`+`seria_numer_dokumentu`/`dzialalnosc_adres`+
+	`dzialalnosc_telefon`, kontekst po prostu by je zignorował i odpowiednie
+	klucze kontekstu (`rodzaj_seria_numer_dokumentu`,
+	`dzialalnosc_adres_telefon`) wyszłyby puste (K11: fałszywie zielony test
+	pustości). `stan_cywilny` musi być jedną z kanonicznych stałych `STAN_*`
+	(pisownia z wielkiej litery, patrz `crm/volteo_kredyt_pdf.py`), nie
+	surową transkrypcją PDF-u sprzed 2026-08-15, inaczej żadna z sześciu
+	kratek stanu cywilnego się nie zapala i wszystkie sześć wychodzi `False`.
+
 	Waliduje `praca_okres == "Czas określony"`, więc `praca_nieokreslony_od`
-	wychodzi jako pusty string w tym konkretnym fixture — to nie przeszkadza
+	wychodzi jako pusty string w tym konkretnym fixture, to nie przeszkadza
 	kontraktowi kluczy (klucz jest zawsze obecny w kontekście, niezależnie od
 	wartości), tylko oznacza, że test wartości-str-lub-bool i tak przechodzi
-	(pusty string to wciąż `str`)."""
+	(pusty string to wciąż `str`). Test pustości (`TestPelnyFixtureBezPustychKluczy`
+	niżej) sprawdza to wprost, wraz z jawnymi wyjątkami dla wzajemnie
+	wykluczających się kratek (wykształcenie, stan cywilny, forma
+	zatrudnienia, forma opodatkowania, adresy) i dla routingu
+	`praca_okres_od`. Drugi wariant fixture (`praca_okres = "Czas
+	nieokreślony"`) sprawdza symetryczny przypadek."""
 	baza: dict[str, Any] = {
 		"miejsce_urodzenia": "Warszawa",
-		"rodzaj_seria_numer_dokumentu": "Dowód osobisty ABC123456",
+		"rodzaj_dokumentu": "Dowód osobisty",
+		"seria_numer_dokumentu": "ABC123456",
 		"data_wydania_dokumentu": "2020-01-15",
 		"data_waznosci_dokumentu": "2030-01-15",
 		"adres_zameldowania_taki_sam": "Nie",
@@ -78,7 +121,7 @@ def _kredyt_wszystko_wlaczone(**nadpisania: Any) -> dict[str, Any]:
 		"adres_korespondencji_taki_sam": "Nie",
 		"adres_korespondencji": "ul. Kolejowa 2, 00-003 Warszawa",
 		"wyksztalcenie": "wyższe",
-		"stan_cywilny": "kawaler/panna",
+		"stan_cywilny": STAN_KAWALER_PANNA,
 		"liczba_osob_na_utrzymaniu": "2",
 		"kwota_800_plus": "800",
 		"dochod_wspolmalzonka": "3000",
@@ -109,7 +152,8 @@ def _kredyt_wszystko_wlaczone(**nadpisania: Any) -> dict[str, Any]:
 		"dzialalnosc_forma_inna": "Podatek liniowy",
 		"dzialalnosc_nip": "9876543210",
 		"dzialalnosc_nazwa": "Firma Testowa",
-		"dzialalnosc_adres_telefon": "Kraków, 500700800",
+		"dzialalnosc_adres": "Kraków",
+		"dzialalnosc_telefon": "500700800",
 		"dzialalnosc_od_kiedy": "2018-01-01",
 		"dzialalnosc_kwota_dochodu": "4000",
 		"gospodarstwo_wlaczone": 1,
@@ -147,6 +191,171 @@ def _pelny_kontekst() -> dict[str, Any]:
 	"""Referencyjny kontekst — WSZYSTKIE grupy dochodu włączone, WSZYSTKIE pola
 	wypełnione. Ten sam kontekst służy wszystkim testom niżej."""
 	return zbuduj_kontekst_kredytu(_kredyt_wszystko_wlaczone(), _kontakt(), date(2026, 8, 15))
+
+
+# ---------------------------------------------------------------------------
+# K11: wyjątki od "w pełnym fixture nic nie jest puste" (patrz
+# `TestPelnyFixtureBezPustychKluczy` niżej). Każda z grup poniżej to jeden
+# Select z zestawem wzajemnie wykluczających się kratek w kontekście PDF-u:
+# skoro Select ma zawsze DOKŁADNIE jedną wybraną wartość, wszystkie kratki
+# poza tą jedną muszą wyjść `False` nawet w fixture, gdzie "wszystko jest
+# włączone". `_wyjatki_checkboxow_selecta` liczy ten zbiór z mapowania
+# opcja -> klucz kontekstu, nigdy nie jest wpisywany ręcznie dla
+# konkretnego fixture.
+# ---------------------------------------------------------------------------
+
+_WYKSZTALCENIE_KLUCZE: dict[str, str] = {
+	WYKSZTALCENIE_WYZSZE: "wyksztalcenie_wyzsze",
+	WYKSZTALCENIE_SREDNIE: "wyksztalcenie_srednie",
+	WYKSZTALCENIE_ZAWODOWE: "wyksztalcenie_zawodowe",
+	WYKSZTALCENIE_PODSTAWOWE: "wyksztalcenie_podstawowe",
+}
+
+_STAN_CYWILNY_KLUCZE: dict[str, str] = {
+	STAN_KAWALER_PANNA: "stan_kawaler_panna",
+	STAN_ROZWIEDZIONY: "stan_rozwiedziony",
+	STAN_MALZENSTWO_ROZDZIELNOSC: "stan_malzenstwo_rozdzielnosc",
+	STAN_MALZENSTWO_WSPOLNOTA: "stan_malzenstwo_wspolnota",
+	STAN_WDOWIEC_WDOWA: "stan_wdowiec_wdowa",
+	STAN_SEPARACJA: "stan_separacja",
+}
+
+_PRACA_FORMA_KLUCZE: dict[str, str] = {
+	FORMA_UMOWA_O_PRACE: "praca_umowa_o_prace",
+	FORMA_UMOWA_ZLECENIE: "praca_zlecenie",
+	FORMA_UMOWA_DZIELO: "praca_dzielo",
+}
+
+_DZIALALNOSC_FORMA_KLUCZE: dict[str, str] = {
+	FORMA_RYCZALT: "dzialalnosc_ryczalt",
+	FORMA_KPIR: "dzialalnosc_kpir",
+	FORMA_INNE: "dzialalnosc_inne",
+}
+
+_ADRES_ZAMELDOWANIA_KLUCZE: dict[str, str] = {
+	ADRES_TAK: "adres_zameldowania_tak",
+	ADRES_NIE: "adres_zameldowania_nie",
+}
+
+_ADRES_KORESPONDENCJI_KLUCZE: dict[str, str] = {
+	ADRES_TAK: "adres_korespondencji_tak",
+	ADRES_NIE: "adres_korespondencji_nie",
+}
+
+
+def _wyjatki_checkboxow_selecta(mapowanie: dict[str, str], wybrana_opcja: Any) -> set[str]:
+	"""Dla grupy wzajemnie wykluczających się kratek jednego Selecta
+	(mapowanie wartość-opcji -> klucz kontekstu kratki) zwraca klucze
+	WSZYSTKICH kratek poza tą odpowiadającą `wybrana_opcja`, te pozostają
+	`False` w pełnym fixture nawet gdy "wszystko jest włączone", bo Select ma
+	zawsze dokładnie jedną wybraną wartość. Wyliczone z `mapowanie`, nie
+	wpisane ręcznie dla konkretnego fixture."""
+	return {klucz for opcja, klucz in mapowanie.items() if opcja != wybrana_opcja}
+
+
+def _wyjatki_pustych_wartosci(dane: dict[str, Any]) -> frozenset[str]:
+	"""Jawna lista kluczy kontekstu, które w pełnym fixture (`_kredyt_wszystko_wlaczone`,
+	w dowolnym wariancie `praca_okres`) legalnie wychodzą puste/`False` mimo
+	że "wszystko jest włączone", bo są wzajemnie wykluczającym się wyborem w
+	obrębie jednego Selecta, a Select ma zawsze dokładnie jedną wybraną
+	wartość. Wyliczona programowo z opcji przez `_wyjatki_checkboxow_selecta`,
+	nie wpisana ręcznie tam, gdzie się da.
+
+	Jedyny ręczny wyjątek to routing `praca_okreslony_od`/`_do` vs
+	`praca_nieokreslony_od`: to nie jest grupa kratek jednego Selecta, tylko
+	przekierowanie JEDNEGO surowego pola (`praca_okres_od`) do jednego z
+	dwóch kluczy kontekstu zależnie od `praca_okres`, patrz `_blok_praca` w
+	`crm/volteo_kredyt_pdf.py`. Nie da się tego wyliczyć z listy opcji tak
+	jak kratek, bo klucze docelowe różnią się nazwą, nie tylko wartością
+	bool."""
+	wyjatki: set[str] = set()
+	wyjatki |= _wyjatki_checkboxow_selecta(_WYKSZTALCENIE_KLUCZE, dane.get("wyksztalcenie"))
+	wyjatki |= _wyjatki_checkboxow_selecta(_STAN_CYWILNY_KLUCZE, dane.get("stan_cywilny"))
+	wyjatki |= _wyjatki_checkboxow_selecta(_PRACA_FORMA_KLUCZE, dane.get("praca_forma"))
+	wyjatki |= _wyjatki_checkboxow_selecta(
+		_DZIALALNOSC_FORMA_KLUCZE, dane.get("dzialalnosc_forma_opodatkowania")
+	)
+	wyjatki |= _wyjatki_checkboxow_selecta(
+		_ADRES_ZAMELDOWANIA_KLUCZE, dane.get("adres_zameldowania_taki_sam")
+	)
+	wyjatki |= _wyjatki_checkboxow_selecta(
+		_ADRES_KORESPONDENCJI_KLUCZE, dane.get("adres_korespondencji_taki_sam")
+	)
+
+	if dane.get("praca_okres") == OKRES_CZAS_OKRESLONY:
+		wyjatki.add("praca_nieokreslony_od")
+	elif dane.get("praca_okres") == OKRES_CZAS_NIEOKRESLONY:
+		wyjatki.add("praca_okreslony_od")
+		wyjatki.add("praca_okreslony_do")
+
+	return frozenset(wyjatki)
+
+
+class TestPelnyFixtureBezPustychKluczy(unittest.TestCase):
+	"""K11: `TestWartosciKontekstu.test_a_kazda_wartosc_referencyjnego_kontekstu_jest_str_albo_bool`
+	sprawdza tylko TYP wartości, nigdy jej pustość: fixture z wycofanymi
+	polami (`rodzaj_seria_numer_dokumentu`, `dzialalnosc_adres_telefon`) i
+	nierozpoznawaną wartością `stan_cywilny` ("kawaler/panna" zamiast
+	kanonicznego `STAN_KAWALER_PANNA`) przechodziła tamten test na zielono
+	mimo ośmiu pustych kluczy kontekstu (dwa złożone pola dokumentu/firmy plus
+	sześć kratek stanu cywilnego). Te testy sprawdzają pustość wprost, na obu
+	wariantach `praca_okres`, z jawną listą wyjątków wyliczaną programowo
+	przez `_wyjatki_pustych_wartosci`."""
+
+	def _sprawdz_bez_pustych(
+		self: "TestPelnyFixtureBezPustychKluczy",
+		kontekst: dict[str, Any],
+		wyjatki: frozenset[str],
+	) -> None:
+		for klucz, wartosc in kontekst.items():
+			if klucz in wyjatki:
+				continue
+			with self.subTest(klucz=klucz):
+				if isinstance(wartosc, bool):
+					self.assertTrue(
+						wartosc, f"{klucz!r} jest False mimo braku w jawnych wyjątkach"
+					)
+				else:
+					self.assertNotEqual(
+						wartosc.strip(),
+						"",
+						f"{klucz!r} jest puste mimo braku w jawnych wyjątkach",
+					)
+
+	def test_a_czas_okreslony_bez_pustych_kluczy_poza_wyjatkami(
+		self: "TestPelnyFixtureBezPustychKluczy",
+	) -> None:
+		dane = _kredyt_wszystko_wlaczone()
+		kontekst = zbuduj_kontekst_kredytu(dane, _kontakt(), date(2026, 8, 15))
+		wyjatki = _wyjatki_pustych_wartosci(dane)
+		# Bezpiecznik testu: dla tego wariantu fixture liczba wyjątków jest
+		# znana i zamrożona: 3 (wykształcenie) + 5 (stan cywilny) + 2 (forma
+		# zatrudnienia) + 2 (forma opodatkowania) + 1 (adres zameldowania) + 1
+		# (adres korespondencji) + 1 (praca_nieokreslony_od) = 15. Gdyby
+		# `_wyjatki_pustych_wartosci` kiedyś przypadkiem zwróciło pusty zbiór
+		# (np. literówka w kluczu `dane.get(...)`), poniższe `assertEqual`
+		# złapałoby to, zanim `_sprawdz_bez_pustych` zdążyłoby cokolwiek
+		# przetestować.
+		self.assertEqual(len(wyjatki), 15)
+		self._sprawdz_bez_pustych(kontekst, wyjatki)
+
+	def test_b_czas_nieokreslony_bez_pustych_kluczy_poza_wyjatkami(
+		self: "TestPelnyFixtureBezPustychKluczy",
+	) -> None:
+		# Regresja K2/#139: przy "Czas nieokreślony" `praca_nieokreslony_od`
+		# musi wyjść NIEPUSTE (martwa linia wydruku, historycznie zerowana),
+		# a `praca_okreslony_od`/`_do` muszą wyjść puste, bo teraz to one są
+		# wzajemnie wykluczone.
+		dane = _kredyt_wszystko_wlaczone(praca_okres=OKRES_CZAS_NIEOKRESLONY)
+		kontekst = zbuduj_kontekst_kredytu(dane, _kontakt(), date(2026, 8, 15))
+		wyjatki = _wyjatki_pustych_wartosci(dane)
+		self.assertNotIn("praca_nieokreslony_od", wyjatki)
+		self.assertIn("praca_okreslony_od", wyjatki)
+		self.assertIn("praca_okreslony_do", wyjatki)
+		self.assertNotEqual(kontekst["praca_nieokreslony_od"].strip(), "")
+		self.assertEqual(kontekst["praca_okreslony_od"], "")
+		self.assertEqual(kontekst["praca_okreslony_do"], "")
+		self._sprawdz_bez_pustych(kontekst, wyjatki)
 
 
 class TestKlucze(unittest.TestCase):
