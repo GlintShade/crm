@@ -2,7 +2,7 @@
 # For license information, please see license.txt
 
 """Import leadów z arkusza Grega (`CRM_ProEnergy_FINAL_import_CRM.xlsx`, arkusz
-„Leady") do `CRM Lead` — reimport b59 (issue #98), zastępuje poprzedni parser
+„Leady") do `CRM Lead`: reimport b59 (issue #98), zastępuje poprzedni parser
 CSV historycznej bazy Arago/SD/CC.
 
 Moduł celowo nie importuje ``frappe`` — precedens ``crm/volteo_naming.py``.
@@ -21,7 +21,7 @@ Dokładnie 14 nazwanych kolumn, w tej kolejności (`NAGLOWKI_ARKUSZA`): Telefon,
 Imię, Nazwisko, Adres, Powiat, Województwo, Źródło, Data pozyskania, Status
 źródła, Zasady rozliczania, Obecne produkty, Produkt w procesie,
 Zainteresowanie, Uwagi. `waliduj_naglowek` rzuca głośno na jakiekolwiek
-odstępstwo (brakująca, nadmiarowa albo przestawiona kolumna) — zero
+odstępstwo (brakująca, nadmiarowa albo przestawiona kolumna): zero
 zgadywania kształtu pliku.
 
 ## Puste komórki
@@ -29,7 +29,7 @@ zgadywania kształtu pliku.
 `_pusta()` traktuje jako pustkę (bez rozróżniania wielkości liter): pustą
 komórkę, `-`, `brak`, `nie`. To poszerzenie względem poprzedniego formatu
 (który znał tylko `""`/`-`) NIE zmienia zachowania żadnej z zachowanych
-funkcji na ich dotychczasowych testach — `normalizuj_wojewodztwo("brak")` i
+funkcji na ich dotychczasowych testach: `normalizuj_wojewodztwo("brak")` i
 `mapuj_zainteresowanie("brak")` już wcześniej zwracały `None` (bo `"brak"`
 nie pasował do żadnego kanonu), więc dodatkowa wczesna ścieżka przez
 `_pusta()` daje ten sam wynik, tylko szybciej. Nowy marker `nie` nie był
@@ -37,20 +37,20 @@ dotąd używany w żadnym teście, więc nie ma czego złamać.
 
 ## Odrzucenia pól kontra odrzucenia wierszy
 
-Zły telefon (nie przechodzi `normalizuj_telefon`) odrzuca CAŁY wiersz —
+Zły telefon (nie przechodzi `normalizuj_telefon`) odrzuca CAŁY wiersz:
 `zbuduj_leada_z_arkusza` zwraca `(None, [OdrzuconePole(...)])`. Każda inna
 kolumna słownikowa (Data pozyskania, Status źródła, Zasady rozliczania,
 Obecne produkty, Produkt w procesie, Zainteresowanie, Województwo, Źródło)
 idzie przez wspólny helper `_pole_slownikowe`: niepusta wartość, której
 normalizator nie rozpozna (czy to przez wyjątek `WartoscOdrzucona`, czy przez
-zwrócenie `None`), odrzuca TYLKO to jedno pole — pole w wynikowym słowniku
+zwrócenie `None`), odrzuca TYLKO to jedno pole: pole w wynikowym słowniku
 leada staje się `None`, wpis trafia do listy `OdrzuconePole`, a wiersz i tak
 wchodzi do wyniku. To jest kontrakt uzgodniony z Gregiem: nieznany token w
 Obecne produkty / Produkt w procesie / Źródło nie ma unieważniać całego
 leada, tylko to jedno pole.
 
 Wyjątek: pusta komórka `Źródło` jest odrzucana z powodem `"wymagane"` mimo że
-inne puste komórki nie trafiają do raportu — źródło leada jest jedynym polem
+inne puste komórki nie trafiają do raportu: źródło leada jest jedynym polem
 z tej grupy, które ma być zawsze wypełnione.
 
 ## Adres
@@ -58,12 +58,12 @@ z tej grupy, które ma być zawsze wypełnione.
 `rozbij_adres_arkusza` rozbija jedną kolumnę `Adres` (`"<ulica>, <kod>
 <miejscowość>[ (dopisek]"`) na ulicę, numer domu, kod, miejscowość i dopisek
 w nawiasie. `_WZOR_ADRES` ma ZACHŁANNĄ grupę 1, więc kotwiczy się na
-OSTATNIM wystąpieniu `, dd-ddd ` w tekście — dla adresu z dwoma przecinkami
+OSTATNIM wystąpieniu `, dd-ddd ` w tekście: dla adresu z dwoma przecinkami
 („Rogierówko, Ul. Kościuszki 16A, 62-090 Rokietnica") grupa 1 to CAŁE
 „Rogierówko, Ul. Kościuszki 16A" (z przecinkiem w środku), które dopiero
 `rozbij_adres` rozbija na ulicę „Rogierówko, Ul. Kościuszki" i numer „16A".
-Dopisek w nawiasie bywa ucięty bez zamykającego `)` (obcięta komórka Excela)
-— `rozbij_adres_arkusza` radzi sobie z obiema wersjami. Brak dopasowania do
+Dopisek w nawiasie bywa ucięty bez zamykającego `)` (obcięta komórka Excela);
+`rozbij_adres_arkusza` radzi sobie z obiema wersjami. Brak dopasowania do
 `_WZOR_ADRES` odrzuca CAŁE pole Adres do raportu; surowy tekst zostaje w
 `custom_install_address` bez zmian, reszta adresowych pól zostaje pusta.
 """
@@ -453,7 +453,7 @@ def rozdziel_imie_nazwisko(imie: str, nazwisko: str) -> tuple[str, str]:
 
 	Gdy `nazwisko` jest już niepuste — zwraca oba pola bez zmian (po
 	ujednoliceniu pustki wg `_pusta()`). Gdy `imie` jest jednowyrazowe albo
-	puste — też bez zmian, nie ma czego dzielić.
+	puste, też bez zmian, nie ma czego dzielić.
 
 	Dla wielowyrazowego `imie` przy pustym `nazwisko`:
 	- wygląda na firmę (`_wyglada_na_firme`) → CAŁOŚĆ zostaje w `first_name`,
@@ -641,7 +641,7 @@ def waliduj_naglowek(naglowek: list[str]) -> None:
 	przestawiona kolumna to twardy błąd (`ValueError` z nazwami) - zmiana kształtu
 	arkusza ma się ujawnić głośno, zanim jakikolwiek wiersz zostanie źle zmapowany
 	na kolumny."""
-	oczyszczony = [(pole or "").lstrip("﻿").strip() for pole in naglowek]
+	oczyszczony = [(pole or "").lstrip("\ufeff").strip() for pole in naglowek]
 	oczekiwany = list(NAGLOWKI_ARKUSZA)
 	if oczyszczony == oczekiwany:
 		return
