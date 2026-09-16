@@ -7,6 +7,8 @@ import frappe
 import requests
 from frappe import _
 
+from crm.integrations.autenti import logika
+
 CONNECT_TIMEOUT = 10
 READ_TIMEOUT = 30
 UPLOAD_READ_TIMEOUT = 120
@@ -189,45 +191,25 @@ class AutentiClient:
 	def get_signed_file_id(self, doc_id: str) -> str | None:
 		"""
 		Return the id of the signed output file for a document process, if any.
-		Prefers a fully SIGNED_CONTENT_FILE, falls back to a
-		PARTIALLY_SIGNED_CONTENT_FILE, then to any other non-source file that
-		is verifiably a PDF (via mimeType, or the filename extension when
-		mimeType is missing).
+		Accepts ONLY a fully SIGNED_CONTENT_FILE (ops#143, F3) -- selection itself
+		lives in `logika.wybierz_id_podpisanego_pliku` (frappe-free, unit tested),
+		this method is a thin wrapper fetching the candidate list.
 
-		CONTENT_ARCHIVE is a ZIP bundle, not a PDF, and must never be picked
-		by the fallback — doing so would silently save a ZIP as
-		"<oferta>-podpisana.pdf". This filePurpose only materialises once a
-		document process reaches COMPLETED, so it is invisible during
-		pre-signature testing and can't be caught by testing earlier stages.
+		A COMPLETED remote status means every signatory has signed, so a
+		PARTIALLY_SIGNED_CONTENT_FILE (one signature) or any other file (e.g.
+		CONTENT_ARCHIVE, a ZIP bundle, not a PDF) is never an acceptable result
+		here -- saving either under "<document>-podpisana.pdf" would be a silent,
+		never-refreshed error. The previous fallback onto
+		PARTIALLY_SIGNED_CONTENT_FILE, then onto "any PDF", is removed entirely,
+		not just narrowed for this call site.
 
-		Returns None when no qualifying file exists yet; the caller already
-		handles None by logging and leaving the status transition intact.
+		Returns None when no qualifying file exists yet; the caller
+		(`crm.integrations.autenti.api._attach_signed_pdf`) retries on the next
+		poller pass instead of guessing a replacement.
 		"""
-
-		def _is_pdf(file_entry: dict) -> bool:
-			mime_type = file_entry.get("mimeType")
-			if mime_type is not None:
-				return mime_type == "application/pdf"
-			filename = file_entry.get("filename") or ""
-			return filename.lower().endswith(".pdf")
-
 		files = self.get_document_files(doc_id)
 		candidates = [f for f in files if f.get("filePurpose") != "SOURCE_FILE"]
-		if not candidates:
-			return None
-
-		signed = next((f for f in candidates if f.get("filePurpose") == "SIGNED_CONTENT_FILE"), None)
-		if signed:
-			return signed.get("id")
-
-		partially_signed = next(
-			(f for f in candidates if f.get("filePurpose") == "PARTIALLY_SIGNED_CONTENT_FILE"), None
-		)
-		if partially_signed:
-			return partially_signed.get("id")
-
-		pdf_fallback = next((f for f in candidates if _is_pdf(f)), None)
-		return pdf_fallback.get("id") if pdf_fallback else None
+		return logika.wybierz_id_podpisanego_pliku(candidates)
 
 	def download_file_content(self, doc_id: str, file_id: str) -> bytes:
 		"""

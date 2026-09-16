@@ -1,9 +1,21 @@
 import unittest
+from datetime import datetime, timedelta
 
 from crm.integrations.autenti.logika import (
+	DECYZJA_NOWY_PROCES,
+	DECYZJA_ODZYSKAJ,
+	KOMUNIKAT_TIMEOUT_WYSYLANIA_BEZ_PROCESU,
 	PENDING_REMOTE_STATUSES,
 	SEND_BLOCKED_STATUSES,
 	STATUS_MAP,
+	WYSYLANIE_TIMEOUT_MIN,
+	ZALEGLY_PODPISANY_PLIK_LOG_MIN,
+	czy_logowac_brak_podpisanego_pliku,
+	czy_logowac_nierozpoznany_status,
+	czy_wysylanie_przekroczylo_timeout,
+	decyzja_ponownej_wysylki,
+	komunikat_bledu_wysylki,
+	komunikat_nierozpoznanego_statusu,
 	mozna_wyslac,
 	nazwa_pliku_kredytu,
 	nazwa_pliku_kredytu_podpisanego,
@@ -12,6 +24,7 @@ from crm.integrations.autenti.logika import (
 	prefiks_pliku_kredytu,
 	tytul_dokumentu,
 	tytul_dokumentu_kredytu,
+	wybierz_id_podpisanego_pliku,
 	zbuduj_odbiorcow,
 )
 
@@ -241,6 +254,168 @@ class TestAutentiLogika(unittest.TestCase):
 		prefiks = prefiks_pliku_kredytu(deal)
 		self.assertTrue(nazwa_pliku_kredytu(deal).startswith(prefiks))
 		self.assertTrue(nazwa_pliku_kredytu_podpisanego(deal).startswith(prefiks))
+
+
+	def test_v_decyzja_ponownej_wysylki_processing_odzyskaj(self: "TestAutentiLogika") -> None:
+		self.assertEqual(decyzja_ponownej_wysylki("PROCESSING"), DECYZJA_ODZYSKAJ)
+
+	def test_w_decyzja_ponownej_wysylki_completed_odzyskaj(self: "TestAutentiLogika") -> None:
+		self.assertEqual(decyzja_ponownej_wysylki("COMPLETED"), DECYZJA_ODZYSKAJ)
+
+	def test_x_decyzja_ponownej_wysylki_draft_nowy_proces(self: "TestAutentiLogika") -> None:
+		# DRAFT oznacza proces utworzony, ale nigdy niewysłany (awaria przed send()) --
+		# stary draft zostaje w Autenti nieszkodliwy, wymuszamy nowy proces.
+		self.assertEqual(decyzja_ponownej_wysylki("DRAFT"), DECYZJA_NOWY_PROCES)
+
+	def test_y_decyzja_ponownej_wysylki_terminalne_nie_sukces_nowy_proces(
+		self: "TestAutentiLogika",
+	) -> None:
+		for status in ("REJECTED", "EXPIRED", "WITHDRAWN"):
+			with self.subTest(status=status):
+				self.assertEqual(decyzja_ponownej_wysylki(status), DECYZJA_NOWY_PROCES)
+
+	def test_z_decyzja_ponownej_wysylki_404_none_nowy_proces(self: "TestAutentiLogika") -> None:
+		# `None` reprezentuje odpowiedź 404 (proces nie istnieje po stronie Autenti).
+		self.assertEqual(decyzja_ponownej_wysylki(None), DECYZJA_NOWY_PROCES)
+
+	def test_aa_czy_wysylanie_przekroczylo_timeout_brak_znacznika_zawsze_przekroczony(
+		self: "TestAutentiLogika",
+	) -> None:
+		# Legacy rekordy sprzed tej poprawki nigdy nie dostały znacznika `sent_at`
+		# przy ustawieniu "Wysyłanie" -- brak znacznika nie może oznaczać "jeszcze
+		# nie", bo wtedy taki rekord utknąłby na zawsze.
+		self.assertTrue(czy_wysylanie_przekroczylo_timeout(None, datetime(2026, 1, 1, 12, 0, 0)))
+
+	def test_ab_czy_wysylanie_przekroczylo_timeout_swiezy_nie_przekroczony(
+		self: "TestAutentiLogika",
+	) -> None:
+		teraz = datetime(2026, 1, 1, 12, 0, 0)
+		sent_at = teraz - timedelta(minutes=5)
+		self.assertFalse(czy_wysylanie_przekroczylo_timeout(sent_at, teraz))
+
+	def test_ac_czy_wysylanie_przekroczylo_timeout_stary_przekroczony(
+		self: "TestAutentiLogika",
+	) -> None:
+		teraz = datetime(2026, 1, 1, 12, 0, 0)
+		sent_at = teraz - timedelta(minutes=WYSYLANIE_TIMEOUT_MIN + 1)
+		self.assertTrue(czy_wysylanie_przekroczylo_timeout(sent_at, teraz))
+
+	def test_ad_czy_wysylanie_przekroczylo_timeout_dokladnie_na_granicy(
+		self: "TestAutentiLogika",
+	) -> None:
+		# Dokładnie WYSYLANIE_TIMEOUT_MIN minut to jeszcze NIE "starszy niż" -- granica
+		# jest ostra (>), nie >=.
+		teraz = datetime(2026, 1, 1, 12, 0, 0)
+		sent_at = teraz - timedelta(minutes=WYSYLANIE_TIMEOUT_MIN)
+		self.assertFalse(czy_wysylanie_przekroczylo_timeout(sent_at, teraz))
+
+	def test_ae_czy_logowac_brak_podpisanego_pliku_swiezy_nie(self: "TestAutentiLogika") -> None:
+		teraz = datetime(2026, 1, 1, 12, 0, 0)
+		signed_at = teraz - timedelta(minutes=5)
+		self.assertFalse(czy_logowac_brak_podpisanego_pliku(signed_at, teraz))
+
+	def test_af_czy_logowac_brak_podpisanego_pliku_zalegly_tak(self: "TestAutentiLogika") -> None:
+		teraz = datetime(2026, 1, 1, 12, 0, 0)
+		signed_at = teraz - timedelta(minutes=ZALEGLY_PODPISANY_PLIK_LOG_MIN + 1)
+		self.assertTrue(czy_logowac_brak_podpisanego_pliku(signed_at, teraz))
+
+	def test_ag_czy_logowac_brak_podpisanego_pliku_brak_znacznika_tak(
+		self: "TestAutentiLogika",
+	) -> None:
+		self.assertTrue(czy_logowac_brak_podpisanego_pliku(None, datetime(2026, 1, 1, 12, 0, 0)))
+
+	def test_ah_komunikat_nierozpoznanego_statusu_zawiera_status(self: "TestAutentiLogika") -> None:
+		komunikat = komunikat_nierozpoznanego_statusu("SOME_WEIRD_STATUS")
+		self.assertIn("SOME_WEIRD_STATUS", komunikat)
+		self.assertNotIn("\u2014", komunikat)
+
+	def test_ai_czy_logowac_nierozpoznany_status_pierwszy_raz_tak(
+		self: "TestAutentiLogika",
+	) -> None:
+		self.assertTrue(czy_logowac_nierozpoznany_status(None, "SOME_WEIRD_STATUS"))
+		self.assertTrue(czy_logowac_nierozpoznany_status("", "SOME_WEIRD_STATUS"))
+		self.assertTrue(czy_logowac_nierozpoznany_status("Inny błąd", "SOME_WEIRD_STATUS"))
+
+	def test_aj_czy_logowac_nierozpoznany_status_juz_zapisany_nie(
+		self: "TestAutentiLogika",
+	) -> None:
+		komunikat = komunikat_nierozpoznanego_statusu("SOME_WEIRD_STATUS")
+		self.assertFalse(czy_logowac_nierozpoznany_status(komunikat, "SOME_WEIRD_STATUS"))
+
+	def test_ak_czy_logowac_nierozpoznany_status_inny_status_tak(
+		self: "TestAutentiLogika",
+	) -> None:
+		# Zapisany komunikat dotyczył INNEGO nierozpoznanego statusu -- nowy status
+		# musi zostać zalogowany osobno.
+		stary_komunikat = komunikat_nierozpoznanego_statusu("STATUS_A")
+		self.assertTrue(czy_logowac_nierozpoznany_status(stary_komunikat, "STATUS_B"))
+
+	def test_al_komunikat_bledu_wysylki_timeout(self: "TestAutentiLogika") -> None:
+		import requests
+
+		komunikat = komunikat_bledu_wysylki(requests.Timeout("read timed out"))
+		self.assertEqual(
+			komunikat, "Przekroczono czas oczekiwania na odpowiedź Autenti. Wyślij ponownie."
+		)
+		self.assertNotIn("\u2014", komunikat)
+
+	def test_am_komunikat_bledu_wysylki_http_error_z_kodem(self: "TestAutentiLogika") -> None:
+		import requests
+
+		response = requests.Response()
+		response.status_code = 500
+		exc = requests.HTTPError("500 Server Error", response=response)
+
+		komunikat = komunikat_bledu_wysylki(exc)
+		self.assertEqual(
+			komunikat, "Autenti odpowiedziało błędem HTTP 500. Szczegóły w dzienniku błędów."
+		)
+		self.assertNotIn("\u2014", komunikat)
+
+	def test_an_komunikat_bledu_wysylki_http_error_bez_odpowiedzi(
+		self: "TestAutentiLogika",
+	) -> None:
+		import requests
+
+		komunikat = komunikat_bledu_wysylki(requests.HTTPError("brak odpowiedzi"))
+		self.assertEqual(komunikat, "Autenti odpowiedziało błędem HTTP. Szczegóły w dzienniku błędów.")
+
+	def test_ao_komunikat_bledu_wysylki_inny_wyjatek(self: "TestAutentiLogika") -> None:
+		komunikat = komunikat_bledu_wysylki(ValueError("cokolwiek po angielsku"))
+		self.assertEqual(komunikat, "Wysyłka do Autenti nie powiodła się. Szczegóły w dzienniku błędów.")
+		self.assertNotIn("\u2014", komunikat)
+		# Surowy angielski tekst wyjątku nigdy nie ląduje w komunikacie dla użytkownika.
+		self.assertNotIn("cokolwiek", komunikat)
+
+	def test_ap_komunikat_timeout_bez_procesu_po_polsku(self: "TestAutentiLogika") -> None:
+		self.assertEqual(
+			KOMUNIKAT_TIMEOUT_WYSYLANIA_BEZ_PROCESU,
+			"Wysyłka została przerwana przed utworzeniem procesu w Autenti. Wyślij ponownie.",
+		)
+		self.assertNotIn("\u2014", KOMUNIKAT_TIMEOUT_WYSYLANIA_BEZ_PROCESU)
+
+	def test_aq_wybierz_id_podpisanego_pliku_preferuje_signed_content_file(
+		self: "TestAutentiLogika",
+	) -> None:
+		pliki = [
+			{"id": "id-partial", "filePurpose": "PARTIALLY_SIGNED_CONTENT_FILE"},
+			{"id": "id-signed", "filePurpose": "SIGNED_CONTENT_FILE"},
+		]
+		self.assertEqual(wybierz_id_podpisanego_pliku(pliki), "id-signed")
+
+	def test_ar_wybierz_id_podpisanego_pliku_nigdy_partially_signed(
+		self: "TestAutentiLogika",
+	) -> None:
+		# Krytyczne dla F3: COMPLETED z tylko jednym podpisem (PARTIALLY_SIGNED) nie
+		# może zostać nigdy zapisany jako gotowy podpisany plik.
+		pliki = [{"id": "id-partial", "filePurpose": "PARTIALLY_SIGNED_CONTENT_FILE"}]
+		self.assertIsNone(wybierz_id_podpisanego_pliku(pliki))
+
+	def test_as_wybierz_id_podpisanego_pliku_brak_kandydatow_none(
+		self: "TestAutentiLogika",
+	) -> None:
+		self.assertIsNone(wybierz_id_podpisanego_pliku([]))
+		self.assertIsNone(wybierz_id_podpisanego_pliku([{"id": "x", "filePurpose": "CONTENT_ARCHIVE"}]))
 
 
 if __name__ == "__main__":
