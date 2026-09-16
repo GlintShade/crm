@@ -55,17 +55,62 @@ z tej grupy, które ma być zawsze wypełnione.
 
 ## Adres
 
-`rozbij_adres_arkusza` rozbija jedną kolumnę `Adres` (`"<ulica>, <kod>
-<miejscowość>[ (dopisek]"`) na ulicę, numer domu, kod, miejscowość i dopisek
-w nawiasie. `_WZOR_ADRES` ma ZACHŁANNĄ grupę 1, więc kotwiczy się na
-OSTATNIM wystąpieniu `, dd-ddd ` w tekście: dla adresu z dwoma przecinkami
-(„Rogierówko, Ul. Kościuszki 16A, 62-090 Rokietnica") grupa 1 to CAŁE
-„Rogierówko, Ul. Kościuszki 16A" (z przecinkiem w środku), które dopiero
-`rozbij_adres` rozbija na ulicę „Rogierówko, Ul. Kościuszki" i numer „16A".
-Dopisek w nawiasie bywa ucięty bez zamykającego `)` (obcięta komórka Excela);
-`rozbij_adres_arkusza` radzi sobie z obiema wersjami. Brak dopasowania do
-`_WZOR_ADRES` odrzuca CAŁE pole Adres do raportu; surowy tekst zostaje w
-`custom_install_address` bez zmian, reszta adresowych pól zostaje pusta.
+`rozbij_adres_arkusza` rozbija jedną kolumnę `Adres` (`"<fragment ulicy>, <kod>
+<miejscowość>[ (dopisek]"`) na ulicę, numer domu, kod, miejscowość i dopisek.
+`_WZOR_ADRES` ma ZACHŁANNĄ grupę 1, więc kotwiczy się na OSTATNIM wystąpieniu
+`, dd-ddd ` w tekście: dla adresu z dwoma przecinkami („Rogierówko, Ul.
+Kościuszki 16A, 62-090 Rokietnica") grupa 1 to CAŁE „Rogierówko, Ul.
+Kościuszki 16A" (z przecinkiem w środku) - fragment ulicy, dopiero rozbijany
+dalej. Brak dopasowania do `_WZOR_ADRES` odrzuca CAŁE pole Adres do raportu;
+surowy tekst zostaje w `custom_install_address` bez zmian, reszta adresowych
+pól zostaje pusta.
+
+Fragment ulicy równy `-` (albo pusty wg `_pusta`) - wieś bez nazwy ulicy -
+daje `ulica = miejscowość`, `nr_domu = ""` (decyzja właściciela, issue #116,
+2026-09-09: OBA pola mają nieść tę samą wartość, żeby "ulica" nigdy nie była
+pusta tam, gdzie jest jakikolwiek adres). W pozostałych przypadkach fragment
+idzie przez `rozbij_fragment_ulicy(fragment, miejscowość)`, która rozpoznaje
+numer domu tolerancyjnie (litery, ukośniki, słowo „nr", numer sklejony bez
+odstępu, nawiasy w środku fragmentu, segmenty po przecinku - patrz jej
+docstring dla pełnych reguł a-g). Gdy numer domu nie zostanie rozpoznany, a
+pozostawiony w Ulicy tekst zawiera choć jedną cyfrę (`ulica_zawiera_cyfre`),
+`zbuduj_leada_z_arkusza` dokłada wpis INFORMACYJNY do raportu odrzuceń
+(kolumna „Adres", powód „numer domu nierozpoznany, tekst zostawiony w
+Ulicy") - to NIE jest odrzucenie pola ani wiersza, lead wchodzi normalnie.
+
+Dopiski (nawiasy w środku fragmentu ulicy, segmenty odrzucone przy podziale
+po przecinku, oraz klasyczny dopisek w nawiasie PO miejscowości) łączą się w
+JEDNĄ linię `custom_uwagi_import` w formacie `Adres (dopisek): <segmenty
+złączone przecinkiem>`, dokładaną przez `normalizuj_uwagi`.
+
+## Duble telefonu
+
+`scal_duble` grupuje wiersze arkusza po znormalizowanym telefonie i SCALA
+każdą grupę powtórzeń w jeden wiersz zamiast odrzucać kolejne wystąpienia
+(kontrakt z Gregiem, `docs/LEADY-ARKUSZ-IMPORT-GREG.md`, sekcja „Duble":
+„importer scali je sam po numerze, źródła po plusie, uwagi sklejone").
+Pierwsze wystąpienie wygrywa jako baza; `Źródło`/`Obecne produkty`/`Produkt w
+procesie` sumują surowe tokeny obu wierszy (normalizacja i tak dzieje się
+później, w `zbuduj_leada_z_arkusza`), `Uwagi` się doklejają, `Status źródła`
+idzie wg priorytetu Wygrana > Potencjał > Przegrana > Nieaktualna, `Data
+pozyskania` bierze nowszą, a każda inna pusta komórka bazy dopełnia się z
+kolejnego wiersza. Wiersze z niepoprawnym telefonem NIE są ze sobą grupowane
+(każdy taki wiersz to własna, jednoelementowa "grupa") - `zbuduj_leada_z_arkusza`
+i tak je odrzuci później. `wykryj_duble_telefonow` zostaje bez zmian (używa
+jej konwerter `ops/leady-xlsx-do-csv.py`, który tylko RAPORTUJE duble, nie
+scala ich).
+
+## Pisownia imion i nazwisk
+
+Decyzja właściciela 2026-09-16 (ujednolicenie pisowni): `zbuduj_leada_z_arkusza`
+normalizuje `first_name`/`last_name` przez `normalizuj_pisownie_osoby` -
+pierwsza litera wielka, reszta mała, na KAŻDYM słowie, także po myślniku i
+apostrofie (`str.title()` już to robi poprawnie, diakrytyki polskie
+włącznie - patrz jej docstring). WYJĄTEK: gdy `_wyglada_na_firme` rozpoznaje
+firmę w surowej kolumnie `Imię`, pisownia zostaje bez zmian (firmowe nazwy
+nie są tytułowane). Ulice NIE są normalizowane tą funkcją - ryzyko przy
+nazwach typu „dywizjonu 303" czy „Zbyszka z Bogdańca", gdzie title-case
+psułby sens.
 """
 
 import csv
@@ -108,14 +153,71 @@ PUSTE_MARKERY: frozenset[str] = frozenset({"", "-", "brak", "nie"})
 """Markery pustej komórki w arkuszu Grega, dopasowywane bez rozróżniania wielkości
 liter (patrz `_pusta`)."""
 
-_WZOR_SAM_NUMER = re.compile(r"^\d+[A-Za-z]?(?:/\d+[A-Za-z]?)?$")
-"""Cała wartość adresu to sam numer domu (wieś bez nazwy ulicy) - `rozbij_adres`."""
-
-_WZOR_ULICA_I_NUMER = re.compile(r"^(.+)\s+(\d+[A-Za-z]?(?:/\d+[A-Za-z]?)?)$")
-"""Ulica + numer domu (z opcjonalną literą/ukośnikiem) na końcu - `rozbij_adres`."""
+_WZOR_SAM_NUMER = re.compile(r"^\d+\s?[A-Za-z]?(?:\s*/\s*(?:\d+[A-Za-z]?|[A-Za-z]))?$")
+"""Cała wartość to sam numer domu (wieś bez nazwy ulicy) - `_rozbij_c_do_f` regula f.
+Tolerancyjny tak samo jak `_CZESC_NUMERU_GLOWNA`/`_CZESC_NUMERU_DRUGA` (odstęp przed
+literą, druga część po ukośniku może być samą literą, np. `21/A`) - spójność z
+regułą d, żeby ta sama forma numeru nie działała inaczej w zależności od tego, czy
+przed nią stoi nazwa ulicy."""
 
 _WZOR_KOD_POCZTOWY = re.compile(r"^\d{2}-\d{3}$")
-"""Wygląda jak polski kod pocztowy, nie nazwa ulicy - straż w `rozbij_adres` przeciwko np. '62-300 300' (kod pocztowy wpisany w kolumnie Ulica)."""
+"""Wygląda jak polski kod pocztowy, nie nazwa ulicy - straż w `_rozbij_c_do_f` i
+`_podziel_segmenty_przecinkiem` przeciwko np. '62-300 300' (kod pocztowy wpisany
+w kolumnie Ulica) albo segmentowi-kodowi w adresie z dwoma przecinkami."""
+
+_ZNAK_LITERA = r"[^\W\d_]"
+"""Jeden znak-litera (unicode, z polskimi diakrytykami włącznie) - `\\w` minus
+cyfra minus podkreślnik. Używane w `_WZOR_NUMER_SKLEJONY` (regula e)."""
+
+_CZESC_NUMERU_GLOWNA = r"\d+\s?[A-Za-z]?"
+"""Pierwsza część tolerancyjnego numeru domu: cyfry plus opcjonalna litera,
+z opcjonalnym POJEDYNCZYM odstępem przed literą (`16A`, `41a`, `5`, `21 A` -
+w realnym arkuszu „21 A"/„3 B" jest częstszym zapisem niż sklejone „21A") -
+`_rozbij_c_do_f` reguły d/e. `_znormalizuj_numer` usuwa odstęp z wyniku, więc
+`21 A` i `21A` dają ten sam znormalizowany numer `21A`."""
+
+_CZESC_NUMERU_DRUGA = r"(?:\d+[A-Za-z]?|[A-Za-z])"
+"""Część numeru PO ukośniku: cyfry z opcjonalną literą, albo sama litera
+(`22/A` - druga część to sama litera `A`) - `_rozbij_c_do_f` reguła d."""
+
+_WZOR_PREFIKS_ULICY = re.compile(r"^(?:ulica\s+|ul\.\s*|ul\s+)", re.IGNORECASE)
+"""Prefiks 'ul.'/'ul'/'ulica' na początku fragmentu (`_rozbij_c_do_f` reguła c)
+- wymaga kropki LUB białego znaku zaraz po 'ul', żeby nie okroić prawdziwej
+nazwy ulicy zaczynającej się od liter 'ul' (np. 'Ulicowa'). Dopasowuje też
+sklejone 'UL.PARKOWA5' (kropka bez spacji za nią)."""
+
+_WZOR_NUMER_Z_NR = re.compile(
+	rf"^(?P<ulica>.+?)\s+nr\.?\s*(?P<numer>{_CZESC_NUMERU_GLOWNA})"
+	rf"(?:\s*/\s*(?P<numer2>{_CZESC_NUMERU_DRUGA}))?\s*\.?\s*$",
+	re.IGNORECASE,
+)
+"""Numer domu poprzedzony jawnym słowem 'nr'/'nr.' (`_rozbij_c_do_f` reguła d) -
+SPRAWDZANY PRZED `_WZOR_NUMER_ZWYKLY`: bez tego priorytetu nie-zachłanna grupa
+ulicy wciągnęłaby samo słowo 'nr' do nazwy ulicy (np. 'dywizjonu 303 nr 34.'
+dałoby błędnie ulica='dywizjonu 303 nr')."""
+
+_WZOR_NUMER_ZWYKLY = re.compile(
+	rf"^(?P<ulica>.+?)\s+(?P<numer>{_CZESC_NUMERU_GLOWNA})"
+	rf"(?:\s*/\s*(?P<numer2>{_CZESC_NUMERU_DRUGA}))?\s*\.?\s*$"
+)
+"""Numer domu na końcu bez słowa 'nr' (`_rozbij_c_do_f` reguła d), oddzielony
+od ulicy co najmniej jednym białym znakiem."""
+
+_WZOR_NUMER_SKLEJONY = re.compile(
+	rf"^(?P<ulica>.*?{_ZNAK_LITERA})(?P<numer>{_CZESC_NUMERU_GLOWNA})"
+	rf"(?:\s*/\s*(?P<numer2>{_CZESC_NUMERU_DRUGA}))?\s*\.?\s*$"
+)
+"""Numer sklejony bez odstępu z ulicą (`_rozbij_c_do_f` reguła e, np.
+'KOWALEWICZKI32', 'PARKOWA5' po zdjęciu prefiksu 'UL.') - ulica musi kończyć
+się LITERĄ (nie dowolnym znakiem), żeby np. '4.0' (reguła f) nie złapało się
+tu jako ulica='4.', numer='0'. Wywołujący (`_rozbij_c_do_f`) używa tego wzorca
+TYLKO gdy cały tekst jest jednym tokenem bez białych znaków - inaczej złapałby
+np. 'Rzepkowo 14m2' jako ulica='Rzepkowo 14m', numer='2'."""
+
+_WZOR_SAM_NUMER_KROPKA = re.compile(r"^\d+\.0$")
+"""Liczba całkowita zapisana przez Excela jako float ('4.0', '1.0') -
+`_rozbij_c_do_f` reguła f; końcówka '.0' jest ucinana przed sprawdzeniem
+`_WZOR_SAM_NUMER`."""
 
 MARKERY_FIRMY: frozenset[str] = frozenset(
 	{
@@ -248,13 +350,21 @@ class OdrzuconePole(NamedTuple):
 
 
 class AdresRozbity(NamedTuple):
-	"""Wynik `rozbij_adres_arkusza` - pięć składowych jednej komórki `Adres`."""
+	"""Wynik `rozbij_adres_arkusza` - sześć składowych jednej komórki `Adres`.
+
+	`numer_nierozpoznany_z_cyfra` ma domyślną wartość `False`, żeby istniejące
+	konstrukcje `AdresRozbity(...)` bez tego argumentu (testy sprzed b59-#141)
+	nadal działały - `True` tylko wtedy, gdy `rozbij_fragment_ulicy` nie
+	rozpoznała numeru domu (reguła g), a pozostawiony w `ulica` tekst zawiera
+	choć jedną cyfrę (patrz `ulica_zawiera_cyfre`) - `zbuduj_leada_z_arkusza`
+	dokłada wtedy wpis informacyjny do raportu odrzuceń."""
 
 	ulica: str
 	nr_domu: str
 	kod: str
 	miejscowosc: str
 	dopisek: str
+	numer_nierozpoznany_z_cyfra: bool = False
 
 
 def _pusta(wartosc: str | None) -> bool:
@@ -394,34 +504,214 @@ def mapuj_zainteresowanie(surowe: str) -> str | None:
 	return " + ".join(rozpoznane)
 
 
-def rozbij_adres(adres: str, miasto: str) -> tuple[str, str] | None:
-	"""Rozbija fragment ulicowy adresu na `(ulica, numer_domu)`.
+def ulica_zawiera_cyfre(tekst: str) -> bool:
+	"""Czy `tekst` (fragment ulicy pozostawiony BEZ rozpoznanego numeru domu -
+	`rozbij_fragment_ulicy` reguła g) zawiera choć jedną cyfrę.
 
-	Numer domu rozpoznaje literę i ukośnik na końcu (`19A`, `5/2`). Gdy CAŁA wartość
-	`adres` to sam numer - przy wsiach bez nazwy ulicy taki fragment bywa właśnie
-	samym numerem, a wieś leży w `miasto` (reguła „Zbożowo 5, 64-300 Zbożowo"):
-	ulicą staje się `miasto`, zwraca `(miasto, numer)`. Wszystko nierozpoznane -
-	pusty `adres`, brak liczby na końcu, sam numer bez `miasto` do podstawienia,
-	albo ulica po rozbiciu pusta lub wyglądająca jak kod pocztowy (dwie cyfry,
-	myślnik, trzy cyfry - np. źle wpisane "62-300 300", produkcyjna anomalia
-	danych) - zwraca `None`: zero zgadywania, wywołujący ma zostawić oryginalną
-	wartość bez zmian.
-	"""
-	tekst = (adres or "").strip()
+	Używane przez `rozbij_adres_arkusza`/`zbuduj_leada_z_arkusza`, żeby odróżnić
+	zwykły „brak numeru" (np. „Blizińskiego" - nic do zgłoszenia) od przypadku,
+	gdzie w Ulicy został jakiś nierozpoznany numer/tekst z cyfrą (np. „Rzepkowo
+	14m2", „1952-01-22T00:00:00") - ten drugi przypadek dostaje wpis
+	informacyjny w raporcie odrzuceń."""
+	return any(znak.isdigit() for znak in (tekst or ""))
+
+
+def _znormalizuj_numer(numer: str, numer2: str | None) -> str:
+	"""Składa numer domu z grup regexu tolerancyjnego dopasowania (reguły d/e):
+	`("22", "A")` -> `"22/A"`, `("34", None)` -> `"34"`, `("21 A", None)` ->
+	`"21A"` (odstęp przed literą - patrz `_CZESC_NUMERU_GLOWNA` - jest usuwany
+	tu, w JEDNYM miejscu). Wielkość liter obu części zostaje bez zmian (spec:
+	„litera bez zmian")."""
+	numer_czysty = re.sub(r"\s+", "", numer)
+	if numer2:
+		numer2_czysty = re.sub(r"\s+", "", numer2)
+		return f"{numer_czysty}/{numer2_czysty}"
+	return numer_czysty
+
+
+def _usun_prefiks_ulicy(tekst: str) -> str:
+	"""Usuwa wiodący prefiks 'ul.'/'ul'/'ulica' (reguła c) - patrz
+	`_WZOR_PREFIKS_ULICY`."""
+	return _WZOR_PREFIKS_ULICY.sub("", tekst, count=1)
+
+
+def _rozbij_c_do_f(segment: str, miejscowosc: str) -> tuple[str, str]:
+	"""Rozbija JEDEN segment (cały fragment ulicy, albo jeden kawałek po
+	podziale po przecinku - patrz `rozbij_fragment_ulicy`) na `(ulica,
+	nr_domu)`, stosując reguły c-f w tej kolejności; `nr_domu` pusty oznacza
+	regułę g („numer nierozpoznany", NIE odrzucenie - patrz `ulica_zawiera_cyfre`
+	i docstring modułu, sekcja Adres)."""
+	tekst = (segment or "").strip()
 	if not tekst:
-		return None
-	if _WZOR_SAM_NUMER.match(tekst):
-		miasto_czyste = (miasto or "").strip()
-		if not miasto_czyste:
-			return None
-		return miasto_czyste, tekst
-	dopasowanie = _WZOR_ULICA_I_NUMER.match(tekst)
+		return "", ""
+
+	# c) prefiks 'ul.'/'ul'/'ulica'
+	tekst = _usun_prefiks_ulicy(tekst).strip()
+	if not tekst:
+		return "", ""
+
+	# d) numer na końcu, tolerancyjnie - ze słowem 'nr' MA PIERWSZEŃSTWO przed
+	# wzorcem bez 'nr' (patrz docstring `_WZOR_NUMER_Z_NR`)
+	dopasowanie = _WZOR_NUMER_Z_NR.match(tekst) or _WZOR_NUMER_ZWYKLY.match(tekst)
 	if dopasowanie:
-		ulica = dopasowanie.group(1).strip()
-		if not ulica or _WZOR_KOD_POCZTOWY.match(ulica):
-			return None
-		return ulica, dopasowanie.group(2)
-	return None
+		ulica = dopasowanie.group("ulica").strip()
+		if ulica and not _WZOR_KOD_POCZTOWY.match(ulica):
+			numer = _znormalizuj_numer(dopasowanie.group("numer"), dopasowanie.group("numer2"))
+			return ulica, numer
+
+	# e) numer sklejony bez odstępu - TYLKO gdy cały tekst to jeden token bez
+	# białych znaków (patrz docstring `_WZOR_NUMER_SKLEJONY`)
+	if not re.search(r"\s", tekst):
+		dopasowanie_sklejone = _WZOR_NUMER_SKLEJONY.match(tekst)
+		if dopasowanie_sklejone:
+			ulica = dopasowanie_sklejone.group("ulica").strip()
+			if ulica and not _WZOR_KOD_POCZTOWY.match(ulica):
+				numer = _znormalizuj_numer(
+					dopasowanie_sklejone.group("numer"), dopasowanie_sklejone.group("numer2")
+				)
+				return ulica, numer
+
+	# f) cały (pozostały) tekst to sam numer domu (wieś bez nazwy ulicy) - w
+	# tym zapis Excela "4.0"/"1.0" dla liczb całkowitych
+	kandydat_sam_numer = tekst[:-2] if _WZOR_SAM_NUMER_KROPKA.match(tekst) else tekst
+	if _WZOR_SAM_NUMER.match(kandydat_sam_numer):
+		miasto_czyste = (miejscowosc or "").strip()
+		if miasto_czyste:
+			return miasto_czyste, re.sub(r"\s+", "", kandydat_sam_numer)
+
+	# g) numer nierozpoznany - segment zostaje w całości jako ulica
+	return tekst, ""
+
+
+def _wyciagnij_nawias(tekst: str) -> tuple[str, str]:
+	"""Wyciąga treść PIERWSZEGO nawiasu z `tekst` (także niedomkniętego -
+	obcięta komórka Excela) - `rozbij_fragment_ulicy` reguła a. Zwraca
+	`(tekst_bez_nawiasu, tresc_nawiasu)`; brak `(` zwraca `(tekst, "")` bez
+	zmian."""
+	if "(" not in tekst:
+		return tekst, ""
+	przed, _, po_nawiasie = tekst.partition("(")
+	if ")" in po_nawiasie:
+		tresc, _, po_zamknieciu = po_nawiasie.partition(")")
+		pozostaly = f"{przed.rstrip()} {po_zamknieciu.strip()}".strip()
+	else:
+		tresc = po_nawiasie
+		pozostaly = przed.strip()
+	return pozostaly, tresc.strip()
+
+
+_WZOR_KOD_POCZTOWY_PREFIKS = re.compile(r"^\d{2}-\d{3}\s+")
+"""Wiodący kod pocztowy Z ODSTĘPEM na początku segmentu (np. „62-640
+Boryslawice Kościelne 20" - drugi kod pocztowy sklejony przecinkiem bez
+spacji do pierwszego trafia jako OSTATNI segment po podziale po przecinku,
+z tym wiodącym kodem) - `_podziel_segmenty_przecinkiem` zdejmuje ten prefiks,
+NIE cały segment (w odróżnieniu od `_WZOR_KOD_POCZTOWY`, który dopasowuje
+segment BĘDĄCY w całości kodem pocztowym i taki segment odrzuca)."""
+
+
+def _podziel_segmenty_przecinkiem(tekst: str) -> list[str]:
+	"""Dzieli `tekst` po przecinku, przycina każdy kawałek i odrzuca puste
+	segmenty (wg `_pusta` - a więc też sam „-"/„brak"/„nie") oraz segmenty
+	wyglądające jak kod pocztowy (`_WZOR_KOD_POCZTOWY`, cały segment). Segment
+	zaczynający się od kodu pocztowego Z DALSZYM tekstem po nim (np. „62-640
+	Boryslawice Kościelne 20") ma ten wiodący kod ZDJĘTY, nie jest odrzucany w
+	całości - `_WZOR_KOD_POCZTOWY_PREFIKS`. Używane zarówno przez
+	`rozbij_fragment_ulicy` (reguła b) jak i `rozbij_adres_arkusza` (część PO
+	kodzie pocztowym, gdy ta też niesie przecinki)."""
+	wynik: list[str] = []
+	for czesc in (surowa.strip() for surowa in tekst.split(",")):
+		if not czesc or _pusta(czesc):
+			continue
+		if _WZOR_KOD_POCZTOWY.match(czesc):
+			continue
+		czesc = _WZOR_KOD_POCZTOWY_PREFIKS.sub("", czesc, count=1).strip()
+		if czesc:
+			wynik.append(czesc)
+	return wynik
+
+
+def rozbij_fragment_ulicy(fragment: str, miejscowosc: str) -> tuple[str, str, str]:
+	"""Rozbija fragment ulicy (część komórki `Adres` PRZED kodem pocztowym) na
+	`(ulica, nr_domu, dopisek_dodatkowy)`, tolerancyjnie rozpoznając numer domu
+	(uniformizacja danych z arkusza Grega, b59). Reguły stosowane W TEJ
+	KOLEJNOŚCI:
+
+	a) Nawias w środku fragmentu (np. „Kolejowa (budynek ma mieć odbiór...)"),
+	   także niedomknięty (obcięta komórka Excela) - treść nawiasu jest
+	   usuwana z fragmentu i dokładana do dopisku (patrz `_wyciagnij_nawias`).
+	b) Segmenty po przecinku (np. „Rogierówko, Ul. Kościuszki 16A", „ul.
+	   Szafranowa 14, Jezierzyce") - fragment (PO usunięciu nawiasu) jest
+	   dzielony po przecinku (`_podziel_segmenty_przecinkiem`, odrzuca puste i
+	   segmenty-kody-pocztowe). Segmentem ulicy zostaje PIERWSZY segment, który
+	   po regułach c-f daje rozpoznany numer domu; jeśli żaden segment go nie
+	   da, segmentem ulicy zostaje OSTATNI segment (numer wtedy pusty - reguła
+	   g). Pozostałe segmenty (w oryginalnej kolejności) trafiają do dopisku,
+	   złączone przecinkiem.
+	c-f) Patrz `_rozbij_c_do_f`: prefiks 'ul.'/'ulica' zdjęty, numer domu
+	   rozpoznany tolerancyjnie (ze słowem 'nr' albo bez, sklejony bez
+	   odstępu, albo cały segment to sam numer - wieś bez ulicy).
+	g) Brak rozpoznanego numeru - segment (po c) zostaje w całości jako
+	   `ulica`, `nr_domu` pusty. To NIE jest odrzucenie - `ulica_zawiera_cyfre`
+	   decyduje, czy wywołujący dołoży wpis informacyjny do raportu.
+
+	Dopiski z a) i b) łączą się w jedną wartość `dopisek_dodatkowy`, segmenty
+	złączone przecinkiem (pusta lista dopiskow daje pusty string)."""
+	tekst = (fragment or "").strip()
+	dopisek_czesci: list[str] = []
+
+	tekst, dopisek_nawiasu = _wyciagnij_nawias(tekst)
+	if dopisek_nawiasu:
+		dopisek_czesci.append(dopisek_nawiasu)
+
+	if "," in tekst:
+		segmenty = _podziel_segmenty_przecinkiem(tekst)
+		if not segmenty:
+			ulica, nr_domu = "", ""
+		else:
+			wybrany_indeks: int | None = None
+			wybrany_wynik: tuple[str, str] | None = None
+			for indeks, segment in enumerate(segmenty):
+				kandydat_ulica, kandydat_nr = _rozbij_c_do_f(segment, miejscowosc)
+				if kandydat_nr:
+					wybrany_indeks = indeks
+					wybrany_wynik = (kandydat_ulica, kandydat_nr)
+					break
+			if wybrany_wynik is None:
+				wybrany_indeks = len(segmenty) - 1
+				wybrany_wynik = _rozbij_c_do_f(segmenty[-1], miejscowosc)
+			ulica, nr_domu = wybrany_wynik
+			pozostale = [s for i, s in enumerate(segmenty) if i != wybrany_indeks]
+			if pozostale:
+				dopisek_czesci.append(", ".join(pozostale))
+	else:
+		ulica, nr_domu = _rozbij_c_do_f(tekst, miejscowosc)
+
+	dopisek_dodatkowy = ", ".join(dopisek_czesci)
+	return ulica, nr_domu, dopisek_dodatkowy
+
+
+def normalizuj_pisownie_osoby(tekst: str) -> str:
+	"""Normalizuje pisownię imienia/nazwiska do formy „pierwsza litera wielka,
+	reszta mała" na KAŻDYM słowie, także po myślniku i apostrofie (decyzja
+	właściciela 2026-09-16, ujednolicenie pisowni: „RADOSŁAW GIEREMEK" ->
+	„Radosław Gieremek", „kowalska-nowak" -> „Kowalska-Nowak", „o'brien" ->
+	„O'Brien").
+
+	`str.title()` już dzieli słowa na każdym znaku niealfabetycznym (spacja,
+	myślnik, apostrof włącznie) i poprawnie obsługuje polskie diakrytyki w
+	tablicach Unicode Pythona 3 (`"ŁUKASZ".title() == "Łukasz"`,
+	`"ŚWIĘTOSŁAWA".title() == "Świętosława"`) - ta funkcja jest cienką warstwą
+	nad `str.title()`, tylko po to, żeby mieć jedno udokumentowane miejsce dla
+	tej decyzji i przyszłych wyjątków. Puste wejście zwraca bez zmian.
+
+	Wywoływana W `zbuduj_leada_z_arkusza` PO `rozdziel_imie_nazwisko`, NIGDY
+	gdy `_wyglada_na_firme` rozpoznaje firmę w oryginalnej (nierozbitej)
+	kolumnie `Imię` - firmowa pisownia zostaje bez zmian. Ulice NIE przechodzą
+	przez tę funkcję - ryzyko przy nazwach typu „dywizjonu 303" albo „Zbyszka
+	z Bogdańca", gdzie title-case psułby sens (patrz docstring modułu)."""
+	if not tekst:
+		return tekst
+	return tekst.title()
 
 
 def _wyglada_na_firme(tekst: str) -> bool:
@@ -573,18 +863,29 @@ def rozbij_adres_arkusza(adres: str) -> AdresRozbity | None:
 	zwraca `None` - CAŁE pole Adres jest wtedy odrzucane przez wywołującego
 	(`zbuduj_leada_z_arkusza`), surowy tekst zostaje bez zmian.
 
-	Miejscowość to część przed pierwszym ` (` w tym, co zostaje po kodzie
-	pocztowym; dopisek to reszta, z obciętym końcowym `)` gdy jest obecny (bywa
-	ucięty przez Excela bez zamykającego nawiasu - obie wersje dają ten sam wynik).
+	Miejscowość: część PO kodzie pocztowym też bywa z przecinkiem (np. „-,
+	66-010 Przybymierz,", „-, 72-006 Dołuje,Mierzyn", „-, 78-627 Wałcz,
+	Różewo", „-, 23-114 Jabłonna (gmina), Chmiel Kolonia- miejscowość" -
+	decyzja właściciela po QA parsera, 2026-09-16): nawias jest najpierw
+	wycięty (`_wyciagnij_nawias`, tak jak dotąd - obsługuje też obcięty bez
+	zamykającego `)`), reszta idzie przez `_podziel_segmenty_przecinkiem`;
+	miejscowością zostaje PIERWSZY niepusty segment (przycięty, bez końcowej
+	interpunkcji `,;.`), pozostałe segmenty trafiają do dopisku razem z
+	treścią nawiasu (nawias pierwszy, potem segmenty, złączone przecinkiem).
 
-	Fragment ulicy równy dokładnie `-` (wiersz bez żadnej ulicy) daje puste `ulica`
-	i `nr_domu` - CELOWO nie kopiujemy tu miejscowości do ulicy (w odróżnieniu od
-	`rozbij_adres`, który to robi dla starego formatu "sam numer domu"). W
-	pozostałych przypadkach fragment ulicy idzie przez `rozbij_adres(fragment,
-	miejscowosc)`; gdy ten zwróci `None` (np. „Blizińskiego" - ulica bez numeru na
-	końcu) fragment zostaje w całości jako `ulica`, `nr_domu` pusty - to NIE jest
-	odrzucenie, tylko brakujący numer domu (statystyka "ulica bez numeru").
-	"""
+	Fragment ulicy równy `-` (albo pusty wg `_pusta`) - wieś bez nazwy ulicy -
+	daje `ulica = miejscowość`, `nr_domu = ""` (decyzja właściciela, issue
+	#116, 2026-09-09: OBA pola niosą tę samą wartość). W pozostałych
+	przypadkach fragment idzie przez `rozbij_fragment_ulicy(fragment,
+	miejscowosc)` (patrz jej docstring dla pełnych reguł a-g rozpoznawania
+	numeru domu). `numer_nierozpoznany_z_cyfra` jest `True` tylko gdy ta druga
+	ścieżka nie rozpoznała numeru domu (reguła g), a pozostawiony `ulica`
+	zawiera choć jedną cyfrę (`ulica_zawiera_cyfre`) - NIGDY dla ścieżki
+	"wieś bez ulicy" powyżej, gdzie brak numeru jest oczekiwany, nie błędny.
+
+	`dopisek` łączy dopisek zwrócony przez `rozbij_fragment_ulicy` (nawiasy w
+	środku fragmentu, segmenty odrzucone przy podziale po przecinku) z
+	dopiskiem-po-miejscowości, segmenty złączone przecinkiem."""
 	tekst = (adres or "").strip()
 	if not tekst:
 		return None
@@ -595,24 +896,35 @@ def rozbij_adres_arkusza(adres: str) -> AdresRozbity | None:
 	kod = dopasowanie.group(2)
 	reszta = dopasowanie.group(3).strip()
 
-	if " (" in reszta:
-		miejscowosc_surowa, _, dopisek_surowy = reszta.partition(" (")
-		miejscowosc = miejscowosc_surowa.strip()
-		dopisek = dopisek_surowy.rstrip(")").strip()
+	reszta_bez_nawiasu, dopisek_nawiasu = _wyciagnij_nawias(reszta)
+	segmenty_miejscowosci = _podziel_segmenty_przecinkiem(reszta_bez_nawiasu)
+	if segmenty_miejscowosci:
+		miejscowosc = segmenty_miejscowosci[0].rstrip(",;.")
+		dopisek_pozostale_segmenty = ", ".join(segmenty_miejscowosci[1:])
 	else:
-		miejscowosc = reszta
-		dopisek = ""
+		miejscowosc = ""
+		dopisek_pozostale_segmenty = ""
+	segmenty_dopisku_miejscowosci = [d for d in (dopisek_nawiasu, dopisek_pozostale_segmenty) if d]
+	dopisek_miejscowosci = ", ".join(segmenty_dopisku_miejscowosci)
 
-	if czesc_ulicy == "-":
-		ulica, nr_domu = "", ""
+	if _pusta(czesc_ulicy):
+		ulica, nr_domu, dopisek_fragmentu = miejscowosc, "", ""
+		numer_nierozpoznany_z_cyfra = False
 	else:
-		rozbite = rozbij_adres(czesc_ulicy, miejscowosc)
-		if rozbite:
-			ulica, nr_domu = rozbite
-		else:
-			ulica, nr_domu = czesc_ulicy, ""
+		ulica, nr_domu, dopisek_fragmentu = rozbij_fragment_ulicy(czesc_ulicy, miejscowosc)
+		numer_nierozpoznany_z_cyfra = not nr_domu and ulica_zawiera_cyfre(ulica)
 
-	return AdresRozbity(ulica=ulica, nr_domu=nr_domu, kod=kod, miejscowosc=miejscowosc, dopisek=dopisek)
+	segmenty_dopisku = [d for d in (dopisek_fragmentu, dopisek_miejscowosci) if d]
+	dopisek = ", ".join(segmenty_dopisku)
+
+	return AdresRozbity(
+		ulica=ulica,
+		nr_domu=nr_domu,
+		kod=kod,
+		miejscowosc=miejscowosc,
+		dopisek=dopisek,
+		numer_nierozpoznany_z_cyfra=numer_nierozpoznany_z_cyfra,
+	)
 
 
 def normalizuj_uwagi(tekst: str, dopisek_adresu: str = "") -> str:
@@ -706,6 +1018,146 @@ def wykryj_duble_telefonow(wiersze: list[dict[str, str]]) -> dict[int, int]:
 	return duble
 
 
+_PRIORYTET_STATUSU_ZRODLA: tuple[str, ...] = ("Wygrana", "Potencjał", "Przegrana", "Nieaktualna")
+"""Priorytet `Status źródła` przy scalaniu dubli (`scal_duble`) - pierwsza
+wartość z tej listy znaleziona wśród obu scalanych wierszy wygrywa."""
+
+_KOLUMNY_SUMA_TOKENOW_PRZECINEK: frozenset[str] = frozenset({"Obecne produkty", "Produkt w procesie"})
+"""Kolumny `scal_duble` sumuje tekstowo (surowo, złączone przecinkiem) zamiast
+brać pierwszą niepustą wartość - normalizacja/dedup tokenów i tak dzieje się
+później, w `_rozloz_tokeny`."""
+
+
+def _polacz_tokeny_scalania(a: str, b: str, separator: str) -> str:
+	"""Łączy dwie surowe komórki `separator`-em, pomijając puste wg `_pusta`
+	(np. `Źródło` „SD"+„CC" -> „SD CC", `Obecne produkty` „PV"+„PC" ->
+	„PV,PC") - `scal_duble`. Normalizację/dedup tokenów robi dopiero
+	`_rozloz_tokeny` w `zbuduj_leada_z_arkusza`."""
+	czesci = [c.strip() for c in (a, b) if not _pusta(c)]
+	return separator.join(czesci)
+
+
+def _polacz_uwagi_scalania(a: str, b: str) -> str:
+	"""Doklejenie uwag przy scalaniu dubli - `a` + `|` + `b`, puste pomijane -
+	`scal_duble`. Ten sam separator `|` co w arkuszu, `normalizuj_uwagi`
+	dzieli po nim później na osobne linie."""
+	czesci = [c.strip() for c in (a, b) if not _pusta(c)]
+	return "|".join(czesci)
+
+
+def _wybierz_status_priorytet(a: str, b: str) -> str:
+	"""Wybiera `Status źródła` przy scalaniu dubli wg `_PRIORYTET_STATUSU_ZRODLA`
+	(dopasowanie bez rozróżniania wielkości liter) - `scal_duble`. Gdy żadna z
+	dwóch wartości nie jest jednym z czterech priorytetowych słów (śmieci w tej
+	kolumnie się zdarzają - patrz `normalizuj_status_zrodla`), pierwsza niepusta
+	wygrywa; gdy obie puste, zwraca `a` bez zmian."""
+	for status in _PRIORYTET_STATUSU_ZRODLA:
+		for kandydat in (a, b):
+			if not _pusta(kandydat) and kandydat.strip().lower() == status.lower():
+				return kandydat.strip()
+	for kandydat in (a, b):
+		if not _pusta(kandydat):
+			return kandydat.strip()
+	return a
+
+
+def _nowsza_data_scalania(a: str, b: str) -> str:
+	"""Wybiera `Data pozyskania` przy scalaniu dubli - nowsza z dwóch (porównanie
+	przez `normalizuj_date`, więc działa niezależnie od formatu wejścia -
+	`scal_duble`). Niepoprawna/pusta data traktowana jak brak; gdy żadna z
+	dwóch wartości nie jest poprawną datą, pierwsza niepusta wygrywa (żeby nie
+	gubić surowego, choćby nierozpoznanego tekstu)."""
+	data_a = normalizuj_date(a) if not _pusta(a) else None
+	data_b = normalizuj_date(b) if not _pusta(b) else None
+	if data_a and data_b:
+		return a.strip() if data_a >= data_b else b.strip()
+	if data_a:
+		return a.strip()
+	if data_b:
+		return b.strip()
+	for kandydat in (a, b):
+		if not _pusta(kandydat):
+			return kandydat.strip()
+	return a
+
+
+def _scal_dwa_wiersze(pierwszy: dict[str, str], drugi: dict[str, str]) -> dict[str, str]:
+	"""Scala `drugi` wiersz W `pierwszy` (zwraca NOWY słownik, `pierwszy` i
+	`drugi` zostają bez zmian - konwencja immutability modułu) wg reguł
+	`scal_duble`. `Telefon` zostaje wartością `pierwszy` (oba wiersze mają ten
+	sam znormalizowany telefon, inaczej nie trafiłyby tutaj)."""
+	wynik = dict(pierwszy)
+	for kolumna in NAGLOWKI_ARKUSZA:
+		if kolumna == "Telefon":
+			continue
+		if kolumna == "Źródło":
+			wynik[kolumna] = _polacz_tokeny_scalania(pierwszy.get(kolumna, ""), drugi.get(kolumna, ""), " ")
+		elif kolumna == "Uwagi":
+			wynik[kolumna] = _polacz_uwagi_scalania(pierwszy.get(kolumna, ""), drugi.get(kolumna, ""))
+		elif kolumna in _KOLUMNY_SUMA_TOKENOW_PRZECINEK:
+			wynik[kolumna] = _polacz_tokeny_scalania(pierwszy.get(kolumna, ""), drugi.get(kolumna, ""), ",")
+		elif kolumna == "Status źródła":
+			wynik[kolumna] = _wybierz_status_priorytet(pierwszy.get(kolumna, ""), drugi.get(kolumna, ""))
+		elif kolumna == "Data pozyskania":
+			wynik[kolumna] = _nowsza_data_scalania(pierwszy.get(kolumna, ""), drugi.get(kolumna, ""))
+		elif _pusta(pierwszy.get(kolumna, "")):
+			# kazda inna pusta komorka pierwszego dopelniana z drugiego
+			wynik[kolumna] = drugi.get(kolumna, "")
+	return wynik
+
+
+def scal_duble(
+	wiersze: list[dict[str, str]],
+) -> tuple[list[tuple[int, dict[str, str]]], list[tuple[int, int]]]:
+	"""Grupuje wiersze arkusza po znormalizowanym telefonie (`normalizuj_telefon`)
+	i SCALA każdą grupę > 1 w jeden wiersz - kontrakt z Gregiem,
+	`docs/LEADY-ARKUSZ-IMPORT-GREG.md`, sekcja „Duble": „importer scali je sam
+	po numerze, źródła po plusie, uwagi sklejone" (patrz docstring modułu,
+	sekcja Duble telefonu).
+
+	Wiersze z niepoprawnym telefonem (`normalizuj_telefon` zwraca `None`) NIE
+	są ze sobą grupowane - każdy taki wiersz to WŁASNA, jednoelementowa grupa
+	i zostaje bez zmian (ich odrzucenie należy do `zbuduj_leada_z_arkusza`,
+	nie do tej funkcji).
+
+	Scalanie kolejnego wiersza z tym samym numerem DO pierwszego (patrz
+	`_scal_dwa_wiersze` dla reguł per kolumna: `Źródło`/`Obecne
+	produkty`/`Produkt w procesie` sumują tokeny, `Uwagi` się doklejają,
+	`Status źródła` idzie wg priorytetu, `Data pozyskania` bierze nowszą,
+	każda inna pusta komórka pierwszego dopełnia się z drugiego).
+
+	Zwraca `(scalone, pary_dubli)`:
+	- `scalone`: lista `(nr_wiersza_pierwszego_wystapienia, scalony_wiersz)` w
+	  KOLEJNOŚCI PIERWSZYCH WYSTĄPIEŃ (nie w kolejności numeru telefonu ani
+	  numeru wiersza scalonego rekordu).
+	- `pary_dubli`: lista `(nr_wiersza_pozniejszego, nr_wiersza_pierwszego)` -
+	  jeden wpis na KAŻDY scalony (późniejszy) wiersz, do wpisu informacyjnego
+	  w raporcie odrzuceń („scalono z wierszem N")."""
+	grupy: dict[str, int] = {}  # telefon znormalizowany -> nr_wiersza pierwszego
+	wynik_by_nr: dict[int, dict[str, str]] = {}
+	kolejnosc: list[int] = []  # nr_wiersza pierwszych wystapien, w kolejnosci
+	pary_dubli: list[tuple[int, int]] = []
+
+	for i, wiersz in enumerate(wiersze):
+		nr = i + 2
+		telefon = normalizuj_telefon(wiersz.get("Telefon", "") or "")
+		if telefon is None:
+			wynik_by_nr[nr] = dict(wiersz)
+			kolejnosc.append(nr)
+			continue
+		if telefon not in grupy:
+			grupy[telefon] = nr
+			wynik_by_nr[nr] = dict(wiersz)
+			kolejnosc.append(nr)
+		else:
+			nr_pierwszy = grupy[telefon]
+			wynik_by_nr[nr_pierwszy] = _scal_dwa_wiersze(wynik_by_nr[nr_pierwszy], wiersz)
+			pary_dubli.append((nr, nr_pierwszy))
+
+	scalone = [(nr, wynik_by_nr[nr]) for nr in kolejnosc]
+	return scalone, pary_dubli
+
+
 def _pole_slownikowe(
 	nr_wiersza: int,
 	telefon: str,
@@ -756,9 +1208,20 @@ def zbuduj_leada_z_arkusza(
 
 	Adres: `rozbij_adres_arkusza` na kolumnie `Adres`; brak dopasowania odrzuca CAŁE
 	pole Adres do raportu i zostawia surowy tekst w `custom_install_address` bez
-	zmian (`custom_nr_domu`/kod/miejscowość/dopisek zostają puste). Dopisek w
-	nawiasie NIE trafia do `custom_install_city` - dokleja się jako ostatnia linia
-	`custom_uwagi_import` przez `normalizuj_uwagi` (decyzja właściciela 2026-09-16).
+	zmian (`custom_nr_domu`/kod/miejscowość/dopisek zostają puste). Dopisek
+	(nawiasy w środku fragmentu ulicy, segmenty odrzucone przy podziale po
+	przecinku, dopisek po miejscowości) NIE trafia do `custom_install_city` -
+	dokleja się jako ostatnia linia `custom_uwagi_import` przez `normalizuj_uwagi`
+	(decyzja właściciela 2026-09-16). Gdy numer domu nie zostanie rozpoznany, a
+	pozostawiony w Ulicy tekst zawiera choć jedną cyfrę
+	(`AdresRozbity.numer_nierozpoznany_z_cyfra`), dokłada się wpis INFORMACYJNY
+	do raportu (powód „numer domu nierozpoznany, tekst zostawiony w Ulicy") -
+	to NIE jest odrzucenie, lead i pole Adres wchodzą normalnie.
+
+	Imię/nazwisko: `rozdziel_imie_nazwisko`, potem `normalizuj_pisownie_osoby`
+	na obu polach (decyzja właściciela 2026-09-16, ujednolicenie pisowni) -
+	POMIJANE, gdy `_wyglada_na_firme` rozpoznaje firmę w surowej kolumnie
+	`Imię` (firmowa pisownia zostaje bez zmian).
 
 	Źródło: pusta komórka `Źródło` jest odrzucana z powodem `"wymagane"` (jedyne pole
 	tej grupy odrzucane mimo pustki - źródło ma być zawsze wypełnione). Status
@@ -777,9 +1240,13 @@ def zbuduj_leada_z_arkusza(
 		)
 		return None, odrzucone
 
+	imie_surowy = _tekst_albo_puste(wiersz.get("Imię"))
 	imie, nazwisko = rozdziel_imie_nazwisko(
 		wiersz.get("Imię", "") or "", wiersz.get("Nazwisko", "") or ""
 	)
+	if not _wyglada_na_firme(imie_surowy):
+		imie = normalizuj_pisownie_osoby(imie)
+		nazwisko = normalizuj_pisownie_osoby(nazwisko)
 
 	adres_surowy = wiersz.get("Adres", "") or ""
 	if _pusta(adres_surowy):
@@ -792,7 +1259,17 @@ def zbuduj_leada_z_arkusza(
 			)
 			ulica, nr_domu, kod, miejscowosc, dopisek = adres_surowy.strip(), "", "", "", ""
 		else:
-			ulica, nr_domu, kod, miejscowosc, dopisek = rozbite_adres
+			ulica, nr_domu, kod, miejscowosc, dopisek = rozbite_adres[:5]
+			if rozbite_adres.numer_nierozpoznany_z_cyfra:
+				odrzucone.append(
+					OdrzuconePole(
+						nr_wiersza,
+						telefon,
+						"Adres",
+						adres_surowy.strip(),
+						"numer domu nierozpoznany, tekst zostawiony w Ulicy",
+					)
+				)
 
 	powiat = _tekst_albo_puste(wiersz.get("Powiat"))
 
