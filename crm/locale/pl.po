@@ -9002,3 +9002,64 @@ msgstr "Podaj powód oznaczenia tego leada jako straconego"
 # widoczny angielski napis w wymaganym zrzucie ekranu)
 msgid "No Tasks"
 msgstr "Brak zadań"
+
+# b59 T1
+# issue ops#132: puste stany zakladek leada/szansy (Activities.vue) i
+# literaly obok nich (DataFields.vue, WhatsAppArea.vue, FilesUploader.vue)
+# owiniete __()
+msgid "No Activities Found"
+msgstr "Nie znaleziono aktywności"
+
+msgid "No Emails Found"
+msgstr "Nie znaleziono e-maili"
+
+msgid "No Comments Found"
+msgstr "Nie znaleziono komentarzy"
+
+msgid "No Data Fields Added Yet"
+msgstr "Nie dodano jeszcze żadnych pól danych"
+
+msgid "No Call History"
+msgstr "Brak historii połączeń"
+
+msgid "No Notes Found"
+msgstr "Nie znaleziono notatek"
+
+msgid "No Tasks Found"
+msgstr "Nie znaleziono zadań"
+
+msgid "No Attachments Found"
+msgstr "Nie znaleziono załączników"
+
+msgid "No WhatsApp Messages Found"
+msgstr "Nie znaleziono wiadomości WhatsApp"
+
+msgid "There are no activities to display here. Go ahead and make some changes."
+msgstr "Nie ma tu żadnych aktywności do wyświetlenia. Wprowadź jakieś zmiany."
+
+msgid "No emails found in your inbox. New messages will appear here soon."
+msgstr "Nie znaleziono e-maili w skrzynce odbiorczej. Nowe wiadomości pojawią się tutaj wkrótce."
+
+msgid "Be the first to add one."
+msgstr "Bądź pierwszą osobą, która doda komentarz."
+
+msgid "No data fields have been added yet."
+msgstr "Nie dodano jeszcze żadnych pól danych."
+
+msgid "No recent calls to display. Log a call or call someone now!"
+msgstr "Brak ostatnich połączeń do wyświetlenia. Zarejestruj połączenie albo zadzwoń do kogoś teraz!"
+
+msgid "Nothing here for now. Add a note to keep track of things."
+msgstr "Nic tu jeszcze nie ma. Dodaj notatkę, aby nie zapomnieć o ważnych sprawach."
+
+msgid "Nothing to do at the moment. Start organizing by adding one here."
+msgstr "Na razie nic do zrobienia. Zacznij organizować pracę, dodając zadanie tutaj."
+
+msgid "No files have been attached yet. Upload files to see them here."
+msgstr "Nie dodano jeszcze żadnych załączników. Prześlij pliki, aby zobaczyć je tutaj."
+
+msgid "Start a conversation now!"
+msgstr "Rozpocznij rozmowę teraz!"
+
+msgid "Error Uploading File"
+msgstr "Błąd przesyłania pliku"
