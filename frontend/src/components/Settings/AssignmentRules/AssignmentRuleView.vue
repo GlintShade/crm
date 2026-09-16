@@ -127,11 +127,11 @@
             v-model="assignmentRuleData.documentType"
             :options="[
               {
-                label: 'Lead',
+                label: __('Lead'),
                 value: 'CRM Lead',
               },
               {
-                label: 'Deal',
+                label: __('Deal'),
                 value: 'CRM Deal',
               },
             ]"
