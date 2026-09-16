@@ -83,6 +83,7 @@
           class="mt-4"
           :label="__('Reports to (hierarchy)')"
           :options="hierarchyOptions"
+          :placeholder="__('Wybierz opcję')"
         />
         <div class="flex flex-col gap-2 mt-4">
           <FormControl

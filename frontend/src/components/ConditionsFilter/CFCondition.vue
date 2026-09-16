@@ -255,11 +255,19 @@ function getValueControl() {
   } else if (typeNumber.includes(fieldtype)) {
     return h(FormControl, { type: 'number' })
   } else if (typeDate.includes(fieldtype) && operator == 'between') {
-    return h(DateRangePicker, { value: condition[2], iconLeft: '' })
+    return h(DateRangePicker, {
+      value: condition[2],
+      iconLeft: '',
+      placeholder: __('Wybierz zakres'),
+    })
   } else if (typeDate.includes(fieldtype)) {
     return h(fieldtype == 'Date' ? DatePicker : DateTimePicker, {
       value: condition[2],
       iconLeft: '',
+      placeholder:
+        fieldtype == 'Date'
+          ? __('Wybierz datę')
+          : __('Wybierz datę i godzinę'),
     })
   } else if (typeRating.includes(fieldtype)) {
     return h(Rating, {

@@ -7,6 +7,8 @@
       selectable: options.selectable,
       showTooltip: options.showTooltip,
       resizeColumn: options.resizeColumn,
+      selectionText: (n) =>
+        n === 1 ? __('Zaznaczono 1 wiersz') : __('Zaznaczono {0} wierszy', [n]),
     }"
     row-key="name"
     v-bind="$attrs"

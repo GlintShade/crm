@@ -30,6 +30,7 @@
           v-model="wybranyHandlowiec"
           :options="opcjeHandlowcow"
           :disabled="handlowcyResource.loading"
+          :placeholder="__('Wybierz opcję')"
         />
         <ErrorMessage :message="blad" />
       </div>

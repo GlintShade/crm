@@ -72,7 +72,12 @@
               </div>
             </div>
             <div class="flex items-center gap-2">
-              <Combobox v-model="twilio.doc.app_name" :options="twilioApps">
+              <Combobox
+                v-model="twilio.doc.app_name"
+                :options="twilioApps"
+                :placeholder="__('Wybierz opcję')"
+                :emptyText="__('Brak wyników')"
+              >
                 <template #footer>
                   <Button
                     :label="__('Refresh Apps')"
