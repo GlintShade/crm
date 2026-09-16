@@ -301,6 +301,158 @@ export function hydrateFrom(record) {
   return form
 }
 
+// Fields required unconditionally, independent of every other answer in the
+// form (owner decision, 2026-08-15). MIRROR: crm/volteo_kredyt.py's
+// `_BAZA_WYMAGANE` tuple, same order. `numer_rachunku` is deliberately
+// absent (owner decision, 2026-08-17): the field still exists and prints on
+// the PDF if given, it just is not required.
+//
+// CONTRACT (ops#147): brakujacePola() below, together with BAZA_WYMAGANE, is
+// a pure mirror of crm/volteo_kredyt.py's `_BAZA_WYMAGANE` / `_pola_grupy()`
+// / `brakujace_pola()`. Any change to that backend module requires the
+// matching change here, and vice versa. crm/test_volteo_kredyt_pdf.py's
+// `TestBrakujacePola*` classes and this file's kredytForm.test.js mirror the
+// same case matrix so a divergence fails on both sides.
+export const BAZA_WYMAGANE = [
+  'miejsce_urodzenia',
+  'rodzaj_dokumentu',
+  'seria_numer_dokumentu',
+  'data_wydania_dokumentu',
+  'data_waznosci_dokumentu',
+  'adres_zameldowania_taki_sam',
+  'adres_korespondencji_taki_sam',
+  'wyksztalcenie',
+  'stan_cywilny',
+  'liczba_osob_na_utrzymaniu',
+  'kwota_800_plus',
+  'dochod_wspolmalzonka',
+  'zrodlo_dochodu_malzonka',
+  'oplaty_miesieczne',
+  'suma_zobowiazan',
+]
+
+/**
+ * Is a value "filled", for brakujacePola()'s purposes? MIRROR:
+ * crm/volteo_kredyt.py `_jest_puste()`. `null`/`undefined`/a whitespace-only
+ * string are empty; everything else (including the string "0") is filled.
+ */
+function jestPuste(wartosc) {
+  if (wartosc === null || wartosc === undefined) return true
+  if (typeof wartosc === 'string') return wartosc.trim() === ''
+  return false
+}
+
+/**
+ * Is an income-group toggle "on"? MIRROR: crm/volteo_kredyt.py `_wlaczone()`.
+ * Accepts a real boolean (the shape the live form always carries, per
+ * hydrateFrom's `!!r[fn]` coercion), or a number/string the way the raw API
+ * payload might still carry it ('' and '0' are off, anything else is on).
+ * Never throws.
+ */
+function jestWlaczone(wartosc) {
+  if (typeof wartosc === 'boolean') return wartosc
+  if (wartosc === null || wartosc === undefined) return false
+  if (typeof wartosc === 'string') {
+    const tekst = wartosc.trim()
+    return tekst !== '' && tekst !== '0'
+  }
+  return Boolean(wartosc)
+}
+
+/**
+ * Filter one income group's fields down to the ones actually required, given
+ * the group is on. MIRROR: crm/volteo_kredyt.py `_pola_grupy()`, same three
+ * exceptions, same "skip conditionally instead of appending at the end" so
+ * the result preserves GRUPY's declared field order regardless of which
+ * field is conditional. Never mutates `grupa` or `form`.
+ */
+function polaGrupyWymagane(grupa, form) {
+  if (grupa.wlaczone === 'praca_wlaczone') {
+    return grupa.fields.filter((pole) => {
+      if (pole === 'praca_okres_do') return form.praca_okres === 'Czas określony'
+      return true
+    })
+  }
+
+  if (grupa.wlaczone === 'dzialalnosc_wlaczone') {
+    // Pisownia "inne" (małą literą) jest celowa: dokładna transkrypcja
+    // opcji Select z PDF-u, tak samo jak w backendzie i w
+    // WARUNKI_WIDOCZNOSCI powyżej: porównanie jest case-sensitive.
+    return grupa.fields.filter((pole) => {
+      if (pole === 'dzialalnosc_forma_inna') {
+        return form.dzialalnosc_forma_opodatkowania === 'inne'
+      }
+      return true
+    })
+  }
+
+  if (grupa.wlaczone === 'inne_wlaczone') {
+    return grupa.fields.filter((pole) => pole === 'inne_1_typ' || pole === 'inne_1_kwota')
+  }
+
+  return [...grupa.fields]
+}
+
+/**
+ * Pure mirror of crm/volteo_kredyt.py `brakujace_pola()`, returns the
+ * fieldnames required by the form and currently empty, in the same
+ * deterministic order the backend produces (BAZA_WYMAGANE, then the two
+ * conditional addresses, then each income group's fields in GRUPY order).
+ *
+ * Never mutates `form`. See the CONTRACT note above BAZA_WYMAGANE.
+ *
+ * @param {object} form - current form state (BASE_FIELDS + GRUPY fields + toggles)
+ * @returns {string[]} fieldnames that are required and currently empty
+ */
+export function brakujacePola(form) {
+  const dane = form || {}
+  let wymagane = [...BAZA_WYMAGANE]
+
+  if (dane.adres_zameldowania_taki_sam === 'Nie') wymagane.push('adres_zameldowania')
+  if (dane.adres_korespondencji_taki_sam === 'Nie') wymagane.push('adres_korespondencji')
+
+  GRUPY.forEach((grupa) => {
+    if (!jestWlaczone(dane[grupa.wlaczone])) return
+    wymagane = wymagane.concat(polaGrupyWymagane(grupa, dane))
+  })
+
+  return wymagane.filter((pole) => jestPuste(dane[pole]))
+}
+
+// Polish labels for the 9 required `prefill` (contact-card) keys. MIRROR:
+// crm/api/kredyt.py `_PREFILL_ETYKIETY`, same 9 keys, same wording,
+// `nr_lokalu` deliberately absent (a client living in a detached house
+// legitimately has no flat number, so it can never block PDF generation).
+const PREFILL_ETYKIETY_KLIENTA = {
+  pesel: 'PESEL',
+  imiona: 'Imię/imiona',
+  nazwisko: 'Nazwisko',
+  telefon: 'Telefon',
+  email: 'E-mail',
+  kod_pocztowy: 'Kod pocztowy',
+  miejscowosc: 'Miejscowość',
+  ulica: 'Ulica',
+  nr_domu: 'Nr domu',
+}
+
+/**
+ * Pure mirror of crm/api/kredyt.py `volteo_kredyt_pdf`'s prefill-completeness
+ * check (`brakujace_prefill = [klucz for klucz in _PREFILL_ETYKIETY if not
+ * prefill.get(klucz)]`), the SAME falsy check, not a whitespace-trim check,
+ * so a stray space in a contact field is not treated as missing here either;
+ * matches the server exactly. Returns PL labels (not fieldnames), ready to
+ * join straight into the banner's second line. Never mutates `prefill`.
+ *
+ * @param {object} prefill - the `prefill` block returned by the kredyt API
+ * @returns {string[]} PL labels of the required prefill keys that are empty
+ */
+export function brakujaceDaneKlienta(prefill) {
+  const dane = prefill || {}
+  return Object.keys(PREFILL_ETYKIETY_KLIENTA)
+    .filter((klucz) => !dane[klucz])
+    .map((klucz) => PREFILL_ETYKIETY_KLIENTA[klucz])
+}
+
 // Matches a plain amount: an integer part (digits, optionally interspersed
 // with spaces/NBSP thousands grouping — never touched, only the decimal
 // part is normalized) plus an optional decimal separator (',' or '.')

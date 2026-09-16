@@ -18,6 +18,9 @@ import {
   formatujNumerRachunkuZKursorem,
   poleWidoczne,
   widocznePola,
+  BAZA_WYMAGANE,
+  brakujacePola,
+  brakujaceDaneKlienta,
 } from '@/utils/kredytForm'
 
 function deepFreeze(value) {
@@ -28,6 +31,71 @@ function deepFreeze(value) {
     }
   }
   return value
+}
+
+// Mirror of crm/test_volteo_kredyt_pdf.py's `_kredyt()` fixture, same
+// field-for-field values, so overrides in the tests below reproduce the
+// backend TestBrakujacePola* case matrix 1:1. Every income-group toggle
+// starts off; tests that want to check a specific group turn it on
+// explicitly via `nadpisania`.
+function kredytKompletny(nadpisania = {}) {
+  const baza = {
+    miejsce_urodzenia: 'Warszawa',
+    rodzaj_dokumentu: 'Dowód osobisty',
+    seria_numer_dokumentu: 'ABC123456',
+    data_wydania_dokumentu: '2020-01-15',
+    data_waznosci_dokumentu: '2030-01-15',
+    adres_zameldowania_taki_sam: 'Tak',
+    adres_zameldowania: '',
+    adres_korespondencji_taki_sam: 'Tak',
+    adres_korespondencji: '',
+    wyksztalcenie: 'wyższe',
+    stan_cywilny: 'Kawaler/panna',
+    liczba_osob_na_utrzymaniu: '0',
+    kwota_800_plus: '0',
+    dochod_wspolmalzonka: '0',
+    zrodlo_dochodu_malzonka: 'Emerytura',
+    oplaty_miesieczne: '500',
+    suma_zobowiazan: '0',
+    numer_rachunku: 'PL61109010140000071219812874',
+    praca_wlaczone: false,
+    praca_forma: '',
+    praca_data_zatrudnienia: '',
+    praca_okres: '',
+    praca_okres_od: '',
+    praca_okres_do: '',
+    praca_nip: '',
+    praca_nazwa_zakladu: '',
+    praca_adres_telefon: '',
+    praca_kwota_dochodu: '',
+    emerytura_wlaczone: false,
+    emerytura_numer_swiadczenia: '',
+    emerytura_od_kiedy: '',
+    emerytura_kwota_dochodu: '',
+    renta_wlaczone: false,
+    renta_numer_swiadczenia: '',
+    renta_od_kiedy: '',
+    renta_kwota_dochodu: '',
+    dzialalnosc_wlaczone: false,
+    dzialalnosc_forma_opodatkowania: '',
+    dzialalnosc_forma_inna: '',
+    dzialalnosc_nip: '',
+    dzialalnosc_nazwa: '',
+    dzialalnosc_adres: '',
+    dzialalnosc_telefon: '',
+    dzialalnosc_od_kiedy: '',
+    dzialalnosc_kwota_dochodu: '',
+    gospodarstwo_wlaczone: false,
+    gospodarstwo_nip: '',
+    gospodarstwo_od_kiedy: '',
+    gospodarstwo_kwota_dochodu: '',
+    inne_wlaczone: false,
+    inne_1_typ: '',
+    inne_1_kwota: '',
+    inne_2_typ: '',
+    inne_2_kwota: '',
+  }
+  return { ...baza, ...nadpisania }
 }
 
 describe('Kredyt form logic', () => {
@@ -709,6 +777,458 @@ describe('Kredyt form logic', () => {
 
       expect(nazwy).toContain('praca_okres_od')
       expect(nazwy).not.toContain('praca_okres_do')
+    })
+  })
+
+  describe('BAZA_WYMAGANE', () => {
+    it('is the 15-field list mirrored from crm/volteo_kredyt.py _BAZA_WYMAGANE, numer_rachunku absent', () => {
+      expect(BAZA_WYMAGANE).toEqual([
+        'miejsce_urodzenia',
+        'rodzaj_dokumentu',
+        'seria_numer_dokumentu',
+        'data_wydania_dokumentu',
+        'data_waznosci_dokumentu',
+        'adres_zameldowania_taki_sam',
+        'adres_korespondencji_taki_sam',
+        'wyksztalcenie',
+        'stan_cywilny',
+        'liczba_osob_na_utrzymaniu',
+        'kwota_800_plus',
+        'dochod_wspolmalzonka',
+        'zrodlo_dochodu_malzonka',
+        'oplaty_miesieczne',
+        'suma_zobowiazan',
+      ])
+      expect(BAZA_WYMAGANE).not.toContain('numer_rachunku')
+    })
+  })
+
+  describe('brakujacePola (mirror of crm/volteo_kredyt.py brakujace_pola, case matrix from crm/test_volteo_kredyt_pdf.py TestBrakujacePola*)', () => {
+    describe('pola bazowe (TestBrakujacePolaBazowe)', () => {
+      it('a: pusty rekord daje liste bazowa', () => {
+        expect(brakujacePola({})).toEqual(BAZA_WYMAGANE)
+      })
+
+      it('b: kompletny rekord bez grup dochodu nic nie brakuje', () => {
+        expect(brakujacePola(kredytKompletny())).toEqual([])
+      })
+
+      it('c: zero amount liczy sie jako wypelnione', () => {
+        const dane = kredytKompletny({
+          kwota_800_plus: '0',
+          dochod_wspolmalzonka: '0',
+          suma_zobowiazan: '0',
+        })
+        const wynik = brakujacePola(dane)
+        expect(wynik).not.toContain('kwota_800_plus')
+        expect(wynik).not.toContain('dochod_wspolmalzonka')
+        expect(wynik).not.toContain('suma_zobowiazan')
+      })
+
+      it('d: bialy znak jest brakujacy', () => {
+        const dane = kredytKompletny({ miejsce_urodzenia: '   ' })
+        expect(brakujacePola(dane)).toContain('miejsce_urodzenia')
+      })
+
+      it('e: nie mutuje wejscia', () => {
+        const dane = deepFreeze(kredytKompletny())
+        expect(() => brakujacePola(dane)).not.toThrow()
+      })
+
+      it('f: numer_rachunku pusty nie jest brakujacy', () => {
+        const dane = kredytKompletny({ numer_rachunku: '' })
+        expect(brakujacePola(dane)).not.toContain('numer_rachunku')
+      })
+    })
+
+    describe('pola warunkowe adresy (TestBrakujacePolaWarunkoweAdresy)', () => {
+      it('a: adres_zameldowania wymagany gdy Nie', () => {
+        const dane = kredytKompletny({ adres_zameldowania_taki_sam: 'Nie', adres_zameldowania: '' })
+        expect(brakujacePola(dane)).toContain('adres_zameldowania')
+      })
+
+      it('b: adres_zameldowania niewymagany gdy Tak', () => {
+        const dane = kredytKompletny({ adres_zameldowania_taki_sam: 'Tak', adres_zameldowania: '' })
+        expect(brakujacePola(dane)).not.toContain('adres_zameldowania')
+      })
+
+      it('c: adres_zameldowania wypelniony wystarcza', () => {
+        const dane = kredytKompletny({
+          adres_zameldowania_taki_sam: 'Nie',
+          adres_zameldowania: 'ul. Polna 10',
+        })
+        expect(brakujacePola(dane)).not.toContain('adres_zameldowania')
+      })
+
+      it('d: adres_korespondencji analogicznie', () => {
+        const dane1 = kredytKompletny({ adres_korespondencji_taki_sam: 'Nie', adres_korespondencji: '' })
+        expect(brakujacePola(dane1)).toContain('adres_korespondencji')
+
+        const dane2 = kredytKompletny({
+          adres_korespondencji_taki_sam: 'Nie',
+          adres_korespondencji: 'ul. Inna 3',
+        })
+        expect(brakujacePola(dane2)).not.toContain('adres_korespondencji')
+      })
+    })
+
+    describe('grupy dochodu (TestBrakujacePolaGrupyDochodu)', () => {
+      it('a: zero grup wlaczonych kompletne', () => {
+        expect(brakujacePola(kredytKompletny())).toEqual([])
+      })
+
+      it('b: praca wlaczona dodaje jej pola', () => {
+        const dane = kredytKompletny({ praca_wlaczone: 1 })
+        const wynik = brakujacePola(dane)
+        ;['praca_forma', 'praca_data_zatrudnienia', 'praca_okres', 'praca_okres_od'].forEach((pole) => {
+          expect(wynik).toContain(pole)
+        })
+        // praca_okres_do NIE jest wymagane, bo praca_okres nie jest "Czas określony".
+        expect(wynik).not.toContain('praca_okres_do')
+      })
+
+      it('c: praca_okres_do wymagany tylko dla Czas okreslony', () => {
+        const daneOkreslony = kredytKompletny({
+          praca_wlaczone: 1,
+          praca_forma: 'Umowa o pracę',
+          praca_data_zatrudnienia: '2020-01-01',
+          praca_okres: 'Czas określony',
+          praca_okres_od: '2020-01-01',
+          praca_nip: '123',
+          praca_nazwa_zakladu: 'Firma',
+          praca_adres_telefon: 'tel',
+          praca_kwota_dochodu: '5000',
+        })
+        expect(brakujacePola(daneOkreslony)).toContain('praca_okres_do')
+
+        const daneNieokreslony = { ...daneOkreslony, praca_okres: 'Czas nieokreślony' }
+        expect(brakujacePola(daneNieokreslony)).not.toContain('praca_okres_do')
+      })
+
+      it('d: praca_okres_od zawsze wymagany gdy praca wlaczona', () => {
+        const dane = kredytKompletny({
+          praca_wlaczone: 1,
+          praca_okres: 'Czas nieokreślony',
+          praca_okres_od: '',
+        })
+        expect(brakujacePola(dane)).toContain('praca_okres_od')
+      })
+
+      it('e: emerytura wlaczona dodaje jej pola', () => {
+        const dane = kredytKompletny({ emerytura_wlaczone: 1 })
+        const wynik = brakujacePola(dane)
+        expect(wynik).toContain('emerytura_numer_swiadczenia')
+        expect(wynik).toContain('emerytura_od_kiedy')
+        expect(wynik).toContain('emerytura_kwota_dochodu')
+      })
+
+      it('f: renta wlaczona dodaje jej pola', () => {
+        const dane = kredytKompletny({ renta_wlaczone: 1 })
+        const wynik = brakujacePola(dane)
+        expect(wynik).toContain('renta_numer_swiadczenia')
+        expect(wynik).toContain('renta_od_kiedy')
+        expect(wynik).toContain('renta_kwota_dochodu')
+      })
+
+      it('g: gospodarstwo wlaczone dodaje jego pola', () => {
+        const dane = kredytKompletny({ gospodarstwo_wlaczone: 1 })
+        const wynik = brakujacePola(dane)
+        expect(wynik).toContain('gospodarstwo_nip')
+        expect(wynik).toContain('gospodarstwo_od_kiedy')
+        expect(wynik).toContain('gospodarstwo_kwota_dochodu')
+      })
+
+      it('h: dzialalnosc wlaczona bez formy inna nie wymaga opisu', () => {
+        const dane = kredytKompletny({
+          dzialalnosc_wlaczone: 1,
+          dzialalnosc_forma_opodatkowania: 'ryczałt',
+          dzialalnosc_nip: '123',
+          dzialalnosc_nazwa: 'Firma',
+          dzialalnosc_adres: 'adres',
+          dzialalnosc_telefon: 'tel',
+          dzialalnosc_od_kiedy: '2020-01-01',
+          dzialalnosc_kwota_dochodu: '5000',
+        })
+        expect(brakujacePola(dane)).toEqual([])
+      })
+
+      it('i: dzialalnosc forma inne wymaga opisu', () => {
+        const dane = kredytKompletny({
+          dzialalnosc_wlaczone: 1,
+          dzialalnosc_forma_opodatkowania: 'inne',
+          dzialalnosc_forma_inna: '',
+          dzialalnosc_nip: '123',
+          dzialalnosc_nazwa: 'Firma',
+          dzialalnosc_adres: 'adres',
+          dzialalnosc_telefon: 'tel',
+          dzialalnosc_od_kiedy: '2020-01-01',
+          dzialalnosc_kwota_dochodu: '5000',
+        })
+        expect(brakujacePola(dane)).toContain('dzialalnosc_forma_inna')
+      })
+
+      it('test_e_wielka_litera_inne_nie_pasuje: "Inne" (wielka litera) nie pasuje, forma_inna nie jest wymagana', () => {
+        const dane = kredytKompletny({
+          dzialalnosc_wlaczone: 1,
+          dzialalnosc_forma_opodatkowania: 'Inne',
+          dzialalnosc_forma_inna: '',
+          dzialalnosc_nip: '123',
+          dzialalnosc_nazwa: 'Firma',
+          dzialalnosc_adres: 'adres',
+          dzialalnosc_telefon: 'tel',
+          dzialalnosc_od_kiedy: '2020-01-01',
+          dzialalnosc_kwota_dochodu: '5000',
+        })
+        expect(brakujacePola(dane)).not.toContain('dzialalnosc_forma_inna')
+      })
+
+      it('j: inne druga para opcjonalna', () => {
+        const dane = kredytKompletny({ inne_wlaczone: 1, inne_1_typ: 'Alimenty', inne_1_kwota: '1000' })
+        expect(brakujacePola(dane)).toEqual([])
+      })
+
+      it('k: inne pierwsza para wymagana', () => {
+        const dane = kredytKompletny({ inne_wlaczone: 1, inne_1_typ: '', inne_1_kwota: '' })
+        const wynik = brakujacePola(dane)
+        expect(wynik).toContain('inne_1_typ')
+        expect(wynik).toContain('inne_1_kwota')
+        expect(wynik).not.toContain('inne_2_typ')
+        expect(wynik).not.toContain('inne_2_kwota')
+      })
+
+      it('l: wiele grup naraz', () => {
+        const dane = kredytKompletny({ praca_wlaczone: 1, gospodarstwo_wlaczone: 1 })
+        const wynik = brakujacePola(dane)
+        expect(wynik).toContain('praca_forma')
+        expect(wynik).toContain('gospodarstwo_nip')
+        expect(wynik).not.toContain('emerytura_numer_swiadczenia')
+        expect(wynik).not.toContain('renta_numer_swiadczenia')
+      })
+    })
+
+    describe('nowe nazwy pol, rozbicie dokumentu i adresu firmy (TestBrakujacePolaNoweNazwyPol)', () => {
+      it('a: rodzaj_dokumentu i seria_numer puste sa brakujace', () => {
+        const dane = kredytKompletny({ rodzaj_dokumentu: '', seria_numer_dokumentu: '' })
+        const wynik = brakujacePola(dane)
+        expect(wynik).toContain('rodzaj_dokumentu')
+        expect(wynik).toContain('seria_numer_dokumentu')
+      })
+
+      it('b: rodzaj_dokumentu i seria_numer wypelnione wystarcza', () => {
+        const dane = kredytKompletny({
+          rodzaj_dokumentu: 'Dowód osobisty',
+          seria_numer_dokumentu: 'ABC123456',
+        })
+        const wynik = brakujacePola(dane)
+        expect(wynik).not.toContain('rodzaj_dokumentu')
+        expect(wynik).not.toContain('seria_numer_dokumentu')
+      })
+
+      it('c: jedno z pary puste nadal brakujace', () => {
+        const dane = kredytKompletny({ rodzaj_dokumentu: 'Dowód osobisty', seria_numer_dokumentu: '' })
+        const wynik = brakujacePola(dane)
+        expect(wynik).not.toContain('rodzaj_dokumentu')
+        expect(wynik).toContain('seria_numer_dokumentu')
+      })
+
+      it('d: dzialalnosc adres i telefon wymagane gdy grupa wlaczona', () => {
+        const dane = kredytKompletny({
+          dzialalnosc_wlaczone: 1,
+          dzialalnosc_forma_opodatkowania: 'ryczałt',
+          dzialalnosc_nip: '123',
+          dzialalnosc_nazwa: 'Firma',
+          dzialalnosc_adres: '',
+          dzialalnosc_telefon: '',
+          dzialalnosc_od_kiedy: '2020-01-01',
+          dzialalnosc_kwota_dochodu: '5000',
+        })
+        const wynik = brakujacePola(dane)
+        expect(wynik).toContain('dzialalnosc_adres')
+        expect(wynik).toContain('dzialalnosc_telefon')
+      })
+
+      it('e: dzialalnosc adres i telefon wypelnione wystarcza', () => {
+        const dane = kredytKompletny({
+          dzialalnosc_wlaczone: 1,
+          dzialalnosc_forma_opodatkowania: 'ryczałt',
+          dzialalnosc_nip: '123',
+          dzialalnosc_nazwa: 'Firma',
+          dzialalnosc_adres: 'ul. Firmowa 1',
+          dzialalnosc_telefon: '500600700',
+          dzialalnosc_od_kiedy: '2020-01-01',
+          dzialalnosc_kwota_dochodu: '5000',
+        })
+        expect(brakujacePola(dane)).toEqual([])
+      })
+
+      it('f: dzialalnosc wylaczona nie wymaga adresu ani telefonu', () => {
+        const dane = kredytKompletny({ dzialalnosc_wlaczone: 0, dzialalnosc_adres: '', dzialalnosc_telefon: '' })
+        const wynik = brakujacePola(dane)
+        expect(wynik).not.toContain('dzialalnosc_adres')
+        expect(wynik).not.toContain('dzialalnosc_telefon')
+      })
+    })
+  })
+
+  describe('brakujaceDaneKlienta (mirror of crm/api/kredyt.py _PREFILL_ETYKIETY)', () => {
+    const kompletnyPrefill = {
+      pesel: '90010112345',
+      imiona: 'Jan',
+      nazwisko: 'Kowalski',
+      telefon: '500600700',
+      email: 'jan@example.com',
+      kod_pocztowy: '00-001',
+      miejscowosc: 'Warszawa',
+      ulica: 'Kwiatowa',
+      nr_domu: '5',
+      nr_lokalu: '12',
+    }
+
+    it('returns an empty list when all 9 required keys are filled', () => {
+      expect(brakujaceDaneKlienta(kompletnyPrefill)).toEqual([])
+    })
+
+    it('returns the PL label, not the fieldname, for a missing key', () => {
+      const prefill = { ...kompletnyPrefill, pesel: '' }
+      expect(brakujaceDaneKlienta(prefill)).toEqual(['PESEL'])
+    })
+
+    it('nr_lokalu is never checked, missing it alone blocks nothing', () => {
+      const prefill = { ...kompletnyPrefill, nr_lokalu: '' }
+      expect(brakujaceDaneKlienta(prefill)).toEqual([])
+    })
+
+    it('an empty/undefined prefill reports all 9 labels in the mirrored order', () => {
+      const oczekiwane = [
+        'PESEL',
+        'Imię/imiona',
+        'Nazwisko',
+        'Telefon',
+        'E-mail',
+        'Kod pocztowy',
+        'Miejscowość',
+        'Ulica',
+        'Nr domu',
+      ]
+      expect(brakujaceDaneKlienta({})).toEqual(oczekiwane)
+      expect(brakujaceDaneKlienta(undefined)).toEqual(oczekiwane)
+    })
+
+    it('uses a falsy check like the backend, not a whitespace trim: a whitespace-only value counts as filled', () => {
+      const prefill = { ...kompletnyPrefill, ulica: '   ' }
+      expect(brakujaceDaneKlienta(prefill)).toEqual([])
+    })
+
+    it('never mutates its argument', () => {
+      const prefill = deepFreeze({ ...kompletnyPrefill })
+      expect(() => brakujaceDaneKlienta(prefill)).not.toThrow()
+    })
+  })
+
+  describe('ops#147 regression: praca_okres_od transient state (documents why the widocznePola safety net exists)', () => {
+    it('the instant "praca" is switched on, before praca_okres has a value, praca_okres_od is required but hidden by the pure rule; the safety net (brakujacePola fed back into widocznePola) is what actually shows it', () => {
+      const form = defaultForm()
+      form.praca_wlaczone = true
+      const pracaFields = GRUPY.find((g) => g.key === 'praca').fields.map((fn) => ({
+        fieldname: fn,
+        label: fn,
+      }))
+
+      const braki = brakujacePola(form)
+      expect(braki).toContain('praca_okres_od')
+
+      // Pure rule visibility (no safety net) still hides it in this
+      // transient state, exactly the class of mismatch the `brakujace`
+      // safety-net parameter of widocznePola() exists to absorb. KredytTab.vue
+      // always calls widocznePola() with the live brakujacePola(form) result
+      // as that third argument, never `[]`, so this transient state never
+      // actually reproduces the ops#139 banner deadlock in the running app.
+      const bezSiatki = widocznePola(pracaFields, form, [])
+      expect(bezSiatki.map((f) => f.fieldname)).not.toContain('praca_okres_od')
+
+      const zSiatka = widocznePola(pracaFields, form, braki)
+      expect(zSiatka.map((f) => f.fieldname)).toContain('praca_okres_od')
+    })
+  })
+
+  describe('invariant (ops#147): required fields are visible via WARUNKI_WIDOCZNOSCI alone, for every "settled" state', () => {
+    // "Settled" = every conditional discriminator (praca_okres,
+    // dzialalnosc_forma_opodatkowania, adres_*_taki_sam) already carries a
+    // concrete value, i.e. every state actually reachable once the rep has
+    // interacted with the group's own discriminator field. The one
+    // deliberately excluded transient state (a group just switched on, its
+    // own discriminator still blank) is covered separately above: that is
+    // exactly what the widocznePola `brakujace` safety-net parameter exists
+    // to absorb at runtime, so it is not expected to hold under the "pure
+    // rule, no safety net" check here.
+    const wszystkiePola = [...BASE_FIELDS, ...GRUPY.flatMap((g) => g.fields)].map((fn) => ({
+      fieldname: fn,
+    }))
+
+    const matrix = [
+      kredytKompletny(),
+      kredytKompletny({ adres_zameldowania_taki_sam: 'Nie', adres_zameldowania: '' }),
+      kredytKompletny({ adres_korespondencji_taki_sam: 'Nie', adres_korespondencji: '' }),
+      kredytKompletny({
+        praca_wlaczone: true,
+        praca_okres: 'Czas określony',
+        praca_forma: 'Umowa o pracę',
+        praca_data_zatrudnienia: '2020-01-01',
+        praca_okres_od: '',
+        praca_okres_do: '',
+        praca_nip: '123',
+        praca_nazwa_zakladu: 'Firma',
+        praca_adres_telefon: 'tel',
+        praca_kwota_dochodu: '5000',
+      }),
+      kredytKompletny({
+        praca_wlaczone: true,
+        praca_okres: 'Czas nieokreślony',
+        praca_forma: 'Umowa o pracę',
+        praca_data_zatrudnienia: '2020-01-01',
+        praca_okres_od: '',
+        praca_nip: '123',
+        praca_nazwa_zakladu: 'Firma',
+        praca_adres_telefon: 'tel',
+        praca_kwota_dochodu: '5000',
+      }),
+      kredytKompletny({
+        dzialalnosc_wlaczone: true,
+        dzialalnosc_forma_opodatkowania: 'inne',
+        dzialalnosc_forma_inna: '',
+        dzialalnosc_nip: '123',
+        dzialalnosc_nazwa: 'Firma',
+        dzialalnosc_adres: 'adres',
+        dzialalnosc_telefon: 'tel',
+        dzialalnosc_od_kiedy: '2020-01-01',
+        dzialalnosc_kwota_dochodu: '5000',
+      }),
+      kredytKompletny({ emerytura_wlaczone: true }),
+      kredytKompletny({ renta_wlaczone: true }),
+      kredytKompletny({ gospodarstwo_wlaczone: true }),
+      kredytKompletny({ inne_wlaczone: true }),
+      kredytKompletny({
+        praca_wlaczone: true,
+        praca_okres: 'Czas nieokreślony',
+        praca_forma: 'Umowa o pracę',
+        praca_data_zatrudnienia: '2020-01-01',
+        praca_okres_od: '2020-01-01',
+        praca_nip: '123',
+        praca_nazwa_zakladu: 'Firma',
+        praca_adres_telefon: 'tel',
+        praca_kwota_dochodu: '5000',
+        gospodarstwo_wlaczone: true,
+      }),
+    ]
+
+    it('every fieldname brakujacePola(form) returns is present in widocznePola(wszystkiePola, form, [])', () => {
+      matrix.forEach((form) => {
+        const braki = brakujacePola(form)
+        const widoczneNazwy = widocznePola(wszystkiePola, form, []).map((f) => f.fieldname)
+        braki.forEach((pole) => {
+          expect(widoczneNazwy).toContain(pole)
+        })
+      })
     })
   })
 })

@@ -110,13 +110,9 @@
             <Button
               variant="outline"
               :label="__('Generuj PDF')"
-              :disabled="generatingPdf || missingLabels.length > 0"
+              :disabled="generatingPdf || pdfZablokowany"
               :loading="generatingPdf"
-              :tooltip="
-                missingLabels.length > 0
-                  ? __('Uzupełnij wszystkie wymagane pola')
-                  : ''
-              "
+              :tooltip="pdfTooltip"
               @click="generatePdf"
             />
             <Button
@@ -247,10 +243,15 @@
 
         <!-- Missing-fields summary -->
         <div
-          v-if="missingLabels.length"
+          v-if="missingLabels.length || brakujaceKlienta.length"
           class="rounded-lg border border-outline-amber-3 bg-surface-amber-2 px-4 py-3 text-sm text-ink-amber-8"
         >
-          {{ __('Brakujące pola:') }} {{ missingLabels.join(', ') }}
+          <div v-if="missingLabels.length">
+            {{ __('Brakujące pola:') }} {{ missingLabels.join(', ') }}
+          </div>
+          <div v-if="brakujaceKlienta.length">
+            {{ __('Brakujące dane klienta:') }} {{ brakujaceKlienta.join(', ') }}
+          </div>
         </div>
 
         <!-- §1-3: base sections -->
@@ -332,7 +333,7 @@
 <script setup>
 import KredytIcon from '@/components/Icons/KredytIcon.vue'
 import { Badge, Button, FormControl, call, toast } from 'frappe-ui'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useAutenti } from '@/composables/useAutenti'
 import {
   GRUPY,
@@ -351,6 +352,8 @@ import {
   formatujNumerRachunku,
   formatujNumerRachunkuZKursorem,
   widocznePola,
+  brakujacePola,
+  brakujaceDaneKlienta,
 } from '@/utils/kredytForm'
 
 const props = defineProps({
@@ -654,6 +657,27 @@ const brakujace = ref([])
 
 const form = reactive(defaultForm())
 
+// True only while `form` is being programmatically replaced from a server
+// record (load/create/save): see przyjmijRekord() below. The watch just
+// below must not react to THAT kind of change, or every successful save
+// would immediately flip its own "Zapisano" badge back to idle again.
+let hydratingForm = false
+
+// K3: previously there was no watch on `form` at all, so `saveState`
+// stayed 'saved' forever once a save succeeded: editing a field after
+// saving left the "Zapisano" badge showing stale confidence (a rep could
+// change the income amount, never click "Zapisz" again, and the badge
+// would still claim the form was saved). Any genuine edit now drops the
+// badge back to 'idle' so it only ever claims what is actually true.
+watch(
+  form,
+  () => {
+    if (hydratingForm) return
+    if (saveState.value === 'saved') saveState.value = 'idle'
+  },
+  { deep: true },
+)
+
 const prefillLabels = {
   pesel: __('PESEL'),
   imiona: __('Imiona'),
@@ -723,8 +747,16 @@ function extractBrakujace(data) {
 // makes them render grouped immediately on load, not only after the rep
 // next touches the field, and the next save persists them grouped too.
 function przyjmijRekord(record) {
+  hydratingForm = true
   Object.assign(form, hydrateFrom(record))
   form.numer_rachunku = formatujNumerRachunku(form.numer_rachunku)
+  // Reset the guard only after the watch above has had its chance to run
+  // for this batch of changes (Vue's default 'pre'-flush watchers run
+  // before the post-flush nextTick queue), so the programmatic hydration
+  // itself is never mistaken for a rep's edit.
+  nextTick(() => {
+    hydratingForm = false
+  })
 }
 
 async function loadKredyt() {
@@ -743,10 +775,50 @@ async function loadKredyt() {
   }
 }
 
-const missingSet = computed(() => new Set(brakujace.value))
+// Missing-fields semantics (ops#147, K3/K4/K8): brakujaceLokalne is
+// computed LIVE from `form` (kredytForm.js's brakujacePola, a pure mirror
+// of crm/volteo_kredyt.py brakujace_pola), it is the PRIMARY source for
+// the red field rings (missingSet) and for whether "Generuj PDF" is
+// disabled, so completing the last required field, or switching an
+// income-group toggle off, updates the banner and the button instantly,
+// with no need to click "Zapisz" first.
+//
+// The server's list (`brakujace`, refreshed after get/create/save) keeps
+// two narrower jobs: (1) it still feeds widocznePola()'s safety-net
+// parameter in visibleFields() below, so a field the server ever reports
+// missing is always rendered even if a frontend rule disagrees (the
+// ops#139 pattern); and (2) after a round-trip it is unioned INTO the
+// banner TEXT only (never into missingSet or the disabled condition):
+// if the server ever reports something the local mirror does not, the
+// rep still sees it named. The union only ever ADDS a field name, it
+// never hides a requirement the local list already found.
+const brakujaceLokalne = computed(() => brakujacePola(form))
+const missingSet = computed(() => new Set(brakujaceLokalne.value))
+
+const brakujaceBanerNazwy = computed(() => {
+  const lokalne = brakujaceLokalne.value
+  const zSerweraDodatkowe = brakujace.value.filter((fn) => !lokalne.includes(fn))
+  return [...lokalne, ...zSerweraDodatkowe]
+})
 const missingLabels = computed(() =>
-  brakujace.value.map((fn) => fieldLabelByName.get(fn) || fn),
+  brakujaceBanerNazwy.value.map((fn) => fieldLabelByName.get(fn) || fn),
 )
+
+// Client-card (prefill) completeness is a SEPARATE blocker from
+// brakujaceLokalne above: these fields live on the contact, not in
+// `form`, so they never get a red ring here: they only gate "Generuj
+// PDF" and get their own banner line, mirroring
+// crm.api.kredyt.volteo_kredyt_pdf's own prefill check server-side.
+const brakujaceKlienta = computed(() => brakujaceDaneKlienta(prefill.value))
+
+const pdfZablokowany = computed(
+  () => brakujaceLokalne.value.length > 0 || brakujaceKlienta.value.length > 0,
+)
+const pdfTooltip = computed(() => {
+  if (brakujaceLokalne.value.length > 0) return __('Uzupełnij wszystkie wymagane pola')
+  if (brakujaceKlienta.value.length > 0) return __('Uzupełnij dane klienta na karcie kontaktu')
+  return ''
+})
 
 // --- Create --------------------------------------------------------------------
 async function createKredyt() {
@@ -767,8 +839,12 @@ async function createKredyt() {
 }
 
 // --- Save (draft-safe: incomplete saves are allowed) -----------------------------
+// Returns whether the record is now complete (no braki); callers (notably
+// generatePdf() below) must not rely on any ref's side effect to learn the
+// outcome, since brakujace.value/kredyt.value can each independently be
+// stale for a tick relative to when this promise actually settles.
 async function saveForm() {
-  if (saving.value || !kredyt.value) return
+  if (saving.value || !kredyt.value) return false
   saving.value = true
   saveState.value = 'saving'
   try {
@@ -778,17 +854,20 @@ async function saveForm() {
     })
     kredyt.value = data?.kredyt || kredyt.value
     prefill.value = data?.prefill || prefill.value
-    brakujace.value = extractBrakujace(data)
+    const braki = extractBrakujace(data)
+    brakujace.value = braki
     przyjmijRekord(kredyt.value)
     saveState.value = 'saved'
-    if (brakujace.value.length) {
-      toast.success(__('Zapisano jako roboczy — część pól nadal brakuje.'))
+    if (braki.length) {
+      toast.success(__('Zapisano jako roboczy: część pól nadal brakuje.'))
     } else {
       toast.success(__('Zapisano wniosek kredytowy'))
     }
+    return braki.length === 0
   } catch (err) {
     saveState.value = 'error'
     toast.error(extractErrorMessage(err))
+    return false
   } finally {
     saving.value = false
   }
@@ -797,10 +876,24 @@ async function saveForm() {
 // --- Generate PDF ------------------------------------------------------------------
 const generatingPdf = ref(false)
 
+// K3: the backend prints whatever is already in the database
+// (crm/api/kredyt.py's volteo_kredyt_pdf reads the saved doc, it never
+// sees `form` directly), so generating a PDF without saving first could
+// silently print a stale value the rep just typed but never persisted.
+// Saving is therefore always the first step here, never optional and
+// never left to the rep to remember: if the save reports braki (or
+// throws), stop before ever calling the PDF endpoint.
 async function generatePdf() {
-  if (generatingPdf.value || !kredyt.value || missingLabels.value.length) return
+  if (generatingPdf.value || !kredyt.value) return
   generatingPdf.value = true
   try {
+    const zapisano = await saveForm()
+    if (!zapisano) return
+    if (brakujaceKlienta.value.length) {
+      toast.error(__('Dane kontaktu podstawowego są niekompletne, uzupełnij je na karcie kontaktu.'))
+      return
+    }
+
     const data = await call('crm.api.kredyt.volteo_kredyt_pdf', { deal: props.dealId })
     if (data?.file_url) {
       window.open(data.file_url, '_blank')
