@@ -4,11 +4,29 @@ from decimal import Decimal
 from crm.volteo_umowa import (
 	KONSTRUKCJA_MONTAZ,
 	PROG_PPOZ_KW,
+	brakujace_dane_klienta,
 	brakujace_pola,
 	kwota_kredytu,
 	miejsce_i_pokrycie,
 	ppoz_wymagane,
 )
+
+
+def _pelny_kontakt() -> dict[str, str]:
+	"""Kompletne dane kontaktu w kształcie `_dane_kontaktu()` z `crm/api/umowa.py`."""
+	return {
+		"first_name": "Jan",
+		"last_name": "Kowalski",
+		"custom_pesel": "12345678901",
+		"custom_ulica": "Polna",
+		"custom_nr_domu": "5",
+		"custom_nr_mieszkania": "",
+		"custom_kod_pocztowy": "00-001",
+		"custom_miasto": "Warszawa",
+		"custom_wojewodztwo": "mazowieckie",
+		"email": "jan@example.com",
+		"mobile_no": "500600700",
+	}
 
 
 def _pelny_formularz() -> dict[str, object]:
@@ -350,6 +368,94 @@ class TestBrakujacePola(unittest.TestCase):
 		dane["finansowanie"] = "Kredyt + gotówka"
 		dane["wklad_wlasny_pln"] = "0"
 		self.assertEqual(brakujace_pola(dane), [])
+
+
+class TestBrakujaceDaneKlienta(unittest.TestCase):
+	"""ops#146 (Z4): dane osobowe klienta idą z `Contact`, nie z `Volteo Umowa`,
+	więc mają własną walidację, osobną od `brakujace_pola`. Adres kontaktu
+	celowo NIE jest tu sprawdzany, patrz `test_m_adres_kontaktu_nie_wplywa`."""
+
+	def test_a_pelny_kontakt_bez_brakow(self: "TestBrakujaceDaneKlienta") -> None:
+		self.assertEqual(brakujace_dane_klienta(_pelny_kontakt()), [])
+
+	def test_b_brak_imienia(self: "TestBrakujaceDaneKlienta") -> None:
+		dane = _pelny_kontakt()
+		dane["first_name"] = ""
+		self.assertEqual(brakujace_dane_klienta(dane), ["Imię i nazwisko"])
+
+	def test_c_brak_nazwiska(self: "TestBrakujaceDaneKlienta") -> None:
+		dane = _pelny_kontakt()
+		dane["last_name"] = ""
+		self.assertEqual(brakujace_dane_klienta(dane), ["Imię i nazwisko"])
+
+	def test_d_brak_obojga_imienia_i_nazwiska_jedna_etykieta(
+		self: "TestBrakujaceDaneKlienta",
+	) -> None:
+		dane = _pelny_kontakt()
+		dane["first_name"] = ""
+		dane["last_name"] = None
+		self.assertEqual(brakujace_dane_klienta(dane), ["Imię i nazwisko"])
+
+	def test_e_brak_pesel(self: "TestBrakujaceDaneKlienta") -> None:
+		dane = _pelny_kontakt()
+		dane["custom_pesel"] = ""
+		self.assertEqual(brakujace_dane_klienta(dane), ["PESEL"])
+
+	def test_f_brak_telefonu(self: "TestBrakujaceDaneKlienta") -> None:
+		dane = _pelny_kontakt()
+		dane["mobile_no"] = ""
+		self.assertEqual(brakujace_dane_klienta(dane), ["Telefon"])
+
+	def test_g_brak_email(self: "TestBrakujaceDaneKlienta") -> None:
+		dane = _pelny_kontakt()
+		dane["email"] = ""
+		self.assertEqual(brakujace_dane_klienta(dane), ["E-mail"])
+
+	def test_h_biale_znaki_traktowane_jako_brak(self: "TestBrakujaceDaneKlienta") -> None:
+		dane = _pelny_kontakt()
+		dane["custom_pesel"] = "   "
+		self.assertEqual(brakujace_dane_klienta(dane), ["PESEL"])
+
+	def test_i_none_traktowany_jako_brak(self: "TestBrakujaceDaneKlienta") -> None:
+		dane = _pelny_kontakt()
+		dane["email"] = None
+		self.assertEqual(brakujace_dane_klienta(dane), ["E-mail"])
+
+	def test_j_stabilna_kolejnosc_wielu_brakow(self: "TestBrakujaceDaneKlienta") -> None:
+		dane = _pelny_kontakt()
+		dane["custom_pesel"] = ""
+		dane["email"] = ""
+		self.assertEqual(brakujace_dane_klienta(dane), ["PESEL", "E-mail"])
+
+	def test_k_wszystko_puste(self: "TestBrakujaceDaneKlienta") -> None:
+		dane = {pole: "" for pole in ("first_name", "last_name", "custom_pesel", "email", "mobile_no")}
+		self.assertEqual(
+			brakujace_dane_klienta(dane),
+			["Imię i nazwisko", "PESEL", "Telefon", "E-mail"],
+		)
+
+	def test_l_pusty_slownik_wszystko_brakuje(self: "TestBrakujaceDaneKlienta") -> None:
+		self.assertEqual(
+			brakujace_dane_klienta({}),
+			["Imię i nazwisko", "PESEL", "Telefon", "E-mail"],
+		)
+
+	def test_m_adres_kontaktu_nie_wplywa(self: "TestBrakujaceDaneKlienta") -> None:
+		# Adres zamieszkania klienta ma własną ścieżkę walidacji w `brakujace_pola`
+		# (pola `adres_zam_*` formularza umowy), tu celowo bez wpływu.
+		dane = _pelny_kontakt()
+		dane["custom_ulica"] = ""
+		dane["custom_nr_domu"] = ""
+		dane["custom_kod_pocztowy"] = ""
+		dane["custom_miasto"] = ""
+		dane["custom_wojewodztwo"] = ""
+		self.assertEqual(brakujace_dane_klienta(dane), [])
+
+	def test_n_nie_mutuje_wejsciowego_slownika(self: "TestBrakujaceDaneKlienta") -> None:
+		dane = _pelny_kontakt()
+		przed = dict(dane)
+		brakujace_dane_klienta(dane)
+		self.assertEqual(dane, przed)
 
 
 class TestDecimalLubZeroIKwotaKredytuNaSurowychDanych(unittest.TestCase):

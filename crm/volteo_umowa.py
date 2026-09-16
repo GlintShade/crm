@@ -166,6 +166,60 @@ def brakujace_pola(dane: dict[str, Any]) -> list[str]:
 	return [pole for pole in wymagane if _jest_puste(dane.get(pole), pole)]
 
 
+_ETYKIETA_IMIE_NAZWISKO = "Imię i nazwisko"
+_ETYKIETA_PESEL = "PESEL"
+_ETYKIETA_TELEFON = "Telefon"
+_ETYKIETA_EMAIL = "E-mail"
+
+
+def brakujace_dane_klienta(kontakt: dict[str, Any]) -> list[str]:
+	"""Zwraca etykiety brakujących danych osobowych klienta (kontaktu) potrzebnych
+	do umowy, w stałej kolejności: imię i nazwisko, PESEL, telefon, e-mail (ops#146).
+
+	`brakujace_pola` powyżej waliduje wyłącznie pola samego dokumentu `Volteo
+	Umowa`, dane osobowe klienta idą z osobnego dokumentu `Contact` i miały
+	dotąd zerową walidację (świadomie ciche puste stringi w `_dane_kontaktu()`,
+	`crm/api/umowa.py`), więc umowa mogła wyjść ze statusem „Kompletny” i bez
+	ostrzeżenia mimo pustego PESEL-u/telefonu/e-maila w komparycji dokumentu
+	prawnego. Ta funkcja jest tym brakującym mechanizmem, lustrzana do wzorca
+	`_PREFILL_ETYKIETY`/`brakujace_prefill` z formularza kredytowego
+	(`crm/api/kredyt.py`).
+
+	Klucze wejściowe odpowiadają dokładnie kształtowi zwracanemu przez
+	`_dane_kontaktu()` w `crm/api/umowa.py`: `first_name`, `last_name`,
+	`custom_pesel`, `email`, `mobile_no`. Adres klienta (`custom_ulica` i inne
+	pola adresowe kontaktu) celowo NIE jest tu sprawdzany. Adres zamieszkania
+	na potrzeby umowy ma własną, niezależną ścieżkę walidacji przez pola
+	`adres_zam_*` formularza umowy, już pokrytą przez `brakujace_pola`.
+
+	Brak imienia LUB brak nazwiska daje jedną wspólną etykietę „Imię i
+	nazwisko”, nigdy dwie osobne. Nie mutuje `kontakt`. Białe znaki liczą się
+	jako brak, tak samo jak pusty string czy `None`.
+	"""
+	braki: list[str] = []
+	if _tekst_pusty(kontakt.get("first_name")) or _tekst_pusty(kontakt.get("last_name")):
+		braki.append(_ETYKIETA_IMIE_NAZWISKO)
+	if _tekst_pusty(kontakt.get("custom_pesel")):
+		braki.append(_ETYKIETA_PESEL)
+	if _tekst_pusty(kontakt.get("mobile_no")):
+		braki.append(_ETYKIETA_TELEFON)
+	if _tekst_pusty(kontakt.get("email")):
+		braki.append(_ETYKIETA_EMAIL)
+	return braki
+
+
+def _tekst_pusty(wartosc: Any) -> bool:
+	"""`None`/pusty string/same białe znaki są puste; każda inna wartość nie jest.
+
+	Dane kontaktu z `_dane_kontaktu()` są zawsze stringami albo `None` (nigdy
+	liczbą), więc w odróżnieniu od `_jest_puste` nie ma tu wariantu
+	zero-oznacza-puste.
+	"""
+	if wartosc is None:
+		return True
+	return isinstance(wartosc, str) and wartosc.strip() == ""
+
+
 def _sparsuj_decimal(wartosc: Any) -> Decimal | None:
 	"""Próbuje sparsować wartość (w tym string z formularza klienta) jako `Decimal`.
 
