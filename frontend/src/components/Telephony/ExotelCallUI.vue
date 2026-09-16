@@ -143,7 +143,7 @@
             ref="content"
             variant="ghost"
             editor-class="prose-sm h-[290px] text-ink-base overflow-auto mt-1"
-            :bubbleMenu="true"
+            :bubbleMenu="paskiPlywajace"
             :content="note.content"
             :placeholder="__('Take a note...')"
             @change="(val) => (note.content = val)"
@@ -238,9 +238,14 @@ import CountUpTimer from '@/components/CountUpTimer.vue'
 import { globalStore } from '@/stores/global'
 import { sessionStore } from '@/stores/session'
 import { useDraggable, useWindowSize } from '@vueuse/core'
-import { TextEditor, Avatar, Button, createResource, toast } from 'frappe-ui'
+import { TextEditor, Avatar, Button, createEditorButton, createResource, toast } from 'frappe-ui'
 import { ref, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
+import { przyciskiPlywajace } from '@/utils/edytorPrzyciski'
+
+// Polskie etykiety paska pływającego edytora notatki połączenia - patrz
+// frontend/src/utils/edytorPrzyciski.js.
+const paskiPlywajace = przyciskiPlywajace(createEditorButton)
 
 const { $socket } = globalStore()
 

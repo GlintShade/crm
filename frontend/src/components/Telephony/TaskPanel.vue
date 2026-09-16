@@ -11,7 +11,7 @@
       ref="content"
       variant="ghost"
       editor-class="prose-sm h-[150px] text-ink-base overflow-auto"
-      :bubbleMenu="true"
+      :bubbleMenu="paskiPlywajace"
       :content="task.description"
       :placeholder="__('Add description...')"
       @change="(val) => (task.description = val)"
@@ -82,8 +82,13 @@ import UserAvatar from '@/components/UserAvatar.vue'
 import Link from '@/components/Controls/Link.vue'
 import { usersStore } from '@/stores/users'
 import { taskStatusOptions, taskPriorityOptions, getFormat } from '@/utils'
-import { TextEditor, Dropdown, Tooltip, DateTimePicker } from 'frappe-ui'
+import { TextEditor, Dropdown, Tooltip, DateTimePicker, createEditorButton } from 'frappe-ui'
 import { reactive } from 'vue'
+import { przyciskiPlywajace } from '@/utils/edytorPrzyciski'
+
+// Polskie etykiety paska pływającego edytora opisu zadania - patrz
+// frontend/src/utils/edytorPrzyciski.js.
+const paskiPlywajace = przyciskiPlywajace(createEditorButton)
 
 const props = defineProps({
   task: {

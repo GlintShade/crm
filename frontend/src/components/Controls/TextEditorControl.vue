@@ -4,8 +4,8 @@
     :placeholder="placeholder"
     :editable="!disabled"
     :editor-class="editorClasses"
-    :fixed-menu="disabled ? false : fixedMenu"
-    :bubble-menu="bubbleMenu"
+    :fixed-menu="disabled ? false : paskiUstalone"
+    :bubble-menu="paskiPlywajace"
     v-bind="$attrs"
     @change="onContentChange"
     @blur="onBlur"
@@ -13,8 +13,9 @@
 </template>
 
 <script setup>
-import { TextEditor } from 'frappe-ui'
+import { TextEditor, createEditorButton } from 'frappe-ui'
 import { computed, ref } from 'vue'
+import { przyciskiUstalone, przyciskiPlywajace } from '@/utils/edytorPrzyciski'
 
 const props = defineProps({
   value: { type: String, default: '' },
@@ -74,6 +75,21 @@ const editorClasses = computed(() => {
     props.editorClass,
   ]
 })
+
+// Wspólny wrapper dla CommentArea, NoteArea, CommentBox, EmailEditor,
+// Field.vue, Notes.vue, Tasks.vue (rendered via FieldLayout) - patrz
+// frontend/src/utils/edytorPrzyciski.js: te propsy zostają Boolean (żaden
+// dotychczasowy wywołujący nie przekazuje tu własnej tablicy, sprawdzone),
+// a rozwiązanie true -> polska tablica dzieje się tutaj, więc każdy
+// konsument tego wrappera (w tym SidePanelLayout.vue i Controls/Grid.vue,
+// które przekazują tu tylko booleany :fixed-menu/:bubble-menu) dostaje
+// polskie etykiety bez własnych zmian.
+const paskiUstalone = computed(() =>
+  props.fixedMenu ? przyciskiUstalone(createEditorButton) : false,
+)
+const paskiPlywajace = computed(() =>
+  props.bubbleMenu ? przyciskiPlywajace(createEditorButton) : false,
+)
 
 const latestContent = ref(props.value)
 const isDirty = ref(false)
