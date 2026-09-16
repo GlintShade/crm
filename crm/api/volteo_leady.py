@@ -587,6 +587,7 @@ def mapa(
 			"custom_cc",
 			"custom_import_source",
 			"custom_posiadane_produkty",
+			"custom_produkt_procesu",
 			"custom_status_zrodla",
 			"custom_termin_spotkania",
 			"mobile_no",

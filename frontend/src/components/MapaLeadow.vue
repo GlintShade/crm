@@ -655,6 +655,7 @@ function budujDymek(lead) {
   const wiersze = [
     ustawieniaDymka.zrodlo && [__('Źródło'), lead.custom_import_source],
     ustawieniaDymka.produkty && [__('Obecne produkty'), lead.custom_posiadane_produkty],
+    ustawieniaDymka.produkty && [__('Produkt w procesie'), lead.custom_produkt_procesu],
     ustawieniaDymka.statusZrodla && [__('Status źródła'), lead.custom_status_zrodla],
     ustawieniaDymka.terminSpotkania && [
       __('Termin spotkania'),

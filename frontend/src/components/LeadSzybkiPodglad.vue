@@ -314,6 +314,7 @@ const dymek = computed(() => {
   const wiersze = [
     [__('Źródło'), props.lead.custom_import_source],
     [__('Obecne produkty'), props.lead.custom_posiadane_produkty],
+    [__('Produkt w procesie'), props.lead.custom_produkt_procesu],
     [__('Status źródła'), props.lead.custom_status_zrodla],
   ]
   return wiersze

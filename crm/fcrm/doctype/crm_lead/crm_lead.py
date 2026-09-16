@@ -305,6 +305,12 @@ class CRMLead(Document):
 				"width": "10rem",
 			},
 			{
+				"label": "Produkt w procesie",
+				"type": "Data",
+				"key": "custom_produkt_procesu",
+				"width": "10rem",
+			},
+			{
 				"label": "Przypisany handlowiec",
 				"type": "Link",
 				"options": "User",
@@ -394,6 +400,7 @@ class CRMLead(Document):
 			"custom_kolejny_kontakt",
 			"custom_termin_spotkania",
 			"custom_posiadane_produkty",
+			"custom_produkt_procesu",
 			"lead_owner",
 			"custom_cc",
 			"custom_install_address",
