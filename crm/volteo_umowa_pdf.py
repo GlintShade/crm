@@ -164,6 +164,21 @@ def zbuduj_kontekst(
 	powierzchnia_prog = umowa.get("powierzchnia_prog")
 	internet = umowa.get("internet")
 
+	# Pola sterujące (gałąź wybrana w Selekcie) dla czterech bloków warunkowych
+	# tłumionych poniżej: wkład własny/kwota kredytu, powierzchnia, przekop,
+	# istniejąca instalacja PV. REGUŁA NADRZĘDNA (ops#145): dokument prawny nie
+	# ma prawa sam sobie zaprzeczać. Jawny wybór w Selekcie zawsze wygrywa z
+	# resztką wartości zostawioną w polu warunkowym (np. po zmianie zdania
+	# przez przedstawiciela), tak jak już robi blok kabla niżej. Gdy Select jest
+	# pusty/nierozpoznany, pole warunkowe jest tłumione tak samo jak przy
+	# jawnym "Nie": bez jawnego "Tak" dokument nie ma podstaw nic drukować.
+	fin_kredyt_100_stan = _rowna(finansowanie, "Kredyt 100%")
+	fin_kredyt_wklad_stan = _rowna(finansowanie, "Kredyt + gotówka")
+	fin_gotowka_stan = _rowna(finansowanie, "Gotówka 100%")
+	pow_ponad_300_stan = _rowna(powierzchnia_prog, "powyżej 300 m²")
+	przekop_tak_stan = _rowna(umowa.get("przekop_gruntowy"), "Tak")
+	istniejaca_pv_tak_stan = _rowna(umowa.get("istniejaca_pv"), "Tak")
+
 	ppoz_stan = _stan_bool(umowa.get("ppoz_wymagane"))
 	zgoda_telefon_stan = _stan_bool(umowa.get("zgoda_kontakt_telefoniczny"))
 	zgoda_promocja_stan = _stan_bool(umowa.get("zgoda_dzialania_promocyjne"))
@@ -193,15 +208,26 @@ def zbuduj_kontekst(
 		# §2
 		"wynagrodzenie_netto": _kwota(deal.get("custom_netto")),
 		"wynagrodzenie_brutto": _kwota(deal.get("deal_value")),
-		"fin_kredyt_100": _rowna(finansowanie, "Kredyt 100%"),
-		"fin_kredyt_wklad": _rowna(finansowanie, "Kredyt + gotówka"),
-		"fin_gotowka": _rowna(finansowanie, "Gotówka 100%"),
-		"wklad_wlasny": _kwota(umowa.get("wklad_wlasny_pln")),
-		"kwota_kredytu": _kwota(umowa.get("kwota_kredytu_pln")),
+		"fin_kredyt_100": fin_kredyt_100_stan,
+		"fin_kredyt_wklad": fin_kredyt_wklad_stan,
+		"fin_gotowka": fin_gotowka_stan,
+		# Wkład własny drukuje się tylko przy "Kredyt + gotówka", kwota
+		# kredytu tylko przy "Kredyt 100%" albo "Kredyt + gotówka". Dla
+		# "Gotówka 100%"/nierozpoznanego wyboru obie kwoty są puste, nawet
+		# gdy formularz zostawił w nich starą, niezerową wartość (ops#145 Z1).
+		"wklad_wlasny": _kwota(umowa.get("wklad_wlasny_pln")) if fin_kredyt_wklad_stan else "",
+		"kwota_kredytu": (
+			_kwota(umowa.get("kwota_kredytu_pln"))
+			if (fin_kredyt_100_stan or fin_kredyt_wklad_stan)
+			else ""
+		),
 		# §3 ust. 1 lit. g
 		"pow_do_300": _rowna(powierzchnia_prog, "do 300 m²"),
-		"pow_ponad_300": _rowna(powierzchnia_prog, "powyżej 300 m²"),
-		"powierzchnia_m2": _liczba(umowa.get("powierzchnia_m2")),
+		"pow_ponad_300": pow_ponad_300_stan,
+		# Formularz chowa to pole na ekranie, gdy próg nie jest "powyżej
+		# 300 m²": jawny wybór progu wygrywa z resztką liczby zostawioną w
+		# ukrytym polu (ops#145 Z2).
+		"powierzchnia_m2": _liczba(umowa.get("powierzchnia_m2")) if pow_ponad_300_stan else "",
 		# Załącznik 1a
 		"panel_moc_wp": panel_moc_wp,
 		"panel_szt": _liczba_calkowita(deal.get("custom_panele")),
@@ -225,13 +251,17 @@ def zbuduj_kontekst(
 		"odgromowa_nie": _rowna(umowa.get("instalacja_odgromowa"), "Nie"),
 		"ppoz_tak": ppoz_stan is True,
 		"ppoz_nie": ppoz_stan is False,
-		"przekop_tak": _rowna(umowa.get("przekop_gruntowy"), "Tak"),
+		"przekop_tak": przekop_tak_stan,
 		"przekop_nie": _rowna(umowa.get("przekop_gruntowy"), "Nie"),
 		# `przekop_mb` istnieje w schemacie `Volteo Umowa` (`ops/crm-umowa.py`)
 		# i na whiteliście zapisu `crm/api/umowa.py`, ale może zostać
 		# niewypełnione przez przedstawiciela — odczyt jest więc defensywny
 		# (`.get()` na brakującym/pustym kluczu daje pustkę, nigdy wyjątek).
-		"przekop_mb": _liczba_calkowita(umowa.get("przekop_mb")),
+		# Drukuje się tylko przy jawnym `przekop_gruntowy == "Tak"`, inaczej
+		# stare metry zostawione w polu po zmianie wyboru na "Nie" wydrukowałyby
+		# się OBOK zaznaczonej kratki "Nie" (ops#145 Z2), dokładnie ten sam
+		# błąd, który blok kabla niżej już ma naprawiony.
+		"przekop_mb": _liczba_calkowita(umowa.get("przekop_mb")) if przekop_tak_stan else "",
 		# `dodatkowy_kabel` (Select: Tak/Nie) jest właściwym źródłem prawdy,
 		# gdy wypełniony — jawne "Nie" ZAWSZE wygrywa i tłumi metry na
 		# wydruku, nawet gdy `dodatkowy_kabel_m` ma dodatnią wartość (formularz
@@ -252,9 +282,18 @@ def zbuduj_kontekst(
 		"bateria_szt": bateria_szt,
 		"bateria_pojemnosc_lacznie_kwh": _liczba(deal.get("custom_pojemnosc_kwh")),
 		"bateria_gwarancja_lat": _liczba_calkowita(_pole(bateria_komponent, "gwarancja_lat")),
-		"ist_pv_moc_inwertera_kw": _liczba(umowa.get("istniejaca_pv_moc_inwertera_kw")),
-		"ist_pv_moc_kwp": _liczba(umowa.get("istniejaca_pv_moc_kwp")),
-		"ist_pv_producent_inwertera": _tekst(umowa.get("istniejaca_pv_producent_inwertera")),
+		# Trzy pola instalacji istniejącej drukują się tylko przy jawnym
+		# `istniejaca_pv == "Tak"`. Formularz chowa je na ekranie dla "Nie"
+		# (ops#145 Z2), więc stara moc/producent zostawione w ukrytym polu po
+		# zmianie wyboru nie mają prawa opisać instalacji, której umowa nie
+		# deklaruje.
+		"ist_pv_moc_inwertera_kw": (
+			_liczba(umowa.get("istniejaca_pv_moc_inwertera_kw")) if istniejaca_pv_tak_stan else ""
+		),
+		"ist_pv_moc_kwp": _liczba(umowa.get("istniejaca_pv_moc_kwp")) if istniejaca_pv_tak_stan else "",
+		"ist_pv_producent_inwertera": (
+			_tekst(umowa.get("istniejaca_pv_producent_inwertera")) if istniejaca_pv_tak_stan else ""
+		),
 		# Załącznik 2
 		"zgoda_telefon": zgoda_telefon_stan is True,
 		"zgoda_promocja": zgoda_promocja_stan is True,
@@ -430,11 +469,30 @@ def _data_pl(dzis: date) -> str:
 	return f"{dzis.day:02d}.{dzis.month:02d}.{dzis.year:04d}"
 
 
+_PREFIKSY_ULICY: tuple[str, ...] = ("ul.", "ul ", "al.", "pl.", "os.")
+"""Skróty rodzaju drogi, które pole ulicy może już nosić wpisane ręcznie (np.
+przez prefill z `custom_install_address`, gdzie przedstawiciel wkleił cały
+adres razem ze skrótem, zob. ops#145 Z11). Gdy `ulica_t` zaczyna się (bez
+rozróżniania wielkości liter, po `strip()`) od któregokolwiek z nich, `_adres()`
+NIE dokleja własnego `"ul. "` przed wartością, inaczej wydrukowałoby się
+"ul. ul. Kwiatowa 5" albo "ul. al. Niepodległości 10"."""
+
+
+def _ma_prefiks_ulicy(ulica_t: str) -> bool:
+	"""Czy znormalizowana (już `_tekst()`-owana) nazwa ulicy zaczyna się od
+	skrótu rodzaju drogi z `_PREFIKSY_ULICY`, bez rozróżniania wielkości liter.
+	"""
+	dolna = ulica_t.lower()
+	return any(dolna.startswith(prefiks) for prefiks in _PREFIKSY_ULICY)
+
+
 def _adres(ulica: Any, nr_domu: Any, nr_mieszkania: Any, kod: Any, miasto: Any) -> str:
 	"""Składa adres z pól rozbitych (ulica/nr domu/nr mieszkania/kod/miasto).
 
 	Każdy brakujący fragment jest po prostu pomijany — nigdy nie wstawia się
 	pustego miejsca w stylu "ul. , 5". Zwraca `""`, gdy wszystkie pola są puste.
+	Prefiks "ul. " jest doklejany tylko, gdy `ulica` sama go jeszcze nie ma,
+	patrz `_ma_prefiks_ulicy()` (ops#145 Z11).
 	"""
 	ulica_t = _tekst(ulica)
 	nr_domu_t = _tekst(nr_domu)
@@ -444,7 +502,7 @@ def _adres(ulica: Any, nr_domu: Any, nr_mieszkania: Any, kod: Any, miasto: Any) 
 
 	czesc_ulicy = ""
 	if ulica_t:
-		czesc_ulicy = f"ul. {ulica_t}"
+		czesc_ulicy = ulica_t if _ma_prefiks_ulicy(ulica_t) else f"ul. {ulica_t}"
 		if nr_domu_t:
 			czesc_ulicy += f" {nr_domu_t}"
 	elif nr_domu_t:

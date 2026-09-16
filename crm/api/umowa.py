@@ -308,14 +308,16 @@ def _wyliczenia(
 	"""
 	miejsce, pokrycie = miejsce_i_pokrycie(deal_doc.get("custom_konstrukcja"))
 	moc_istniejaca = umowa_doc.get("istniejaca_pv_moc_kwp") if umowa_doc else None
+	istniejaca_pv = umowa_doc.get("istniejaca_pv") if umowa_doc else None
 	wklad = umowa_doc.get("wklad_wlasny_pln") if umowa_doc else None
+	finansowanie = umowa_doc.get("finansowanie") if umowa_doc else None
 	dane_do_walidacji = {pole: umowa_doc.get(pole) for pole in _DANE_POLA_DOZWOLONE} if umowa_doc else {}
 
 	return {
 		"miejsce_montazu": miejsce,
 		"pokrycie_dachowe": pokrycie,
-		"ppoz_wymagane": ppoz_wymagane(deal_doc.get("custom_pv_power_kwp"), moc_istniejaca),
-		"kwota_kredytu_pln": kwota_kredytu(deal_doc.get("deal_value"), wklad),
+		"ppoz_wymagane": ppoz_wymagane(deal_doc.get("custom_pv_power_kwp"), moc_istniejaca, istniejaca_pv),
+		"kwota_kredytu_pln": kwota_kredytu(deal_doc.get("deal_value"), wklad, finansowanie),
 		"brakujace_pola": brakujace_pola(dane_do_walidacji),
 	}
 
@@ -482,9 +484,16 @@ def volteo_umowa_save(deal: str, dane: dict[str, Any]) -> dict[str, Any]:
 
 	# Kwota kredytu i wymóg PPOŻ liczone są WYŁĄCZNIE na serwerze i nadpisują cokolwiek
 	# przesłał klient — klient nie może ustawić kwoty kredytu ani ominąć wymogu PPOŻ.
-	umowa_doc.kwota_kredytu_pln = kwota_kredytu(deal_doc.get("deal_value"), umowa_doc.get("wklad_wlasny_pln"))
+	# Obie funkcje dostają też pole sterujące (`finansowanie`/`istniejaca_pv`)
+	# świeżo zapisane wyżej w pętli `umowa_doc.set(...)`: jawny wybór w Selekcie
+	# gasi resztkę wartości zostawioną w polu warunkowym (ops#145 Z1/Z2).
+	umowa_doc.kwota_kredytu_pln = kwota_kredytu(
+		deal_doc.get("deal_value"), umowa_doc.get("wklad_wlasny_pln"), umowa_doc.get("finansowanie")
+	)
 	umowa_doc.ppoz_wymagane = ppoz_wymagane(
-		deal_doc.get("custom_pv_power_kwp"), umowa_doc.get("istniejaca_pv_moc_kwp")
+		deal_doc.get("custom_pv_power_kwp"),
+		umowa_doc.get("istniejaca_pv_moc_kwp"),
+		umowa_doc.get("istniejaca_pv"),
 	)
 
 	try:
