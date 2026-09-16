@@ -1,3 +1,154 @@
+diff --git a/node_modules/frappe-ui/src/components/DatePicker/CalendarPanel.vue b/node_modules/frappe-ui/src/components/DatePicker/CalendarPanel.vue
+index 896d35b..3efff43 100644
+--- a/node_modules/frappe-ui/src/components/DatePicker/CalendarPanel.vue
++++ b/node_modules/frappe-ui/src/components/DatePicker/CalendarPanel.vue
+@@ -113,10 +113,16 @@
+                 "
+                 @keydown.down.prevent="shiftFocus(cell.date.add(7, 'day'), 1)"
+                 @keydown.home.prevent="
+-                  shiftFocus(cell.date.subtract(cell.date.day(), 'day'), -1)
++                  shiftFocus(
++                    cell.date.subtract((cell.date.day() + 6) % 7, 'day'),
++                    -1,
++                  )
+                 "
+                 @keydown.end.prevent="
+-                  shiftFocus(cell.date.add(6 - cell.date.day(), 'day'), 1)
++                  shiftFocus(
++                    cell.date.add((7 - cell.date.day()) % 7, 'day'),
++                    1,
++                  )
+                 "
+                 @keydown.page-up.prevent="
+                   shiftFocus(
+@@ -435,7 +441,10 @@ function focusInitialCell() {
+ 
+ defineExpose({ focusInitialCell })
+ 
+-const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
++// VOLTEO PATCH (issue #134): Polish weekday abbreviations, week starting
++// Monday (owner decision 2026-09-16), matching the Monday-first grid built
++// by `generateWeeks()` in ./utils.ts.
++const WEEKDAYS = ['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'So', 'Nd']
+ 
+ function ariaSelected(cell: CalendarPanelCell): 'true' | 'false' {
+   return cell.isSelected || cell.isRangeStart || cell.isRangeEnd
+diff --git a/node_modules/frappe-ui/src/components/DatePicker/DatePicker.vue b/node_modules/frappe-ui/src/components/DatePicker/DatePicker.vue
+index 86bd7d4..cb48bf9 100644
+--- a/node_modules/frappe-ui/src/components/DatePicker/DatePicker.vue
++++ b/node_modules/frappe-ui/src/components/DatePicker/DatePicker.vue
+@@ -60,7 +60,7 @@
+           :current-year="currentYear"
+           :current-month="currentMonth"
+           :weeks="weeks"
+-          today-label="Today"
++          today-label="Dzisiaj"
+           :min="props.min"
+           :max="props.max"
+           v-model:focused-date="focusedDate"
+diff --git a/node_modules/frappe-ui/src/components/DatePicker/DateRangePicker.vue b/node_modules/frappe-ui/src/components/DatePicker/DateRangePicker.vue
+index a33cf45..ff53dce 100644
+--- a/node_modules/frappe-ui/src/components/DatePicker/DateRangePicker.vue
++++ b/node_modules/frappe-ui/src/components/DatePicker/DateRangePicker.vue
+@@ -66,7 +66,7 @@
+             :current-year="currentYear"
+             :current-month="currentMonth"
+             :weeks="weeks"
+-            :today-label="isDualPaneActive ? '' : 'Today'"
++            :today-label="isDualPaneActive ? '' : 'Dzisiaj'"
+             :hide-next="isDualPaneActive"
+             :hide-out-of-month="isDualPaneActive"
+             :center-header="isDualPaneActive"
+diff --git a/node_modules/frappe-ui/src/components/DatePicker/DateTimePicker.vue b/node_modules/frappe-ui/src/components/DatePicker/DateTimePicker.vue
+index 0ec591f..09c2486 100644
+--- a/node_modules/frappe-ui/src/components/DatePicker/DateTimePicker.vue
++++ b/node_modules/frappe-ui/src/components/DatePicker/DateTimePicker.vue
+@@ -62,7 +62,7 @@
+             :current-year="currentYear"
+             :current-month="currentMonth"
+             :weeks="weeks"
+-            today-label="Now"
++            today-label="Teraz"
+             :min="resolvedMin"
+             :max="resolvedMax"
+             v-model:focused-date="focusedDate"
+@@ -82,7 +82,7 @@
+               :typeable="props.allowCustomTime"
+               side="bottom"
+               align="start"
+-              placeholder="Select time"
++              placeholder="Wybierz godzinę"
+               :min="computedMinTime"
+               :max="computedMaxTime"
+               @change="onTimeChange"
+diff --git a/node_modules/frappe-ui/src/components/DatePicker/utils.ts b/node_modules/frappe-ui/src/components/DatePicker/utils.ts
+index 7d1ae5d..8d76285 100644
+--- a/node_modules/frappe-ui/src/components/DatePicker/utils.ts
++++ b/node_modules/frappe-ui/src/components/DatePicker/utils.ts
+@@ -3,19 +3,21 @@ import type { Dayjs } from 'dayjs/esm'
+ import type { DatePickerDateObj as DateObj } from './types'
+ 
+ // Constant list of month labels
++// VOLTEO PATCH (issue #134): Polish month abbreviations. Upstream has no
++// prop for this list, so it is patched directly.
+ export const months: string[] = [
+-  'Jan',
+-  'Feb',
++  'Sty',
++  'Lut',
+   'Mar',
+-  'Apr',
+-  'May',
+-  'Jun',
+-  'Jul',
+-  'Aug',
+-  'Sep',
+-  'Oct',
+-  'Nov',
+-  'Dec',
++  'Kwi',
++  'Maj',
++  'Cze',
++  'Lip',
++  'Sie',
++  'Wrz',
++  'Paź',
++  'Lis',
++  'Gru',
+ ]
+ 
+ // Start of given month (0-indexed month)
+@@ -48,7 +50,16 @@ export function generateWeeks(
+     d = d.add(1, 'day')
+   }
+   const chunked: DateObj[][] = []
+-  for (let i = 0; i < days.length; i += 7) chunked.push(days.slice(i, i + 7))
++  for (let i = 0; i < days.length; i += 7) {
++    const week = days.slice(i, i + 7)
++    // VOLTEO PATCH (issue #134): each week here comes out Sunday-first
++    // (index 0 = Sunday, since `start` above is dayjs' locale-independent,
++    // always-Sunday `startOf('week')`). Rotate the leading Sunday to the end
++    // so the grid reads Monday-first instead (owner decision 2026-09-16).
++    // CalendarPanel.vue's WEEKDAYS header and its Home/End keyboard
++    // handlers are patched to match this same column order.
++    chunked.push([...week.slice(1), week[0]])
++  }
+   return chunked
+ }
+ 
+diff --git a/node_modules/frappe-ui/src/components/ListView/ListSelectBanner.vue b/node_modules/frappe-ui/src/components/ListView/ListSelectBanner.vue
+index 846acc0..38b36b4 100644
+--- a/node_modules/frappe-ui/src/components/ListView/ListSelectBanner.vue
++++ b/node_modules/frappe-ui/src/components/ListView/ListSelectBanner.vue
+@@ -54,7 +54,7 @@
+               variant="ghost"
+               @click="list.toggleAllRows(true)"
+             >
+-              Select all
++              Zaznacz wszystko
+             </Button>
+             <Button
+               icon="lucide-x"
 diff --git a/node_modules/frappe-ui/src/components/Menu/MenuRenderContentAsChild.vue b/node_modules/frappe-ui/src/components/Menu/MenuRenderContentAsChild.vue
 index aab0324..a9d96d9 100644
 --- a/node_modules/frappe-ui/src/components/Menu/MenuRenderContentAsChild.vue
