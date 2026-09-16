@@ -8,6 +8,8 @@
       selectable: true,
       showTooltip: true,
       resizeColumn: true,
+      selectionText: (n) =>
+        n === 1 ? __('Zaznaczono 1 wiersz') : __('Zaznaczono {0} wierszy', [n]),
     }"
     row-key="reference_docname"
     @update:selections="(selections) => emit('selectionsChanged', selections)"

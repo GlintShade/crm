@@ -14,6 +14,7 @@
           type="select"
           :label="__('Number Chart')"
           :options="numberCharts"
+          :placeholder="__('Wybierz opcję')"
         />
         <FormControl
           v-if="chartType === 'axis_chart'"

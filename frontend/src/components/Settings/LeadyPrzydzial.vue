@@ -39,6 +39,7 @@
           :label="__('Handlowiec')"
           :options="handlowcyOptions"
           :disabled="aktywnyAssignResource.loading"
+          :placeholder="__('Wybierz opcję')"
         />
         <FormControl
           v-else
@@ -47,6 +48,7 @@
           :label="__('Osoba CC')"
           :options="ccOptions"
           :disabled="aktywnyAssignResource.loading"
+          :placeholder="__('Wybierz opcję')"
         />
         <FormControl
           v-model="form.ilosc"
@@ -63,6 +65,7 @@
           :label="__('Województwo')"
           :options="wojewodztwoOptions"
           :disabled="aktywnyAssignResource.loading"
+          :placeholder="__('Wybierz opcję')"
         />
         <FormControl
           v-model="form.powiat"
@@ -75,6 +78,7 @@
           "
           :options="powiatOptions"
           :disabled="aktywnyAssignResource.loading || powiatyResource.loading"
+          :placeholder="__('Wybierz opcję')"
         />
         <FormControl
           v-model="form.miasto"

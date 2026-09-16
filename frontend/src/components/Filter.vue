@@ -741,7 +741,11 @@ function getValueControl(f) {
   } else if (typeNumber.includes(fieldtype)) {
     return h(FormControl, { type: 'number' })
   } else if (typeDate.includes(fieldtype) && operator == 'between') {
-    return h(DateRangePicker, { value: f.value, iconLeft: '' })
+    return h(DateRangePicker, {
+      value: f.value,
+      iconLeft: '',
+      placeholder: __('Wybierz zakres'),
+    })
   } else if (typeDuration.includes(fieldtype)) {
     return h(DurationInput, { value: f.value })
   } else if (typeRating.includes(fieldtype)) {
@@ -754,6 +758,10 @@ function getValueControl(f) {
     return h(fieldtype == 'Date' ? DatePicker : DateTimePicker, {
       value: f.value,
       iconLeft: '',
+      placeholder:
+        fieldtype == 'Date'
+          ? __('Wybierz datę')
+          : __('Wybierz datę i godzinę'),
     })
   } else {
     return h(FormControl, { type: 'text' })

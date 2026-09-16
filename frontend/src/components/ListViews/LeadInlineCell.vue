@@ -82,6 +82,7 @@
       :options="opcjeStatusuHandlowego"
       :modelValue="wartosc"
       :disabled="zapisywanie"
+      :placeholder="__('Wybierz opcję')"
       @update:modelValue="(v) => zapiszWartosc(column.key, v)"
     />
 
@@ -92,6 +93,7 @@
       variant="outline"
       input-class="border-none text-sm text-ink-gray-8"
       :disabled="zapisywanie"
+      :placeholder="__('Wybierz datę')"
       @change="(v) => zapiszWartosc(column.key, v)"
     />
 
@@ -102,6 +104,7 @@
       variant="outline"
       input-class="border-none text-sm text-ink-gray-8"
       :disabled="zapisywanie"
+      :placeholder="__('Wybierz datę i godzinę')"
       @change="(v) => zapiszWartosc(column.key, v)"
     />
   </div>

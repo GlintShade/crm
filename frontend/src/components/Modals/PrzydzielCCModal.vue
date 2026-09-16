@@ -34,6 +34,7 @@
           v-model="wybranyCc"
           :options="opcjeCc"
           :disabled="osobyCc.loading"
+          :placeholder="__('Wybierz opcję')"
         />
         <FormControl
           v-if="pokazCheckboxWszystkie"

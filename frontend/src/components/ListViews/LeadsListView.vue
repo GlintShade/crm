@@ -7,6 +7,8 @@
       selectable: canSelectRows,
       showTooltip: options.showTooltip,
       resizeColumn: options.resizeColumn,
+      selectionText: (n) =>
+        n === 1 ? __('Zaznaczono 1 wiersz') : __('Zaznaczono {0} wierszy', [n]),
     }"
     row-key="name"
     @update:selections="(selections) => emit('selectionsChanged', selections)"
