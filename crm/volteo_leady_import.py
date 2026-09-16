@@ -600,12 +600,34 @@ def _wyciagnij_nawias(tekst: str) -> tuple[str, str]:
 	return pozostaly, tresc.strip()
 
 
+_WZOR_KOD_POCZTOWY_PREFIKS = re.compile(r"^\d{2}-\d{3}\s+")
+"""Wiodący kod pocztowy Z ODSTĘPEM na początku segmentu (np. „62-640
+Boryslawice Kościelne 20" - drugi kod pocztowy sklejony przecinkiem bez
+spacji do pierwszego trafia jako OSTATNI segment po podziale po przecinku,
+z tym wiodącym kodem) - `_podziel_segmenty_przecinkiem` zdejmuje ten prefiks,
+NIE cały segment (w odróżnieniu od `_WZOR_KOD_POCZTOWY`, który dopasowuje
+segment BĘDĄCY w całości kodem pocztowym i taki segment odrzuca)."""
+
+
 def _podziel_segmenty_przecinkiem(tekst: str) -> list[str]:
 	"""Dzieli `tekst` po przecinku, przycina każdy kawałek i odrzuca puste
-	segmenty oraz segmenty wyglądające jak kod pocztowy (`_WZOR_KOD_POCZTOWY`)
-	- `rozbij_fragment_ulicy` reguła b."""
-	surowe = [czesc.strip() for czesc in tekst.split(",")]
-	return [czesc for czesc in surowe if czesc and not _WZOR_KOD_POCZTOWY.match(czesc)]
+	segmenty (wg `_pusta` - a więc też sam „-"/„brak"/„nie") oraz segmenty
+	wyglądające jak kod pocztowy (`_WZOR_KOD_POCZTOWY`, cały segment). Segment
+	zaczynający się od kodu pocztowego Z DALSZYM tekstem po nim (np. „62-640
+	Boryslawice Kościelne 20") ma ten wiodący kod ZDJĘTY, nie jest odrzucany w
+	całości - `_WZOR_KOD_POCZTOWY_PREFIKS`. Używane zarówno przez
+	`rozbij_fragment_ulicy` (reguła b) jak i `rozbij_adres_arkusza` (część PO
+	kodzie pocztowym, gdy ta też niesie przecinki)."""
+	wynik: list[str] = []
+	for czesc in (surowa.strip() for surowa in tekst.split(",")):
+		if not czesc or _pusta(czesc):
+			continue
+		if _WZOR_KOD_POCZTOWY.match(czesc):
+			continue
+		czesc = _WZOR_KOD_POCZTOWY_PREFIKS.sub("", czesc, count=1).strip()
+		if czesc:
+			wynik.append(czesc)
+	return wynik
 
 
 def rozbij_fragment_ulicy(fragment: str, miejscowosc: str) -> tuple[str, str, str]:
@@ -841,10 +863,15 @@ def rozbij_adres_arkusza(adres: str) -> AdresRozbity | None:
 	zwraca `None` - CAŁE pole Adres jest wtedy odrzucane przez wywołującego
 	(`zbuduj_leada_z_arkusza`), surowy tekst zostaje bez zmian.
 
-	Miejscowość to część przed pierwszym ` (` w tym, co zostaje po kodzie
-	pocztowym; dopisek-po-miejscowości to reszta, z obciętym końcowym `)` gdy
-	jest obecny (bywa ucięty przez Excela bez zamykającego nawiasu - obie
-	wersje dają ten sam wynik).
+	Miejscowość: część PO kodzie pocztowym też bywa z przecinkiem (np. „-,
+	66-010 Przybymierz,", „-, 72-006 Dołuje,Mierzyn", „-, 78-627 Wałcz,
+	Różewo", „-, 23-114 Jabłonna (gmina), Chmiel Kolonia- miejscowość" -
+	decyzja właściciela po QA parsera, 2026-09-16): nawias jest najpierw
+	wycięty (`_wyciagnij_nawias`, tak jak dotąd - obsługuje też obcięty bez
+	zamykającego `)`), reszta idzie przez `_podziel_segmenty_przecinkiem`;
+	miejscowością zostaje PIERWSZY niepusty segment (przycięty, bez końcowej
+	interpunkcji `,;.`), pozostałe segmenty trafiają do dopisku razem z
+	treścią nawiasu (nawias pierwszy, potem segmenty, złączone przecinkiem).
 
 	Fragment ulicy równy `-` (albo pusty wg `_pusta`) - wieś bez nazwy ulicy -
 	daje `ulica = miejscowość`, `nr_domu = ""` (decyzja właściciela, issue
@@ -869,13 +896,16 @@ def rozbij_adres_arkusza(adres: str) -> AdresRozbity | None:
 	kod = dopasowanie.group(2)
 	reszta = dopasowanie.group(3).strip()
 
-	if " (" in reszta:
-		miejscowosc_surowa, _, dopisek_surowy = reszta.partition(" (")
-		miejscowosc = miejscowosc_surowa.strip()
-		dopisek_miejscowosci = dopisek_surowy.rstrip(")").strip()
+	reszta_bez_nawiasu, dopisek_nawiasu = _wyciagnij_nawias(reszta)
+	segmenty_miejscowosci = _podziel_segmenty_przecinkiem(reszta_bez_nawiasu)
+	if segmenty_miejscowosci:
+		miejscowosc = segmenty_miejscowosci[0].rstrip(",;.")
+		dopisek_pozostale_segmenty = ", ".join(segmenty_miejscowosci[1:])
 	else:
-		miejscowosc = reszta
-		dopisek_miejscowosci = ""
+		miejscowosc = ""
+		dopisek_pozostale_segmenty = ""
+	segmenty_dopisku_miejscowosci = [d for d in (dopisek_nawiasu, dopisek_pozostale_segmenty) if d]
+	dopisek_miejscowosci = ", ".join(segmenty_dopisku_miejscowosci)
 
 	if _pusta(czesc_ulicy):
 		ulica, nr_domu, dopisek_fragmentu = miejscowosc, "", ""

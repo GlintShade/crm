@@ -765,6 +765,63 @@ class TestRozbijAdresArkusza(unittest.TestCase):
 		self.assertEqual(wynik.ulica, "Kolejowa")
 		self.assertEqual(wynik.dopisek, "uwaga, Wilanów")
 
+	# --- QA parsera 2026-09-16: przecinki TEZ w czesci PO kodzie pocztowym ---
+
+	def test_e4_miejscowosc_z_koncowym_przecinkiem_bez_dopisku(
+		self: "TestRozbijAdresArkusza",
+	) -> None:
+		wynik = rozbij_adres_arkusza("-, 66-010 Przybymierz,")
+		self.assertEqual(wynik.miejscowosc, "Przybymierz")
+		self.assertEqual(wynik.dopisek, "")
+
+	def test_e5_miejscowosc_przecinek_dopisek_bez_spacji(
+		self: "TestRozbijAdresArkusza",
+	) -> None:
+		wynik = rozbij_adres_arkusza("-, 72-006 Dołuje,Mierzyn")
+		self.assertEqual(wynik.miejscowosc, "Dołuje")
+		self.assertEqual(wynik.dopisek, "Mierzyn")
+
+	def test_e6_miejscowosc_przecinek_dopisek_ze_spacja(
+		self: "TestRozbijAdresArkusza",
+	) -> None:
+		wynik = rozbij_adres_arkusza("-, 78-627 Wałcz, Różewo")
+		self.assertEqual(wynik.miejscowosc, "Wałcz")
+		self.assertEqual(wynik.dopisek, "Różewo")
+
+	def test_e7_miejscowosc_nawias_i_segment_po_przecinku_razem_w_dopisku(
+		self: "TestRozbijAdresArkusza",
+	) -> None:
+		wynik = rozbij_adres_arkusza(
+			"-, 23-114 Jabłonna (gmina), Chmiel Kolonia- miejscowość"
+		)
+		self.assertEqual(wynik.miejscowosc, "Jabłonna")
+		self.assertEqual(wynik.dopisek, "gmina, Chmiel Kolonia- miejscowość")
+
+	def test_e8_drugi_kod_pocztowy_sklejony_przecinkiem_bez_dopisku_myslnik(
+		self: "TestRozbijAdresArkusza",
+	) -> None:
+		# "-, 62-640 Boryslawice Koscielne 20,62-640 Grzegorzew": _WZOR_ADRES
+		# kotwiczy sie na DRUGIM wystapieniu ", dd-ddd " (po "20,"), wiec grupa 1
+		# to "-, 62-640 Boryslawice Koscielne 20" - fragment ulicy ma WEWNATRZ
+		# siebie wlasny przecinek z wiodacym "-" (odrzucany jako pusty segment)
+		# i wlasny wiodacy kod pocztowy (zdejmowany jako prefiks segmentu).
+		wynik = rozbij_adres_arkusza(
+			"-, 62-640 Boryslawice Kościelne 20,62-640 Grzegorzew"
+		)
+		self.assertEqual(wynik.ulica, "Boryslawice Kościelne")
+		self.assertEqual(wynik.nr_domu, "20")
+		self.assertEqual(wynik.miejscowosc, "Grzegorzew")
+		self.assertEqual(wynik.dopisek, "")
+
+	def test_e9_segment_pusta_myslnik_odrzucony_z_miejscowosci(
+		self: "TestRozbijAdresArkusza",
+	) -> None:
+		# analogiczny przypadek po stronie miejscowosci: sam "-" jako segment nie
+		# ma trafic do dopisku.
+		wynik = rozbij_adres_arkusza("-, 62-080 Poznań,-")
+		self.assertEqual(wynik.miejscowosc, "Poznań")
+		self.assertEqual(wynik.dopisek, "")
+
 	def test_f_brak_dopasowania_wzorca_daje_none(self: "TestRozbijAdresArkusza") -> None:
 		self.assertIsNone(rozbij_adres_arkusza("zupelnie inny format bez kodu pocztowego"))
 
