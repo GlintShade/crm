@@ -9,12 +9,15 @@ import {
   PREFILL_KEYS,
   BASE_FIELDS,
   GRUPY,
+  WARUNKI_WIDOCZNOSCI,
   defaultForm,
   buildDane,
   hydrateFrom,
   normalizujKwote,
   formatujNumerRachunku,
   formatujNumerRachunkuZKursorem,
+  poleWidoczne,
+  widocznePola,
 } from '@/utils/kredytForm'
 
 function deepFreeze(value) {
@@ -529,6 +532,183 @@ describe('Kredyt form logic', () => {
         kursor: 3,
       })
       expect(formatujNumerRachunkuZKursorem('abc', 2)).toEqual({ tekst: 'abc', kursor: 2 })
+    })
+  })
+
+  describe('poleWidoczne', () => {
+    it('is visible when the field has no rule in WARUNKI_WIDOCZNOSCI', () => {
+      const form = defaultForm()
+      expect(poleWidoczne(form, 'miejsce_urodzenia')).toBe(true)
+    })
+
+    it('a "value" rule matches on equality', () => {
+      const form = defaultForm()
+      form.adres_zameldowania_taki_sam = 'Nie'
+      expect(poleWidoczne(form, 'adres_zameldowania')).toBe(true)
+    })
+
+    it('a "value" rule hides the field when the value does not match', () => {
+      const form = defaultForm()
+      form.adres_zameldowania_taki_sam = 'Tak'
+      expect(poleWidoczne(form, 'adres_zameldowania')).toBe(false)
+    })
+
+    it('a "values" rule shows the field for every non-empty PRACA_OKRES_OPCJE value', () => {
+      PRACA_OKRES_OPCJE.filter((v) => v !== '').forEach((wartosc) => {
+        const form = defaultForm()
+        form.praca_okres = wartosc
+        expect(poleWidoczne(form, 'praca_okres_od')).toBe(true)
+      })
+    })
+
+    it('a "values" rule hides the field for the empty PRACA_OKRES_OPCJE value', () => {
+      const form = defaultForm()
+      form.praca_okres = ''
+      expect(poleWidoczne(form, 'praca_okres_od')).toBe(false)
+    })
+
+    it('never mutates the form it inspects', () => {
+      const form = deepFreeze(defaultForm())
+      expect(() => poleWidoczne(form, 'praca_okres_od')).not.toThrow()
+    })
+  })
+
+  describe('WARUNKI_WIDOCZNOSCI (contract mirrored against crm/volteo_kredyt.py brakujace_pola)', () => {
+    it('praca_okres_od is visible for every non-empty PRACA_OKRES_OPCJE value (backend requires it whenever "praca" is on, regardless of period type)', () => {
+      PRACA_OKRES_OPCJE.filter((v) => v !== '').forEach((wartosc) => {
+        const form = defaultForm()
+        form.praca_okres = wartosc
+        expect(poleWidoczne(form, 'praca_okres_od')).toBe(true)
+      })
+    })
+
+    it('praca_okres_do is visible only for "Czas określony"', () => {
+      const form1 = defaultForm()
+      form1.praca_okres = 'Czas określony'
+      expect(poleWidoczne(form1, 'praca_okres_do')).toBe(true)
+
+      const form2 = defaultForm()
+      form2.praca_okres = 'Czas nieokreślony'
+      expect(poleWidoczne(form2, 'praca_okres_do')).toBe(false)
+
+      const form3 = defaultForm()
+      form3.praca_okres = ''
+      expect(poleWidoczne(form3, 'praca_okres_do')).toBe(false)
+    })
+
+    it('dzialalnosc_forma_inna is visible only for the lowercase "inne"', () => {
+      const form1 = defaultForm()
+      form1.dzialalnosc_forma_opodatkowania = 'inne'
+      expect(poleWidoczne(form1, 'dzialalnosc_forma_inna')).toBe(true)
+
+      const form2 = defaultForm()
+      form2.dzialalnosc_forma_opodatkowania = 'ryczałt'
+      expect(poleWidoczne(form2, 'dzialalnosc_forma_inna')).toBe(false)
+    })
+
+    it('adres_zameldowania is visible only for "Nie"', () => {
+      const form1 = defaultForm()
+      form1.adres_zameldowania_taki_sam = 'Nie'
+      expect(poleWidoczne(form1, 'adres_zameldowania')).toBe(true)
+
+      const form2 = defaultForm()
+      form2.adres_zameldowania_taki_sam = 'Tak'
+      expect(poleWidoczne(form2, 'adres_zameldowania')).toBe(false)
+    })
+
+    it('adres_korespondencji is visible only for "Nie"', () => {
+      const form1 = defaultForm()
+      form1.adres_korespondencji_taki_sam = 'Nie'
+      expect(poleWidoczne(form1, 'adres_korespondencji')).toBe(true)
+
+      const form2 = defaultForm()
+      form2.adres_korespondencji_taki_sam = 'Tak'
+      expect(poleWidoczne(form2, 'adres_korespondencji')).toBe(false)
+    })
+  })
+
+  describe('widocznePola', () => {
+    it('includes a field hidden by rule when its fieldname is present in brakujace (safety net)', () => {
+      const form = defaultForm()
+      form.praca_okres = 'Czas nieokreślony'
+      const fields = [
+        { fieldname: 'praca_okres_do', label: 'Okres zatrudnienia do' },
+      ]
+      const wynik = widocznePola(fields, form, ['praca_okres_do'])
+      expect(wynik.map((f) => f.fieldname)).toEqual(['praca_okres_do'])
+    })
+
+    it('excludes a field hidden by rule and absent from brakujace', () => {
+      const form = defaultForm()
+      form.praca_okres = 'Czas nieokreślony'
+      const fields = [
+        { fieldname: 'praca_okres_do', label: 'Okres zatrudnienia do' },
+      ]
+      const wynik = widocznePola(fields, form, [])
+      expect(wynik).toEqual([])
+    })
+
+    it('preserves field order', () => {
+      const form = defaultForm()
+      form.praca_okres = 'Czas określony'
+      const fields = [
+        { fieldname: 'praca_forma', label: 'a' },
+        { fieldname: 'praca_okres', label: 'b' },
+        { fieldname: 'praca_okres_od', label: 'c' },
+        { fieldname: 'praca_okres_do', label: 'd' },
+        { fieldname: 'praca_nip', label: 'e' },
+      ]
+      const wynik = widocznePola(fields, form, [])
+      expect(wynik.map((f) => f.fieldname)).toEqual([
+        'praca_forma',
+        'praca_okres',
+        'praca_okres_od',
+        'praca_okres_do',
+        'praca_nip',
+      ])
+    })
+
+    it('defaults brakujace to an empty list when omitted', () => {
+      const form = defaultForm()
+      form.praca_okres = 'Czas nieokreślony'
+      const fields = [{ fieldname: 'praca_okres_do', label: 'Okres zatrudnienia do' }]
+      expect(widocznePola(fields, form)).toEqual([])
+    })
+
+    it('never mutates its inputs (deep-compare before/after)', () => {
+      const form = defaultForm()
+      form.praca_okres = 'Czas nieokreślony'
+      const fields = [
+        { fieldname: 'praca_okres_od', label: 'Okres zatrudnienia od' },
+        { fieldname: 'praca_okres_do', label: 'Okres zatrudnienia do' },
+      ]
+      const brakujace = ['praca_okres_do']
+
+      const formPrzed = JSON.parse(JSON.stringify(form))
+      const fieldsPrzed = JSON.parse(JSON.stringify(fields))
+      const brakujacePrzed = JSON.parse(JSON.stringify(brakujace))
+
+      widocznePola(fields, form, brakujace)
+
+      expect(form).toEqual(formPrzed)
+      expect(fields).toEqual(fieldsPrzed)
+      expect(brakujace).toEqual(brakujacePrzed)
+    })
+
+    it('regression (ops#139): praca_okres = "Czas nieokreślony" shows praca_okres_od and hides praca_okres_do', () => {
+      const form = defaultForm()
+      form.praca_wlaczone = true
+      form.praca_okres = 'Czas nieokreślony'
+      const pracaFields = GRUPY.find((g) => g.key === 'praca').fields.map((fn) => ({
+        fieldname: fn,
+        label: fn,
+      }))
+
+      const wynik = widocznePola(pracaFields, form, [])
+      const nazwy = wynik.map((f) => f.fieldname)
+
+      expect(nazwy).toContain('praca_okres_od')
+      expect(nazwy).not.toContain('praca_okres_do')
     })
   })
 })

@@ -343,6 +343,7 @@ import {
   normalizujKwote,
   formatujNumerRachunku,
   formatujNumerRachunkuZKursorem,
+  widocznePola,
 } from '@/utils/kredytForm'
 
 const props = defineProps({
@@ -392,7 +393,6 @@ const formSections = [
         fieldname: 'adres_zameldowania',
         label: __('Adres zameldowania'),
         type: 'text',
-        depends_on: { fieldname: 'adres_zameldowania_taki_sam', value: 'Nie' },
       },
       {
         fieldname: 'adres_korespondencji_taki_sam',
@@ -404,7 +404,6 @@ const formSections = [
         fieldname: 'adres_korespondencji',
         label: __('Adres do korespondencji'),
         type: 'text',
-        depends_on: { fieldname: 'adres_korespondencji_taki_sam', value: 'Nie' },
       },
     ],
   },
@@ -480,9 +479,11 @@ const formSections = [
 // Keyed by GRUPY[].key from kredytForm.js — the fieldname LIST there is the
 // single source of truth for which fields exist per group (and what
 // buildDane()/hydrateFrom() operate on); this map only adds the per-field
-// label/type/depends_on needed to render them, so the two can never drift
-// on fieldnames (a missing/extra field here would leave a hole in the grid,
-// not a data-shape bug).
+// label/type needed to render them, so the two can never drift on
+// fieldnames (a missing/extra field here would leave a hole in the grid,
+// not a data-shape bug). Conditional visibility is no longer declared
+// inline here. It lives in kredytForm.js's WARUNKI_WIDOCZNOSCI, read
+// through widocznePola() below (see that map's header comment for why).
 const grupaPola = {
   praca: [
     { fieldname: 'praca_forma', label: __('Forma zatrudnienia'), type: 'select', options: PRACA_FORMA_OPCJE },
@@ -492,13 +493,11 @@ const grupaPola = {
       fieldname: 'praca_okres_od',
       label: __('Okres zatrudnienia od'),
       type: 'date',
-      depends_on: { fieldname: 'praca_okres', value: 'Czas określony' },
     },
     {
       fieldname: 'praca_okres_do',
       label: __('Okres zatrudnienia do'),
       type: 'date',
-      depends_on: { fieldname: 'praca_okres', value: 'Czas określony' },
     },
     { fieldname: 'praca_nip', label: __('NIP zakładu pracy'), type: 'text' },
     { fieldname: 'praca_nazwa_zakladu', label: __('Nazwa zakładu pracy'), type: 'text' },
@@ -544,7 +543,6 @@ const grupaPola = {
       fieldname: 'dzialalnosc_forma_inna',
       label: __('Inna forma opodatkowania — jaka?'),
       type: 'text',
-      depends_on: { fieldname: 'dzialalnosc_forma_opodatkowania', value: 'inne' },
     },
     { fieldname: 'dzialalnosc_nip', label: __('NIP'), type: 'text' },
     { fieldname: 'dzialalnosc_nazwa', label: __('Nazwa działalności'), type: 'text' },
@@ -598,13 +596,13 @@ const fieldLabelByName = new Map([
   ...Object.values(grupaPola).flatMap((fields) => fields.map((f) => [f.fieldname, f.label])),
 ])
 
-function depOk(form, item) {
-  const dep = item.depends_on
-  if (!dep) return true
-  return form[dep.fieldname] === dep.value
-}
+// Thin wrapper around kredytForm.js's widocznePola(): field visibility
+// rules now live in WARUNKI_WIDOCZNOSCI (single source of truth, unit
+// tested in kredytForm.test.js), with `brakujace` passed through as the
+// safety net so a field the server reports missing is always rendered,
+// even if a rule and the backend ever disagree again (see ops#139).
 function visibleFields(fields) {
-  return (fields || []).filter((f) => depOk(form, f))
+  return widocznePola(fields, form, brakujace.value)
 }
 
 // Amount fields (inputmode: 'decimal') get their typed text normalized to

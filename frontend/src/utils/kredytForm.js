@@ -159,6 +159,70 @@ export const GRUPY = [
   },
 ]
 
+// Declarative field-visibility rules, single source of truth for every
+// conditional field in the Kredyt form (KredytTab.vue no longer carries
+// inline depends_on entries: it reads this map through poleWidoczne()).
+//
+// MIRROR: the required-field rules this map's visibility must never
+// contradict live in the backend, crm/volteo_kredyt.py `_pola_grupy()` /
+// `brakujace_pola()`. INVARIANT: a field the backend requires in a given
+// form state MUST be visible in the frontend in that same state. The
+// ops#139 bug was exactly this invariant broken for praca_okres_od (backend
+// requires it whenever the "praca" group is on, for either period type;
+// the old frontend rule only showed it for 'Czas określony', so a rep
+// filling 'Czas nieokreślony' could never clear the missing-fields banner).
+// A rule here has either a `value` (equality) or a `values` (membership)
+// key, never both.
+export const WARUNKI_WIDOCZNOSCI = {
+  praca_okres_od: { fieldname: 'praca_okres', values: ['Czas określony', 'Czas nieokreślony'] },
+  praca_okres_do: { fieldname: 'praca_okres', value: 'Czas określony' },
+  dzialalnosc_forma_inna: { fieldname: 'dzialalnosc_forma_opodatkowania', value: 'inne' },
+  adres_zameldowania: { fieldname: 'adres_zameldowania_taki_sam', value: 'Nie' },
+  adres_korespondencji: { fieldname: 'adres_korespondencji_taki_sam', value: 'Nie' },
+}
+
+/**
+ * Pure visibility check for one field against the current form state, per
+ * WARUNKI_WIDOCZNOSCI. A field with no rule is always visible. Never
+ * mutates `form`.
+ *
+ * @param {object} form - current form state
+ * @param {string} fieldname - field to check
+ * @returns {boolean} whether the field's rule is satisfied
+ */
+export function poleWidoczne(form, fieldname) {
+  const rule = WARUNKI_WIDOCZNOSCI[fieldname]
+  if (!rule) return true
+  if (Array.isArray(rule.values)) {
+    return rule.values.includes(form[rule.fieldname])
+  }
+  return form[rule.fieldname] === rule.value
+}
+
+/**
+ * Filter `fields` down to the ones that should render, given the current
+ * form state and the server's latest missing-fields list.
+ *
+ * A field is visible when EITHER poleWidoczne(form, fieldname) is true, OR
+ * its fieldname is present in `brakujace`, the safety net that keeps a
+ * server/frontend rule mismatch from ever reproducing the ops#139 deadlock
+ * again: whatever the server reports as missing is always rendered so the
+ * rep can fill it in and the banner can clear.
+ *
+ * Pure: returns a new array, never mutates `fields`, `form`, or `brakujace`.
+ * Preserves the input order.
+ *
+ * @param {Array<object>} fields - field definitions (objects with .fieldname)
+ * @param {object} form - current form state
+ * @param {Array<string>} [brakujace] - fieldnames the server reports missing
+ * @returns {Array<object>} the visible field definitions, in original order
+ */
+export function widocznePola(fields, form, brakujace = []) {
+  return (fields || []).filter(
+    (f) => poleWidoczne(form, f.fieldname) || brakujace.includes(f.fieldname),
+  )
+}
+
 /**
  * Create the initial state of the Kredyt form. Every call returns a
  * completely independent object (own copy, no shared references) — mirrors
