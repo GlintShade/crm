@@ -1,8 +1,8 @@
 <!--
-  Zestaw tab, bottom of content — admin-only actual-cost panel. The file is
-  named for the domain it covers (koszty montażu/realizacji — installation/
+  Zestaw tab, bottom of content, admin-only actual-cost panel. The file is
+  named for the domain it covers (koszty montażu/realizacji: installation/
   fulfilment costs), NOT for the tab it renders in: it is mounted at the
-  very bottom of ZestawTab.vue's template (owner decision — an earlier
+  very bottom of ZestawTab.vue's template (owner decision: an earlier
   version of this panel briefly lived in MontazTab.vue by mistake and was
   moved here; keep that history in mind if you go looking for it in the
   wrong tab). Reads the planned cost snapshot persisted by the calculator
@@ -15,11 +15,11 @@
   permlevel 2, so Frappe silently drops the key from the get_value response
   for any role without read access to it (see ZestawTab.vue's own
   dealSubsidy fetch, a few components up in the same file, for the same
-  pattern, verified empirically for this codebase) — there is no error,
+  pattern, verified empirically for this codebase), there is no error,
   just an absent key. A pre-b49 deal (created before this snapshot existed)
   or a parse failure look identical from here: `null`, no panel, no console
   noise. Deliberately mounted outside ZestawTab's loading/empty/populated
-  v-if chain, so it still renders for a deal with no BOM rows to show — the
+  v-if chain, so it still renders for a deal with no BOM rows to show, the
   snapshot this panel reads is unrelated to whether the BOM itself is
   populated. This is a display+edit surface only; the server
   (`crm.api.koszty.volteo_koszty_zapisz`) is the sole source of truth once
@@ -27,16 +27,16 @@
   what this component displayed.
 
   All the live math (fallback to plan, delta, marża/zysk) is display-only
-  and lives in `@/utils/montazKoszty.js` — see that file's header for why
+  and lives in `@/utils/montazKoszty.js`; see that file's header for why
   Number (not Decimal) is fine here.
 
   Reactive state is declared up front with explicit `null`/`{}`/`[]`
   defaults and is always REPLACED wholesale (`x.value = newThing`), never
-  read via `hasOwnProperty`/`in` — see the header comment in
+  read via `hasOwnProperty`/`in`; see the header comment in
   DokumentyLista.vue and the trap writeup in ZestawTab.vue: a `computed`
   built on a `hasOwnProperty` read against a `reactive()`/`ref()` object
   registers no dependency and freezes at first evaluation. Plain property
-  `get`/`set` (as used throughout this file) is unaffected — only the
+  `get`/`set` (as used throughout this file) is unaffected; only the
   presence-check traps are the problem.
 -->
 <template>
@@ -46,7 +46,7 @@
       class="flex w-full items-center justify-between rounded-md border border-outline-amber-3 bg-surface-amber-2 px-2.5 py-1.5 text-sm font-semibold text-ink-amber-8 transition-colors hover:bg-surface-amber-3"
       @click="expanded = !expanded"
     >
-      <span>{{ __('Koszty i marża — widoczne tylko dla administratorów') }}</span>
+      <span>{{ __('Koszty i marża (widoczne tylko dla administratorów)') }}</span>
       <FeatherIcon :name="expanded ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 text-ink-amber-8" />
     </button>
 
@@ -147,31 +147,31 @@
           <span>{{ __('Netto') }}</span><span class="tabular-nums">{{ formatPln(wynik.razem.netto) }}</span>
         </div>
         <div class="mk-summary-row">
-          <span>{{ __('Koszt — plan') }}</span><span class="tabular-nums">{{ formatPln(wynik.razem.kosztPlan) }}</span>
+          <span>{{ __('Koszt (plan)') }}</span><span class="tabular-nums">{{ formatPln(wynik.razem.kosztPlan) }}</span>
         </div>
         <div class="mk-summary-row">
-          <span>{{ __('Koszt — rzeczywisty') }}</span>
+          <span>{{ __('Koszt (rzeczywisty)') }}</span>
           <span class="font-medium tabular-nums">{{ formatPln(wynik.razem.kosztRzeczywisty) }}</span>
         </div>
         <div class="mk-summary-row">
-          <span>{{ __('Marża — plan') }}</span><span class="tabular-nums">{{ formatPln(wynik.razem.marzaPlan) }}</span>
+          <span>{{ __('Marża (plan)') }}</span><span class="tabular-nums">{{ formatPln(wynik.razem.marzaPlan) }}</span>
         </div>
         <div class="mk-summary-row mk-summary-highlight">
-          <span>{{ __('Marża — rzeczywista') }}</span>
+          <span>{{ __('Marża (rzeczywista)') }}</span>
           <span class="tabular-nums font-semibold" :class="compareClass(wynik.razem.marzaRzeczywista, wynik.razem.marzaPlan)">
             {{ formatPln(wynik.razem.marzaRzeczywista) }}
           </span>
         </div>
         <template v-if="wynik.razem.prowizjaPlan !== null">
           <div class="mk-summary-row">
-            <span>{{ __('Prowizja — plan') }}</span><span class="tabular-nums">{{ formatPln(wynik.razem.prowizjaPlan) }}</span>
+            <span>{{ __('Prowizja (plan)') }}</span><span class="tabular-nums">{{ formatPln(wynik.razem.prowizjaPlan) }}</span>
           </div>
         </template>
         <div class="mk-summary-row">
-          <span>{{ __('Zysk — plan') }}</span><span class="tabular-nums">{{ formatPln(wynik.razem.zyskPlan) }}</span>
+          <span>{{ __('Zysk (plan)') }}</span><span class="tabular-nums">{{ formatPln(wynik.razem.zyskPlan) }}</span>
         </div>
         <div class="mk-summary-row mk-summary-highlight">
-          <span>{{ __('Zysk — rzeczywisty') }}</span>
+          <span>{{ __('Zysk (rzeczywisty)') }}</span>
           <span class="tabular-nums font-semibold" :class="compareClass(wynik.razem.zyskRzeczywisty, wynik.razem.zyskPlan)">
             {{ formatPln(wynik.razem.zyskRzeczywisty) }}
           </span>
@@ -205,19 +205,19 @@ const props = defineProps({
   dealId: { type: String, required: true },
 })
 
-// --- State (declared up front, always replaced wholesale — never mutated
+// --- State (declared up front, always replaced wholesale, never mutated
 // in place beyond a single leaf key/value set, and never read via
 // hasOwnProperty/in; see header comment above). --------------------------
 const snapshot = ref(null) // parsed custom_koszty_json, or null (see header)
 const edycje = ref({}) // klucz -> raw typed "koszt rzeczywisty" string
-const dodatkowe = ref([]) // [{id?, nazwa, kwota}] — raw, in-progress
+const dodatkowe = ref([]) // [{id?, nazwa, kwota}], raw, in-progress
 const expanded = ref(false) // collapsed by default (screenshare-safe, mirrors KalkulatorTab.vue)
 const saving = ref(false)
 
 // --- Load -------------------------------------------------------------------
 // Permlevel-2 field: Frappe drops `custom_koszty_json` from the response
 // entirely for any role without read access, so a non-admin's fetch
-// SUCCEEDS with the key simply absent — there is no error path to handle
+// SUCCEEDS with the key simply absent; there is no error path to handle
 // here for the "not an admin" case, only for genuine fetch failures, and
 // both end up rendering nothing (parseSnapshot(undefined) -> null).
 createResource({
@@ -278,7 +278,7 @@ function deltaClass(delta) {
 
 // Actual vs plan comparison for the summary highlight rows: a lower actual
 // margin/profit than planned is a red flag (cost overrun ate into it), a
-// higher one is a green result — equal stays neutral gray.
+// higher one is a green result; equal stays neutral gray.
 function compareClass(rzeczywiste, plan) {
   if (rzeczywiste < plan) return 'text-ink-red-6'
   if (rzeczywiste > plan) return 'text-ink-green-6'
@@ -302,7 +302,7 @@ function ustawKwoteDodatkowa(indeks, wartosc) {
 // --- Save ---------------------------------------------------------------
 // Full dotted path is mandatory: crm.api.koszty is a whitelisted fork API
 // method, not a Server Script, and a bare method name resolves only for
-// Server Scripts (see the api-call-path trap documented in UmowaTab.vue —
+// Server Scripts (see the api-call-path trap documented in UmowaTab.vue:
 // AudytTab.vue's Server Script calls by bare name look like a valid pattern
 // to copy here and silently are not, producing an HTTP 417 at runtime).
 async function zapiszKoszty() {
@@ -332,7 +332,7 @@ async function zapiszKoszty() {
 }
 
 // Copied verbatim from the extractErrorMessage() pattern used across the
-// deal tabs (useAutenti.js, KredytTab.vue, UmowaTab.vue, ...) — but that
+// deal tabs (useAutenti.js, KredytTab.vue, UmowaTab.vue, ...), but that
 // pattern was blind to the actual shape of errors thrown by frappe-ui's
 // call() (see frontend/node_modules/frappe-ui/src/utils/frappeRequest.js
 // ~L82-124): call() consumes _server_messages itself and re-throws an
@@ -369,7 +369,7 @@ function extractErrorMessage(err) {
 <style scoped>
 /* Column layout on desktop; collapses to a single stacked column per row on
    narrow viewports (ZestawTab, which mounts this panel, also renders inside
-   MobileDeal.vue — same self-responsive behaviour applies there, no
+   MobileDeal.vue; same self-responsive behaviour applies there, no
    layout change needed on the move from MontazTab.vue). Mirrors the amber
    "admin only" treatment already used across the deal tabs
    (KalkulatorTab.vue, KalkulatorCPTab.vue, ZestawTab.vue), and the

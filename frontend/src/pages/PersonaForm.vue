@@ -108,8 +108,8 @@ const questions = computed(() => [
     title: __('How many people will use Frappe CRM?'),
     options: [
       { label: __('Just me'), value: 'just_me' },
-      { label: __('2–5'), value: '2_5' },
-      { label: __('6–20'), value: '6_20' },
+      { label: __('2 do 5'), value: '2_5' },
+      { label: __('6 do 20'), value: '6_20' },
       { label: __('More than 20'), value: 'more_than_20' },
     ],
   },
