@@ -8,6 +8,7 @@ from crm.volteo_leady_import import (
 	mapuj_zainteresowanie,
 	normalizuj_date,
 	normalizuj_kod,
+	normalizuj_pisownie_osoby,
 	normalizuj_posiadane_produkty,
 	normalizuj_produkt_procesu,
 	normalizuj_status_zrodla,
@@ -16,9 +17,11 @@ from crm.volteo_leady_import import (
 	normalizuj_wojewodztwo,
 	normalizuj_zasady,
 	normalizuj_zrodlo,
-	rozbij_adres,
 	rozbij_adres_arkusza,
+	rozbij_fragment_ulicy,
 	rozdziel_imie_nazwisko,
+	scal_duble,
+	ulica_zawiera_cyfre,
 	waliduj_naglowek,
 	wczytaj_arkusz,
 	wykryj_duble_telefonow,
@@ -158,55 +161,225 @@ class TestMapujZainteresowanie(unittest.TestCase):
 		self.assertIsNone(mapuj_zainteresowanie("zużywa 720 kw na 2 miesiące"))
 
 
-class TestRozbijAdres(unittest.TestCase):
-	def test_a_ulica_z_numerem(self: "TestRozbijAdres") -> None:
-		self.assertEqual(rozbij_adres("Kwiatowa 19", "Poznań"), ("Kwiatowa", "19"))
+class TestRozbijFragmentUlicy(unittest.TestCase):
+	"""`rozbij_fragment_ulicy` (b59, issue #141, uniformizacja) - zastępuje
+	starą, usuniętą `rozbij_adres`. Pierwsza porcja testów portuje pokrycie
+	starej funkcji (proste "ulica + numer", "sam numer bierze miasto", straż
+	kodu pocztowego), reszta pokrywa nowe reguły a-g (nawiasy, segmenty po
+	przecinku, tolerancyjny numer ze słowem 'nr', numer sklejony bez odstępu,
+	prefiks 'ul.')."""
 
-	def test_b_numer_z_litera(self: "TestRozbijAdres") -> None:
-		self.assertEqual(rozbij_adres("Kwiatowa 19A", "Poznań"), ("Kwiatowa", "19A"))
+	# --- portowane z usuniętej TestRozbijAdres ---
 
-	def test_c_numer_z_ukosnikiem(self: "TestRozbijAdres") -> None:
-		self.assertEqual(rozbij_adres("Polna 5/2", "Poznań"), ("Polna", "5/2"))
+	def test_a_ulica_z_numerem(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(rozbij_fragment_ulicy("Kwiatowa 19", "Poznań"), ("Kwiatowa", "19", ""))
 
-	def test_d_wieloczlonowa_nazwa_ulicy(self: "TestRozbijAdres") -> None:
+	def test_b_numer_z_litera(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(rozbij_fragment_ulicy("Kwiatowa 19A", "Poznań"), ("Kwiatowa", "19A", ""))
+
+	def test_c_numer_z_ukosnikiem(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(rozbij_fragment_ulicy("Polna 5/2", "Poznań"), ("Polna", "5/2", ""))
+
+	def test_d_wieloczlonowa_nazwa_ulicy(self: "TestRozbijFragmentUlicy") -> None:
 		self.assertEqual(
-			rozbij_adres("Aleje Jerozolimskie 120", "Warszawa"), ("Aleje Jerozolimskie", "120")
+			rozbij_fragment_ulicy("Aleje Jerozolimskie 120", "Warszawa"),
+			("Aleje Jerozolimskie", "120", ""),
 		)
 
-	def test_e_wies_bez_ulicy_sam_numer_bierze_miasto(self: "TestRozbijAdres") -> None:
+	def test_e_wies_bez_ulicy_sam_numer_bierze_miasto(self: "TestRozbijFragmentUlicy") -> None:
 		# reguła "Zbożowo 5, 64-300 Zbożowo" z issue ops#92
-		self.assertEqual(rozbij_adres("5", "Zbożowo"), ("Zbożowo", "5"))
+		self.assertEqual(rozbij_fragment_ulicy("5", "Zbożowo"), ("Zbożowo", "5", ""))
 
-	def test_f_sam_numer_z_litera_bierze_miasto(self: "TestRozbijAdres") -> None:
-		self.assertEqual(rozbij_adres("5A", "Zbożowo"), ("Zbożowo", "5A"))
+	def test_f_sam_numer_z_litera_bierze_miasto(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(rozbij_fragment_ulicy("5A", "Zbożowo"), ("Zbożowo", "5A", ""))
 
-	def test_g_sam_numer_bez_miasta_nierozpoznane(self: "TestRozbijAdres") -> None:
-		self.assertIsNone(rozbij_adres("5", ""))
+	def test_g_sam_numer_bez_miasta_zostaje_bez_zmian(self: "TestRozbijFragmentUlicy") -> None:
+		# brak miasta do podstawienia - reguła g (nierozpoznany numer), NIE None
+		self.assertEqual(rozbij_fragment_ulicy("5", ""), ("5", "", ""))
 
-	def test_h_brak_liczby_na_koncu_nierozpoznane(self: "TestRozbijAdres") -> None:
-		self.assertIsNone(rozbij_adres("Rynek", "Kraków"))
+	def test_h_brak_liczby_na_koncu_zostaje_bez_zmian(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(rozbij_fragment_ulicy("Rynek", "Kraków"), ("Rynek", "", ""))
 
-	def test_i_puste_nierozpoznane(self: "TestRozbijAdres") -> None:
-		self.assertIsNone(rozbij_adres("", "Kraków"))
-		self.assertIsNone(rozbij_adres("   ", "Kraków"))
+	def test_i_puste_daje_puste(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(rozbij_fragment_ulicy("", "Kraków"), ("", "", ""))
+		self.assertEqual(rozbij_fragment_ulicy("   ", "Kraków"), ("", "", ""))
 
-	def test_j_juz_sama_nazwa_ulicy_z_myslnikiem_bez_numeru_nierozpoznane(
-		self: "TestRozbijAdres",
+	def test_j_ulica_z_myslnikiem_bez_numeru_zostaje_bez_zmian(
+		self: "TestRozbijFragmentUlicy",
 	) -> None:
-		self.assertIsNone(rozbij_adres("Plac Wolności", "Poznań"))
+		self.assertEqual(rozbij_fragment_ulicy("Plac Wolności", "Poznań"), ("Plac Wolności", "", ""))
 
-	def test_k_kod_pocztowy_jako_ulica_nierozpoznane(self: "TestRozbijAdres") -> None:
+	def test_k_kod_pocztowy_jako_ulica_nierozpoznane(self: "TestRozbijFragmentUlicy") -> None:
 		# Produkcyjna anomalia danych: "62-300 300" w kolumnie Ulica (kod pocztowy
 		# wpisany przez pomylke, po nim jeszcze liczba) - bez straznika regex
 		# mechanicznie rozbilby to na ulica="62-300"/numer="300", co jest bez sensu.
-		self.assertIsNone(rozbij_adres("62-300 300", "Poznań"))
+		self.assertEqual(rozbij_fragment_ulicy("62-300 300", "Poznań"), ("62-300 300", "", ""))
 
-	def test_l_kod_pocztowy_sam_bez_numeru_juz_nierozpoznany_wczesniej(
-		self: "TestRozbijAdres",
+	def test_l_kod_pocztowy_sam_bez_numeru(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(rozbij_fragment_ulicy("62-300", "Poznań"), ("62-300", "", ""))
+
+	# --- regula a) nawias w srodku fragmentu ---
+
+	def test_m_nawias_domkniety_w_srodku_fragmentu(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(
+			rozbij_fragment_ulicy("Kolejowa (budynek ma mieć odbiór...)", ""),
+			("Kolejowa", "", "budynek ma mieć odbiór..."),
+		)
+
+	def test_n_nawias_niedomkniety_w_srodku_fragmentu(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(
+			rozbij_fragment_ulicy("Kolejowa (budynek ma mieć odbiór...", ""),
+			("Kolejowa", "", "budynek ma mieć odbiór..."),
+		)
+
+	# --- regula b) segmenty po przecinku ---
+
+	def test_o_dwa_przecinki_ulica_z_prefiksem_jako_pierwszy_segment(
+		self: "TestRozbijFragmentUlicy",
 	) -> None:
-		# "62-300" samo (bez trailing liczby) i tak juz nie pasuje do zadnego wzorca -
-		# potwierdza, ze straznik w SEKCJI ulica+numer nie jest jedyna droga do None.
-		self.assertIsNone(rozbij_adres("62-300", "Poznań"))
+		self.assertEqual(
+			rozbij_fragment_ulicy("Rogierówko, Ul. Kościuszki 16A", ""),
+			("Kościuszki", "16A", "Rogierówko"),
+		)
+
+	def test_p_ulica_przecinek_miejscowosc_dopisek(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(
+			rozbij_fragment_ulicy("ul. Szafranowa 14, Jezierzyce", ""),
+			("Szafranowa", "14", "Jezierzyce"),
+		)
+
+	def test_q_trzy_segmenty_srodkowy_kod_pocztowy_odrzucony(
+		self: "TestRozbijFragmentUlicy",
+	) -> None:
+		self.assertEqual(
+			rozbij_fragment_ulicy("Ul. Wąpielsk 76, 87-337, Wąpielsk", ""),
+			("Wąpielsk", "76", "Wąpielsk"),
+		)
+
+	def test_r_spoldzielcza_z_dopiskiem_po_przecinku(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(
+			rozbij_fragment_ulicy("Spółdzielcza 6a, Warszawa - Wesoła", ""),
+			("Spółdzielcza", "6a", "Warszawa - Wesoła"),
+		)
+
+	def test_s_miejscowosc_przed_ulica_numer_w_drugim_segmencie(
+		self: "TestRozbijFragmentUlicy",
+	) -> None:
+		self.assertEqual(
+			rozbij_fragment_ulicy("Marianów, Marianowska 29", ""),
+			("Marianowska", "29", "Marianów"),
+		)
+
+	def test_t_miejscowosc_przed_ul_prefiksem_numer_z_litera(
+		self: "TestRozbijFragmentUlicy",
+	) -> None:
+		self.assertEqual(
+			rozbij_fragment_ulicy("Kaczory, Ul. Gajowa 6H", ""),
+			("Gajowa", "6H", "Kaczory"),
+		)
+
+	def test_u_zaden_segment_bez_numeru_ostatni_segment_wygrywa(
+		self: "TestRozbijFragmentUlicy",
+	) -> None:
+		self.assertEqual(
+			rozbij_fragment_ulicy("Kaczory, Wielka Wieś", ""),
+			("Wielka Wieś", "", "Kaczory"),
+		)
+
+	# --- regula c) prefiks 'ul.'/'ul'/'ulica' ---
+
+	def test_v_prefiks_ul_kropka_spacja(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(rozbij_fragment_ulicy("ul. Kręta 2/a", ""), ("Kręta", "2/a", ""))
+
+	def test_w_prefiks_sklejony_bez_spacji(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(rozbij_fragment_ulicy("UL.PARKOWA5", ""), ("PARKOWA", "5", ""))
+
+	def test_x_prefiks_nie_okraja_prawdziwej_nazwy_ulicy(self: "TestRozbijFragmentUlicy") -> None:
+		# "Ulicowa" NIE zaczyna sie od prefiksu 'ul.'/'ul '/'ulica ' - zostaje cala.
+		self.assertEqual(rozbij_fragment_ulicy("Ulicowa 5", ""), ("Ulicowa", "5", ""))
+
+	# --- regula d) numer tolerancyjny (ze slowem 'nr' i bez) ---
+
+	def test_y_numer_z_ukosnikiem_i_litera(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(rozbij_fragment_ulicy("Wrzosowa 22/A", ""), ("Wrzosowa", "22/A", ""))
+
+	def test_z_numer_z_odstepami_wokol_ukosnika(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(rozbij_fragment_ulicy("Słupska 1 /2", ""), ("Słupska", "1/2", ""))
+
+	def test_aa_numer_ze_slowem_nr_i_kropka(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(
+			rozbij_fragment_ulicy("dywizjonu 303 nr 34.", ""), ("dywizjonu 303", "34", "")
+		)
+
+	def test_ab_zakrzewo_45_prosty_przypadek(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(rozbij_fragment_ulicy("Zakrzewo 45", "Zakrzewo"), ("Zakrzewo", "45", ""))
+
+	def test_ac_ulica_dwuczlonowa_numer_z_litera(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(
+			rozbij_fragment_ulicy("Chałupki Dębniańskie 42a", ""),
+			("Chałupki Dębniańskie", "42a", ""),
+		)
+
+	def test_ad_numer_trzycyfrowy(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(rozbij_fragment_ulicy("Jaśminowa 816", ""), ("Jaśminowa", "816", ""))
+
+	def test_ae_ulica_dwuczlonowa_numer_trzycyfrowy(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(
+			rozbij_fragment_ulicy("Grodzisko Dolne 270", ""), ("Grodzisko Dolne", "270", "")
+		)
+
+	# --- regula e) numer sklejony bez odstepu ---
+
+	def test_af_numer_sklejony_bez_prefiksu(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(rozbij_fragment_ulicy("KOWALEWICZKI32", ""), ("KOWALEWICZKI", "32", ""))
+
+	# --- regula f) sam numer, w tym zapis Excela "x.0" ---
+
+	def test_ag_sam_numer_excel_float_40(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(rozbij_fragment_ulicy("4.0", "Trzcinka"), ("Trzcinka", "4", ""))
+
+	def test_ah_sam_numer_excel_float_10(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(rozbij_fragment_ulicy("1.0", "Trzcinka"), ("Trzcinka", "1", ""))
+
+	# --- regula g) numer nierozpoznany (i pulapka na regule e dla "14m2") ---
+
+	def test_ai_blizinskiego_bez_numeru(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(rozbij_fragment_ulicy("Blizińskiego", ""), ("Blizińskiego", "", ""))
+
+	def test_aj_koscino_bez_numeru(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(rozbij_fragment_ulicy("Kościno", ""), ("Kościno", "", ""))
+
+	def test_ak_rzepkowo_14m2_nie_lapie_sie_na_regule_e_sklejona(
+		self: "TestRozbijFragmentUlicy",
+	) -> None:
+		# Bialy znak miedzy "Rzepkowo" i "14m2" wylacza regule e) (sklejony numer) -
+		# bez tej strazy regex zlapalby to jako ulica="Rzepkowo 14m", numer="2".
+		self.assertEqual(rozbij_fragment_ulicy("Rzepkowo 14m2", ""), ("Rzepkowo 14m2", "", ""))
+
+	def test_al_znacznik_czasu_bez_numeru(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(
+			rozbij_fragment_ulicy("1952-01-22T00:00:00", ""), ("1952-01-22T00:00:00", "", "")
+		)
+
+	def test_am_wolny_tekst_bez_cyfry_zostaje_caly(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(
+			rozbij_fragment_ulicy("Pani w pracy w pośpiechu nie zdążyła podać", ""),
+			("Pani w pracy w pośpiechu nie zdążyła podać", "", ""),
+		)
+
+	def test_an_xxx_zostaje_bez_zmian(self: "TestRozbijFragmentUlicy") -> None:
+		self.assertEqual(rozbij_fragment_ulicy("xxx", ""), ("xxx", "", ""))
+
+
+class TestUlicaZawieraCyfre(unittest.TestCase):
+	def test_a_zawiera_cyfre(self: "TestUlicaZawieraCyfre") -> None:
+		self.assertTrue(ulica_zawiera_cyfre("Rzepkowo 14m2"))
+
+	def test_b_bez_cyfry(self: "TestUlicaZawieraCyfre") -> None:
+		self.assertFalse(ulica_zawiera_cyfre("Blizińskiego"))
+
+	def test_c_puste_bez_cyfry(self: "TestUlicaZawieraCyfre") -> None:
+		self.assertFalse(ulica_zawiera_cyfre(""))
 
 
 class TestRozdzielImieNazwisko(unittest.TestCase):
@@ -267,6 +440,41 @@ class TestRozdzielImieNazwisko(unittest.TestCase):
 	def test_l_puste_oba_pola(self: "TestRozdzielImieNazwisko") -> None:
 		self.assertEqual(rozdziel_imie_nazwisko("", ""), ("", ""))
 		self.assertEqual(rozdziel_imie_nazwisko("-", "-"), ("", ""))
+
+
+class TestNormalizujPisownieOsoby(unittest.TestCase):
+	"""`normalizuj_pisownie_osoby` (b59, decyzja właściciela 2026-09-16,
+	ujednolicenie pisowni)."""
+
+	def test_a_same_wielkie_litery_dwa_slowa(self: "TestNormalizujPisownieOsoby") -> None:
+		self.assertEqual(normalizuj_pisownie_osoby("RADOSŁAW GIEREMEK"), "Radosław Gieremek")
+
+	def test_b_myslnik_kapitalizuje_obie_strony(self: "TestNormalizujPisownieOsoby") -> None:
+		self.assertEqual(normalizuj_pisownie_osoby("kowalska-nowak"), "Kowalska-Nowak")
+
+	def test_c_apostrof_kapitalizuje_po_sobie(self: "TestNormalizujPisownieOsoby") -> None:
+		self.assertEqual(normalizuj_pisownie_osoby("o'brien"), "O'Brien")
+
+	def test_d_polski_diakrytyk_lukasz(self: "TestNormalizujPisownieOsoby") -> None:
+		self.assertEqual(normalizuj_pisownie_osoby("ŁUKASZ"), "Łukasz")
+
+	def test_e_polski_diakrytyk_swietoslawa(self: "TestNormalizujPisownieOsoby") -> None:
+		self.assertEqual(normalizuj_pisownie_osoby("ŚWIĘTOSŁAWA"), "Świętosława")
+
+	def test_f_juz_poprawna_pisownia_bez_zmian(self: "TestNormalizujPisownieOsoby") -> None:
+		self.assertEqual(normalizuj_pisownie_osoby("Jan Kowalski"), "Jan Kowalski")
+
+	def test_g_puste_zostaje_puste(self: "TestNormalizujPisownieOsoby") -> None:
+		self.assertEqual(normalizuj_pisownie_osoby(""), "")
+
+	def test_h_mieszana_wielkosc_liter_jedno_slowo(self: "TestNormalizujPisownieOsoby") -> None:
+		self.assertEqual(normalizuj_pisownie_osoby("aLEKSANDRA"), "Aleksandra")
+
+	def test_i_trzy_slowa_kazde_kapitalizowane(self: "TestNormalizujPisownieOsoby") -> None:
+		self.assertEqual(
+			normalizuj_pisownie_osoby("agnieszka katarzyna marciniak"),
+			"Agnieszka Katarzyna Marciniak",
+		)
 
 
 # ---------------------------------------------------------------------------
@@ -470,36 +678,70 @@ class TestRozbijAdresArkusza(unittest.TestCase):
 		self.assertEqual(wynik.dopisek, "Wilanów")
 		self.assertEqual(wynik.miejscowosc, "Poznań")
 
-	def test_c_ulica_myslnik_puste_ulica_i_numer(self: "TestRozbijAdresArkusza") -> None:
+	def test_c_ulica_myslnik_kopiuje_miejscowosc(self: "TestRozbijAdresArkusza") -> None:
+		# issue #116, decyzja właściciela 2026-09-09: wieś bez ulicy -> ulica
+		# ma niesc TA SAMA wartosc co miejscowosc, nie zostac pusta.
 		wynik = rozbij_adres_arkusza("-, 62-020 Swarzędz")
 		self.assertEqual(
 			wynik,
-			AdresRozbity(ulica="", nr_domu="", kod="62-020", miejscowosc="Swarzędz", dopisek=""),
+			AdresRozbity(ulica="Swarzędz", nr_domu="", kod="62-020", miejscowosc="Swarzędz", dopisek=""),
 		)
 
-	def test_d_dwa_przecinki_zachlanna_grupa_kotwiczy_na_ostatnim_kodzie(
+	def test_c2_ulica_pusta_wg_pusta_tez_kopiuje_miejscowosc(
 		self: "TestRozbijAdresArkusza",
 	) -> None:
+		# "brak"/"nie" tez licza sie jako pustka fragmentu ulicy (_pusta), nie
+		# tylko dosłowny "-".
+		wynik = rozbij_adres_arkusza("brak, 62-020 Swarzędz")
+		self.assertEqual(wynik.ulica, "Swarzędz")
+		self.assertEqual(wynik.nr_domu, "")
+		self.assertFalse(wynik.numer_nierozpoznany_z_cyfra)
+
+	def test_d_dwa_przecinki_pierwszy_segment_miejscowosc_drugi_ulica(
+		self: "TestRozbijAdresArkusza",
+	) -> None:
+		# b59 (#141): fragment "Rogierówko, Ul. Kościuszki 16A" (grupa 1
+		# zachlannego _WZOR_ADRES) idzie teraz przez rozbij_fragment_ulicy,
+		# ktora dzieli go po przecinku - "Rogierówko" nie daje numeru,
+		# "Ul. Kościuszki 16A" daje, wiec TO jest ulica, a "Rogierówko"
+		# trafia do dopisku.
 		wynik = rozbij_adres_arkusza("Rogierówko, Ul. Kościuszki 16A, 62-090 Rokietnica")
 		self.assertEqual(
 			wynik,
 			AdresRozbity(
-				ulica="Rogierówko, Ul. Kościuszki",
+				ulica="Kościuszki",
 				nr_domu="16A",
 				kod="62-090",
 				miejscowosc="Rokietnica",
-				dopisek="",
+				dopisek="Rogierówko",
 			),
 		)
 
 	def test_e_ulica_bez_numeru_nie_jest_odrzuceniem(self: "TestRozbijAdresArkusza") -> None:
-		# "Blizińskiego" nie pasuje do _WZOR_ULICA_I_NUMER (brak numeru na koncu) -
-		# rozbij_adres zwraca None, wiec rozbij_adres_arkusza uzywa calego
-		# fragmentu jako ulicy z pustym numerem, NIE odrzuca calego pola.
+		# "Blizińskiego" nie ma rozpoznawalnego numeru na koncu (regula g) -
+		# rozbij_adres_arkusza uzywa calego fragmentu jako ulicy z pustym
+		# numerem, NIE odrzuca calego pola Adres. Brak cyfry w "Blizińskiego"
+		# -> tez brak wpisu informacyjnego.
 		wynik = rozbij_adres_arkusza("Blizińskiego, 97-200 Tomaszów Mazowiecki")
 		self.assertEqual(wynik.ulica, "Blizińskiego")
 		self.assertEqual(wynik.nr_domu, "")
 		self.assertEqual(wynik.miejscowosc, "Tomaszów Mazowiecki")
+		self.assertFalse(wynik.numer_nierozpoznany_z_cyfra)
+
+	def test_e2_numer_nierozpoznany_z_cyfra_flaga_ustawiona(
+		self: "TestRozbijAdresArkusza",
+	) -> None:
+		wynik = rozbij_adres_arkusza("Rzepkowo 14m2, 62-080 Poznań")
+		self.assertEqual(wynik.ulica, "Rzepkowo 14m2")
+		self.assertEqual(wynik.nr_domu, "")
+		self.assertTrue(wynik.numer_nierozpoznany_z_cyfra)
+
+	def test_e3_dopisek_z_fragmentu_i_z_miejscowosci_razem(
+		self: "TestRozbijAdresArkusza",
+	) -> None:
+		wynik = rozbij_adres_arkusza("Kolejowa (uwaga), 62-080 Poznań (Wilanów)")
+		self.assertEqual(wynik.ulica, "Kolejowa")
+		self.assertEqual(wynik.dopisek, "uwaga, Wilanów")
 
 	def test_f_brak_dopasowania_wzorca_daje_none(self: "TestRozbijAdresArkusza") -> None:
 		self.assertIsNone(rozbij_adres_arkusza("zupelnie inny format bez kodu pocztowego"))
@@ -655,6 +897,134 @@ class TestWykryjDubleTelefonow(unittest.TestCase):
 	) -> None:
 		wiersze = [_wiersz_arkusza(Telefon="502103270"), _wiersz_arkusza(Telefon="+48 502 103 270")]
 		self.assertEqual(wykryj_duble_telefonow(wiersze), {3: 2})
+
+
+class TestScalDuble(unittest.TestCase):
+	"""`scal_duble` (b59, uniformizacja, spec `docs/LEADY-ARKUSZ-IMPORT-GREG.md`
+	sekcja "Duble")."""
+
+	def test_a_bez_dubli_wiersze_bez_zmian(self: "TestScalDuble") -> None:
+		wiersze = [_wiersz_arkusza(Telefon="+48502103270"), _wiersz_arkusza(Telefon="+48609116693")]
+		scalone, pary = scal_duble(wiersze)
+		self.assertEqual([nr for nr, _ in scalone], [2, 3])
+		self.assertEqual(pary, [])
+		self.assertEqual(scalone[0][1]["Telefon"], "+48502103270")
+		self.assertEqual(scalone[1][1]["Telefon"], "+48609116693")
+
+	def test_b_dwa_wiersze_scalone_do_pierwszego(self: "TestScalDuble") -> None:
+		wiersze = [
+			_wiersz_arkusza(Telefon="+48502103270", Imię="Jan", Nazwisko="Kowalski"),
+			_wiersz_arkusza(Telefon="+48502103270", Imię="Adam", Nazwisko="Nowak"),
+		]
+		scalone, pary = scal_duble(wiersze)
+		self.assertEqual(len(scalone), 1)
+		self.assertEqual(scalone[0][0], 2)
+		self.assertEqual(scalone[0][1]["Imię"], "Jan")
+		self.assertEqual(scalone[0][1]["Nazwisko"], "Kowalski")
+		self.assertEqual(pary, [(3, 2)])
+
+	def test_c_zrodlo_sumowane_tokenami(self: "TestScalDuble") -> None:
+		wiersze = [
+			_wiersz_arkusza(Telefon="+48502103270", **{"Źródło": "SD"}),
+			_wiersz_arkusza(Telefon="+48502103270", **{"Źródło": "CC"}),
+		]
+		scalone, _ = scal_duble(wiersze)
+		self.assertEqual(scalone[0][1]["Źródło"], "SD CC")
+
+	def test_d_uwagi_sklejone_pipe(self: "TestScalDuble") -> None:
+		wiersze = [
+			_wiersz_arkusza(Telefon="+48502103270", Uwagi="pierwsza notatka"),
+			_wiersz_arkusza(Telefon="+48502103270", Uwagi="druga notatka"),
+		]
+		scalone, _ = scal_duble(wiersze)
+		self.assertEqual(scalone[0][1]["Uwagi"], "pierwsza notatka|druga notatka")
+
+	def test_e_obecne_produkty_sumowane_przecinkiem(self: "TestScalDuble") -> None:
+		wiersze = [
+			_wiersz_arkusza(Telefon="+48502103270", **{"Obecne produkty": "PV"}),
+			_wiersz_arkusza(Telefon="+48502103270", **{"Obecne produkty": "PC"}),
+		]
+		scalone, _ = scal_duble(wiersze)
+		self.assertEqual(scalone[0][1]["Obecne produkty"], "PV,PC")
+
+	def test_f_produkt_w_procesie_sumowany_przecinkiem(self: "TestScalDuble") -> None:
+		wiersze = [
+			_wiersz_arkusza(Telefon="+48502103270", **{"Produkt w procesie": "PV"}),
+			_wiersz_arkusza(Telefon="+48502103270", **{"Produkt w procesie": "CP"}),
+		]
+		scalone, _ = scal_duble(wiersze)
+		self.assertEqual(scalone[0][1]["Produkt w procesie"], "PV,CP")
+
+	def test_g_pusta_komorka_pierwszego_dopelniona_drugim(self: "TestScalDuble") -> None:
+		wiersze = [
+			_wiersz_arkusza(Telefon="+48502103270", Powiat="-"),
+			_wiersz_arkusza(Telefon="+48502103270", Powiat="ostrowski"),
+		]
+		scalone, _ = scal_duble(wiersze)
+		self.assertEqual(scalone[0][1]["Powiat"], "ostrowski")
+
+	def test_h_niepusta_komorka_pierwszego_nie_nadpisywana(self: "TestScalDuble") -> None:
+		wiersze = [
+			_wiersz_arkusza(Telefon="+48502103270", Powiat="poznański"),
+			_wiersz_arkusza(Telefon="+48502103270", Powiat="ostrowski"),
+		]
+		scalone, _ = scal_duble(wiersze)
+		self.assertEqual(scalone[0][1]["Powiat"], "poznański")
+
+	def test_i_status_zrodla_priorytet_wygrana_bije_potencjal(self: "TestScalDuble") -> None:
+		wiersze = [
+			_wiersz_arkusza(Telefon="+48502103270", **{"Status źródła": "Potencjał"}),
+			_wiersz_arkusza(Telefon="+48502103270", **{"Status źródła": "Wygrana"}),
+		]
+		scalone, _ = scal_duble(wiersze)
+		self.assertEqual(scalone[0][1]["Status źródła"], "Wygrana")
+
+	def test_j_status_zrodla_priorytet_potencjal_bije_przegrana(self: "TestScalDuble") -> None:
+		wiersze = [
+			_wiersz_arkusza(Telefon="+48502103270", **{"Status źródła": "Przegrana"}),
+			_wiersz_arkusza(Telefon="+48502103270", **{"Status źródła": "Potencjał"}),
+		]
+		scalone, _ = scal_duble(wiersze)
+		self.assertEqual(scalone[0][1]["Status źródła"], "Potencjał")
+
+	def test_k_data_pozyskania_nowsza_wygrywa(self: "TestScalDuble") -> None:
+		wiersze = [
+			_wiersz_arkusza(Telefon="+48502103270", **{"Data pozyskania": "2022-01-01"}),
+			_wiersz_arkusza(Telefon="+48502103270", **{"Data pozyskania": "2022-06-15"}),
+		]
+		scalone, _ = scal_duble(wiersze)
+		self.assertEqual(scalone[0][1]["Data pozyskania"], "2022-06-15")
+
+	def test_l_niepoprawny_telefon_nie_jest_grupowany(self: "TestScalDuble") -> None:
+		wiersze = [
+			_wiersz_arkusza(Telefon="za krotki", Imię="Ala"),
+			_wiersz_arkusza(Telefon="tez zly", Imię="Ola"),
+		]
+		scalone, pary = scal_duble(wiersze)
+		self.assertEqual(len(scalone), 2)
+		self.assertEqual(pary, [])
+		self.assertEqual(scalone[0][1]["Imię"], "Ala")
+		self.assertEqual(scalone[1][1]["Imię"], "Ola")
+
+	def test_m_trzy_wiersze_ten_sam_telefon_scalone_progresywnie(self: "TestScalDuble") -> None:
+		wiersze = [
+			_wiersz_arkusza(Telefon="+48502103270", **{"Źródło": "SD"}),
+			_wiersz_arkusza(Telefon="+48502103270", **{"Źródło": "CC"}),
+			_wiersz_arkusza(Telefon="502103270", **{"Źródło": "ARG"}),
+		]
+		scalone, pary = scal_duble(wiersze)
+		self.assertEqual(len(scalone), 1)
+		self.assertEqual(scalone[0][1]["Źródło"], "SD CC ARG")
+		self.assertEqual(pary, [(3, 2), (4, 2)])
+
+	def test_n_kolejnosc_wyjsciowa_wedlug_pierwszych_wystapien(self: "TestScalDuble") -> None:
+		wiersze = [
+			_wiersz_arkusza(Telefon="+48111111111"),
+			_wiersz_arkusza(Telefon="+48222222222"),
+			_wiersz_arkusza(Telefon="+48111111111"),
+		]
+		scalone, _ = scal_duble(wiersze)
+		self.assertEqual([nr for nr, _ in scalone], [2, 3])
 
 
 class TestZbudujLeadaZArkusza(unittest.TestCase):
@@ -879,6 +1249,61 @@ class TestZbudujLeadaZArkusza(unittest.TestCase):
 		self.assertIsNone(lead["custom_produkt_procesu"])
 		self.assertIsNone(lead["custom_product_interest"])
 		self.assertEqual(lead["custom_uwagi_import"], "")
+
+	def test_v_pisownia_imienia_i_nazwiska_znormalizowana(
+		self: "TestZbudujLeadaZArkusza",
+	) -> None:
+		wiersz = _wiersz_arkusza(Imię="RADOSŁAW", Nazwisko="GIEREMEK")
+		lead, _ = zbuduj_leada_z_arkusza(wiersz, 2)
+		self.assertEqual(lead["first_name"], "Radosław")
+		self.assertEqual(lead["last_name"], "Gieremek")
+
+	def test_w_pisownia_nazwiska_z_myslnikiem_znormalizowana(
+		self: "TestZbudujLeadaZArkusza",
+	) -> None:
+		wiersz = _wiersz_arkusza(Imię="Anna", Nazwisko="kowalska-nowak")
+		lead, _ = zbuduj_leada_z_arkusza(wiersz, 2)
+		self.assertEqual(lead["last_name"], "Kowalska-Nowak")
+
+	def test_x_firma_w_imieniu_pisownia_bez_zmian(self: "TestZbudujLeadaZArkusza") -> None:
+		wiersz = _wiersz_arkusza(
+			Imię="PRZEDSIĘBIORSTWO WIELOBRANŻOWE KRZYSZTOF STECKIEWICZ", Nazwisko="-"
+		)
+		lead, _ = zbuduj_leada_z_arkusza(wiersz, 2)
+		self.assertEqual(lead["first_name"], "PRZEDSIĘBIORSTWO WIELOBRANŻOWE KRZYSZTOF STECKIEWICZ")
+		self.assertEqual(lead["last_name"], "")
+
+	def test_y_firma_inwestprojekt_pisownia_bez_zmian(self: "TestZbudujLeadaZArkusza") -> None:
+		wiersz = _wiersz_arkusza(Imię="Firma Inwestprojekt", Nazwisko="-")
+		lead, _ = zbuduj_leada_z_arkusza(wiersz, 2)
+		self.assertEqual(lead["first_name"], "Firma Inwestprojekt")
+
+	def test_z_wies_bez_ulicy_ulica_rowna_miejscowosci(self: "TestZbudujLeadaZArkusza") -> None:
+		wiersz = _wiersz_arkusza(Adres="-, 62-020 Swarzędz")
+		lead, odrzucone = zbuduj_leada_z_arkusza(wiersz, 2)
+		self.assertEqual(odrzucone, [])
+		self.assertEqual(lead["custom_install_address"], "Swarzędz")
+		self.assertEqual(lead["custom_nr_domu"], "")
+		self.assertEqual(lead["custom_install_city"], "Swarzędz")
+
+	def test_aa_numer_domu_nierozpoznany_z_cyfra_dodaje_wpis_informacyjny(
+		self: "TestZbudujLeadaZArkusza",
+	) -> None:
+		wiersz = _wiersz_arkusza(Adres="Rzepkowo 14m2, 62-080 Poznań")
+		lead, odrzucone = zbuduj_leada_z_arkusza(wiersz, 2)
+		self.assertIsNotNone(lead)
+		self.assertEqual(lead["custom_install_address"], "Rzepkowo 14m2")
+		self.assertEqual(len(odrzucone), 1)
+		self.assertEqual(odrzucone[0].kolumna, "Adres")
+		self.assertEqual(odrzucone[0].powod, "numer domu nierozpoznany, tekst zostawiony w Ulicy")
+
+	def test_ab_ulica_bez_numeru_bez_cyfry_nie_dodaje_wpisu(
+		self: "TestZbudujLeadaZArkusza",
+	) -> None:
+		wiersz = _wiersz_arkusza(Adres="Blizińskiego, 97-200 Tomaszów Mazowiecki")
+		lead, odrzucone = zbuduj_leada_z_arkusza(wiersz, 2)
+		self.assertIsNotNone(lead)
+		self.assertEqual(odrzucone, [])
 
 
 if __name__ == "__main__":
