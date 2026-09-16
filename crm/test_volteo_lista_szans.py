@@ -1,13 +1,17 @@
 import unittest
 
+from crm.volteo_leady_import import KOLEJNOSC_PRODUKTOW, KOLEJNOSC_PRODUKTOW_PROCESU
 from crm.volteo_lista_szans import (
 	FILTER_FIELDS_DEAL,
 	FILTER_FIELDS_LEAD,
+	POLA_TAGOW_LEAD,
 	POLA_ZAWSZE_DOZWOLONE,
 	SORT_FIELDS_DEAL,
 	SORT_FIELDS_LEAD,
 	niedozwolone_klucze_filtrow,
 	podstaw_dzis,
+	rozpoznaj_filtr_tagu,
+	wzory_tagu,
 )
 
 PERMITTED = {"name", "status", "deal_owner", "_assign", "_liked_by", "custom_rodzaj_umowy"}
@@ -533,6 +537,183 @@ class TestPodstawDzis(unittest.TestCase):
 
 	def test_n_puste_filtry(self: "TestPodstawDzis") -> None:
 		self.assertEqual(podstaw_dzis({}, self.DZIS, self.JUTRO, self._czy_datetime), {})
+
+
+class TestPolaTagowLead(unittest.TestCase):
+	"""`POLA_TAGOW_LEAD` (issue ops#150) -- jedyne zrodlo prawdy dla pol
+	tagow produktow leada, mapujace fieldname na kanoniczna kolejnosc
+	tokenow importowana wprost z `crm.volteo_leady_import` (zakaz
+	duplikowania slownika, patrz brief ops#150)."""
+
+	def test_a_dwa_pola(self: "TestPolaTagowLead") -> None:
+		self.assertEqual(
+			set(POLA_TAGOW_LEAD),
+			{"custom_posiadane_produkty", "custom_produkt_procesu"},
+		)
+
+	def test_b_kolejnosci_importowane_wprost_ze_zrodla_prawdy(
+		self: "TestPolaTagowLead",
+	) -> None:
+		self.assertIs(POLA_TAGOW_LEAD["custom_posiadane_produkty"], KOLEJNOSC_PRODUKTOW)
+		self.assertIs(
+			POLA_TAGOW_LEAD["custom_produkt_procesu"], KOLEJNOSC_PRODUKTOW_PROCESU
+		)
+
+	def test_c_jest_dict(self: "TestPolaTagowLead") -> None:
+		self.assertIsInstance(POLA_TAGOW_LEAD, dict)
+
+
+class TestWzoryTagu(unittest.TestCase):
+	"""`wzory_tagu(pole, token)` -- 4 warunki dokladnego dopasowania tokenu
+	w polu `+`-laczonym (usuwa hazard PV kontra PVME). Sygnatura bierze
+	`pole` jawnie (odstepstwo udokumentowane w raporcie koncowym agenta):
+	kazdy z 4 wzorcow zaczyna sie od nazwy POLA, wiec funkcja musi znac
+	pole, ktorego dotyczy -- wywolujaca `_rozwin_filtry_tagow` przetwarza
+	oba pola tagow (`custom_posiadane_produkty` i `custom_produkt_procesu`)
+	w jednym przebiegu, po jednym polu na raz."""
+
+	def test_a_cztery_warunki_w_kolejnosci(self: "TestWzoryTagu") -> None:
+		self.assertEqual(
+			wzory_tagu("custom_posiadane_produkty", "PV"),
+			[
+				["custom_posiadane_produkty", "=", "PV"],
+				["custom_posiadane_produkty", "like", "PV+%"],
+				["custom_posiadane_produkty", "like", "%+PV"],
+				["custom_posiadane_produkty", "like", "%+PV+%"],
+			],
+		)
+
+	def test_b_inne_pole_inny_prefiks(self: "TestWzoryTagu") -> None:
+		warunki = wzory_tagu("custom_produkt_procesu", "PVME")
+		self.assertTrue(all(w[0] == "custom_produkt_procesu" for w in warunki))
+		self.assertEqual(warunki[0], ["custom_produkt_procesu", "=", "PVME"])
+
+	def test_c_pv_nie_lapie_pvme_jako_podciagu_like(self: "TestWzoryTagu") -> None:
+		# Hazard: "PV" nie moze byc dopasowane jako podciag "PVME" -- zaden
+		# z 4 wzorcow LIKE dla tokenu "PV" nie moze dopasowac wartosci
+		# zawierajacej WYLACZNIE "PVME" (bez odzielnego tokenu "PV").
+		warunki = wzory_tagu("custom_produkt_procesu", "PV")
+		wzorce_like = {w[2] for w in warunki if w[1] == "like"}
+		self.assertNotIn("PVME", wzorce_like)
+		for wzorzec in wzorce_like:
+			# Zaden wzorzec LIKE dla "PV" nie powinien pasowac do "PVME" jako
+			# calosci: albo jest zakotwiczony "+PV" (nie prefiks "PVME"),
+			# albo "PV+" (nie sufiks "PVME"), sprawdzone jawnie ponizej w
+			# TestRozpoznajFiltrTagu z faktycznym LIKE-em przez fnmatch.
+			self.assertTrue(wzorzec.startswith("PV") or wzorzec.endswith("PV") or "+PV+" in wzorzec)
+
+	def test_d_nowa_lista_kazde_wywolanie(self: "TestWzoryTagu") -> None:
+		self.assertIsNot(
+			wzory_tagu("custom_posiadane_produkty", "PV"),
+			wzory_tagu("custom_posiadane_produkty", "PV"),
+		)
+
+
+def _pasuje_like(wartosc: str, wzorzec: str) -> bool:
+	"""Pomocnicza do testow: SQL LIKE bez znakow specjalnych `_`/`%` poza
+	tymi, ktore `wzory_tagu` sam dokleja jako `%` -- fnmatch z `%` -> `*`
+	wystarcza dla tych czterech wzorcow."""
+	import fnmatch
+
+	return fnmatch.fnmatchcase(wartosc, wzorzec.replace("%", "*"))
+
+
+class TestWzoryTaguHazardPvPvme(unittest.TestCase):
+	"""Weryfikacja hazardu PV/PVME z symulowanym LIKE (fnmatch), na
+	prawdziwych wartosciach pola `+`-laczonego."""
+
+	def test_a_pv_dopasowuje_pv_samodzielnie(self: "TestWzoryTaguHazardPvPvme") -> None:
+		warunki = wzory_tagu("custom_produkt_procesu", "PV")
+		wzorce_like = [w[2] for w in warunki if w[1] == "like"]
+		self.assertTrue(any(_pasuje_like("PV+ME", w) for w in wzorce_like))
+		self.assertTrue(any(_pasuje_like("ME+PV", w) for w in wzorce_like))
+		self.assertTrue(any(_pasuje_like("PC+PV+CP", w) for w in wzorce_like))
+
+	def test_b_pv_nie_dopasowuje_samego_pvme(self: "TestWzoryTaguHazardPvPvme") -> None:
+		warunki = wzory_tagu("custom_produkt_procesu", "PV")
+		wzorce_like = [w[2] for w in warunki if w[1] == "like"]
+		self.assertFalse(any(_pasuje_like("PVME", w) for w in wzorce_like))
+		self.assertFalse(any(_pasuje_like("PVME+ME", w) for w in wzorce_like))
+		self.assertFalse(any(_pasuje_like("ME+PVME", w) for w in wzorce_like))
+		self.assertNotEqual(warunki[0][2] if warunki else None, "PVME")
+		# rowniez operator "=" (nie like) nie moze zrownac "PVME" z "PV"
+		self.assertNotIn(["custom_produkt_procesu", "=", "PVME"], warunki)
+
+
+class TestRozpoznajFiltrTagu(unittest.TestCase):
+	"""`rozpoznaj_filtr_tagu(pole, wartosc)` -- normalizacja wire formatu
+	filtra na `(rodzaj, tokeny)` albo `None` dla ksztaltow spoza kontraktu
+	(bez zmian, filtr idzie dalej jak dzis)."""
+
+	def test_a_skalar_ma_tag(self: "TestRozpoznajFiltrTagu") -> None:
+		self.assertEqual(
+			rozpoznaj_filtr_tagu("custom_posiadane_produkty", "PV"),
+			("in", ["PV"]),
+		)
+
+	def test_b_operator_rowne(self: "TestRozpoznajFiltrTagu") -> None:
+		self.assertEqual(
+			rozpoznaj_filtr_tagu("custom_posiadane_produkty", ["=", "PV"]),
+			("in", ["PV"]),
+		)
+
+	def test_c_in_ktorykolwiek(self: "TestRozpoznajFiltrTagu") -> None:
+		self.assertEqual(
+			rozpoznaj_filtr_tagu("custom_posiadane_produkty", ["in", ["PV", "ME"]]),
+			("in", ["PV", "ME"]),
+		)
+
+	def test_d_not_in_zaden(self: "TestRozpoznajFiltrTagu") -> None:
+		self.assertEqual(
+			rozpoznaj_filtr_tagu("custom_posiadane_produkty", ["not in", ["PV", "ME"]]),
+			("not in", ["PV", "ME"]),
+		)
+
+	def test_e_operator_wielkosc_liter_bez_znaczenia(
+		self: "TestRozpoznajFiltrTagu",
+	) -> None:
+		self.assertEqual(
+			rozpoznaj_filtr_tagu("custom_posiadane_produkty", ["IN", ["PV"]]),
+			("in", ["PV"]),
+		)
+		self.assertEqual(
+			rozpoznaj_filtr_tagu("custom_posiadane_produkty", ["Not In", ["PV"]]),
+			("not in", ["PV"]),
+		)
+
+	def test_f_like_zwraca_none(self: "TestRozpoznajFiltrTagu") -> None:
+		self.assertIsNone(
+			rozpoznaj_filtr_tagu("custom_posiadane_produkty", ["like", "%PV%"])
+		)
+
+	def test_g_inny_operator_zwraca_none(self: "TestRozpoznajFiltrTagu") -> None:
+		self.assertIsNone(
+			rozpoznaj_filtr_tagu("custom_posiadane_produkty", [">", "PV"])
+		)
+
+	def test_h_none_zwraca_none(self: "TestRozpoznajFiltrTagu") -> None:
+		self.assertIsNone(rozpoznaj_filtr_tagu("custom_posiadane_produkty", None))
+
+	def test_i_pusta_lista_w_in_zwraca_pusta_liste_tokenow(
+		self: "TestRozpoznajFiltrTagu",
+	) -> None:
+		self.assertEqual(
+			rozpoznaj_filtr_tagu("custom_posiadane_produkty", ["in", []]),
+			("in", []),
+		)
+
+	def test_j_krotka_rownowazna_liscie(self: "TestRozpoznajFiltrTagu") -> None:
+		self.assertEqual(
+			rozpoznaj_filtr_tagu("custom_posiadane_produkty", ("in", ["PV"])),
+			("in", ["PV"]),
+		)
+
+	def test_k_nie_mutuje_wejsciowej_listy(self: "TestRozpoznajFiltrTagu") -> None:
+		wartosc = ["in", ["PV", "ME"]]
+		oryginal = ["PV", "ME"]
+		rozpoznaj_filtr_tagu("custom_posiadane_produkty", wartosc)
+		self.assertEqual(wartosc[1], oryginal)
+
 
 if __name__ == "__main__":
 	unittest.main()

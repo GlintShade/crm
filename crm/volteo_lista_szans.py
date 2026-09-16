@@ -21,6 +21,8 @@ i przekazuje tutaj — ten moduł tylko porównuje klucze filtra z tym zbiorem.
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
 
+from crm.volteo_leady_import import KOLEJNOSC_PRODUKTOW, KOLEJNOSC_PRODUKTOW_PROCESU
+
 # Pola zawsze dozwolone do filtrowania/sortowania/grupowania, niezaleznie od
 # tego, co zwroci `get_permitted_fields` dla danego doctype'u — bezpiecznik
 # uzywany przez `crm.api.doc._pola_dozwolone` (ops#79). Trzy ostatnie pozycje
@@ -332,3 +334,86 @@ def _podstaw_wartosc_dzis(
 		return ["<", jutro]
 
 	return [operator, dzis]
+
+
+# Pola "produktow leada" (issue ops#150, decyzja wlasciciela 2026-09-16,
+# model A+): pole Data zostaje nosnikiem (tokeny ze slownika w kanonicznej
+# kolejnosci, zlaczone "+", bez wolnego tekstu), a prezentacja/edycja/
+# filtrowanie dzialaja jak na zbiorze tagow. Kolejnosci importowane WPROST
+# z `crm.volteo_leady_import` (jedyne zrodlo prawdy, ten modul ich NIE
+# duplikuje) -- ten sam modul definiuje `_rozloz_tokeny`, ktora parsuje
+# wolny tekst z arkusza importu do tego samego ksztaltu przy imporcie.
+POLA_TAGOW_LEAD: dict[str, tuple[str, ...]] = {
+	"custom_posiadane_produkty": KOLEJNOSC_PRODUKTOW,
+	"custom_produkt_procesu": KOLEJNOSC_PRODUKTOW_PROCESU,
+}
+"""Mapa fieldname -> kanoniczna kolejnosc tokenow, dla obu pol "produktow
+leada" na `CRM Lead`. Konsumowana przez `crm.api.doc._rozwin_filtry_tagow`
+(rozwiniecie filtra na `name in [...]`) i `get_quick_filters`/
+`get_filterable_fields` (dolozenie `options`/`volteo_tagi` do wyniku, zeby
+front rozpoznal pole tagow bez duplikowania slownika w JS)."""
+
+
+def wzory_tagu(pole: str, token: str) -> list[list]:
+	"""Zwraca 4 warunki dokladnego dopasowania `token` wewnatrz pola `pole`
+	zlaczonego "+" (np. `custom_posiadane_produkty` = "PV+ME+PC"):
+	`[pole, "=", token]` (dokladnie jeden tag), `[pole, "like", "token+%"]`
+	(pierwszy z wielu), `[pole, "like", "%+token"]` (ostatni z wielu),
+	`[pole, "like", "%+token+%"]` (srodkowy z wielu). Cztery warunki naraz
+	(uzyte jako `or_filters` przez wywolujacego) usuwaja hazard "PV" kontra
+	"PVME": zaden z czterech wzorcow LIKE nie dopasuje wartosci "PVME" dla
+	tokenu "PV", bo LIKE nie jest zakotwiczone w srodku tokenu bez
+	sasiadujacego "+" -- patrz `TestWzoryTaguHazardPvPvme` w
+	`crm.test_volteo_lista_szans` dla weryfikacji na konkretnych
+	wartosciach.
+
+	Odstepstwo od brzmienia briefu ops#150 (`wzory_tagu(token)` bez `pole`
+	w podpisie funkcji, choc kazdy z czterech wzorow zaczyna sie od
+	`pole`): funkcja MUSI znac nazwe pola, ktorego dotyczy, zeby moc
+	obsluzyc oba pola tagow (`custom_posiadane_produkty` i
+	`custom_produkt_procesu`) tym samym kodem -- `_rozwin_filtry_tagow`
+	przetwarza kazde z nich osobno w jednej petli. Przyjeto `wzory_tagu(pole,
+	token)` jako jedyna spojna interpretacje briefu; zgloszone w raporcie
+	koncowym agenta jako swiadome doprecyzowanie, nie odstepstwo od
+	zamierzonego zachowania.
+
+	Zwraca NOWA liste przy kazdym wywolaniu (immutability, coding-style.md)."""
+	return [
+		[pole, "=", token],
+		[pole, "like", f"{token}+%"],
+		[pole, "like", f"%+{token}"],
+		[pole, "like", f"%+{token}+%"],
+	]
+
+
+def rozpoznaj_filtr_tagu(pole: str, wartosc: object) -> tuple[str, list[str]] | None:
+	"""Normalizuje wire format filtra na pole tagow (`pole` w
+	`POLA_TAGOW_LEAD`) do pary `(rodzaj, tokeny)`:
+	  - skalar `"PV"` albo `["=", "PV"]` -> `("in", ["PV"])` (ma tag PV);
+	  - `["in", [...]]` -> `("in", [...])` (ma KTORYKOLWIEK z tokenow);
+	  - `["not in", [...]]` -> `("not in", [...])` (nie ma ZADNEGO z
+	    tokenow).
+	Kazdy inny ksztalt (`["like", ...]`, inny operator, `None`, cokolwiek
+	nie bedace stringiem ani para `[operator, wartosc]`) zwraca `None` --
+	sygnal dla wywolujacej `_rozwin_filtry_tagow`, zeby zostawic ten filtr
+	BEZ ZMIAN (idzie dalej jak dzis, bez rozwiniecia na `name in [...]`).
+
+	Operator rozpoznawany bez wzgledu na wielkosc liter (`"IN"`, `"Not In"`
+	itd. -- ten sam wzorzec co `_podstaw_wartosc_dzis` wyzej w tym module).
+	Nie mutuje `wartosc` (immutability): zwracana lista tokenow jest zawsze
+	NOWA lista (kopia), nie referencja do `wartosc[1]`."""
+	if isinstance(wartosc, str):
+		return ("in", [wartosc])
+
+	if isinstance(wartosc, (list, tuple)) and len(wartosc) == 2:
+		operator, argument = wartosc
+		operator_l = operator.lower() if isinstance(operator, str) else operator
+
+		if operator_l == "=" and isinstance(argument, str):
+			return ("in", [argument])
+		if operator_l == "in" and isinstance(argument, (list, tuple)):
+			return ("in", list(argument))
+		if operator_l == "not in" and isinstance(argument, (list, tuple)):
+			return ("not in", list(argument))
+
+	return None

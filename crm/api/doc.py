@@ -14,7 +14,14 @@ from crm.api.views import get_views
 from crm.fcrm.doctype.crm_form_script.crm_form_script import get_form_script
 from crm.utils import is_frappe_version
 from crm.volteo_grupy_filtrow import klucze_z_grup, waliduj_grupy, wydziel_grupy
-from crm.volteo_lista_szans import POLA_ZAWSZE_DOZWOLONE, niedozwolone_klucze_filtrow, podstaw_dzis
+from crm.volteo_lista_szans import (
+	POLA_TAGOW_LEAD,
+	POLA_ZAWSZE_DOZWOLONE,
+	niedozwolone_klucze_filtrow,
+	podstaw_dzis,
+	rozpoznaj_filtr_tagu,
+	wzory_tagu,
+)
 
 # Bezpiecznik rozmiaru unii w `rozwin_grupy` (issue #129): patrz jej
 # docstring. Chroni zapytanie `name in [...]` przed nieograniczonym
@@ -295,6 +302,157 @@ def rozwin_grupy(doctype: str, filters: dict) -> dict:
 	return wynik
 
 
+def _nazwy_istniejacego_filtra_name(wartosc: object) -> tuple[str, set] | None:
+	"""Rozpoznaje ksztalt istniejacego filtra po polu `name` (np. dolozony
+	przez `rozwin_grupy` jako `["in", [...]]`) jako `(rodzaj, zbior_nazw)`,
+	do przeciecia z ograniczeniami z filtrow tagow w `_rozwin_filtry_tagow`
+	nizej. Rozpoznaje skalar (`"PRO/..."` -> `("in", {"PRO/..."})`),
+	`["=", wartosc]`, `["in", [...]]` i `["not in", [...]]`. Kazdy inny
+	ksztalt (`["like", ...]`, inny operator) zwraca `None` -- wywolujaca
+	wtedy NIE probuje przecinac, zeby nie zgubic/nie nadpisac filtra po
+	`name` o ksztalcie, ktorego nie da sie bezpiecznie zredukowac do
+	skonczonego zbioru nazw (udokumentowane ograniczenie, patrz docstring
+	`_rozwin_filtry_tagow`)."""
+	if isinstance(wartosc, str):
+		return ("in", {wartosc})
+	if isinstance(wartosc, (list, tuple)) and len(wartosc) == 2:
+		operator, argument = wartosc
+		operator_l = operator.lower() if isinstance(operator, str) else operator
+		if operator_l == "=" and isinstance(argument, str):
+			return ("in", {argument})
+		if operator_l == "in" and isinstance(argument, (list, tuple)):
+			return ("in", set(argument))
+		if operator_l == "not in" and isinstance(argument, (list, tuple)):
+			return ("not in", set(argument))
+	return None
+
+
+def _rozwin_filtry_tagow(doctype: str, filters: dict) -> dict:
+	"""Rozwija filtry po polach "produktow leada" (`POLA_TAGOW_LEAD`,
+	`custom_posiadane_produkty`/`custom_produkt_procesu` na `CRM Lead`,
+	issue ops#150) na zwykly filtr `name in [...]`/`name not in [...]`,
+	tak jak `rozwin_grupy` robi to dla klucza `volteo_grupy` -- wolac PO
+	`rozwin_grupy` i `_podstaw_dzis` (te dwie moga same dolozyc/zmienic
+	filtr po `name`), PRZED `_sprawdz_filtry` (ktora i tak nie musi znac
+	tych dwoch pol wprost, bo po tej funkcji nie ma juz po nich sladu w
+	`filters` -- zastapione przez `name`, ktore jest zawsze dozwolone,
+	patrz `POLA_ZAWSZE_DOZWOLONE`).
+
+	Tylko `doctype == "CRM Lead"` -- POLA_TAGOW_LEAD to pola tego jednego
+	doctype'u, no-op dla kazdego innego (m.in. `CRM Deal`, gdzie `get_data`
+	tez woła te funkcje).
+
+	Dla kazdego klucza z `filters`, ktory jest w `POLA_TAGOW_LEAD`:
+	`rozpoznaj_filtr_tagu` normalizuje wartosc do `(rodzaj, tokeny)` albo
+	`None` (ksztalt spoza kontraktu in/not in/rownosc/skalar, np. "like" --
+	ten filtr zostaje WTEDY bez zmian, nie usuwany). Rozpoznany klucz jest
+	zawsze usuwany z wyniku (zastapiony przez `name` na koncu funkcji).
+	Pusta lista tokenow (`["in", []]`) = ograniczenie z tego pola usuniete
+	calkowicie (nie wplywa na `name`).
+
+	Dla NIEPUSTEJ listy tokenow: `wzory_tagu(pole, token)` dla kazdego
+	tokenu daje 4 warunki dokladnego dopasowania (patrz jej docstring w
+	`crm.volteo_lista_szans` -- usuwa hazard PV/PVME), splaszczone do
+	jednej listy `or_filters`. `frappe.get_all` (NIE `get_list`): to
+	zapytanie sluzy WYLACZNIE do wyliczenia zbioru nazw pasujacych do
+	wzorca tagu, bez zadnego scopingu uprawnien -- wlasciwy odczyt
+	dokumentow (nizej w `get_data`/`crm.api.volteo_leady.mapa`) i tak idzie
+	przez `frappe.get_list` z filtrem `name in [...]` zbudowanym tutaj, ktory
+	scoping `crm/permissions/org_hierarchy.py` zawezi normalnie -- rozszerzenie
+	nazwy o leady spoza zasiegu wolajacego na tym etapie nie jest wyciekiem
+	danych, bo zaden dokument nie jest tu jeszcze odczytywany, tylko jego
+	nazwa (`name`, ktora i tak jest zawsze dozwolonym polem filtrowania).
+
+	`kind == "in"` -> nazwy TRAFIAJA do zbioru DOZWOLONYCH (lead ma
+	KTORYKOLWIEK z tokenow). `kind == "not in"` -> nazwy TRAFIAJA do
+	zbioru WYKLUCZONYCH (lead nie ma ZADNEGO z tokenow) -- to unika
+	drugiego zapytania z odwroconym warunkiem: "dozwolone minus wykluczone"
+	daje dokladnie te sama semantyke.
+
+	Kilka pol tagow filtrowanych naraz (`custom_posiadane_produkty` I
+	`custom_produkt_procesu` w tym samym `filters`): kazde pole dokłada
+	WŁASNY zbior do wspolnej puli -- DOZWOLONE to PRZECIECIE wszystkich
+	zbiorow "in" (lead musi pasowac do KAZDEGO z filtrowanych pol), zbior
+	WYKLUCZONYCH to SUMA wszystkich zbiorow "not in".
+
+	Jesli `filters` mial juz wlasny filtr po `name` (np. dolozony przez
+	`rozwin_grupy` z grup ALBO) o ksztalcie rozpoznanym przez
+	`_nazwy_istniejacego_filtra_name` (skalar/"="/"in"/"not in"): dolaczany
+	do tej samej puli -- "polaczyc przez przeciecie zbiorow" (brief
+	ops#150). Ksztalt NIEROZPOZNANY (np. `["like", ...]`): udokumentowane,
+	swiadome ograniczenie -- ten pre-existing filtr po `name` zostaje BEZ
+	ZMIAN, tagi w tym samym wywolaniu (rzadki, praktycznie niespotykany
+	przypadek dwoch niezaleznych filtrow po `name` naraz) nie sa wtedy w
+	stanie go zawezic; nie jest to luka bezpieczenstwa (filtrowanie, nie
+	uprawnienia), tylko rzadki naroznik UX zgloszony w raporcie koncowym
+	agenta.
+
+	Brak JAKIEGOKOLWIEK filtra tagow do zastosowania (np. wszystkie
+	rozpoznane wpisy mialy puste listy tokenow, i nie bylo wczesniej
+	filtra po `name`): `filters` wraca BEZ ZMIAN (klucz `name`, jesli
+	istnial w nierozpoznanym ksztalcie, zostaje nietkniety).
+
+	Zwraca NOWY dict (immutability, coding-style.md) -- `filters` nie jest
+	mutowany."""
+	if doctype != "CRM Lead":
+		return filters
+
+	klucze_tagow = [pole for pole in filters if pole in POLA_TAGOW_LEAD]
+	if not klucze_tagow:
+		return filters
+
+	wynik = dict(filters)
+	zbiory_dozwolonych: list[set] = []
+	zbiory_wykluczonych: list[set] = []
+
+	for pole in klucze_tagow:
+		rozpoznany = rozpoznaj_filtr_tagu(pole, filters[pole])
+		if rozpoznany is None:
+			# Ksztalt spoza kontraktu (np. "like") -- filtr tego pola
+			# zostaje w wyniku BEZ ZMIAN, nie rozwijamy go na name.
+			continue
+
+		del wynik[pole]
+		kind, tokeny = rozpoznany
+		if not tokeny:
+			continue
+
+		warunki = [warunek for token in tokeny for warunek in wzory_tagu(pole, token)]
+		nazwy = set(frappe.get_all(doctype, pluck="name", or_filters=warunki, limit_page_length=0))
+
+		if kind == "not in":
+			zbiory_wykluczonych.append(nazwy)
+		else:
+			zbiory_dozwolonych.append(nazwy)
+
+	if "name" in wynik:
+		istniejacy = _nazwy_istniejacego_filtra_name(wynik["name"])
+		if istniejacy is not None:
+			kind, zbior = istniejacy
+			if kind == "not in":
+				zbiory_wykluczonych.append(zbior)
+			else:
+				zbiory_dozwolonych.append(zbior)
+		# Ksztalt nierozpoznany: `wynik["name"]` zostaje nietkniety (patrz
+		# docstring wyzej) -- ponizszy blok nadpisuje `wynik["name"]`
+		# TYLKO gdy jest przynajmniej jeden rozpoznany zbior do polaczenia.
+
+	if zbiory_dozwolonych or zbiory_wykluczonych:
+		wykluczone = set.union(*zbiory_wykluczonych) if zbiory_wykluczonych else set()
+		if zbiory_dozwolonych:
+			dozwolone = set.intersection(*zbiory_dozwolonych) - wykluczone
+			wynik["name"] = ["in", sorted(dozwolone) if dozwolone else [""]]
+		elif wykluczone:
+			wynik["name"] = ["not in", sorted(wykluczone)]
+		else:
+			# Wszystkie zbiory "not in" okazaly sie puste (zaden lead nie ma
+			# zadnego z filtrowanych tokenow) -- brak faktycznego
+			# ograniczenia, wiec nie zostawiamy po sobie sztucznego filtra.
+			wynik.pop("name", None)
+
+	return wynik
+
+
 def _odfiltruj_niedozwolone_klucze(doctype: str, klucze: list) -> list:
 	"""Zwraca `klucze` (nazwy pol z `rows`/`kanban_fields` w `get_data`) bez
 	tych, do ktorych biezacy uzytkownik nie ma odczytu na poziomie permlevel
@@ -366,6 +524,44 @@ def sort_options(doctype: str):
 	fields = [field for field in fields if field["fieldname"] in permitted]
 
 	return fields
+
+
+def _dolacz_tagi_lead(doctype: str, field: dict) -> dict:
+	"""Dla pol z `POLA_TAGOW_LEAD` na `CRM Lead` (issue ops#150) doklada do
+	slownika pola `"options"` (kanoniczny slownik tokenow tego pola,
+	zlaczony `"\\n"`, dokladnie tak jak Frappe przechowuje opcje pola
+	Select) i `"volteo_tagi": 1`, po ktorym front
+	(`frontend/src/utils/tagiProduktow.js::czyPoleTagow`) rozpoznaje pole
+	tagow bez duplikowania slownika w JS -- `field.fieldtype` zostaje
+	`"Data"` bez zmian (te dwa pola SA Data, model A+ z briefu ops#150
+	celowo nie zmienia schematu), wiec galezie kodu zalezne wprost od
+	`fieldtype == "Select"` (np. w tej samej funkcji nizej, albo
+	`get_quick_filters`) same z siebie NIE obejma tych pol -- front
+	dostaje osobna galaz zaleznosc od flagi `volteo_tagi` (patrz
+	`Filter.vue`/`filtrWielokrotny.js`/`QuickFilterField.vue`).
+
+	Uzywana zarowno w `get_filterable_fields` nizej (gdzie wpisy w
+	`fields` sa juz plain dictami, bo `meta = frappe.get_meta(doctype).
+	as_dict()`), jak i w `get_quick_filters` (gdzie wpisy MOGA byc
+	prawdziwymi obiektami `DocField`, `meta = frappe.get_meta(doctype,
+	cached)` bez `.as_dict()`) -- `field.as_dict()` (gdy dostepne) najpierw
+	sprowadza wpis do plain dicta, zeby `**field` nizej dzialalo
+	bezpiecznie w obu przypadkach.
+
+	Zwraca `field` BEZ ZMIAN dla kazdego innego doctype'u/pola
+	(immutability: gdy faktycznie doklada atrybuty, zwraca NOWY dict, nie
+	mutuje `field`)."""
+	if doctype != "CRM Lead":
+		return field
+
+	slownik = POLA_TAGOW_LEAD.get(field.get("fieldname"))
+	if not slownik:
+		return field
+
+	if hasattr(field, "as_dict"):
+		field = field.as_dict()
+
+	return {**field, "options": "\n".join(slownik), "volteo_tagi": 1}
 
 
 @frappe.whitelist()
@@ -447,10 +643,20 @@ def get_filterable_fields(doctype: str, scope: str = "list"):
 			entry = by_fieldname[fieldname]
 			if etykieta is not None:
 				entry = {**entry, "label": _(etykieta)}
+			# VOLTEO (issue ops#150): pola "produktow leada" dostaja tutaj
+			# "options" (slownik tokenow zlaczony "\n") i "volteo_tagi": 1,
+			# zeby front rozpoznal je jako pole tagow bez duplikowania
+			# slownika w JS -- patrz docstring _dolacz_tagi_lead. No-op dla
+			# kazdego innego pola/doctype'u.
+			entry = _dolacz_tagi_lead(doctype, entry)
 			allowlisted.append(entry)
 		return allowlisted
 
-	fields = [field for field in fields if field.get("fieldname") in permitted]
+	fields = [
+		_dolacz_tagi_lead(doctype, field)
+		for field in fields
+		if field.get("fieldname") in permitted
+	]
 
 	return fields
 
@@ -557,6 +763,14 @@ def get_quick_filters(doctype: str, cached: bool = True):
 	fields = [field for field in fields if field.get("fieldname") in permitted]
 
 	for field in fields:
+		# VOLTEO (issue ops#150): pola "produktow leada" dostaja tutaj
+		# "options" (slownik tokenow zlaczony "\n") i "volteo_tagi": 1 --
+		# patrz docstring _dolacz_tagi_lead. `field` moze byc prawdziwym
+		# obiektem `DocField` (galaz `in_standard_filter` powyzej) albo
+		# plain dictem (galaz "name"/Global Settings powyzej) -- oba
+		# obslugiwane przez _dolacz_tagi_lead. No-op dla kazdego innego
+		# pola/doctype'u.
+		field = _dolacz_tagi_lead(doctype, field)
 		options = field.get("options")
 		if field.get("fieldtype") == "Select" and options and isinstance(options, str):
 			options = options.split("\n")
@@ -569,6 +783,7 @@ def get_quick_filters(doctype: str, cached: bool = True):
 				"fieldname": field.get("fieldname"),
 				"fieldtype": field.get("fieldtype"),
 				"options": options,
+				**({"volteo_tagi": 1} if field.get("volteo_tagi") else {}),
 			}
 		)
 
@@ -678,6 +893,14 @@ def get_data(
 	# nizej (ktora nie zna tego klucza i odrzucilaby go jak kazde inne
 	# nieznane pole). Bez klucza w filters ta funkcja jest no-opem.
 	filters = frappe._dict(rozwin_grupy(doctype, filters))
+
+	# VOLTEO (issue ops#150): rozwija filtry po polach "produktow leada"
+	# (custom_posiadane_produkty/custom_produkt_procesu na CRM Lead) na
+	# zwykly filtr "name in [...]"/"name not in [...]" -- PO rozwin_grupy
+	# (moze sama dolozyc/zmienic filtr po "name", patrz docstring
+	# _rozwin_filtry_tagow), PRZED _sprawdz_filtry nizej. No-op dla kazdego
+	# doctype'u innego niz CRM Lead.
+	filters = frappe._dict(_rozwin_filtry_tagow(doctype, filters))
 
 	# Blokada filtrowania po polu bez uprawnien odczytu (permlevel > 0) — patrz
 	# ops#79. Walidujemy PO scaleniu default_filters i podstawieniu @me/@dzis,
