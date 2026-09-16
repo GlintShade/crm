@@ -175,6 +175,22 @@
               :label="item.label"
             />
           </div>
+          <div
+            v-else-if="
+              column.key === 'custom_posiadane_produkty' ||
+              column.key === 'custom_produkt_procesu'
+            "
+            class="flex flex-wrap items-center gap-1 overflow-hidden py-1"
+          >
+            <Badge
+              v-for="token in item"
+              :key="token"
+              variant="subtle"
+              :theme="column.key === 'custom_posiadane_produkty' ? 'blue' : 'orange'"
+              size="sm"
+              :label="token"
+            />
+          </div>
           <div v-else-if="column.type === 'Check'">
             <FormControl
               type="checkbox"

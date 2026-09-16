@@ -205,6 +205,7 @@ import { usersStore } from '@/stores/users'
 import { statusesStore } from '@/stores/statuses'
 import { colorNameFromParsed } from '@/utils/statusColors'
 import { widocznyLead } from '@/utils/mapaFiltry'
+import { rozbijTagi } from '@/utils/tagiProduktow'
 import { formatDate } from '@/utils'
 import {
   KOLOR_BRAK,
@@ -652,21 +653,36 @@ function budujDymek(lead) {
   // Pola w dymku (issue #101): tylko te, które użytkownik zostawił zaznaczone
   // w popoverze ustawień (domyślnie wszystkie cztery). Termin spotkania
   // formatowany przez formatDate() -- Datetime z serwera, nie surowy string.
+  // Trzeci element (opcjonalny, `true`) oznacza wiersz "produktów leada"
+  // (ops#150) -- tokeny renderowane jako span-chipy zamiast surowego
+  // stringa "PV+PC" (patrz `rozbijTagi` w utils/tagiProduktow.js).
   const wiersze = [
     ustawieniaDymka.zrodlo && [__('Źródło'), lead.custom_import_source],
-    ustawieniaDymka.produkty && [__('Obecne produkty'), lead.custom_posiadane_produkty],
-    ustawieniaDymka.produkty && [__('Produkt w procesie'), lead.custom_produkt_procesu],
+    ustawieniaDymka.produkty && [__('Obecne produkty'), lead.custom_posiadane_produkty, true],
+    ustawieniaDymka.produkty && [__('Produkt w procesie'), lead.custom_produkt_procesu, true],
     ustawieniaDymka.statusZrodla && [__('Status źródła'), lead.custom_status_zrodla],
     ustawieniaDymka.terminSpotkania && [
       __('Termin spotkania'),
       lead.custom_termin_spotkania ? formatDate(lead.custom_termin_spotkania) : '',
     ],
   ].filter(Boolean)
-  for (const [label, value] of wiersze) {
+  for (const [label, value, tagi] of wiersze) {
     if (!value) continue
     const row = document.createElement('div')
     row.className = 'text-xs text-ink-gray-5'
-    row.textContent = `${label}: ${value}`
+    if (tagi) {
+      const etykieta = document.createElement('span')
+      etykieta.textContent = `${label}: `
+      row.appendChild(etykieta)
+      for (const token of rozbijTagi(value)) {
+        const chip = document.createElement('span')
+        chip.className = 'inline-block rounded bg-surface-gray-3 px-1 mr-1 text-ink-gray-7'
+        chip.textContent = token
+        row.appendChild(chip)
+      }
+    } else {
+      row.textContent = `${label}: ${value}`
+    }
     container.appendChild(row)
   }
 

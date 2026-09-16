@@ -17,7 +17,7 @@
     v-else-if="jestWielokrotny"
     :label="filter.label"
     :fieldtype="filter.fieldtype"
-    :options="filter.options"
+    :options="opcjeCheckList"
     :modelValue="parsujWartoscWielokrotna(filter.value)"
     @update:modelValue="(wartosci) => updateFilter(filter, wartosci)"
   />
@@ -56,6 +56,7 @@ import { etykietaMoje } from '@/utils/etykietaMoje'
 import { opcjeEtapu } from '@/utils/etapFiltr'
 import { parsujWartoscWielokrotna } from '@/utils/filtrWielokrotny'
 import { czyWielokrotnyFiltrSzybki } from '@/utils/filtrSzybki'
+import { czyPoleTagow, opcjeTagow } from '@/utils/tagiProduktow'
 import { statusesStore } from '@/stores/statuses'
 import { computed, reactive, watch } from 'vue'
 
@@ -99,9 +100,25 @@ const opcjeEtapuFiltra = computed(() =>
 
 // Issue #127: Select i Link (poza User i Etapem na CRM Deal, patrz JSDoc
 // czyWielokrotnyFiltrSzybki) dostają checkboxową listę wielokrotnego
-// wyboru zamiast pojedynczego pola.
+// wyboru zamiast pojedynczego pola. Issue ops#150: pole "produktów leada"
+// (tagów) dostaje ją też, mimo fieldtype === 'Data'.
 const jestWielokrotny = computed(() =>
   czyWielokrotnyFiltrSzybki(props.doctype, filter),
+)
+
+// Issue ops#150: QuickFilterCheckList w trybie "Select" (fieldtype !==
+// 'Link') oczekuje `options` jako tablicy {label, value} -- dokładnie to,
+// co `crm.api.doc.get_quick_filters` już zwraca dla prawdziwego Select.
+// Dla pola tagów `filter.options` to string złączony "\n" (ten sam
+// format co dla Select w DB, dołożony przez `_dolacz_tagi_lead`), więc
+// tutaj rozbijamy go przez `opcjeTagow` i mapujemy do tego samego
+// kształtu -- bez duplikowania słownika w JS (opcje nadal pochodzą z
+// serwera). Każde inne pole (Select prawdziwy, Link) dostaje
+// `filter.options` bez zmian, jak dotychczas.
+const opcjeCheckList = computed(() =>
+  czyPoleTagow(filter)
+    ? opcjeTagow(filter).map((token) => ({ label: token, value: token }))
+    : filter.options,
 )
 
 const emit = defineEmits(['applyQuickFilter'])

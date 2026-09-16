@@ -148,6 +148,25 @@ describe('czyWielokrotnyFiltrSzybki', () => {
     ).toBe(false)
   })
 
+  it('ops#150: pole tagów (Data + volteo_tagi) → true, dostaje QuickFilterCheckList', () => {
+    expect(
+      czyWielokrotnyFiltrSzybki('CRM Lead', {
+        fieldname: 'custom_posiadane_produkty',
+        fieldtype: 'Data',
+        options: 'PV\nME\nPC',
+        volteo_tagi: 1,
+      }),
+    ).toBe(true)
+    expect(
+      czyWielokrotnyFiltrSzybki('CRM Lead', {
+        fieldname: 'custom_produkt_procesu',
+        fieldtype: 'Data',
+        options: 'PV\nPVME\nME\nPC\nCP',
+        volteo_tagi: 1,
+      }),
+    ).toBe(true)
+  })
+
   it('status na innym doctype niż CRM Deal (np. CRM Lead) → true, wyjątek dotyczy tylko Deal', () => {
     expect(
       czyWielokrotnyFiltrSzybki('CRM Lead', {
