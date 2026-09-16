@@ -63,6 +63,85 @@ GRUPY_DOCHODU: dict[str, tuple[str, ...]] = {
 Kolejność kluczy jest deklaratywna i odpowiada kolejności, w jakiej
 `brakujace_pola()` dopisuje pola poszczególnych grup do wyniku."""
 
+ETYKIETY_POL: dict[str, str] = {
+	"miejsce_urodzenia": "Miejsce urodzenia",
+	"rodzaj_dokumentu": "Rodzaj dokumentu tożsamości",
+	"seria_numer_dokumentu": "Seria i numer dokumentu tożsamości",
+	"data_wydania_dokumentu": "Data wydania dokumentu tożsamości",
+	"data_waznosci_dokumentu": "Data ważności dokumentu tożsamości",
+	"adres_zameldowania_taki_sam": "Czy adres zamieszkania jest taki sam, jak adres zameldowania?",
+	"adres_zameldowania": "Adres zamieszkania",
+	"adres_korespondencji_taki_sam": "Czy adres do korespondencji jest taki sam, jak adres zameldowania?",
+	"adres_korespondencji": "Adres do korespondencji",
+	"wyksztalcenie": "Wykształcenie",
+	"stan_cywilny": "Stan cywilny",
+	"liczba_osob_na_utrzymaniu": "Liczba osób w gospodarstwie domowym na utrzymaniu",
+	"kwota_800_plus": "Kwota świadczenia 800+",
+	"dochod_wspolmalzonka": "Deklarowany dochód współmałżonka",
+	"zrodlo_dochodu_malzonka": "Źródło dochodu małżonka",
+	"oplaty_miesieczne": "Opłaty miesięczne",
+	"suma_zobowiazan": "Suma miesięcznych zobowiązań kredytowych i finansowych",
+	"numer_rachunku": "Numer rachunku bankowego",
+	"praca_wlaczone": "Dochód: umowa o pracę / zlecenie / dzieło",
+	"praca_forma": "Forma zatrudnienia",
+	"praca_data_zatrudnienia": "Data zatrudnienia",
+	"praca_okres": "Okres zatrudnienia",
+	"praca_okres_od": "Zatrudnienie od",
+	"praca_okres_do": "Zatrudnienie do",
+	"praca_nip": "NIP zakładu pracy",
+	"praca_nazwa_zakladu": "Nazwa zakładu pracy",
+	"praca_adres_telefon": "Adres i numer telefonu zakładu pracy",
+	"praca_kwota_dochodu": "Kwota dochodu",
+	"emerytura_wlaczone": "Dochód: emerytura",
+	"emerytura_numer_swiadczenia": "Numer świadczenia",
+	"emerytura_od_kiedy": "Od kiedy przyznane jest świadczenie",
+	"emerytura_kwota_dochodu": "Kwota dochodu",
+	"renta_wlaczone": "Dochód: renta",
+	"renta_numer_swiadczenia": "Numer świadczenia",
+	"renta_od_kiedy": "Od kiedy przyznane jest świadczenie",
+	"renta_kwota_dochodu": "Kwota dochodu",
+	"dzialalnosc_wlaczone": "Dochód: działalność gospodarcza",
+	"dzialalnosc_forma_opodatkowania": "Forma opodatkowania",
+	"dzialalnosc_forma_inna": "Inna forma opodatkowania: jaka?",
+	"dzialalnosc_nip": "NIP firmy",
+	"dzialalnosc_nazwa": "Nazwa firmy",
+	"dzialalnosc_adres": "Adres firmy",
+	"dzialalnosc_telefon": "Numer telefonu do firmy",
+	"dzialalnosc_od_kiedy": "Od kiedy prowadzona jest działalność?",
+	"dzialalnosc_kwota_dochodu": "Kwota dochodu",
+	"gospodarstwo_wlaczone": "Dochód: gospodarstwo rolne",
+	"gospodarstwo_nip": "NIP gospodarstwa",
+	"gospodarstwo_od_kiedy": "Od kiedy prowadzone jest gospodarstwo?",
+	"gospodarstwo_kwota_dochodu": "Kwota dochodu",
+	"inne_wlaczone": "Dochód: inne",
+	"inne_1_typ": "Typ dochodu (1)",
+	"inne_1_kwota": "Kwota dochodu (1)",
+	"inne_2_typ": "Typ dochodu (2)",
+	"inne_2_kwota": "Kwota dochodu (2)",
+}
+"""Jedyny kanon etykiet PL dla wszystkich 54 pól danych `Volteo Kredyt`
+(`_DANE_POLA_DOZWOLONE` w `crm/api/kredyt.py`): przepisany 1:1 z etykiet
+doctype'u (`ops/crm-kredyt.py`, sekcja `KREDYT_FIELDS`), które są zgodne z
+oryginalnym szablonem PDF-u (ops#148: front, komunikat blokujący PDF i Desk
+dryfowały, doctype był zgodny z papierem od początku).
+
+Ta sama etykieta ma się pojawić w banerze braków, w komunikacie serwera
+blokującym PDF (`crm/api/kredyt.py::_ETYKIETY_POL`, alias importu stąd) i w
+polu formularza (`frontend/src/utils/kredytForm.js::ETYKIETY_POL`, jego 1:1
+odpowiednik po stronie JS). Jedyny dopuszczalny wyjątek: etykieta ekranowa w
+JS krótsza niż kanon, gdy kanon nie mieści się w kolumnie formularza. Wtedy
+JS ma osobny słownik `ETYKIETY_PELNE` z pełnym kanonem, używanym w banerze i
+w tooltipie pola (patrz `kredytForm.js`).
+
+JEDNO celowe odstępstwo od `ops/crm-kredyt.py`: `dzialalnosc_forma_inna` ma
+tam etykietę łączoną myślnikiem (kończy się słowami "jaka?" po myślniku).
+Reguła projektu zabrania myślników w kodzie/testach/komentarzach, więc kanon
+tutaj używa dwukropka ("Inna forma opodatkowania: jaka?"). Wyrównanie
+etykiety w `ops/crm-kredyt.py` do tego brzmienia jest osobną, świadomie
+odłożoną zmianą (NIE częścią ops#148). `ops/crm-kredyt.py` nie jest tu
+ruszane.
+"""
+
 _BAZA_WYMAGANE: tuple[str, ...] = (
 	"miejsce_urodzenia",
 	"rodzaj_dokumentu",

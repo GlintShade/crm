@@ -21,6 +21,9 @@ import {
   BAZA_WYMAGANE,
   brakujacePola,
   brakujaceDaneKlienta,
+  ETYKIETY_POL,
+  ETYKIETY_PELNE,
+  etykietaPelna,
 } from '@/utils/kredytForm'
 
 function deepFreeze(value) {
@@ -1230,5 +1233,133 @@ describe('Kredyt form logic', () => {
         })
       })
     })
+  })
+})
+
+// Mirror of ops/crm-kredyt.py's `KREDYT_FIELDS` labels (the doctype canon,
+// 54 data fields, `deal`/`status`/section breaks excluded), retyped here on
+// purpose rather than imported. The exact same deliberate duplication as
+// crm/test_volteo_kredyt_etykiety.py's `_ETYKIETY_KANON_DOCTYPE` (see that
+// file's header comment for the full rationale: there is no runtime bridge
+// between the Python and JS test suites, so both independently retype the
+// canon and a divergence in either fails its own side). A relabel in
+// ops/crm-kredyt.py requires updating THIS literal, kredytForm.js's
+// ETYKIETY_POL/ETYKIETY_PELNE, and the Python test's mirror.
+//
+// ONE deliberate divergence from ops/crm-kredyt.py (ops#148 acceptance
+// criteria): `dzialalnosc_forma_inna`'s doctype label carries an em dash
+// ("Inna forma opodatkowania" joined to "jaka?" with an em dash). This
+// project's zero-em-dash rule
+// forbids that in code we write, so the canon here uses a colon instead
+// ("Inna forma opodatkowania: jaka?"). Aligning ops/crm-kredyt.py's own
+// label is a separate, deliberately deferred change (not part of this
+// issue).
+const ETYKIETY_KANON_DOCTYPE = {
+  miejsce_urodzenia: 'Miejsce urodzenia',
+  rodzaj_dokumentu: 'Rodzaj dokumentu tożsamości',
+  seria_numer_dokumentu: 'Seria i numer dokumentu tożsamości',
+  data_wydania_dokumentu: 'Data wydania dokumentu tożsamości',
+  data_waznosci_dokumentu: 'Data ważności dokumentu tożsamości',
+  adres_zameldowania_taki_sam: 'Czy adres zamieszkania jest taki sam, jak adres zameldowania?',
+  adres_zameldowania: 'Adres zamieszkania',
+  adres_korespondencji_taki_sam: 'Czy adres do korespondencji jest taki sam, jak adres zameldowania?',
+  adres_korespondencji: 'Adres do korespondencji',
+  wyksztalcenie: 'Wykształcenie',
+  stan_cywilny: 'Stan cywilny',
+  liczba_osob_na_utrzymaniu: 'Liczba osób w gospodarstwie domowym na utrzymaniu',
+  kwota_800_plus: 'Kwota świadczenia 800+',
+  dochod_wspolmalzonka: 'Deklarowany dochód współmałżonka',
+  zrodlo_dochodu_malzonka: 'Źródło dochodu małżonka',
+  oplaty_miesieczne: 'Opłaty miesięczne',
+  suma_zobowiazan: 'Suma miesięcznych zobowiązań kredytowych i finansowych',
+  numer_rachunku: 'Numer rachunku bankowego',
+  praca_wlaczone: 'Dochód: umowa o pracę / zlecenie / dzieło',
+  praca_forma: 'Forma zatrudnienia',
+  praca_data_zatrudnienia: 'Data zatrudnienia',
+  praca_okres: 'Okres zatrudnienia',
+  praca_okres_od: 'Zatrudnienie od',
+  praca_okres_do: 'Zatrudnienie do',
+  praca_nip: 'NIP zakładu pracy',
+  praca_nazwa_zakladu: 'Nazwa zakładu pracy',
+  praca_adres_telefon: 'Adres i numer telefonu zakładu pracy',
+  praca_kwota_dochodu: 'Kwota dochodu',
+  emerytura_wlaczone: 'Dochód: emerytura',
+  emerytura_numer_swiadczenia: 'Numer świadczenia',
+  emerytura_od_kiedy: 'Od kiedy przyznane jest świadczenie',
+  emerytura_kwota_dochodu: 'Kwota dochodu',
+  renta_wlaczone: 'Dochód: renta',
+  renta_numer_swiadczenia: 'Numer świadczenia',
+  renta_od_kiedy: 'Od kiedy przyznane jest świadczenie',
+  renta_kwota_dochodu: 'Kwota dochodu',
+  dzialalnosc_wlaczone: 'Dochód: działalność gospodarcza',
+  dzialalnosc_forma_opodatkowania: 'Forma opodatkowania',
+  dzialalnosc_forma_inna: 'Inna forma opodatkowania: jaka?',
+  dzialalnosc_nip: 'NIP firmy',
+  dzialalnosc_nazwa: 'Nazwa firmy',
+  dzialalnosc_adres: 'Adres firmy',
+  dzialalnosc_telefon: 'Numer telefonu do firmy',
+  dzialalnosc_od_kiedy: 'Od kiedy prowadzona jest działalność?',
+  dzialalnosc_kwota_dochodu: 'Kwota dochodu',
+  gospodarstwo_wlaczone: 'Dochód: gospodarstwo rolne',
+  gospodarstwo_nip: 'NIP gospodarstwa',
+  gospodarstwo_od_kiedy: 'Od kiedy prowadzone jest gospodarstwo?',
+  gospodarstwo_kwota_dochodu: 'Kwota dochodu',
+  inne_wlaczone: 'Dochód: inne',
+  inne_1_typ: 'Typ dochodu (1)',
+  inne_1_kwota: 'Kwota dochodu (1)',
+  inne_2_typ: 'Typ dochodu (2)',
+  inne_2_kwota: 'Kwota dochodu (2)',
+}
+
+// Matches an em dash (U+2014) or en dash (U+2013), written as Unicode
+// escapes rather than the literal glyph: this test file is itself subject
+// to the project's zero-em-dash rule, so the character cannot appear in the
+// source as a glyph, only as an escape sequence naming its code point.
+const WZORZEC_MYSLNIKOW = /[\u2014\u2013]/
+
+describe('ETYKIETY_POL / ETYKIETY_PELNE (kanon etykiet, ops#148)', () => {
+  const wszystkieFieldnames = [...BASE_FIELDS, ...GRUPY.flatMap((g) => [g.wlaczone, ...g.fields])]
+
+  it('ma dokładnie 54 pola (BASE_FIELDS + toggle + pola GRUPY)', () => {
+    expect(wszystkieFieldnames.length).toBe(54)
+  })
+
+  it('klucze ETYKIETY_POL pokrywają się dokładnie z BASE_FIELDS + polami GRUPY', () => {
+    expect(Object.keys(ETYKIETY_POL).slice().sort()).toEqual(wszystkieFieldnames.slice().sort())
+  })
+
+  it('każde pole rozstrzyga się do kanonu doctype (ETYKIETY_PELNE gdy jest, inaczej ETYKIETY_POL)', () => {
+    wszystkieFieldnames.forEach((fieldname) => {
+      expect(etykietaPelna(fieldname)).toBe(ETYKIETY_KANON_DOCTYPE[fieldname])
+    })
+  })
+
+  it('zero myślników em/en w ETYKIETY_POL i ETYKIETY_PELNE', () => {
+    Object.values(ETYKIETY_POL).forEach((etykieta) => {
+      expect(etykieta).not.toMatch(WZORZEC_MYSLNIKOW)
+    })
+    Object.values(ETYKIETY_PELNE).forEach((etykieta) => {
+      expect(etykieta).not.toMatch(WZORZEC_MYSLNIKOW)
+    })
+  })
+
+  it('K5: adres_zameldowania to kanon "Adres zamieszkania"', () => {
+    expect(ETYKIETY_POL.adres_zameldowania).toBe('Adres zamieszkania')
+  })
+
+  it('K6: suma_zobowiazan ma etykietę ekranową ze słowem "miesięcznych" i pełny kanon w ETYKIETY_PELNE', () => {
+    expect(ETYKIETY_POL.suma_zobowiazan).toMatch(/miesięcznych/)
+    expect(ETYKIETY_PELNE.suma_zobowiazan).toBe(
+      'Suma miesięcznych zobowiązań kredytowych i finansowych',
+    )
+  })
+
+  it('etykietaPelna spada na ETYKIETY_POL, gdy nie ma wyjątku w ETYKIETY_PELNE', () => {
+    expect(etykietaPelna('miejsce_urodzenia')).toBe(ETYKIETY_POL.miejsce_urodzenia)
+    expect(ETYKIETY_PELNE.miejsce_urodzenia).toBeUndefined()
+  })
+
+  it('etykietaPelna zwraca fieldname dla nieznanego klucza (nigdy nie rzuca)', () => {
+    expect(etykietaPelna('nieistniejace_pole')).toBe('nieistniejace_pole')
   })
 })
