@@ -204,7 +204,7 @@ function attachFile(file, i) {
     file.total = data.total
   })
   uploader.value.on('error', (error) => {
-    oznaczBlad(file, error || 'Error Uploading File')
+    oznaczBlad(file, error || __('Error Uploading File'))
   })
   uploader.value.on('finish', () => {
     file.uploading = false
@@ -227,7 +227,7 @@ function attachFile(file, i) {
       }
     })
     .catch((error) => {
-      let errorMessage = 'Error Uploading File'
+      let errorMessage = __('Error Uploading File')
       if (error?._server_messages) {
         errorMessage = JSON.parse(JSON.parse(error._server_messages)[0]).message
       } else if (error?.exc) {

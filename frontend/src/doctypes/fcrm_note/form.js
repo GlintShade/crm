@@ -6,7 +6,7 @@ export class FCRMNote {
       this.actions = [
         {
           name: 'Redirect Action',
-          label: __('Open {0}', [label]),
+          label: __('Open {0}', [__(label)]),
           onClick: (close) => {
             if (!this.doc.reference_docname) return
             let name =
