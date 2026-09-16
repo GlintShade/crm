@@ -40,11 +40,13 @@ import { useTelemetry } from 'frappe-ui/frappe'
 import {
   FormControl,
   call,
+  createEditorButton,
   createResource,
   TextEditor,
   DatePicker,
 } from 'frappe-ui'
 import { ref, computed, onMounted, h } from 'vue'
+import { przyciskiPlywajace } from '@/utils/edytorPrzyciski'
 
 const typeCheck = ['Check']
 const typeLink = ['Link', 'Dynamic Link']
@@ -165,7 +167,7 @@ function getValueComponent(f) {
       variant: 'outline',
       editorClass:
         '!prose-sm overflow-auto min-h-[80px] max-h-80 py-1.5 px-2 rounded border border-outline-gray-2 bg-surface-base hover:border-outline-gray-3 hover:shadow-sm focus:bg-surface-base focus:border-outline-gray-4 focus:shadow-sm focus:ring-0 focus-visible:ring-2 focus-visible:ring-outline-gray-3 text-ink-gray-8 transition-colors',
-      bubbleMenu: true,
+      bubbleMenu: przyciskiPlywajace(createEditorButton),
       content: newValue.value,
     })
   } else {

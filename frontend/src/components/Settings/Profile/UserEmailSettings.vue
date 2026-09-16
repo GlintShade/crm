@@ -40,8 +40,8 @@
           editor-class="prose-sm min-h-28 max-w-full border rounded-b-lg border-t-0 p-2 border-outline-elevation-2"
           :content="user.doc.email_signature"
           :placeholder="__('Type something...')"
-          :bubbleMenu="true"
-          :fixed-menu="true"
+          :bubbleMenu="paskiPlywajace"
+          :fixed-menu="paskiUstalone"
           @change="(val) => (user.doc.email_signature = val)"
         />
       </div>
@@ -123,13 +123,20 @@ import {
   Badge,
   Button,
   createDocumentResource,
+  createEditorButton,
   createListResource,
   TextEditor,
   toast,
 } from 'frappe-ui'
 import { computed, inject } from 'vue'
+import { przyciskiUstalone, przyciskiPlywajace } from '@/utils/edytorPrzyciski'
 
 const emit = defineEmits(['updateStep'])
+
+// Polskie etykiety paska edytora podpisu e-mail - patrz
+// frontend/src/utils/edytorPrzyciski.js.
+const paskiUstalone = computed(() => przyciskiUstalone(createEditorButton))
+const paskiPlywajace = computed(() => przyciskiPlywajace(createEditorButton))
 
 const { user: sessionUser } = inject('session')
 
