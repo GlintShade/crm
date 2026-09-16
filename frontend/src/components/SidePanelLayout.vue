@@ -75,6 +75,7 @@
                         <div
                           v-if="
                             field.read_only &&
+                            !czyPoleTagow(field) &&
                             ![
                               'Int',
                               'Float',
@@ -351,6 +352,13 @@
                           :disabled="Boolean(field.read_only)"
                           @change="(v) => fieldChange(v, field)"
                         />
+                        <TagiProduktowInput
+                          v-else-if="czyPoleTagow(field)"
+                          :field="field"
+                          :value="doc[field.fieldname]"
+                          :doctype="doctype"
+                          @change="(v) => fieldChange(v, field)"
+                        />
                         <FormControl
                           v-else
                           class="form-control"
@@ -418,10 +426,12 @@ import FadedScrollableDiv from '@/components/FadedScrollableDiv.vue'
 import ArrowUpRightIcon from '@/components/Icons/ArrowUpRightIcon.vue'
 import EditIcon from '@/components/Icons/EditIcon.vue'
 import Link from '@/components/Controls/Link.vue'
+import TagiProduktowInput from '@/components/Controls/TagiProduktowInput.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import SidePanelModal from '@/components/Modals/SidePanelModal.vue'
 import { getMeta } from '@/stores/meta'
 import { parseLinkFilters } from '@/utils/fieldTransforms'
+import { czyPoleTagow } from '@/utils/tagiProduktow'
 import { usersStore } from '@/stores/users'
 import { isMobileView } from '@/composables/settings'
 import {

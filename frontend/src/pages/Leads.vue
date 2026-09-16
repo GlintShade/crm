@@ -303,6 +303,7 @@ import { useBroadcast } from '@/composables/useBroadcast'
 import { formatDate, timeAgo, website, formatTime } from '@/utils'
 import { timestampCell } from '@/composables/useTimelinePreferences'
 import { zasadyDotacjiBadge } from '@/utils/zasadyDotacji'
+import { rozbijTagi } from '@/utils/tagiProduktow'
 import { useOnboarding, useTelemetry } from 'frappe-ui/frappe'
 import { Avatar, Tooltip, Dropdown } from 'frappe-ui'
 import { useRoute } from 'vue-router'
@@ -480,6 +481,11 @@ function parseRows(rows, columns = []) {
           label: lead.status,
           color: getLeadStatus(lead.status)?.color,
         }
+      } else if (row === 'custom_posiadane_produkty' || row === 'custom_produkt_procesu') {
+        // ops#150: pole "produktow leada" jako tagi -- lista renderuje
+        // chipy (LeadsListView.vue), wiec parseRows dostarcza tablice
+        // tokenow zamiast surowego stringa "PV+PC" (patrz utils/tagiProduktow.js).
+        _rows[row] = rozbijTagi(lead[row])
       } else if (row == 'custom_zasady_dotacji') {
         // Wspólne mapowanie z utils/zasadyDotacji.js (patrz też dymek mapy
         // i "Szybki podgląd", jeśli kiedyś zaczną pokazywać to pole -- na

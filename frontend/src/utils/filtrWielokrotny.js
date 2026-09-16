@@ -17,6 +17,8 @@
 // etapFiltr.js / etykietaMoje.js: eager chunk wywołuje moduł przed
 // zainicjowaniem i18n), testowalne bezpośrednio przez vitest.
 
+import { czyPoleTagow } from './tagiProduktow'
+
 /**
  * Normalizuje wartość filtra in/not in do tablicy niepustych stringów.
  * Przyjmuje zarówno tablicę (kształt zapisany przez transformIn / wczytany
@@ -76,11 +78,19 @@ export function scalOpcjeZZaznaczonymi(opcje, zaznaczoneWartosci) {
  * Frappe-free: przyjmuje `field` w kształcie `{ fieldtype, options }` (ten
  * sam kształt, co `f.field` w Filter.vue), żadnej zależności od Vue ani
  * komponentów.
+ *
+ * Issue ops#150: pole "produktów leada" (tagów, `czyPoleTagow` w
+ * `utils/tagiProduktow.js`) dostaje TĘ SAMĄ kontrolkę wielokrotnego wyboru
+ * mimo `fieldtype === 'Data'`, nie 'Select' -- model A+ z briefu ops#150
+ * celowo nie zmienia typu pola, więc rozpoznanie idzie przez osobną flagę
+ * (`field.volteo_tagi`, dołożoną przez `crm.api.doc.get_filterable_fields`/
+ * `get_quick_filters`) zamiast przez fieldtype.
  */
 export function czyWielokrotnyWybor(field, operator) {
   if (!field) return false
   if (!['in', 'not in'].includes(operator)) return false
   if (field.fieldtype === 'Select') return true
   if (field.fieldtype === 'Link' && field.options !== 'User') return true
+  if (czyPoleTagow(field)) return true
   return false
 }

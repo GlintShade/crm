@@ -106,7 +106,20 @@
         <span class="w-2/5 shrink-0 truncate text-ink-gray-5">{{
           wiersz.label
         }}</span>
-        <span class="min-w-0 flex-1 truncate text-ink-gray-8">{{
+        <span
+          v-if="wiersz.tokeny"
+          class="flex min-w-0 flex-1 flex-wrap items-center gap-1"
+        >
+          <Badge
+            v-for="token in wiersz.tokeny"
+            :key="token"
+            variant="subtle"
+            theme="gray"
+            size="sm"
+            :label="token"
+          />
+        </span>
+        <span v-else class="min-w-0 flex-1 truncate text-ink-gray-8">{{
           wiersz.value
         }}</span>
       </div>
@@ -176,6 +189,7 @@ import { globalStore } from '@/stores/global'
 import { usersStore } from '@/stores/users'
 import { statusesStore } from '@/stores/statuses'
 import { callEnabled } from '@/composables/telephony'
+import { rozbijTagi } from '@/utils/tagiProduktow'
 import { isTranslatable } from '@/utils'
 import router from '@/router'
 import { Button, Dropdown, createResource } from 'frappe-ui'
@@ -310,16 +324,21 @@ function onCommentAdded({ count }) {
 
 // --- Dymek: skrot zrodla/produktow/statusu zrodla (te same pola co dymek pinezki) ---
 
+// Trzeci element (opcjonalny, `true`) oznacza wiersz "produktów leada"
+// (ops#150) -- renderowany jako chipy (`wiersz.tokeny`), nie surowy
+// string, patrz szablon wyżej.
 const dymek = computed(() => {
   const wiersze = [
     [__('Źródło'), props.lead.custom_import_source],
-    [__('Obecne produkty'), props.lead.custom_posiadane_produkty],
-    [__('Produkt w procesie'), props.lead.custom_produkt_procesu],
+    [__('Obecne produkty'), props.lead.custom_posiadane_produkty, true],
+    [__('Produkt w procesie'), props.lead.custom_produkt_procesu, true],
     [__('Status źródła'), props.lead.custom_status_zrodla],
   ]
   return wiersze
     .filter(([, value]) => Boolean(value))
-    .map(([label, value]) => ({ label, value }))
+    .map(([label, value, tagi]) =>
+      tagi ? { label, value, tokeny: rozbijTagi(value) } : { label, value },
+    )
 })
 
 // --- Esc zamyka panel (ale nie gdy otwarty jest jakis Dialog) --------------

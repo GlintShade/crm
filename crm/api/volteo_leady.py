@@ -118,7 +118,14 @@ import frappe
 from frappe import _
 from frappe.utils import cint
 
-from crm.api.doc import _podstaw_dzis, _podstaw_me, _sprawdz_filtry, convert_filter_to_tuple, rozwin_grupy
+from crm.api.doc import (
+	_podstaw_dzis,
+	_podstaw_me,
+	_rozwin_filtry_tagow,
+	_sprawdz_filtry,
+	convert_filter_to_tuple,
+	rozwin_grupy,
+)
 from crm.permissions.org_hierarchy import BYPASS_ROLES, _ma_linie_leady, czy_autor_ma_role_cc
 from crm.volteo_aktywnosc import maskuj_autora_cc, tekst_sladu, zapisz_slad
 
@@ -568,6 +575,13 @@ def mapa(
 	filters = {**filters, **default_filters}
 
 	filters = rozwin_grupy("CRM Lead", filters)
+
+	# VOLTEO (issue ops#150): rozwiniecie filtrow po polach "produktow
+	# leada" (custom_posiadane_produkty/custom_produkt_procesu) na
+	# "name in [...]" -- w tym samym miejscu co get_data (crm.api.doc), PO
+	# rozwin_grupy, PRZED _sprawdz_filtry, zeby mapa i lista dzielily
+	# identyczna semantyke filtrow tagow.
+	filters = _rozwin_filtry_tagow("CRM Lead", filters)
 
 	_sprawdz_filtry("CRM Lead", filters)
 

@@ -337,6 +337,7 @@ import {
   czyWielokrotnyWybor,
   parsujWartoscWielokrotna,
 } from '@/utils/filtrWielokrotny'
+import { czyPoleTagow } from '@/utils/tagiProduktow'
 import {
   MAX_GRUP,
   MAX_WARUNKOW_W_GRUPIE,
@@ -669,12 +670,21 @@ function getValueControl(f) {
       modelValue: f.value,
       'onUpdate:modelValue': (v) => updateValue(v, f),
     })
-  } else if (czyWielokrotnyWybor(f.field, operator) && typeSelect.includes(fieldtype)) {
+  } else if (
+    czyWielokrotnyWybor(f.field, operator) &&
+    (typeSelect.includes(fieldtype) || czyPoleTagow(f.field))
+  ) {
     // Issue #103: "jest jednym z" / "nie jest jednym z" na polu Select:
     // wielokrotny wybór z opcji pola (tych samych, co przy operatorze
     // równości), zamiast pola tekstowego z wartościami po przecinku.
     // Serializacja bez zmian: modelValue MultiSelect to tablica stringów,
     // dokładnie ten kształt, jakiego oczekuje transformIn/parseFilters.
+    //
+    // Issue ops#150: pole "produktów leada" (tagów) dostaje TĘ SAMĄ
+    // kontrolkę mimo `fieldtype === 'Data'` -- `field.options` niesie
+    // słownik tokenów złączony "\n" dokładnie jak dla Select (dołożony
+    // przez `crm.api.doc.get_filterable_fields`, patrz `_dolacz_tagi_lead`),
+    // więc `getSelectOptions(options)` działa bez zmian.
     return h(MultiSelect, {
       options: getSelectOptions(options).map((o) => ({ label: o, value: o })),
       modelValue: parsujWartoscWielokrotna(f.value),

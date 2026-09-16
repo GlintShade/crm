@@ -120,4 +120,30 @@ describe('czyWielokrotnyWybor', () => {
     expect(czyWielokrotnyWybor(null, 'in')).toBe(false)
     expect(czyWielokrotnyWybor(undefined, 'in')).toBe(false)
   })
+
+  it('ops#150: pole tagów (Data + volteo_tagi) + in/not in → true', () => {
+    const field = {
+      fieldtype: 'Data',
+      fieldname: 'custom_posiadane_produkty',
+      options: 'PV\nME\nPC',
+      volteo_tagi: 1,
+    }
+    expect(czyWielokrotnyWybor(field, 'in')).toBe(true)
+    expect(czyWielokrotnyWybor(field, 'not in')).toBe(true)
+  })
+
+  it('ops#150: pole tagów rozpoznane po fieldname nawet bez volteo_tagi (fallback panelu bocznego) → true', () => {
+    expect(
+      czyWielokrotnyWybor({ fieldtype: 'Data', fieldname: 'custom_produkt_procesu' }, 'in'),
+    ).toBe(true)
+  })
+
+  it('ops#150: pole tagów na inny operator → false, zostaje bez zmian', () => {
+    const field = {
+      fieldtype: 'Data',
+      fieldname: 'custom_posiadane_produkty',
+      volteo_tagi: 1,
+    }
+    expect(czyWielokrotnyWybor(field, 'equals')).toBe(false)
+  })
 })
