@@ -48,6 +48,7 @@ from crm.api.umowa import _dane_kontaktu, _podstawowy_kontakt, _sprawdz_dostep_d
 from crm.integrations.autenti import logika as autenti_logika
 from crm.permissions.file_nazwy_systemowe import plik_systemowy
 from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad
+from crm.volteo_kredyt import ETYKIETY_POL as _ETYKIETY_POL
 from crm.volteo_kredyt import GRUPY_DOCHODU, brakujace_pola, kwota_poprawna
 from crm.volteo_kredyt_pdf import zbuduj_kontekst_kredytu
 from crm.volteo_kredyt_render import sciezka_szablonu_kredytu, zloz_kredyt
@@ -181,66 +182,16 @@ sprawdzenia cyfry-only (`_pole_kwotowe_poprawne` niżej) — dziesiętne „2.5
 osoby” nie ma sensu, mimo że jako kwota parsowałoby się poprawnie.
 """
 
-_ETYKIETY_POL: dict[str, str] = {
-	"miejsce_urodzenia": "Miejsce urodzenia",
-	"rodzaj_dokumentu": "Rodzaj dokumentu tożsamości",
-	"seria_numer_dokumentu": "Seria i numer dokumentu tożsamości",
-	"data_wydania_dokumentu": "Data wydania dokumentu",
-	"data_waznosci_dokumentu": "Data ważności dokumentu",
-	"adres_zameldowania_taki_sam": "Adres zameldowania (taki sam jak zamieszkania)",
-	"adres_zameldowania": "Adres zameldowania",
-	"adres_korespondencji_taki_sam": "Adres korespondencyjny (taki sam jak zamieszkania)",
-	"adres_korespondencji": "Adres korespondencyjny",
-	"wyksztalcenie": "Wykształcenie",
-	"stan_cywilny": "Stan cywilny",
-	"liczba_osob_na_utrzymaniu": "Liczba osób na utrzymaniu",
-	"kwota_800_plus": "Kwota świadczenia 800+",
-	"dochod_wspolmalzonka": "Dochód współmałżonka",
-	"zrodlo_dochodu_malzonka": "Źródło dochodu współmałżonka",
-	"oplaty_miesieczne": "Miesięczne opłaty stałe",
-	"suma_zobowiazan": "Suma zobowiązań kredytowych",
-	"numer_rachunku": "Numer rachunku bankowego",
-	"praca_wlaczone": "Zatrudnienie na umowę o pracę",
-	"praca_forma": "Forma zatrudnienia",
-	"praca_data_zatrudnienia": "Data zatrudnienia",
-	"praca_okres": "Rodzaj umowy o pracę (okres)",
-	"praca_okres_od": "Okres zatrudnienia — od",
-	"praca_okres_do": "Okres zatrudnienia — do",
-	"praca_nip": "NIP zakładu pracy",
-	"praca_nazwa_zakladu": "Nazwa zakładu pracy",
-	"praca_adres_telefon": "Adres i telefon zakładu pracy",
-	"praca_kwota_dochodu": "Kwota dochodu z pracy",
-	"emerytura_wlaczone": "Dochód z emerytury",
-	"emerytura_numer_swiadczenia": "Numer świadczenia emerytalnego",
-	"emerytura_od_kiedy": "Emerytura — od kiedy",
-	"emerytura_kwota_dochodu": "Kwota emerytury",
-	"renta_wlaczone": "Dochód z renty",
-	"renta_numer_swiadczenia": "Numer świadczenia rentowego",
-	"renta_od_kiedy": "Renta — od kiedy",
-	"renta_kwota_dochodu": "Kwota renty",
-	"dzialalnosc_wlaczone": "Dochód z działalności gospodarczej",
-	"dzialalnosc_forma_opodatkowania": "Forma opodatkowania działalności",
-	"dzialalnosc_forma_inna": "Inna forma opodatkowania (opis)",
-	"dzialalnosc_nip": "NIP działalności",
-	"dzialalnosc_nazwa": "Nazwa działalności",
-	"dzialalnosc_adres": "Adres firmy",
-	"dzialalnosc_telefon": "Numer telefonu do firmy",
-	"dzialalnosc_od_kiedy": "Działalność — od kiedy",
-	"dzialalnosc_kwota_dochodu": "Kwota dochodu z działalności",
-	"gospodarstwo_wlaczone": "Dochód z gospodarstwa rolnego",
-	"gospodarstwo_nip": "NIP gospodarstwa",
-	"gospodarstwo_od_kiedy": "Gospodarstwo — od kiedy",
-	"gospodarstwo_kwota_dochodu": "Kwota dochodu z gospodarstwa",
-	"inne_wlaczone": "Inne źródło dochodu",
-	"inne_1_typ": "Inne źródło dochodu 1 — typ",
-	"inne_1_kwota": "Inne źródło dochodu 1 — kwota",
-	"inne_2_typ": "Inne źródło dochodu 2 — typ",
-	"inne_2_kwota": "Inne źródło dochodu 2 — kwota",
-}
-"""Etykiety PL dla WSZYSTKICH pól `_DANE_POLA_DOZWOLONE` — nadzbiór tego, co
-`crm.volteo_kredyt.brakujace_pola` może kiedykolwiek zwrócić, żeby komunikat
-blokujący PDF (`volteo_kredyt_pdf`) zawsze miał czytelną nazwę pola, nawet gdy
-zbiór pól wymaganych przez rdzeń się zmieni."""
+# `_ETYKIETY_POL` (import u góry pliku, `crm.volteo_kredyt.ETYKIETY_POL`) to
+# JEDYNY kanon etykiet PL dla WSZYSTKICH pól `_DANE_POLA_DOZWOLONE`: nadzbiór
+# tego, co `crm.volteo_kredyt.brakujace_pola` może kiedykolwiek zwrócić, żeby
+# komunikat blokujący PDF (`volteo_kredyt_pdf`) zawsze miał czytelną nazwę
+# pola, nawet gdy zbiór pól wymaganych przez rdzeń się zmieni. Ten moduł go
+# nie definiuje: przepisywanie etykiet lokalnie tutaj (osobno od Desku i
+# frontendu) było źródłem ops#148 (K5/K6/K17). Etykiety różniły się między
+# frontem, tym plikiem, doctype'em i papierowym szablonem PDF-u. Zmiana
+# etykiety idzie WYŁĄCZNIE do `crm/volteo_kredyt.py::ETYKIETY_POL` (i do jego
+# odpowiednika po stronie JS, `frontend/src/utils/kredytForm.js`), nigdy tu.
 
 _PREFILL_ETYKIETY: dict[str, str] = {
 	"pesel": "PESEL",

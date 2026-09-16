@@ -263,6 +263,7 @@
             <div
               v-for="f in visibleFields(sec.fields)"
               :key="f.fieldname"
+              :title="etykietaPelna(f.fieldname)"
               :class="[
                 'rounded',
                 missingSet.has(f.fieldname) ? 'ring-1 ring-outline-red-3' : '',
@@ -310,6 +311,7 @@
             <div
               v-for="f in visibleFields(grupaPola[grupa.key])"
               :key="f.fieldname"
+              :title="etykietaPelna(f.fieldname)"
               :class="['rounded', missingSet.has(f.fieldname) ? 'ring-1 ring-outline-red-3' : '']"
             >
               <FormControl
@@ -354,6 +356,8 @@ import {
   widocznePola,
   brakujacePola,
   brakujaceDaneKlienta,
+  ETYKIETY_POL,
+  etykietaPelna,
 } from '@/utils/kredytForm'
 
 const props = defineProps({
@@ -364,27 +368,37 @@ const props = defineProps({
 // Same Vue 3 trap as UmowaTab: `v-if` + `v-for` on one node is evaluated
 // before the loop variable exists, so filtering happens in script
 // (visibleFields()) and the template stays a bare `v-for`.
+// Every field `label` below reads from ETYKIETY_POL (kredytForm.js): the
+// single canon shared with crm/volteo_kredyt.py's ETYKIETY_POL and the
+// backend's PDF-blocking message (ops#148: the literal strings this file
+// used to carry inline had drifted from both the doctype and the backend).
+// Only the field-grid STRUCTURE (grouping, order, type, options,
+// placeholder) still lives here; wording never does.
 const formSections = [
   {
     key: 'podstawowe',
     label: __('Dane podstawowe'),
     fields: [
-      { fieldname: 'miejsce_urodzenia', label: __('Miejsce urodzenia'), type: 'text' },
+      { fieldname: 'miejsce_urodzenia', label: __(ETYKIETY_POL.miejsce_urodzenia), type: 'text' },
       {
         fieldname: 'rodzaj_dokumentu',
-        label: __('Rodzaj dokumentu'),
+        label: __(ETYKIETY_POL.rodzaj_dokumentu),
         type: 'select',
         options: RODZAJ_DOKUMENTU_OPCJE,
       },
       {
         fieldname: 'seria_numer_dokumentu',
-        label: __('Seria i numer dokumentu tożsamości'),
+        label: __(ETYKIETY_POL.seria_numer_dokumentu),
         type: 'text',
       },
-      { fieldname: 'data_wydania_dokumentu', label: __('Data wydania dokumentu'), type: 'date' },
+      {
+        fieldname: 'data_wydania_dokumentu',
+        label: __(ETYKIETY_POL.data_wydania_dokumentu),
+        type: 'date',
+      },
       {
         fieldname: 'data_waznosci_dokumentu',
-        label: __('Data ważności dokumentu'),
+        label: __(ETYKIETY_POL.data_waznosci_dokumentu),
         type: 'date',
       },
     ],
@@ -395,24 +409,24 @@ const formSections = [
     fields: [
       {
         fieldname: 'adres_zameldowania_taki_sam',
-        label: __('Czy adres zamieszkania jest taki sam, jak adres zameldowania?'),
+        label: __(ETYKIETY_POL.adres_zameldowania_taki_sam),
         type: 'select',
         options: TAK_NIE_OPCJE,
       },
       {
         fieldname: 'adres_zameldowania',
-        label: __('Adres zameldowania'),
+        label: __(ETYKIETY_POL.adres_zameldowania),
         type: 'text',
       },
       {
         fieldname: 'adres_korespondencji_taki_sam',
-        label: __('Czy adres do korespondencji jest taki sam, jak adres zameldowania?'),
+        label: __(ETYKIETY_POL.adres_korespondencji_taki_sam),
         type: 'select',
         options: TAK_NIE_OPCJE,
       },
       {
         fieldname: 'adres_korespondencji',
-        label: __('Adres do korespondencji'),
+        label: __(ETYKIETY_POL.adres_korespondencji),
         type: 'text',
       },
     ],
@@ -423,58 +437,63 @@ const formSections = [
     fields: [
       {
         fieldname: 'wyksztalcenie',
-        label: __('Wykształcenie'),
+        label: __(ETYKIETY_POL.wyksztalcenie),
         type: 'select',
         options: WYKSZTALCENIE_OPCJE,
       },
       {
         fieldname: 'stan_cywilny',
-        label: __('Stan cywilny'),
+        label: __(ETYKIETY_POL.stan_cywilny),
         type: 'select',
         options: STAN_CYWILNY_OPCJE,
       },
       {
         fieldname: 'liczba_osob_na_utrzymaniu',
-        label: __('Liczba osób na utrzymaniu'),
+        label: __(ETYKIETY_POL.liczba_osob_na_utrzymaniu),
         type: 'text',
         inputmode: 'numeric',
       },
       {
         fieldname: 'kwota_800_plus',
-        label: __('Kwota 800+'),
+        label: __(ETYKIETY_POL.kwota_800_plus),
         type: 'text',
         inputmode: 'decimal',
         placeholder: '0,00',
       },
       {
         fieldname: 'dochod_wspolmalzonka',
-        label: __('Dochód współmałżonka'),
+        label: __(ETYKIETY_POL.dochod_wspolmalzonka),
         type: 'text',
         inputmode: 'decimal',
         placeholder: '0,00',
       },
       {
         fieldname: 'zrodlo_dochodu_malzonka',
-        label: __('Źródło dochodu małżonka'),
+        label: __(ETYKIETY_POL.zrodlo_dochodu_malzonka),
         type: 'text',
       },
       {
         fieldname: 'oplaty_miesieczne',
-        label: __('Opłaty miesięczne'),
+        label: __(ETYKIETY_POL.oplaty_miesieczne),
         type: 'text',
         inputmode: 'decimal',
         placeholder: '0,00',
       },
       {
+        // K6, ops#148: on-screen label is the shortened ETYKIETY_POL entry
+        // ("Suma miesięcznych zobowiązań"). The full canon
+        // ("...kredytowych i finansowych") lives in ETYKIETY_PELNE and
+        // surfaces via the field's title tooltip and the missing-fields
+        // banner (fieldLabelByName below), never truncated silently.
         fieldname: 'suma_zobowiazan',
-        label: __('Suma zobowiązań'),
+        label: __(ETYKIETY_POL.suma_zobowiazan),
         type: 'text',
         inputmode: 'decimal',
         placeholder: '0,00',
       },
       {
         fieldname: 'numer_rachunku',
-        label: __('Numer rachunku'),
+        label: __(ETYKIETY_POL.numer_rachunku),
         type: 'text',
         // Full-width — at the shared 1/3-column width the last digits of a
         // 26-digit IBAN-style account number were getting visually cut off
@@ -496,47 +515,57 @@ const formSections = [
 // through widocznePola() below (see that map's header comment for why).
 const grupaPola = {
   praca: [
-    { fieldname: 'praca_forma', label: __('Forma zatrudnienia'), type: 'select', options: PRACA_FORMA_OPCJE },
-    { fieldname: 'praca_data_zatrudnienia', label: __('Data zatrudnienia'), type: 'date' },
-    { fieldname: 'praca_okres', label: __('Okres zatrudnienia'), type: 'select', options: PRACA_OKRES_OPCJE },
+    {
+      fieldname: 'praca_forma',
+      label: __(ETYKIETY_POL.praca_forma),
+      type: 'select',
+      options: PRACA_FORMA_OPCJE,
+    },
+    { fieldname: 'praca_data_zatrudnienia', label: __(ETYKIETY_POL.praca_data_zatrudnienia), type: 'date' },
+    {
+      fieldname: 'praca_okres',
+      label: __(ETYKIETY_POL.praca_okres),
+      type: 'select',
+      options: PRACA_OKRES_OPCJE,
+    },
     {
       fieldname: 'praca_okres_od',
-      label: __('Okres zatrudnienia od'),
+      label: __(ETYKIETY_POL.praca_okres_od),
       type: 'date',
     },
     {
       fieldname: 'praca_okres_do',
-      label: __('Okres zatrudnienia do'),
+      label: __(ETYKIETY_POL.praca_okres_do),
       type: 'date',
     },
-    { fieldname: 'praca_nip', label: __('NIP zakładu pracy'), type: 'text' },
-    { fieldname: 'praca_nazwa_zakladu', label: __('Nazwa zakładu pracy'), type: 'text' },
-    { fieldname: 'praca_adres_telefon', label: __('Adres i telefon zakładu pracy'), type: 'text' },
+    { fieldname: 'praca_nip', label: __(ETYKIETY_POL.praca_nip), type: 'text' },
+    { fieldname: 'praca_nazwa_zakladu', label: __(ETYKIETY_POL.praca_nazwa_zakladu), type: 'text' },
+    { fieldname: 'praca_adres_telefon', label: __(ETYKIETY_POL.praca_adres_telefon), type: 'text' },
     {
       fieldname: 'praca_kwota_dochodu',
-      label: __('Kwota dochodu'),
+      label: __(ETYKIETY_POL.praca_kwota_dochodu),
       type: 'text',
       inputmode: 'decimal',
       placeholder: '0,00',
     },
   ],
   emerytura: [
-    { fieldname: 'emerytura_numer_swiadczenia', label: __('Numer świadczenia'), type: 'text' },
-    { fieldname: 'emerytura_od_kiedy', label: __('Od kiedy pobierane'), type: 'date' },
+    { fieldname: 'emerytura_numer_swiadczenia', label: __(ETYKIETY_POL.emerytura_numer_swiadczenia), type: 'text' },
+    { fieldname: 'emerytura_od_kiedy', label: __(ETYKIETY_POL.emerytura_od_kiedy), type: 'date' },
     {
       fieldname: 'emerytura_kwota_dochodu',
-      label: __('Kwota dochodu'),
+      label: __(ETYKIETY_POL.emerytura_kwota_dochodu),
       type: 'text',
       inputmode: 'decimal',
       placeholder: '0,00',
     },
   ],
   renta: [
-    { fieldname: 'renta_numer_swiadczenia', label: __('Numer świadczenia'), type: 'text' },
-    { fieldname: 'renta_od_kiedy', label: __('Od kiedy pobierane'), type: 'date' },
+    { fieldname: 'renta_numer_swiadczenia', label: __(ETYKIETY_POL.renta_numer_swiadczenia), type: 'text' },
+    { fieldname: 'renta_od_kiedy', label: __(ETYKIETY_POL.renta_od_kiedy), type: 'date' },
     {
       fieldname: 'renta_kwota_dochodu',
-      label: __('Kwota dochodu'),
+      label: __(ETYKIETY_POL.renta_kwota_dochodu),
       type: 'text',
       inputmode: 'decimal',
       placeholder: '0,00',
@@ -545,52 +574,52 @@ const grupaPola = {
   dzialalnosc: [
     {
       fieldname: 'dzialalnosc_forma_opodatkowania',
-      label: __('Forma opodatkowania'),
+      label: __(ETYKIETY_POL.dzialalnosc_forma_opodatkowania),
       type: 'select',
       options: DZIALALNOSC_FORMA_OPCJE,
     },
     {
       fieldname: 'dzialalnosc_forma_inna',
-      label: __('Inna forma opodatkowania — jaka?'),
+      label: __(ETYKIETY_POL.dzialalnosc_forma_inna),
       type: 'text',
     },
-    { fieldname: 'dzialalnosc_nip', label: __('NIP'), type: 'text' },
-    { fieldname: 'dzialalnosc_nazwa', label: __('Nazwa działalności'), type: 'text' },
-    { fieldname: 'dzialalnosc_adres', label: __('Adres firmy'), type: 'text' },
-    { fieldname: 'dzialalnosc_telefon', label: __('Numer telefonu do firmy'), type: 'text' },
-    { fieldname: 'dzialalnosc_od_kiedy', label: __('Od kiedy prowadzona'), type: 'date' },
+    { fieldname: 'dzialalnosc_nip', label: __(ETYKIETY_POL.dzialalnosc_nip), type: 'text' },
+    { fieldname: 'dzialalnosc_nazwa', label: __(ETYKIETY_POL.dzialalnosc_nazwa), type: 'text' },
+    { fieldname: 'dzialalnosc_adres', label: __(ETYKIETY_POL.dzialalnosc_adres), type: 'text' },
+    { fieldname: 'dzialalnosc_telefon', label: __(ETYKIETY_POL.dzialalnosc_telefon), type: 'text' },
+    { fieldname: 'dzialalnosc_od_kiedy', label: __(ETYKIETY_POL.dzialalnosc_od_kiedy), type: 'date' },
     {
       fieldname: 'dzialalnosc_kwota_dochodu',
-      label: __('Kwota dochodu'),
+      label: __(ETYKIETY_POL.dzialalnosc_kwota_dochodu),
       type: 'text',
       inputmode: 'decimal',
       placeholder: '0,00',
     },
   ],
   gospodarstwo: [
-    { fieldname: 'gospodarstwo_nip', label: __('NIP gospodarstwa'), type: 'text' },
-    { fieldname: 'gospodarstwo_od_kiedy', label: __('Od kiedy prowadzone'), type: 'date' },
+    { fieldname: 'gospodarstwo_nip', label: __(ETYKIETY_POL.gospodarstwo_nip), type: 'text' },
+    { fieldname: 'gospodarstwo_od_kiedy', label: __(ETYKIETY_POL.gospodarstwo_od_kiedy), type: 'date' },
     {
       fieldname: 'gospodarstwo_kwota_dochodu',
-      label: __('Kwota dochodu'),
+      label: __(ETYKIETY_POL.gospodarstwo_kwota_dochodu),
       type: 'text',
       inputmode: 'decimal',
       placeholder: '0,00',
     },
   ],
   inne: [
-    { fieldname: 'inne_1_typ', label: __('Inne źródło 1 — typ'), type: 'text' },
+    { fieldname: 'inne_1_typ', label: __(ETYKIETY_POL.inne_1_typ), type: 'text' },
     {
       fieldname: 'inne_1_kwota',
-      label: __('Inne źródło 1 — kwota'),
+      label: __(ETYKIETY_POL.inne_1_kwota),
       type: 'text',
       inputmode: 'decimal',
       placeholder: '0,00',
     },
-    { fieldname: 'inne_2_typ', label: __('Inne źródło 2 — typ'), type: 'text' },
+    { fieldname: 'inne_2_typ', label: __(ETYKIETY_POL.inne_2_typ), type: 'text' },
     {
       fieldname: 'inne_2_kwota',
-      label: __('Inne źródło 2 — kwota'),
+      label: __(ETYKIETY_POL.inne_2_kwota),
       type: 'text',
       inputmode: 'decimal',
       placeholder: '0,00',
@@ -598,12 +627,17 @@ const grupaPola = {
   ],
 }
 
-// Polish labels for the missing-fields banner — combines both static
+// Full-canon labels for the missing-fields banner: combines both static
 // section fields and every income-group field so any fieldname the server
-// reports in brakujace_pola resolves to a readable label.
+// reports in brakujace_pola resolves to a readable label. Deliberately
+// reads etykietaPelna(fieldname), NOT f.label: a field whose on-screen
+// label is shortened (today only suma_zobowiazan, K6/ops#148) must still
+// show its FULL canon in the banner, never the truncated screen version.
 const fieldLabelByName = new Map([
-  ...formSections.flatMap((s) => s.fields.map((f) => [f.fieldname, f.label])),
-  ...Object.values(grupaPola).flatMap((fields) => fields.map((f) => [f.fieldname, f.label])),
+  ...formSections.flatMap((s) => s.fields.map((f) => [f.fieldname, etykietaPelna(f.fieldname)])),
+  ...Object.values(grupaPola).flatMap((fields) =>
+    fields.map((f) => [f.fieldname, etykietaPelna(f.fieldname)]),
+  ),
 ])
 
 // Thin wrapper around kredytForm.js's widocznePola(): field visibility
