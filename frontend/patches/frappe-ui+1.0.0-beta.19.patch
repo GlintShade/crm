@@ -82,7 +82,7 @@ index 0ec591f..09c2486 100644
                :max="computedMaxTime"
                @change="onTimeChange"
 diff --git a/node_modules/frappe-ui/src/components/DatePicker/utils.ts b/node_modules/frappe-ui/src/components/DatePicker/utils.ts
-index 7d1ae5d..8d76285 100644
+index 7d1ae5d..3bef72f 100644
 --- a/node_modules/frappe-ui/src/components/DatePicker/utils.ts
 +++ b/node_modules/frappe-ui/src/components/DatePicker/utils.ts
 @@ -3,19 +3,21 @@ import type { Dayjs } from 'dayjs/esm'
@@ -118,24 +118,22 @@ index 7d1ae5d..8d76285 100644
  ]
  
  // Start of given month (0-indexed month)
-@@ -48,7 +50,16 @@ export function generateWeeks(
-     d = d.add(1, 'day')
-   }
-   const chunked: DateObj[][] = []
--  for (let i = 0; i < days.length; i += 7) chunked.push(days.slice(i, i + 7))
-+  for (let i = 0; i < days.length; i += 7) {
-+    const week = days.slice(i, i + 7)
-+    // VOLTEO PATCH (issue #134): each week here comes out Sunday-first
-+    // (index 0 = Sunday, since `start` above is dayjs' locale-independent,
-+    // always-Sunday `startOf('week')`). Rotate the leading Sunday to the end
-+    // so the grid reads Monday-first instead (owner decision 2026-09-16).
-+    // CalendarPanel.vue's WEEKDAYS header and its Home/End keyboard
-+    // handlers are patched to match this same column order.
-+    chunked.push([...week.slice(1), week[0]])
-+  }
-   return chunked
- }
- 
+@@ -32,7 +34,14 @@ export function generateWeeks(
+   // Always emit 6 rows × 7 days so the calendar height stays constant — both
+   // across months in a single pane (no jiggle when navigating) and between
+   // panes in dual-pane mode (where one month may span 5 weeks and the other 6).
+-  const start = monthStart(year, monthIndex).startOf('week')
++  // VOLTEO PATCH (issue #134): week starts on Monday (owner decision
++  // 2026-09-16), not the Sunday that dayjs' locale-independent
++  // startOf('week') always returns. first.day() is 0 (Sun) through 6
++  // (Sat); (day() + 6) % 7 is how many days to step back to reach that
++  // week's Monday. CalendarPanel.vue's WEEKDAYS header and its Home/End
++  // keyboard handlers are patched to match this same Monday-first order.
++  const first = monthStart(year, monthIndex)
++  const start = first.subtract((first.day() + 6) % 7, 'day')
+   const days: DateObj[] = []
+   let d: Dayjs = start
+   const sel = dayjs(selected)
 diff --git a/node_modules/frappe-ui/src/components/ListView/ListSelectBanner.vue b/node_modules/frappe-ui/src/components/ListView/ListSelectBanner.vue
 index 846acc0..38b36b4 100644
 --- a/node_modules/frappe-ui/src/components/ListView/ListSelectBanner.vue
