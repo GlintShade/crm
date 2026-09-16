@@ -614,14 +614,28 @@ def _autenti_send_job(deal: str, wysylajacy: str | None = None, rodzaj: str = "u
 	try:
 		client = AutentiClient()
 
-		# F1 (ops#143): ponowna wysyłka rekordu w lokalnym stanie „Błąd” z zachowanym
-		# `autenti_document_id` NIE tworzy ślepo drugi proces dokumentu: najpierw
-		# sprawdza, czy poprzedni proces da się odzyskać (patrz docstring
-		# `_sprobuj_odzyskac_wyslany_proces`). Umyślnie PRZED każdym innym
-		# przygotowaniem (PDF, kontakt, ustawienia): odzyskanie nie potrzebuje
-		# żadnego z nich, więc sprawdzamy to najpierw i najtaniej.
+		# F1 (ops#143): ponowna wysyłka rekordu z zachowanym `autenti_document_id`
+		# NIE tworzy ślepo drugi proces dokumentu: najpierw sprawdza, czy poprzedni
+		# proces da się odzyskać (patrz docstring `_sprobuj_odzyskac_wyslany_proces`).
+		# Umyślnie PRZED każdym innym przygotowaniem (PDF, kontakt, ustawienia):
+		# odzyskanie nie potrzebuje żadnego z nich, więc sprawdzamy to najpierw i
+		# najtaniej.
+		#
+		# Bramka jest WYŁĄCZNIE na `istniejacy_doc_id`, celowo BEZ sprawdzania
+		# `dokument.get("autenti_status") == "Błąd"`: `_wyslij_dokument` ustawia
+		# status na „Wysyłanie” i commituje SYNCHRONICZNIE, PRZED `frappe.enqueue`
+		# (patrz jej docstring) -- ten job zawsze widzi w bazie „Wysyłanie”, nigdy
+		# „Błąd”, więc warunek na status byłby tu zawsze fałszywy i cała gałąź
+		# odzyskania byłaby martwa (znaleziono w QA ops#143, druga runda).
+		# `autenti_document_id` sam w sobie jest wystarczającym sygnałem: pojawia
+		# się w rekordzie dopiero po poprzedniej próbie (pierwsza wysyłka go nie
+		# ma), a `logika.mozna_wyslac` w `_wyslij_dokument` już przepuściło tylko
+		# stany, dla których ponowna wysyłka jest w ogóle legalna (Błąd, Odrzucona,
+		# Wygasła, Wycofana, brak wysyłki) -- dla terminalnych nie-sukcesów
+		# `get_status` zwróci REJECTED/EXPIRED/WITHDRAWN i `decyzja_ponownej_wysylki`
+		# i tak da nowy proces, dla PROCESSING/COMPLETED odzyska istniejący.
 		istniejacy_doc_id = dokument.get("autenti_document_id")
-		if dokument.get("autenti_status") == "Błąd" and istniejacy_doc_id:
+		if istniejacy_doc_id:
 			try:
 				odzyskano = _sprobuj_odzyskac_wyslany_proces(
 					client, deal, deal, konfig, istniejacy_doc_id, wysylajacy
@@ -1039,7 +1053,11 @@ def _ponow_pobranie_podpisanych_plikow(konfig: dict[str, Any]) -> None:
 	"""
 	wiersze = frappe.get_all(
 		konfig["doctype"],
-		filters={"autenti_status": "Podpisana", "autenti_document_id": ["is", "set"], "signed_pdf_file": ""},
+		filters={
+			"autenti_status": "Podpisana",
+			"autenti_document_id": ["is", "set"],
+			"signed_pdf_file": ["is", "not set"],
+		},
 		fields=["name", "autenti_document_id"],
 	)
 	for wiersz in wiersze:
