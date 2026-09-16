@@ -25,6 +25,7 @@ z równoległym zapisem formularza przez przedstawiciela w przeglądarce.
 from typing import Any
 
 import frappe
+import requests
 from frappe import _
 from frappe.rate_limiter import rate_limit
 
@@ -438,6 +439,15 @@ def _wyslij_dokument(deal: str, konfig: dict[str, Any]) -> dict[str, Any]:
 
 	# `frappe.db.set_value` zamiast `doc.save()` — nie ryzykujemy ścigania się
 	# z równoległym zapisem formularza przez przedstawiciela w przeglądarce.
+	#
+	# `sent_at` jest stemplowane już TU, nie dopiero przy sukcesie (ops#143, F2):
+	# semantyka pola do tego momentu to "moment zakolejkowania wysyłki", nie
+	# "moment faktycznego wysłania": jeśli `_autenti_send_job` zakończy się
+	# sukcesem, `sent_at` zostanie NADPISANE prawdziwym momentem wysłania
+	# (patrz `_autenti_send_job`). Bez tego wczesnego znacznika poller nie miałby
+	# jak rozpoznać, że rekord utknął w „Wysyłanie” dłużej niż
+	# `logika.WYSYLANIE_TIMEOUT_MIN` minut (worker mógł zginąć bez wejścia w
+	# `except`, np. OOM albo restart kontenera).
 	frappe.db.set_value(
 		konfig["doctype"],
 		deal,
@@ -446,6 +456,7 @@ def _wyslij_dokument(deal: str, konfig: dict[str, Any]) -> dict[str, Any]:
 			"signer_name": podpisujacy["full_name"],
 			"signer_email": podpisujacy["email"],
 			"sent_by": wysylajacy,
+			"sent_at": frappe.utils.now(),
 			"error_message": None,
 		},
 		update_modified=False,
@@ -507,6 +518,70 @@ def autenti_send_kredyt(deal: str) -> dict[str, Any]:
 	return _wyslij_dokument(deal, KONFIG_KREDYT)
 
 
+def _zdalny_status_bezpiecznie(client: AutentiClient, doc_id: str) -> str | None:
+	"""Odpytuje `AutentiClient.get_status(doc_id)` i zwraca sam status, traktując
+	odpowiedź 404 (proces nie istnieje już po stronie Autenti) jako `None`, zamiast
+	pozwalać jej propagować jako wyjątek. Każdy inny błąd HTTP jest przepuszczany
+	dalej -- wołający nie ma jak bezpiecznie odróżnić "proces naprawdę nie
+	istnieje" od "chwilowa awaria API", więc tylko 404 jest tu interpretowane
+	jako sygnał, a nie usterka.
+	"""
+	try:
+		return client.get_status(doc_id).get("status")
+	except requests.HTTPError as exc:
+		response = exc.response
+		if response is not None and response.status_code == 404:
+			return None
+		raise
+
+
+def _sprobuj_odzyskac_wyslany_proces(
+	client: AutentiClient,
+	deal: str,
+	umowa_name: str,
+	konfig: dict[str, Any],
+	doc_id: str,
+	wysylajacy: str | None = None,
+) -> bool:
+	"""Sprawdza zdalny status procesu dokumentu `doc_id` i stosuje regułę decyzyjną
+	`logika.decyzja_ponownej_wysylki`: gdy zdalny proces idzie naprzód (PROCESSING)
+	albo już się zakończył (COMPLETED), NIE tworzy nowego procesu -- ustawia lokalnie
+	„Wysłana” (+ `sent_at`, `error_message=None`), zapisuje ślad i zwraca `True`,
+	zostawiając dokończenie (w tym ewentualne przejście do „Podpisana” i pobranie
+	podpisanego PDF-u) kolejnemu przebiegowi `poll_autenti_status`. W przeciwnym
+	razie (DRAFT, terminalny status nie-sukces, albo 404) zwraca `False` i NIE
+	dotyka żadnego stanu -- decyzję, co zrobić dalej (utworzyć nowy proces, albo
+	oznaczyć „Błąd”), podejmuje wołający.
+
+	Współdzielona między F1 (`_autenti_send_job`, ponowna wysyłka rekordu w stanie
+	„Błąd” z zachowanym `autenti_document_id`) i F2 (`poll_autenti_status`, rekord
+	utknięty w „Wysyłanie” dłużej niż `logika.WYSYLANIE_TIMEOUT_MIN`) -- ten sam
+	kontrakt API Autenti, ta sama reguła decyzyjna, jeden punkt prawdy (ops#143).
+
+	`deal` i `umowa_name` są zawsze tym samym stringiem (oba doctype'y są 1:1 z
+	`CRM Deal`) -- trzymane osobno dla parytetu z `_attach_signed_pdf` i resztą
+	tego modułu.
+
+	Może rzucić (błąd sieciowy inny niż 404 z `_zdalny_status_bezpiecznie`) --
+	wołający decyduje, jak zareagować na awarię samego sprawdzenia.
+	"""
+	zdalny_status = _zdalny_status_bezpiecznie(client, doc_id)
+	if logika.decyzja_ponownej_wysylki(zdalny_status) != logika.DECYZJA_ODZYSKAJ:
+		return False
+
+	frappe.db.set_value(
+		konfig["doctype"],
+		umowa_name,
+		{"autenti_status": "Wysłana", "sent_at": frappe.utils.now(), "error_message": None},
+		update_modified=False,
+	)
+	frappe.db.commit()
+	_slad_z_atrybucja(
+		deal, tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Wysłana"), wysylajacy
+	)
+	return True
+
+
 def _autenti_send_job(deal: str, wysylajacy: str | None = None, rodzaj: str = "umowa") -> None:
 	"""Zadanie w tle: pobiera zapisany PDF dokumentu `rodzaj` (NIGDY świeży render —
 	patrz docstring modułu) i wywołuje Autenti, żeby utworzyć proces dokumentu, dodać
@@ -537,6 +612,58 @@ def _autenti_send_job(deal: str, wysylajacy: str | None = None, rodzaj: str = "u
 		return
 
 	try:
+		client = AutentiClient()
+
+		# F1 (ops#143): ponowna wysyłka rekordu z zachowanym `autenti_document_id`
+		# NIE tworzy ślepo drugi proces dokumentu: najpierw sprawdza, czy poprzedni
+		# proces da się odzyskać (patrz docstring `_sprobuj_odzyskac_wyslany_proces`).
+		# Umyślnie PRZED każdym innym przygotowaniem (PDF, kontakt, ustawienia):
+		# odzyskanie nie potrzebuje żadnego z nich, więc sprawdzamy to najpierw i
+		# najtaniej.
+		#
+		# Bramka jest WYŁĄCZNIE na `istniejacy_doc_id`, celowo BEZ sprawdzania
+		# `dokument.get("autenti_status") == "Błąd"`: `_wyslij_dokument` ustawia
+		# status na „Wysyłanie” i commituje SYNCHRONICZNIE, PRZED `frappe.enqueue`
+		# (patrz jej docstring) -- ten job zawsze widzi w bazie „Wysyłanie”, nigdy
+		# „Błąd”, więc warunek na status byłby tu zawsze fałszywy i cała gałąź
+		# odzyskania byłaby martwa (znaleziono w QA ops#143, druga runda).
+		# `autenti_document_id` sam w sobie jest wystarczającym sygnałem: pojawia
+		# się w rekordzie dopiero po poprzedniej próbie (pierwsza wysyłka go nie
+		# ma), a `logika.mozna_wyslac` w `_wyslij_dokument` już przepuściło tylko
+		# stany, dla których ponowna wysyłka jest w ogóle legalna (Błąd, Odrzucona,
+		# Wygasła, Wycofana, brak wysyłki) -- dla terminalnych nie-sukcesów
+		# `get_status` zwróci REJECTED/EXPIRED/WITHDRAWN i `decyzja_ponownej_wysylki`
+		# i tak da nowy proces, dla PROCESSING/COMPLETED odzyska istniejący.
+		istniejacy_doc_id = dokument.get("autenti_document_id")
+		if istniejacy_doc_id:
+			try:
+				odzyskano = _sprobuj_odzyskac_wyslany_proces(
+					client, deal, deal, konfig, istniejacy_doc_id, wysylajacy
+				)
+			except Exception:
+				frappe.log_error(
+					title=f"Autenti: sprawdzenie poprzedniego procesu {konfig['doctype']} nie powiodło się",
+					message=f"Szansa: {deal}\nProces dokumentu: {istniejacy_doc_id}\n{frappe.get_traceback()}",
+				)
+				frappe.db.set_value(
+					konfig["doctype"],
+					deal,
+					{
+						"autenti_status": "Błąd",
+						"error_message": "Nie udało się sprawdzić stanu poprzedniej wysyłki w Autenti. Spróbuj ponownie.",
+					},
+					update_modified=False,
+				)
+				frappe.db.commit()
+				_slad_z_atrybucja(
+					deal, tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Błąd"), wysylajacy
+				)
+				return
+			if odzyskano:
+				return
+			# decyzja == nowy_proces: stary proces zostaje w Autenti nieszkodliwy
+			# (DRAFT albo terminalny nie-sukces), tworzymy nowy od zera poniżej.
+
 		plik = konfig["znajdz_pdf"](deal)
 		if plik is None:
 			frappe.db.set_value(
@@ -596,8 +723,21 @@ def _autenti_send_job(deal: str, wysylajacy: str | None = None, rodzaj: str = "u
 		signature_type = ustawienia.get("default_signature_type") or "BASIC"
 		tytul = konfig["tytul"](podpisujacy["full_name"])
 
-		client = AutentiClient()
 		doc_id = client.create_document_process(title=tytul)
+
+		# F1 pkt 1 (ops#143): `autenti_document_id` jest zapisany OSOBNYM zapisem
+		# zaraz po utworzeniu procesu, PRZED add_party/upload_file/send. Read
+		# timeout (`client.py` READ_TIMEOUT=30 s) na którymkolwiek z tych trzech
+		# wywołań, mimo że po stronie Autenti proces już powstał, ląduje w
+		# `except` poniżej -- a ten NIE nadpisuje `autenti_document_id` (dict w
+		# excepcie go nie zawiera), więc zostaje zachowany dla przyszłej
+		# ponownej wysyłki (patrz `_sprobuj_odzyskac_wyslany_proces` powyżej).
+		# Bez tego wczesnego zapisu poprzednia wersja tego kodu traciła doc_id
+		# przy każdym takim timeoucie, więc poller nigdy nie widział procesu, a
+		# „Wyślij ponownie” tworzyło DRUGI proces podpisu tej samej umowy.
+		frappe.db.set_value(konfig["doctype"], deal, "autenti_document_id", doc_id, update_modified=False)
+		frappe.db.commit()
+
 		for odbiorca in odbiorcy:
 			# first_name/last_name pochodzą osobno z helpera kontaktu/ustawień/User,
 			# nigdy z rozbicia pełnego imienia i nazwiska po spacji (zawodzi dla
@@ -619,7 +759,6 @@ def _autenti_send_job(deal: str, wysylajacy: str | None = None, rodzaj: str = "u
 			deal,
 			{
 				"autenti_status": "Wysłana",
-				"autenti_document_id": doc_id,
 				"sent_at": frappe.utils.now(),
 				"error_message": None,
 			},
@@ -634,10 +773,15 @@ def _autenti_send_job(deal: str, wysylajacy: str | None = None, rodzaj: str = "u
 			title=f"Autenti: wysyłka {konfig['doctype']} nie powiodła się",
 			message=f"Szansa: {deal}\n{frappe.get_traceback()}",
 		)
+		# F1 pkt 2 (ops#143): `autenti_document_id` NIE jest w tym słowniku --
+		# celowo pozostaje nienaruszony, gdyby już był zapisany powyżej.
+		# F15 (ops#143): polski, czysty komunikat dla handlowca (`komunikat_bledu_wysylki`)
+		# zamiast surowego, angielskiego `str(exc)` -- pełny traceback zostaje w
+		# Error Log przez `frappe.log_error` powyżej.
 		frappe.db.set_value(
 			konfig["doctype"],
 			deal,
-			{"autenti_status": "Błąd", "error_message": str(exc)[:500]},
+			{"autenti_status": "Błąd", "error_message": logika.komunikat_bledu_wysylki(exc)},
 			update_modified=False,
 		)
 		frappe.db.commit()
@@ -668,15 +812,44 @@ def _attach_signed_pdf(deal: str, umowa_name: str, doc_id: str, konfig: dict[str
 
 	Cały błąd jest łapany i logowany, nigdy nie propaguje — utrata samego załącznika
 	nie może cofnąć już zapisanego przejścia statusu na „Podpisana”.
+
+	WZNAWIALNA i IDEMPOTENTNA (ops#143, F3 pkt 1): `poll_autenti_status` woła tę
+	funkcję ponownie dla każdego rekordu „Podpisana” z pustym `signed_pdf_file`,
+	dopóki się nie powiedzie. Zanim pobierze cokolwiek z Autenti, sprawdza,
+	czy `File` o docelowej nazwie już wisi na tym dokumencie (poprzednia próba
+	zdążyła go wgrać, ale awarowała PRZED zapisem `signed_pdf_file`, np. na
+	samym `frappe.db.commit()`), wtedy tylko uzupełnia pole, nie pobiera i nie
+	wgrywa pliku po raz drugi.
 	"""
 	try:
+		istniejacy_url = frappe.db.get_value(
+			"File",
+			{
+				"attached_to_doctype": konfig["doctype"],
+				"attached_to_name": umowa_name,
+				"file_name": konfig["nazwa_podpisanego"](deal),
+			},
+			"file_url",
+		)
+		if istniejacy_url:
+			frappe.db.set_value(konfig["doctype"], umowa_name, "signed_pdf_file", istniejacy_url, update_modified=False)
+			frappe.db.commit()
+			return
+
 		client = AutentiClient()
 		file_id = client.get_signed_file_id(doc_id)
 		if not file_id:
-			frappe.log_error(
-				title="Autenti: brak podpisanego pliku",
-				message=f"{konfig['doctype']}: {umowa_name}\nProces dokumentu: {doc_id}\nBrak jeszcze pliku podpisanego.",
-			)
+			# F3 pkt 3 (ops#143): logujemy dopiero, gdy zaległość faktycznie trwa
+			# (`ZALEGLY_PODPISANY_PLIK_LOG_MIN`), nie przy KAŻDYM przebiegu pollera
+			# (co 10 minut), inaczej zalałoby to Error Log ~144 wpisami/dobę na
+			# jeden dokument, zanim Autenti w ogóle wystawi plik.
+			signed_at_raw = frappe.db.get_value(konfig["doctype"], umowa_name, "signed_at")
+			signed_at = frappe.utils.get_datetime(signed_at_raw) if signed_at_raw else None
+			if logika.czy_logowac_brak_podpisanego_pliku(signed_at, frappe.utils.now_datetime()):
+				frappe.log_error(
+					title="Autenti: brak podpisanego pliku",
+					message=f"{konfig['doctype']}: {umowa_name}\nProces dokumentu: {doc_id}\nBrak jeszcze pliku podpisanego.",
+				)
 			return
 
 		content = client.download_file_content(doc_id, file_id)
@@ -704,89 +877,242 @@ def _attach_signed_pdf(deal: str, umowa_name: str, doc_id: str, konfig: dict[str
 		frappe.db.commit()
 
 
-def poll_autenti_status() -> None:
-	"""Zadanie harmonogramu (co 10 min, patrz `hooks.py`): sprawdza status wszystkich
-	dokumentów w stanie „Wysłana” przez API Autenti — dla KAŻDEGO skonfigurowanego
-	typu dokumentu w `KONFIGURACJE` — i aktualizuje odpowiedni rekord
-	(`Volteo Umowa`/`Volteo Kredyt`).
+def _odpytaj_wyslane(client: AutentiClient, konfig: dict[str, Any]) -> None:
+	"""Skanuje wszystkie dokumenty `konfig["doctype"]` w lokalnym stanie „Wysłana”,
+	sprawdza ich zdalny status przez API Autenti i aktualizuje rekord. Wydzielone z
+	`poll_autenti_status`, żeby ten skan (istniejący od b45) i dwa nowe skany
+	dodane w ops#143 (`_odzyskaj_utkniete_wysylanie`, `_ponow_pobranie_podpisanych_plikow`)
+	miały niezależne bloki try/except pod wspólną pętlą po `KONFIGURACJE`, patrz
+	docstring `poll_autenti_status`.
+	"""
+	wiersze = frappe.get_all(
+		konfig["doctype"],
+		filters={"autenti_status": "Wysłana", "autenti_document_id": ["is", "set"]},
+		fields=["name", "autenti_document_id", "autenti_status", "error_message"],
+	)
+	if not wiersze:
+		return
 
-	Skan każdego doctype'u jest owinięty WŁASNYM try/except: schemat `Volteo Kredyt`
-	(kolumny `autenti_status`/`autenti_document_id`) może na danej instalacji nie być
-	jeszcze wdrożony (np. okno między deployem obrazu z tym kodem a odpaleniem
-	skryptu ops dodającego pola) — brakująca kolumna przy skanowaniu jednego
-	doctype'u nie może zablokować odpytania drugiego, już działającego.
+	for wiersz in wiersze:
+		try:
+			zdalny_status = _zdalny_status_bezpiecznie(client, wiersz.autenti_document_id)
+			nowy_status = logika.STATUS_MAP.get(zdalny_status) if zdalny_status else None
+			if not nowy_status:
+				if zdalny_status in logika.PENDING_REMOTE_STATUSES:
+					# Nieterminalny stan zdalny: dokument zasadnie czeka na podpis
+					# dni, więc NIGDY nie logujemy tego jako błąd (zalałoby Error Log).
+					continue
+				# F9 (ops#143): nierozpoznany zdalny status (np. 404 -> None, albo
+				# literał spoza STATUS_MAP/PENDING_REMOTE_STATUSES) jest logowany
+				# RAZ na dokument, nie przy każdym przebiegu co 10 minut:
+				# deduplikacja przez treść `error_message` (patrz
+				# `logika.czy_logowac_nierozpoznany_status`). Status lokalny
+				# pozostaje bez zmiany: NIE dodajemy zgadywanych statusów do
+				# STATUS_MAP tylko dlatego, że jeden przebieg je zobaczył.
+				if logika.czy_logowac_nierozpoznany_status(wiersz.error_message, str(zdalny_status)):
+					frappe.log_error(
+						title="Autenti: nierozpoznany status",
+						message=f"{konfig['doctype']}: {wiersz.name}\nProces dokumentu: {wiersz.autenti_document_id}\n"
+						f"Nierozpoznany zdalny status: {zdalny_status}",
+					)
+					frappe.db.set_value(
+						konfig["doctype"],
+						wiersz.name,
+						"error_message",
+						logika.komunikat_nierozpoznanego_statusu(str(zdalny_status)),
+						update_modified=False,
+					)
+					frappe.db.commit()
+				continue
+
+			stary_status = wiersz.autenti_status
+			aktualizacja: dict[str, Any] = {"autenti_status": nowy_status}
+			if nowy_status == "Podpisana":
+				aktualizacja["signed_at"] = frappe.utils.now()
+			frappe.db.set_value(konfig["doctype"], wiersz.name, aktualizacja, update_modified=False)
+			frappe.db.commit()
+
+			if nowy_status != stary_status:
+				# Ślad tylko przy FAKTYCZNEJ zmianie stanu: `stary_status` jest tu
+				# zawsze "Wysłana" (patrz filtr `frappe.get_all` powyżej) i
+				# `logika.STATUS_MAP` nigdy nie mapuje na "Wysłana", więc ten
+				# warunek jest dziś zawsze prawdziwy; trzymany jawnie jako
+				# bezpiecznik na wypadek przyszłej zmiany mapowania.
+				_slad_z_atrybucja(
+					wiersz.name,
+					tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status=nowy_status),
+				)
+
+			if nowy_status == "Podpisana":
+				if konfig["awansuj_po_podpisie"]:
+					# F4 (ops#143): własny try/except wokół awansu procesu szansy i
+					# jego commita, ODDZIELNY od pobrania pliku poniżej. Wcześniej
+					# oba żyły w tym samym `try` tej pętli, a wyjątek na
+					# `advance_deal_status`/`frappe.db.commit()` przeskakiwał całe
+					# `_attach_signed_pdf` mimo komentarza obiecującego, że awaria
+					# automatyzacji nie zablokuje pobrania pliku. Automatyzacja jest
+					# opcjonalna w panelu admina i przejście musi iść do przodu w
+					# JEJ procesie; nigdy nie może cofnąć już zapisanego statusu
+					# podpisu ani zablokować pobrania podpisanego pliku. Ten worker
+					# nie ma sesji wołającego (scheduler), więc `doc.save()`
+					# wewnątrz `advance_deal_status` zapisuje jako wołający zadania
+					# w tle. Formularz kredytowy (`konfig["awansuj_po_podpisie"] is
+					# False`) celowo NIGDY tu nie trafia: nie ma własnego etapu w
+					# `crm.volteo_pipeline` (decyzja właściciela, 2026-08-17).
+					try:
+						advance_deal_status(wiersz.name, "Umowa Podpisana", "umowa_podpisana")
+						frappe.db.commit()
+					except Exception:
+						frappe.log_error(
+							title="Autenti: awans statusu szansy po podpisaniu nie powiódł się",
+							message=f"Szansa: {wiersz.name}\n{frappe.get_traceback()}",
+						)
+						frappe.db.commit()
+				_attach_signed_pdf(wiersz.name, wiersz.name, wiersz.autenti_document_id, konfig)
+		except Exception:
+			frappe.log_error(
+				title="Autenti: odpytanie statusu nie powiodło się",
+				message=f"{konfig['doctype']}: {wiersz.name}\n{frappe.get_traceback()}",
+			)
+			frappe.db.commit()
+
+
+def _odzyskaj_utkniete_wysylanie(client: AutentiClient, konfig: dict[str, Any]) -> None:
+	"""F2 (ops#143): skanuje dokumenty `konfig["doctype"]` utknięte w lokalnym
+	statusie „Wysyłanie” dłużej niż `logika.WYSYLANIE_TIMEOUT_MIN` minut: worker
+	mógł zginąć (OOM, restart kontenera) bez wejścia w `except`, więc taki rekord
+	inaczej blokowałby ponowną wysyłkę i regenerację PDF-u na zawsze
+	(`logika.SEND_BLOCKED_STATUSES`).
+
+	Bez `autenti_document_id`: żaden proces nie zdążył powstać po stronie Autenti,
+	od razu „Błąd”. Z `autenti_document_id`: ta sama reguła odzyskiwania co F1
+	(`_sprobuj_odzyskac_wyslany_proces`): PROCESSING/COMPLETED odzyskuje rekord
+	do „Wysłana” i zostawia dokończenie kolejnemu przebiegowi pollera; w
+	przeciwnym razie „Błąd” (poller sam nie tworzy nowych procesów, brakuje mu
+	PDF-u/odbiorców/ustawień, które ma tylko `_autenti_send_job`, więc rep musi
+	kliknąć „Wyślij ponownie”, co wtedy trafi na ten sam stary `doc_id` i, widząc
+	DRAFT/terminalny status, utworzy nowy proces).
+	"""
+	wiersze = frappe.get_all(
+		konfig["doctype"],
+		filters={"autenti_status": "Wysyłanie"},
+		fields=["name", "autenti_document_id", "sent_at"],
+	)
+	if not wiersze:
+		return
+
+	teraz = frappe.utils.now_datetime()
+	for wiersz in wiersze:
+		sent_at = frappe.utils.get_datetime(wiersz.sent_at) if wiersz.sent_at else None
+		if not logika.czy_wysylanie_przekroczylo_timeout(sent_at, teraz):
+			continue
+
+		try:
+			if not wiersz.autenti_document_id:
+				frappe.db.set_value(
+					konfig["doctype"],
+					wiersz.name,
+					{"autenti_status": "Błąd", "error_message": logika.KOMUNIKAT_TIMEOUT_WYSYLANIA_BEZ_PROCESU},
+					update_modified=False,
+				)
+				frappe.db.commit()
+				_slad_z_atrybucja(
+					wiersz.name, tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Błąd")
+				)
+				continue
+
+			if _sprobuj_odzyskac_wyslany_proces(client, wiersz.name, wiersz.name, konfig, wiersz.autenti_document_id):
+				continue
+
+			frappe.db.set_value(
+				konfig["doctype"],
+				wiersz.name,
+				{"autenti_status": "Błąd", "error_message": logika.KOMUNIKAT_TIMEOUT_WYSYLANIA_Z_PROCESEM},
+				update_modified=False,
+			)
+			frappe.db.commit()
+			_slad_z_atrybucja(
+				wiersz.name, tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Błąd")
+			)
+		except Exception:
+			frappe.log_error(
+				title="Autenti: odzyskanie utkniętej wysyłki nie powiodło się",
+				message=f"{konfig['doctype']}: {wiersz.name}\n{frappe.get_traceback()}",
+			)
+			frappe.db.commit()
+
+
+def _ponow_pobranie_podpisanych_plikow(konfig: dict[str, Any]) -> None:
+	"""F3 pkt 1 (ops#143): ponawia `_attach_signed_pdf` dla dokumentów `konfig["doctype"]`
+	już w statusie „Podpisana”, którym mimo to brakuje `signed_pdf_file`:
+	pierwsza próba w `_odpytaj_wyslane` mogła się nie udać (np. plik jeszcze nie
+	istnieje po stronie Autenti tuż po COMPLETED, albo przejściowy błąd sieci).
+	`_attach_signed_pdf` jest wznawialna i idempotentna (patrz jej docstring) i
+	sama łapie każdy wyjątek, więc ta funkcja nie potrzebuje własnego try/except
+	wokół samego wywołania, tylko wokół zapytania `frappe.get_all`.
+	"""
+	wiersze = frappe.get_all(
+		konfig["doctype"],
+		filters={
+			"autenti_status": "Podpisana",
+			"autenti_document_id": ["is", "set"],
+			"signed_pdf_file": ["is", "not set"],
+		},
+		fields=["name", "autenti_document_id"],
+	)
+	for wiersz in wiersze:
+		_attach_signed_pdf(wiersz.name, wiersz.name, wiersz.autenti_document_id, konfig)
+
+
+def poll_autenti_status() -> None:
+	"""Zadanie harmonogramu (co 10 min, patrz `hooks.py`): dla KAŻDEGO skonfigurowanego
+	typu dokumentu w `KONFIGURACJE` -- sprawdza status wszystkich dokumentów w stanie
+	„Wysłana” przez API Autenti (`_odpytaj_wyslane`), odzyskuje albo oznacza jako
+	błąd rekordy utknięte w „Wysyłanie” (`_odzyskaj_utkniete_wysylanie`, ops#143 F2),
+	i ponawia pobranie podpisanego pliku dla „Podpisana” bez `signed_pdf_file`
+	(`_ponow_pobranie_podpisanych_plikow`, ops#143 F3).
+
+	Konstrukcja `AutentiClient()` jest owinięta WŁASNYM try/except (ops#143, F19):
+	wyjątek w jej `__init__` (np. brak sekretu po migracji ustawień) nie może
+	wywalić całego joba bez wpisu w Error Log.
+
+	Każdy z trzech skanów, dla KAŻDEGO doctype'u, jest owinięty WŁASNYM
+	try/except: schemat `Volteo Kredyt` (kolumny `autenti_status`/`autenti_document_id`)
+	może na danej instalacji nie być jeszcze wdrożony (np. okno między deployem
+	obrazu z tym kodem a odpaleniem skryptu ops dodającego pola), brakująca
+	kolumna przy jednym skanie/doctype nie może zablokować pozostałych, już
+	działających.
 	"""
 	if not _wlaczone():
 		return
 
-	client = AutentiClient()
+	try:
+		client = AutentiClient()
+	except Exception:
+		frappe.log_error(title="Autenti: konfiguracja klienta", message=frappe.get_traceback())
+		return
+
 	for konfig in KONFIGURACJE.values():
 		try:
-			wiersze = frappe.get_all(
-				konfig["doctype"],
-				filters={"autenti_status": "Wysłana", "autenti_document_id": ["is", "set"]},
-				fields=["name", "autenti_document_id", "autenti_status"],
-			)
-			if not wiersze:
-				continue
-
-			for wiersz in wiersze:
-				try:
-					zdalny = client.get_status(wiersz.autenti_document_id)
-					zdalny_status = zdalny.get("status")
-					nowy_status = logika.STATUS_MAP.get(zdalny_status)
-					if not nowy_status:
-						if zdalny_status in logika.PENDING_REMOTE_STATUSES:
-							# Nieterminalny stan zdalny — dokument zasadnie czeka na podpis
-							# dni, więc NIGDY nie logujemy tego jako błąd (zalałoby Error Log).
-							continue
-						frappe.log_error(
-							title="Autenti: nierozpoznany status",
-							message=f"{konfig['doctype']}: {wiersz.name}\nProces dokumentu: {wiersz.autenti_document_id}\n"
-							f"Nierozpoznany zdalny status: {zdalny_status}",
-						)
-						continue
-
-					stary_status = wiersz.autenti_status
-					aktualizacja: dict[str, Any] = {"autenti_status": nowy_status}
-					if nowy_status == "Podpisana":
-						aktualizacja["signed_at"] = frappe.utils.now()
-					frappe.db.set_value(konfig["doctype"], wiersz.name, aktualizacja, update_modified=False)
-					frappe.db.commit()
-
-					if nowy_status != stary_status:
-						# Ślad tylko przy FAKTYCZNEJ zmianie stanu — `stary_status` jest tu
-						# zawsze "Wysłana" (patrz filtr `frappe.get_all` powyżej) i
-						# `logika.STATUS_MAP` nigdy nie mapuje na "Wysłana", więc ten
-						# warunek jest dziś zawsze prawdziwy; trzymany jawnie jako
-						# bezpiecznik na wypadek przyszłej zmiany mapowania.
-						_slad_z_atrybucja(
-							wiersz.name,
-							tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status=nowy_status),
-						)
-
-					if nowy_status == "Podpisana":
-						if konfig["awansuj_po_podpisie"]:
-							# Automatyzacja: przesuwa status szansy do przodu, o ile włączona w
-							# panelu admina i przejście jest do przodu w JEJ procesie; nigdy
-							# nie rzuca — awaria automatyzacji nie może cofnąć już zapisanego
-							# statusu podpisu ani zablokować pobrania podpisanego pliku poniżej.
-							# Ten worker nie ma sesji wołającego (scheduler), więc `doc.save()`
-							# wewnątrz `advance_deal_status` zapisuje jako wołający zadania w
-							# tle. Formularz kredytowy (`konfig["awansuj_po_podpisie"] is
-							# False`) celowo NIGDY tu nie trafia — nie ma własnego etapu w
-							# `crm.volteo_pipeline` (decyzja właściciela, 2026-08-17).
-							advance_deal_status(wiersz.name, "Umowa Podpisana", "umowa_podpisana")
-							frappe.db.commit()
-						_attach_signed_pdf(wiersz.name, wiersz.name, wiersz.autenti_document_id, konfig)
-				except Exception:
-					frappe.log_error(
-						title="Autenti: odpytanie statusu nie powiodło się",
-						message=f"{konfig['doctype']}: {wiersz.name}\n{frappe.get_traceback()}",
-					)
-					frappe.db.commit()
+			_odpytaj_wyslane(client, konfig)
 		except Exception:
 			frappe.log_error(
 				title=f"Autenti: odpytanie statusu {konfig['doctype']} nie powiodło się",
+				message=frappe.get_traceback(),
+			)
+
+		try:
+			_odzyskaj_utkniete_wysylanie(client, konfig)
+		except Exception:
+			frappe.log_error(
+				title=f"Autenti: odzyskanie utkniętej wysyłki {konfig['doctype']} nie powiodło się",
+				message=frappe.get_traceback(),
+			)
+
+		try:
+			_ponow_pobranie_podpisanych_plikow(konfig)
+		except Exception:
+			frappe.log_error(
+				title=f"Autenti: ponowienie pobrania podpisanego pliku {konfig['doctype']} nie powiodło się",
 				message=frappe.get_traceback(),
 			)
