@@ -123,6 +123,7 @@ FILTER_FIELDS_LEAD: tuple[tuple[str, str | None], ...] = (
 	("mobile_no", "Telefon"),
 	("custom_zasady_dotacji", "Zasady"),
 	("custom_posiadane_produkty", "Obecne produkty"),
+	("custom_produkt_procesu", "Produkt w procesie"),
 	("custom_install_address", "Ulica"),
 	("custom_nr_domu", "Nr domu"),
 	("custom_install_postal_code", "Kod pocztowy"),

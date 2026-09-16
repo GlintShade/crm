@@ -353,7 +353,7 @@ class TestAllowlistyLeadow(unittest.TestCase):
 		)
 
 	def test_f_filter_fields_lead_liczba_i_kolejnosc(self: "TestAllowlistyLeadow") -> None:
-		self.assertEqual(len(FILTER_FIELDS_LEAD), 21)
+		self.assertEqual(len(FILTER_FIELDS_LEAD), 22)
 		self.assertEqual(
 			[fieldname for fieldname, _ in FILTER_FIELDS_LEAD],
 			[
@@ -365,6 +365,7 @@ class TestAllowlistyLeadow(unittest.TestCase):
 				"mobile_no",
 				"custom_zasady_dotacji",
 				"custom_posiadane_produkty",
+				"custom_produkt_procesu",
 				"custom_install_address",
 				"custom_nr_domu",
 				"custom_install_postal_code",
