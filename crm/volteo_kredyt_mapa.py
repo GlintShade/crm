@@ -291,6 +291,6 @@ _STRONA_5: tuple[Pole, ...] = (
 _STRONA_6: tuple[Pole, ...] = ()
 
 MAPA_KREDYT: tuple[Pole, ...] = _STRONA_1 + _STRONA_2 + _STRONA_3 + _STRONA_4 + _STRONA_5 + _STRONA_6
-"""Pełna mapa współrzędnych formularza kredytowego — 74 pozycje na stronach
-0, 1, 2 (37 + 26 + 9) i 2 pozycje na stronie 4 (drugi podpis); strony 3 i 5
-celowo puste (patrz komentarze przy `_STRONA_4`/`_STRONA_6`)."""
+"""Pełna mapa współrzędnych formularza kredytowego: 72 pozycje na stronach
+0, 1, 2 (37 + 26 + 9) i 2 pozycje na stronie 4 (drugi podpis), razem 74;
+strony 3 i 5 celowo puste (patrz komentarze przy `_STRONA_4`/`_STRONA_6`)."""
