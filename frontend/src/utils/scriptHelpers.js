@@ -41,7 +41,7 @@ export function createDocProxy(source, instance, childInstance = null) {
           if (currentDocData && 'trigger' in currentDocData) {
             console.warn(
               __(
-                '⚠️ Avoid using "trigger" as a field name — it conflicts with the built-in trigger() method.',
+                '⚠️ Avoid using "trigger" as a field name. It conflicts with the built-in trigger() method.',
               ),
             )
           }

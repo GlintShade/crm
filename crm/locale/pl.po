@@ -728,7 +728,7 @@ msgstr "Warunki przypisania"
 
 #: frontend/src/components/Settings/Sla/SlaPolicyView.vue:305
 msgid "Assignment conditions are invalid or corrupt, recreate the conditions."
-msgstr "Warunki przypisania są nieprawidłowe lub uszkodzone — utwórz je ponownie."
+msgstr "Warunki przypisania są nieprawidłowe lub uszkodzone. Utwórz je ponownie."
 
 #: frontend/src/components/Controls/GridFieldsEditorModal.vue:188
 msgid "At least one field is required"
@@ -792,8 +792,8 @@ msgstr "Automatycznie przypisuj leady/szanse do odpowiedniego handlowca na podst
 #. Description of the 'Condition' (Code) field in DocType 'CRM Service Level
 #. Agreement'
 #: crm/fcrm/doctype/crm_service_level_agreement/crm_service_level_agreement.json
-msgid "Auto-generated from the portal view — do not edit directly unless you know what you're doing! "
-msgstr "Wygenerowane automatycznie na podstawie widoku portalu — nie edytuj bezpośrednio, chyba że wiesz, co robisz! "
+msgid "Auto-generated from the portal view. Do not edit directly unless you know what you're doing! "
+msgstr "Wygenerowane automatycznie na podstawie widoku portalu. Nie edytuj bezpośrednio, chyba że wiesz, co robisz! "
 
 #. Label of the autocomplete (Autocomplete) field in DocType 'CRM Products'
 #: crm/fcrm/doctype/crm_products/crm_products.json
@@ -2308,7 +2308,7 @@ msgstr "ERPNext nie jest zainstalowany w bieżącej witrynie"
 
 #: frontend/src/components/Settings/ERPNextSettings.vue:71
 msgid "ERPNext is not installed on this site either install it or enter the URL of your ERPNext site to connect"
-msgstr "ERPNext nie jest zainstalowany na tej witrynie — zainstaluj go albo podaj adres URL swojej witryny ERPNext, aby się połączyć"
+msgstr "ERPNext nie jest zainstalowany na tej witrynie. Zainstaluj go albo podaj adres URL swojej witryny ERPNext, aby się połączyć"
 
 #: crm/fcrm/doctype/erpnext_crm_settings/erpnext_crm_settings.py:27
 msgid "ERPNext is not integrated with the CRM"
@@ -2869,7 +2869,7 @@ msgstr "Nie udało się przechwycić nagrania Twilio"
 
 #: frontend/src/components/Settings/EmailAdd.vue:149
 msgid "Failed to create Email Account, Invalid credentials"
-msgstr "Nie udało się utworzyć konta e-mail — nieprawidłowe dane logowania"
+msgstr "Nie udało się utworzyć konta e-mail, nieprawidłowe dane logowania"
 
 #: frontend/src/components/Settings/EmailTemplate/NewEmailTemplate.vue:180
 msgid "Failed to create template"
@@ -2941,7 +2941,7 @@ msgstr "Nie udało się rozpocząć synchronizacji"
 
 #: frontend/src/components/Settings/EmailEdit.vue:216
 msgid "Failed to update Email Account, Invalid credentials"
-msgstr "Nie udało się zaktualizować konta e-mail — nieprawidłowe dane logowania"
+msgstr "Nie udało się zaktualizować konta e-mail, nieprawidłowe dane logowania"
 
 #: crm/integrations/twilio/api.py:181
 msgid "Failed to update Twilio call status"
@@ -5970,7 +5970,7 @@ msgstr "Konfiguracja e-mail"
 
 #: crm/api/exchange_rate.py:149
 msgid "Setup the Exchange Rate Provider other than 'Frankfurter' in settings, as default provider does not support currency conversion for {0} to {1}."
-msgstr "Skonfiguruj w ustawieniach innego dostawcę kursu wymiany niż „Frankfurter” — domyślny dostawca nie obsługuje przeliczania waluty {0} na {1}."
+msgstr "Skonfiguruj w ustawieniach innego dostawcę kursu wymiany niż „Frankfurter”. Domyślny dostawca nie obsługuje przeliczania waluty {0} na {1}."
 
 #: frontend/src/components/Layouts/AppSidebar.vue:360
 msgid "Setup your password"
@@ -6030,7 +6030,7 @@ msgstr "Ponieważ usunięto {0} z listy przypisanych, {0} również został usun
 
 #: frontend/src/components/AssignTo.vue:76
 msgid "Since you removed {0} from the assignee, the {0} has been changed to the next available assignee {1}."
-msgstr "Ponieważ usunięto {0} z listy przypisanych, {0} zmieniono na kolejnego dostępnego przypisanego — {1}."
+msgstr "Ponieważ usunięto {0} z listy przypisanych, {0} zmieniono na kolejnego dostępnego przypisanego: {1}."
 
 #: frontend/src/components/Settings/ERPNextSettings.vue:66
 msgid "Site URL"
@@ -7190,7 +7190,7 @@ msgstr "utworzył(a) tę szansę"
 msgid "created this lead"
 msgstr "utworzył(a) tego leada"
 
-#. Activity feed (Aktywność) — field-change verbs and connectors rendered by
+#. Activity feed (Aktywność): field-change verbs and connectors rendered by
 #. update_activities_details() (Activities.vue:700) via __(activity.type) /
 #. __(activity.value); "added"/"removed" are also reused for attachment rows
 #. (parse_attachment_log() in crm/api/activities.py sets activity.data.type).
@@ -7530,7 +7530,7 @@ msgstr "tygodnie przed"
 
 #: frontend/src/components/Settings/AssignmentRules/AssignmentRuleView.vue:193 frontend/src/components/Settings/AssignmentRules/AssignmentRuleView.vue:277
 msgid "which are not compatible with this UI, you will need to recreate the conditions here if you want to manage and add new conditions from this UI."
-msgstr "które nie są zgodne z tym interfejsem — jeśli chcesz zarządzać nimi i dodawać nowe warunki z poziomu tego interfejsu, musisz odtworzyć je tutaj."
+msgstr "które nie są zgodne z tym interfejsem, jeśli chcesz zarządzać nimi i dodawać nowe warunki z poziomu tego interfejsu, musisz odtworzyć je tutaj."
 
 #. Option for the 'Color' (Select) field in DocType 'CRM Deal Status'
 #. Option for the 'Color' (Select) field in DocType 'CRM Lead Status'
@@ -7647,8 +7647,8 @@ msgid "{0} yes"
 msgstr "{0} tak"
 
 #: frontend/src/utils/scriptHelpers.js:43
-msgid "⚠️ Avoid using \"trigger\" as a field name — it conflicts with the built-in trigger() method."
-msgstr "⚠️ Unikaj używania \"trigger\" jako nazwy pola — koliduje to z wbudowaną metodą trigger()."
+msgid "⚠️ Avoid using \"trigger\" as a field name. It conflicts with the built-in trigger() method."
+msgstr "⚠️ Unikaj używania \"trigger\" jako nazwy pola. Koliduje to z wbudowaną metodą trigger()."
 
 #: frontend/src/utils/scriptHelpers.js:55
 msgid "⚠️ Method \"{0}\" not found in class."
@@ -8887,11 +8887,11 @@ msgstr "Przełożony (hierarchia)"
 msgid "None"
 msgstr "Brak"
 
-# nowy string: email zaproszenia — polonizacja i branding ProEnergy (b49, defekt zgłoszony przez właściciela)
+# nowy string: email zaproszenia, polonizacja i branding ProEnergy (b49, defekt zgłoszony przez właściciela)
 msgid "You have been invited to join {0}"
 msgstr "Zaproszenie do {0}"
 
-# nowy string: email zaproszenia — polonizacja i branding ProEnergy (b49, defekt zgłoszony przez właściciela)
+# nowy string: email zaproszenia, polonizacja i branding ProEnergy (b49, defekt zgłoszony przez właściciela)
 msgid "Click the button below to accept the invitation and get started."
 msgstr "Kliknij przycisk poniżej, aby przyjąć zaproszenie i rozpocząć pracę."
 
@@ -9094,3 +9094,99 @@ msgstr "{0} obiekt"
 
 msgid "{0} features"
 msgstr "{0} obiektów"
+
+# b59 T4
+# issue ops#135: brakujace klucze z audytu (Zalacznik A, bez ekranu
+# startowego PersonaForm/Questionnaire, pominietego decyzja wlasciciela) oraz
+# sklejone klucze DoctypeModal.vue ("Edit "/"Create " + tytul doctype'u)
+#: frontend/src/components/Settings/DashboardSettings.vue:139
+msgid "Access Key for {0}. Required for fetching exchange rates."
+msgstr "Klucz dostępu dla {0}. Wymagany do pobierania kursów wymiany walut."
+
+#: frontend/src/components/Settings/DashboardSettings.vue:217
+msgid "Please enter the {0} Access Key."
+msgstr "Podaj klucz dostępu {0}."
+
+#: frontend/src/components/Settings/AssignmentRules/AssigneeRules.vue:17
+msgid "{0} routing"
+msgstr "Przydzielanie: {0}"
+
+#: frontend/src/components/Settings/AssignmentRules/AssigneeRules.vue:26
+msgid "Choose how {0} are assigned among the selected assignees."
+msgstr "Wybierz, w jaki sposób {0} są przydzielane wybranym osobom."
+
+#: frontend/src/components/Settings/Hierarchy/Hierarchy.vue:203
+msgid "Are you sure you want to remove {0} from the hierarchy?"
+msgstr "Czy na pewno chcesz usunąć {0} z hierarchii?"
+
+#: frontend/src/components/Settings/AssignmentRules/AssignmentRuleView.vue:150
+msgid "Choose which {0} are affected by this assignment rule."
+msgstr "Wybierz, których {0} dotyczy ta reguła przydziału."
+
+#: frontend/src/components/AssignTo.vue:92
+msgid "Since you added a new assignee, the {0} has been set to {1}."
+msgstr "Ponieważ dodano nową osobę przypisaną, {0} ustawiono na {1}."
+
+#: frontend/src/components/FieldLayoutEditor.vue:512
+msgid "Remove and move columns to {0} section"
+msgstr "Usuń i przenieś kolumny do sekcji {0}"
+
+#: frontend/src/components/FilesUploader/FilesUploaderArea.vue:347
+msgid "File \"{0}\" was skipped because size exceeds {1} MB"
+msgstr "Plik \"{0}\" został pominięty, ponieważ jego rozmiar przekracza {1} MB"
+
+#: frontend/src/components/Controls/MultiSelectEmailInput.vue:73 frontend/src/components/Controls/MultiSelectUserInput.vue:73
+msgid "Type an email address to invite"
+msgstr "Wpisz adres e-mail, aby zaprosić"
+
+#: crm/api/__init__.py:257
+msgid "Enter a valid phone number"
+msgstr "Podaj prawidłowy numer telefonu"
+
+#: crm/api/__init__.py:227
+msgid "Cannot invite for this Volteo role"
+msgstr "Nie można zaprosić dla tej roli Volteo"
+
+#: crm/api/__init__.py:235
+msgid "Sales Hierarchy node {0} does not exist"
+msgstr "Węzeł hierarchii sprzedaży {0} nie istnieje"
+
+#: crm/api/__init__.py:247
+msgid "First and last name are required"
+msgstr "Imię i nazwisko są wymagane"
+
+#: crm/api/__init__.py:294
+msgid "Invite one person at a time"
+msgstr "Zapraszaj jedną osobę na raz"
+
+#: crm/api/__init__.py:232 crm/api/__init__.py:388
+msgid "You are not allowed to invite Backoffice users"
+msgstr "Nie masz uprawnień do zapraszania użytkowników Backoffice"
+
+#: crm/fcrm/doctype/erpnext_crm_settings/erpnext_crm_settings.py:156
+msgid "Could not create the Frappe CRM custom fields on {0} automatically. If it is running the latest ERPNext, enable <b>Frappe CRM Data Synchronization</b> in its CRM Settings, Otherwise check the Error Log."
+msgstr "Nie udało się automatycznie utworzyć pól niestandardowych Frappe CRM w {0}. Jeśli działa najnowsza wersja ERPNext, włącz opcję <b>Synchronizacja danych Frappe CRM</b> w jego Ustawieniach CRM. W przeciwnym razie sprawdź dziennik błędów."
+
+#: crm/fcrm/doctype/erpnext_crm_settings/erpnext_crm_settings.py:161
+msgid "ERPNext custom fields not created"
+msgstr "Nie utworzono pól niestandardowych ERPNext"
+
+#: crm/fcrm/doctype/crm_deal/crm_deal.py:566
+msgid "Invalid deal payload: expected an object of field values."
+msgstr "Nieprawidłowe dane szansy sprzedaży: oczekiwano obiektu z wartościami pól."
+
+# DoctypeModal.vue:10-11, __('Edit ' + (doctypeTitle || doctype)) /
+# __('Create ' + (doctypeTitle || doctype)); tylko klucze faktycznie
+# osiagalne w kodzie (showModal() wola tytuly Task/Note/Call Log/Address,
+# Task/Note/Call Log maja juz wpisy Edit poza tym blokiem)
+#: frontend/src/components/Modals/DoctypeModal.vue:11
+msgid "Create Call Log"
+msgstr "Utwórz dziennik połączeń"
+
+#: frontend/src/components/Modals/DoctypeModal.vue:10
+msgid "Edit Address"
+msgstr "Edytuj adres"
+
+#: frontend/src/components/Modals/DoctypeModal.vue:11
+msgid "Create Address"
+msgstr "Utwórz adres"
