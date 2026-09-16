@@ -153,8 +153,12 @@ PUSTE_MARKERY: frozenset[str] = frozenset({"", "-", "brak", "nie"})
 """Markery pustej komórki w arkuszu Grega, dopasowywane bez rozróżniania wielkości
 liter (patrz `_pusta`)."""
 
-_WZOR_SAM_NUMER = re.compile(r"^\d+[A-Za-z]?(?:/\d+[A-Za-z]?)?$")
-"""Cała wartość to sam numer domu (wieś bez nazwy ulicy) - `_rozbij_c_do_f` regula f."""
+_WZOR_SAM_NUMER = re.compile(r"^\d+\s?[A-Za-z]?(?:\s*/\s*(?:\d+[A-Za-z]?|[A-Za-z]))?$")
+"""Cała wartość to sam numer domu (wieś bez nazwy ulicy) - `_rozbij_c_do_f` regula f.
+Tolerancyjny tak samo jak `_CZESC_NUMERU_GLOWNA`/`_CZESC_NUMERU_DRUGA` (odstęp przed
+literą, druga część po ukośniku może być samą literą, np. `21/A`) - spójność z
+regułą d, żeby ta sama forma numeru nie działała inaczej w zależności od tego, czy
+przed nią stoi nazwa ulicy."""
 
 _WZOR_KOD_POCZTOWY = re.compile(r"^\d{2}-\d{3}$")
 """Wygląda jak polski kod pocztowy, nie nazwa ulicy - straż w `_rozbij_c_do_f` i
@@ -165,9 +169,12 @@ _ZNAK_LITERA = r"[^\W\d_]"
 """Jeden znak-litera (unicode, z polskimi diakrytykami włącznie) - `\\w` minus
 cyfra minus podkreślnik. Używane w `_WZOR_NUMER_SKLEJONY` (regula e)."""
 
-_CZESC_NUMERU_GLOWNA = r"\d+[A-Za-z]?"
-"""Pierwsza część tolerancyjnego numeru domu: cyfry plus opcjonalna litera
-(`16A`, `41a`, `5`) - `_rozbij_c_do_f` reguły d/e."""
+_CZESC_NUMERU_GLOWNA = r"\d+\s?[A-Za-z]?"
+"""Pierwsza część tolerancyjnego numeru domu: cyfry plus opcjonalna litera,
+z opcjonalnym POJEDYNCZYM odstępem przed literą (`16A`, `41a`, `5`, `21 A` -
+w realnym arkuszu „21 A"/„3 B" jest częstszym zapisem niż sklejone „21A") -
+`_rozbij_c_do_f` reguły d/e. `_znormalizuj_numer` usuwa odstęp z wyniku, więc
+`21 A` i `21A` dają ten sam znormalizowany numer `21A`."""
 
 _CZESC_NUMERU_DRUGA = r"(?:\d+[A-Za-z]?|[A-Za-z])"
 """Część numeru PO ukośniku: cyfry z opcjonalną literą, albo sama litera
@@ -511,11 +518,15 @@ def ulica_zawiera_cyfre(tekst: str) -> bool:
 
 def _znormalizuj_numer(numer: str, numer2: str | None) -> str:
 	"""Składa numer domu z grup regexu tolerancyjnego dopasowania (reguły d/e):
-	`("22", "A")` -> `"22/A"`, `("34", None)` -> `"34"`. Wielkość liter obu
-	części zostaje bez zmian (spec: „litera bez zmian")."""
+	`("22", "A")` -> `"22/A"`, `("34", None)` -> `"34"`, `("21 A", None)` ->
+	`"21A"` (odstęp przed literą - patrz `_CZESC_NUMERU_GLOWNA` - jest usuwany
+	tu, w JEDNYM miejscu). Wielkość liter obu części zostaje bez zmian (spec:
+	„litera bez zmian")."""
+	numer_czysty = re.sub(r"\s+", "", numer)
 	if numer2:
-		return f"{numer}/{numer2}"
-	return numer
+		numer2_czysty = re.sub(r"\s+", "", numer2)
+		return f"{numer_czysty}/{numer2_czysty}"
+	return numer_czysty
 
 
 def _usun_prefiks_ulicy(tekst: str) -> str:
@@ -566,7 +577,7 @@ def _rozbij_c_do_f(segment: str, miejscowosc: str) -> tuple[str, str]:
 	if _WZOR_SAM_NUMER.match(kandydat_sam_numer):
 		miasto_czyste = (miejscowosc or "").strip()
 		if miasto_czyste:
-			return miasto_czyste, kandydat_sam_numer
+			return miasto_czyste, re.sub(r"\s+", "", kandydat_sam_numer)
 
 	# g) numer nierozpoznany - segment zostaje w całości jako ulica
 	return tekst, ""

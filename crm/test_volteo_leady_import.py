@@ -333,6 +333,21 @@ class TestRozbijFragmentUlicy(unittest.TestCase):
 	def test_af_numer_sklejony_bez_prefiksu(self: "TestRozbijFragmentUlicy") -> None:
 		self.assertEqual(rozbij_fragment_ulicy("KOWALEWICZKI32", ""), ("KOWALEWICZKI", "32", ""))
 
+	# --- odstep przed litera koncowa (uniformizacja po tescie dymnym na
+	# realnym arkuszu - "21 A"/"3 B" jest w praktyce czestszy niz "21A") ---
+
+	def test_af2_numer_z_odstepem_przed_litera_normalizowany_bez_odstepu(
+		self: "TestRozbijFragmentUlicy",
+	) -> None:
+		self.assertEqual(rozbij_fragment_ulicy("Dziadowice 3 A", ""), ("Dziadowice", "3A", ""))
+
+	def test_af3_ulica_dwuczlonowa_numer_z_odstepem_przed_litera(
+		self: "TestRozbijFragmentUlicy",
+	) -> None:
+		self.assertEqual(
+			rozbij_fragment_ulicy("Woskrzenice Małe 21 A", ""), ("Woskrzenice Małe", "21A", "")
+		)
+
 	# --- regula f) sam numer, w tym zapis Excela "x.0" ---
 
 	def test_ag_sam_numer_excel_float_40(self: "TestRozbijFragmentUlicy") -> None:
@@ -340,6 +355,13 @@ class TestRozbijFragmentUlicy(unittest.TestCase):
 
 	def test_ah_sam_numer_excel_float_10(self: "TestRozbijFragmentUlicy") -> None:
 		self.assertEqual(rozbij_fragment_ulicy("1.0", "Trzcinka"), ("Trzcinka", "1", ""))
+
+	def test_ah2_sam_numer_z_ukosnikiem_i_sama_litera_po_ukosniku(
+		self: "TestRozbijFragmentUlicy",
+	) -> None:
+		# spojnosc z regula d ("22/A" ma litere-bez-cyfry po ukosniku) - ta sama
+		# forma numeru MA dzialac tak samo, gdy przed nim nie stoi nazwa ulicy.
+		self.assertEqual(rozbij_fragment_ulicy("21/A", "Żelkówko"), ("Żelkówko", "21/A", ""))
 
 	# --- regula g) numer nierozpoznany (i pulapka na regule e dla "14m2") ---
 
