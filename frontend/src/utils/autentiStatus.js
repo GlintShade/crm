@@ -31,16 +31,46 @@ export const AUTENTI_BADGE = {
 }
 
 /**
+ * Kredyt-only label overrides for `AUTENTI_BADGE` above. The backend has
+ * separate per-document Polish sentences for the same reason (see
+ * `crm/integrations/autenti/api.py`'s `KONFIG_UMOWA` / `KONFIG_KREDYT`
+ * comments): "Umowa" (the contract) is grammatically feminine, "Formularz
+ * kredytowy" (the credit application) is masculine, so the same status
+ * needs a different adjective ending per document.
+ *
+ * 'Wysyłanie' and 'Błąd' carry no gendered noun and are not listed here:
+ * `badgeFor` falls back to the shared `AUTENTI_BADGE` label for them.
+ */
+const AUTENTI_BADGE_LABEL_KREDYT = {
+  Wysłana: 'Wysłany do podpisu',
+  Podpisana: 'Podpisany',
+  Odrzucona: 'Odrzucony',
+  Wygasła: 'Wygasły',
+  Wycofana: 'Wycofany',
+}
+
+/**
  * Look up the badge entry ({label, theme}) for a status, or `null` when the
- * umowa was never sent (status is `null`/`undefined`/`''`) — the caller
+ * document was never sent (status is `null`/`undefined`/`''`), the caller
  * should render no badge at all in that case, not a "never sent" badge.
  *
+ * `__()` is called here, inside the function body, never at module scope:
+ * calling it while the object literals above are being built would risk
+ * the eager-chunk `ReferenceError` described in CLAUDE.md → "Eager chunk a
+ * __()" (see the same pattern in `edytorPrzyciski.js`'s `zbudujPrzycisk`).
+ *
  * @param {string|null|undefined} status - raw `autenti_status` value
+ * @param {'umowa'|'kredyt'} [dokument] - which document's wording to use;
+ *   defaults to 'umowa' so every existing caller keeps behaving exactly as
+ *   before
  * @returns {{label: string, theme: string}|null}
  */
-export function badgeFor(status) {
+export function badgeFor(status, dokument = 'umowa') {
   if (!status) return null
-  return AUTENTI_BADGE[status] || null
+  const entry = AUTENTI_BADGE[status]
+  if (!entry) return null
+  const label = dokument === 'kredyt' ? AUTENTI_BADGE_LABEL_KREDYT[status] || entry.label : entry.label
+  return { label: __(label), theme: entry.theme }
 }
 
 // Mirrors the backend's SEND_BLOCKED_STATUSES: sending (or resending) is
@@ -84,17 +114,38 @@ export function isInFlight(status) {
 const RESEND_STATUSES = new Set(['Błąd', 'Odrzucona', 'Wygasła', 'Wycofana'])
 
 /**
- * Label for the send/resend button, depending on whether the umowa has
- * ever been sent before.
+ * First-send button label, by document. "Podpisz umowę" only makes sense
+ * for the umowa (contract); the kredyt (credit application) uses
+ * "wniosek", mirroring the backend's per-document literals, see the
+ * `AUTENTI_BADGE_LABEL_KREDYT` comment above.
+ */
+const SEND_LABEL_FIRST = {
+  umowa: 'Podpisz umowę',
+  kredyt: 'Podpisz wniosek',
+}
+
+// The resend label needs no gendered noun ("do podpisu"), so it is shared
+// by both documents.
+const SEND_LABEL_RESEND = 'Wyślij ponownie do podpisu'
+
+/**
+ * Label for the send/resend button, depending on whether the document has
+ * ever been sent before, and which document this is for.
+ *
+ * `__()` is called here, inside the function body, see the note on
+ * `badgeFor` above for why that matters.
  *
  * @param {string|null|undefined} status - raw `autenti_status` value
- * @returns {string} 'Podpisz umowę' for never-sent, 'Wyślij ponownie do podpisu' otherwise
+ * @param {'umowa'|'kredyt'} [dokument] - defaults to 'umowa' so every
+ *   existing caller keeps behaving exactly as before
+ * @returns {string} 'Podpisz umowę'/'Podpisz wniosek' for never-sent,
+ *   'Wyślij ponownie do podpisu' otherwise
  */
-export function sendButtonLabel(status) {
+export function sendButtonLabel(status, dokument = 'umowa') {
   if (status && RESEND_STATUSES.has(status)) {
-    return 'Wyślij ponownie do podpisu'
+    return __(SEND_LABEL_RESEND)
   }
-  return 'Podpisz umowę'
+  return __(SEND_LABEL_FIRST[dokument] || SEND_LABEL_FIRST.umowa)
 }
 
 /**

@@ -22,6 +22,14 @@
 // UmowaTab.vue's header comment for why a bare command name silently
 // resolves only for Server Scripts and 417s for fork API methods.
 //
+// `dokument` ('umowa' | 'kredyt', defaults to 'umowa') is passed straight
+// through to `badgeFor()` / `sendButtonLabel()` (see autentiStatus.js) so
+// the badge and send-button copy uses the grammatically correct Polish
+// wording for whichever document this instance is signing: "Umowa" is
+// feminine ("Podpisana"), "Formularz kredytowy" is masculine ("Podpisany").
+// KredytTab.vue passes `dokument: 'kredyt'`; UmowaTab.vue relies on the
+// default and needs no change.
+//
 // Record-existence key: the status payload carries `dokument_exists` on
 // every endpoint, and the umowa endpoint additionally carries the legacy
 // `umowa_exists` (same value, kept for whichever consumers still read it).
@@ -32,7 +40,7 @@ import { computed, onMounted, onUnmounted, ref, toValue } from 'vue'
 import { formatDate } from '@/utils'
 import { badgeFor, canSend, groupRecipients, isInFlight, sendButtonLabel } from '@/utils/autentiStatus'
 
-export function useAutenti({ dealId, statusMethod, sendMethod, sentToastLabel }) {
+export function useAutenti({ dealId, statusMethod, sendMethod, sentToastLabel, dokument = 'umowa' }) {
   // Explicit `null` initial state (never a bare `reactive` key presence
   // check — see the CLAUDE.md note on the hasOwnProperty/reactive trap that
   // froze the CP admin panel). `autenti` is a plain ref holding the whole
@@ -107,8 +115,8 @@ export function useAutenti({ dealId, statusMethod, sendMethod, sentToastLabel })
   // must stay completely invisible rather than show a half-broken control.
   const autentiEnabled = computed(() => autenti.value?.enabled === true)
   const autentiStatus = computed(() => autenti.value?.autenti_status || null)
-  const autentiBadgeEntry = computed(() => badgeFor(autentiStatus.value))
-  const autentiSendLabel = computed(() => sendButtonLabel(autentiStatus.value))
+  const autentiBadgeEntry = computed(() => badgeFor(autentiStatus.value, dokument))
+  const autentiSendLabel = computed(() => sendButtonLabel(autentiStatus.value, dokument))
   // Gated on the status payload's own record-existence flag. The umowa
   // endpoint returns BOTH `dokument_exists` and the legacy `umowa_exists`
   // with the same value; the kredyt endpoint returns only `dokument_exists`.

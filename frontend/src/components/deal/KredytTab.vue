@@ -199,13 +199,20 @@
             </div>
           </div>
 
+          <!-- Fail-safe warning: the backend (client.py) uses the production
+          Autenti URL ONLY when environment === 'Production'; an empty/null
+          environment (unconfigured Single) goes to SANDBOX. So the warning
+          must fire on anything that is NOT 'Production', not only on the
+          literal 'Sandbox' string, or a rep with a never-configured
+          environment sees no warning and believes the signature is legally
+          binding (ops#144, F8). -->
           <div
-            v-if="autenti.environment === 'Sandbox'"
+            v-if="autenti.environment !== 'Production'"
             class="mb-3 rounded-lg border border-outline-amber-3 bg-surface-amber-2 px-3 py-2 text-sm text-ink-amber-8"
           >
             {{
               __(
-                'Środowisko testowe Autenti — podpis NIE jest prawnie wiążący, a e-mail do klienta przyjdzie z domeny testowej.',
+                'Środowisko testowe Autenti (albo brak konfiguracji środowiska). Podpis NIE jest prawnie wiążący.',
               )
             }}
           </div>
@@ -695,6 +702,9 @@ const {
   statusMethod: 'crm.integrations.autenti.api.autenti_kredyt_status',
   sendMethod: 'crm.integrations.autenti.api.autenti_send_kredyt',
   sentToastLabel: __('Formularz kredytowy wysłany do podpisu'),
+  // 'Formularz kredytowy' is grammatically masculine, see useAutenti.js's
+  // header comment on `dokument` for why this changes badge/button wording.
+  dokument: 'kredyt',
 })
 
 onMounted(loadKredyt)

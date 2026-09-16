@@ -37,13 +37,38 @@ describe('Autenti — status umowy (autentiStatus)', () => {
       },
     )
 
-    it('zwraca wpis badge dla znanego statusu', () => {
+    it('zwraca wpis badge dla znanego statusu (dokument domyślny: umowa)', () => {
       expect(badgeFor('Podpisana')).toEqual({ label: 'Podpisana', theme: 'green' })
       expect(badgeFor('Błąd')).toEqual({ label: 'Błąd wysyłki', theme: 'red' })
     })
 
     it('zwraca null dla nieznanego statusu zamiast rzucać wyjątek', () => {
       expect(badgeFor('CośNieistniejącego')).toBeNull()
+    })
+
+    it('dla dokument="umowa" etykiety pozostają rodzaju żeńskiego (bez zmian)', () => {
+      expect(badgeFor('Wysłana', 'umowa')).toEqual({ label: 'Wysłana do podpisu', theme: 'amber' })
+      expect(badgeFor('Podpisana', 'umowa')).toEqual({ label: 'Podpisana', theme: 'green' })
+      expect(badgeFor('Odrzucona', 'umowa')).toEqual({ label: 'Odrzucona', theme: 'red' })
+      expect(badgeFor('Wygasła', 'umowa')).toEqual({ label: 'Wygasła', theme: 'gray' })
+      expect(badgeFor('Wycofana', 'umowa')).toEqual({ label: 'Wycofana', theme: 'gray' })
+    })
+
+    it('dla dokument="kredyt" etykiety są rodzaju męskiego (formularz kredytowy)', () => {
+      expect(badgeFor('Wysłana', 'kredyt')).toEqual({ label: 'Wysłany do podpisu', theme: 'amber' })
+      expect(badgeFor('Podpisana', 'kredyt')).toEqual({ label: 'Podpisany', theme: 'green' })
+      expect(badgeFor('Odrzucona', 'kredyt')).toEqual({ label: 'Odrzucony', theme: 'red' })
+      expect(badgeFor('Wygasła', 'kredyt')).toEqual({ label: 'Wygasły', theme: 'gray' })
+      expect(badgeFor('Wycofana', 'kredyt')).toEqual({ label: 'Wycofany', theme: 'gray' })
+    })
+
+    it('dla dokument="kredyt" statusy bez rodzajowego rzeczownika zostają bez zmian', () => {
+      expect(badgeFor('Wysyłanie', 'kredyt')).toEqual({ label: 'Wysyłanie…', theme: 'blue' })
+      expect(badgeFor('Błąd', 'kredyt')).toEqual({ label: 'Błąd wysyłki', theme: 'red' })
+    })
+
+    it('nieznany status z dokument="kredyt" nadal zwraca null', () => {
+      expect(badgeFor('CośNieistniejącego', 'kredyt')).toBeNull()
     })
   })
 
@@ -90,7 +115,7 @@ describe('Autenti — status umowy (autentiStatus)', () => {
       ['Odrzucona', 'Wyślij ponownie do podpisu'],
       ['Wygasła', 'Wyślij ponownie do podpisu'],
       ['Wycofana', 'Wyślij ponownie do podpisu'],
-    ])('sendButtonLabel(%p) === %p', (status, expected) => {
+    ])('sendButtonLabel(%p) === %p (bez dokument, domyślnie umowa)', (status, expected) => {
       expect(sendButtonLabel(status)).toBe(expected)
     })
 
@@ -103,6 +128,30 @@ describe('Autenti — status umowy (autentiStatus)', () => {
       ['Podpisana', 'Podpisz umowę'],
     ])('sendButtonLabel(%p) === %p (nieużywane w UI, ale bez wyjątku)', (status, expected) => {
       expect(sendButtonLabel(status)).toBe(expected)
+    })
+
+    it.each([
+      [null, 'Podpisz umowę'],
+      [undefined, 'Podpisz umowę'],
+      ['', 'Podpisz umowę'],
+      ['Błąd', 'Wyślij ponownie do podpisu'],
+      ['Odrzucona', 'Wyślij ponownie do podpisu'],
+      ['Wygasła', 'Wyślij ponownie do podpisu'],
+      ['Wycofana', 'Wyślij ponownie do podpisu'],
+    ])('sendButtonLabel(%p, "umowa") === %p (jawny dokument, bez zmian)', (status, expected) => {
+      expect(sendButtonLabel(status, 'umowa')).toBe(expected)
+    })
+
+    it.each([
+      [null, 'Podpisz wniosek'],
+      [undefined, 'Podpisz wniosek'],
+      ['', 'Podpisz wniosek'],
+      ['Błąd', 'Wyślij ponownie do podpisu'],
+      ['Odrzucona', 'Wyślij ponownie do podpisu'],
+      ['Wygasła', 'Wyślij ponownie do podpisu'],
+      ['Wycofana', 'Wyślij ponownie do podpisu'],
+    ])('sendButtonLabel(%p, "kredyt") === %p', (status, expected) => {
+      expect(sendButtonLabel(status, 'kredyt')).toBe(expected)
     })
   })
 
