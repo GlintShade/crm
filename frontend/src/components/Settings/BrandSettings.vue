@@ -53,7 +53,7 @@
             <img
               v-if="settings.doc?.brand_logo"
               :src="settings.doc?.brand_logo"
-              alt="Logo"
+              :alt="__('Logo')"
               class="size-8 rounded"
             />
             <ImageIcon v-else class="size-5 text-ink-gray-4" />
@@ -88,7 +88,7 @@
             <img
               v-if="settings.doc?.favicon"
               :src="settings.doc?.favicon"
-              alt="Favicon"
+              :alt="__('Favicon')"
               class="size-8 rounded"
             />
             <ImageIcon v-else class="size-5 text-ink-gray-4" />

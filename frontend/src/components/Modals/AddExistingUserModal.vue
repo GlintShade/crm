@@ -76,12 +76,15 @@ const role = ref('Sales User')
 
 const description = computed(() => {
   return {
-    'System Manager':
+    'System Manager': __(
       'Can manage all aspects of the CRM, including user management, customizations and settings.',
-    'Sales Manager':
+    ),
+    'Sales Manager': __(
       'Can manage and invite new users, and create public & private views (reports).',
-    'Sales User':
+    ),
+    'Sales User': __(
       'Can work with leads and deals and create private views (reports).',
+    ),
   }[role.value]
 })
 

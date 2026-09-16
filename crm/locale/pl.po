@@ -9063,3 +9063,34 @@ msgstr "Rozpocznij rozmowę teraz!"
 
 msgid "Error Uploading File"
 msgstr "Błąd przesyłania pliku"
+
+# b59 T5
+# issue ops#136: pozostale literaly bez __() (call log, statusy/priorytety
+# zadan, opisy roli w AddExistingUserModal, Lead Sync, licznik obiektow w
+# GeolocationControl)
+msgid "Incoming Call"
+msgstr "Połączenie przychodzące"
+
+msgid "Outgoing Call"
+msgstr "Połączenie wychodzące"
+
+msgid "Can manage all aspects of the CRM, including user management, customizations and settings."
+msgstr "Może zarządzać wszystkimi aspektami CRM, w tym użytkownikami, personalizacją i ustawieniami."
+
+msgid "Can manage and invite new users, and create public & private views (reports)."
+msgstr "Może zarządzać i zapraszać nowych użytkowników oraz tworzyć publiczne i prywatne widoki (raporty)."
+
+msgid "Can work with leads and deals and create private views (reports)."
+msgstr "Może pracować z leadami i szansami oraz tworzyć prywatne widoki (raporty)."
+
+msgid "Manage your lead sources here. Add new sources to start syncing leads automatically."
+msgstr "Zarządzaj tutaj źródłami leadów. Dodaj nowe źródła, aby automatycznie synchronizować leady."
+
+msgid "Lead Form"
+msgstr "Formularz leada"
+
+msgid "{0} feature"
+msgstr "{0} obiekt"
+
+msgid "{0} features"
+msgstr "{0} obiektów"
