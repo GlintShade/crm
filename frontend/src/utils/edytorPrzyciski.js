@@ -179,3 +179,45 @@ export function przyciskiUstalone(createEditorButton) {
 export function przyciskiPlywajace(createEditorButton) {
   return zbudujTablice(SPECYFIKACJA_PLYWAJACA, createEditorButton)
 }
+
+// Słownik klucz komendy -> polska etykieta, zbudowany raz z obu specyfikacji
+// powyżej (SPECYFIKACJA_USTALONA jest nadzbiorem SPECYFIKACJA_PLYWAJACA co do
+// zestawu komend, ale iterujemy obie na wypadek przyszłej rozbieżności).
+// Służy konsumentom, którzy - jak CommentBox.vue i EmailEditor.vue - nie
+// chcą pełnej listy `przyciskiUstalone`/`przyciskiPlywajace`, tylko WŁASNY,
+// węższy podzbiór/kolejność komend (np. bez Strikethrough/Task List/Undo),
+// ale wciąż z polskimi etykietami zamiast angielskiego literału wprost.
+const SLOWNIK_ETYKIET = new Map()
+for (const specyfikacja of [SPECYFIKACJA_USTALONA, SPECYFIKACJA_PLYWAJACA]) {
+  for (const wpis of specyfikacja) {
+    if (wpis === 'Separator') continue
+    const pary = jestGrupa(wpis) ? wpis : [wpis]
+    for (const [klucz, etykieta] of pary) SLOWNIK_ETYKIET.set(klucz, etykieta)
+  }
+}
+
+function zbudujZeSlownika(createEditorButton, klucz) {
+  const etykieta = SLOWNIK_ETYKIET.get(klucz)
+  if (!etykieta) {
+    // Celowo błąd, nie cichy fallback na angielski literał - zob.
+    // konwencja "unknown material is an error" w CLAUDE.md.
+    throw new Error(`edytorPrzyciski: brak polskiej etykiety dla komendy "${klucz}"`)
+  }
+  return { ...createEditorButton(klucz), label: __(etykieta) }
+}
+
+// Buduje tablicę przycisków wg WŁASNEJ listy komend konsumenta - własny
+// podzbiór i własna kolejność (np. `textEditorMenuButtons` w CommentBox.vue
+// i EmailEditor.vue), z polskimi etykietami wziętymi ze wspólnego słownika
+// powyżej. `lista` ma inny kształt niż SPECYFIKACJA_*: same stringi komend
+// zamiast par [klucz, etykieta] - string komendy, 'Separator', albo tablica
+// stringów (grupa/dropdown, np. nagłówki albo podmenu tabeli).
+export function przyciskiWedlugListy(lista, createEditorButton) {
+  return lista.map((wpis) => {
+    if (wpis === 'Separator') return createEditorButton('Separator')
+    if (Array.isArray(wpis)) {
+      return wpis.map((klucz) => zbudujZeSlownika(createEditorButton, klucz))
+    }
+    return zbudujZeSlownika(createEditorButton, wpis)
+  })
+}

@@ -89,8 +89,14 @@ import SmileIcon from '@/components/Icons/SmileIcon.vue'
 import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
 import AttachmentItem from '@/components/AttachmentItem.vue'
 import { usersStore } from '@/stores/users'
+import { przyciskiWedlugListy } from '@/utils/edytorPrzyciski'
 import { useTelemetry } from 'frappe-ui/frappe'
-import { TextEditorBubbleMenu, TextEditor, FileUploader } from 'frappe-ui'
+import {
+  TextEditorBubbleMenu,
+  TextEditor,
+  FileUploader,
+  createEditorButton,
+} from 'frappe-ui'
 import { EditorContent } from '@tiptap/vue-3'
 import { ref, computed } from 'vue'
 
@@ -142,41 +148,48 @@ const mentionsKonfig = { mentions: () => listaWzmianek() }
 
 defineExpose({ editor })
 
-const textEditorMenuButtons = [
-  'Paragraph',
-  ['Heading 2', 'Heading 3', 'Heading 4', 'Heading 5', 'Heading 6'],
-  'Separator',
-  'Bold',
-  'Italic',
-  'Separator',
-  'Bullet List',
-  'Numbered List',
-  'Separator',
-  'Align Left',
-  'Align Center',
-  'Align Right',
-  'FontColor',
-  'Separator',
-  'Image',
-  'Video',
-  'Link',
-  'Blockquote',
-  'Code',
-  'Horizontal Rule',
+// Polskie etykiety (nie hardkodowany angielski literał) - zob.
+// frontend/src/utils/edytorPrzyciski.js. Ten komponent trzyma własny,
+// węższy podzbiór/kolejność komend niż frappe-ui's domyślny bubbleMenu,
+// dlatego `przyciskiWedlugListy`, nie `przyciskiPlywajace`.
+const textEditorMenuButtons = przyciskiWedlugListy(
   [
-    'InsertTable',
-    'AddColumnBefore',
-    'AddColumnAfter',
-    'DeleteColumn',
-    'AddRowBefore',
-    'AddRowAfter',
-    'DeleteRow',
-    'MergeCells',
-    'SplitCell',
-    'ToggleHeaderColumn',
-    'ToggleHeaderRow',
-    'ToggleHeaderCell',
-    'DeleteTable',
+    'Paragraph',
+    ['Heading 2', 'Heading 3', 'Heading 4', 'Heading 5', 'Heading 6'],
+    'Separator',
+    'Bold',
+    'Italic',
+    'Separator',
+    'Bullet List',
+    'Numbered List',
+    'Separator',
+    'Align Left',
+    'Align Center',
+    'Align Right',
+    'FontColor',
+    'Separator',
+    'Image',
+    'Video',
+    'Link',
+    'Blockquote',
+    'Code',
+    'Horizontal Rule',
+    [
+      'InsertTable',
+      'AddColumnBefore',
+      'AddColumnAfter',
+      'DeleteColumn',
+      'AddRowBefore',
+      'AddRowAfter',
+      'DeleteRow',
+      'MergeCells',
+      'SplitCell',
+      'ToggleHeaderColumn',
+      'ToggleHeaderRow',
+      'ToggleHeaderCell',
+      'DeleteTable',
+    ],
   ],
-]
+  createEditorButton,
+)
 </script>

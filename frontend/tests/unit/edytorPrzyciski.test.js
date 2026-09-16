@@ -7,6 +7,7 @@ import {
   kluczeZeSpecyfikacji,
   przyciskiUstalone,
   przyciskiPlywajace,
+  przyciskiWedlugListy,
 } from '@/utils/edytorPrzyciski'
 
 // UWAGA: ten plik celowo NIE importuje niczego z 'frappe-ui' (ani barrela,
@@ -160,5 +161,82 @@ describe('edytorPrzyciski', () => {
     const przyciski = przyciskiUstalone(fakeCreateEditorButton)
     const separator = przyciski.find((p) => !Array.isArray(p) && p.type === 'separator')
     expect(separator).toEqual({ type: 'separator' })
+  })
+
+  describe('przyciskiWedlugListy', () => {
+    it('tłumaczy własną listę konsumenta (podzbiór, string zamiast pary) na polskie etykiety, zachowując kolejność i grupowanie', () => {
+      const lista = [
+        'Paragraph',
+        ['Heading 2', 'Heading 3'],
+        'Separator',
+        'Bold',
+        'Italic',
+      ]
+      const przyciski = przyciskiWedlugListy(lista, fakeCreateEditorButton)
+      expect(przyciski).toHaveLength(5)
+      expect(przyciski[0].label).toBe('Akapit')
+      expect(Array.isArray(przyciski[1])).toBe(true)
+      expect(przyciski[1].map((p) => p.label)).toEqual(['Nagłówek 2', 'Nagłówek 3'])
+      expect(przyciski[2]).toEqual({ type: 'separator' })
+      expect(przyciski[3].label).toBe('Pogrubienie')
+      expect(przyciski[4].label).toBe('Kursywa')
+    })
+
+    it('zachowuje icon/action/isActive z oryginalnej komendy, nadpisuje tylko label', () => {
+      const [bold] = przyciskiWedlugListy(['Bold'], fakeCreateEditorButton)
+      expect(bold.icon).toBe('icon:Bold')
+      expect(typeof bold.action).toBe('function')
+      expect(typeof bold.isActive).toBe('function')
+    })
+
+    it('rzuca błąd dla nieznanej komendy zamiast cicho przepuścić angielski literał', () => {
+      expect(() => przyciskiWedlugListy(['CoNieIstnieje'], fakeCreateEditorButton)).toThrow(
+        /CoNieIstnieje/,
+      )
+    })
+
+    it('pokrywa dokładnie zestaw komend faktycznie używanych przez CommentBox.vue/EmailEditor.vue (bez literówek)', () => {
+      // Ta sama lista co `textEditorMenuButtons` w obu komponentach - jeśli
+      // się rozjadą, ten test i tak wykryje literówkę/nieznaną komendę,
+      // bo zbudujZeSlownika rzuca dla brakującego klucza.
+      const listaKomponentow = [
+        'Paragraph',
+        ['Heading 2', 'Heading 3', 'Heading 4', 'Heading 5', 'Heading 6'],
+        'Separator',
+        'Bold',
+        'Italic',
+        'Separator',
+        'Bullet List',
+        'Numbered List',
+        'Separator',
+        'Align Left',
+        'Align Center',
+        'Align Right',
+        'FontColor',
+        'Separator',
+        'Image',
+        'Video',
+        'Link',
+        'Blockquote',
+        'Code',
+        'Horizontal Rule',
+        [
+          'InsertTable',
+          'AddColumnBefore',
+          'AddColumnAfter',
+          'DeleteColumn',
+          'AddRowBefore',
+          'AddRowAfter',
+          'DeleteRow',
+          'MergeCells',
+          'SplitCell',
+          'ToggleHeaderColumn',
+          'ToggleHeaderRow',
+          'ToggleHeaderCell',
+          'DeleteTable',
+        ],
+      ]
+      expect(() => przyciskiWedlugListy(listaKomponentow, fakeCreateEditorButton)).not.toThrow()
+    })
   })
 })
