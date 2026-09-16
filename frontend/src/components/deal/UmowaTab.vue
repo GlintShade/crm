@@ -229,10 +229,16 @@
 
         <!-- Missing-fields summary (populated after the last save attempt) -->
         <div
-          v-if="missingLabels.length"
+          v-if="missingLabels.length || missingClientLabels.length"
           class="rounded-lg border border-outline-amber-3 bg-surface-amber-2 px-4 py-3 text-sm text-ink-amber-8"
         >
-          {{ __('Brakujące pola:') }} {{ missingLabels.join(', ') }}
+          <div v-if="missingLabels.length">
+            {{ __('Brakujące pola:') }} {{ missingLabels.join(', ') }}
+          </div>
+          <div v-if="missingClientLabels.length">
+            {{ __('Brakujące dane klienta:') }} {{ missingClientLabels.join(', ') }}
+            {{ __('Uzupełnij je na karcie klienta.') }}
+          </div>
         </div>
 
         <section v-for="sec in formSections" :key="sec.key">
@@ -625,6 +631,7 @@ const creating = ref(false)
 const saving = ref(false)
 const saveState = ref('idle') // idle | saving | saved | error
 const brakujace = ref([])
+const brakujaceKlienta = ref([])
 
 const form = reactive({})
 
@@ -670,6 +677,15 @@ function extractBrakujace(data) {
   return Array.isArray(list) ? list : []
 }
 
+// Same shape and same reading rule as extractBrakujace() above, but for the
+// separate list of missing CLIENT data (Contact-side: imię/nazwisko, PESEL,
+// telefon, e-mail, ops#146), the server already returns human-readable
+// Polish labels here, not fieldnames, so there is no local label lookup.
+function extractBrakujaceKlienta(data) {
+  const list = data?.wyliczenia?.brakujace_dane_klienta
+  return Array.isArray(list) ? list : []
+}
+
 async function loadUmowa() {
   loading.value = true
   loadError.value = ''
@@ -679,6 +695,7 @@ async function loadUmowa() {
     prefill.value = data?.prefill || {}
     wyliczenia.value = data?.wyliczenia || {}
     brakujace.value = extractBrakujace(data)
+    brakujaceKlienta.value = extractBrakujaceKlienta(data)
     if (umowa.value) hydrateForm(umowa.value)
   } catch (err) {
     loadError.value = extractErrorMessage(err)
@@ -731,6 +748,10 @@ const missingSet = computed(() => new Set(brakujace.value))
 const missingLabels = computed(() =>
   brakujace.value.map((fn) => fieldLabelByName.get(fn) || fn),
 )
+// `brakujace_dane_klienta` already carries human-readable Polish labels from
+// the server (ops#146). Unlike `brakujace_pola`/`missingLabels`, there is no
+// fieldname-to-label lookup to do here.
+const missingClientLabels = computed(() => brakujaceKlienta.value)
 
 const recordStatus = computed(() => umowa.value?.status || 'Roboczy')
 const isKompletny = computed(() => recordStatus.value === 'Kompletny')
@@ -745,6 +766,7 @@ async function createUmowa() {
     prefill.value = data?.prefill || {}
     wyliczenia.value = data?.wyliczenia || {}
     brakujace.value = extractBrakujace(data)
+    brakujaceKlienta.value = extractBrakujaceKlienta(data)
     if (umowa.value) hydrateForm(umowa.value)
     toast.success(__('Utworzono formularz umowy'))
     // Refresh Autenti status so `umowa_exists` stops being stale — otherwise
@@ -779,6 +801,7 @@ async function saveForm() {
     prefill.value = data?.prefill || prefill.value
     wyliczenia.value = data?.wyliczenia || wyliczenia.value
     brakujace.value = extractBrakujace(data)
+    brakujaceKlienta.value = extractBrakujaceKlienta(data)
     hydrateForm(umowa.value)
     saveState.value = 'saved'
     if (brakujace.value.length) {

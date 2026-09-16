@@ -25,6 +25,7 @@ from crm.permissions.file_nazwy_systemowe import plik_systemowy
 from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad
 from crm.volteo_naming import code_for
 from crm.volteo_umowa import (
+	brakujace_dane_klienta,
 	brakujace_pola,
 	kwota_kredytu,
 	miejsce_i_pokrycie,
@@ -303,8 +304,10 @@ def _wyliczenia(
 	umowa_doc: "frappe.model.document.Document | None",
 ) -> dict[str, Any]:
 	"""Wartości liczone na żądanie: miejsce montażu, pokrycie dachowe, wymóg PPOŻ,
-	kwota kredytu i lista brakujących pól. Zawsze przeliczane od nowa z bieżącego
-	stanu szansy i umowy — nigdy nie ufamy wcześniej zapisanym wartościom.
+	kwota kredytu, lista brakujących pól formularza umowy i lista brakujących
+	danych osobowych klienta z karty kontaktu (ops#146). Zawsze przeliczane od
+	nowa z bieżącego stanu szansy, umowy i kontaktu, nigdy nie ufamy wcześniej
+	zapisanym wartościom.
 	"""
 	miejsce, pokrycie = miejsce_i_pokrycie(deal_doc.get("custom_konstrukcja"))
 	moc_istniejaca = umowa_doc.get("istniejaca_pv_moc_kwp") if umowa_doc else None
@@ -312,6 +315,7 @@ def _wyliczenia(
 	wklad = umowa_doc.get("wklad_wlasny_pln") if umowa_doc else None
 	finansowanie = umowa_doc.get("finansowanie") if umowa_doc else None
 	dane_do_walidacji = {pole: umowa_doc.get(pole) for pole in _DANE_POLA_DOZWOLONE} if umowa_doc else {}
+	kontakt_dane = _dane_kontaktu(_podstawowy_kontakt(deal_doc))
 
 	return {
 		"miejsce_montazu": miejsce,
@@ -319,6 +323,7 @@ def _wyliczenia(
 		"ppoz_wymagane": ppoz_wymagane(deal_doc.get("custom_pv_power_kwp"), moc_istniejaca, istniejaca_pv),
 		"kwota_kredytu_pln": kwota_kredytu(deal_doc.get("deal_value"), wklad, finansowanie),
 		"brakujace_pola": brakujace_pola(dane_do_walidacji),
+		"brakujace_dane_klienta": brakujace_dane_klienta(kontakt_dane),
 	}
 
 
@@ -480,7 +485,11 @@ def volteo_umowa_save(deal: str, dane: dict[str, Any]) -> dict[str, Any]:
 		umowa_doc.set(pole, wartosc)
 
 	braki = brakujace_pola({pole: umowa_doc.get(pole) for pole in _DANE_POLA_DOZWOLONE})
-	umowa_doc.status = "Roboczy" if braki else "Kompletny"
+	# Status "Kompletny" wymaga TAKŻE kompletu danych osobowych klienta z karty
+	# kontaktu (ops#146 Z4). Bez tej bramki dokument prawny mógł wyjść ze
+	# statusem "Kompletny" mimo pustego PESEL-u/telefonu/e-maila w komparycji.
+	braki_klienta = brakujace_dane_klienta(_dane_kontaktu(_podstawowy_kontakt(deal_doc)))
+	umowa_doc.status = "Roboczy" if (braki or braki_klienta) else "Kompletny"
 
 	# Kwota kredytu i wymóg PPOŻ liczone są WYŁĄCZNIE na serwerze i nadpisują cokolwiek
 	# przesłał klient — klient nie może ustawić kwoty kredytu ani ominąć wymogu PPOŻ.
