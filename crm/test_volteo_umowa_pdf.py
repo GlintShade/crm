@@ -174,7 +174,12 @@ class TestZeroZnaczyPustke(unittest.TestCase):
 		self.assertEqual(kontekst["bateria_moc_kw"], "")
 
 	def test_e_kwoty_zero_tez_sa_puste(self: "TestZeroZnaczyPustke") -> None:
-		kontekst = _kontekst(wklad_wlasny_pln=Decimal("0"), kwota_kredytu_pln=Decimal("0"))
+		# Bramka finansowania otwarta ("Kredyt + gotówka" spełnia warunek obu
+		# kluczy), mimo to zero samo w sobie musi wyjść pusto (ops#145 Z1
+		# testuje gating, ten test testuje niezależnie od niego regułę zera).
+		kontekst = _kontekst(
+			finansowanie="Kredyt + gotówka", wklad_wlasny_pln=Decimal("0"), kwota_kredytu_pln=Decimal("0")
+		)
 		self.assertEqual(kontekst["wklad_wlasny"], "")
 		self.assertEqual(kontekst["kwota_kredytu"], "")
 
@@ -231,31 +236,60 @@ class TestPanelGwarancjaTekst(unittest.TestCase):
 
 
 class TestFinansowanie(unittest.TestCase):
+	"""Kratka finansowania I gating obu kwot (`wklad_wlasny`/`kwota_kredytu`)
+	dla każdego z trzech wariantów (ops#145 Z1, CRITICAL). Każdy test niżej
+	celowo zostawia w polach warunkowych NIEZEROWE wartości niepasujące do
+	pozostałych dwóch wariantów, żeby wykazać, że to wyłącznie jawny wybór w
+	Selekcie decyduje, co trafia na wydruk, nie arytmetyka ani obecność
+	wartości w polu."""
+
 	def test_a_kredyt_100(self: "TestFinansowanie") -> None:
-		kontekst = _kontekst(finansowanie="Kredyt 100%")
+		kontekst = _kontekst(
+			finansowanie="Kredyt 100%", wklad_wlasny_pln=Decimal("12000"), kwota_kredytu_pln=Decimal("43454.88")
+		)
 		self.assertTrue(kontekst["fin_kredyt_100"])
 		self.assertFalse(kontekst["fin_kredyt_wklad"])
 		self.assertFalse(kontekst["fin_gotowka"])
+		# Kredyt 100%: kwota kredytu drukowana, wkład własny (mimo obecnej
+		# wartości w ukrytym polu) tłumiony: klient nic nie wpłaca.
+		self.assertEqual(kontekst["kwota_kredytu"], "43 454,88")
+		self.assertEqual(kontekst["wklad_wlasny"], "")
 
 	def test_b_kredyt_plus_gotowka(self: "TestFinansowanie") -> None:
-		kontekst = _kontekst(finansowanie="Kredyt + gotówka")
+		kontekst = _kontekst(
+			finansowanie="Kredyt + gotówka", wklad_wlasny_pln=Decimal("5000"), kwota_kredytu_pln=Decimal("38454.88")
+		)
 		self.assertFalse(kontekst["fin_kredyt_100"])
 		self.assertTrue(kontekst["fin_kredyt_wklad"])
 		self.assertFalse(kontekst["fin_gotowka"])
+		self.assertEqual(kontekst["wklad_wlasny"], "5 000,00")
+		self.assertEqual(kontekst["kwota_kredytu"], "38 454,88")
 
 	def test_c_gotowka_100(self: "TestFinansowanie") -> None:
-		kontekst = _kontekst(finansowanie="Gotówka 100%")
+		# Formularz niespójny: obie kwoty zostały w polach warunkowych mimo
+		# wyboru "Gotówka 100%" (np. przedstawiciel zmienił zdanie po
+		# wypełnieniu formularza), jawny wybór w Selekcie wygrywa, obie
+		# kwoty tłumione na wydruku (Z1, dokładny scenariusz z issue).
+		kontekst = _kontekst(
+			finansowanie="Gotówka 100%", wklad_wlasny_pln=Decimal("12000"), kwota_kredytu_pln=Decimal("30000")
+		)
 		self.assertFalse(kontekst["fin_kredyt_100"])
 		self.assertFalse(kontekst["fin_kredyt_wklad"])
 		self.assertTrue(kontekst["fin_gotowka"])
+		self.assertEqual(kontekst["wklad_wlasny"], "")
+		self.assertEqual(kontekst["kwota_kredytu"], "")
 
 	def test_d_nieznane_lub_puste_wszystkie_false(self: "TestFinansowanie") -> None:
 		for wartosc in (None, "", "Coś innego"):
 			with self.subTest(wartosc=wartosc):
-				kontekst = _kontekst(finansowanie=wartosc)
+				kontekst = _kontekst(
+					finansowanie=wartosc, wklad_wlasny_pln=Decimal("5000"), kwota_kredytu_pln=Decimal("30000")
+				)
 				self.assertFalse(kontekst["fin_kredyt_100"])
 				self.assertFalse(kontekst["fin_kredyt_wklad"])
 				self.assertFalse(kontekst["fin_gotowka"])
+				self.assertEqual(kontekst["wklad_wlasny"], "")
+				self.assertEqual(kontekst["kwota_kredytu"], "")
 
 
 class TestKonstrukcja(unittest.TestCase):
@@ -828,13 +862,85 @@ class TestPrzekopMb(unittest.TestCase):
 	def test_a_niewypelnione_pole_jest_puste(self: "TestPrzekopMb") -> None:
 		# Fixture bazowy nie ustawia "przekop_mb" — pole istnieje w schemacie
 		# (`ops/crm-umowa.py` + whitelist zapisu `crm/api/umowa.py`), ale bywa
-		# niewypełnione, więc defensywny odczyt `.get()` daje pustkę.
-		kontekst = _kontekst()
+		# niewypełnione, więc defensywny odczyt `.get()` daje pustkę. Bramka
+		# otwarta ("Tak"), żeby testować konkretnie brak wartości, nie gating.
+		kontekst = _kontekst(przekop_gruntowy="Tak")
 		self.assertEqual(kontekst["przekop_mb"], "")
 
-	def test_b_wypelnione_pole_jest_drukowane(self: "TestPrzekopMb") -> None:
-		kontekst = _kontekst(przekop_mb=25)
+	def test_b_wypelnione_pole_jest_drukowane_gdy_przekop_tak(self: "TestPrzekopMb") -> None:
+		kontekst = _kontekst(przekop_gruntowy="Tak", przekop_mb=25)
 		self.assertEqual(kontekst["przekop_mb"], "25")
+
+	def test_c_wypelnione_pole_tlumione_gdy_przekop_nie(self: "TestPrzekopMb") -> None:
+		# Formularz niespójny (ops#145 Z2, dokładny scenariusz z issue): metry
+		# zostały w polu warunkowym mimo wyboru "Nie" na przełączniku, jawny
+		# wybór wygrywa, tak jak w bloku kabla (kabel_nie_wygrywa_mimo_metrow).
+		kontekst = _kontekst(przekop_gruntowy="Nie", przekop_mb=25)
+		self.assertEqual(kontekst["przekop_mb"], "")
+
+	def test_d_wypelnione_pole_tlumione_gdy_przekop_nieznany(self: "TestPrzekopMb") -> None:
+		kontekst = _kontekst(przekop_gruntowy=None, przekop_mb=25)
+		self.assertEqual(kontekst["przekop_mb"], "")
+
+
+class TestPowierzchniaM2Tlumienie(unittest.TestCase):
+	"""Z2 (ops#145): `powierzchnia_m2` drukuje się tylko przy jawnym
+	`powierzchnia_prog == "powyżej 300 m²"`."""
+
+	def test_a_do_300_tlumi_powierzchnie(self: "TestPowierzchniaM2Tlumienie") -> None:
+		# Formularz niespójny: wartość została w polu mimo progu "do 300 m²"
+		# (dokładny scenariusz z issue).
+		kontekst = _kontekst(powierzchnia_prog="do 300 m²", powierzchnia_m2=Decimal("150"))
+		self.assertEqual(kontekst["powierzchnia_m2"], "")
+
+	def test_b_ponad_300_drukuje_powierzchnie(self: "TestPowierzchniaM2Tlumienie") -> None:
+		kontekst = _kontekst(powierzchnia_prog="powyżej 300 m²", powierzchnia_m2=Decimal("350"))
+		self.assertEqual(kontekst["powierzchnia_m2"], "350")
+
+	def test_c_prog_nieznany_tlumi_powierzchnie(self: "TestPowierzchniaM2Tlumienie") -> None:
+		kontekst = _kontekst(powierzchnia_prog=None, powierzchnia_m2=Decimal("350"))
+		self.assertEqual(kontekst["powierzchnia_m2"], "")
+
+
+class TestIstniejacaPvTlumienie(unittest.TestCase):
+	"""Z2 (ops#145): trzy pola instalacji istniejącej (`ist_pv_moc_inwertera_kw`,
+	`ist_pv_moc_kwp`, `ist_pv_producent_inwertera`) drukują się tylko przy
+	jawnym `istniejaca_pv == "Tak"`."""
+
+	def test_a_nie_tlumi_wszystkie_trzy_pola(self: "TestIstniejacaPvTlumienie") -> None:
+		# Formularz niespójny: dane instalacji zostały w polach mimo wyboru
+		# "Nie" (dokładny scenariusz z issue).
+		kontekst = _kontekst(
+			istniejaca_pv="Nie",
+			istniejaca_pv_moc_inwertera_kw=Decimal("4"),
+			istniejaca_pv_moc_kwp=Decimal("3.5"),
+			istniejaca_pv_producent_inwertera="Fronius",
+		)
+		self.assertEqual(kontekst["ist_pv_moc_inwertera_kw"], "")
+		self.assertEqual(kontekst["ist_pv_moc_kwp"], "")
+		self.assertEqual(kontekst["ist_pv_producent_inwertera"], "")
+
+	def test_b_tak_drukuje_wszystkie_trzy_pola(self: "TestIstniejacaPvTlumienie") -> None:
+		kontekst = _kontekst(
+			istniejaca_pv="Tak",
+			istniejaca_pv_moc_inwertera_kw=Decimal("4"),
+			istniejaca_pv_moc_kwp=Decimal("3.5"),
+			istniejaca_pv_producent_inwertera="Fronius",
+		)
+		self.assertEqual(kontekst["ist_pv_moc_inwertera_kw"], "4")
+		self.assertEqual(kontekst["ist_pv_moc_kwp"], "3,5")
+		self.assertEqual(kontekst["ist_pv_producent_inwertera"], "Fronius")
+
+	def test_c_nieznany_wybor_tlumi(self: "TestIstniejacaPvTlumienie") -> None:
+		kontekst = _kontekst(
+			istniejaca_pv=None,
+			istniejaca_pv_moc_inwertera_kw=Decimal("4"),
+			istniejaca_pv_moc_kwp=Decimal("3.5"),
+			istniejaca_pv_producent_inwertera="Fronius",
+		)
+		self.assertEqual(kontekst["ist_pv_moc_inwertera_kw"], "")
+		self.assertEqual(kontekst["ist_pv_moc_kwp"], "")
+		self.assertEqual(kontekst["ist_pv_producent_inwertera"], "")
 
 
 class TestRodo(unittest.TestCase):
@@ -940,6 +1046,84 @@ class TestAdresyIDane(unittest.TestCase):
 		deal = _deal(name="PRO/CP/26/0042")
 		kontekst = zbuduj_kontekst(_umowa(), deal, _kontakt(), _zestaw(), _komponenty(), _stale(), _DZIS)
 		self.assertEqual(kontekst["umowa_nr"], "PRO/CP/26/0042")
+
+
+class TestAdresUlicaPrefiks(unittest.TestCase):
+	"""Z11 (ops#145, LOW): `_adres()` nie dokleja własnego "ul. " przed nazwą
+	ulicy, gdy ta już zaczyna się od skrótu rodzaju drogi, inaczej wydruk
+	pokazuje "ul. ul. Kwiatowa 5" (prefill z `custom_install_address` bywa
+	wklejony razem ze skrótem przez przedstawiciela)."""
+
+	def test_a_ulica_juz_z_prefiksem_ul_z_kropka_nie_dubluje(self: "TestAdresUlicaPrefiks") -> None:
+		kontekst = _kontekst(adres_montaz_ulica="ul. Kwiatowa", adres_montaz_nr_domu="5")
+		self.assertEqual(kontekst["adres_montazu"], "ul. Kwiatowa 5, 02-002 Kraków")
+
+	def test_b_ulica_z_prefiksem_ul_bez_kropki_nie_dubluje(self: "TestAdresUlicaPrefiks") -> None:
+		kontekst = _kontekst(adres_montaz_ulica="ul Kwiatowa", adres_montaz_nr_domu="5")
+		self.assertEqual(kontekst["adres_montazu"], "ul Kwiatowa 5, 02-002 Kraków")
+
+	def test_c_aleja_nie_dostaje_dodatkowego_prefiksu_ul(self: "TestAdresUlicaPrefiks") -> None:
+		kontekst = _kontekst(adres_montaz_ulica="al. Niepodległości", adres_montaz_nr_domu="10")
+		self.assertEqual(kontekst["adres_montazu"], "al. Niepodległości 10, 02-002 Kraków")
+
+	def test_d_plac_nie_dostaje_dodatkowego_prefiksu_ul(self: "TestAdresUlicaPrefiks") -> None:
+		kontekst = _kontekst(adres_montaz_ulica="pl. Wolności", adres_montaz_nr_domu="1")
+		self.assertEqual(kontekst["adres_montazu"], "pl. Wolności 1, 02-002 Kraków")
+
+	def test_e_osiedle_nie_dostaje_dodatkowego_prefiksu_ul(self: "TestAdresUlicaPrefiks") -> None:
+		kontekst = _kontekst(adres_montaz_ulica="os. Słoneczne", adres_montaz_nr_domu="3")
+		self.assertEqual(kontekst["adres_montazu"], "os. Słoneczne 3, 02-002 Kraków")
+
+	def test_f_wielkosc_liter_prefiksu_nieistotna(self: "TestAdresUlicaPrefiks") -> None:
+		kontekst = _kontekst(adres_montaz_ulica="UL. Kwiatowa", adres_montaz_nr_domu="5")
+		self.assertEqual(kontekst["adres_montazu"], "UL. Kwiatowa 5, 02-002 Kraków")
+
+	def test_g_zwykla_ulica_dostaje_prefiks_ul_jak_dawniej(self: "TestAdresUlicaPrefiks") -> None:
+		kontekst = _kontekst(adres_montaz_ulica="Kwiatowa", adres_montaz_nr_domu="5")
+		self.assertEqual(kontekst["adres_montazu"], "ul. Kwiatowa 5, 02-002 Kraków")
+
+
+def _umowa_niespojna(**nadpisania: Any) -> dict[str, Any]:
+	"""Formularz NIESPÓJNY: przełącznik ustawiony na "brak"/"Nie" na każdym
+	z czterech pól sterujących, ale odpowiadające pola warunkowe wciąż niosą
+	stare, niezerowe wartości (np. przedstawiciel zmienił zdanie już po
+	wstępnym wypełnieniu formularza). Żadne z tych pól warunkowych NIE MA
+	prawa wylądować na wydrukowanym dokumencie prawnym. Fixture wprost pod
+	scenariusz z issue ops#145 (Z1 + Z2 naraz)."""
+	return _umowa(
+		finansowanie="Gotówka 100%",
+		wklad_wlasny_pln=Decimal("12000"),
+		kwota_kredytu_pln=Decimal("30000"),
+		przekop_gruntowy="Nie",
+		przekop_mb=Decimal("25"),
+		powierzchnia_prog="do 300 m²",
+		powierzchnia_m2=Decimal("350"),
+		istniejaca_pv="Nie",
+		istniejaca_pv_moc_inwertera_kw=Decimal("4"),
+		istniejaca_pv_moc_kwp=Decimal("3.5"),
+		istniejaca_pv_producent_inwertera="Fronius",
+		**nadpisania,
+	)
+
+
+class TestFormularzNiespojnyWszystkiePolaWarunkoweTlumione(unittest.TestCase):
+	"""Test regresyjny "golden" odtwarzający dokładnie scenariusz z issue
+	ops#145: formularz niespójny na WSZYSTKICH czterech osiach naraz. Żaden
+	z siedmiu kluczy warunkowych nie ma prawa wyciec na wydruk."""
+
+	def test_a_zaden_klucz_warunkowy_nie_wyciekl(
+		self: "TestFormularzNiespojnyWszystkiePolaWarunkoweTlumione",
+	) -> None:
+		kontekst = zbuduj_kontekst(
+			_umowa_niespojna(), _deal(), _kontakt(), _zestaw(), _komponenty(), _stale(), _DZIS
+		)
+		self.assertEqual(kontekst["wklad_wlasny"], "")
+		self.assertEqual(kontekst["kwota_kredytu"], "")
+		self.assertEqual(kontekst["przekop_mb"], "")
+		self.assertEqual(kontekst["powierzchnia_m2"], "")
+		self.assertEqual(kontekst["ist_pv_moc_inwertera_kw"], "")
+		self.assertEqual(kontekst["ist_pv_moc_kwp"], "")
+		self.assertEqual(kontekst["ist_pv_producent_inwertera"], "")
 
 
 class TestNieMutujeWejscia(unittest.TestCase):

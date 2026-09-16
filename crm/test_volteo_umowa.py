@@ -56,53 +56,144 @@ class TestMiejsceIPokrycie(unittest.TestCase):
 
 
 class TestPpozWymagane(unittest.TestCase):
+	# Wszystkie testy tej klasy przekazują trzeci argument (`istniejaca_pv`)
+	# wprost dobrany tak, żeby zachować pierwotną intencję każdego przypadku:
+	# "Tak", gdy `moc_istniejaca_kw` niesie realną (choćby zerową) wartość do
+	# zsumowania, "Nie" gdy drugi argument i tak jest pusty/nieistotny dla
+	# testowanego zachowania. Bramka istniejaca_pv sama w sobie ma osobną
+	# klasę testów niżej: `TestPpozWymaganeIstniejacaPvBramka` (ops#145 Z2).
 	def test_a_ponizej_progu(self: "TestPpozWymagane") -> None:
-		self.assertFalse(ppoz_wymagane(Decimal("5.0"), None))
+		self.assertFalse(ppoz_wymagane(Decimal("5.0"), None, "Nie"))
 
 	def test_b_dokladnie_prog_nie_wymaga(self: "TestPpozWymagane") -> None:
-		self.assertFalse(ppoz_wymagane(PROG_PPOZ_KW, None))
-		self.assertFalse(ppoz_wymagane("6.5", "0"))
+		self.assertFalse(ppoz_wymagane(PROG_PPOZ_KW, None, "Nie"))
+		self.assertFalse(ppoz_wymagane("6.5", "0", "Tak"))
 
 	def test_c_powyzej_progu(self: "TestPpozWymagane") -> None:
-		self.assertTrue(ppoz_wymagane(Decimal("6.51"), None))
-		self.assertTrue(ppoz_wymagane("10", None))
+		self.assertTrue(ppoz_wymagane(Decimal("6.51"), None, "Nie"))
+		self.assertTrue(ppoz_wymagane("10", None, "Nie"))
 
 	def test_d_rozbudowa_suma_przekracza_prog(self: "TestPpozWymagane") -> None:
 		# Ani nowa (4.0), ani istniejąca (3.0) instalacja osobno nie przekracza 6.5,
 		# ale ich suma (7.0) tak — to reguła najłatwiejsza do przypadkowego złamania.
-		self.assertTrue(ppoz_wymagane(Decimal("4.0"), Decimal("3.0")))
+		self.assertTrue(ppoz_wymagane(Decimal("4.0"), Decimal("3.0"), "Tak"))
 
 	def test_e_rozbudowa_suma_nie_przekracza_progu(self: "TestPpozWymagane") -> None:
-		self.assertFalse(ppoz_wymagane(Decimal("3.0"), Decimal("3.0")))
+		self.assertFalse(ppoz_wymagane(Decimal("3.0"), Decimal("3.0"), "Tak"))
 
 	def test_f_brakujace_wartosci_traktowane_jako_zero(self: "TestPpozWymagane") -> None:
-		self.assertFalse(ppoz_wymagane(None, None))
-		self.assertFalse(ppoz_wymagane("", ""))
-		self.assertFalse(ppoz_wymagane(None, "6.5"))
+		self.assertFalse(ppoz_wymagane(None, None, "Nie"))
+		self.assertFalse(ppoz_wymagane("", "", "Nie"))
+		# Bramka otwarta ("Tak"), a suma dokładnie na progu (0 + 6.5): wciąż
+		# nie wymaga zgody, próg jest wyłączny.
+		self.assertFalse(ppoz_wymagane(None, "6.5", "Tak"))
 
 	def test_g_rozne_typy_wejsciowe(self: "TestPpozWymagane") -> None:
-		self.assertTrue(ppoz_wymagane(7, 0))
-		self.assertTrue(ppoz_wymagane(7.0, 0.0))
+		self.assertTrue(ppoz_wymagane(7, 0, "Tak"))
+		self.assertTrue(ppoz_wymagane(7.0, 0.0, "Tak"))
+
+
+class TestPpozWymaganeIstniejacaPvBramka(unittest.TestCase):
+	"""Z2 (ops#145): moc istniejącej instalacji PV liczy się do progu PPOŻ
+	TYLKO, gdy przełącznik `istniejaca_pv` jest jawnie "Tak". W przeciwnym
+	razie (w tym formularz niespójny, gdzie stara moc została w polu po
+	zmianie wyboru na "Nie") moc istniejąca jest ignorowana."""
+
+	def test_a_nie_ignoruje_moc_mimo_wypelnionej(self: "TestPpozWymaganeIstniejacaPvBramka") -> None:
+		# Formularz niespójny: "Nie" wybrane, ale stara moc (4.0) zostala w polu.
+		self.assertFalse(ppoz_wymagane(Decimal("3.0"), Decimal("4.0"), "Nie"))
+
+	def test_b_tak_liczy_moc_do_sumy(self: "TestPpozWymaganeIstniejacaPvBramka") -> None:
+		self.assertTrue(ppoz_wymagane(Decimal("3.0"), Decimal("4.0"), "Tak"))
+
+	def test_c_nieznany_wybor_ignoruje_moc(self: "TestPpozWymaganeIstniejacaPvBramka") -> None:
+		for wybor in (None, "", "Coś innego"):
+			with self.subTest(wybor=wybor):
+				self.assertFalse(ppoz_wymagane(Decimal("3.0"), Decimal("4.0"), wybor))
+
+	def test_d_bramka_nie_wplywa_na_moc_nowej_instalacji(
+		self: "TestPpozWymaganeIstniejacaPvBramka",
+	) -> None:
+		# Moc nowej instalacji liczy się zawsze, niezależnie od bramki.
+		self.assertTrue(ppoz_wymagane(Decimal("10.0"), Decimal("4.0"), "Nie"))
 
 
 class TestKwotaKredytu(unittest.TestCase):
+	# Wszystkie testy tej klasy przekazują trzeci argument jako
+	# "Kredyt + gotówka": to gałąź, która zachowuje klasyczną arytmetykę
+	# `brutto - wklad_wlasny` testowaną tu od zawsze. Zachowanie zależne od
+	# samego wyboru finansowania ma osobną klasę niżej:
+	# `TestKwotaKredytuFinansowanieBramka` (ops#145 Z1).
 	def test_a_zwykly_przypadek(self: "TestKwotaKredytu") -> None:
-		self.assertEqual(kwota_kredytu(Decimal("50000"), Decimal("10000")), Decimal("40000.00"))
+		self.assertEqual(
+			kwota_kredytu(Decimal("50000"), Decimal("10000"), "Kredyt + gotówka"), Decimal("40000.00")
+		)
 
 	def test_b_zerowy_wklad_wlasny(self: "TestKwotaKredytu") -> None:
-		self.assertEqual(kwota_kredytu(Decimal("50000"), Decimal("0")), Decimal("50000.00"))
-		self.assertEqual(kwota_kredytu(Decimal("50000"), None), Decimal("50000.00"))
+		self.assertEqual(
+			kwota_kredytu(Decimal("50000"), Decimal("0"), "Kredyt + gotówka"), Decimal("50000.00")
+		)
+		self.assertEqual(kwota_kredytu(Decimal("50000"), None, "Kredyt + gotówka"), Decimal("50000.00"))
 
 	def test_c_wklad_wiekszy_niz_brutto_przycina_do_zera(self: "TestKwotaKredytu") -> None:
-		self.assertEqual(kwota_kredytu(Decimal("10000"), Decimal("15000")), Decimal("0.00"))
+		self.assertEqual(
+			kwota_kredytu(Decimal("10000"), Decimal("15000"), "Kredyt + gotówka"), Decimal("0.00")
+		)
 
 	def test_d_wejscia_tekstowe(self: "TestKwotaKredytu") -> None:
-		self.assertEqual(kwota_kredytu("50000", "10000.50"), Decimal("39999.50"))
+		self.assertEqual(
+			kwota_kredytu("50000", "10000.50", "Kredyt + gotówka"), Decimal("39999.50")
+		)
 
 	def test_e_kwantyzacja_do_dwoch_miejsc(self: "TestKwotaKredytu") -> None:
-		wynik = kwota_kredytu(Decimal("100.005"), Decimal("0"))
+		wynik = kwota_kredytu(Decimal("100.005"), Decimal("0"), "Kredyt + gotówka")
 		self.assertEqual(wynik, Decimal("100.01"))
 		self.assertEqual(wynik.as_tuple().exponent, -2)
+
+
+class TestKwotaKredytuFinansowanieBramka(unittest.TestCase):
+	"""Z1 (ops#145, CRITICAL): kwota kredytu zależy od wybranego sposobu
+	finansowania, nie tylko od arytmetyki brutto minus wkład."""
+
+	def test_a_gotowka_100_zawsze_zero(self: "TestKwotaKredytuFinansowanieBramka") -> None:
+		# Nawet gdy w polu wklad_wlasny_pln zostala jakas stara wartosc,
+		# "Gotówka 100%" nie generuje kredytu.
+		self.assertEqual(
+			kwota_kredytu(Decimal("50000"), Decimal("10000"), "Gotówka 100%"), Decimal("0.00")
+		)
+		self.assertEqual(kwota_kredytu(Decimal("50000"), Decimal("0"), "Gotówka 100%"), Decimal("0.00"))
+
+	def test_b_kredyt_100_caly_brutto_wklad_ignorowany(
+		self: "TestKwotaKredytuFinansowanieBramka",
+	) -> None:
+		self.assertEqual(
+			kwota_kredytu(Decimal("50000"), Decimal("10000"), "Kredyt 100%"), Decimal("50000.00")
+		)
+		self.assertEqual(kwota_kredytu(Decimal("50000"), Decimal("0"), "Kredyt 100%"), Decimal("50000.00"))
+
+	def test_c_kredyt_i_gotowka_odejmuje_wklad(self: "TestKwotaKredytuFinansowanieBramka") -> None:
+		self.assertEqual(
+			kwota_kredytu(Decimal("50000"), Decimal("10000"), "Kredyt + gotówka"), Decimal("40000.00")
+		)
+
+	def test_d_kredyt_i_gotowka_wklad_wiekszy_od_brutto_przycina_do_zera(
+		self: "TestKwotaKredytuFinansowanieBramka",
+	) -> None:
+		self.assertEqual(
+			kwota_kredytu(Decimal("10000"), Decimal("15000"), "Kredyt + gotówka"), Decimal("0.00")
+		)
+
+	def test_e_nieznany_lub_pusty_wybor_zero(self: "TestKwotaKredytuFinansowanieBramka") -> None:
+		for wybor in (None, "", "Coś innego"):
+			with self.subTest(wybor=wybor):
+				self.assertEqual(
+					kwota_kredytu(Decimal("50000"), Decimal("10000"), wybor), Decimal("0.00")
+				)
+
+	def test_f_kredyt_100_ujemny_brutto_przycina_do_zera(
+		self: "TestKwotaKredytuFinansowanieBramka",
+	) -> None:
+		self.assertEqual(kwota_kredytu(Decimal("-100"), Decimal("0"), "Kredyt 100%"), Decimal("0.00"))
 
 
 class TestBrakujacePola(unittest.TestCase):
@@ -265,22 +356,22 @@ class TestDecimalLubZeroIKwotaKredytuNaSurowychDanych(unittest.TestCase):
 	"""Wartości z formularza klienta (stringi) nie mogą podnosić wyjątku w kalkulatorze cenowym."""
 
 	def test_a_sama_spacja_nie_podnosi_wyjatku(self: "TestDecimalLubZeroIKwotaKredytuNaSurowychDanych") -> None:
-		self.assertEqual(kwota_kredytu(" ", " "), Decimal("0.00"))
+		self.assertEqual(kwota_kredytu(" ", " ", "Kredyt + gotówka"), Decimal("0.00"))
 
 	def test_b_niepoprawny_tekst_nie_podnosi_wyjatku(
 		self: "TestDecimalLubZeroIKwotaKredytuNaSurowychDanych",
 	) -> None:
-		self.assertEqual(kwota_kredytu("abc", "def"), Decimal("0.00"))
+		self.assertEqual(kwota_kredytu("abc", "def", "Kredyt + gotówka"), Decimal("0.00"))
 
 	def test_c_niepoprawny_tekst_w_ppoz_wymagane_nie_podnosi_wyjatku(
 		self: "TestDecimalLubZeroIKwotaKredytuNaSurowychDanych",
 	) -> None:
-		self.assertFalse(ppoz_wymagane("abc", " "))
+		self.assertFalse(ppoz_wymagane("abc", " ", "Tak"))
 
 	def test_d_poprawna_wartosc_z_niepoprawnym_wkladem_liczy_sie_normalnie(
 		self: "TestDecimalLubZeroIKwotaKredytuNaSurowychDanych",
 	) -> None:
-		self.assertEqual(kwota_kredytu("50000", "abc"), Decimal("50000.00"))
+		self.assertEqual(kwota_kredytu("50000", "abc", "Kredyt + gotówka"), Decimal("50000.00"))
 
 
 if __name__ == "__main__":

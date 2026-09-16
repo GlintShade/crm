@@ -96,21 +96,48 @@ def miejsce_i_pokrycie(konstrukcja: str | None) -> tuple[str | None, str | None]
 	return KONSTRUKCJA_MONTAZ.get(konstrukcja.strip(), (None, None))
 
 
-def ppoz_wymagane(moc_nowa_kw: Any, moc_istniejaca_kw: Any) -> bool:
+def ppoz_wymagane(moc_nowa_kw: Any, moc_istniejaca_kw: Any, istniejaca_pv: Any) -> bool:
 	"""Czy wymagana jest zgoda PPOŻ.
 
 	Zgodnie z umową próg dotyczy SUMY mocy nowej instalacji i ewentualnej
 	instalacji istniejącej (przypadek rozbudowy) — pojedyncza instalacja może
 	być poniżej progu, a suma już go przekracza. Próg jest wyłączny: dokładnie
 	6,5 kW nie wymaga zgody, wymaga dopiero wartość ściśle większa.
+
+	`moc_istniejaca_kw` liczy się do sumy TYLKO, gdy `istniejaca_pv == "Tak"`.
+	Formularz chowa pole mocy istniejącej instalacji na ekranie, gdy
+	przedstawiciel wybierze "Nie" (albo zostawi wybór pusty). Jawny wybór
+	w Selecie musi wtedy wygrywać z ewentualną resztką liczby zostawioną w
+	ukrytym polu (np. po zmianie zdania), inaczej sam wymóg zgody PPOŻ
+	policzyłby się z danych, których formularz jawnie się wyparł. Patrz
+	analogiczna zasada w `crm/volteo_umowa_pdf.py::zbuduj_kontekst` dla pól
+	drukowanych na PDF-ie (ops#145).
 	"""
-	suma = _decimal_lub_zero(moc_nowa_kw) + _decimal_lub_zero(moc_istniejaca_kw)
+	moc_istniejaca_liczona = moc_istniejaca_kw if istniejaca_pv == "Tak" else None
+	suma = _decimal_lub_zero(moc_nowa_kw) + _decimal_lub_zero(moc_istniejaca_liczona)
 	return suma > PROG_PPOZ_KW
 
 
-def kwota_kredytu(brutto: Any, wklad_wlasny: Any) -> Decimal:
-	"""Kwota do sfinansowania kredytem: `brutto - wklad_wlasny`, nigdy poniżej zera."""
-	roznica = _decimal_lub_zero(brutto) - _decimal_lub_zero(wklad_wlasny)
+def kwota_kredytu(brutto: Any, wklad_wlasny: Any, finansowanie: Any) -> Decimal:
+	"""Kwota do sfinansowania kredytem, zależna od wybranego sposobu finansowania.
+
+	- `"Gotówka 100%"`: kredytu nie ma, wynik zawsze `0`. Wkład własny z pola
+	  warunkowego (ukrytego wtedy na ekranie) nie ma prawa na to wpłynąć.
+	- `"Kredyt 100%"`: całe `brutto` idzie na kredyt, `wklad_wlasny` jest
+	  ignorowany (pole też ukryte na ekranie dla tego wyboru).
+	- `"Kredyt + gotówka"`: klasyczne `brutto - wklad_wlasny`, nigdy poniżej zera.
+	- Inny/nierozpoznany/pusty wybór (formularz jeszcze niewypełniony): `0`.
+	  Jawny wybór w Selecie musi istnieć, zanim dokument cokolwiek obiecuje
+	  finansowo (ops#145, dokument prawny nie ma prawa sam sobie zaprzeczać).
+
+	Wynik zawsze kwantyzowany do dwóch miejsc po przecinku (grosze), `ROUND_HALF_UP`.
+	"""
+	if finansowanie == "Kredyt 100%":
+		roznica = _decimal_lub_zero(brutto)
+	elif finansowanie == "Kredyt + gotówka":
+		roznica = _decimal_lub_zero(brutto) - _decimal_lub_zero(wklad_wlasny)
+	else:
+		roznica = _ZERO
 	if roznica < _ZERO:
 		roznica = _ZERO
 	return roznica.quantize(_KWOTA_KWANT, rounding=ROUND_HALF_UP)
