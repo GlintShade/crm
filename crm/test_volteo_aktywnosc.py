@@ -28,7 +28,7 @@ ETYKIETY = {
 	"deal_owner": "Właściciel szansy",
 	"organization": "Firma",
 	"custom_rodzaj_umowy": "Rodzaj umowy",
-	"custom_zasady_dotacji": "Zasady dotacji",
+	"custom_zasady_dotacji": "Zasady rozliczeń",
 	"custom_narzut": "Narzut",
 	"custom_pv_power_kwp": "Moc PV (kWp)",
 }

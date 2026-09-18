@@ -67,7 +67,7 @@
                 </div>
 
                 <div v-if="sel.typKlienta === 'indywidualny'" class="col-span-2">
-                  <div class="mb-0.5 text-sm text-ink-gray-5">Zasady dotacji</div>
+                  <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Zasady rozliczeń') }}</div>
                   <div class="flex flex-wrap gap-1.5">
                     <button
                       v-for="opt in ZASADY_DOTACJI_OPTIONS" :key="opt.value"

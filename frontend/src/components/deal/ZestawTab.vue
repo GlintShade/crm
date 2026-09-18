@@ -222,7 +222,7 @@
             <span>{{ __('Dotacja') }}</span><span>{{ formatPln(wycenaFields.custom_dotacja) }}</span>
           </div>
           <div v-if="wycenaFields.custom_zasady_dotacji" class="flex justify-between py-0.5 text-ink-gray-7">
-            <span>{{ __('Zasady dotacji') }}</span><span>{{ wycenaFields.custom_zasady_dotacji }}</span>
+            <span>{{ __('Zasady rozliczeń') }}</span><span>{{ wycenaFields.custom_zasady_dotacji }}</span>
           </div>
           <div class="flex justify-between py-0.5 text-ink-gray-7">
             <span>{{ __('Cena po dotacji') }}</span><span>{{ formatPln(wycenaFields.custom_cena_po_dotacji) }}</span>

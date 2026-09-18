@@ -268,10 +268,10 @@ class CRMLead(Document):
 				"width": "3.5rem",
 			},
 			{
-				"label": "Zasady",
+				"label": "Zasady rozliczeń",
 				"type": "Select",
 				"key": "custom_zasady_dotacji",
-				"width": "5.5rem",
+				"width": "7rem",
 			},
 			{
 				"label": "Telefon",
