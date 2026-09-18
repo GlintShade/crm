@@ -143,28 +143,89 @@ GUGIK_ZAKRZEWO_MIASTO_WIELOZNACZNE = {
 	"results": {
 		"1": {
 			"city": "Zakrzewo",
+			"voivodeship": "dolnośląskie",
 			"county": "trzebnicki",
 			"x": "16.8200000658115",
 			"y": "51.428611141916",
 		},
 		"2": {
 			"city": "Zakrzewo",
+			"voivodeship": "kujawsko-pomorskie",
 			"county": "aleksandrowski",
 			"x": "18.8141667209183",
 			"y": "52.7769444624719",
 		},
 		"3": {
 			"city": "Zakrzewo",
+			"voivodeship": "kujawsko-pomorskie",
 			"county": "aleksandrowski",
 			"x": "18.6261111594886",
 			"y": "52.7569444809348",
 		},
 		"4": {
 			"city": "Zakrzewo",
+			"voivodeship": "kujawsko-pomorskie",
 			"county": "chełmiński",
 			"x": "18.4730555041799",
 			"y": "53.3177777387868",
 		},
+	},
+}
+
+GUGIK_MIASTO_WOJEWODZTWO_I_POWIAT = {
+	# Fixture syntetyczna (nie z realnego curl) - specjalnie skonstruowana,
+	# żeby jednoznacznie sprawdzić KOLEJNOŚĆ rozstrzygania z QA #102-2:
+	# najpierw województwo, potem powiat wśród tego, co zostało. Filtrowanie
+	# powiatu jako pierwszego dałoby dwa dopasowania "poznański"
+	# (kandydat 1 i 3, różne województwa) - błędną niejednoznaczność.
+	"type": "city",
+	"found objects": 3,
+	"results": {
+		"1": {
+			"city": "Nowa Wieś",
+			"voivodeship": "wielkopolskie",
+			"county": "poznański",
+			"x": "16.9000000000000",
+			"y": "52.4000000000000",
+		},
+		"2": {
+			"city": "Nowa Wieś",
+			"voivodeship": "wielkopolskie",
+			"county": "kaliski",
+			"x": "18.0000000000000",
+			"y": "51.7000000000000",
+		},
+		"3": {
+			"city": "Nowa Wieś",
+			"voivodeship": "mazowieckie",
+			"county": "poznański",
+			"x": "20.5000000000000",
+			"y": "52.1000000000000",
+		},
+	},
+}
+
+GUGIK_ZAKRZEWO_45_JEDEN_ZLY_KOD = {
+	# Sprawdzone 2026-09-18: realna odpowiedź GUGiK dla "Zakrzewo 45" ma 8
+	# kandydatów (patrz GUGIK_ZAKRZEWO_45_ADRES_8), ale ten sam kształt
+	# odpowiedzi (jeden kandydat "returned objects": 1) pojawia się też przy
+	# innych zapytaniach, gdy GUGiK zwróci tylko jedno trafienie. Ta fixture
+	# to zredukowany, syntetyczny przypadek dokładnie z opisu QA #102-1:
+	# jeden kandydat w 63-910, lead ma kod 84-223 (inna wieś o tej samej
+	# nazwie) - przed poprawką moduł przyjmowałby tę złą wieś.
+	"type": "address",
+	"found objects": 15,
+	"returned objects": 1,
+	"results": {
+		"1": {
+			"city": "Zakrzewo",
+			"street": None,
+			"number": "45",
+			"code": "63-910",
+			"jednostka": "{Polska,wielkopolskie,rawicki,Miejska Górka}",
+			"x": "16.8988959688829",
+			"y": "51.6708325420272",
+		}
 	},
 }
 
@@ -321,6 +382,10 @@ class TestParsujGugik(unittest.TestCase):
 	def test_o_adres_wieloznaczny_ale_w_promieniu_300m_bierze_pierwszy(
 		self: "TestParsujGugik",
 	) -> None:
+		# QA #102-1: oba kandydaci mają TEN SAM kod co lead ("00-000") - to
+		# jedyny przypadek, w którym promień 300 m w ogóle wchodzi do gry po
+		# poprawce; wcześniejsza wersja testu (kod leada niepasujący do
+		# żadnego kandydata) sprawdzała fallback, który QA kazało usunąć.
 		odpowiedz = {
 			"type": "address",
 			"results": {
@@ -328,9 +393,27 @@ class TestParsujGugik(unittest.TestCase):
 				"2": {"street": "Rynek", "number": "1a", "code": "00-000", "x": "19.0010", "y": "52.0010"},
 			},
 		}
-		wynik = parsuj_gugik(odpowiedz, _adres(kod="99-999"))
+		wynik = parsuj_gugik(odpowiedz, _adres(kod="00-000"))
 		self.assertIsNotNone(wynik)
 		self.assertEqual(wynik.lat, 52.0000)
+
+	def test_o2_adres_kod_niepasujacy_do_zadnego_kandydata_zwraca_none(
+		self: "TestParsujGugik",
+	) -> None:
+		# QA #102-1: nazwy wsi się powtarzają - "Zakrzewo 45" z JEDNYM wynikiem
+		# w 63-910 dla leada, który mieszka w 84-223, to zła wieś. Przed
+		# poprawką pojedynczy kandydat był przyjmowany bez sprawdzenia kodu.
+		adres = _adres(nr_domu="45", kod="84-223", miejscowosc="Zakrzewo")
+		self.assertIsNone(parsuj_gugik(GUGIK_ZAKRZEWO_45_JEDEN_ZLY_KOD, adres))
+
+	def test_o3_adres_kod_pusty_zachowuje_stare_zachowanie(self: "TestParsujGugik") -> None:
+		# Wyjątek z QA #102-1: gdy lead NIE ma kodu pocztowego wpisanego,
+		# filtrowanie po kodzie jest pomijane - pojedynczy kandydat wciąż
+		# wystarcza, tak jak przed poprawką.
+		adres = _adres(nr_domu="45", miejscowosc="Zakrzewo")
+		wynik = parsuj_gugik(GUGIK_ZAKRZEWO_45_JEDEN_ZLY_KOD, adres)
+		self.assertIsNotNone(wynik)
+		self.assertEqual(wynik.dokladnosc, "adres")
 
 	def test_p_brak_wynikow_results_none(self: "TestParsujGugik") -> None:
 		self.assertIsNone(parsuj_gugik(GUGIK_BRAK_WYNIKOW, _adres()))
@@ -369,6 +452,56 @@ class TestParsujGugik(unittest.TestCase):
 			GUGIK_ZAKRZEWO_MIASTO_WIELOZNACZNE, _adres(miejscowosc="Zakrzewo"), powiat="nieistniejacy"
 		)
 		self.assertIsNone(wynik)
+
+	def test_w2_miasto_jeden_kandydat_wojewodztwo_pasuje(self: "TestParsujGugik") -> None:
+		wynik = parsuj_gugik(
+			GUGIK_SWARZEDZ_MIASTO, _adres(miejscowosc="Swarzędz"), wojewodztwo="wielkopolskie"
+		)
+		self.assertIsNotNone(wynik)
+		self.assertEqual(wynik.dokladnosc, "miejscowosc")
+
+	def test_w3_miasto_jeden_kandydat_wojewodztwo_niezgodne_zwraca_none(
+		self: "TestParsujGugik",
+	) -> None:
+		# QA #102-2: "ta sama logika bezpieczeństwa co w 1" - jeden kandydat
+		# od początku, ale z innym województwem niż lead, to zła miejscowość
+		# (powtarzająca się nazwa w innym województwie).
+		wynik = parsuj_gugik(
+			GUGIK_SWARZEDZ_MIASTO, _adres(miejscowosc="Swarzędz"), wojewodztwo="mazowieckie"
+		)
+		self.assertIsNone(wynik)
+
+	def test_w4_miasto_wielu_kandydatow_wojewodztwo_rozstrzyga(self: "TestParsujGugik") -> None:
+		wynik = parsuj_gugik(
+			GUGIK_ZAKRZEWO_MIASTO_WIELOZNACZNE,
+			_adres(miejscowosc="Zakrzewo"),
+			wojewodztwo="dolnośląskie",
+		)
+		self.assertIsNotNone(wynik)
+		self.assertAlmostEqual(wynik.lat, 51.428611141916)
+
+	def test_w5_miasto_wojewodztwo_bez_dopasowania_zwraca_none(self: "TestParsujGugik") -> None:
+		wynik = parsuj_gugik(
+			GUGIK_ZAKRZEWO_MIASTO_WIELOZNACZNE,
+			_adres(miejscowosc="Zakrzewo"),
+			wojewodztwo="lubelskie",
+		)
+		self.assertIsNone(wynik)
+
+	def test_w6_miasto_wojewodztwo_potem_powiat_kolejnosc(self: "TestParsujGugik") -> None:
+		# QA #102-2: filtrowanie NAJPIERW po województwie, potem po powiecie
+		# wśród tego, co zostało. Filtrowanie samym powiatem "poznański" dałoby
+		# DWA dopasowania (kandydat 1 i 3, różne województwa) - niejednoznaczne;
+		# województwo najpierw zawęża do kandydata 1 i 2 (oba wielkopolskie),
+		# dopiero wtedy powiat "poznański" rozstrzyga jednoznacznie na 1.
+		wynik = parsuj_gugik(
+			GUGIK_MIASTO_WOJEWODZTWO_I_POWIAT,
+			_adres(miejscowosc="Nowa Wieś"),
+			wojewodztwo="wielkopolskie",
+			powiat="poznański",
+		)
+		self.assertIsNotNone(wynik)
+		self.assertAlmostEqual(wynik.lat, 52.4)
 
 	def test_x_typ_street_nieobslugiwany(self: "TestParsujGugik") -> None:
 		self.assertIsNone(parsuj_gugik(GUGIK_MARSZALKOWSKA_ULICA_TYP_STREET, _adres(miejscowosc="Warszawa")))
@@ -444,6 +577,25 @@ class TestParsujNominatim(unittest.TestCase):
 		lista = [{"lat": "nie-liczba", "lon": "17.0", "place_rank": 30, "display_name": "Sypniewo"}]
 		self.assertIsNone(parsuj_nominatim(lista, _adres(miejscowosc="Sypniewo")))
 
+	def test_ak2_kod_ustawiony_ale_niezgodny_mimo_pasujacej_miejscowosci(
+		self: "TestParsujNominatim",
+	) -> None:
+		# QA #102-3: analogicznie do parsuj_gugik - gdy lead MA kod pocztowy,
+		# to on rozstrzyga, nie miejscowość. Wcześniejsza wersja (kod LUB
+		# miejscowość) przyjmowałaby to trafienie, bo "Sypniewo" jest w
+		# display_name mimo złego kodu - dokładnie ten sam problem
+		# powtarzających się nazw miejscowości co w GUGiK.
+		lista = [
+			{
+				"lat": "53.0",
+				"lon": "17.0",
+				"place_rank": 30,
+				"display_name": "10, Miodowa, Sypniewo, gmina Inna, powiat inny, 00-000, Polska",
+			}
+		]
+		wynik = parsuj_nominatim(lista, _adres(kod="89-422", miejscowosc="Sypniewo"))
+		self.assertIsNone(wynik)
+
 
 class TestHashAdresu(unittest.TestCase):
 	def test_al_taki_sam_hash_niezaleznie_od_wielkosci_liter_i_bialych_znakow(
@@ -518,6 +670,13 @@ class TestGeokoduj(unittest.TestCase):
 		wynik = geokoduj(adres, http_get, powiat="trzebnicki")
 		self.assertIsNotNone(wynik)
 		self.assertEqual(wynik.dokladnosc, "miejscowosc")
+
+	def test_av2_wojewodztwo_przekazywane_do_gugik(self: "TestGeokoduj") -> None:
+		adres = _adres(miejscowosc="Zakrzewo")
+		http_get = _http_get_z_sekwencji([GUGIK_ZAKRZEWO_MIASTO_WIELOZNACZNE])
+		wynik = geokoduj(adres, http_get, wojewodztwo="dolnośląskie")
+		self.assertIsNotNone(wynik)
+		self.assertAlmostEqual(wynik.lat, 51.428611141916)
 
 	def test_aw_brak_adresu_probuje_od_razu_nominatim(self: "TestGeokoduj") -> None:
 		# zapytanie_gugik(adres) daje None (brak miejscowości) -> GUGiK w ogóle

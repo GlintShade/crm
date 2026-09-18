@@ -178,16 +178,44 @@ def zapytanie_gugik(adres: Adres) -> str | None:
 	return miejscowosc
 
 
-def parsuj_gugik(odpowiedz: dict | None, adres: Adres, *, powiat: str | None = None) -> "Wynik | None":
+def _wojewodztwo_pasuje(kandydat: dict, wojewodztwo: str) -> bool:
+	return (kandydat.get("voivodeship") or "").strip().lower() == wojewodztwo.strip().lower()
+
+
+def parsuj_gugik(
+	odpowiedz: dict | None,
+	adres: Adres,
+	*,
+	powiat: str | None = None,
+	wojewodztwo: str | None = None,
+) -> "Wynik | None":
 	"""Rozbiera odpowiedź GUGiK UUG GetAddress na `Wynik` albo `None`.
 
-	`powiat` (opcjonalny - dane leada mogą, ale nie muszą go nieść) rozstrzyga
-	tylko dwuznaczność `type == "city"`; `type == "address"` rozstrzyga się
-	po `code` (kod pocztowy) i, gdy to nie wystarczy, po promieniu 300 m
-	między kandydaturami. Nieznany/nieobsłużony `type` (np. `"street"`, gdy
-	GUGiK dopasuje samą ulicę bez adresu ani miejscowości) -> `None`;
-	obsługiwane są wyłącznie `"address"` i `"city"`, zgodnie ze specyfikacją
-	issue #102.
+	`powiat`/`wojewodztwo` (oba opcjonalne - dane leada mogą, ale nie muszą
+	je nieść) rozstrzygają tylko dwuznaczność `type == "city"`. Nieznany/
+	nieobsłużony `type` (np. `"street"`, gdy GUGiK dopasuje samą ulicę bez
+	adresu ani miejscowości) -> `None`; obsługiwane są wyłącznie `"address"`
+	i `"city"`, zgodnie ze specyfikacją issue #102.
+
+	`type == "address"` (poprawka QA #102-1, 2026-09-18): nazwy miejscowości
+	się powtarzają w Polsce, więc gdy lead MA kod pocztowy, ten kod jest
+	jedynym akceptowalnym sitem - kandydat, który go nie ma, nigdy nie jest
+	przyjmowany, NAWET jeśli jest jedynym zwróconym przez GUGiK ("Zakrzewo
+	45" z jednym wynikiem w 63-910 dla leada w 84-223 to zła wieś, nie
+	przybliżenie). Gdy po odfiltrowaniu po kodzie nie zostaje ŻADEN kandydat
+	-> `None` od razu, bez próby promienia 300 m na niefiltrowanej liście.
+	Promień 300 m rozstrzyga wyłącznie WŚRÓD kandydatów, którzy już
+	dzielą kod (albo, gdy lead nie ma kodu wpisanego wcale, wśród
+	wszystkich zwróconych - jedyny wyjątek od reguły kodu powyżej).
+
+	`type == "city"` (poprawka QA #102-2): przy wielu kandydatach kolejność
+	sit jest stała - najpierw `voivodeship` (gdy podane), potem `county`
+	wśród tego, co zostało (gdy podane); jeśli po obu krokach zostaje
+	dokładnie jeden kandydat -> `Wynik`, inaczej `None`. Gdy kandydat jest
+	od początku tylko jeden, a lead ma województwo, które się nie zgadza z
+	`voivodeship` kandydata -> `None` (ta sama logika bezpieczeństwa
+	powtarzających się nazw co przy `"address"` wyżej; `powiat` NIE jest
+	sprawdzany w tej gałęzi z jednym kandydatem, tak jak przed poprawką).
 	"""
 	if not odpowiedz:
 		return None
@@ -200,9 +228,9 @@ def parsuj_gugik(odpowiedz: dict | None, adres: Adres, *, powiat: str | None = N
 
 	if typ == "address":
 		if adres.kod:
-			po_kodzie = [k for k in kandydaci if k.get("code") == adres.kod]
-			if po_kodzie:
-				kandydaci = po_kodzie
+			kandydaci = [k for k in kandydaci if k.get("code") == adres.kod]
+			if not kandydaci:
+				return None
 		if len(kandydaci) == 1:
 			kandydat = kandydaci[0]
 			return _wynik_z_kandydata_gugik(kandydat, _dokladnosc_gugik_adres(kandydat))
@@ -213,13 +241,19 @@ def parsuj_gugik(odpowiedz: dict | None, adres: Adres, *, powiat: str | None = N
 
 	if typ == "city":
 		if len(kandydaci) == 1:
-			return _wynik_z_kandydata_gugik(kandydaci[0], "miejscowosc")
-		if len(kandydaci) > 1 and powiat:
-			dopasowani = [
+			kandydat = kandydaci[0]
+			if wojewodztwo and not _wojewodztwo_pasuje(kandydat, wojewodztwo):
+				return None
+			return _wynik_z_kandydata_gugik(kandydat, "miejscowosc")
+
+		if wojewodztwo:
+			kandydaci = [k for k in kandydaci if _wojewodztwo_pasuje(k, wojewodztwo)]
+		if powiat:
+			kandydaci = [
 				k for k in kandydaci if (k.get("county") or "").strip().lower() == powiat.strip().lower()
 			]
-			if len(dopasowani) == 1:
-				return _wynik_z_kandydata_gugik(dopasowani[0], "miejscowosc")
+		if len(kandydaci) == 1:
+			return _wynik_z_kandydata_gugik(kandydaci[0], "miejscowosc")
 		return None
 
 	return None
@@ -279,11 +313,16 @@ def parsuj_nominatim(lista: list | None, adres: Adres) -> "Wynik | None":
 	"""Rozbiera odpowiedź Nominatim `search` (lista wyników, `limit=1` więc
 	najwyżej jeden element) na `Wynik` albo `None`.
 
-	Odrzuca trafienie, którego `display_name` nie zawiera ani kodu
-	pocztowego, ani nazwy miejscowości z `adres` - to jedyna dostępna
-	kontrola przytomności wobec structured search, który potrafi czasem
-	dopasować zupełnie inne miejsce, gdy `city`/`postalcode` się nie
-	zgadzają z niczym dokładniej."""
+	Poprawka QA #102-3 (2026-09-18): gdy lead MA kod pocztowy, `display_name`
+	MUSI go zawierać - to jedyne akceptowalne dopasowanie, analogicznie do
+	`parsuj_gugik` (`type == "address"`) wyżej. Nazwy miejscowości się
+	powtarzają, więc sprawdzanie miejscowości JAKO ALTERNATYWY dla kodu
+	(dawne zachowanie: kod LUB miejscowość) przepuszczało dokładnie ten sam
+	błąd - trafienie w złą miejscowość o tej samej nazwie, ale z pasującym
+	tekstem miejscowości w `display_name` mimo zupełnie innego kodu. Kod
+	pocztowy rozstrzyga sam, gdy jest; miejscowość jest sprawdzana TYLKO gdy
+	lead nie ma kodu wpisanego wcale - to jedyny przypadek, w którym nie ma
+	nic silniejszego do sprawdzenia."""
 	if not lista:
 		return None
 	kandydat = lista[0]
@@ -301,10 +340,13 @@ def parsuj_nominatim(lista: list | None, adres: Adres) -> "Wynik | None":
 
 	display_name = (kandydat.get("display_name") or "").lower()
 	kod = (adres.kod or "").strip().lower()
-	miejscowosc = (adres.miejscowosc or "").strip().lower()
-	pasuje = (kod and kod in display_name) or (miejscowosc and miejscowosc in display_name)
-	if not pasuje:
-		return None
+	if kod:
+		if kod not in display_name:
+			return None
+	else:
+		miejscowosc = (adres.miejscowosc or "").strip().lower()
+		if not miejscowosc or miejscowosc not in display_name:
+			return None
 
 	return Wynik(lat=lat, lng=lng, dokladnosc=dokladnosc, zrodlo="osm")
 
@@ -330,6 +372,7 @@ def geokoduj(
 	*,
 	uzyj_nominatim: bool = True,
 	powiat: str | None = None,
+	wojewodztwo: str | None = None,
 ) -> "Wynik | None":
 	"""Łańcuch GUGiK -> Nominatim (decyzja właściciela 2026-09-10). Zwraca
 	pierwszy wystarczający `Wynik` albo `None`, gdy żadne z dwóch źródeł nie
@@ -345,8 +388,12 @@ def geokoduj(
 	więc jeden zepsuty adres w wsadzie 200 leadów nie przerywa partii.
 
 	`uzyj_nominatim=False` pomija krok 2 całkowicie (przydatne np. w próbce
-	DRY_RUN, żeby nie zużywać budżetu 1 zapytania/s Nominatim na podgląd)."""
-	wynik = _sprobuj_gugik(adres, http_get, powiat)
+	DRY_RUN, żeby nie zużywać budżetu 1 zapytania/s Nominatim na podgląd).
+
+	`powiat`/`wojewodztwo` przekazywane dalej do `parsuj_gugik` (patrz jego
+	docstring) - rozstrzygają wyłącznie dwuznaczność `type == "city"` po
+	stronie GUGiK; Nominatim nie ma odpowiednika tych parametrów."""
+	wynik = _sprobuj_gugik(adres, http_get, powiat, wojewodztwo)
 	if wynik is not None:
 		return wynik
 	if not uzyj_nominatim:
@@ -354,7 +401,9 @@ def geokoduj(
 	return _sprobuj_nominatim(adres, http_get)
 
 
-def _sprobuj_gugik(adres: Adres, http_get, powiat: str | None) -> "Wynik | None":
+def _sprobuj_gugik(
+	adres: Adres, http_get, powiat: str | None, wojewodztwo: str | None = None
+) -> "Wynik | None":
 	zapytanie = zapytanie_gugik(adres)
 	if not zapytanie:
 		return None
@@ -362,7 +411,7 @@ def _sprobuj_gugik(adres: Adres, http_get, powiat: str | None) -> "Wynik | None"
 		odpowiedz = http_get(GUGIK_URL, {"request": "GetAddress", "address": zapytanie, "srid": "4326"}, None)
 	except Exception:
 		return None
-	wynik = parsuj_gugik(odpowiedz, adres, powiat=powiat)
+	wynik = parsuj_gugik(odpowiedz, adres, powiat=powiat, wojewodztwo=wojewodztwo)
 	if wynik is not None and _w_polsce(wynik.lat, wynik.lng):
 		return wynik
 	return None
