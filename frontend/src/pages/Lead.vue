@@ -82,14 +82,6 @@
               @afterFieldChange="reloadResources"
             />
           </div>
-          <div v-if="uwagiImportWiersze.length" class="border-t p-4">
-            <div class="mb-2 text-sm text-ink-gray-5">
-              {{ __('Uwagi (import)') }}
-            </div>
-            <div class="whitespace-pre-line text-base text-ink-gray-8">{{
-              uwagiImportWiersze.join('\n')
-            }}</div>
-          </div>
         </div>
         <Activities
           v-else
@@ -401,19 +393,6 @@ const {
 const canDelete = computed(() => permissions.data?.permissions?.delete || false)
 
 const doc = computed(() => document.doc || {})
-
-// VOLTEO (issue #96): `custom_uwagi_import` (ops/crm-leady-pola.py, Small
-// Text) skleja wpisy z kilku zrodel/wierszy CSV znakiem " | "
-// (crm.volteo_leady_import._linia_uwag) -- rozbijamy z powrotem na osobne
-// wiersze, zeby CC czytal opis instalacji (falownik, moc, dach) po kolei,
-// nie jako jeden dlugi ciag.
-const uwagiImportWiersze = computed(() => {
-  const surowe = doc.value.custom_uwagi_import || ''
-  return surowe
-    .split(' | ')
-    .map((wiersz) => wiersz.trim())
-    .filter(Boolean)
-})
 
 function onPrzekazano() {
   document.reload()

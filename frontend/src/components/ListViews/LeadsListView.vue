@@ -191,6 +191,13 @@
               :label="token"
             />
           </div>
+          <div
+            v-else-if="column.key === 'custom_uwagi_import'"
+            class="flex cursor-pointer items-center truncate text-base"
+            @click.stop.prevent="() => openUwagi(row)"
+          >
+            <span v-if="item" class="truncate">{{ pierwszaLiniaUwag(item) }}</span>
+          </div>
           <div v-else-if="column.type === 'Check'">
             <FormControl
               type="checkbox"
@@ -247,6 +254,22 @@
     doctype="CRM Lead"
     @commentAdded="onCommentAdded"
   />
+  <Dialog v-model:open="uwagiPopup.open" :options="{ title: __('Uwagi'), size: 'lg' }">
+    <template #body-content>
+      <p class="mb-3 truncate text-p-base text-ink-gray-5">
+        {{ uwagiPopup.lead }}
+      </p>
+      <div class="flex flex-col gap-2">
+        <p
+          v-for="(linia, idx) in uwagiPopupLinie"
+          :key="idx"
+          class="whitespace-pre-line text-base text-ink-gray-8"
+        >
+          {{ linia }}
+        </p>
+      </div>
+    </template>
+  </Dialog>
 </template>
 
 <script setup>
@@ -265,6 +288,7 @@ import { KOLUMNY_INLINE, nowaListaZPodmienionymPolem } from '@/utils/leadyInline
 import { isTranslatable, formatDuration } from '@/utils'
 import {
   Avatar,
+  Dialog,
   ListView,
   ListHeader,
   ListHeaderItem,
@@ -354,6 +378,32 @@ function openComments(row) {
 function onCommentAdded() {
   list.value?.reload?.()
 }
+
+// VOLTEO (issue #152): kolumna "Uwagi" (custom_uwagi_import) pokazuje w
+// wierszu tylko pierwsza linie (przed pierwszym " | ", tak samo sklejane
+// jak w crm.volteo_leady_import._linia_uwag), klik otwiera popup z pelna
+// trescia -- jeden Dialog na cala liste (ten sam wzorzec co showComments/
+// commentsDocname powyzej), bez wywolania API: tresc jest juz w wierszu.
+const uwagiPopup = ref({ open: false, tekst: '', lead: '' })
+
+function pierwszaLiniaUwag(tekst) {
+  return tekst?.split(' | ')[0]?.trim() || ''
+}
+
+function openUwagi(row) {
+  uwagiPopup.value = {
+    open: true,
+    tekst: row.custom_uwagi_import || '',
+    lead: row.lead_name?.label || row.name,
+  }
+}
+
+const uwagiPopupLinie = computed(() =>
+  uwagiPopup.value.tekst
+    .split(' | ')
+    .map((linia) => linia.trim())
+    .filter(Boolean),
+)
 
 // VOLTEO (issue #99): LeadInlineCell.vue zapisuje przez set_value samo i
 // emituje tylko surowa pare {fieldname, value} po udanym zapisie. Podmiana
