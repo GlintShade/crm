@@ -81,6 +81,19 @@ możliwe przy błędnym/nieaktualnym kodzie w danych leada), przyjmujemy
 pierwszy tylko jeśli wszystkie kandydatury leżą praktycznie w tym samym
 miejscu - inaczej zgadywanie który to adres byłoby gorsze niż brak wyniku."""
 
+PROMIEN_ODNIESIENIA_KM = 30
+"""QA #102 runda 4 (2026-09-18): gdy dotychczasowe sita (kod / ulica+numer /
+województwo / powiat) nadal zostawiają więcej niż jednego kandydata,
+`punkt_odniesienia` (centroid kodu pocztowego leada, gdy `custom_geo_zrodlo
+== "kod"`) rozstrzyga po odległości - patrz `_najblizszy_kandydat`."""
+
+_PROMIEN_MIEJSCOWOSCI_ODNIESIENIA_KM = 60
+"""Próg bezpieczeństwa dla `type == "city"` z JEDNYM kandydatem (nawet po
+wszystkich innych sitach): gdy jest `punkt_odniesienia`, a jedyny kandydat
+leży dalej niż to - `None`, zamiast zaakceptować odległą miejscowość o tej
+samej nazwie w tym samym województwie (np. "Bydgoszcz" - patrz
+`_w_zasiegu_miejscowosci`)."""
+
 
 class Adres(NamedTuple):
 	"""Cztery pola adresu leada, dokładnie te, które niesie `CRM Lead`
@@ -127,6 +140,72 @@ def _wszystkie_w_promieniu(kandydaci: list[dict], promien_m: float) -> bool:
 		return False
 	bazowy_lat, bazowy_lng = punkty[0]
 	return all(_odleglosc_m(bazowy_lat, bazowy_lng, lat, lng) <= promien_m for lat, lng in punkty)
+
+
+def _wspolrzedne_kandydata(kandydat: dict) -> "tuple[float, float] | None":
+	try:
+		return (float(kandydat["y"]), float(kandydat["x"]))
+	except (KeyError, TypeError, ValueError):
+		return None
+
+
+def _najblizszy_kandydat(
+	kandydaci: list[dict], punkt_odniesienia: "tuple[float, float] | None"
+) -> "dict | None":
+	"""QA #102 runda 4: ostatnia deska ratunku, gdy dotychczasowe sita nadal
+	zostawiają >1 kandydata (i, dla `type == "address"`, promień 300 m też
+	nie rozstrzygnął - kandydaci NIE leżą praktycznie w jednym miejscu).
+	Bez `punkt_odniesienia` (lead nie ma jeszcze żadnych współrzędnych,
+	nawet centroidu kodu) - `None`, nic do porównania.
+
+	Wybiera kandydata najbliższego `punkt_odniesienia`, TYLKO gdy: jest w
+	promieniu `PROMIEN_ODNIESIENIA_KM` ORAZ (drugi najbliższy leży poza tym
+	promieniem ALBO jest dalej niż 2x od najbliższego) - inaczej `None`,
+	bo oba kandydaci są "wystarczająco blisko" punktu odniesienia, żeby
+	zgadywanie między nimi było ryzykowne. Kandydat bez parsowalnych
+	współrzędnych (`y`/`x`) unieważnia całe porównanie (`None`) - nie
+	ryzykujemy wyboru na podstawie niepełnych danych."""
+	if not punkt_odniesienia:
+		return None
+
+	wspolrzedne = [_wspolrzedne_kandydata(k) for k in kandydaci]
+	if any(w is None for w in wspolrzedne):
+		return None
+
+	lat0, lng0 = punkt_odniesienia
+	odleglosci = sorted(
+		((_odleglosc_m(lat0, lng0, lat, lng), k) for (lat, lng), k in zip(wspolrzedne, kandydaci, strict=True)),
+		key=lambda para: para[0],
+	)
+
+	prog_m = PROMIEN_ODNIESIENIA_KM * 1000.0
+	najblizszy_m, najblizszy = odleglosci[0]
+	if najblizszy_m > prog_m:
+		return None
+	if len(odleglosci) == 1:
+		return najblizszy
+
+	drugi_m = odleglosci[1][0]
+	if drugi_m > prog_m or drugi_m > 2 * najblizszy_m:
+		return najblizszy
+	return None
+
+
+def _w_zasiegu_miejscowosci(kandydat: dict, punkt_odniesienia: "tuple[float, float] | None") -> bool:
+	"""QA #102 runda 4: dla `type == "city"` z jednym (ostatecznym) kandydatem
+	- gdy jest `punkt_odniesienia`, a kandydat leży dalej niż
+	`_PROMIEN_MIEJSCOWOSCI_ODNIESIENIA_KM`, odrzuca go (`False`). Bez
+	`punkt_odniesienia`, albo gdy współrzędnych kandydata nie da się
+	sparsować, nie blokuje na tej podstawie (`True`) - `_wynik_z_kandydata_gugik`
+	i tak odrzuci kandydata z niepoprawnymi współrzędnymi osobno."""
+	if not punkt_odniesienia:
+		return True
+	wspolrzedne = _wspolrzedne_kandydata(kandydat)
+	if wspolrzedne is None:
+		return True
+	lat0, lng0 = punkt_odniesienia
+	lat, lng = wspolrzedne
+	return _odleglosc_m(lat0, lng0, lat, lng) <= _PROMIEN_MIEJSCOWOSCI_ODNIESIENIA_KM * 1000.0
 
 
 def _wynik_z_kandydata_gugik(kandydat: dict, dokladnosc: str, zrodlo: str = "gugik") -> "Wynik | None":
@@ -308,6 +387,7 @@ def parsuj_gugik(
 	*,
 	powiat: str | None = None,
 	wojewodztwo: str | None = None,
+	punkt_odniesienia: "tuple[float, float] | None" = None,
 ) -> "Wynik | None":
 	"""Rozbiera odpowiedź GUGiK UUG GetAddress na `Wynik` albo `None`.
 
@@ -347,6 +427,18 @@ def parsuj_gugik(
 	`voivodeship` kandydata -> `None` (ta sama logika bezpieczeństwa
 	powtarzających się nazw co przy `"address"` wyżej; `powiat` NIE jest
 	sprawdzany w tej gałęzi z jednym kandydatem, tak jak przed poprawką).
+
+	`punkt_odniesienia` (QA #102 runda 4, opcjonalna para `(lat, lng)` -
+	zwykle centroid kodu pocztowego leada) to OSTATNIA deska ratunku, gdy
+	dotychczasowe sita nadal zostawiają >1 kandydata: `type == "address"`
+	próbuje go PO promieniu 300 m (gdy kandydaci nie leżą praktycznie w
+	jednym miejscu), `type == "city"` PO filtrach województwo/powiat (patrz
+	`_najblizszy_kandydat`). Dodatkowo, `type == "city"` z JEDNYM
+	(ostatecznym) kandydatem odrzuca go, gdy leży dalej niż
+	`_PROMIEN_MIEJSCOWOSCI_ODNIESIENIA_KM` od `punkt_odniesienia` - ochrona
+	przed odległą miejscowością o tej samej nazwie w tym samym województwie
+	(np. "Bydgoszcz": dwóch kandydatów GUGiK, ten sam region, lead bez
+	powiatu na karcie).
 	"""
 	if not isinstance(odpowiedz, dict):
 		return None
@@ -380,23 +472,29 @@ def parsuj_gugik(
 				jedyny = kandydaci[0]
 				if (jedyny.get("city") or "").strip().lower() != (adres.miejscowosc or "").strip().lower():
 					return None
-			else:
-				# Wielu kandydatów po dopasowaniu ulicy/numeru, żaden nie ma
-				# kodu leada - nie ma jak rozstrzygnąć, które to miejsce.
-				return None
+			# else: kod nie zawęził niczego (wielu kandydatów, żaden nie
+			# pasuje) - `kandydaci` zostaje pełnym zbiorem po sicie 1,
+			# rozstrzyganie schodzi do promienia/punktu odniesienia niżej,
+			# zamiast poddawać się od razu (QA #102 runda 4).
 
 		if len(kandydaci) == 1:
 			kandydat = kandydaci[0]
 			return _wynik_z_kandydata_gugik(kandydat, _dokladnosc_gugik_adres(kandydat))
-		if len(kandydaci) > 1 and _wszystkie_w_promieniu(kandydaci, _PROMIEN_NIEJEDNOZNACZNOSCI_M):
-			kandydat = kandydaci[0]
-			return _wynik_z_kandydata_gugik(kandydat, _dokladnosc_gugik_adres(kandydat))
+		if len(kandydaci) > 1:
+			if _wszystkie_w_promieniu(kandydaci, _PROMIEN_NIEJEDNOZNACZNOSCI_M):
+				kandydat = kandydaci[0]
+				return _wynik_z_kandydata_gugik(kandydat, _dokladnosc_gugik_adres(kandydat))
+			wybrany = _najblizszy_kandydat(kandydaci, punkt_odniesienia)
+			if wybrany is not None:
+				return _wynik_z_kandydata_gugik(wybrany, _dokladnosc_gugik_adres(wybrany))
 		return None
 
 	if typ == "city":
 		if len(kandydaci) == 1:
 			kandydat = kandydaci[0]
 			if wojewodztwo and not _wojewodztwo_pasuje(kandydat, wojewodztwo):
+				return None
+			if not _w_zasiegu_miejscowosci(kandydat, punkt_odniesienia):
 				return None
 			return _wynik_z_kandydata_gugik(kandydat, "miejscowosc")
 
@@ -406,8 +504,17 @@ def parsuj_gugik(
 			kandydaci = [
 				k for k in kandydaci if (k.get("county") or "").strip().lower() == powiat.strip().lower()
 			]
+
 		if len(kandydaci) == 1:
-			return _wynik_z_kandydata_gugik(kandydaci[0], "miejscowosc")
+			kandydat = kandydaci[0]
+			if not _w_zasiegu_miejscowosci(kandydat, punkt_odniesienia):
+				return None
+			return _wynik_z_kandydata_gugik(kandydat, "miejscowosc")
+
+		if len(kandydaci) > 1:
+			wybrany = _najblizszy_kandydat(kandydaci, punkt_odniesienia)
+			if wybrany is not None:
+				return _wynik_z_kandydata_gugik(wybrany, "miejscowosc")
 		return None
 
 	return None
@@ -520,6 +627,62 @@ def hash_adresu(adres: Adres) -> str:
 	return hashlib.sha1("|".join(czesci).encode("utf-8")).hexdigest()
 
 
+_SKROTY_MIEJSCOWOSCI = (
+	("Wlkp.", "Wielkopolski"),
+	("Wlkp", "Wielkopolski"),
+	("Maz.", "Mazowiecki"),
+	("Śl.", "Śląski"),
+)
+"""QA #102 runda 4, 2026-09-18: skróty przymiotnika wojewódzkiego na końcu
+nazwy miejscowości, rozwijane przez `warianty_miejscowosci` - dry-run
+lokalny pokazał nazwy bez polskich znaków, w tym "Gorzow Wlkp" (GUGiK
+zwraca 0 wyników dla samego skrótu). Kolejność ma znaczenie: `"Wlkp."` (z
+kropką) sprawdzany PRZED `"Wlkp"` (bez kropki), żeby nie zostawić kropki w
+dopasowanym rdzeniu przez pomyłkę."""
+
+
+def warianty_miejscowosci(miejscowosc: str, miejscowosc_z_kodu: str | None) -> list[str]:
+	"""Lista unikalnych nazw miejscowości do kolejnych prób w `geokoduj`, w
+	kolejności: (1) nazwa leada, (2) nazwa z tabeli kodów pocztowych - tylko
+	gdy niepusta i różna od (1) (bez wielkości liter), (3) nazwa leada z
+	rozwiniętym skrótem przymiotnika wojewódzkiego na końcu (`_SKROTY_MIEJSCOWOSCI`,
+	np. "Gorzow Wlkp" -> "Gorzow Wielkopolski"), gdy taki skrót faktycznie
+	występuje. Duplikaty (bez wielkości liter) pomijane, więc lista ma
+	NAJWYŻEJ 3 elementy - pusta, gdy obie nazwy wejściowe są puste.
+
+	QA #102 runda 4, uwaga lokalna: dla leada "Poznan" z kodem 60-185 tabela
+	kodów pocztowych daje "Skórzewo" (sąsiednia wieś, nie samo miasto) -
+	to ZAMIERZONE: wariant (2) nie musi być tą samą miejscowością, ma być
+	geokodowalną nazwą blisko prawdziwego adresu, dokładniejszą niż brak
+	współrzędnych w ogóle."""
+	warianty: list[str] = []
+
+	nazwa_leada = (miejscowosc or "").strip()
+	if nazwa_leada:
+		warianty.append(nazwa_leada)
+
+	nazwa_z_kodu = (miejscowosc_z_kodu or "").strip()
+	if nazwa_z_kodu and nazwa_z_kodu.lower() != nazwa_leada.lower():
+		warianty.append(nazwa_z_kodu)
+
+	if nazwa_leada:
+		for skrot, rozwiniecie in _SKROTY_MIEJSCOWOSCI:
+			if nazwa_leada.endswith(skrot):
+				rdzen = nazwa_leada[: -len(skrot)].rstrip()
+				rozwiniety = re.sub(r"\s+", " ", f"{rdzen} {rozwiniecie}").strip()
+				warianty.append(rozwiniety)
+				break
+
+	wynik: list[str] = []
+	widziane: set[str] = set()
+	for wariant in warianty:
+		klucz = wariant.lower()
+		if klucz not in widziane:
+			widziane.add(klucz)
+			wynik.append(wariant)
+	return wynik[:3]
+
+
 def zapytanie_gugik_przysiolek(adres: Adres) -> str | None:
 	"""Zapytanie GUGiK dla hipotezy przysiółka (QA #102, runda 2, 2026-09-18):
 	adresy wiejskie typu "Zalesie 14, 77-400 Święta" mają w `Ulica` nazwę
@@ -548,14 +711,23 @@ def zapytanie_gugik_przysiolek(adres: Adres) -> str | None:
 	return f"{ulica} {nr_domu}"
 
 
-def parsuj_gugik_przysiolek(odpowiedz: dict | None, adres: Adres) -> "Wynik | None":
+def parsuj_gugik_przysiolek(
+	odpowiedz: dict | None,
+	adres: Adres,
+	*,
+	punkt_odniesienia: "tuple[float, float] | None" = None,
+) -> "Wynik | None":
 	"""Rozbiera odpowiedź GUGiK dla zapytania przysiółka. Celowo BEZ
 	leniencji "jeden kandydat + city pasuje" z `parsuj_gugik` powyżej - tu
 	nie ma miejscowości do porównania (zapytanie to sama nazwa przysiółka),
 	więc jedynym bezpiecznym sitem jest DOKŁADNA zgodność `code`. GUGiK
 	zwraca maksymalnie 15 wyników ("max results limit": 15) - gdy prawdziwy
 	przysiółek jest poza tym limitem, żaden kandydat nie będzie miał
-	pasującego kodu i funkcja i tak zwróci `None`, bez zgadywania."""
+	pasującego kodu i funkcja i tak zwróci `None`, bez zgadywania.
+
+	`punkt_odniesienia` (QA #102 runda 4): ostatnia deska ratunku, gdy po
+	dokładnym dopasowaniu kodu wciąż zostaje >1 kandydat, a promień 300 m
+	(duplikat rekordu) nie rozstrzyga - patrz `_najblizszy_kandydat`."""
 	if not isinstance(odpowiedz, dict) or odpowiedz.get("type") != "address":
 		return None
 	wyniki = odpowiedz.get("results")
@@ -564,9 +736,42 @@ def parsuj_gugik_przysiolek(odpowiedz: dict | None, adres: Adres) -> "Wynik | No
 	kandydaci = [k for k in wyniki.values() if k.get("code") == adres.kod]
 	if len(kandydaci) == 1:
 		return _wynik_z_kandydata_gugik(kandydaci[0], "adres")
-	if len(kandydaci) > 1 and _wszystkie_w_promieniu(kandydaci, _PROMIEN_NIEJEDNOZNACZNOSCI_M):
-		return _wynik_z_kandydata_gugik(kandydaci[0], "adres")
+	if len(kandydaci) > 1:
+		if _wszystkie_w_promieniu(kandydaci, _PROMIEN_NIEJEDNOZNACZNOSCI_M):
+			return _wynik_z_kandydata_gugik(kandydaci[0], "adres")
+		wybrany = _najblizszy_kandydat(kandydaci, punkt_odniesienia)
+		if wybrany is not None:
+			return _wynik_z_kandydata_gugik(wybrany, "adres")
 	return None
+
+
+def _adres_z_miejscowoscia(adres: Adres, wariant: str) -> Adres:
+	"""Podmienia `Miejscowość` na `wariant` (QA #102 runda 4,
+	`warianty_miejscowosci`). Gdy oryginalny adres był wsią-bez-ulicy
+	(`_wies_bez_ulicy` - `Ulica` puste albo równe starej `Miejscowość`),
+	wariant zastępuje OBA pola, żeby ta klasyfikacja została prawdziwa
+	także dla nowej nazwy - inaczej `_wies_bez_ulicy` przestałaby wykrywać
+	wieś po podmianie (stare `Ulica` nie zgadzałoby się z nowym
+	`Miejscowość`), co fałszywie przełączyłoby zapytanie na tryb
+	"prawdziwa ulica"."""
+	if _wies_bez_ulicy(adres):
+		return Adres(ulica=wariant, nr_domu=adres.nr_domu, kod=adres.kod, miejscowosc=wariant)
+	return Adres(ulica=adres.ulica, nr_domu=adres.nr_domu, kod=adres.kod, miejscowosc=wariant)
+
+
+def _adresy_do_probowania(adres: Adres, miejscowosc_z_kodu: str | None) -> "list[Adres]":
+	"""Oryginalny `adres` ZAWSZE pierwszy (nawet gdy `Miejscowość` jest pusta
+	- `warianty_miejscowosci` wtedy nie zwróci go jako elementu listy, a
+	krok Nominatim i tak działa bez miejscowości), potem każdy kolejny
+	wariant nazwy z `warianty_miejscowosci`, pomijając ten identyczny z
+	oryginałem (już wypróbowany jako pierwszy element)."""
+	proby = [adres]
+	miejscowosc_oryginalna = (adres.miejscowosc or "").strip().lower()
+	for wariant in warianty_miejscowosci(adres.miejscowosc, miejscowosc_z_kodu):
+		if wariant.strip().lower() == miejscowosc_oryginalna:
+			continue
+		proby.append(_adres_z_miejscowoscia(adres, wariant))
+	return proby
 
 
 def geokoduj(
@@ -576,9 +781,11 @@ def geokoduj(
 	uzyj_nominatim: bool = True,
 	powiat: str | None = None,
 	wojewodztwo: str | None = None,
+	punkt_odniesienia: "tuple[float, float] | None" = None,
+	miejscowosc_z_kodu: str | None = None,
 ) -> "Wynik | None":
 	"""Łańcuch czterokrokowy (decyzja właściciela 2026-09-10, rozszerzony QA
-	#102 rundą 2, 2026-09-18), w tej kolejności:
+	#102 rundami 2 i 4, 2026-09-18), w tej kolejności:
 
 	1. GUGiK, pełny adres (`zapytanie_gugik` - wieś bez ulicy, ulica+numer,
 	   sama ulica albo sama miejscowość).
@@ -594,10 +801,23 @@ def geokoduj(
 	     bo to GUGiK, nie Nominatim, więc żaden budżet zapytań/s tu nie
 	     obowiązuje.
 
-	Zwraca pierwszy wystarczający `Wynik` z dowolnego kroku, albo `None`,
-	gdy żaden nie dał trafienia w granicach Polski - w takim razie wołający
-	zostaje przy dotychczasowym centroidzie kodu pocztowego
-	(`dokladnosc="kod"`) albo, gdy go też nie ma, `dokladnosc="brak"`.
+	Gdy WSZYSTKIE cztery kroki dadzą `None` dla nazwy miejscowości leada,
+	QA #102 runda 4 dodaje pętlę wariantów nazwy (`_adresy_do_probowania`,
+	`warianty_miejscowosci`): cały czterokrokowy łańcuch powtarza się dla
+	kolejnej nazwy (najpierw z tabeli kodów pocztowych, `miejscowosc_z_kodu`,
+	potem z rozwiniętym skrótem przymiotnika wojewódzkiego typu "Wlkp." ->
+	"Wielkopolski"), maks. 3 próby łącznie licząc oryginał (limit narzucony
+	przez `warianty_miejscowosci`). Dla wsi-bez-ulicy wariant zastępuje
+	zarówno `Miejscowość`, jak i `Ulica` (patrz `_adres_z_miejscowoscia`).
+	Dokładność zwróconego `Wynik` jest zawsze tym, co dał faktycznie trafiony
+	krok (`adres`/`ulica`/`miejscowosc`) - podmiana nazwy nie zmienia
+	znaczenia dokładności.
+
+	Zwraca pierwszy wystarczający `Wynik` z dowolnej próby (adresu/wariantu)
+	i dowolnego kroku, albo `None`, gdy żadna kombinacja nie dała trafienia
+	w granicach Polski - w takim razie wołający zostaje przy dotychczasowym
+	centroidzie kodu pocztowego (`dokladnosc="kod"`) albo, gdy go też nie
+	ma, `dokladnosc="brak"`.
 
 	`http_get(url, params, headers) -> dict | None` jest jedynym punktem
 	wejścia/wyjścia I/O - dostarczany przez wołającego (prawdziwy
@@ -610,13 +830,45 @@ def geokoduj(
 
 	`powiat`/`wojewodztwo` przekazywane dalej do `parsuj_gugik` (patrz jego
 	docstring) - rozstrzygają dwuznaczność `type == "city"` po stronie
-	GUGiK, w krokach 1 i 4; Nominatim i krok 2 (przysiółek) nie mają
-	odpowiednika tych parametrów."""
-	wynik = _sprobuj_gugik(adres, http_get, powiat, wojewodztwo)
+	GUGiK, w krokach 1, 2 i 4; Nominatim nie ma odpowiednika tych
+	parametrów. `punkt_odniesienia` (QA #102 runda 4, para `(lat, lng)` -
+	zwykle centroid kodu pocztowego leada, przekazywany przez wołającego
+	tylko gdy `custom_geo_zrodlo == "kod"`) trafia do WSZYSTKICH kroków
+	GUGiK (1, 2, 4) jako ostatnia deska ratunku przy >1 kandydacie po
+	dotychczasowych sitach; Nominatim ma `limit=1`, więc nigdy nie zwraca
+	wielu kandydatów do rozstrzygnięcia - stąd bez odpowiednika tam."""
+	for adres_proby in _adresy_do_probowania(adres, miejscowosc_z_kodu):
+		wynik = _geokoduj_jeden_adres(
+			adres_proby,
+			http_get,
+			uzyj_nominatim=uzyj_nominatim,
+			powiat=powiat,
+			wojewodztwo=wojewodztwo,
+			punkt_odniesienia=punkt_odniesienia,
+		)
+		if wynik is not None:
+			return wynik
+	return None
+
+
+def _geokoduj_jeden_adres(
+	adres: Adres,
+	http_get,
+	*,
+	uzyj_nominatim: bool,
+	powiat: str | None,
+	wojewodztwo: str | None,
+	punkt_odniesienia: "tuple[float, float] | None",
+) -> "Wynik | None":
+	"""Cztery kroki łańcucha dla JEDNEGO konkretnego adresu (oryginał albo
+	jeden z wariantów nazwy miejscowości z `geokoduj`) - wydzielone z
+	`geokoduj`, żeby pętla wariantów mogła powtórzyć te same cztery kroki
+	bez duplikowania ich kolejności w dwóch miejscach."""
+	wynik = _sprobuj_gugik(adres, http_get, powiat, wojewodztwo, punkt_odniesienia)
 	if wynik is not None:
 		return wynik
 
-	wynik = _sprobuj_gugik_przysiolek(adres, http_get)
+	wynik = _sprobuj_gugik_przysiolek(adres, http_get, punkt_odniesienia)
 	if wynik is not None:
 		return wynik
 
@@ -625,18 +877,24 @@ def geokoduj(
 		if wynik is not None:
 			return wynik
 
-	return _sprobuj_gugik_miejscowosc(adres, http_get, powiat, wojewodztwo)
+	return _sprobuj_gugik_miejscowosc(adres, http_get, powiat, wojewodztwo, punkt_odniesienia)
 
 
 def _sprobuj_gugik(
-	adres: Adres, http_get, powiat: str | None, wojewodztwo: str | None = None
+	adres: Adres,
+	http_get,
+	powiat: str | None,
+	wojewodztwo: str | None = None,
+	punkt_odniesienia: "tuple[float, float] | None" = None,
 ) -> "Wynik | None":
 	zapytanie = zapytanie_gugik(adres)
 	if not zapytanie:
 		return None
 	try:
 		odpowiedz = http_get(GUGIK_URL, {"request": "GetAddress", "address": zapytanie, "srid": "4326"}, None)
-		wynik = parsuj_gugik(odpowiedz, adres, powiat=powiat, wojewodztwo=wojewodztwo)
+		wynik = parsuj_gugik(
+			odpowiedz, adres, powiat=powiat, wojewodztwo=wojewodztwo, punkt_odniesienia=punkt_odniesienia
+		)
 	except Exception:
 		return None
 	if wynik is not None and _w_polsce(wynik.lat, wynik.lng):
@@ -644,13 +902,15 @@ def _sprobuj_gugik(
 	return None
 
 
-def _sprobuj_gugik_przysiolek(adres: Adres, http_get) -> "Wynik | None":
+def _sprobuj_gugik_przysiolek(
+	adres: Adres, http_get, punkt_odniesienia: "tuple[float, float] | None" = None
+) -> "Wynik | None":
 	zapytanie = zapytanie_gugik_przysiolek(adres)
 	if not zapytanie:
 		return None
 	try:
 		odpowiedz = http_get(GUGIK_URL, {"request": "GetAddress", "address": zapytanie, "srid": "4326"}, None)
-		wynik = parsuj_gugik_przysiolek(odpowiedz, adres)
+		wynik = parsuj_gugik_przysiolek(odpowiedz, adres, punkt_odniesienia=punkt_odniesienia)
 	except Exception:
 		return None
 	if wynik is not None and _w_polsce(wynik.lat, wynik.lng):
@@ -671,22 +931,28 @@ def _sprobuj_nominatim(adres: Adres, http_get) -> "Wynik | None":
 
 
 def _sprobuj_gugik_miejscowosc(
-	adres: Adres, http_get, powiat: str | None, wojewodztwo: str | None
+	adres: Adres,
+	http_get,
+	powiat: str | None,
+	wojewodztwo: str | None,
+	punkt_odniesienia: "tuple[float, float] | None" = None,
 ) -> "Wynik | None":
 	"""Krok 4 łańcucha (QA #102, runda 2): GUGiK samą nazwą miejscowości,
 	`type == "city"` - ostatnia deska ratunku przed `None`. Rozstrzyganie
-	wieloznaczności identyczne jak w kroku 1 (`powiat`/`wojewodztwo`
-	przekazane do `parsuj_gugik`); jedyna różnica to wynik ograniczony do
-	dokładności `"miejscowosc"` - inne dokładności nie powinny się tu
-	pojawić (zapytanie to sama nazwa miejscowości), ale sprawdzamy jawnie,
-	żeby ta funkcja nigdy nie zwróciła czegoś dokładniejszego niż faktycznie
-	wie (środek miejscowości, nic więcej)."""
+	wieloznaczności identyczne jak w kroku 1 (`powiat`/`wojewodztwo`/
+	`punkt_odniesienia` przekazane do `parsuj_gugik`); jedyna różnica to
+	wynik ograniczony do dokładności `"miejscowosc"` - inne dokładności nie
+	powinny się tu pojawić (zapytanie to sama nazwa miejscowości), ale
+	sprawdzamy jawnie, żeby ta funkcja nigdy nie zwróciła czegoś
+	dokładniejszego niż faktycznie wie (środek miejscowości, nic więcej)."""
 	miejscowosc = (adres.miejscowosc or "").strip()
 	if not miejscowosc:
 		return None
 	try:
 		odpowiedz = http_get(GUGIK_URL, {"request": "GetAddress", "address": miejscowosc, "srid": "4326"}, None)
-		wynik = parsuj_gugik(odpowiedz, adres, powiat=powiat, wojewodztwo=wojewodztwo)
+		wynik = parsuj_gugik(
+			odpowiedz, adres, powiat=powiat, wojewodztwo=wojewodztwo, punkt_odniesienia=punkt_odniesienia
+		)
 	except Exception:
 		return None
 	if wynik is not None and wynik.dokladnosc == "miejscowosc" and _w_polsce(wynik.lat, wynik.lng):
