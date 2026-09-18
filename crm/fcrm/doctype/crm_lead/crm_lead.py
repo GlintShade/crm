@@ -378,6 +378,12 @@ class CRMLead(Document):
 				"width": "10rem",
 			},
 			{
+				"label": "Uwagi",
+				"type": "Small Text",
+				"key": "custom_uwagi_import",
+				"width": "16rem",
+			},
+			{
 				"label": "Źródło",
 				"type": "Data",
 				"key": "custom_import_source",
@@ -411,6 +417,7 @@ class CRMLead(Document):
 			"custom_powiat",
 			"custom_status_handlowy",
 			"custom_status_zrodla",
+			"custom_uwagi_import",
 			"custom_import_source",
 			"modified",
 			# Nie sa osobnymi kolumnami, ale karmia awatar w pseudo-kolumnie
