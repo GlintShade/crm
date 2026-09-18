@@ -4,6 +4,7 @@ from crm.volteo_geokodowanie import (
 	DOKLADNOSCI,
 	GUGIK_URL,
 	NOMINATIM_URL,
+	PROMIEN_ODNIESIENIA_KM,
 	ZRODLA,
 	Adres,
 	Wynik,
@@ -12,6 +13,7 @@ from crm.volteo_geokodowanie import (
 	parsuj_gugik,
 	parsuj_gugik_przysiolek,
 	parsuj_nominatim,
+	warianty_miejscowosci,
 	zapytanie_gugik,
 	zapytanie_gugik_przysiolek,
 	zapytanie_nominatim,
@@ -413,6 +415,32 @@ NOMINATIM_MIODOWA_ULICA = [
 ]
 
 NOMINATIM_PUSTA = []
+
+# --- Współrzędne syntetyczne dla testów punkt_odniesienia (QA #102 runda 4) -----
+# Wszystkie przesunięcia liczone WZDŁUŻ POŁUDNIKA (ta sama długość geograficzna,
+# 19.0) od punktu odniesienia (52.0, 19.0) - dla ruchu północ-południe odległość
+# haversine równa się dokładnie R * delta_lat_rad, więc te wartości dają
+# DOKŁADNE, przewidywalne odległości w km bez zależności od zbieżności
+# południków. Przeliczone Pythonem tą samą formułą co `_odleglosc_m` (2026-09-18).
+PUNKT_ODNIESIENIA = (52.0, 19.0)
+LAT_5KM = 52.044966
+LAT_10KM = 52.089932
+LAT_15KM = 52.134898
+LAT_20KM = 52.179864
+LAT_25KM = 52.224830
+LAT_31KM = 52.278790
+LAT_35KM = 52.314763
+LAT_50KM = 52.449661
+LAT_65KM = 52.584559
+LAT_70KM = 52.629525
+
+
+def _kandydat_adres(y: float, code: str = "") -> dict:
+	return {"city": "Testowo", "street": "Wspólna", "number": "1", "code": code, "x": "19.0", "y": f"{y}"}
+
+
+def _kandydat_miasto(y: float, county: str = "") -> dict:
+	return {"city": "Bydgoszcz", "voivodeship": "kujawsko-pomorskie", "county": county, "x": "19.0", "y": f"{y}"}
 
 
 def _adres(ulica="", nr_domu="", kod="", miejscowosc="") -> Adres:
@@ -1045,6 +1073,194 @@ class TestParsujGugikPrzysiolek(unittest.TestCase):
 		self.assertEqual(wynik.lat, 53.700)
 
 
+class TestPunktOdniesienia(unittest.TestCase):
+	"""QA #102 runda 4, 2026-09-18: rozstrzyganie po odległości od
+	`punkt_odniesienia` (centroid kodu pocztowego leada), gdy dotychczasowe
+	sita (kod / ulica+numer / województwo / powiat) nadal zostawiają >1
+	kandydata. `_kandydat_adres`/`_kandydat_miasto` (patrz fixtures wyżej)
+	trzymają street+number/city/voivodeship stałe i różnicują tylko `y`
+	(szerokość), więc jedyną zmienną w każdym teście jest odległość."""
+
+	def test_ca_adres_najblizszy_akceptowany_drugi_ponad_2x_dalej(
+		self: "TestPunktOdniesienia",
+	) -> None:
+		# 5 km i 25 km od punktu odniesienia - najbliższy w promieniu 30 km,
+		# drugi ponad 2x dalej (25 > 2*5) -> akceptowany najbliższy.
+		odpowiedz = {
+			"type": "address",
+			"results": {"1": _kandydat_adres(LAT_5KM), "2": _kandydat_adres(LAT_25KM)},
+		}
+		adres = _adres(ulica="Wspólna", nr_domu="1", miejscowosc="Testowo")
+		wynik = parsuj_gugik(odpowiedz, adres, punkt_odniesienia=PUNKT_ODNIESIENIA)
+		self.assertIsNotNone(wynik)
+		self.assertEqual(wynik.lat, LAT_5KM)
+		self.assertEqual(wynik.dokladnosc, "adres")
+
+	def test_cb_adres_oba_blisko_i_nie_2x_dalej_zwraca_none(
+		self: "TestPunktOdniesienia",
+	) -> None:
+		# 10 km i 15 km - oba w promieniu 30 km, drugi TYLKO 1.5x dalej
+		# (nie > 2x) -> wciąż niejednoznaczne, `None`.
+		odpowiedz = {
+			"type": "address",
+			"results": {"1": _kandydat_adres(LAT_10KM), "2": _kandydat_adres(LAT_15KM)},
+		}
+		adres = _adres(ulica="Wspólna", nr_domu="1", miejscowosc="Testowo")
+		self.assertIsNone(parsuj_gugik(odpowiedz, adres, punkt_odniesienia=PUNKT_ODNIESIENIA))
+
+	def test_cc_adres_najblizszy_poza_promieniem_30km_zwraca_none(
+		self: "TestPunktOdniesienia",
+	) -> None:
+		# Najbliższy sam w sobie już 35 km - poza `PROMIEN_ODNIESIENIA_KM`
+		# (30) - `None`, niezależnie od drugiego kandydata.
+		odpowiedz = {
+			"type": "address",
+			"results": {"1": _kandydat_adres(LAT_35KM), "2": _kandydat_adres(LAT_70KM)},
+		}
+		adres = _adres(ulica="Wspólna", nr_domu="1", miejscowosc="Testowo")
+		self.assertIsNone(parsuj_gugik(odpowiedz, adres, punkt_odniesienia=PUNKT_ODNIESIENIA))
+
+	def test_cd_adres_drugi_poza_promieniem_ale_nie_2x_dalej_akceptuje_najblizszy(
+		self: "TestPunktOdniesienia",
+	) -> None:
+		# 20 km i 31 km - drugi NIE jest 2x dalej (31 < 2*20=40), ale LEŻY
+		# poza promieniem 30 km - to osobny warunek akceptacji ("ALBO poza
+		# promieniem"), więc najbliższy i tak jest akceptowany.
+		odpowiedz = {
+			"type": "address",
+			"results": {"1": _kandydat_adres(LAT_20KM), "2": _kandydat_adres(LAT_31KM)},
+		}
+		adres = _adres(ulica="Wspólna", nr_domu="1", miejscowosc="Testowo")
+		wynik = parsuj_gugik(odpowiedz, adres, punkt_odniesienia=PUNKT_ODNIESIENIA)
+		self.assertIsNotNone(wynik)
+		self.assertEqual(wynik.lat, LAT_20KM)
+
+	def test_ce_adres_bez_punktu_odniesienia_zwraca_none(self: "TestPunktOdniesienia") -> None:
+		# Dokładnie te same współrzędne co w teście "akceptowany" wyżej, ale
+		# bez `punkt_odniesienia` - nie ma z czym porównywać, `None`
+		# (zachowanie sprzed rundy 4, regresja).
+		odpowiedz = {
+			"type": "address",
+			"results": {"1": _kandydat_adres(LAT_5KM), "2": _kandydat_adres(LAT_25KM)},
+		}
+		adres = _adres(ulica="Wspólna", nr_domu="1", miejscowosc="Testowo")
+		self.assertIsNone(parsuj_gugik(odpowiedz, adres))
+
+	def test_cf_miasto_jeden_kandydat_poza_60km_zwraca_none(self: "TestPunktOdniesienia") -> None:
+		odpowiedz = {"type": "city", "results": {"1": _kandydat_miasto(LAT_70KM)}}
+		adres = _adres(miejscowosc="Bydgoszcz")
+		self.assertIsNone(parsuj_gugik(odpowiedz, adres, punkt_odniesienia=PUNKT_ODNIESIENIA))
+
+	def test_cg_miasto_jeden_kandydat_w_60km_akceptowany(self: "TestPunktOdniesienia") -> None:
+		# 50 km, w zasięgu 60 km - nie blokować bez potrzeby.
+		odpowiedz = {"type": "city", "results": {"1": _kandydat_miasto(LAT_50KM)}}
+		adres = _adres(miejscowosc="Bydgoszcz")
+		wynik = parsuj_gugik(odpowiedz, adres, punkt_odniesienia=PUNKT_ODNIESIENIA)
+		self.assertIsNotNone(wynik)
+		self.assertEqual(wynik.dokladnosc, "miejscowosc")
+
+	def test_ch_miasto_wielu_kandydatow_rozstrzygniete_punktem_odniesienia(
+		self: "TestPunktOdniesienia",
+	) -> None:
+		# Przykład z briefu: "Bydgoszcz" -> 2 kandydatów GUGiK w tym samym
+		# województwie, lead bez powiatu na karcie - `wojewodztwo`/`powiat`
+		# nie pomagają, punkt odniesienia rozstrzyga (5 km vs 25 km, drugi
+		# > 2x dalej).
+		odpowiedz = {
+			"type": "city",
+			"results": {"1": _kandydat_miasto(LAT_5KM, "bydgoski"), "2": _kandydat_miasto(LAT_25KM, "inny")},
+		}
+		adres = _adres(miejscowosc="Bydgoszcz")
+		wynik = parsuj_gugik(odpowiedz, adres, wojewodztwo="kujawsko-pomorskie", punkt_odniesienia=PUNKT_ODNIESIENIA)
+		self.assertIsNotNone(wynik)
+		self.assertEqual(wynik.lat, LAT_5KM)
+		self.assertEqual(wynik.dokladnosc, "miejscowosc")
+
+	def test_ci_miasto_wielu_kandydatow_nadal_niejednoznaczne_zwraca_none(
+		self: "TestPunktOdniesienia",
+	) -> None:
+		odpowiedz = {
+			"type": "city",
+			"results": {"1": _kandydat_miasto(LAT_10KM, "a"), "2": _kandydat_miasto(LAT_15KM, "b")},
+		}
+		adres = _adres(miejscowosc="Bydgoszcz")
+		wynik = parsuj_gugik(odpowiedz, adres, wojewodztwo="kujawsko-pomorskie", punkt_odniesienia=PUNKT_ODNIESIENIA)
+		self.assertIsNone(wynik)
+
+	def test_cj_przysiolek_wielu_kandydatow_rozstrzygniete_punktem_odniesienia(
+		self: "TestPunktOdniesienia",
+	) -> None:
+		# `punkt_odniesienia` dociera też do parsuj_gugik_przysiolek (QA:
+		# "przekazywany do wszystkich kroków GUGiK") - tu oboje kandydaci
+		# mają DOKŁADNIE zgodny kod (jedyne sito przysiółka), więc bez
+		# punktu odniesienia i poza promieniem 300 m byłoby `None`.
+		odpowiedz = {
+			"type": "address",
+			"results": {
+				"1": {"city": "Zalesie", "street": None, "number": "14", "code": "77-400", "x": "19.0", "y": f"{LAT_5KM}"},
+				"2": {"city": "Zalesie", "street": None, "number": "14", "code": "77-400", "x": "19.0", "y": f"{LAT_25KM}"},
+			},
+		}
+		adres = _adres(ulica="Zalesie", nr_domu="14", kod="77-400", miejscowosc="Święta")
+		wynik = parsuj_gugik_przysiolek(odpowiedz, adres, punkt_odniesienia=PUNKT_ODNIESIENIA)
+		self.assertIsNotNone(wynik)
+		self.assertEqual(wynik.lat, LAT_5KM)
+		self.assertEqual(wynik.dokladnosc, "adres")
+
+
+class TestWariantyMiejscowosci(unittest.TestCase):
+	def test_da_tylko_nazwa_leada(self: "TestWariantyMiejscowosci") -> None:
+		self.assertEqual(warianty_miejscowosci("Poznan", None), ["Poznan"])
+
+	def test_db_nazwa_leada_i_rozna_nazwa_z_kodu(self: "TestWariantyMiejscowosci") -> None:
+		# QA #102 runda 4, uwaga lokalna: kod 60-185 daje "Skórzewo" dla
+		# leada "Poznan" - wieś obok, nie to samo miasto, ale to zamierzone.
+		self.assertEqual(warianty_miejscowosci("Poznan", "Skórzewo"), ["Poznan", "Skórzewo"])
+
+	def test_dc_nazwa_z_kodu_identyczna_bez_wielkosci_liter_pomijana(
+		self: "TestWariantyMiejscowosci",
+	) -> None:
+		self.assertEqual(warianty_miejscowosci("Sypniewo", "sypniewo"), ["Sypniewo"])
+
+	def test_dd_skrot_wlkp_bez_kropki_rozwiniety(self: "TestWariantyMiejscowosci") -> None:
+		self.assertEqual(
+			warianty_miejscowosci("Gorzow Wlkp", None), ["Gorzow Wlkp", "Gorzow Wielkopolski"]
+		)
+
+	def test_de_skrot_wlkp_z_kropka_rozwiniety_bez_kropki_w_rdzeniu(
+		self: "TestWariantyMiejscowosci",
+	) -> None:
+		self.assertEqual(
+			warianty_miejscowosci("Gorzow Wlkp.", None), ["Gorzow Wlkp.", "Gorzow Wielkopolski"]
+		)
+
+	def test_df_skrot_maz_rozwiniety(self: "TestWariantyMiejscowosci") -> None:
+		self.assertEqual(
+			warianty_miejscowosci("Ostroleka Maz.", None), ["Ostroleka Maz.", "Ostroleka Mazowiecki"]
+		)
+
+	def test_dg_skrot_sl_rozwiniety(self: "TestWariantyMiejscowosci") -> None:
+		self.assertEqual(warianty_miejscowosci("Gliwice Śl.", None), ["Gliwice Śl.", "Gliwice Śląski"])
+
+	def test_dh_kolejnosc_wszystkie_trzy_zrodla_naraz(self: "TestWariantyMiejscowosci") -> None:
+		wynik = warianty_miejscowosci("Gorzow Wlkp", "Santok")
+		self.assertEqual(wynik, ["Gorzow Wlkp", "Santok", "Gorzow Wielkopolski"])
+		self.assertEqual(len(wynik), 3)
+
+	def test_di_pusta_nazwa_leada_tylko_nazwa_z_kodu(self: "TestWariantyMiejscowosci") -> None:
+		self.assertEqual(warianty_miejscowosci("", "Skórzewo"), ["Skórzewo"])
+
+	def test_dj_oba_puste_pusta_lista(self: "TestWariantyMiejscowosci") -> None:
+		self.assertEqual(warianty_miejscowosci("", None), [])
+
+	def test_dk_brak_skrotu_na_koncu_nazwy_nie_dodaje_wariantu(
+		self: "TestWariantyMiejscowosci",
+	) -> None:
+		# "Wlkp" NIE jest na końcu ("Wlkp Nowa") - żaden skrót z tabeli nie
+		# pasuje jako sufiks, więc tylko nazwa leada.
+		self.assertEqual(warianty_miejscowosci("Wlkp Nowa", None), ["Wlkp Nowa"])
+
+
 class TestGeokoduj(unittest.TestCase):
 	def test_ao_gugik_sukces_nie_wola_dalej(self: "TestGeokoduj") -> None:
 		adres = _adres(ulica="Miodowa", nr_domu="10", kod="89-422", miejscowosc="Sypniewo")
@@ -1202,6 +1418,95 @@ class TestGeokoduj(unittest.TestCase):
 		self.assertIsNotNone(wynik)
 		self.assertEqual(wynik.dokladnosc, "miejscowosc")
 		self.assertEqual(wynik.zrodlo, "gugik")
+
+
+	def test_dl_wies_bez_ulicy_wariant_zastepuje_obie_i_trafia_na_koncu(
+		self: "TestGeokoduj",
+	) -> None:
+		# QA #102 runda 4, uwaga lokalna: lead "Poznan" (bez polskich
+		# znaków, GUGiK zwraca 0 wszędzie), kod 60-185 daje w tabeli kodów
+		# "Skórzewo" - wieś obok, ale poprawna, dokładniejsza lokalizacja
+		# niż całkowity brak. Adres jest wsią-bez-ulicy (Ulica pusta), więc
+		# wariant zastępuje ZARÓWNO Ulica, jak i Miejscowość (żeby
+		# _wies_bez_ulicy zostało prawdziwe też dla nowej nazwy). Dwaj
+		# kandydaci "Skórzewo" w fixture (różne województwa) potwierdzają,
+		# że `wojewodztwo` dociera też do próby z wariantem, nie tylko do
+		# pierwszej (oryginalnej) próby.
+		skorzewo_dwuznaczne = {
+			"type": "city",
+			"results": {
+				"1": {"city": "Skórzewo", "voivodeship": "wielkopolskie", "county": "poznański", "x": "16.80", "y": "52.40"},
+				"2": {"city": "Skórzewo", "voivodeship": "mazowieckie", "county": "inny", "x": "20.80", "y": "52.10"},
+			},
+		}
+		adres = _adres(kod="60-185", miejscowosc="Poznan")
+		http_get = _http_get_wg_url(
+			gugik=[GUGIK_BRAK_WYNIKOW, GUGIK_BRAK_WYNIKOW, skorzewo_dwuznaczne],
+			nominatim=[NOMINATIM_PUSTA],
+		)
+		wynik = geokoduj(adres, http_get, wojewodztwo="wielkopolskie", miejscowosc_z_kodu="Skórzewo")
+		self.assertIsNotNone(wynik)
+		self.assertEqual(wynik.dokladnosc, "miejscowosc")
+		self.assertAlmostEqual(wynik.lat, 52.40)
+		self.assertEqual(len(http_get.wywolania), 4)
+
+	def test_dm_prawdziwa_ulica_wariant_zastepuje_tylko_miejscowosc(
+		self: "TestGeokoduj",
+	) -> None:
+		# Adres z prawdziwą ulicą (Ulica != Miejscowość) - wariant zastępuje
+		# WYŁĄCZNIE Miejscowość, Ulica/Nr zostają nietknięte. Trafienie na
+		# drugiej próbie ma dokładność "adres" (nie "miejscowosc") - podmiana
+		# nazwy miejscowości nie zmienia znaczenia dokładności zwróconego
+		# wyniku (QA: "dokładność bez zmian").
+		wielkopolski_bema = {
+			"type": "address",
+			"results": {
+				"1": {"city": "Gorzow Wielkopolski", "street": "Bema", "number": "5", "code": "66-400", "x": "15.2", "y": "52.7"}
+			},
+		}
+		adres = _adres(ulica="Bema", nr_domu="5", miejscowosc="Gorzow Wlkp")
+		http_get = _http_get_wg_url(
+			gugik=[GUGIK_BRAK_WYNIKOW, GUGIK_BRAK_WYNIKOW, wielkopolski_bema],
+			nominatim=[NOMINATIM_PUSTA],
+		)
+		wynik = geokoduj(adres, http_get)
+		self.assertIsNotNone(wynik)
+		self.assertEqual(wynik.dokladnosc, "adres")
+
+	def test_dn_wariant_tylko_ze_skrotu_bez_nazwy_z_kodu(self: "TestGeokoduj") -> None:
+		# Bez miejscowosc_z_kodu (None) - tylko dwa warianty w grze: nazwa
+		# leada i rozwinięcie skrótu. Trafienie na drugiej (ostatniej) próbie.
+		gorzow_miasto = {
+			"type": "city",
+			"results": {"1": {"city": "Gorzow Wielkopolski", "voivodeship": "lubuskie", "x": "15.2", "y": "52.7"}},
+		}
+		adres = _adres(kod="66-400", miejscowosc="Gorzow Wlkp")
+		http_get = _http_get_wg_url(
+			gugik=[GUGIK_BRAK_WYNIKOW, GUGIK_BRAK_WYNIKOW, gorzow_miasto], nominatim=[NOMINATIM_PUSTA]
+		)
+		wynik = geokoduj(adres, http_get)
+		self.assertIsNotNone(wynik)
+		self.assertEqual(wynik.dokladnosc, "miejscowosc")
+		self.assertEqual(len(http_get.wywolania), 4)
+
+	def test_do_maksymalnie_trzy_warianty_wszystkie_bez_trafienia(
+		self: "TestGeokoduj",
+	) -> None:
+		# Trzy warianty (nazwa leada, nazwa z kodu, rozwinięcie skrótu) - każdy
+		# bez trafienia w żadnym z czterech kroków. Adres jest wsią-bez-ulicy
+		# przez cały czas (wariant zastępuje Ulica razem z Miejscowość), więc
+		# krok 2 (przysiółek) jest pomijany w KAŻDEJ próbie - dokładnie 3 razy
+		# po 3 wywołania (krok 1 + krok 3 + krok 4) = 9 razem, nie więcej.
+		adres = _adres(kod="66-400", miejscowosc="Gorzow Wlkp")
+		http_get = _http_get_wg_url(
+			gugik=[GUGIK_BRAK_WYNIKOW] * 6,
+			nominatim=[NOMINATIM_PUSTA] * 3,
+		)
+		wynik = geokoduj(adres, http_get, miejscowosc_z_kodu="Santok")
+		self.assertIsNone(wynik)
+		self.assertEqual(len(http_get.wywolania), 9)
+		self.assertEqual(sum(1 for url, _, _ in http_get.wywolania if url == GUGIK_URL), 6)
+		self.assertEqual(sum(1 for url, _, _ in http_get.wywolania if url == NOMINATIM_URL), 3)
 
 
 if __name__ == "__main__":
