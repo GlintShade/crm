@@ -188,13 +188,17 @@
       />
     </div>
 
-    <!-- Atrybucje (wymóg licencyjny OSM + GeoNames) -->
+    <!-- Atrybucje (wymóg licencyjny OSM + GeoNames; geokodowanie GUGiK/Nominatim
+         dopisane issue #102 - GUGiK jest usługą państwową bez wymogu atrybucji,
+         ale Nominatim (OSM) tego wymaga, więc jeden wspólny wiersz dla obu. -->
     <div
       class="border-t border-outline-gray-2 px-4 py-1.5 text-xs text-ink-gray-4"
     >
       {{ __('© OpenStreetMap contributors') }}
       ·
       {{ __('kody pocztowe: GeoNames, CC-BY 4.0') }}
+      ·
+      {{ __('geokodowanie: GUGiK (UUG), OpenStreetMap Nominatim') }}
     </div>
   </div>
 </template>
@@ -494,7 +498,19 @@ function patchujLeada(patch) {
 // `hashString` (issue #101) przeniesiony do utils/mapaKolory.js, żeby
 // kolorowanie wg użytkownika mogło użyć tego samego algorytmu.
 
+// Issue #102: jitter ma sens tylko tam, gdzie wiele leadów faktycznie dzieli
+// JEDEN punkt - centroid kodu pocztowego (dokładność "kod"), albo brak
+// dokładnego geokodu w ogóle (dokładność "brak", albo pusta/nieustawiona,
+// gdy skrypt schematu jeszcze nie poszedł albo lead nie był jeszcze
+// przetworzony wsadem). Pin geokodowany po prawdziwym adresie ("adres") albo
+// po samej ulicy ("ulica") ma już własną, w praktyce unikalną współrzędną -
+// jitter przesunąłby go z prawdziwej lokalizacji bez żadnego powodu.
 const JITTER_DEG = 0.005
+const DOKLADNOSCI_Z_JITTEREM = new Set(['kod', 'miejscowosc', 'brak', ''])
+
+function potrzebujeJitteru(dokladnosc) {
+  return DOKLADNOSCI_Z_JITTEREM.has(dokladnosc || '')
+}
 
 function jitterOffset(name, sol) {
   const h = hashString(`${name}:${sol}`)
@@ -597,8 +613,9 @@ function rysujMarkery() {
   markerLayer.clearLayers()
 
   for (const lead of leadyPrzefiltrowane.value) {
-    const lat = Number(lead.custom_lat) + jitterOffset(lead.name, 'lat')
-    const lng = Number(lead.custom_lng) + jitterOffset(lead.name, 'lng')
+    const jitter = potrzebujeJitteru(lead.custom_geo_dokladnosc)
+    const lat = Number(lead.custom_lat) + (jitter ? jitterOffset(lead.name, 'lat') : 0)
+    const lng = Number(lead.custom_lng) + (jitter ? jitterOffset(lead.name, 'lng') : 0)
     if (!isFinite(lat) || !isFinite(lng)) continue
 
     const kolor = kolorLeada(lead)
@@ -623,6 +640,20 @@ function rysujMarkery() {
     }
     dopasowanoWidok = true
   }
+}
+
+// Etykieta wiersza "Dokładność" w dymku (issue #102) - tylko cztery wartości
+// niosące realną informację o precyzji geokodu; "brak"/pusty custom_geo_dokladnosc
+// (backend jeszcze nie policzył albo nie znalazł trafienia) celowo bez etykiety,
+// żeby `if (!value) continue` w pętli budującej dymek pominęło ten wiersz.
+function etykietaDokladnosciGeokodu(dokladnosc) {
+  const etykiety = {
+    adres: __('adres'),
+    ulica: __('ulica'),
+    miejscowosc: __('miejscowość'),
+    kod: __('kod pocztowy'),
+  }
+  return etykiety[dokladnosc] || ''
 }
 
 // Dymek pinezki (hover, Leaflet Tooltip) -- skrot: nazwa, miasto, status,
@@ -665,6 +696,11 @@ function budujDymek(lead) {
       __('Termin spotkania'),
       lead.custom_termin_spotkania ? formatDate(lead.custom_termin_spotkania) : '',
     ],
+    // Issue #102: wiersz dokładności geokodu. Etykieta "brak"/pusta nie ma
+    // sensu do pokazania w dymku (to brak dokładnego geokodu, nie wartość
+    // do zaprezentowania), więc mapa etykiet nie zna tego klucza i wiersz
+    // po prostu nie trafi tu przez `if (!value) continue` niżej.
+    [__('Dokładność'), etykietaDokladnosciGeokodu(lead.custom_geo_dokladnosc)],
   ].filter(Boolean)
   for (const [label, value, tagi] of wiersze) {
     if (!value) continue

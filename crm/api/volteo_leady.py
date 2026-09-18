@@ -588,24 +588,34 @@ def mapa(
 	filtry_tuples = convert_filter_to_tuple("CRM Lead", filters)
 	filtry_tuples = [*filtry_tuples, ["CRM Lead", "custom_lat", "!=", 0]]
 
+	fields = [
+		"name",
+		"lead_name",
+		"status",
+		"custom_lat",
+		"custom_lng",
+		"lead_owner",
+		"custom_install_city",
+		"custom_cc",
+		"custom_import_source",
+		"custom_posiadane_produkty",
+		"custom_produkt_procesu",
+		"custom_status_zrodla",
+		"custom_termin_spotkania",
+		"mobile_no",
+	]
+	# VOLTEO (issue #102): dokładność geokodu dla jittera pinezki i wiersza
+	# "Dokładność" w dymku. Bramkowane has_field tak samo jak custom_cc w
+	# crm/permissions/org_hierarchy.py -- pole tworzy osobny skrypt ops
+	# (crm-leady-geokodowanie.py) i kod forka ma działać także na
+	# środowisku, gdzie ten skrypt jeszcze nie poszedł (get_list z
+	# nieistniejącym polem rzuca "Unknown column").
+	if frappe.get_meta("CRM Lead").has_field("custom_geo_dokladnosc"):
+		fields.append("custom_geo_dokladnosc")
+
 	return frappe.get_list(
 		"CRM Lead",
-		fields=[
-			"name",
-			"lead_name",
-			"status",
-			"custom_lat",
-			"custom_lng",
-			"lead_owner",
-			"custom_install_city",
-			"custom_cc",
-			"custom_import_source",
-			"custom_posiadane_produkty",
-			"custom_produkt_procesu",
-			"custom_status_zrodla",
-			"custom_termin_spotkania",
-			"mobile_no",
-		],
+		fields=fields,
 		filters=filtry_tuples,
 		limit_page_length=0,
 	)
