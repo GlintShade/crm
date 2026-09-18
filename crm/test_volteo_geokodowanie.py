@@ -717,6 +717,146 @@ class TestParsujGugik(unittest.TestCase):
 	def test_x_typ_street_nieobslugiwany(self: "TestParsujGugik") -> None:
 		self.assertIsNone(parsuj_gugik(GUGIK_MARSZALKOWSKA_ULICA_TYP_STREET, _adres(miejscowosc="Warszawa")))
 
+	def test_x2_sufiks_na_granicy_slowa_akceptowany_pelna_nazwa_urzedowa(
+		self: "TestParsujGugik",
+	) -> None:
+		# QA #102 runda 3, 2026-09-18: dry-run lokalny, "Michałowskiego 38,
+		# 64-920 Piła" nie trafiał, bo GUGiK zwraca `street = "Piotra
+		# Michałowskiego"` (pełna nazwa urzędowa), a ścisła równość rundy 2
+		# to odrzucała. Sufiks na granicy słowa ("Piotra Michałowskiego"
+		# kończy się słowem "Michałowskiego") ma to teraz akceptować.
+		odpowiedz = {
+			"type": "address",
+			"results": {
+				"1": {
+					"city": "Piła",
+					"street": "Piotra Michałowskiego",
+					"number": "38",
+					"code": "64-920",
+					"x": "16.75",
+					"y": "53.15",
+				}
+			},
+		}
+		adres = _adres(ulica="Michałowskiego", nr_domu="38", kod="64-920", miejscowosc="Piła")
+		wynik = parsuj_gugik(odpowiedz, adres)
+		self.assertIsNotNone(wynik)
+		self.assertEqual(wynik.dokladnosc, "adres")
+
+	def test_x3_sufiks_na_granicy_slowa_akceptowany_generala(self: "TestParsujGugik") -> None:
+		# Drugi przykład z briefu QA: "Generała Józefa Bema" vs "Bema".
+		odpowiedz = {
+			"type": "address",
+			"results": {
+				"1": {
+					"city": "Warszawa",
+					"street": "Generała Józefa Bema",
+					"number": "5",
+					"code": "01-234",
+					"x": "20.98",
+					"y": "52.24",
+				}
+			},
+		}
+		adres = _adres(ulica="Bema", nr_domu="5", kod="01-234", miejscowosc="Warszawa")
+		wynik = parsuj_gugik(odpowiedz, adres)
+		self.assertIsNotNone(wynik)
+		self.assertEqual(wynik.dokladnosc, "adres")
+
+	def test_x4_sufiks_dwuwyrazowy_nowa_vs_krakowska_nowa(self: "TestParsujGugik") -> None:
+		# Z briefu QA: „Nowa” vs „Krakowska Nowa” - akceptowane jako sufiks
+		# (ostatnie słowo obu się zgadza).
+		odpowiedz = {
+			"type": "address",
+			"results": {
+				"1": {
+					"city": "Kraków",
+					"street": "Krakowska Nowa",
+					"number": "2",
+					"code": "30-001",
+					"x": "19.94",
+					"y": "50.06",
+				}
+			},
+		}
+		adres = _adres(ulica="Nowa", nr_domu="2", kod="30-001", miejscowosc="Kraków")
+		wynik = parsuj_gugik(odpowiedz, adres)
+		self.assertIsNotNone(wynik)
+		self.assertEqual(wynik.dokladnosc, "adres")
+
+	def test_x5_fuzzy_calkowicie_inna_ulica_nadal_odrzucona(self: "TestParsujGugik") -> None:
+		# Regresja rundy 2 (QA #102): "Sternicza" i "Miernicza" to jedno
+		# słowo każda, różne słowo - żadna relacja sufiksowa, luzowanie
+		# rundy 3 NIE ma tego przepuszczać.
+		odpowiedz = {
+			"type": "address",
+			"results": {
+				"1": {
+					"city": "Bielsko-Biała",
+					"street": "Sternicza",
+					"number": "35",
+					"code": "43-316",
+					"x": "19.0256298900019",
+					"y": "49.8053808884128",
+				}
+			},
+		}
+		adres = _adres(ulica="Miernicza", nr_domu="35", kod="43-316", miejscowosc="Bielsko-Biała")
+		self.assertIsNone(parsuj_gugik(odpowiedz, adres))
+
+	def test_x6_podpolna_vs_polna_odrzucone_brak_granicy_slowa(self: "TestParsujGugik") -> None:
+		# Z briefu QA: „Polna” vs „Podpolna” - odrzucone, bo "polna" w
+		# "Podpolna" nie jest osobnym słowem (brak spacji przed nim), to
+		# dopasowanie po ZNAKACH, nie po słowach, i reguła sufiksu ma je
+		# odrzucić mimo że string.endswith() na poziomie znaków by przeszedł.
+		odpowiedz = {
+			"type": "address",
+			"results": {
+				"1": {
+					"city": "Poznań",
+					"street": "Podpolna",
+					"number": "7",
+					"code": "60-001",
+					"x": "16.93",
+					"y": "52.41",
+				}
+			},
+		}
+		adres = _adres(ulica="Polna", nr_domu="7", kod="60-001", miejscowosc="Poznań")
+		self.assertIsNone(parsuj_gugik(odpowiedz, adres))
+
+	def test_x7_prefiks_al_zdejmowany_po_obu_stronach(self: "TestParsujGugik") -> None:
+		# Normalizacja rundy 3: prefiksy al./aleja są zdejmowane symetrycznie
+		# - lead zapisany z prefiksem ("al. Bema") wciąż dopasowuje GUGiK
+		# bez prefiksu ("Bema").
+		odpowiedz = {
+			"type": "address",
+			"results": {
+				"1": {"city": "Warszawa", "street": "Bema", "number": "5", "code": "01-234", "x": "20.98", "y": "52.24"}
+			},
+		}
+		adres = _adres(ulica="al. Bema", nr_domu="5", kod="01-234", miejscowosc="Warszawa")
+		wynik = parsuj_gugik(odpowiedz, adres)
+		self.assertIsNotNone(wynik)
+
+	def test_x8_prefiks_osiedle_zdejmowany_z_gugik(self: "TestParsujGugik") -> None:
+		odpowiedz = {
+			"type": "address",
+			"results": {
+				"1": {
+					"city": "Poznań",
+					"street": "Osiedle Słoneczne",
+					"number": "12",
+					"code": "60-002",
+					"x": "16.93",
+					"y": "52.41",
+				}
+			},
+		}
+		adres = _adres(ulica="Słoneczne", nr_domu="12", kod="60-002", miejscowosc="Poznań")
+		wynik = parsuj_gugik(odpowiedz, adres)
+		self.assertIsNotNone(wynik)
+
 
 class TestZapytanieNominatim(unittest.TestCase):
 	def test_y_wies_bez_ulicy_z_numerem(self: "TestZapytanieNominatim") -> None:

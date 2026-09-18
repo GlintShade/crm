@@ -46,6 +46,7 @@ adres w wsadzie nie przerywa całej partii.
 
 import hashlib
 import math
+import re
 from typing import NamedTuple
 
 GUGIK_URL = "https://services.gugik.gov.pl/uug/"
@@ -190,16 +191,68 @@ def _wojewodztwo_pasuje(kandydat: dict, wojewodztwo: str) -> bool:
 	return (kandydat.get("voivodeship") or "").strip().lower() == wojewodztwo.strip().lower()
 
 
-def _bez_prefiksu_ulicy(tekst: str) -> str:
-	"""Zdejmuje prefiks „ul.”/„ulica” (bez wielkości liter) z nazwy ulicy,
-	tak jak zwraca go czasem GUGiK (np. `"ulica Marszałkowska"`) - żeby
-	porównanie z `adres.ulica` (zwykle bez prefiksu) nie fałszowało
-	niedopasowania."""
-	tekst = tekst.strip()
-	for prefiks in ("ulica ", "ul. ", "ul "):
-		if tekst.lower().startswith(prefiks):
+_PREFIKSY_ULICY = (
+	"ulica ",
+	"ul. ",
+	"ul ",
+	"aleja ",
+	"al. ",
+	"al ",
+	"plac ",
+	"pl. ",
+	"pl ",
+	"osiedle ",
+	"os. ",
+	"os ",
+)
+"""Prefiksy typu ulicy zdejmowane przy normalizacji - GUGiK i `adres.ulica`
+oba potrafią je nieść (np. `"ulica Marszałkowska"`, `"al. Bema"`, `"os.
+Słoneczne"`) albo nie nieść wcale; porównanie musi działać niezależnie od
+tego, po której stronie prefiks się znalazł."""
+
+
+def _znormalizuj_ulice(tekst: str | None) -> str:
+	"""Normalizacja nazwy ulicy do porównania: zdjęcie prefiksu typu ulicy
+	(`_PREFIKSY_ULICY`, bez wielkości liter), małe litery, pojedyncze spacje
+	(bez wiodących/końcowych). Stosowana symetrycznie do obu stron
+	porównania (kandydat GUGiK i `adres.ulica`) - lead bywa zapisany z
+	prefiksem tak samo jak odpowiedź GUGiK."""
+	tekst = re.sub(r"\s+", " ", (tekst or "").strip()).lower()
+	for prefiks in _PREFIKSY_ULICY:
+		if tekst.startswith(prefiks):
 			return tekst[len(prefiks) :].strip()
 	return tekst
+
+
+def _ulica_pasuje(ulica_gugik_norm: str, ulica_lead_norm: str) -> bool:
+	"""QA #102 runda 3, 2026-09-18: równość ALBO dopasowanie sufiksowe na
+	granicy słowa, w obie strony. GUGiK zwraca pełne nazwy urzędowe
+	("Piotra Michałowskiego", "Generała Józefa Bema"), podczas gdy lead ma
+	często skróconą, potoczną nazwę ("Michałowskiego", "Bema") - sprawdzone
+	realnym dry-runem 2026-09-18: "Michałowskiego 38, 64-920 Piła" nie
+	trafiał, bo GUGiK zwraca `street = "Piotra Michałowskiego"` i ścisła
+	równość to odrzucała.
+
+	Dopasowanie jest PO SŁOWACH, nie po znakach - "Podpolna" nie może
+	dopasować "Polna" mimo że string kończy się tymi znakami, bo w
+	"Podpolna" nie ma spacji przed "polna" (to jedno słowo, inna ulica).
+	"Krakowska Nowa" dopasowuje "Nowa" (dwa słowa, ostatnie słowo się
+	zgadza), "Sternicza" nie dopasowuje "Miernicza" (jedno słowo, różne
+	słowo) - pokrywa się to z fuzzy-dopasowaniem GUGiK odrzuconym w rundzie
+	2 (QA #102), ta reguła go nie osłabia."""
+	if ulica_gugik_norm == ulica_lead_norm:
+		return True
+
+	slowa_gugik = ulica_gugik_norm.split()
+	slowa_lead = ulica_lead_norm.split()
+	if not slowa_gugik or not slowa_lead:
+		return False
+
+	if len(slowa_lead) <= len(slowa_gugik) and slowa_gugik[-len(slowa_lead) :] == slowa_lead:
+		return True
+	if len(slowa_gugik) <= len(slowa_lead) and slowa_lead[-len(slowa_gugik) :] == slowa_gugik:
+		return True
+	return False
 
 
 def _numer_pasuje(kandydat_number: str | None, nr_domu: str) -> bool:
@@ -225,12 +278,15 @@ def _kandydat_adresowo_pasuje(kandydat: dict, adres: Adres) -> bool:
 	Wieś bez ulicy (`adres.ulica` puste albo równe `adres.miejscowosc`):
 	kandydat pasuje, gdy jego `street` jest puste ORAZ `city` == miejscowość
 	leada (bez wielkości liter). Prawdziwa ulica: kandydat pasuje, gdy jego
-	`street` (po zdjęciu prefiksu „ul.”/„ulica” i normalizacji wielkości
-	liter/białych znaków) == `adres.ulica`. W obu przypadkach `number` musi
-	się zgadzać z `adres.nr_domu` (normalizacja: bez spacji, bez wielkości
-	liter). Kandydat z pustym `street`, gdy zapytanie MIAŁO ulicę, zawsze
-	odpada - GUGiK czasem zwraca dopasowanie samej miejscowości jako
-	fallback w tym samym zapytaniu adresowym."""
+	`street` i `adres.ulica`, oba znormalizowane (`_znormalizuj_ulice`),
+	dają zgodność wg `_ulica_pasuje` - równość ALBO sufiks na granicy słowa
+	w obie strony (QA #102 runda 3: GUGiK zwraca pełną nazwę urzędową,
+	"Piotra Michałowskiego", lead często ma skróconą potoczną,
+	"Michałowskiego" - sprawdzone realnym dry-runem 2026-09-18). W obu
+	przypadkach `number` musi się zgadzać z `adres.nr_domu` (normalizacja:
+	bez spacji, bez wielkości liter). Kandydat z pustym `street`, gdy
+	zapytanie MIAŁO ulicę, zawsze odpada - GUGiK czasem zwraca dopasowanie
+	samej miejscowości jako fallback w tym samym zapytaniu adresowym."""
 	if not _numer_pasuje(kandydat.get("number"), adres.nr_domu):
 		return False
 
@@ -243,7 +299,7 @@ def _kandydat_adresowo_pasuje(kandydat: dict, adres: Adres) -> bool:
 
 	if not kandydat_street:
 		return False
-	return _bez_prefiksu_ulicy(kandydat_street).lower() == ulica.lower()
+	return _ulica_pasuje(_znormalizuj_ulice(kandydat_street), _znormalizuj_ulice(ulica))
 
 
 def parsuj_gugik(
