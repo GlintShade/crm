@@ -357,7 +357,7 @@ class TestAllowlistyLeadow(unittest.TestCase):
 		)
 
 	def test_f_filter_fields_lead_liczba_i_kolejnosc(self: "TestAllowlistyLeadow") -> None:
-		self.assertEqual(len(FILTER_FIELDS_LEAD), 22)
+		self.assertEqual(len(FILTER_FIELDS_LEAD), 23)
 		self.assertEqual(
 			[fieldname for fieldname, _ in FILTER_FIELDS_LEAD],
 			[
@@ -383,6 +383,7 @@ class TestAllowlistyLeadow(unittest.TestCase):
 				"modified",
 				"creation",
 				"_assign",
+				"custom_geo_dokladnosc",
 			],
 		)
 

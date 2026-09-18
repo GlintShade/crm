@@ -139,6 +139,7 @@ FILTER_FIELDS_LEAD: tuple[tuple[str, str | None], ...] = (
 	("modified", "Ostatnia zmiana"),
 	("creation", "Data utworzenia"),
 	("_assign", "Przypisano do"),
+	("custom_geo_dokladnosc", "Dokładność geokodu"),
 )
 
 
