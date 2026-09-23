@@ -129,6 +129,7 @@ _DANE_POLA_DOZWOLONE = [
 	"zgoda_kontakt_telefoniczny",
 	"zgoda_dzialania_promocyjne",
 	"zgoda_realizacja_przed_odstapieniem",
+	"drugi_zamawiajacy",
 ]
 """Jedyne pola `Volteo Umowa`, jakie `volteo_umowa_save` przyjmuje od klienta.
 
@@ -144,6 +145,12 @@ z Załącznika 2 — mają wagę prawną, patrz `_POLA_CHECKBOX` dla ich koercji
 (realizacja Umowy przed upływem ustawowego terminu na odstąpienie) — to warunek
 umowy, nie zgoda marketingowa, więc celowo NIE jest kopiowane na `Contact` przez
 `_propaguj_zgody` poniżej.
+`drugi_zamawiajacy` (ops#168) to Link do `Contact` drugiego Zamawiającego dla
+wariantu umowy podwójnej: samo przyjęcie wartości z klienta idzie tą samą
+allowlistą jak reszta pól, ale zapis w `volteo_umowa_save` dokłada osobną
+walidację (kontakt musi istnieć i różnić się od kontaktu podstawowego szansy)
+i efekt uboczny (dopięcie kontaktu do `deal_doc.contacts`), patrz komentarz
+przy tej walidacji niżej.
 """
 
 _POLA_KWOTOWE = frozenset({"wklad_wlasny_pln"})
@@ -282,6 +289,17 @@ def _dane_kontaktu(kontakt: str | None) -> dict[str, Any]:
 	return wynik
 
 
+def _prefill_drugi(umowa_doc: "frappe.model.document.Document | None") -> dict[str, Any]:
+	"""Dane drugiego Zamawiającego (ops#168) do osobnego bloku `prefill_drugi`,
+	tym samym kształtem kluczy co `_dane_kontaktu` dla kontaktu podstawowego
+	(``first_name``/``last_name``/``custom_pesel``/adres/``email``/``mobile_no``).
+	Pusty dokument umowy albo brak `drugi_zamawiajacy` daje same puste stringi,
+	`_dane_kontaktu(None)` już to robi, świadomie nigdy nie rzuca.
+	"""
+	kontakt = umowa_doc.get("drugi_zamawiajacy") if umowa_doc else None
+	return _dane_kontaktu(kontakt)
+
+
 def _prefill(deal_doc: "frappe.model.document.Document") -> dict[str, Any]:
 	"""Składa blok `prefill`: surowe pola szansy/kontaktu PLUS wpisy zmapowane na
 	fieldnames `Volteo Umowa` (`_PREFILL_MAPOWANIE`), których frontend faktycznie
@@ -304,10 +322,11 @@ def _wyliczenia(
 	umowa_doc: "frappe.model.document.Document | None",
 ) -> dict[str, Any]:
 	"""Wartości liczone na żądanie: miejsce montażu, pokrycie dachowe, wymóg PPOŻ,
-	kwota kredytu, lista brakujących pól formularza umowy i lista brakujących
-	danych osobowych klienta z karty kontaktu (ops#146). Zawsze przeliczane od
-	nowa z bieżącego stanu szansy, umowy i kontaktu, nigdy nie ufamy wcześniej
-	zapisanym wartościom.
+	kwota kredytu, lista brakujących pól formularza umowy, lista brakujących
+	danych osobowych klienta z karty kontaktu (ops#146) i, gdy umowa ma drugiego
+	Zamawiającego (ops#168), ta sama lista dla niego (`brakujace_dane_drugiego`).
+	Zawsze przeliczane od nowa z bieżącego stanu szansy, umowy i kontaktu(ów),
+	nigdy nie ufamy wcześniej zapisanym wartościom.
 	"""
 	miejsce, pokrycie = miejsce_i_pokrycie(deal_doc.get("custom_konstrukcja"))
 	moc_istniejaca = umowa_doc.get("istniejaca_pv_moc_kwp") if umowa_doc else None
@@ -316,6 +335,7 @@ def _wyliczenia(
 	finansowanie = umowa_doc.get("finansowanie") if umowa_doc else None
 	dane_do_walidacji = {pole: umowa_doc.get(pole) for pole in _DANE_POLA_DOZWOLONE} if umowa_doc else {}
 	kontakt_dane = _dane_kontaktu(_podstawowy_kontakt(deal_doc))
+	drugi_kontakt = umowa_doc.get("drugi_zamawiajacy") if umowa_doc else None
 
 	return {
 		"miejsce_montazu": miejsce,
@@ -324,6 +344,10 @@ def _wyliczenia(
 		"kwota_kredytu_pln": kwota_kredytu(deal_doc.get("deal_value"), wklad, finansowanie),
 		"brakujace_pola": brakujace_pola(dane_do_walidacji),
 		"brakujace_dane_klienta": brakujace_dane_klienta(kontakt_dane),
+		# Brak drugiego Zamawiającego to normalny stan (umowa pojedyncza), pusta
+		# lista, NIE lista czterech braków wyliczona z pustego kontaktu; stąd jawny
+		# warunek zamiast `brakujace_dane_klienta(_dane_kontaktu(drugi_kontakt))`.
+		"brakujace_dane_drugiego": brakujace_dane_klienta(_dane_kontaktu(drugi_kontakt)) if drugi_kontakt else [],
 	}
 
 
@@ -391,7 +415,10 @@ def _propaguj_zgody(
 @frappe.whitelist()
 @rate_limit(limit=60, seconds=60)
 def volteo_umowa_get(deal: str) -> dict[str, Any]:
-	"""Zwraca istniejący rekord `Volteo Umowa` (jeśli jest), dane `prefill` i `wyliczenia`."""
+	"""Zwraca istniejący rekord `Volteo Umowa` (jeśli jest), dane `prefill`,
+	`prefill_drugi` (dane drugiego Zamawiającego, ops#168, puste gdy nieustawiony)
+	i `wyliczenia`.
+	"""
 	_sprawdz_role()
 	_sprawdz_dostep_do_szansy(deal, "read")
 
@@ -401,6 +428,7 @@ def volteo_umowa_get(deal: str) -> dict[str, Any]:
 	return {
 		"umowa": _umowa_do_dict(umowa_doc) if umowa_doc else None,
 		"prefill": _prefill(deal_doc),
+		"prefill_drugi": _prefill_drugi(umowa_doc),
 		"wyliczenia": _wyliczenia(deal_doc, umowa_doc),
 	}
 
@@ -446,8 +474,47 @@ def volteo_umowa_create(deal: str) -> dict[str, Any]:
 	return {
 		"umowa": _umowa_do_dict(umowa_doc),
 		"prefill": _prefill(deal_doc),
+		"prefill_drugi": _prefill_drugi(umowa_doc),
 		"wyliczenia": _wyliczenia(deal_doc, umowa_doc),
 	}
+
+
+def _zwaliduj_i_dopnij_drugiego_zamawiajacego(
+	deal_doc: "frappe.model.document.Document",
+	umowa_doc: "frappe.model.document.Document",
+) -> None:
+	"""Waliduje `drugi_zamawiajacy` (ops#168) i, gdy trzeba, dopina go do szansy.
+
+	Panel boczny szansy świadomie pokazuje jednego klienta (decyzja właściciela
+	2026-09-03, patrz `CRM Deal`/`is_primary` w reszcie forka), drugi uczestnik
+	umowy jest dopinany WYŁĄCZNIE tutaj, z poziomu formularza umowy, nigdy przez
+	panel szansy. Kontakt musi już istnieć w bazie i różnić się od podstawowego
+	kontaktu szansy (`_podstawowy_kontakt`), inaczej to nie jest "drugi" nikt.
+	Jeśli kontakt nie jest jeszcze podpięty do `deal_doc.contacts`, dopisujemy
+	go jako wiersz NIE-podstawowy (`is_primary=0`), nigdy nie zamieniamy ani nie
+	dotykamy istniejącego podstawowego wiersza. Pusty `drugi_zamawiajacy` (umowa
+	pojedyncza, częstszy przypadek) jest no-opem.
+	"""
+	drugi = umowa_doc.get("drugi_zamawiajacy")
+	if not drugi:
+		return
+
+	if not frappe.db.exists("Contact", drugi):
+		frappe.throw(_("Wskazany drugi Zamawiający nie istnieje."))
+
+	podstawowy = _podstawowy_kontakt(deal_doc)
+	if drugi == podstawowy:
+		frappe.throw(_("Drugi Zamawiający musi być innym kontaktem niż podstawowy kontakt szansy."))
+
+	juz_podpiety = any(wiersz.contact == drugi for wiersz in deal_doc.contacts)
+	if juz_podpiety:
+		return
+
+	try:
+		deal_doc.append("contacts", {"contact": drugi, "is_primary": 0})
+		deal_doc.save(ignore_permissions=False)
+	except Exception:
+		_blad_ogolny()
 
 
 @frappe.whitelist()
@@ -484,6 +551,11 @@ def volteo_umowa_save(deal: str, dane: dict[str, Any]) -> dict[str, Any]:
 			wartosc = cint(wartosc)
 		umowa_doc.set(pole, wartosc)
 
+	# ops#168: musi biec PO pętli powyżej (żeby widzieć świeżo ustawiony
+	# `drugi_zamawiajacy`) i PRZED `umowa_doc.save()` niżej, rzuca od razu na
+	# nieprawidłowym wyborze, zanim cokolwiek trafi do bazy.
+	_zwaliduj_i_dopnij_drugiego_zamawiajacego(deal_doc, umowa_doc)
+
 	braki = brakujace_pola({pole: umowa_doc.get(pole) for pole in _DANE_POLA_DOZWOLONE})
 	# Status "Kompletny" wymaga TAKŻE kompletu danych osobowych klienta z karty
 	# kontaktu (ops#146 Z4). Bez tej bramki dokument prawny mógł wyjść ze
@@ -515,6 +587,7 @@ def volteo_umowa_save(deal: str, dane: dict[str, Any]) -> dict[str, Any]:
 	return {
 		"umowa": _umowa_do_dict(umowa_doc),
 		"prefill": _prefill(deal_doc),
+		"prefill_drugi": _prefill_drugi(umowa_doc),
 		"wyliczenia": _wyliczenia(deal_doc, umowa_doc),
 	}
 
