@@ -330,14 +330,14 @@
           </div>
 
           <div v-if="!wnioskodawcaEdytowalny" class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div v-for="p in wnioskodawcaWyswietlanie" :key="p.fieldname">
+            <div v-for="p in wnioskodawcaWyswietlanie" :key="p.fieldname" class="min-w-0">
               <div class="text-xs text-ink-gray-5">{{ p.label }}</div>
               <TelefonLink
                 v-if="czyPoleTelefonu(p.fieldname) && p.value"
                 :numer="p.value"
                 klasa="text-sm text-ink-gray-8"
               />
-              <div v-else class="text-sm text-ink-gray-8">{{ p.value || '-' }}</div>
+              <div v-else class="break-words text-sm text-ink-gray-8">{{ p.value || '-' }}</div>
             </div>
           </div>
           <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-3">

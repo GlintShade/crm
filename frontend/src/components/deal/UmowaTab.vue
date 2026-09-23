@@ -139,16 +139,25 @@
               <div class="mb-1 text-xs font-medium text-ink-gray-5">
                 {{ __('Drugi Zamawiający') }}
               </div>
-              <Link
-                v-model="form.drugi_zamawiajacy"
-                doctype="Contact"
-                :filters="drugiZamawiajacyFilters"
-                :placeholder="__('Wybierz kontakt')"
-              />
+              <div class="flex items-center gap-2">
+                <Link
+                  class="flex-1"
+                  v-model="form.drugi_zamawiajacy"
+                  doctype="Contact"
+                  :filters="drugiZamawiajacyFilters"
+                  :placeholder="__('Wybierz kontakt')"
+                />
+                <Button
+                  v-if="mozeDodacNowegoKlienta"
+                  variant="outline"
+                  :label="__('Nowy klient')"
+                  @click="showNowyKlientModal = true"
+                />
+              </div>
               <div class="mt-1 text-xs text-ink-gray-4">
                 {{
                   __(
-                    'Wybierz dowolnego klienta z CRM. Zostanie dopięty do tej szansy jako drugi Zamawiający.',
+                    'Wybierz dowolnego klienta z CRM albo załóż nową kartę przyciskiem "Nowy klient". Zostanie dopięty do tej szansy jako drugi Zamawiający.',
                   )
                 }}
               </div>
@@ -162,14 +171,14 @@
                 {{ __('Dane drugiego Zamawiającego (z CRM)') }}
               </div>
               <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div v-for="p in prefillDrugiDisplay" :key="p.key">
+                <div v-for="p in prefillDrugiDisplay" :key="p.key" class="min-w-0">
                   <div class="text-xs text-ink-gray-5">{{ p.label }}</div>
                   <TelefonLink
                     v-if="p.key === 'mobile_no' && p.value"
                     :numer="p.value"
                     klasa="text-sm text-ink-gray-8"
                   />
-                  <div v-else class="text-sm text-ink-gray-8">{{ p.value || '-' }}</div>
+                  <div v-else class="break-words text-sm text-ink-gray-8">{{ p.value || '-' }}</div>
                 </div>
               </div>
               <div class="mt-3 text-xs text-ink-gray-4">
@@ -381,16 +390,32 @@
       </div>
     </div>
   </div>
+
+  <!-- Nowy klient (b62, decyzja właściciela 2026-09-23, bez issue): quick contact creation reused verbatim from
+  ContactModal.vue (same fields the double contract and the credit form
+  need, same duplicate/format validation). See afterInsert wiring below,
+  wybierzNowegoKlientaJakoDrugiego(). -->
+  <ContactModal
+    v-if="showNowyKlientModal"
+    v-model="showNowyKlientModal"
+    :contact="nowyKlientContact"
+    :options="{
+      redirect: false,
+      afterInsert: (doc) => wybierzNowegoKlientaJakoDrugiego(doc),
+    }"
+  />
 </template>
 
 <script setup>
 import Link from '@/components/Controls/Link.vue'
 import UmowaIcon from '@/components/Icons/UmowaIcon.vue'
 import TelefonLink from '@/components/TelefonLink.vue'
+import ContactModal from '@/components/Modals/ContactModal.vue'
 import { Badge, Button, FormControl, Switch, call, createResource, toast } from 'frappe-ui'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { formatPlnAmount } from '@/utils/money'
 import { useAutenti } from '@/composables/useAutenti'
+import { canSend } from '@/utils/autentiStatus'
 
 const props = defineProps({
   dealId: { type: String, required: true },
@@ -831,6 +856,40 @@ const komunikatBrakuEmaila = computed(() => {
   return ''
 })
 
+// --- Nowy klient: quick contact creation for the second Zamawiający (b62, decyzja właściciela 2026-09-23, bez issue) ----
+// Reuses ContactModal.vue verbatim (same "New Contact" dialog used from the
+// Klienci list and the deal side panel's "+"), wired the same way
+// Deal.vue wires it: an empty ref passed as `:contact`, `redirect: false`
+// (this tab, not the Contact page, stays in view), and `afterInsert`
+// carrying the freshly created Contact doc back here.
+//
+// The button is visible only once the two-person switch is on AND the
+// umowa is still editable, reusing `canSend` (the same SEND_BLOCKED_STATUSES
+// gate that already governs the Autenti send button) rather than inventing a
+// second "is this contract locked" rule: the umowa is locked from further
+// edits by the exact same statuses (Wysyłanie/Wysłana/Podpisana) that block
+// a (re)send.
+const showNowyKlientModal = ref(false)
+const nowyKlientContact = ref({})
+const mozeDodacNowegoKlienta = computed(
+  () => dwaZamawiajacy.value && canSend(autentiStatus.value),
+)
+
+// Called from ContactModal's `afterInsert` once the new Contact is actually
+// saved server-side (ContactModal itself already closes on that success;
+// a failure there keeps ContactModal open and shows its own inline error,
+// unchanged by this feature). From here on this picks up the umowa tab's
+// own save path (`saveForm`) so the same server-side validation/attachment
+// (`_zwaliduj_i_dopnij_drugiego_zamawiajacego` in crm/api/umowa.py) runs as
+// for a manually picked contact. A save failure at THIS stage (e.g. a
+// network hiccup) surfaces as a toast, same as every other save error in
+// this tab; there is no separate dialog left open to fall back into by then.
+async function wybierzNowegoKlientaJakoDrugiego(doc) {
+  if (!doc?.name) return
+  form.drugi_zamawiajacy = doc.name
+  await saveForm({ successMessage: __('Klient dodany i wybrany jako drugi Zamawiający') })
+}
+
 onMounted(() => {
   loadUmowa()
 })
@@ -988,7 +1047,11 @@ function buildPayload() {
   return payload
 }
 
-async function saveForm() {
+// `opts.successMessage` overrides the default "Zapisano..." toast below,
+// used by wybierzNowegoKlientaJakoDrugiego() so choosing a freshly created
+// contact reports "Klient dodany i wybrany..." instead of the generic save
+// message, without duplicating the save call/state handling here.
+async function saveForm(opts = {}) {
   if (saving.value || !umowa.value) return
   saving.value = true
   saveState.value = 'saving'
@@ -1006,7 +1069,9 @@ async function saveForm() {
     brakujaceDrugiego.value = extractBrakujaceDrugiego(data)
     hydrateForm(umowa.value)
     saveState.value = 'saved'
-    if (brakujace.value.length) {
+    if (opts.successMessage) {
+      toast.success(opts.successMessage)
+    } else if (brakujace.value.length) {
       toast.success(__('Zapisano jako roboczy — część pól nadal brakuje.'))
     } else {
       toast.success(__('Zapisano formularz umowy'))
