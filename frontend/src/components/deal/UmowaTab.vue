@@ -142,13 +142,13 @@
               <Link
                 v-model="form.drugi_zamawiajacy"
                 doctype="Contact"
-                :filters="{ name: ['in', dealContactNames] }"
+                :filters="drugiZamawiajacyFilters"
                 :placeholder="__('Wybierz kontakt')"
               />
-              <div v-if="!dealContactNames.length" class="mt-1 text-xs text-ink-gray-4">
+              <div class="mt-1 text-xs text-ink-gray-4">
                 {{
                   __(
-                    'Brak innych kontaktów przypiętych do tej szansy. Dodaj kontakt w panelu bocznym szansy, zanim wybierzesz drugiego Zamawiającego.',
+                    'Wybierz dowolnego klienta z CRM. Zostanie dopięty do tej szansy jako drugi Zamawiający.',
                   )
                 }}
               </div>
@@ -691,11 +691,21 @@ const form = reactive({})
 
 // --- Drugi Zamawiający (ops#171) --------------------------------------------------
 // Second Zamawiający lives ONLY in this tab (b56 decision: the deal side
-// panel keeps showing a single contact, that is untouched here) and is
-// chosen from contacts ALREADY attached to this deal (`deal_doc.contacts`),
-// never from a company-wide Contact search. Same source Deal.vue's side
-// panel reads (`get_deal_contacts`) and the same cache key, so this
-// resource costs no extra request when the side panel already loaded it.
+// panel keeps showing a single contact, that is untouched here). The
+// picker below searches ALL contacts, not just ones already attached to
+// this deal: the side panel offers no way to attach a second contact
+// (same b56 decision), so restricting the search to deal_doc.contacts
+// left the picker empty for every real double contract. Contact
+// visibility is already scoped by the contact_visibility.py permission
+// hook, so an unrestricted search is safe; the backend (crm/api/umowa.py)
+// attaches the chosen contact to the deal itself on save.
+//
+// dealContactsResource stays only to learn which contact is the deal's
+// PRIMARY one, so it can be excluded client-side: the backend rejects a
+// "second" Zamawiający identical to the primary one anyway (see
+// _zwaliduj_i_dopnij_drugiego_zamawiajacego in crm/api/umowa.py), but
+// surfacing that as a save error instead of simply not offering the
+// option in the first place would be a worse experience.
 const dealContactsResource = createResource({
   url: 'crm.fcrm.doctype.crm_deal.api.get_deal_contacts',
   params: { name: props.dealId },
@@ -703,14 +713,13 @@ const dealContactsResource = createResource({
 })
 if (!dealContactsResource.data) dealContactsResource.fetch()
 
-// The primary contact is excluded from the options: the backend rejects a
-// "second" Zamawiający identical to the primary one (see
-// _zwaliduj_i_dopnij_drugiego_zamawiajacego in crm/api/umowa.py), so
-// offering it here would only ever produce a save error.
-const dealContactOptions = computed(() =>
-  (dealContactsResource.data || []).filter((c) => !c.is_primary),
+const primaryContactName = computed(() => {
+  const list = dealContactsResource.data || []
+  return (list.find((c) => c.is_primary) || {}).name || ''
+})
+const drugiZamawiajacyFilters = computed(() =>
+  primaryContactName.value ? { name: ['!=', primaryContactName.value] } : {},
 )
-const dealContactNames = computed(() => dealContactOptions.value.map((c) => c.name))
 
 const prefillDrugi = ref({})
 const dwaZamawiajacy = ref(false)
