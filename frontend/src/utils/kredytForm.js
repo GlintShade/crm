@@ -72,6 +72,45 @@ export const PREFILL_KEYS = [
   'nr_lokalu',
 ]
 
+// Canon of the 10 applicant fields (ops#157/#158), JS twin of
+// crm/volteo_kredyt.py's `POLA_WNIOSKODAWCY` tuple, same order. These are
+// ordinary doctype fieldnames (part of the save payload, see buildDane
+// below), not `prefill` keys: PREFILL_KEYS above is the CURRENT contact
+// card, POLA_WNIOSKODAWCY is the snapshot saved ON THE RECORD at the moment
+// the form was created and editable afterwards from the "Dane wnioskodawcy"
+// block.
+export const POLA_WNIOSKODAWCY = [
+  'wnioskodawca_pesel',
+  'wnioskodawca_imiona',
+  'wnioskodawca_nazwisko',
+  'wnioskodawca_telefon',
+  'wnioskodawca_email',
+  'wnioskodawca_kod_pocztowy',
+  'wnioskodawca_miejscowosc',
+  'wnioskodawca_ulica',
+  'wnioskodawca_nr_domu',
+  'wnioskodawca_nr_lokalu',
+]
+
+// PL labels for POLA_WNIOSKODAWCY, JS twin of crm/volteo_kredyt.py's
+// `ETYKIETY_WNIOSKODAWCY`, same 10 entries, same wording. Mixed into
+// ETYKIETY_POL below (mirrors the Python canon's own
+// `{**_ETYKIETY_KREDYT_POL, **ETYKIETY_WNIOSKODAWCY}`), and used directly
+// wherever only the applicant block's own labels are needed (the "Dane
+// wnioskodawcy" section, the missing-applicant-data banner).
+export const ETYKIETY_WNIOSKODAWCY = {
+  wnioskodawca_pesel: 'PESEL',
+  wnioskodawca_imiona: 'Imiona',
+  wnioskodawca_nazwisko: 'Nazwisko',
+  wnioskodawca_telefon: 'Telefon',
+  wnioskodawca_email: 'E-mail',
+  wnioskodawca_kod_pocztowy: 'Kod pocztowy',
+  wnioskodawca_miejscowosc: 'Miejscowość',
+  wnioskodawca_ulica: 'Ulica',
+  wnioskodawca_nr_domu: 'Nr domu',
+  wnioskodawca_nr_lokalu: 'Nr lokalu',
+}
+
 // Fields that are always part of the payload, independent of any income-group
 // toggle — identity, addresses, and the household/financial summary fields.
 export const BASE_FIELDS = [
@@ -159,8 +198,9 @@ export const GRUPY = [
   },
 ]
 
-// Single canon of PL labels for all 54 `Volteo Kredyt` data fields
-// (BASE_FIELDS + every GRUPY toggle + every GRUPY field), transcribed 1:1
+// Single canon of PL labels for all 64 `Volteo Kredyt` data fields
+// (BASE_FIELDS + every GRUPY toggle + every GRUPY field, plus the 10
+// POLA_WNIOSKODAWCY fields mixed in at the end below), transcribed 1:1
 // from the doctype's own labels (ops/crm-kredyt.py's `KREDYT_FIELDS`),
 // which are themselves transcribed from the original PDF template. This is
 // the JS twin of crm/volteo_kredyt.py's `ETYKIETY_POL` (Python). ops#148:
@@ -250,6 +290,12 @@ export const ETYKIETY_POL = {
   inne_1_kwota: 'Kwota dochodu (1)',
   inne_2_typ: 'Typ dochodu (2)',
   inne_2_kwota: 'Kwota dochodu (2)',
+  // Mixed in from ETYKIETY_WNIOSKODAWCY (declared above): mirrors
+  // crm/volteo_kredyt.py's `ETYKIETY_POL = {**_ETYKIETY_KREDYT_POL,
+  // **ETYKIETY_WNIOSKODAWCY}`, so every consumer that already resolves a
+  // fieldname through ETYKIETY_POL (etykietaPelna, the missing-fields
+  // banner) also covers the 10 applicant fields for free.
+  ...ETYKIETY_WNIOSKODAWCY,
 }
 
 // Full doctype/paper canon for fields whose ETYKIETY_POL screen label above
@@ -359,6 +405,9 @@ export function defaultForm() {
       form[fn] = ''
     })
   })
+  POLA_WNIOSKODAWCY.forEach((fn) => {
+    form[fn] = ''
+  })
   return form
 }
 
@@ -389,6 +438,12 @@ export function buildDane(form) {
     })
   })
 
+  // Applicant fields (ops#157/#158): unconditional, no toggle gates them,
+  // always sent as typed, same as BASE_FIELDS above.
+  POLA_WNIOSKODAWCY.forEach((fn) => {
+    dane[fn] = form[fn]
+  })
+
   return dane
 }
 
@@ -414,6 +469,10 @@ export function hydrateFrom(record) {
     grupa.fields.forEach((fn) => {
       form[fn] = r[fn] ?? ''
     })
+  })
+
+  POLA_WNIOSKODAWCY.forEach((fn) => {
+    form[fn] = r[fn] ?? ''
   })
 
   return form
@@ -537,10 +596,120 @@ export function brakujacePola(form) {
   return wymagane.filter((pole) => jestPuste(dane[pole]))
 }
 
+/**
+ * Pure mirror of crm/volteo_kredyt.py `brakujace_dane_wnioskodawcy()`:
+ * returns the subset of POLA_WNIOSKODAWCY (same order) that is required and
+ * currently empty on `form`. Required is every applicant field EXCEPT
+ * `wnioskodawca_nr_lokalu` (a client living in a detached house legitimately
+ * has no flat number). Pustość jak w brakujacePola(): jestPuste() (`null`/
+ * `undefined`/a whitespace-only string are empty; everything else, including
+ * the string "0", is filled).
+ *
+ * Unlike brakujaceDaneKlienta() below (a legacy, server-round-trip check
+ * against the CURRENT contact card's `prefill`), this reads LIVE from
+ * `form`, the applicant block is now an editable part of the form itself
+ * (ops#157/#158/#163), so its completeness must update instantly as the rep
+ * types, exactly like brakujacePola() already does for the 54 base fields.
+ *
+ * Never mutates `form`.
+ *
+ * @param {object} form - current form state (POLA_WNIOSKODAWCY fields)
+ * @returns {string[]} applicant fieldnames that are required and currently empty
+ */
+export function brakujaceDaneWnioskodawcy(form) {
+  const dane = form || {}
+  return POLA_WNIOSKODAWCY.filter(
+    (pole) => pole !== 'wnioskodawca_nr_lokalu' && jestPuste(dane[pole]),
+  )
+}
+
+/**
+ * Maps the re-keyed `prefill`/`prefill_kontakt` block (short keys: pesel,
+ * imiona, nazwisko, telefon, email, kod_pocztowy, miejscowosc, ulica,
+ * nr_domu, nr_lokalu, the shape crm.api.kredyt's `_prefill()` returns) onto
+ * the 10 POLA_WNIOSKODAWCY form fieldnames, for the "Przywróć dane klienta"
+ * button: the caller merges the result into `form` (immutable update, e.g.
+ * `Object.assign(form, prefillDoWnioskodawcy(prefillKontakt.value))`) to
+ * overwrite the applicant block with the deal's CURRENT contact-card data.
+ *
+ * Never mutates `prefill`. A missing key or `null`/`undefined` value becomes
+ * `''` in the result, same convention as hydrateFrom().
+ *
+ * @param {object} prefill - re-keyed prefill block (PREFILL_KEYS shape)
+ * @returns {object} patch with the 10 wnioskodawca_* fieldnames set
+ */
+export function prefillDoWnioskodawcy(prefill) {
+  const p = prefill || {}
+  return {
+    wnioskodawca_pesel: p.pesel ?? '',
+    wnioskodawca_imiona: p.imiona ?? '',
+    wnioskodawca_nazwisko: p.nazwisko ?? '',
+    wnioskodawca_telefon: p.telefon ?? '',
+    wnioskodawca_email: p.email ?? '',
+    wnioskodawca_kod_pocztowy: p.kod_pocztowy ?? '',
+    wnioskodawca_miejscowosc: p.miejscowosc ?? '',
+    wnioskodawca_ulica: p.ulica ?? '',
+    wnioskodawca_nr_domu: p.nr_domu ?? '',
+    wnioskodawca_nr_lokalu: p.nr_lokalu ?? '',
+  }
+}
+
+// Matches the leading "YYYY-MM-DD" of a Frappe `creation` timestamp
+// ("2026-09-18 14:32:10.123456", or a plain ISO "2026-09-18T14:32:10Z"),
+// deliberately not a full date-library parse: this module stays
+// framework-free (see the file header), and a leading-digits match is all
+// etykietaFormularza() below needs.
+const WZORZEC_DATY_UTWORZENIA = /^(\d{4})-(\d{2})-(\d{2})/
+
+/**
+ * Formats a Frappe `creation` timestamp as "DD.MM.RRRR". Returns '' for a
+ * missing/unparseable value; never throws.
+ */
+function formatujDateUtworzenia(creation) {
+  if (typeof creation !== 'string') return ''
+  const dopasowanie = creation.match(WZORZEC_DATY_UTWORZENIA)
+  if (!dopasowanie) return ''
+  const [, rok, miesiac, dzien] = dopasowanie
+  return `${dzien}.${miesiac}.${rok}`
+}
+
+/**
+ * Builds the label shown for one row of `volteo_kredyt_lista`'s
+ * `formularze` array in the form picker: "Nazwisko Imiona (DD.MM.RRRR)"
+ * when both are known, degrading gracefully (name only, date only, or a
+ * fallback placeholder) when either is missing: a freshly created record
+ * with the applicant block not yet typed still needs a usable row label.
+ *
+ * Never mutates `row`.
+ *
+ * @param {object} row - one entry of volteo_kredyt_lista's `formularze`
+ *   (name, wnioskodawca_nazwisko, wnioskodawca_imiona, status,
+ *   autenti_status, creation, modified)
+ * @returns {string} display label for the form picker
+ */
+export function etykietaFormularza(row) {
+  const r = row || {}
+  const nazwisko = (r.wnioskodawca_nazwisko || '').trim()
+  const imiona = (r.wnioskodawca_imiona || '').trim()
+  const osoba = [nazwisko, imiona].filter(Boolean).join(' ')
+  const data = formatujDateUtworzenia(r.creation)
+
+  if (osoba && data) return `${osoba} (${data})`
+  if (osoba) return osoba
+  if (data) return data
+  return 'Formularz bez danych wnioskodawcy'
+}
+
 // Polish labels for the 9 required `prefill` (contact-card) keys. MIRROR:
 // crm/api/kredyt.py `_PREFILL_ETYKIETY`, same 9 keys, same wording,
 // `nr_lokalu` deliberately absent (a client living in a detached house
 // legitimately has no flat number, so it can never block PDF generation).
+//
+// LEGACY (ops#163): this checks the CURRENT contact card via a server round
+// trip (`prefill`), from before the applicant block became an editable
+// snapshot on the record. KredytTab.vue's live "Generuj PDF" gate now uses
+// brakujaceDaneWnioskodawcy() above instead. Kept exported (and tested)
+// because nothing forces every caller to migrate at once.
 const PREFILL_ETYKIETY_KLIENTA = {
   pesel: 'PESEL',
   imiona: 'Imię/imiona',

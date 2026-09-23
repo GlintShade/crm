@@ -7,6 +7,8 @@ import {
   PRACA_OKRES_OPCJE,
   DZIALALNOSC_FORMA_OPCJE,
   PREFILL_KEYS,
+  POLA_WNIOSKODAWCY,
+  ETYKIETY_WNIOSKODAWCY,
   BASE_FIELDS,
   GRUPY,
   WARUNKI_WIDOCZNOSCI,
@@ -20,6 +22,9 @@ import {
   widocznePola,
   BAZA_WYMAGANE,
   brakujacePola,
+  brakujaceDaneWnioskodawcy,
+  prefillDoWnioskodawcy,
+  etykietaFormularza,
   brakujaceDaneKlienta,
   ETYKIETY_POL,
   ETYKIETY_PELNE,
@@ -207,6 +212,13 @@ describe('Kredyt form logic', () => {
       expect(second.praca_wlaczone).toBe(false)
       expect(first).not.toBe(second)
     })
+
+    it('sets every POLA_WNIOSKODAWCY field to the empty string (ops#157/#163)', () => {
+      const form = defaultForm()
+      POLA_WNIOSKODAWCY.forEach((fn) => {
+        expect(form[fn]).toBe('')
+      })
+    })
   })
 
   describe('buildDane', () => {
@@ -369,6 +381,25 @@ describe('Kredyt form logic', () => {
       expect(second.miejsce_urodzenia).toBe('')
       expect(first).not.toBe(second)
     })
+
+    it('passes every POLA_WNIOSKODAWCY field through unconditionally (ops#157/#163, no toggle gates it)', () => {
+      const form = defaultForm()
+      form.wnioskodawca_pesel = '99010112345'
+      form.wnioskodawca_imiona = 'Jan'
+      form.wnioskodawca_nazwisko = 'Kowalski'
+      form.wnioskodawca_telefon = '500600700'
+      form.wnioskodawca_email = 'jan@example.pl'
+      form.wnioskodawca_kod_pocztowy = '00-001'
+      form.wnioskodawca_miejscowosc = 'Warszawa'
+      form.wnioskodawca_ulica = 'Testowa'
+      form.wnioskodawca_nr_domu = '1'
+      form.wnioskodawca_nr_lokalu = '2'
+
+      const dane = buildDane(form)
+      POLA_WNIOSKODAWCY.forEach((fn) => {
+        expect(dane[fn]).toBe(form[fn])
+      })
+    })
   })
 
   describe('hydrateFrom', () => {
@@ -434,6 +465,22 @@ describe('Kredyt form logic', () => {
       first.miejsce_urodzenia = 'zmienione'
       expect(second.miejsce_urodzenia).toBe('Łódź')
       expect(first).not.toBe(second)
+    })
+
+    it('hydrates every POLA_WNIOSKODAWCY field, coercing null/undefined to the empty string (ops#157/#163)', () => {
+      const record = {
+        wnioskodawca_pesel: '99010112345',
+        wnioskodawca_imiona: 'Jan',
+        wnioskodawca_nazwisko: null,
+        wnioskodawca_telefon: undefined,
+      }
+      const form = hydrateFrom(record)
+      expect(form.wnioskodawca_pesel).toBe('99010112345')
+      expect(form.wnioskodawca_imiona).toBe('Jan')
+      expect(form.wnioskodawca_nazwisko).toBe('')
+      expect(form.wnioskodawca_telefon).toBe('')
+      expect(form.wnioskodawca_email).toBe('')
+      expect(form.wnioskodawca_nr_lokalu).toBe('')
     })
   })
 
@@ -1128,6 +1175,182 @@ describe('Kredyt form logic', () => {
     })
   })
 
+  describe('brakujaceDaneWnioskodawcy (mirror of crm/volteo_kredyt.py brakujace_dane_wnioskodawcy, ops#157/#163)', () => {
+    const kompletnyFormularz = {
+      wnioskodawca_pesel: '90010112345',
+      wnioskodawca_imiona: 'Jan',
+      wnioskodawca_nazwisko: 'Kowalski',
+      wnioskodawca_telefon: '500600700',
+      wnioskodawca_email: 'jan@example.com',
+      wnioskodawca_kod_pocztowy: '00-001',
+      wnioskodawca_miejscowosc: 'Warszawa',
+      wnioskodawca_ulica: 'Kwiatowa',
+      wnioskodawca_nr_domu: '5',
+      wnioskodawca_nr_lokalu: '12',
+    }
+
+    it('returns an empty list when all 9 required fields are filled', () => {
+      expect(brakujaceDaneWnioskodawcy(kompletnyFormularz)).toEqual([])
+    })
+
+    it('returns fieldnames, not labels, matching crm.volteo_kredyt.brakujace_dane_wnioskodawcy', () => {
+      const form = { ...kompletnyFormularz, wnioskodawca_pesel: '' }
+      expect(brakujaceDaneWnioskodawcy(form)).toEqual(['wnioskodawca_pesel'])
+    })
+
+    it('wnioskodawca_nr_lokalu is never required, missing it alone blocks nothing', () => {
+      const form = { ...kompletnyFormularz, wnioskodawca_nr_lokalu: '' }
+      expect(brakujaceDaneWnioskodawcy(form)).toEqual([])
+    })
+
+    it('an empty/undefined form reports all 9 fieldnames in POLA_WNIOSKODAWCY order', () => {
+      const oczekiwane = POLA_WNIOSKODAWCY.filter((p) => p !== 'wnioskodawca_nr_lokalu')
+      expect(brakujaceDaneWnioskodawcy({})).toEqual(oczekiwane)
+      expect(brakujaceDaneWnioskodawcy(undefined)).toEqual(oczekiwane)
+    })
+
+    it('uses jestPuste semantics, not a falsy check: the string "0" counts as filled', () => {
+      const form = { ...kompletnyFormularz, wnioskodawca_pesel: '0' }
+      expect(brakujaceDaneWnioskodawcy(form)).toEqual([])
+    })
+
+    it('a whitespace-only value counts as empty (jestPuste trims)', () => {
+      const form = { ...kompletnyFormularz, wnioskodawca_ulica: '   ' }
+      expect(brakujaceDaneWnioskodawcy(form)).toEqual(['wnioskodawca_ulica'])
+    })
+
+    it('never mutates its argument', () => {
+      const form = deepFreeze({ ...kompletnyFormularz })
+      expect(() => brakujaceDaneWnioskodawcy(form)).not.toThrow()
+    })
+  })
+
+  describe('prefillDoWnioskodawcy (maps re-keyed prefill onto POLA_WNIOSKODAWCY, ops#163)', () => {
+    const prefill = {
+      pesel: '90010112345',
+      imiona: 'Jan',
+      nazwisko: 'Kowalski',
+      telefon: '500600700',
+      email: 'jan@example.com',
+      kod_pocztowy: '00-001',
+      miejscowosc: 'Warszawa',
+      ulica: 'Kwiatowa',
+      nr_domu: '5',
+      nr_lokalu: '12',
+    }
+
+    it('maps every prefill key onto its wnioskodawca_* twin', () => {
+      expect(prefillDoWnioskodawcy(prefill)).toEqual({
+        wnioskodawca_pesel: '90010112345',
+        wnioskodawca_imiona: 'Jan',
+        wnioskodawca_nazwisko: 'Kowalski',
+        wnioskodawca_telefon: '500600700',
+        wnioskodawca_email: 'jan@example.com',
+        wnioskodawca_kod_pocztowy: '00-001',
+        wnioskodawca_miejscowosc: 'Warszawa',
+        wnioskodawca_ulica: 'Kwiatowa',
+        wnioskodawca_nr_domu: '5',
+        wnioskodawca_nr_lokalu: '12',
+      })
+    })
+
+    it('coerces missing/null/undefined keys to the empty string', () => {
+      const wynik = prefillDoWnioskodawcy({ pesel: '90010112345', nazwisko: null })
+      expect(wynik.wnioskodawca_pesel).toBe('90010112345')
+      expect(wynik.wnioskodawca_nazwisko).toBe('')
+      expect(wynik.wnioskodawca_imiona).toBe('')
+      expect(wynik.wnioskodawca_nr_lokalu).toBe('')
+    })
+
+    it('treats null/undefined prefill like an empty object', () => {
+      const puste = {
+        wnioskodawca_pesel: '',
+        wnioskodawca_imiona: '',
+        wnioskodawca_nazwisko: '',
+        wnioskodawca_telefon: '',
+        wnioskodawca_email: '',
+        wnioskodawca_kod_pocztowy: '',
+        wnioskodawca_miejscowosc: '',
+        wnioskodawca_ulica: '',
+        wnioskodawca_nr_domu: '',
+        wnioskodawca_nr_lokalu: '',
+      }
+      expect(prefillDoWnioskodawcy(null)).toEqual(puste)
+      expect(prefillDoWnioskodawcy(undefined)).toEqual(puste)
+    })
+
+    it('never mutates its argument', () => {
+      const frozen = deepFreeze({ ...prefill })
+      expect(() => prefillDoWnioskodawcy(frozen)).not.toThrow()
+    })
+
+    it('round-trips through buildDane: merging the result into form and saving carries every field', () => {
+      const form = defaultForm()
+      Object.assign(form, prefillDoWnioskodawcy(prefill))
+      const dane = buildDane(form)
+      expect(dane.wnioskodawca_pesel).toBe('90010112345')
+      expect(dane.wnioskodawca_nazwisko).toBe('Kowalski')
+    })
+  })
+
+  describe('etykietaFormularza (form-picker row label, ops#163)', () => {
+    it('joins nazwisko + imiona and the creation date in parentheses', () => {
+      const row = {
+        wnioskodawca_nazwisko: 'Kowalski',
+        wnioskodawca_imiona: 'Jan',
+        creation: '2026-09-18 14:32:10.123456',
+      }
+      expect(etykietaFormularza(row)).toBe('Kowalski Jan (18.09.2026)')
+    })
+
+    it('also accepts a plain ISO creation timestamp', () => {
+      const row = {
+        wnioskodawca_nazwisko: 'Nowak',
+        wnioskodawca_imiona: 'Anna',
+        creation: '2026-01-05T09:00:00',
+      }
+      expect(etykietaFormularza(row)).toBe('Nowak Anna (05.01.2026)')
+    })
+
+    it('falls back to the name alone when creation is missing/unparseable', () => {
+      expect(etykietaFormularza({ wnioskodawca_nazwisko: 'Kowalski', wnioskodawca_imiona: 'Jan' })).toBe(
+        'Kowalski Jan',
+      )
+      expect(
+        etykietaFormularza({
+          wnioskodawca_nazwisko: 'Kowalski',
+          wnioskodawca_imiona: 'Jan',
+          creation: 'nie-data',
+        }),
+      ).toBe('Kowalski Jan')
+    })
+
+    it('falls back to the date alone when the name is empty', () => {
+      expect(etykietaFormularza({ creation: '2026-09-18 14:32:10.123456' })).toBe('18.09.2026')
+    })
+
+    it('trims whitespace-only name parts out of the join', () => {
+      expect(
+        etykietaFormularza({ wnioskodawca_nazwisko: '  ', wnioskodawca_imiona: 'Jan', creation: '' }),
+      ).toBe('Jan')
+    })
+
+    it('returns a fallback placeholder when both name and date are missing', () => {
+      expect(etykietaFormularza({})).toBe('Formularz bez danych wnioskodawcy')
+      expect(etykietaFormularza(null)).toBe('Formularz bez danych wnioskodawcy')
+      expect(etykietaFormularza(undefined)).toBe('Formularz bez danych wnioskodawcy')
+    })
+
+    it('never throws and never mutates its argument', () => {
+      const row = deepFreeze({
+        wnioskodawca_nazwisko: 'Kowalski',
+        wnioskodawca_imiona: 'Jan',
+        creation: '2026-09-18 14:32:10.123456',
+      })
+      expect(() => etykietaFormularza(row)).not.toThrow()
+    })
+  })
+
   describe('ops#147 regression: praca_okres_od transient state (documents why the widocznePola safety net exists)', () => {
     it('the instant "praca" is switched on, before praca_okres has a value, praca_okres_od is required but hidden by the pure rule; the safety net (brakujacePola fed back into widocznePola) is what actually shows it', () => {
       const form = defaultForm()
@@ -1317,15 +1540,17 @@ describe('Kredyt form logic', () => {
     })
   })
 
-  describe('allowlist (ops#149): buildDane(defaultForm()) mirrors crm/api/kredyt.py::_DANE_POLA_DOZWOLONE', () => {
+  describe('allowlist (ops#149/#163): buildDane(defaultForm()) mirrors crm/api/kredyt.py::_DANE_POLA_DOZWOLONE', () => {
     // Retyped literal mirror of crm/api/kredyt.py's `_DANE_POLA_DOZWOLONE`
-    // (54 names), the exact same deliberate duplication pattern as
-    // ETYKIETY_KANON_DOCTYPE below (no runtime bridge between the Python
-    // and JS suites, so both sides independently retype the canon and a
-    // divergence in either fails its own side). buildDane() is what
-    // actually leaves the browser as the save payload, so this is the test
-    // that would catch a field silently added to GRUPY/BASE_FIELDS without
-    // a matching addition to the server allowlist (or vice versa).
+    // (54 base names + 10 POLA_WNIOSKODAWCY names since ops#157/#158/#163,
+    // `[*_DANE_POLA_PODSTAWOWE, *POLA_WNIOSKODAWCY]`), the exact same
+    // deliberate duplication pattern as ETYKIETY_KANON_DOCTYPE below (no
+    // runtime bridge between the Python and JS suites, so both sides
+    // independently retype the canon and a divergence in either fails its
+    // own side). buildDane() is what actually leaves the browser as the
+    // save payload, so this is the test that would catch a field silently
+    // added to GRUPY/BASE_FIELDS/POLA_WNIOSKODAWCY without a matching
+    // addition to the server allowlist (or vice versa).
     const DANE_POLA_DOZWOLONE_KANON = [
       'miejsce_urodzenia',
       'rodzaj_dokumentu',
@@ -1381,11 +1606,21 @@ describe('Kredyt form logic', () => {
       'inne_1_kwota',
       'inne_2_typ',
       'inne_2_kwota',
+      'wnioskodawca_pesel',
+      'wnioskodawca_imiona',
+      'wnioskodawca_nazwisko',
+      'wnioskodawca_telefon',
+      'wnioskodawca_email',
+      'wnioskodawca_kod_pocztowy',
+      'wnioskodawca_miejscowosc',
+      'wnioskodawca_ulica',
+      'wnioskodawca_nr_domu',
+      'wnioskodawca_nr_lokalu',
     ]
 
-    it('kanon ma dokładnie 54 unikalne nazwy pól', () => {
-      expect(DANE_POLA_DOZWOLONE_KANON.length).toBe(54)
-      expect(new Set(DANE_POLA_DOZWOLONE_KANON).size).toBe(54)
+    it('kanon ma dokładnie 64 unikalne nazwy pól', () => {
+      expect(DANE_POLA_DOZWOLONE_KANON.length).toBe(64)
+      expect(new Set(DANE_POLA_DOZWOLONE_KANON).size).toBe(64)
     })
 
     it('Object.keys(buildDane(defaultForm())) jest zbiorem równym kanonowi', () => {
@@ -1468,6 +1703,16 @@ const ETYKIETY_KANON_DOCTYPE = {
   inne_1_kwota: 'Kwota dochodu (1)',
   inne_2_typ: 'Typ dochodu (2)',
   inne_2_kwota: 'Kwota dochodu (2)',
+  wnioskodawca_pesel: 'PESEL',
+  wnioskodawca_imiona: 'Imiona',
+  wnioskodawca_nazwisko: 'Nazwisko',
+  wnioskodawca_telefon: 'Telefon',
+  wnioskodawca_email: 'E-mail',
+  wnioskodawca_kod_pocztowy: 'Kod pocztowy',
+  wnioskodawca_miejscowosc: 'Miejscowość',
+  wnioskodawca_ulica: 'Ulica',
+  wnioskodawca_nr_domu: 'Nr domu',
+  wnioskodawca_nr_lokalu: 'Nr lokalu',
 }
 
 // Matches an em dash (U+2014) or en dash (U+2013), written as Unicode
@@ -1476,14 +1721,18 @@ const ETYKIETY_KANON_DOCTYPE = {
 // source as a glyph, only as an escape sequence naming its code point.
 const WZORZEC_MYSLNIKOW = /[\u2014\u2013]/
 
-describe('ETYKIETY_POL / ETYKIETY_PELNE (kanon etykiet, ops#148)', () => {
-  const wszystkieFieldnames = [...BASE_FIELDS, ...GRUPY.flatMap((g) => [g.wlaczone, ...g.fields])]
+describe('ETYKIETY_POL / ETYKIETY_PELNE (kanon etykiet, ops#148/#157/#163)', () => {
+  const wszystkieFieldnames = [
+    ...BASE_FIELDS,
+    ...GRUPY.flatMap((g) => [g.wlaczone, ...g.fields]),
+    ...POLA_WNIOSKODAWCY,
+  ]
 
-  it('ma dokładnie 54 pola (BASE_FIELDS + toggle + pola GRUPY)', () => {
-    expect(wszystkieFieldnames.length).toBe(54)
+  it('ma dokładnie 64 pola (BASE_FIELDS + toggle + pola GRUPY + POLA_WNIOSKODAWCY)', () => {
+    expect(wszystkieFieldnames.length).toBe(64)
   })
 
-  it('klucze ETYKIETY_POL pokrywają się dokładnie z BASE_FIELDS + polami GRUPY', () => {
+  it('klucze ETYKIETY_POL pokrywają się dokładnie z BASE_FIELDS + polami GRUPY + POLA_WNIOSKODAWCY', () => {
     expect(Object.keys(ETYKIETY_POL).slice().sort()).toEqual(wszystkieFieldnames.slice().sort())
   })
 
@@ -1520,5 +1769,57 @@ describe('ETYKIETY_POL / ETYKIETY_PELNE (kanon etykiet, ops#148)', () => {
 
   it('etykietaPelna zwraca fieldname dla nieznanego klucza (nigdy nie rzuca)', () => {
     expect(etykietaPelna('nieistniejace_pole')).toBe('nieistniejace_pole')
+  })
+})
+
+describe('POLA_WNIOSKODAWCY / ETYKIETY_WNIOSKODAWCY (kanon wnioskodawcy, ops#157/#163)', () => {
+  it('ma dokładnie 10 pól', () => {
+    expect(POLA_WNIOSKODAWCY.length).toBe(10)
+    expect(Object.keys(ETYKIETY_WNIOSKODAWCY).length).toBe(10)
+  })
+
+  it('klucze ETYKIETY_WNIOSKODAWCY pokrywają się dokładnie z POLA_WNIOSKODAWCY', () => {
+    expect(Object.keys(ETYKIETY_WNIOSKODAWCY).slice().sort()).toEqual(
+      [...POLA_WNIOSKODAWCY].sort(),
+    )
+  })
+
+  it('ETYKIETY_WNIOSKODAWCY jest domieszane do ETYKIETY_POL', () => {
+    POLA_WNIOSKODAWCY.forEach((pole) => {
+      expect(ETYKIETY_POL[pole]).toBe(ETYKIETY_WNIOSKODAWCY[pole])
+    })
+  })
+
+  it('kolejność i treść etykiet zgadza się z crm/volteo_kredyt.py::ETYKIETY_WNIOSKODAWCY', () => {
+    expect(POLA_WNIOSKODAWCY).toEqual([
+      'wnioskodawca_pesel',
+      'wnioskodawca_imiona',
+      'wnioskodawca_nazwisko',
+      'wnioskodawca_telefon',
+      'wnioskodawca_email',
+      'wnioskodawca_kod_pocztowy',
+      'wnioskodawca_miejscowosc',
+      'wnioskodawca_ulica',
+      'wnioskodawca_nr_domu',
+      'wnioskodawca_nr_lokalu',
+    ])
+    expect(POLA_WNIOSKODAWCY.map((pole) => ETYKIETY_WNIOSKODAWCY[pole])).toEqual([
+      'PESEL',
+      'Imiona',
+      'Nazwisko',
+      'Telefon',
+      'E-mail',
+      'Kod pocztowy',
+      'Miejscowość',
+      'Ulica',
+      'Nr domu',
+      'Nr lokalu',
+    ])
+  })
+
+  it('zero myślników em/en w ETYKIETY_WNIOSKODAWCY', () => {
+    Object.values(ETYKIETY_WNIOSKODAWCY).forEach((etykieta) => {
+      expect(etykieta).not.toMatch(WZORZEC_MYSLNIKOW)
+    })
   })
 })
