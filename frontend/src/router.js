@@ -399,7 +399,10 @@ router.beforeEach(async (to, from, next) => {
     next({ name: 'Invalid Page' })
   } else if (['Deal', 'Lead'].includes(to.name) && !to.hash) {
     let storageKey = to.name === 'Deal' ? 'lastDealTab' : 'lastLeadTab'
-    const activeTab = localStorage.getItem(storageKey) || 'activity'
+    // VOLTEO: default deal tab is Zestaw, owner decision 2026-09-23; Lead keeps activity.
+    const activeTab =
+      localStorage.getItem(storageKey) ||
+      (to.name === 'Deal' ? 'zestaw' : 'activity')
     const hash = '#' + activeTab
     next({ ...to, hash })
   } else if (

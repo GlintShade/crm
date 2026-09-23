@@ -478,6 +478,8 @@ usePageMeta(() => {
 // Curated Polish Szansa tabs (mobile). Keep Details (field panel), then mirror the
 // desktop set: Pliki reuses Attachments, Historia reuses Activity (native `name`,
 // Polish `label`); Zestaw/Faktury/Montaż/Audyt/Trify are custom panels.
+// Order follows the sales process (Dane, Zestaw, Trify, Audyt, Pliki, Montaż,
+// Faktury, Historia), owner decision 2026-09-23.
 const tabs = computed(() => {
   let tabOptions = [
     {
@@ -487,10 +489,13 @@ const tabs = computed(() => {
       condition: () => isMobileView.value,
     },
     { name: 'Zestaw', label: __('Zestaw'), icon: ZestawIcon },
-    { name: 'Attachments', label: __('Pliki'), icon: AttachmentIcon },
-    { name: 'Faktury', label: __('Faktury'), icon: FakturyIcon },
-    { name: 'Montaz', label: __('Montaż'), icon: MontazIcon },
-    { name: 'Activity', label: __('Historia'), icon: ActivityIcon },
+    {
+      // Strumień wpisów o finansowaniu Trify, tylko Czyste Powietrze (pozytywna
+      // równość jak AudytCP). Dla linii OZE odpowiednikiem jest zakładka Kredyt
+      // (nieobecna na mobile).
+      name: 'Trify', label: __('Trify'), icon: TrifyIcon,
+      condition: () => doc.value?.custom_rodzaj_umowy === 'Czyste Powietrze',
+    },
     {
       name: 'Audyt',
       label: __('Audyt'),
@@ -509,17 +514,16 @@ const tabs = computed(() => {
       icon: AudytIcon,
       condition: () => doc.value?.custom_rodzaj_umowy === 'Czyste Powietrze',
     },
-    {
-      // Strumień wpisów o finansowaniu Trify — tylko Czyste Powietrze (pozytywna
-      // równość jak AudytCP). Dla linii OZE odpowiednikiem jest zakładka Kredyt
-      // (nieobecna na mobile).
-      name: 'Trify', label: __('Trify'), icon: TrifyIcon,
-      condition: () => doc.value?.custom_rodzaj_umowy === 'Czyste Powietrze',
-    },
+    { name: 'Attachments', label: __('Pliki'), icon: AttachmentIcon },
+    { name: 'Montaz', label: __('Montaż'), icon: MontazIcon },
+    { name: 'Faktury', label: __('Faktury'), icon: FakturyIcon },
+    { name: 'Activity', label: __('Historia'), icon: ActivityIcon },
   ]
   return tabOptions.filter((tab) => (tab.condition ? tab.condition() : true))
 })
-const { tabIndex } = useActiveTabManager(tabs, 'lastDealTab')
+// VOLTEO: domyślna zakładka Zestaw (owner decision 2026-09-23); localStorage
+// key is shared with Deal.vue (desktop), so the default must match.
+const { tabIndex } = useActiveTabManager(tabs, 'lastDealTab', 'zestaw')
 
 const sections = createResource({
   url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_sidepanel_sections',

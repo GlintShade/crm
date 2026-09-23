@@ -606,6 +606,8 @@ const NATIVE_TABS = [
 // <Activities> renders them; only the visible `label` is Polish). Zestaw /
 // Faktury / Montaż / Audyt / Umowa / Trify are custom panels (see the
 // #tab-panel branch).
+// Order follows the sales process (Zestaw, Umowa, Kredyt/Trify, Audyt, Pliki,
+// Montaż, Faktury, Aktywność), owner decision 2026-09-23.
 // Mirrors OZE_RODZAJE in crm/volteo_pipeline.py — the Kredyt tab (credit
 // application for the bank/leasing partner) only makes sense for the PV/
 // storage product lines, never for Czyste Powietrze (subsidy, not credit).
@@ -622,10 +624,19 @@ const tabs = computed(() => {
   // position.
   let tabOptions = [
     { name: 'Zestaw', label: __('Zestaw'), icon: ZestawIcon },
-    { name: 'Attachments', label: __('Pliki'), icon: AttachmentIcon },
-    { name: 'Faktury', label: __('Faktury'), icon: FakturyIcon },
-    { name: 'Montaz', label: __('Montaż'), icon: MontazIcon },
-    { name: 'Activity', label: __('Aktywność'), icon: ActivityIcon },
+    { name: 'Umowa', label: __('Umowa'), icon: UmowaIcon },
+    {
+      name: 'Kredyt',
+      label: __('Kredyt'),
+      icon: KredytIcon,
+      condition: () => OZE_RODZAJE.has(doc.value?.custom_rodzaj_umowy),
+    },
+    {
+      // Strumień wpisów o finansowaniu Trify, tylko Czyste Powietrze (pozytywna
+      // równość jak AudytCP). Dla linii OZE odpowiednikiem jest zakładka Kredyt.
+      name: 'Trify', label: __('Trify'), icon: TrifyIcon,
+      condition: () => doc.value?.custom_rodzaj_umowy === 'Czyste Powietrze',
+    },
     {
       name: 'Audyt',
       label: __('Audyt'),
@@ -644,24 +655,19 @@ const tabs = computed(() => {
       icon: AudytIcon,
       condition: () => doc.value?.custom_rodzaj_umowy === 'Czyste Powietrze',
     },
-    { name: 'Umowa', label: __('Umowa'), icon: UmowaIcon },
-    {
-      name: 'Kredyt',
-      label: __('Kredyt'),
-      icon: KredytIcon,
-      condition: () => OZE_RODZAJE.has(doc.value?.custom_rodzaj_umowy),
-    },
-    {
-      // Strumień wpisów o finansowaniu Trify — tylko Czyste Powietrze (pozytywna
-      // równość jak AudytCP). Dla linii OZE odpowiednikiem jest zakładka Kredyt.
-      name: 'Trify', label: __('Trify'), icon: TrifyIcon,
-      condition: () => doc.value?.custom_rodzaj_umowy === 'Czyste Powietrze',
-    },
+    { name: 'Attachments', label: __('Pliki'), icon: AttachmentIcon },
+    { name: 'Montaz', label: __('Montaż'), icon: MontazIcon },
+    { name: 'Faktury', label: __('Faktury'), icon: FakturyIcon },
+    { name: 'Activity', label: __('Aktywność'), icon: ActivityIcon },
   ]
   return tabOptions.filter((tab) => (tab.condition ? tab.condition() : true))
 })
 
-const { tabIndex } = useActiveTabManager(tabs, 'lastDealTab')
+// VOLTEO: domyślna zakładka Zestaw (decyzja właściciela 2026-09-23).
+// changeTabTo destructured because the page-level FilesUploader @after handler
+// (line ~305) calls it; that uploader has no UI trigger since ecf041ec removed
+// the header attach button, so the missing binding was latent, not a live error.
+const { tabIndex, changeTabTo } = useActiveTabManager(tabs, 'lastDealTab', 'zestaw')
 
 const sections = createResource({
   url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_sidepanel_sections',
