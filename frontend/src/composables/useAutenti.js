@@ -79,8 +79,27 @@ export function useAutenti({
   let autentiPollInterval = null
 
   async function loadAutentiStatus() {
+    // Guard, ops#163 follow-up: KredytTab.vue's docId getter is
+    // `() => wybrany.value?.name`, and `wybrany` starts as `null` until the
+    // initial list/record fetch resolves. Without this check, the
+    // composable's own onMounted below fires this function immediately with
+    // `toValue(docId)` still undefined; `JSON.stringify` then drops the
+    // `undefined` value entirely from the request body, so the server sees
+    // no `kredyt` key at all, not an empty one, and
+    // `autenti_kredyt_status(kredyt: str)` (a required, non-default
+    // parameter at the time this guard was added) throws a raw
+    // `TypeError: missing 1 required positional argument`, surfaced to the
+    // browser as an unhandled HTTP 500 on every ordinary tab visit. Skipping
+    // the call and resetting `autenti` to null when there is no record name
+    // yet is exactly the "no-op" behaviour KredytTab.vue's own comment above
+    // its useAutenti() call already assumed was in place.
+    const nazwa = toValue(docId ?? dealId)
+    if (!nazwa) {
+      autenti.value = null
+      return
+    }
     try {
-      const data = await call(statusMethod, { [docParam]: toValue(docId) })
+      const data = await call(statusMethod, { [docParam]: nazwa })
       autenti.value = data || null
     } catch (err) {
       // Non-fatal and silent on purpose: this is a background status check
@@ -126,9 +145,17 @@ export function useAutenti({
 
   async function confirmSendAutenti() {
     if (sendingAutenti.value || signerMissingEmail.value) return
+    // Same guard as loadAutentiStatus: in practice `showAutentiSendButton`
+    // already keeps this unreachable with a falsy docId (it requires
+    // `dokument_exists`, which only comes from a status payload that could
+    // not have loaded yet), but the send endpoint is a legally binding
+    // action, so this stays defensive rather than relying on that UI gate
+    // alone.
+    const nazwa = toValue(docId ?? dealId)
+    if (!nazwa) return
     sendingAutenti.value = true
     try {
-      const data = await call(sendMethod, { [docParam]: toValue(docId) })
+      const data = await call(sendMethod, { [docParam]: nazwa })
       autenti.value = autenti.value
         ? { ...autenti.value, autenti_status: data?.autenti_status || 'Wysyłanie' }
         : autenti.value

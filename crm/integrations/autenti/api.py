@@ -547,7 +547,7 @@ def autenti_umowa_status(deal: str) -> dict[str, Any]:
 
 @frappe.whitelist()
 @rate_limit(limit=60, seconds=60)
-def autenti_kredyt_status(kredyt: str) -> dict[str, Any]:
+def autenti_kredyt_status(kredyt: str | None = None) -> dict[str, Any]:
 	"""Odpowiednik `autenti_umowa_status` dla JEDNEGO formularza kredytowego, po
 	nazwie REKORDU (`kredyt`, ops#160) - od ops#158/#159 jedna szansa może mieć
 	wiele formularzy `Volteo Kredyt`, więc `deal` sam w sobie już nie wskazuje
@@ -559,8 +559,23 @@ def autenti_kredyt_status(kredyt: str) -> dict[str, Any]:
 	w UI, a sam odczyt statusu podpisu nie ujawnia niczego wrażliwego, więc nie ma
 	powodu blokować go twardym błędem - np. przy odświeżeniu widoku tuż po
 	przełączeniu „Rodzaju umowy” szansy na Czyste Powietrze.
+
+	`kredyt` puste/`None` (ops#163 follow-up) NIE jest błędem, tylko stanem "rep
+	nie ma jeszcze wybranego formularza" - `KredytTab.vue` woła ten endpoint (przez
+	`useAutenti`'s `onMounted`) zanim `wybrany` zdąży się rozwiązać do konkretnego
+	rekordu, a frontend już go wtedy w ogóle nie wysyła (patrz guard w
+	`loadAutentiStatus`, `frontend/src/composables/useAutenti.js`) - JSON.stringify
+	usuwa `undefined` z ciała żądania, więc bez wartości domyślnej tutaj Frappe
+	widziałby brakujący wymagany parametr i rzucał gołym `TypeError` (417/500, bez
+	wpisu w Error Log), zamiast czytelnej odpowiedzi. Krótkie zwarcie do kształtu
+	"integracja wyłączona" (bez sprawdzania dostępu do szansy - nie ma jeszcze
+	żadnej szansy do sprawdzenia) jest bezpieczne: `useAutenti`'s
+	`autentiEnabled`/`showAutentiSendButton` i tak traktują `enabled !== true`
+	jako "nie pokazuj UI podpisu", identycznie jak `autenti.value === null`.
 	"""
 	_sprawdz_role()
+	if not kredyt:
+		return {"enabled": False}
 	kredyt_doc = _kredyt_po_nazwie(kredyt)
 	_sprawdz_dostep_do_szansy(kredyt_doc.deal, "read")
 
@@ -757,7 +772,7 @@ def autenti_send_umowa(deal: str) -> dict[str, Any]:
 
 @frappe.whitelist()
 @rate_limit(limit=10, seconds=60)
-def autenti_send_kredyt(kredyt: str) -> dict[str, Any]:
+def autenti_send_kredyt(kredyt: str | None = None) -> dict[str, Any]:
 	"""Odpowiednik `autenti_send_umowa` dla JEDNEGO formularza kredytowego, po
 	nazwie REKORDU (`kredyt`, ops#160) - patrz docstring `autenti_kredyt_status`
 	dla uzasadnienia klucza. DODATKOWO sprawdza `_sprawdz_rodzaj_oze` przed
@@ -771,6 +786,17 @@ def autenti_send_kredyt(kredyt: str) -> dict[str, Any]:
 	odczyt. Od ops#160 `write` jest sprawdzane na szansie WYPROWADZONEJ z
 	załadowanego rekordu (`kredyt_doc.deal`), nie z parametru wejściowego -
 	parametr wejściowy to już nazwa rekordu, nie szansy.
+
+	`kredyt: str | None = None` (ops#163 follow-up), tylko żeby brakujący klucz w
+	ciele żądania nie rzucał gołym `TypeError` na poziomie dispatcha Frappe zamiast
+	docierać tutaj - `_kredyt_po_nazwie` poniżej już wcześniej obsługiwała puste/
+	`None` poprawnie (`if not kredyt or not frappe.db.exists(...)`), więc samo
+	ciało tej funkcji nie zmienia się: pusty `kredyt` nadal kończy się czytelnym,
+	polskim `frappe.throw(_("Formularz kredytowy nie istnieje."), frappe.DoesNotExistError)`.
+	W praktyce ten endpoint jest dziś nieosiągalny z pustym `kredyt` z samego UI -
+	`confirmSendAutenti` w `useAutenti.js` ma ten sam guard co `loadAutentiStatus` -
+	ale to wysyłka prawnie wiążącego żądania podpisu, więc zostaje twardo
+	zabezpieczona niezależnie od tego frontendowego gate'u.
 	"""
 	_sprawdz_role()
 	kredyt_doc = _kredyt_po_nazwie(kredyt)
