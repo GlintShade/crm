@@ -1,6 +1,6 @@
 import unittest
 
-from crm.volteo_kredyt import ETYKIETY_POL
+from crm.volteo_kredyt import ETYKIETY_POL, ETYKIETY_WNIOSKODAWCY, POLA_WNIOSKODAWCY
 
 # Mirror of crm/api/kredyt.py's `_DANE_POLA_DOZWOLONE` (the 54 fieldnames
 # `volteo_kredyt_save` accepts). Retyped independently rather than imported:
@@ -8,6 +8,14 @@ from crm.volteo_kredyt import ETYKIETY_POL
 # (same reason `crm/volteo_kredyt.py` stays frappe-free, per its module
 # docstring). A change to `_DANE_POLA_DOZWOLONE` requires the matching
 # change here.
+#
+# Grown by the 10 `wnioskodawca_*` fields (ops#157, `POLA_WNIOSKODAWCY`) so
+# this allowlist mirror covers the applicant-data canon too. This mirror is
+# ahead of the real `crm.api.kredyt._DANE_POLA_DOZWOLONE` until the sibling
+# issues land: A1 (schema for the `wnioskodawca_*` custom fields on
+# `Volteo Kredyt`, in `ops/crm-kredyt.py`, a separate repo) and A4 (wiring
+# `crm.api.kredyt` itself to accept and read these fields). Deliberate: this
+# issue is the frappe-free canon only, per its own scope.
 _DANE_POLA_DOZWOLONE = (
 	"miejsce_urodzenia",
 	"rodzaj_dokumentu",
@@ -63,6 +71,16 @@ _DANE_POLA_DOZWOLONE = (
 	"inne_1_kwota",
 	"inne_2_typ",
 	"inne_2_kwota",
+	"wnioskodawca_pesel",
+	"wnioskodawca_imiona",
+	"wnioskodawca_nazwisko",
+	"wnioskodawca_telefon",
+	"wnioskodawca_email",
+	"wnioskodawca_kod_pocztowy",
+	"wnioskodawca_miejscowosc",
+	"wnioskodawca_ulica",
+	"wnioskodawca_nr_domu",
+	"wnioskodawca_nr_lokalu",
 )
 
 # Mirror of ops/crm-kredyt.py's `KREDYT_FIELDS` labels (the doctype canon,
@@ -134,6 +152,16 @@ _ETYKIETY_KANON_DOCTYPE = {
 	"inne_1_kwota": "Kwota dochodu (1)",
 	"inne_2_typ": "Typ dochodu (2)",
 	"inne_2_kwota": "Kwota dochodu (2)",
+	"wnioskodawca_pesel": "PESEL",
+	"wnioskodawca_imiona": "Imiona",
+	"wnioskodawca_nazwisko": "Nazwisko",
+	"wnioskodawca_telefon": "Telefon",
+	"wnioskodawca_email": "E-mail",
+	"wnioskodawca_kod_pocztowy": "Kod pocztowy",
+	"wnioskodawca_miejscowosc": "Miejscowość",
+	"wnioskodawca_ulica": "Ulica",
+	"wnioskodawca_nr_domu": "Nr domu",
+	"wnioskodawca_nr_lokalu": "Nr lokalu",
 }
 
 
@@ -141,9 +169,10 @@ class TestEtykietyKanonZgodneZDozwolonymiPolami(unittest.TestCase):
 	def test_a_klucze_etykiet_pokrywaja_sie_z_dozwolonymi_polami(self: "TestEtykietyKanonZgodneZDozwolonymiPolami") -> None:
 		self.assertEqual(set(ETYKIETY_POL.keys()), set(_DANE_POLA_DOZWOLONE))
 
-	def test_b_pol_jest_54(self: "TestEtykietyKanonZgodneZDozwolonymiPolami") -> None:
-		self.assertEqual(len(_DANE_POLA_DOZWOLONE), 54)
-		self.assertEqual(len(ETYKIETY_POL), 54)
+	def test_b_pol_jest_64(self: "TestEtykietyKanonZgodneZDozwolonymiPolami") -> None:
+		# 54 pola danych Volteo Kredyt + 10 pól wnioskodawcy (ops#157).
+		self.assertEqual(len(_DANE_POLA_DOZWOLONE), 64)
+		self.assertEqual(len(ETYKIETY_POL), 64)
 
 
 class TestEtykietyKanonZgodneZDoctype(unittest.TestCase):
@@ -162,6 +191,52 @@ class TestEtykietyKanonZgodneZDoctype(unittest.TestCase):
 		self.assertEqual(
 			ETYKIETY_POL["suma_zobowiazan"],
 			"Suma miesięcznych zobowiązań kredytowych i finansowych",
+		)
+
+
+class TestKanonWnioskodawcy(unittest.TestCase):
+	def test_a_pol_jest_10(self: "TestKanonWnioskodawcy") -> None:
+		self.assertEqual(len(POLA_WNIOSKODAWCY), 10)
+		self.assertEqual(len(ETYKIETY_WNIOSKODAWCY), 10)
+
+	def test_b_klucze_etykiet_pokrywaja_sie_z_polami(self: "TestKanonWnioskodawcy") -> None:
+		self.assertEqual(set(ETYKIETY_WNIOSKODAWCY.keys()), set(POLA_WNIOSKODAWCY))
+
+	def test_c_etykiety_wnioskodawcy_sa_domieszane_do_etykiety_pol(self: "TestKanonWnioskodawcy") -> None:
+		for pole, etykieta in ETYKIETY_WNIOSKODAWCY.items():
+			with self.subTest(pole=pole):
+				self.assertEqual(ETYKIETY_POL[pole], etykieta)
+
+	def test_d_kolejnosc_i_tresc_etykiet(self: "TestKanonWnioskodawcy") -> None:
+		self.assertEqual(
+			POLA_WNIOSKODAWCY,
+			(
+				"wnioskodawca_pesel",
+				"wnioskodawca_imiona",
+				"wnioskodawca_nazwisko",
+				"wnioskodawca_telefon",
+				"wnioskodawca_email",
+				"wnioskodawca_kod_pocztowy",
+				"wnioskodawca_miejscowosc",
+				"wnioskodawca_ulica",
+				"wnioskodawca_nr_domu",
+				"wnioskodawca_nr_lokalu",
+			),
+		)
+		self.assertEqual(
+			[ETYKIETY_WNIOSKODAWCY[pole] for pole in POLA_WNIOSKODAWCY],
+			[
+				"PESEL",
+				"Imiona",
+				"Nazwisko",
+				"Telefon",
+				"E-mail",
+				"Kod pocztowy",
+				"Miejscowość",
+				"Ulica",
+				"Nr domu",
+				"Nr lokalu",
+			],
 		)
 
 

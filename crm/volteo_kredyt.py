@@ -63,7 +63,40 @@ GRUPY_DOCHODU: dict[str, tuple[str, ...]] = {
 Kolejność kluczy jest deklaratywna i odpowiada kolejności, w jakiej
 `brakujace_pola()` dopisuje pola poszczególnych grup do wyniku."""
 
-ETYKIETY_POL: dict[str, str] = {
+POLA_WNIOSKODAWCY: tuple[str, ...] = (
+	"wnioskodawca_pesel",
+	"wnioskodawca_imiona",
+	"wnioskodawca_nazwisko",
+	"wnioskodawca_telefon",
+	"wnioskodawca_email",
+	"wnioskodawca_kod_pocztowy",
+	"wnioskodawca_miejscowosc",
+	"wnioskodawca_ulica",
+	"wnioskodawca_nr_domu",
+	"wnioskodawca_nr_lokalu",
+)
+"""Kanon 10 pól wnioskodawcy formularza kredytowego (ops#157), w kolejności
+wiążącej dla `ETYKIETY_WNIOSKODAWCY`, `brakujace_dane_wnioskodawcy()` i
+konsumentów w ops/backend/frontend."""
+
+ETYKIETY_WNIOSKODAWCY: dict[str, str] = {
+	"wnioskodawca_pesel": "PESEL",
+	"wnioskodawca_imiona": "Imiona",
+	"wnioskodawca_nazwisko": "Nazwisko",
+	"wnioskodawca_telefon": "Telefon",
+	"wnioskodawca_email": "E-mail",
+	"wnioskodawca_kod_pocztowy": "Kod pocztowy",
+	"wnioskodawca_miejscowosc": "Miejscowość",
+	"wnioskodawca_ulica": "Ulica",
+	"wnioskodawca_nr_domu": "Nr domu",
+	"wnioskodawca_nr_lokalu": "Nr lokalu",
+}
+"""Etykiety PL kanonu wnioskodawcy, jeden do jednego z `POLA_WNIOSKODAWCY`.
+Te same 10 wpisów są też domieszane do `ETYKIETY_POL` niżej, żeby istniejący
+test kanonu etykiet (`crm/test_volteo_kredyt_etykiety.py`) automatycznie
+obejmował i te pola, zamiast utrzymywać osobny test kanonu."""
+
+_ETYKIETY_KREDYT_POL: dict[str, str] = {
 	"miejsce_urodzenia": "Miejsce urodzenia",
 	"rodzaj_dokumentu": "Rodzaj dokumentu tożsamości",
 	"seria_numer_dokumentu": "Seria i numer dokumentu tożsamości",
@@ -119,11 +152,19 @@ ETYKIETY_POL: dict[str, str] = {
 	"inne_2_typ": "Typ dochodu (2)",
 	"inne_2_kwota": "Kwota dochodu (2)",
 }
-"""Jedyny kanon etykiet PL dla wszystkich 54 pól danych `Volteo Kredyt`
-(`_DANE_POLA_DOZWOLONE` w `crm/api/kredyt.py`): przepisany 1:1 z etykiet
+"""Etykiety PL dla 54 pól danych formularza `Volteo Kredyt`
+(`_DANE_POLA_DOZWOLONE` w `crm/api/kredyt.py`): przepisane 1:1 z etykiet
 doctype'u (`ops/crm-kredyt.py`, sekcja `KREDYT_FIELDS`), które są zgodne z
 oryginalnym szablonem PDF-u (ops#148: front, komunikat blokujący PDF i Desk
 dryfowały, doctype był zgodny z papierem od początku).
+
+Baza prywatna, złożona z `ETYKIETY_WNIOSKODAWCY` w publiczny kanon
+`ETYKIETY_POL` niżej, zamiast być konsumowana wprost."""
+
+ETYKIETY_POL: dict[str, str] = {**_ETYKIETY_KREDYT_POL, **ETYKIETY_WNIOSKODAWCY}
+"""Jedyny kanon etykiet PL dla wszystkich 64 pól danych formularza kredytowego:
+54 pola `Volteo Kredyt` (`_ETYKIETY_KREDYT_POL` wyżej) plus 10 pól
+wnioskodawcy (`ETYKIETY_WNIOSKODAWCY`, ops#157).
 
 Ta sama etykieta ma się pojawić w banerze braków, w komunikacie serwera
 blokującym PDF (`crm/api/kredyt.py::_ETYKIETY_POL`, alias importu stąd) i w
@@ -283,3 +324,95 @@ def _jest_puste(wartosc: Any) -> bool:
 	if isinstance(wartosc, str):
 		return wartosc.strip() == ""
 	return False
+
+
+def _tekst_wnioskodawcy(kredyt: dict[str, Any], pole: str) -> str:
+	"""Odczytuje `kredyt[pole]`, zamieniając brak klucza albo `None` na `""`
+	i ucinając białe znaki na brzegach, tak samo jak `_tekst()` w
+	`crm/volteo_kredyt_pdf.py` (nie importowana stąd, żeby nie odwracać
+	kierunku zależności między tymi dwoma modułami)."""
+	wartosc = kredyt.get(pole)
+	if wartosc is None:
+		return ""
+	return str(wartosc).strip()
+
+
+def kontakt_z_wnioskodawcy(kredyt: dict[str, Any]) -> dict[str, str]:
+	"""Mapuje pola wnioskodawcy formularza kredytowego (`wnioskodawca_*`, patrz
+	`POLA_WNIOSKODAWCY`) na kształt SUROWY, którego dziś oczekuje
+	`crm.volteo_kredyt_pdf.zbuduj_kontekst_kredytu` jako argument `kontakt`:
+	klucze stylu `Contact` (`first_name`, `last_name`, `custom_pesel`,
+	`mobile_no`, `email`, `custom_ulica`, `custom_nr_domu`,
+	`custom_nr_mieszkania`, `custom_kod_pocztowy`, `custom_miasto`).
+
+	Nie mutuje `kredyt`: buduje i zwraca nowy słownik. Brakujący klucz albo
+	`None` w `kredyt` staje się `""` w wyniku.
+
+	UWAGA (udokumentowana klasa błędu z 2026-08-05 i 2026-08-15,
+	`crm/api/kredyt.py:268-305`): to kształt SUROWY, różny od kształtu
+	PRZEKLUCZONEGO zwracanego przez `prefill_z_wnioskodawcy`. Podanie wyniku
+	`prefill_z_wnioskodawcy` tam, gdzie oczekiwany jest ten kształt, daje
+	pusty blok danych klienta w PDF-ie poza polem e-mail, jedynym kluczem o
+	tej samej nazwie w obu kształtach. Ten błąd jest widoczny dopiero na
+	wydruku, nigdy w teście typów ani w konsoli przeglądarki.
+	"""
+	return {
+		"first_name": _tekst_wnioskodawcy(kredyt, "wnioskodawca_imiona"),
+		"last_name": _tekst_wnioskodawcy(kredyt, "wnioskodawca_nazwisko"),
+		"custom_pesel": _tekst_wnioskodawcy(kredyt, "wnioskodawca_pesel"),
+		"mobile_no": _tekst_wnioskodawcy(kredyt, "wnioskodawca_telefon"),
+		"email": _tekst_wnioskodawcy(kredyt, "wnioskodawca_email"),
+		"custom_ulica": _tekst_wnioskodawcy(kredyt, "wnioskodawca_ulica"),
+		"custom_nr_domu": _tekst_wnioskodawcy(kredyt, "wnioskodawca_nr_domu"),
+		"custom_nr_mieszkania": _tekst_wnioskodawcy(kredyt, "wnioskodawca_nr_lokalu"),
+		"custom_kod_pocztowy": _tekst_wnioskodawcy(kredyt, "wnioskodawca_kod_pocztowy"),
+		"custom_miasto": _tekst_wnioskodawcy(kredyt, "wnioskodawca_miejscowosc"),
+	}
+
+
+def prefill_z_wnioskodawcy(kredyt: dict[str, Any]) -> dict[str, str]:
+	"""Mapuje pola wnioskodawcy formularza kredytowego (`wnioskodawca_*`, patrz
+	`POLA_WNIOSKODAWCY`) na kształt PRZEKLUCZONY, używany przez przeglądarkę:
+	krótkie klucze bez przedrostka `wnioskodawca_` i bez nazewnictwa stylu
+	`Contact` (`pesel`, `imiona`, `nazwisko`, `telefon`, `email`,
+	`kod_pocztowy`, `miejscowosc`, `ulica`, `nr_domu`, `nr_lokalu`) -
+	odpowiednik dzisiejszego `prefill` liczonego z `Contact`
+	(`crm/api/kredyt.py::_kontakt_surowy_i_prefill`).
+
+	Nie mutuje `kredyt`: buduje i zwraca nowy słownik. Brakujący klucz albo
+	`None` w `kredyt` staje się `""` w wyniku.
+
+	UWAGA: to kształt PRZEKLUCZONY, różny od kształtu SUROWEGO zwracanego
+	przez `kontakt_z_wnioskodawcy`. Podanie wyniku tej funkcji tam, gdzie
+	`crm.volteo_kredyt_pdf.zbuduj_kontekst_kredytu` oczekuje argumentu
+	`kontakt`, daje pusty blok danych klienta w PDF-ie poza polem e-mail -
+	patrz docstring `kontakt_z_wnioskodawcy` dla pełnego opisu tej klasy
+	błędu (incydenty 2026-08-05, 2026-08-15).
+	"""
+	return {
+		"pesel": _tekst_wnioskodawcy(kredyt, "wnioskodawca_pesel"),
+		"imiona": _tekst_wnioskodawcy(kredyt, "wnioskodawca_imiona"),
+		"nazwisko": _tekst_wnioskodawcy(kredyt, "wnioskodawca_nazwisko"),
+		"telefon": _tekst_wnioskodawcy(kredyt, "wnioskodawca_telefon"),
+		"email": _tekst_wnioskodawcy(kredyt, "wnioskodawca_email"),
+		"kod_pocztowy": _tekst_wnioskodawcy(kredyt, "wnioskodawca_kod_pocztowy"),
+		"miejscowosc": _tekst_wnioskodawcy(kredyt, "wnioskodawca_miejscowosc"),
+		"ulica": _tekst_wnioskodawcy(kredyt, "wnioskodawca_ulica"),
+		"nr_domu": _tekst_wnioskodawcy(kredyt, "wnioskodawca_nr_domu"),
+		"nr_lokalu": _tekst_wnioskodawcy(kredyt, "wnioskodawca_nr_lokalu"),
+	}
+
+
+def brakujace_dane_wnioskodawcy(kredyt: dict[str, Any]) -> list[str]:
+	"""Zwraca podzbiór `POLA_WNIOSKODAWCY` (w tej samej kolejności), który jest
+	wymagany a pusty. Wymagane są wszystkie pola wnioskodawcy poza
+	`wnioskodawca_nr_lokalu` (numer lokalu jest opcjonalny, to numer
+	mieszkania). Pustość jak w `brakujace_pola()`: `_jest_puste` (`None`/`""`/
+	sam biały znak są puste, wszystko inne, w tym `"0"`, jest wypełnione).
+
+	Nie mutuje `kredyt`."""
+	return [
+		pole
+		for pole in POLA_WNIOSKODAWCY
+		if pole != "wnioskodawca_nr_lokalu" and _jest_puste(kredyt.get(pole))
+	]
