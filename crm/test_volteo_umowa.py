@@ -7,6 +7,8 @@ from crm.volteo_umowa import (
 	brakujace_dane_klienta,
 	brakujace_pola,
 	czy_propagowac_zgody,
+	czy_umowa_podwojna,
+	kod_szablonu,
 	kontakty_do_zgod,
 	kwota_kredytu,
 	miejsce_i_pokrycie,
@@ -546,6 +548,72 @@ class TestKontaktyDoZgod(unittest.TestCase):
 		kontakty_do_zgod(podstawowy, drugi)
 		self.assertEqual(podstawowy, "CONT-0001")
 		self.assertEqual(drugi, "CONT-0002")
+
+
+class TestKodSzablonu(unittest.TestCase):
+	"""ops#167: wybór kodu wbudowanego szablonu PDF-u umowy (klucz w
+	`crm.volteo_umowa_render.SZABLONY`), zależny od rodzaju umowy i obecności
+	drugiego Zamawiającego."""
+
+	def test_a_pojedyncza_pv(self: "TestKodSzablonu") -> None:
+		self.assertEqual(kod_szablonu("Fotowoltaika", False), "PV")
+
+	def test_b_pojedyncza_pvme(self: "TestKodSzablonu") -> None:
+		self.assertEqual(kod_szablonu("Fotowoltaika + Magazyn", False), "PVME")
+
+	def test_c_pojedyncza_me(self: "TestKodSzablonu") -> None:
+		self.assertEqual(kod_szablonu("Magazyn energii", False), "ME")
+
+	def test_d_podwojna_pv(self: "TestKodSzablonu") -> None:
+		self.assertEqual(kod_szablonu("Fotowoltaika", True), "PV_2")
+
+	def test_e_podwojna_pvme(self: "TestKodSzablonu") -> None:
+		self.assertEqual(kod_szablonu("Fotowoltaika + Magazyn", True), "PVME_2")
+
+	def test_f_podwojna_me(self: "TestKodSzablonu") -> None:
+		self.assertEqual(kod_szablonu("Magazyn energii", True), "ME_2")
+
+	def test_g_czyste_powietrze_pojedyncza(self: "TestKodSzablonu") -> None:
+		# "CP" nie ma wpisu w SZABLONY (ani pojedynczego, ani podwójnego).
+		# Ta funkcja to tylko oblicza kod, weryfikacja obecności w rejestrze
+		# jest rolą wołającego (`crm/api/umowa.py`).
+		self.assertEqual(kod_szablonu("Czyste Powietrze", False), "CP")
+
+	def test_h_czyste_powietrze_podwojna(self: "TestKodSzablonu") -> None:
+		self.assertEqual(kod_szablonu("Czyste Powietrze", True), "CP_2")
+
+	def test_i_nieznany_rodzaj_pojedyncza(self: "TestKodSzablonu") -> None:
+		self.assertEqual(kod_szablonu("cokolwiek nierozpoznanego", False), "XX")
+
+	def test_j_nieznany_rodzaj_podwojna(self: "TestKodSzablonu") -> None:
+		self.assertEqual(kod_szablonu("cokolwiek nierozpoznanego", True), "XX_2")
+
+	def test_k_pusty_rodzaj_pojedyncza(self: "TestKodSzablonu") -> None:
+		self.assertEqual(kod_szablonu(None, False), "XX")
+
+	def test_l_pusty_rodzaj_podwojna(self: "TestKodSzablonu") -> None:
+		self.assertEqual(kod_szablonu(None, True), "XX_2")
+
+
+class TestCzyUmowaPodwojna(unittest.TestCase):
+	"""ops#167: `czy_umowa_podwojna` = bool `drugi_zamawiajacy`."""
+
+	def test_a_brak_klucza_daje_falsz(self: "TestCzyUmowaPodwojna") -> None:
+		self.assertFalse(czy_umowa_podwojna({}))
+
+	def test_b_none_daje_falsz(self: "TestCzyUmowaPodwojna") -> None:
+		self.assertFalse(czy_umowa_podwojna({"drugi_zamawiajacy": None}))
+
+	def test_c_pusty_string_daje_falsz(self: "TestCzyUmowaPodwojna") -> None:
+		self.assertFalse(czy_umowa_podwojna({"drugi_zamawiajacy": ""}))
+
+	def test_d_ustawiona_nazwa_kontaktu_daje_prawde(self: "TestCzyUmowaPodwojna") -> None:
+		self.assertTrue(czy_umowa_podwojna({"drugi_zamawiajacy": "CONT-0002"}))
+
+	def test_e_nie_mutuje_wejscia(self: "TestCzyUmowaPodwojna") -> None:
+		umowa = {"drugi_zamawiajacy": "CONT-0002", "inne_pole": "x"}
+		czy_umowa_podwojna(umowa)
+		self.assertEqual(umowa, {"drugi_zamawiajacy": "CONT-0002", "inne_pole": "x"})
 
 
 if __name__ == "__main__":

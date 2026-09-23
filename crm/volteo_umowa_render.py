@@ -10,15 +10,19 @@ prawna, logo, stopka, fonty i podział stron są dokładnie takie jak w
 oryginale — bo to fizycznie ten sam plik, tylko z naniesioną warstwą.
 
 Trzy rodzaje umowy mają TRZY osobne szablony PDF i TRZY osobne mapy
-współrzędnych (rejestr `SZABLONY` niżej): `PV` (Fotowoltaika), `ME` (Magazyn
-energii), `PVME` (Fotowoltaika + Magazyn). Wybór szablonu jest jawny — wołający
-(`crm/api/umowa.py`) przekazuje kod rodzaju umowy (te same kody, co
-`crm.volteo_naming.UMOWA_CODES`) do `zloz_umowe()`, tu nie ma żadnego
-domyślnego szablonu. „Czyste Powietrze” (`CP`) i nieznany/pusty rodzaj (`XX`)
-CELOWO nie mają wpisu w `SZABLONY` — ten PDF dotyczy wyłącznie umów PV/magazyn;
-brak klucza w rejestrze jest właśnie tym, co pozwala wołającemu odmówić
-generowania dla pozostałych rodzajów, zamiast po cichu użyć niewłaściwego
-szablonu.
+współrzędnych dla wariantu JEDNOOSOBOWEGO (rejestr `SZABLONY` niżej): `PV`
+(Fotowoltaika), `ME` (Magazyn energii), `PVME` (Fotowoltaika + Magazyn). Od
+ops#167 dochodzą trzy analogiczne warianty PODWÓJNE (`PV_2`, `PVME_2`, `ME_2`)
+dla umów z drugim Zamawiającym: własny plik PDF i własna mapa współrzędnych
+każdy, zmierzone od zera (ops#165/#166), nie skopiowane z wariantu
+jednoosobowego. Wybór szablonu jest jawny, wołający (`crm/api/umowa.py`)
+przekazuje kod rodzaju umowy PLUS informację o drugim Zamawiającym, przez
+`crm.volteo_umowa.kod_szablonu(rodzaj, podwojna)`, do `zloz_umowe()`, tu nie ma
+żadnego domyślnego szablonu. „Czyste Powietrze” (`CP`) i nieznany/pusty rodzaj
+(`XX`) CELOWO nie mają wpisu w `SZABLONY`, w żadnym z dwóch wariantów. Ten PDF
+dotyczy wyłącznie umów PV/magazyn; brak klucza w rejestrze jest właśnie tym, co
+pozwala wołającemu odmówić generowania dla pozostałych rodzajów, zamiast po
+cichu użyć niewłaściwego szablonu.
 
 BEZPIECZNIK (dokument prawny podpisywany przez klienta): `zloz_umowe()`
 sprawdza sumę SHA-256 przekazanego szablonu względem `SZABLONY[kod].sha256`
@@ -55,7 +59,10 @@ from reportlab.pdfgen.canvas import Canvas
 
 from crm.volteo_umowa_mapa import MAPA, SHA256_SZABLONU, Pole
 from crm.volteo_umowa_mapa_me import LICZBA_STRON_ME, MAPA_ME, SHA256_SZABLONU_ME
+from crm.volteo_umowa_mapa_me2 import LICZBA_STRON_ME2, MAPA_ME2, SHA256_SZABLONU_ME2
 from crm.volteo_umowa_mapa_pv import LICZBA_STRON_PV, MAPA_PV, SHA256_SZABLONU_PV
+from crm.volteo_umowa_mapa_pv2 import LICZBA_STRON_PV2, MAPA_PV2, SHA256_SZABLONU_PV2
+from crm.volteo_umowa_mapa_pvme2 import LICZBA_STRON_PVME2, MAPA_PVME2, SHA256_SZABLONU_PVME2
 
 
 @dataclass(frozen=True)
@@ -79,10 +86,24 @@ SZABLONY: dict[str, Szablon] = {
 	"PV": Szablon("umowa_pv.pdf", SHA256_SZABLONU_PV, LICZBA_STRON_PV, MAPA_PV),
 	"PVME": Szablon("umowa_pv_me.pdf", SHA256_SZABLONU, 18, MAPA),
 	"ME": Szablon("umowa_me.pdf", SHA256_SZABLONU_ME, LICZBA_STRON_ME, MAPA_ME),
+	# Warianty PODWÓJNE (dwóch Zamawiających, ops#165/#166/#167): klucz to
+	# kod bazowy z doklejonym `"_2"`, dokładnie to, co zwraca
+	# `crm.volteo_umowa.kod_szablonu(rodzaj, podwojna=True)`. Każdy ma WŁASNY
+	# plik PDF (`crm/szablony/umowa_*_podwojna.pdf`), własną sumę SHA-256 i
+	# własną mapę współrzędnych (`crm/volteo_umowa_mapa_*2.py`), zmierzoną
+	# OD ZERA na tym pliku, nie skopiowaną z wariantu jednoosobowego, bo drugi
+	# blok komparycji przesuwa całą resztę treści.
+	"PV_2": Szablon("umowa_pv_podwojna.pdf", SHA256_SZABLONU_PV2, LICZBA_STRON_PV2, MAPA_PV2),
+	"PVME_2": Szablon("umowa_pv_me_podwojna.pdf", SHA256_SZABLONU_PVME2, LICZBA_STRON_PVME2, MAPA_PVME2),
+	"ME_2": Szablon("umowa_me_podwojna.pdf", SHA256_SZABLONU_ME2, LICZBA_STRON_ME2, MAPA_ME2),
 }
-"""Rejestr szablonów wg kodu rodzaju umowy (te same kody, co
-`crm.volteo_naming.UMOWA_CODES`: `PV`, `PVME`, `ME`). `CP` i `XX` są tu CELOWO
-nieobecne — ten generator PDF-u obsługuje wyłącznie umowy PV/magazyn; nieobecność
+"""Rejestr szablonów wg kodu rodzaju umowy (te same kody bazowe, co
+`crm.volteo_naming.UMOWA_CODES`: `PV`, `PVME`, `ME`), plus trzy warianty
+PODWÓJNE (`PV_2`, `PVME_2`, `ME_2`, ops#167) dla umów z drugim Zamawiającym
+(`Volteo Umowa.drugi_zamawiajacy`, ops#168): wybór między kodem pojedynczym i
+podwójnym jest jawny, przez `crm.volteo_umowa.kod_szablonu()`, nigdy dorozumiany
+z obecności innych pól. `CP` i `XX` (w żadnym z wariantów) są tu CELOWO
+nieobecne, ten generator PDF-u obsługuje wyłącznie umowy PV/magazyn; nieobecność
 klucza w tym słowniku jest właśnie mechanizmem, którym `crm/api/umowa.py` odmawia
 generowania dla „Czyste Powietrze” i nierozpoznanego/pustego rodzaju umowy."""
 
@@ -121,10 +142,13 @@ dla osoby czytającej dokument, a nie wyglądało jak ucięte przez przypadek.""
 def sciezka_wbudowanego_szablonu(kod: str) -> Path:
 	"""Zwraca ścieżkę do wbudowanego szablonu PDF-u umowy dla rodzaju umowy `kod`.
 
-	`kod` to kod z `crm.volteo_naming.UMOWA_CODES` (`PV`/`PVME`/`ME`). Wołający
-	(np. `crm/api/umowa.py`) nie musi znać układu katalogów pakietu ani nazwy
-	pliku szablonu — wystarczy przeczytać wskazany plik binarnie i przekazać
-	jego zawartość do `zloz_umowe()` jako `szablon_pdf`.
+	`kod` to klucz `SZABLONY`: kod z `crm.volteo_naming.UMOWA_CODES`
+	(`PV`/`PVME`/`ME`) dla wariantu jednoosobowego, albo ten sam kod z
+	doklejonym `"_2"` (`PV_2`/`PVME_2`/`ME_2`, ops#167) dla wariantu z drugim
+	Zamawiającym, zob. `crm.volteo_umowa.kod_szablonu()`. Wołający (np.
+	`crm/api/umowa.py`) nie musi znać układu katalogów pakietu ani nazwy pliku
+	szablonu, wystarczy przeczytać wskazany plik binarnie i przekazać jego
+	zawartość do `zloz_umowe()` jako `szablon_pdf`.
 
 	`kod` spoza `SZABLONY` (w tym `CP` i `XX`) rzuca `ValueError` z czytelnym
 	komunikatem po polsku — w praktyce do tego nie powinno dojść, bo

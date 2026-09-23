@@ -28,6 +28,8 @@ from crm.volteo_umowa import (
 	brakujace_dane_klienta,
 	brakujace_pola,
 	czy_propagowac_zgody,
+	czy_umowa_podwojna,
+	kod_szablonu,
 	kontakty_do_zgod,
 	kwota_kredytu,
 	miejsce_i_pokrycie,
@@ -707,12 +709,23 @@ def volteo_umowa_pdf(deal: str) -> dict[str, Any]:
 	podpięty do `CRM Deal`. Zwraca `{"file_url": ..., "file_name": ...}`.
 
 	Dokument PDF nie jest już odtwarzany w HTML — kontekst danych jest nakładany
-	jako warstwa na ORYGINALNY plik PDF od prawnika (jeden z trzech wbudowanych
-	szablonów w `crm/szablony/`, wybrany wg `custom_rodzaj_umowy` szansy przez
-	`crm.volteo_naming.code_for` i rejestr `crm.volteo_umowa_render.SZABLONY`),
+	jako warstwa na ORYGINALNY plik PDF od prawnika (jeden z sześciu wbudowanych
+	szablonów w `crm/szablony/`: trzy jednoosobowe plus, od ops#167, trzy
+	PODWÓJNE dla umowy z drugim Zamawiającym, wybrany wg `custom_rodzaj_umowy`
+	szansy i obecności `Volteo Umowa.drugi_zamawiajacy` przez
+	`crm.volteo_umowa.kod_szablonu` i rejestr `crm.volteo_umowa_render.SZABLONY`),
 	przez `crm.volteo_umowa_render.zloz_umowe`, według współrzędnych z mapy
 	właściwej temu szablonowi. Dzięki temu treść prawna, układ i podział stron
 	są dokładnie takie jak w oryginale.
+
+	Umowa PODWÓJNA (ops#167, drugi Zamawiający ustawiony na `Volteo Umowa`):
+	wybiera automatycznie szablon `<KOD>_2` zamiast `<KOD>` i dokłada dane
+	drugiego Zamawiającego (`kontakt2=`) do `zbuduj_kontekst`; braki w jego
+	danych osobowych (imię/nazwisko, PESEL, telefon, e-mail) blokują
+	generowanie tym samym mechanizmem co dla osoby pierwszej. Umowa
+	POJEDYNCZA (bez `drugi_zamawiajacy`) przechodzi przez DOKŁADNIE tę samą
+	ścieżkę co przed tym zadaniem: `kod`/`kontakt2` niedotknięte, żadna
+	gałąź niżej się nie wykonuje.
 
 	Uprawnienia: rola kalkulatora + `write` na szansie (SEC#35 — było `read`:
 	generowanie PDF-u faktycznie zapisuje nowy plik `File` podpięty do szansy i,
@@ -757,6 +770,24 @@ def volteo_umowa_pdf(deal: str) -> dict[str, Any]:
 	if umowa_doc.get("autenti_status") in autenti_logika.SEND_BLOCKED_STATUSES:
 		frappe.throw(_("Umowa została wysłana do podpisu — nie można wygenerować nowego PDF-u."))
 
+	# Umowa PODWÓJNA (ops#167): przełącza `kod` na wariant `<KOD>_2` i wymaga
+	# kompletnych danych drugiego Zamawiającego przed generowaniem. TA CAŁA
+	# GAŁĄŹ jest no-op dla umowy pojedynczej (`czy_umowa_podwojna` fałsz), więc
+	# `kod`/`kontakt2` niżej zostają dokładnie takie, jak przed tym zadaniem:
+	# ŚCIEŻKA JEDNOOSOBOWA JEST NIEZMIENIONA.
+	kontakt2: dict[str, Any] | None = None
+	if czy_umowa_podwojna(umowa_doc.as_dict()):
+		kod = kod_szablonu(rodzaj_umowy, True)
+		kontakt2 = _dane_kontaktu(umowa_doc.get("drugi_zamawiajacy"))
+		braki_drugiego = brakujace_dane_klienta(kontakt2)
+		if braki_drugiego:
+			frappe.throw(
+				_(
+					"Uzupełnij dane drugiego Zamawiającego przed wygenerowaniem PDF-u "
+					"umowy: {0}."
+				).format(", ".join(braki_drugiego))
+			)
+
 	kontakt = _podstawowy_kontakt(deal_doc)
 
 	try:
@@ -773,6 +804,7 @@ def volteo_umowa_pdf(deal: str) -> dict[str, Any]:
 			komponenty=_komponenty_katalogu(),
 			stale=dict(frappe.db.get_singles_dict("Volteo Kalkulator Stale") or {}),
 			dzis=getdate(),
+			kontakt2=kontakt2,
 		)
 		pdf_bytes = zloz_umowe(kontekst, szablon_pdf, kod)
 	except Exception:
