@@ -137,6 +137,7 @@ permission_query_conditions = {
 	"Contact": "crm.permissions.contact_visibility.get_contact_permission_query_conditions",
 	"Volteo Faktura": "crm.permissions.faktura_visibility.get_faktura_permission_query_conditions",
 	"Volteo Trify Update": "crm.permissions.faktura_visibility.get_trify_permission_query_conditions",
+	"Volteo Kredyt": "crm.permissions.faktura_visibility.get_kredyt_permission_query_conditions",
 	"FCRM Note": "crm.permissions.child_visibility.get_note_permission_query_conditions",
 	"CRM Task": "crm.permissions.child_visibility.get_task_permission_query_conditions",
 }
@@ -156,6 +157,7 @@ has_permission = {
 	],
 	"Volteo Faktura": "crm.permissions.faktura_visibility.has_faktura_permission",
 	"Volteo Trify Update": "crm.permissions.faktura_visibility.has_trify_permission",
+	"Volteo Kredyt": "crm.permissions.faktura_visibility.has_kredyt_permission",
 	"FCRM Note": [
 		"crm.permissions.child_visibility.has_note_permission",
 		"crm.permissions.delete_lockdown.block_nonadmin_delete",
