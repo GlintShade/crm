@@ -16,7 +16,13 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
+from crm.volteo_umowa_mapa import MAPA as MAPA_PVME
 from crm.volteo_umowa_mapa import SZEROKOSC_STRONY_PT, WYSOKOSC_STRONY_PT, Pole
+from crm.volteo_umowa_mapa_me import MAPA_ME
+from crm.volteo_umowa_mapa_me2 import LICZBA_STRON_ME2, MAPA_ME2
+from crm.volteo_umowa_mapa_pv import MAPA_PV
+from crm.volteo_umowa_mapa_pv2 import LICZBA_STRON_PV2, MAPA_PV2
+from crm.volteo_umowa_mapa_pvme2 import LICZBA_STRON_PVME2, MAPA_PVME2
 from crm.volteo_umowa_pdf import zbuduj_kontekst
 from crm.volteo_umowa_render import SZABLONY
 
@@ -525,6 +531,178 @@ class TestPodpisy(unittest.TestCase):
 				]
 				self.assertEqual(len(pozycje_strony), 2)
 				self.assertNotEqual(pozycje_strony[0].y, pozycje_strony[1].y)
+
+
+# ---------------------------------------------------------------------------
+# Mapy PODWÓJNE (issue #166) - dwóch Zamawiających, `MAPA_PV2`/`MAPA_ME2`/
+# `MAPA_PVME2`. Te trzy mapy NIE są jeszcze zarejestrowane w `SZABLONY`
+# (issue #167 rejestruje je razem ze zmianą `zbuduj_kontekst`), więc poniższe
+# testy odwołują się do nich BEZPOŚREDNIO, importowane z modułów, nie przez
+# pętlę po `SZABLONY` jak reszta tego pliku. `TestWariantyPodwojneJeszczeNie
+# Zarejestrowane` w `crm/test_volteo_umowa_szablony_podwojne.py` jest strażnikiem
+# tego stanu (G6) - ten plik go nie dubluje.
+# ---------------------------------------------------------------------------
+
+_MAPY_PODWOJNE: dict[str, Any] = {
+	"PV2": {"mapa": MAPA_PV2, "liczba_stron": LICZBA_STRON_PV2, "mapa_jednoosobowa": MAPA_PV},
+	"ME2": {"mapa": MAPA_ME2, "liczba_stron": LICZBA_STRON_ME2, "mapa_jednoosobowa": MAPA_ME},
+	"PVME2": {"mapa": MAPA_PVME2, "liczba_stron": LICZBA_STRON_PVME2, "mapa_jednoosobowa": MAPA_PVME},
+}
+
+_KLUCZE_DODATKOWE_PODWOJNE: frozenset[str] = frozenset(
+	{
+		"klient2_imie_nazwisko",
+		"klient2_adres",
+		"klient2_pesel",
+		"klient2_telefon",
+		"klient2_email",
+		"podpis_zamawiajacy_2",
+	}
+)
+"""Jedyny dozwolony dodatek kluczy w wariancie podwójnym wobec odpowiadającej
+mapy jednoosobowej (zob. brief issue #166) - każdy klucz mapy podwójnej, który
+nie jest w tym zbiorze, MUSI też istnieć w kluczach mapy jednoosobowej."""
+
+_LICZBA_POZYCJI_OCZEKIWANA: dict[str, int] = {"PV2": 81, "ME2": 68, "PVME2": 90}
+"""Dokładna liczba pozycji w każdej mapie podwójnej, potwierdzona przy
+pomiarze (issue #166) - regresja tego testu = ktoś przypadkiem dodał/usunął
+pozycję przy przyszłej edycji mapy, bez zauważenia zmiany w liczbie."""
+
+_STRONY_ZAMAWIAJACY_2_OCZEKIWANE: dict[str, frozenset[int]] = {
+	"PV2": frozenset({3, 4, 5, 7, 14}),
+	"ME2": frozenset({3, 4, 5, 7, 14}),
+	"PVME2": frozenset({3, 5, 6, 7, 9, 19}),
+}
+"""Strony z co najmniej jedną pozycją `podpis_zamawiajacy_2`: umowa główna,
+Załącznik(i) montażowy(e), Załącznik 2/3 (zgody), Załącznik 4 (RODO) i drugie
+Pełnomocnictwo (ostatnia strona każdego wariantu)."""
+
+_PELNOMOCNICTWO_1_IDX_PODWOJNE: dict[str, int] = {"PV2": 13, "ME2": 13, "PVME2": 18}
+"""Pierwsze Pełnomocnictwo (klient 1, `klient_*`/`podpis_zamawiajacy`) -
+przedostatnia strona każdego wariantu podwójnego."""
+
+_PELNOMOCNICTWO_2_IDX_PODWOJNE: dict[str, int] = {"PV2": 14, "ME2": 14, "PVME2": 19}
+"""Drugie Pełnomocnictwo (klient 2, `klient2_*`/`podpis_zamawiajacy_2`) -
+OSTATNIA strona każdego wariantu podwójnego."""
+
+
+class TestMapyPodwojne(unittest.TestCase):
+	"""Piny geometryczne i kontraktowe dla `MAPA_PV2`/`MAPA_ME2`/`MAPA_PVME2`
+	(issue #166) - analogiczne do `TestGeometria`/`TestPodpisy`/`TestWielokrotne
+	Pozycje` powyżej, ale wyliczone bezpośrednio z modułów map (nieobecnych
+	jeszcze w `SZABLONY`, zob. komentarz nad tą klasą)."""
+
+	def test_a_strona_w_zakresie(self: "TestMapyPodwojne") -> None:
+		for kod, dane in _MAPY_PODWOJNE.items():
+			with self.subTest(kod=kod):
+				for pole in dane["mapa"]:
+					self.assertGreaterEqual(pole.strona, 0, pole)
+					self.assertLess(pole.strona, dane["liczba_stron"], pole)
+
+	def test_b_wspolrzedne_w_granicach_strony(self: "TestMapyPodwojne") -> None:
+		for kod, dane in _MAPY_PODWOJNE.items():
+			with self.subTest(kod=kod):
+				for pole in dane["mapa"]:
+					self.assertGreaterEqual(pole.x, 0.0, pole)
+					self.assertLessEqual(pole.x, SZEROKOSC_STRONY_PT, pole)
+					self.assertGreaterEqual(pole.y, 0.0, pole)
+					self.assertLessEqual(pole.y, WYSOKOSC_STRONY_PT, pole)
+
+	def test_c_zero_duplikatow_tej_samej_pozycji(self: "TestMapyPodwojne") -> None:
+		for kod, dane in _MAPY_PODWOJNE.items():
+			with self.subTest(kod=kod):
+				widziane: set[tuple[str, int, float, float]] = set()
+				for pole in dane["mapa"]:
+					klucz_pozycji = (pole.klucz, pole.strona, pole.x, pole.y)
+					self.assertNotIn(klucz_pozycji, widziane, f"[{kod}] Zduplikowana pozycja: {pole}")
+					widziane.add(klucz_pozycji)
+
+	def test_d_liczba_pozycji_scisle_wieksza_niz_mapa_jednoosobowa(self: "TestMapyPodwojne") -> None:
+		for kod, dane in _MAPY_PODWOJNE.items():
+			with self.subTest(kod=kod):
+				self.assertGreater(len(dane["mapa"]), len(dane["mapa_jednoosobowa"]))
+				self.assertEqual(len(dane["mapa"]), _LICZBA_POZYCJI_OCZEKIWANA[kod])
+
+	def test_e_kazdy_klucz_w_mapie_jednoosobowej_albo_w_dozwolonych_dodatkach(
+		self: "TestMapyPodwojne",
+	) -> None:
+		for kod, dane in _MAPY_PODWOJNE.items():
+			with self.subTest(kod=kod):
+				klucze_jednoosobowe = frozenset(pole.klucz for pole in dane["mapa_jednoosobowa"])
+				for pole in dane["mapa"]:
+					self.assertTrue(
+						pole.klucz in klucze_jednoosobowe or pole.klucz in _KLUCZE_DODATKOWE_PODWOJNE,
+						f"[{kod}] Klucz {pole.klucz!r} nie jest ani w mapie jednoosobowej, ani w "
+						"dozwolonych dodatkach dwuosobowych.",
+					)
+
+	def test_f_oba_podpisy_zamawiajacego_maja_pozycje(self: "TestMapyPodwojne") -> None:
+		for kod, dane in _MAPY_PODWOJNE.items():
+			with self.subTest(kod=kod):
+				mapa = dane["mapa"]
+				self.assertGreater(len([p for p in mapa if p.klucz == "podpis_zamawiajacy"]), 0)
+				self.assertGreater(len([p for p in mapa if p.klucz == "podpis_zamawiajacy_2"]), 0)
+				self.assertGreater(len([p for p in mapa if p.klucz == "podpis_wykonawca"]), 0)
+
+	def test_g_strony_podpisu_zamawiajacego_2_zgodne_z_oczekiwaniem(self: "TestMapyPodwojne") -> None:
+		for kod, dane in _MAPY_PODWOJNE.items():
+			with self.subTest(kod=kod):
+				strony = {pole.strona for pole in dane["mapa"] if pole.klucz == "podpis_zamawiajacy_2"}
+				self.assertEqual(strony, _STRONY_ZAMAWIAJACY_2_OCZEKIWANE[kod])
+
+	def test_h_pierwsze_pelnomocnictwo_uzywa_klient_i_podpisu_1(self: "TestMapyPodwojne") -> None:
+		for kod, dane in _MAPY_PODWOJNE.items():
+			with self.subTest(kod=kod):
+				idx = _PELNOMOCNICTWO_1_IDX_PODWOJNE[kod]
+				mapa = dane["mapa"]
+				self.assertIn(
+					idx, {p.strona for p in mapa if p.klucz == "klient_imie_nazwisko"}
+				)
+				self.assertIn(idx, {p.strona for p in mapa if p.klucz == "podpis_zamawiajacy"})
+				# Pierwsze pelnomocnictwo NIE uzywa kluczy klient2_*/podpis_zamawiajacy_2.
+				for pole in mapa:
+					if pole.strona == idx:
+						self.assertNotIn(pole.klucz, _KLUCZE_DODATKOWE_PODWOJNE, pole)
+
+	def test_i_drugie_pelnomocnictwo_uzywa_klient2_i_podpisu_2(self: "TestMapyPodwojne") -> None:
+		for kod, dane in _MAPY_PODWOJNE.items():
+			with self.subTest(kod=kod):
+				idx = _PELNOMOCNICTWO_2_IDX_PODWOJNE[kod]
+				mapa = dane["mapa"]
+				self.assertIn(
+					idx, {p.strona for p in mapa if p.klucz == "klient2_imie_nazwisko"}
+				)
+				self.assertIn(idx, {p.strona for p in mapa if p.klucz == "podpis_zamawiajacy_2"})
+				# Drugie pelnomocnictwo NIE uzywa kluczy klient_*/podpis_zamawiajacy (bez _2).
+				for pole in mapa:
+					if pole.strona == idx:
+						self.assertNotIn(pole.klucz, ("klient_imie_nazwisko", "klient_adres", "klient_pesel", "podpis_zamawiajacy"), pole)
+
+	def test_j_klient_imie_nazwisko_na_stronie_0_i_pierwszym_pelnomocnictwie(
+		self: "TestMapyPodwojne",
+	) -> None:
+		for kod, dane in _MAPY_PODWOJNE.items():
+			with self.subTest(kod=kod):
+				strony = {p.strona for p in dane["mapa"] if p.klucz == "klient_imie_nazwisko"}
+				self.assertEqual(strony, {0, _PELNOMOCNICTWO_1_IDX_PODWOJNE[kod]})
+
+	def test_k_klient2_imie_nazwisko_na_stronie_0_i_drugim_pelnomocnictwie(
+		self: "TestMapyPodwojne",
+	) -> None:
+		for kod, dane in _MAPY_PODWOJNE.items():
+			with self.subTest(kod=kod):
+				strony = {p.strona for p in dane["mapa"] if p.klucz == "klient2_imie_nazwisko"}
+				self.assertEqual(strony, {0, _PELNOMOCNICTWO_2_IDX_PODWOJNE[kod]})
+
+	def test_l_rodzaj_i_wyrownanie_dozwolone(self: "TestMapyPodwojne") -> None:
+		for kod, dane in _MAPY_PODWOJNE.items():
+			with self.subTest(kod=kod):
+				for pole in dane["mapa"]:
+					self.assertIn(pole.rodzaj, ("tekst", "kratka"), pole)
+					self.assertIn(pole.wyrownanie, ("lewo", "srodek", "prawo"), pole)
+					if pole.rodzaj == "kratka":
+						self.assertEqual(pole.wyrownanie, "srodek", pole)
+						self.assertIsNone(pole.maks_szerokosc, pole)
 
 
 if __name__ == "__main__":
