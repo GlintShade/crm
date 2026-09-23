@@ -64,7 +64,16 @@ def _autenti_ustawienia() -> dict[str, Any]:
 
 
 def _wlaczone() -> bool:
-	return bool(_autenti_ustawienia().get("enabled"))
+	"""Czy integracja Autenti jest wlaczona - patrz `logika.czy_wlaczone` dla
+	uzasadnienia, dlaczego to NIE jest goly `bool(...)`: `_autenti_ustawienia`
+	czyta przez `get_singles_dict`, ktore zwraca wartosci Single jako stringi,
+	wiec pole Check ustawione na 0 przychodzi tu jako string "0", a
+	`bool("0")` jest `True` w Pythonie. Ten sam blad byl obecny (i naprawiony
+	w tym samym miejscu, ops#169) w kazdym innym miejscu tego modulu, ktore
+	czytalo `enabled` z tego samego slownika - patrz `autenti_is_enabled` i
+	`_status_dokumentu` nizej, teraz routowane przez ta sama funkcje albo
+	wprost przez `logika.czy_wlaczone`."""
+	return logika.czy_wlaczone(_autenti_ustawienia().get("enabled"))
 
 
 def _pdf_umowy_plik(deal: str) -> "frappe.model.document.Document | None":
@@ -437,7 +446,10 @@ def autenti_is_enabled() -> dict[str, Any]:
 	"""Tani, bezstanowy check widoczności funkcji podpisu w UI. Bez gate'u dostępu do
 	szansy - to globalny stan integracji, nie dane konkretnego dokumentu."""
 	ustawienia = _autenti_ustawienia()
-	return {"enabled": bool(ustawienia.get("enabled")), "environment": ustawienia.get("environment")}
+	return {
+		"enabled": logika.czy_wlaczone(ustawienia.get("enabled")),
+		"environment": ustawienia.get("environment"),
+	}
 
 
 def _status_dokumentu(nazwa: str, konfig: dict[str, Any]) -> dict[str, Any]:
@@ -451,7 +463,7 @@ def _status_dokumentu(nazwa: str, konfig: dict[str, Any]) -> dict[str, Any]:
 	jeden, tani endpoint per dokument, żeby te dwa przypadki nigdy się nie rozjechały.
 	"""
 	ustawienia = _autenti_ustawienia()
-	if not ustawienia.get("enabled"):
+	if not logika.czy_wlaczone(ustawienia.get("enabled")):
 		return {"enabled": False}
 
 	dokument = konfig["pobierz"](nazwa)

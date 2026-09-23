@@ -13,6 +13,7 @@ from crm.integrations.autenti.logika import (
 	czy_legacy_kredyt,
 	czy_logowac_brak_podpisanego_pliku,
 	czy_logowac_nierozpoznany_status,
+	czy_wlaczone,
 	czy_wysylanie_przekroczylo_timeout,
 	decyzja_ponownej_wysylki,
 	emaile_podpisujacych_rozlaczne,
@@ -61,6 +62,31 @@ class TestAutentiLogika(unittest.TestCase):
 
 	def test_e_mozna_wyslac_nierozpoznany_status(self: "TestAutentiLogika") -> None:
 		self.assertFalse(mozna_wyslac("Coś nieznanego"))
+
+	def test_e2_czy_wlaczone_none_falsz(self: "TestAutentiLogika") -> None:
+		self.assertFalse(czy_wlaczone(None))
+
+	def test_e3_czy_wlaczone_pusty_string_falsz(self: "TestAutentiLogika") -> None:
+		self.assertFalse(czy_wlaczone(""))
+		self.assertFalse(czy_wlaczone("   "))
+
+	def test_e4_czy_wlaczone_string_zero_falsz(self: "TestAutentiLogika") -> None:
+		# To jest dokladnie ksztalt, w jakim `frappe.db.get_singles_dict` zwraca
+		# wylaczone pole Check (ops#169) - `bool("0")` bylby tu blednie `True`.
+		self.assertFalse(czy_wlaczone("0"))
+
+	def test_e5_czy_wlaczone_int_zero_falsz(self: "TestAutentiLogika") -> None:
+		self.assertFalse(czy_wlaczone(0))
+
+	def test_e6_czy_wlaczone_string_jeden_prawda(self: "TestAutentiLogika") -> None:
+		self.assertTrue(czy_wlaczone("1"))
+
+	def test_e7_czy_wlaczone_int_jeden_prawda(self: "TestAutentiLogika") -> None:
+		self.assertTrue(czy_wlaczone(1))
+
+	def test_e8_czy_wlaczone_bool_prawda_i_falsz(self: "TestAutentiLogika") -> None:
+		self.assertTrue(czy_wlaczone(True))
+		self.assertFalse(czy_wlaczone(False))
 
 	def test_f_tytul_dokumentu_normalny(self: "TestAutentiLogika") -> None:
 		self.assertEqual(tytul_dokumentu("Jan Kowalski"), "Umowa ProEnergy - Jan Kowalski")

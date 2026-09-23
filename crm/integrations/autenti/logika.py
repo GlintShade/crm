@@ -55,6 +55,45 @@ def mozna_wyslac(status: str | None) -> bool:
 	return status in {"Błąd", "Odrzucona", "Wygasła", "Wycofana"}
 
 
+def czy_wlaczone(wartosc: object) -> bool:
+	"""Poprawna koercja wartości pola Check `enabled` z `Volteo Autenti Settings` do
+	bool (ops#169, znaleziony przy okazji probki na żywo dla drugiego podpisujacego).
+
+	`frappe.db.get_singles_dict` (celowy wybor w `_autenti_ustawienia`, zamiast
+	`get_single_value`, ktore klamie o nieustawionym polu Single, patrz jej
+	docstring) zwraca wartosci Single jako STRINGI wprost z tabeli `tabSingles`,
+	nigdy jako Python bool ani int. Dla pola Check ustawionego na 0 to string
+	`"0"` - a `bool("0")` w Pythonie jest `True`, bo to niepusty string, nie liczba
+	zero. Goly `bool(wartosc)` w `_wlaczone` po cichu traktowal wylaczona integracje
+	jako wlaczona za kazdym razem, kiedy ktokolwiek jawnie zapisal `enabled=0`
+	(w odroznieniu od pola nigdy niezapisanego, gdzie `get_singles_dict` w ogole
+	nie zwraca klucza - `dict.get` wtedy daje `None`, ktory `czy_wlaczone` tez
+	traktuje jako wylaczone).
+
+	Akceptuje kazdy ksztalt, w jakim ta wartosc realnie sie pojawia: `None` i pusty
+	string (pole nigdy niezapisane albo puste) sa `False`; string `"0"` jest
+	`False`, kazdy inny niepusty string (w tym `"1"`) jest `True` po probie
+	parsowania jako liczba calkowita, z bezpiecznym domyslnym `True` dla
+	niepustego, nieliczbowego stringa (nierozpoznany ksztalt danych nie powinien
+	po cichu wylaczac integracji); liczby i bool przechodza przez zwykle `bool()`.
+	"""
+	if wartosc is None:
+		return False
+	if isinstance(wartosc, bool):
+		return wartosc
+	if isinstance(wartosc, int):
+		return wartosc != 0
+	if isinstance(wartosc, str):
+		okrojony = wartosc.strip()
+		if not okrojony:
+			return False
+		try:
+			return int(okrojony) != 0
+		except ValueError:
+			return True
+	return bool(wartosc)
+
+
 def tytul_dokumentu(signer_name: str | None) -> str:
 	"""Tytuł procesu dokumentu Autenti i nazwa pliku widoczna klientowi.
 
