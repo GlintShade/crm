@@ -23,6 +23,17 @@ which does not itself distinguish `read` from `write` -- see
 That isolates the read/write asymmetry to exactly the DocPerm bits this test
 controls. `_sprawdz_role()` (the unrelated KALKULATOR_ROLE gate shared with
 the PV/CP calculators) is mocked out so it can't mask the gate under test.
+
+Updated statically for ops#160 (NOT run locally -- `frappe`/`CRMTestCase` are
+bench-only, see CLAUDE.md verification matrix): `autenti_send_kredyt` now takes
+`kredyt` (a `Volteo Kredyt` RECORD name, ops#158/#159 made the doctype N:1 with
+the deal) instead of `deal`, and resolves the deal for the permission gate from
+the loaded record (`crm.api.kredyt._kredyt_po_nazwie(kredyt).deal`) before
+`_sprawdz_dostep_do_szansy` ever runs. The kredyt tests below therefore create a
+real `Volteo Kredyt` fixture row via `make_kredyt()` and pass its `.name` --
+passing `deal.name` as before would now resolve to a nonexistent record and
+fail with `frappe.DoesNotExistError` before the permission gate is even
+reached, which would no longer exercise the thing this suite tests.
 """
 
 from unittest.mock import patch
@@ -82,13 +93,17 @@ class TestAutentiSendPermissionGate(FrappeTestCase):
 
 	def test_read_only_user_cannot_send_kredyt(self, _mock_sprawdz_role):
 		deal = make_deal("readonly@autenti33.test")
+		kredyt = make_kredyt(deal.name)
 		try:
 			frappe.set_user("readonly@autenti33.test")
-			self.assertRaises(frappe.PermissionError, autenti_send_kredyt, deal.name)
+			self.assertRaises(frappe.PermissionError, autenti_send_kredyt, kredyt.name)
 		finally:
 			frappe.set_user("Administrator")
 
-		self.assertFalse(frappe.db.exists("Volteo Kredyt", deal.name))
+		# The permission gate must fire before _wyslij_dokument touches anything --
+		# the fixture record's autenti_status must remain untouched (never flipped
+		# to "Wysylanie").
+		self.assertFalse(frappe.db.get_value("Volteo Kredyt", kredyt.name, "autenti_status"))
 
 	def test_write_access_user_clears_permission_gate_for_umowa(self, _mock_sprawdz_role):
 		# This only proves the deal-access gate itself was cleared -- it does not
@@ -115,10 +130,11 @@ class TestAutentiSendPermissionGate(FrappeTestCase):
 
 	def test_write_access_user_clears_permission_gate_for_kredyt(self, _mock_sprawdz_role):
 		deal = make_deal("readwrite@autenti33.test")
+		kredyt = make_kredyt(deal.name)
 		try:
 			frappe.set_user("readwrite@autenti33.test")
 			try:
-				autenti_send_kredyt(deal.name)
+				autenti_send_kredyt(kredyt.name)
 			except frappe.PermissionError:
 				self.fail(
 					"write-access user was blocked by the deal-access permission gate "
@@ -133,7 +149,13 @@ class TestAutentiSendPermissionGate(FrappeTestCase):
 
 
 def delete_test_documents():
-	"""Remove deals created by the test users."""
+	"""Remove deals created by the test users, and any Volteo Kredyt records
+	attached to them (ops#160: post-ops#159 those are hash-named, so they are
+	not swept by the CRM Deal delete below -- they must be deleted first, by
+	`deal`, while that link is still resolvable)."""
+	deal_names = frappe.get_all("CRM Deal", filters={"deal_owner": ("in", TEST_USERS)}, pluck="name")
+	if deal_names:
+		frappe.db.delete("Volteo Kredyt", {"deal": ("in", deal_names)})
 	frappe.db.delete("CRM Deal", {"deal_owner": ("in", TEST_USERS)})
 
 
@@ -182,4 +204,17 @@ def make_deal(owner_email):
 	)
 	doc.flags.ignore_mandatory = True
 	doc.flags.ignore_links = True
+	return doc.insert(ignore_permissions=True)
+
+
+def make_kredyt(deal_name):
+	"""Creates a bare `Volteo Kredyt` record for `deal_name` (ops#160). Post-ops#159
+	the doctype is hash-named, no longer `autoname: field:deal`, so a fixture
+	deal alone no longer doubles as a valid `Volteo Kredyt` record name -- the
+	permission-gate tests above need a real record to pass to `autenti_send_kredyt`,
+	which now resolves the deal for its permission gate from the loaded record
+	(`crm.api.kredyt._kredyt_po_nazwie`) before ever reaching the DocPerm split
+	under test."""
+	doc = frappe.get_doc({"doctype": "Volteo Kredyt", "deal": deal_name, "status": "Roboczy"})
+	doc.flags.ignore_mandatory = True
 	return doc.insert(ignore_permissions=True)
