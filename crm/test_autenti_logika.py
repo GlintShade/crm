@@ -10,6 +10,7 @@ from crm.integrations.autenti.logika import (
 	STATUS_MAP,
 	WYSYLANIE_TIMEOUT_MIN,
 	ZALEGLY_PODPISANY_PLIK_LOG_MIN,
+	czy_legacy_kredyt,
 	czy_logowac_brak_podpisanego_pliku,
 	czy_logowac_nierozpoznany_status,
 	czy_wysylanie_przekroczylo_timeout,
@@ -229,31 +230,114 @@ class TestAutentiLogika(unittest.TestCase):
 		self.assertNotIn("-", tytul_dokumentu_kredytu(None))
 		self.assertNotIn("—", tytul_dokumentu_kredytu(None))
 
-	def test_r_prefiks_pliku_kredytu(self: "TestAutentiLogika") -> None:
+	def test_r_prefiks_pliku_kredytu_legacy(self: "TestAutentiLogika") -> None:
+		# Rekord legacy: kredyt_name == deal (nazwa rekordu sprzed migracji na
+		# formularze 1:N, ops#159). Stary prefiks bez sufiksu, bajt w bajt jak
+		# przed migracją: pięć istniejących produkcyjnych plików musi dalej
+		# pasować.
+		deal = "PRO/PVME/26/1021"
 		self.assertEqual(
-			prefiks_pliku_kredytu("PRO/PVME/26/1021"), "Formularz-kredytowy-PRO-PVME-26-1021"
+			prefiks_pliku_kredytu(deal, deal), "Formularz-kredytowy-PRO-PVME-26-1021"
 		)
 
-	def test_s_nazwa_pliku_kredytu(self: "TestAutentiLogika") -> None:
+	def test_r2_prefiks_pliku_kredytu_hash(self: "TestAutentiLogika") -> None:
+		# Rekord hash: kredyt_name różne od deal (założony po migracji na
+		# formularze 1:N). Nowy prefiks z 8-znakowym sufiksem nazwy rekordu.
 		self.assertEqual(
-			nazwa_pliku_kredytu("PRO/PVME/26/1021"), "Formularz-kredytowy-PRO-PVME-26-1021.pdf"
+			prefiks_pliku_kredytu("PRO/PVME/26/1021", "a1b2c3d4e5"),
+			"Formularz-kredytowy-PRO-PVME-26-1021-a1b2c3d4",
 		)
 
-	def test_t_nazwa_pliku_kredytu_podpisanego(self: "TestAutentiLogika") -> None:
+	def test_r3_prefiks_pliku_kredytu_hash_krotszy_niz_8_znakow(
+		self: "TestAutentiLogika",
+	) -> None:
+		# Nazwa rekordu krótsza niż 8 znaków (nie powinno się zdarzyć dla
+		# prawdziwego hasha Frappe, ale wycinek [:8] nie rzuca wyjątku i po
+		# prostu bierze cały string).
 		self.assertEqual(
-			nazwa_pliku_kredytu_podpisanego("PRO/PVME/26/1021"),
+			prefiks_pliku_kredytu("PRO/PVME/26/1021", "ab12"),
+			"Formularz-kredytowy-PRO-PVME-26-1021-ab12",
+		)
+
+	def test_r4_prefiks_pliku_kredytu_hash_bez_ukosnikow_nie_normalizowany(
+		self: "TestAutentiLogika",
+	) -> None:
+		# Sufiks NIE przechodzi przez .replace('/', '-'): hash names nie mają
+		# ukośników, więc gdyby ktoś kiedyś podał tu coś z ukośnikiem (błąd
+		# wywołującego), musi to być widoczne w nazwie pliku, nie po cichu
+		# znormalizowane jak deal.
+		self.assertEqual(
+			prefiks_pliku_kredytu("PRO/PVME/26/1021", "ab/cd1234"),
+			"Formularz-kredytowy-PRO-PVME-26-1021-ab/cd123",
+		)
+
+	def test_r5_prefiks_pliku_kredytu_dwa_hashe_rozne_prefiksy(
+		self: "TestAutentiLogika",
+	) -> None:
+		# Dwa różne formularze (rekordy Volteo Kredyt) na TEJ SAMEJ szansie
+		# muszą dostać ROZŁĄCZNE prefiksy, to jest cały sens ops#159:
+		# regeneracja/wysyłka jednego formularza nie może po cichu
+		# skasować/podpiąć plik drugiego.
+		deal = "PRO/PVME/26/1021"
+		prefiks_a = prefiks_pliku_kredytu(deal, "aaaaaaaaaa")
+		prefiks_b = prefiks_pliku_kredytu(deal, "bbbbbbbbbb")
+		self.assertNotEqual(prefiks_a, prefiks_b)
+		self.assertFalse(prefiks_b.startswith(prefiks_a))
+		self.assertFalse(prefiks_a.startswith(prefiks_b))
+
+	def test_r6_czy_legacy_kredyt(self: "TestAutentiLogika") -> None:
+		deal = "PRO/PVME/26/1021"
+		self.assertTrue(czy_legacy_kredyt(deal, deal))
+		self.assertFalse(czy_legacy_kredyt(deal, "a1b2c3d4e5"))
+		self.assertFalse(czy_legacy_kredyt(deal, ""))
+
+	def test_s_nazwa_pliku_kredytu_legacy(self: "TestAutentiLogika") -> None:
+		deal = "PRO/PVME/26/1021"
+		self.assertEqual(
+			nazwa_pliku_kredytu(deal, deal), "Formularz-kredytowy-PRO-PVME-26-1021.pdf"
+		)
+
+	def test_s2_nazwa_pliku_kredytu_hash(self: "TestAutentiLogika") -> None:
+		self.assertEqual(
+			nazwa_pliku_kredytu("PRO/PVME/26/1021", "a1b2c3d4e5"),
+			"Formularz-kredytowy-PRO-PVME-26-1021-a1b2c3d4.pdf",
+		)
+
+	def test_t_nazwa_pliku_kredytu_podpisanego_legacy(self: "TestAutentiLogika") -> None:
+		deal = "PRO/PVME/26/1021"
+		self.assertEqual(
+			nazwa_pliku_kredytu_podpisanego(deal, deal),
 			"Formularz-kredytowy-PRO-PVME-26-1021-podpisany.pdf",
 		)
 
-	def test_u_nazwy_plikow_kredytu_dziela_wspolny_prefiks(self: "TestAutentiLogika") -> None:
+	def test_t2_nazwa_pliku_kredytu_podpisanego_hash(self: "TestAutentiLogika") -> None:
+		self.assertEqual(
+			nazwa_pliku_kredytu_podpisanego("PRO/PVME/26/1021", "a1b2c3d4e5"),
+			"Formularz-kredytowy-PRO-PVME-26-1021-a1b2c3d4-podpisany.pdf",
+		)
+
+	def test_u_nazwy_plikow_kredytu_dziela_wspolny_prefiks_legacy(
+		self: "TestAutentiLogika",
+	) -> None:
 		# Odpytywanie Autenti po prefiksie (LIKE) i sprzątanie starych plików
 		# formularza kredytowego w `crm/api/kredyt.py` zależą od tego, że OBIE
-		# nazwy zaczynają się dokładnie od `prefiks_pliku_kredytu(deal)` —
+		# nazwy zaczynają się dokładnie od `prefiks_pliku_kredytu(deal, name)`:
 		# rozjazd tu po cichu psuje dopasowanie w obu miejscach.
 		deal = "PRO/PVME/26/1021"
-		prefiks = prefiks_pliku_kredytu(deal)
-		self.assertTrue(nazwa_pliku_kredytu(deal).startswith(prefiks))
-		self.assertTrue(nazwa_pliku_kredytu_podpisanego(deal).startswith(prefiks))
+		prefiks = prefiks_pliku_kredytu(deal, deal)
+		self.assertTrue(nazwa_pliku_kredytu(deal, deal).startswith(prefiks))
+		self.assertTrue(nazwa_pliku_kredytu_podpisanego(deal, deal).startswith(prefiks))
+
+	def test_u2_nazwy_plikow_kredytu_dziela_wspolny_prefiks_hash(
+		self: "TestAutentiLogika",
+	) -> None:
+		deal = "PRO/PVME/26/1021"
+		kredyt_name = "a1b2c3d4e5"
+		prefiks = prefiks_pliku_kredytu(deal, kredyt_name)
+		self.assertTrue(nazwa_pliku_kredytu(deal, kredyt_name).startswith(prefiks))
+		self.assertTrue(
+			nazwa_pliku_kredytu_podpisanego(deal, kredyt_name).startswith(prefiks)
+		)
 
 
 	def test_v_decyzja_ponownej_wysylki_processing_odzyskaj(self: "TestAutentiLogika") -> None:

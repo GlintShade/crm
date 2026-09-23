@@ -19,6 +19,14 @@ wyszukiwanie po dokładnej nazwie już go nie znajduje, a regeneracja PDF-u tego
 nie naprawia (kolizja powtarza się przy każdej kolejnej próbie). Zob. follow-up
 do ops#77 i docstring `czy_nazwa_systemowa` w `crm/volteo_zalaczniki.py`.
 
+Od ops#159 formularz kredytowy w nowym kształcie (z sufiksem 8-znakowej nazwy
+rekordu `Volteo Kredyt`, gdy jedna szansa ma wiele formularzy) jest rozpoznawany
+przez ten hook BEZ ŻADNEJ zmiany kodu tu ani w `czy_nazwa_systemowa` -- ten
+moduł nie niesie własnego wzorca nazwy, tylko woła `czy_nazwa_systemowa()` jako
+jedyne źródło prawdy, a jej wzorzec obejmuje oba kształty (stary i nowy) z tego
+samego powodu, dla którego już dziś obejmuje znacznik czasu i sufiks kolizji --
+zob. `_WZORZEC_NAZWY_SYSTEMOWEJ` w `crm/volteo_zalaczniki.py`.
+
 Dlaczego `before_insert`, nie `validate`/`before_validate`: hook musi działać
 WYŁĄCZNIE przy wstawianiu nowego wiersza. Późniejsze zapisy prawdziwych plików
 systemowych (np. `File.handle_is_private_changed()` wołane z
