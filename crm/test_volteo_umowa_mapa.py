@@ -35,9 +35,28 @@ from crm.volteo_umowa_render import SZABLONY
 # tego szablonu, inaczej dana po cichu zniknęłaby z wydruku.
 # ---------------------------------------------------------------------------
 
-WYJATKI_PVME: frozenset[str] = frozenset()
+KLUCZE_DRUGIEGO_ZAMAWIAJACEGO: frozenset[str] = frozenset(
+	{
+		"klient2_imie_nazwisko",
+		"klient2_adres",
+		"klient2_pesel",
+		"klient2_telefon",
+		"klient2_email",
+		"podpis_zamawiajacy_2",
+	}
+)
+"""Sześć kluczy drugiego Zamawiającego (ops#167): `zbuduj_kontekst()` je
+zwraca ZAWSZE (puste bez `kontakt2`, zob. jej docstring), ale mają gdzie się
+wydrukować WYŁĄCZNIE w wariantach PODWÓJNYCH (`PV_2`/`ME_2`/`PVME_2`). W
+trzech wariantach JEDNOOSOBOWYCH (`PV`/`ME`/`PVME`) ten sześcioelementowy
+zestaw jest więc wyjątkiem w KAŻDYM z nich, niezależnie od tego, jakie inne
+klucze dany szablon pomija, stąd osobna stała, unijowana do wszystkich
+trzech `WYJATKI_*` poniżej zamiast powtarzana ręcznie."""
+
+WYJATKI_PVME: frozenset[str] = KLUCZE_DRUGIEGO_ZAMAWIAJACEGO
 """PV+ME to superset — ma Załącznik 1a (panele) I Załącznik 1b (bateria), więc
-żaden klucz kontekstu nie jest tu fizycznie nieobecny."""
+poza sześcioma kluczami drugiego Zamawiającego (ten szablon jest JEDNO-
+osobowy) żaden klucz kontekstu nie jest tu fizycznie nieobecny."""
 
 WYJATKI_PV: frozenset[str] = frozenset(
 	{
@@ -48,10 +67,11 @@ WYJATKI_PV: frozenset[str] = frozenset(
 		"bateria_pojemnosc_lacznie_kwh",
 		"bateria_gwarancja_lat",
 	}
-)
+) | KLUCZE_DRUGIEGO_ZAMAWIAJACEGO
 """Szablon PV (`umowa_pv.pdf`) nie ma Załącznika dotyczącego magazynu energii —
 te sześć kluczy `bateria_*` nie ma więc gdzie się wydrukować (zob. docstring
-`MAPA_PV` w `crm/volteo_umowa_mapa_pv.py`)."""
+`MAPA_PV` w `crm/volteo_umowa_mapa_pv.py`), plus sześć kluczy drugiego
+Zamawiającego, bo ten szablon jest JEDNOosobowy (`PV_2` istnieje osobno)."""
 
 WYJATKI_ME: frozenset[str] = frozenset(
 	{
@@ -75,17 +95,29 @@ WYJATKI_ME: frozenset[str] = frozenset(
 		"kabel_mb",
 		"kabel_nie",
 	}
-)
+) | KLUCZE_DRUGIEGO_ZAMAWIAJACEGO
 """Szablon ME (`umowa_me.pdf`) opisuje sprzedaż/montaż magazynu energii BEZ
 fotowoltaiki — nie ma sekcji paneli/inwertera-do-PV/montażu dachowego/instalacji
 odgromowej/ppoż/przekopu/dodatkowego kabla (te elementy montażowe dotyczą
 wyłącznie instalacji PV), więc żaden z tych 19 kluczy nie ma gdzie się
-wydrukować (zob. docstring `MAPA_ME` w `crm/volteo_umowa_mapa_me.py`)."""
+wydrukować (zob. docstring `MAPA_ME` w `crm/volteo_umowa_mapa_me.py`), plus
+sześć kluczy drugiego Zamawiającego, bo ten szablon jest JEDNOosobowy (`ME_2`
+istnieje osobno)."""
 
 WYJATKI_BRAK_POZYCJI_WG_SZABLONU: dict[str, frozenset[str]] = {
 	"PVME": WYJATKI_PVME,
 	"PV": WYJATKI_PV,
 	"ME": WYJATKI_ME,
+	# Warianty PODWÓJNE (ops#167) mają STRUKTURALNIE ten sam zestaw
+	# załączników co ich odpowiednik jednoosobowy (drugi Zamawiający dokłada
+	# pozycje, nie zmienia jakie produkty/sekcje szablon opisuje), te same
+	# wyjątki co dla kodu bazowego, MINUS sześć kluczy drugiego Zamawiającego:
+	# w przeciwieństwie do wariantu jednoosobowego, mapa podwójna MA dla nich
+	# pozycję (to właśnie różnica między tymi dwoma wariantami), więc tu nie
+	# są wyjątkiem.
+	"PV_2": WYJATKI_PV - KLUCZE_DRUGIEGO_ZAMAWIAJACEGO,
+	"PVME_2": WYJATKI_PVME - KLUCZE_DRUGIEGO_ZAMAWIAJACEGO,
+	"ME_2": WYJATKI_ME - KLUCZE_DRUGIEGO_ZAMAWIAJACEGO,
 }
 
 # ---------------------------------------------------------------------------
@@ -94,8 +126,20 @@ WYJATKI_BRAK_POZYCJI_WG_SZABLONU: dict[str, frozenset[str]] = {
 # (`crm/volteo_umowa_mapa*.py`, sekcja „strony bez pozycji”/bloki podpisów).
 # ---------------------------------------------------------------------------
 
-_PELNOMOCNICTWO_IDX: dict[str, int] = {"PVME": 17, "PV": 13, "ME": 13}
-"""Ostatni załącznik (Pełnomocnictwo OSD) każdego szablonu — jedyna strona z
+_PELNOMOCNICTWO_IDX: dict[str, int] = {
+	"PVME": 17,
+	"PV": 13,
+	"ME": 13,
+	# Warianty PODWÓJNE (ops#167): to jest PIERWSZE Pełnomocnictwo (klient 1,
+	# `klient_*`/`podpis_zamawiajacy` bez `_2`), DRUGIE Pełnomocnictwo (klient
+	# 2) leży o jedną stronę dalej, ostatnia strona każdego wariantu
+	# podwójnego (zob. `_PELNOMOCNICTWO_2_IDX_PODWOJNE` niżej, `TestMapyPodwojne`).
+	"PV_2": 13,
+	"ME_2": 13,
+	"PVME_2": 18,
+}
+"""Pierwszy załącznik Pełnomocnictwa OSD (klient 1) każdego szablonu: jedyna
+strona (obok jego bliźniaczej pary dla klienta 2 w wariantach podwójnych) z
 linią podpisu WYŁĄCZNIE Zamawiającego (Mocodawcy), bez Wykonawcy."""
 
 _ZAKAZANE_STRONY_PROTOKOLOW: dict[str, frozenset[int]] = {
@@ -108,21 +152,42 @@ _ZAKAZANE_STRONY_PROTOKOLOW: dict[str, frozenset[int]] = {
 	# oba szablony mają tylko jeden produkt do odebrania.
 	"PV": frozenset(range(9, 13)),
 	"ME": frozenset(range(9, 13)),
+	# Warianty PODWÓJNE (ops#167): drugi blok komparycji na stronie 1 przesuwa
+	# treść w dół, więc te same sekcje (pouczenie o odstąpieniu, formularz,
+	# protokoły) wypadają o jedną stronę dalej niż w wariancie jednoosobowym
+	# (zmierzone bezpośrednio z komentarzy `crm/volteo_umowa_mapa_*2.py`).
+	"PV_2": frozenset(range(8, 13)),
+	"ME_2": frozenset(range(8, 13)),
+	"PVME_2": frozenset(range(10, 18)),
 }
 """Strony formularza odstąpienia i protokołów odbioru — generator nie ma
 prawa wydrukować tam żadnego podpisu z góry, bo poświadczałoby to coś, co się
 jeszcze nie wydarzyło (decyzja produktowa, zob. docstringi map)."""
 
-_ZALACZNIK_2_3_IDX: dict[str, int] = {"PVME": 6, "PV": 5, "ME": 5}
+_ZALACZNIK_2_3_IDX: dict[str, int] = {
+	"PVME": 6,
+	"PV": 5,
+	"ME": 5,
+	"PV_2": 5,
+	"ME_2": 5,
+	"PVME_2": 7,
+}
 """Strona, na której razem leżą Załącznik nr 2 (zgody) i Załącznik nr 3
 (oświadczenie o realizacji przed odstąpieniem) — obie mają WŁASNĄ, osobną
 linię podpisu Zamawiającego (bez Wykonawcy), stąd dwie różne pozycje tego
-samego klucza na jednej stronie."""
+samego klucza na jednej stronie (w wariantach podwójnych: cztery, po dwie
+na osobę)."""
 
 _STRONY_ZAMAWIAJACY_OCZEKIWANE: dict[str, frozenset[int]] = {
 	"PVME": frozenset({3, 4, 5, 6, 17}),
 	"PV": frozenset({3, 4, 5, 13}),
 	"ME": frozenset({3, 4, 5, 13}),
+	# Warianty PODWÓJNE (ops#167): strony `podpis_zamawiajacy` (osoba 1, BEZ
+	# `_2`); zob. `_STRONY_ZAMAWIAJACY_2_OCZEKIWANE` (`TestMapyPodwojne`) dla
+	# osoby 2.
+	"PV_2": frozenset({3, 4, 5, 13}),
+	"ME_2": frozenset({3, 4, 5, 13}),
+	"PVME_2": frozenset({3, 5, 6, 7, 18}),
 }
 """Strony z co najmniej jedną pozycją `podpis_zamawiajacy`: umowa główna,
 Załącznik(i) montażowy(e), Załącznik 2/3 (zgody), Pełnomocnictwo."""
@@ -131,6 +196,9 @@ _STRONY_WYKONAWCA_OCZEKIWANE: dict[str, frozenset[int]] = {
 	"PVME": frozenset({3, 4, 5}),
 	"PV": frozenset({3, 4}),
 	"ME": frozenset({3, 4}),
+	"PV_2": frozenset({3, 4}),
+	"ME_2": frozenset({3, 4}),
+	"PVME_2": frozenset({3, 5, 6}),
 }
 """Strony z co najmniej jedną pozycją `podpis_wykonawca`: umowa główna i
 Załącznik(i) montażowy(e) — NIGDY Załącznik 2/3 (jednostronne oświadczenia
@@ -140,16 +208,33 @@ _KLIENT_IMIE_NAZWISKO_STRONY: dict[str, frozenset[int]] = {
 	"PVME": frozenset({0, 17}),
 	"PV": frozenset({0, 13}),
 	"ME": frozenset({0, 13}),
+	"PV_2": frozenset({0, 13}),
+	"ME_2": frozenset({0, 13}),
+	"PVME_2": frozenset({0, 18}),
 }
 """Imię i nazwisko klienta drukuje się w komparycji (pierwsza strona) i w
-Pełnomocnictwie (ostatnia) — protokoły odbioru od b44 są celowo puste, więc
-dane klienta się tam już NIE powtarzają, w żadnym z trzech szablonów."""
+Pełnomocnictwie (ostatnia dla wariantu jednoosobowego, przedostatnia dla
+wariantu podwójnego, klient 1 nie ma swojego Pełnomocnictwa na SAMYM końcu,
+to miejsce zajmuje Pełnomocnictwo klienta 2), protokoły odbioru od b44 są
+celowo puste, więc dane klienta się tam już NIE powtarzają, w żadnym z
+sześciu szablonów."""
 
-_RODO_STRONA_IDX: dict[str, int] = {"PVME": 8, "PV": 7, "ME": 7}
+_RODO_STRONA_IDX: dict[str, int] = {
+	"PVME": 8,
+	"PV": 7,
+	"ME": 7,
+	"PV_2": 7,
+	"ME_2": 7,
+	"PVME_2": 9,
+}
 """Strona z linią podpisu klienta na końcu Załącznika RODO
 (`rodo_data_imie_nazwisko`) — w PVME to strona 9 (Załącznik 4 zajmuje dwie
 strony, 8 i 9), w PV/ME to strona 8 (Załącznik 4 tam mieści się inaczej, więc
-linia podpisu wypada o jedną stronę wcześniej)."""
+linia podpisu wypada o jedną stronę wcześniej). Warianty podwójne: ten sam
+klucz drukuje się TYLKO dla osoby 1 (zob. docstring `zbuduj_kontekst` w
+`crm/volteo_umowa_pdf.py`), PV_2/ME_2 wypadają na tej samej stronie co ich
+odpowiednik jednoosobowy, PVME_2 o jedną stronę dalej niż PVME (drugi blok
+komparycji przesuwa całą resztę treści o jedną stronę)."""
 
 
 def _klucze_mapy(szablon: Any) -> frozenset[str]:

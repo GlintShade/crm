@@ -21,9 +21,10 @@ Gdy żaden kandydat nie istnieje, testy renderujące są pomijane (`skipTest`) �
 nie fałszują wyniku podstawianiem niewalidnych bajtów jako TTF.
 
 Od zadania „umowa-szablony-typy” `zloz_umowe()`/`sciezka_wbudowanego_szablonu()`
-wymagają jawnego kodu rodzaju umowy (`"PV"`/`"PVME"`/`"ME"`) — testy end-to-end
-pętlą się po `crm.volteo_umowa_render.SZABLONY` (rejestrowi, nie po nazwach
-funkcji poszczególnych map), tak jak `crm/test_volteo_umowa_mapa.py`.
+wymagają jawnego kodu rodzaju umowy (`"PV"`/`"PVME"`/`"ME"`, plus warianty
+podwójne `"PV_2"`/`"PVME_2"`/`"ME_2"` od ops#167), testy end-to-end pętlą się
+po `crm.volteo_umowa_render.SZABLONY` (rejestrowi, nie po nazwach funkcji
+poszczególnych map), tak jak `crm/test_volteo_umowa_mapa.py`.
 """
 
 import hashlib
@@ -187,6 +188,22 @@ def _stale(**nadpisania: Any) -> dict[str, Any]:
 	return baza
 
 
+def _kontakt2(**nadpisania: Any) -> dict[str, Any]:
+	"""Drugi Zamawiający (ops#167): ten sam kształt kluczy co `_kontakt()`.
+	Dane CELOWO różne od `_kontakt()` (osoba 1) na każdym polu, testy "nie
+	przecieka do drugiej osoby"/"nie przecieka z drugiej osoby" (niżej) muszą
+	umieć odróżnić, czyje dane trafiły na wydruk."""
+	baza: dict[str, Any] = {
+		"first_name": "Anna",
+		"last_name": "Nowak-Wiśniewska",
+		"custom_pesel": "91020254321",
+		"mobile_no": "600700800",
+		"email": "anna@example.com",
+	}
+	baza.update(nadpisania)
+	return baza
+
+
 def _pelny_kontekst() -> dict[str, Any]:
 	"""Kontekst z WSZYSTKIMI polami wypełnionymi — żaden klucz nie wypada jako
 	pusty z powodu reguły "zero/brak = pustka" w `zbuduj_kontekst()`. Ten sam
@@ -194,6 +211,22 @@ def _pelny_kontekst() -> dict[str, Any]:
 	zna pojęcia "szablon", zawsze zwraca pełny zestaw kluczy."""
 	return zbuduj_kontekst(
 		_umowa(), _deal(), _kontakt(), _zestaw(), _komponenty(), _stale(), date(2026, 8, 6)
+	)
+
+
+def _pelny_kontekst_podwojny() -> dict[str, Any]:
+	"""Jak `_pelny_kontekst()`, ale z `kontakt2`: dla testów wariantów
+	PODWÓJNYCH (ops#167): sześć kluczy `klient2_*`/`podpis_zamawiajacy_2` też
+	wypełnione."""
+	return zbuduj_kontekst(
+		_umowa(),
+		_deal(),
+		_kontakt(),
+		_zestaw(),
+		_komponenty(),
+		_stale(),
+		date(2026, 8, 6),
+		kontakt2=_kontakt2(),
 	)
 
 
@@ -539,8 +572,119 @@ class TestZlozUmowePelnyPipeline(unittest.TestCase):
 					# Szablon ME nie ma sekcji fotowoltaicznej — wartość panelu
 					# nie ma gdzie się wydrukować, nigdzie na żadnej stronie.
 					self.assertNotIn(kontekst["panel_producent_model"], pelny_tekst)
+				elif kod == "PV_2":
+					# Warianty PODWÓJNE (ops#167): ten wspólny `kontekst` nie ma
+					# `kontakt2` (klient2_* puste), więc te asercje sprawdzają
+					# WYŁĄCZNIE, że osoba 1 nadal renderuje się poprawnie na
+					# szablonie z dodatkowymi pozycjami drugiej osoby,
+					# thorougher assercje dla `kontakt2` wypełnionym są w
+					# `TestZlozUmowePodwojnaPelnyPipeline` niżej.
+					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[0])
+					self.assertIn(
+						kontekst["wynagrodzenie_brutto"].replace("\xa0", " "),
+						tekst_wg_strony[1].replace("\xa0", " "),
+					)
+					self.assertIn(kontekst["panel_producent_model"], tekst_wg_strony[4])
+					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[13])
+					self.assertNotIn(kontekst["bateria_producent_model"], pelny_tekst)
+				elif kod == "ME_2":
+					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[0])
+					self.assertIn(
+						kontekst["wynagrodzenie_brutto"].replace("\xa0", " "),
+						tekst_wg_strony[1].replace("\xa0", " "),
+					)
+					self.assertIn(kontekst["bateria_producent_model"], tekst_wg_strony[4])
+					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[13])
+					self.assertNotIn(kontekst["panel_producent_model"], pelny_tekst)
+				elif kod == "PVME_2":
+					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[0])
+					self.assertIn(
+						kontekst["wynagrodzenie_brutto"].replace("\xa0", " "),
+						tekst_wg_strony[1].replace("\xa0", " "),
+					)
+					self.assertIn(kontekst["panel_producent_model"], tekst_wg_strony[5])
+					self.assertIn(kontekst["bateria_producent_model"], tekst_wg_strony[6])
+					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[18])
 				else:
 					self.fail(f"Nieoczekiwany kod w rejestrze SZABLONY: {kod!r}")
+
+
+class TestZlozUmowePodwojnaPelnyPipeline(unittest.TestCase):
+	"""Testy end-to-end (ops#167) przez publiczne `zloz_umowe()`, na prawdziwych
+	szablonach PODWÓJNYCH z `crm/szablony/` (`PV_2`/`ME_2`/`PVME_2`), z pełnym
+	kontekstem zawierającym `kontakt2` (`_pelny_kontekst_podwojny()`). Sprawdza
+	dokładnie to, czego wymaga akceptacja zadania: liczba stron wyniku zgodna z
+	`LICZBA_STRON_*2`, i że bezpiecznik sumy kontrolnej (`_sprawdz_sume_
+	kontrolna`, wołany wewnątrz `zloz_umowe()`) przechodzi, czyli że plik w
+	`crm/szablony/` i mapa w rejestrze `SZABLONY` nadal się zgadzają. Dodatkowo
+	weryfikuje, że dane drugiego Zamawiającego faktycznie trafiają na stronę
+	komparycji i na drugie Pełnomocnictwo (ostatnia strona każdego wariantu)."""
+
+	_KODY_PODWOJNE: tuple[str, ...] = ("PV_2", "ME_2", "PVME_2")
+
+	def setUp(self: "TestZlozUmowePodwojnaPelnyPipeline") -> None:
+		font = _znajdz_font_testowy()
+		if font is None:
+			self.skipTest("Brak lokalnego pliku TTF do testów end-to-end wariantu podwójnego")
+		self._patch_fontu = mock.patch.object(renderer, "_SCIEZKA_LIBERATION", font)
+		self._patch_fontu.start()
+		self.addCleanup(self._patch_fontu.stop)
+
+	def test_a_liczba_stron_zgodna_z_rejestrem_dla_kazdego_wariantu(
+		self: "TestZlozUmowePodwojnaPelnyPipeline",
+	) -> None:
+		kontekst = _pelny_kontekst_podwojny()
+		for kod in self._KODY_PODWOJNE:
+			with self.subTest(kod=kod):
+				szablon = SZABLONY[kod]
+				szablon_bajty = sciezka_wbudowanego_szablonu(kod).read_bytes()
+				# Bezpiecznik sumy kontrolnej jest wołany WEWNĄTRZ zloz_umowe(),
+				# gdyby plik w crm/szablony/ nie zgadzał się z SHA-256 zarejestrowaną
+				# przy SZABLONY[kod], to wywołanie rzuciłoby ValueError tutaj.
+				wynik_bajty = zloz_umowe(kontekst, szablon_bajty, kod)
+				strony = PdfReader(io.BytesIO(wynik_bajty)).pages
+				self.assertEqual(len(strony), szablon.liczba_stron)
+
+	def test_b_dane_drugiego_zamawiajacego_na_komparycji_i_drugim_pelnomocnictwie(
+		self: "TestZlozUmowePodwojnaPelnyPipeline",
+	) -> None:
+		kontekst = _pelny_kontekst_podwojny()
+		for kod in self._KODY_PODWOJNE:
+			with self.subTest(kod=kod):
+				szablon = SZABLONY[kod]
+				szablon_bajty = sciezka_wbudowanego_szablonu(kod).read_bytes()
+				wynik_bajty = zloz_umowe(kontekst, szablon_bajty, kod)
+				strony = PdfReader(io.BytesIO(wynik_bajty)).pages
+				tekst_wg_strony = [strona.extract_text() for strona in strony]
+
+				# Strona 1 (indeks 0): drugi blok komparycji.
+				self.assertIn(kontekst["klient2_pesel"], tekst_wg_strony[0])
+				self.assertIn(kontekst["klient2_imie_nazwisko"], tekst_wg_strony[0])
+				# Osoba 1 nadal na tej samej stronie, niezmieniona.
+				self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[0])
+				self.assertIn(kontekst["klient_imie_nazwisko"], tekst_wg_strony[0])
+
+				# Ostatnia strona: drugie Pełnomocnictwo OSD (klient 2).
+				ostatnia_idx = szablon.liczba_stron - 1
+				self.assertIn(kontekst["klient2_pesel"], tekst_wg_strony[ostatnia_idx])
+				self.assertIn(kontekst["klient2_imie_nazwisko"], tekst_wg_strony[ostatnia_idx])
+				self.assertIn(kontekst["podpis_zamawiajacy_2"], tekst_wg_strony[ostatnia_idx])
+
+	def test_c_umowa_pojedyncza_bez_kontakt2_nie_drukuje_danych_drugiej_osoby(
+		self: "TestZlozUmowePodwojnaPelnyPipeline",
+	) -> None:
+		# Regresja przeciw wyciekowi danych osoby 2 na szablon PODWÓJNY, gdy
+		# `kontakt2` nie jest podany (formularz bez drugiego Zamawiającego, ale
+		# ktoś pomyłkowo wybrał szablon podwójny), klucze wychodzą puste z
+		# `zbuduj_kontekst()`, więc nic się nie rysuje.
+		kontekst_pojedynczy = _pelny_kontekst()
+		for kod in self._KODY_PODWOJNE:
+			with self.subTest(kod=kod):
+				szablon_bajty = sciezka_wbudowanego_szablonu(kod).read_bytes()
+				wynik_bajty = zloz_umowe(kontekst_pojedynczy, szablon_bajty, kod)
+				pelny_tekst = "\n".join(strona.extract_text() for strona in PdfReader(io.BytesIO(wynik_bajty)).pages)
+				self.assertNotIn(_kontakt2()["custom_pesel"], pelny_tekst)
+				self.assertNotIn(_kontakt2()["last_name"], pelny_tekst)
 
 
 if __name__ == "__main__":

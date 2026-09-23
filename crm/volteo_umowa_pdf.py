@@ -104,12 +104,37 @@ def zbuduj_kontekst(
 	komponenty: list[dict[str, Any]],
 	stale: dict[str, Any],
 	dzis: date,
+	kontakt2: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
 	"""Buduje kontekst do wstawienia w szablon PDF-u umowy (§1-§7, Zał. 1a/1b/2).
 
 	Nie mutuje żadnego z argumentów — wszystkie zwracane wartości są nowymi
 	stringami/boolami wyliczonymi z wejścia. Klucze i ich znaczenie są
 	zdefiniowane w kontrakcie `UMOWA-PDF-KONTRAKT.md`; nazwy są wiążące.
+
+	`kontakt2` (ops#167) to dane drugiego Zamawiającego, tym samym kształtem
+	kluczy co `kontakt` (`first_name`/`last_name`/`custom_pesel`/`mobile_no`/
+	`email`, kształt zwracany przez `_dane_kontaktu()` w `crm/api/umowa.py`),
+	dla umowy PODWÓJNEJ (`Volteo Umowa.drugi_zamawiajacy` ustawiony). Sześć
+	kluczy `klient2_*`/`podpis_zamawiajacy_2` jest zwracanych ZAWSZE, niezależnie
+	od tego, czy `kontakt2` jest podany: `None`/pusty daje sześć pustych
+	stringów, nigdy brakujące klucze. Dzięki temu kontrakt mapa-kontekst
+	(`crm/test_volteo_umowa_mapa.py`) zostaje totalny: `zbuduj_kontekst()`
+	zawsze zwraca ten sam zestaw kluczy, niezależnie od tego, dla jakiego
+	szablonu (pojedynczego czy podwójnego) wynik faktycznie trafi do
+	`zloz_umowe()`. To mapa danego szablonu decyduje, które klucze mają gdzie
+	wylądować, sama funkcja "nie zna" pojęcia szablonu.
+
+	Adres drugiego Zamawiającego (`klient2_adres`) jest CELOWO tą samą wartością
+	co `klient_adres` pierwszego: `Volteo Umowa` ma jeden, wspólny zestaw pól
+	adresu zamieszkania (`adres_zam_*`), nie osobny dla każdej osoby (typowy
+	przypadek: małżonkowie pod tym samym adresem). Gdyby to kiedyś przestało
+	być prawdą (osobny adres drugiego Zamawiającego), ten moduł będzie musiał
+	dostać osobny zestaw pól wejściowych, dziś ich nie ma.
+
+	`rodo_data_imie_nazwisko` (linia podpisu na końcu Załącznika RODO) zostaje
+	WYŁĄCZNIE dla osoby pierwszej: każda mapa podwójna ma na to jeden klucz,
+	nie dwa (zob. `crm/volteo_umowa_mapa_*2.py`).
 	"""
 	falownik_nazwa = deal.get("custom_falownik")
 	falownik_komponent = _znajdz_komponent(komponenty, "Falownik", falownik_nazwa)
@@ -191,6 +216,12 @@ def zbuduj_kontekst(
 	kabel_nie_wybrano = _rowna(kabel_wybor, "Nie")
 
 	klient_imie_nazwisko = _polacz(kontakt.get("first_name"), kontakt.get("last_name"))
+
+	# Drugi Zamawiający (ops#167): sześć kluczy zawsze obecne, puste gdy
+	# `kontakt2` nie jest podany (umowa pojedyncza). `klient2_adres` reużywa
+	# `klient_adres` osoby pierwszej, zob. docstring funkcji wyżej.
+	kontakt2_ = kontakt2 or {}
+	klient2_imie_nazwisko = _polacz(kontakt2_.get("first_name"), kontakt2_.get("last_name"))
 
 	return {
 		# Strony i nagłówek
@@ -306,6 +337,17 @@ def zbuduj_kontekst(
 		# `.upper()` poprawnie zamienia polskie znaki (np. "ł"→"Ł").
 		"podpis_zamawiajacy": klient_imie_nazwisko.upper(),
 		"podpis_wykonawca": "PROENERGY",
+		# Drugi Zamawiający (ops#167, umowa PODWÓJNA): te sześć kluczy trafiają
+		# WYŁĄCZNIE do szablonów `PV_2`/`PVME_2`/`ME_2` (mapy jednoosobowe nie
+		# mają dla nich żadnej pozycji), ale są zwracane zawsze, puste gdy
+		# `kontakt2` nie jest podany. `klient2_adres` = `klient_adres` osoby
+		# pierwszej (jeden wspólny adres zamieszkania na formularzu).
+		"klient2_imie_nazwisko": klient2_imie_nazwisko,
+		"klient2_adres": klient_adres,
+		"klient2_pesel": _tekst(kontakt2_.get("custom_pesel")),
+		"klient2_telefon": _tekst(kontakt2_.get("mobile_no")),
+		"klient2_email": _tekst(kontakt2_.get("email")),
+		"podpis_zamawiajacy_2": klient2_imie_nazwisko.upper(),
 		# Linia podpisu klienta na str. 9 (koniec Załącznika nr 4 - klauzula
 		# RODO): "data i podpis" pod kreską — pre-drukowana data zawarcia umowy
 		# + imię i nazwisko klienta wielkimi literami, decyzja produktowa

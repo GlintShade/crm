@@ -81,6 +81,19 @@ def _kontakt(**nadpisania: Any) -> dict[str, Any]:
 	return baza
 
 
+def _kontakt2(**nadpisania: Any) -> dict[str, Any]:
+	"""Drugi Zamawiający (ops#167): ten sam kształt kluczy co `_kontakt()`."""
+	baza: dict[str, Any] = {
+		"first_name": "Anna",
+		"last_name": "Kowalska",
+		"custom_pesel": "91020254321",
+		"mobile_no": "600700800",
+		"email": "anna@example.com",
+	}
+	baza.update(nadpisania)
+	return baza
+
+
 def _zestaw() -> list[dict[str, Any]]:
 	return [
 		{"typ": "Falownik", "nazwa": "Sigenergy TP2 6 kW", "ilosc": 1},
@@ -1232,6 +1245,111 @@ class TestPodpisy(unittest.TestCase):
 					_umowa(), _deal(), kontakt, _zestaw(), _komponenty(), _stale(), _DZIS
 				)
 				self.assertEqual(kontekst["podpis_wykonawca"], "PROENERGY")
+
+
+class TestDrugiZamawiajacy(unittest.TestCase):
+	"""ops#167: `kontakt2` (opcjonalny) dodaje sześć kluczy `klient2_*`/
+	`podpis_zamawiajacy_2` do kontekstu, zawsze obecnych, puste bez `kontakt2`."""
+
+	def test_a_bez_kontakt2_imie_pesel_telefon_email_podpis_puste(self: "TestDrugiZamawiajacy") -> None:
+		# `klient2_adres` NIE jest tu sprawdzany: reużywa `klient_adres` osoby
+		# pierwszej niezależnie od `kontakt2` (jeden wspólny adres na
+		# formularzu, zob. test_g niżej), więc bywa niepusty nawet bez drugiej
+		# osoby.
+		kontekst = _kontekst()
+		self.assertEqual(kontekst["klient2_imie_nazwisko"], "")
+		self.assertEqual(kontekst["klient2_pesel"], "")
+		self.assertEqual(kontekst["klient2_telefon"], "")
+		self.assertEqual(kontekst["klient2_email"], "")
+		self.assertEqual(kontekst["podpis_zamawiajacy_2"], "")
+
+	def test_b_kontakt2_none_jawnie_szesc_kluczy_obecne(self: "TestDrugiZamawiajacy") -> None:
+		kontekst = zbuduj_kontekst(
+			_umowa(), _deal(), _kontakt(), _zestaw(), _komponenty(), _stale(), _DZIS, kontakt2=None
+		)
+		for klucz in (
+			"klient2_imie_nazwisko",
+			"klient2_adres",
+			"klient2_pesel",
+			"klient2_telefon",
+			"klient2_email",
+			"podpis_zamawiajacy_2",
+		):
+			self.assertIn(klucz, kontekst)
+		self.assertEqual(kontekst["klient2_imie_nazwisko"], "")
+		self.assertEqual(kontekst["podpis_zamawiajacy_2"], "")
+
+	def test_c_kontakt2_pusty_dict_imie_pesel_podpis_puste(self: "TestDrugiZamawiajacy") -> None:
+		kontekst = zbuduj_kontekst(
+			_umowa(), _deal(), _kontakt(), _zestaw(), _komponenty(), _stale(), _DZIS, kontakt2={}
+		)
+		self.assertEqual(kontekst["klient2_imie_nazwisko"], "")
+		self.assertEqual(kontekst["klient2_pesel"], "")
+		self.assertEqual(kontekst["podpis_zamawiajacy_2"], "")
+
+	def test_d_z_kontakt2_imie_nazwisko_polaczone(self: "TestDrugiZamawiajacy") -> None:
+		kontekst = zbuduj_kontekst(
+			_umowa(), _deal(), _kontakt(), _zestaw(), _komponenty(), _stale(), _DZIS, kontakt2=_kontakt2()
+		)
+		self.assertEqual(kontekst["klient2_imie_nazwisko"], "Anna Kowalska")
+
+	def test_e_z_kontakt2_pesel_telefon_email(self: "TestDrugiZamawiajacy") -> None:
+		kontekst = zbuduj_kontekst(
+			_umowa(), _deal(), _kontakt(), _zestaw(), _komponenty(), _stale(), _DZIS, kontakt2=_kontakt2()
+		)
+		self.assertEqual(kontekst["klient2_pesel"], "91020254321")
+		self.assertEqual(kontekst["klient2_telefon"], "600700800")
+		self.assertEqual(kontekst["klient2_email"], "anna@example.com")
+
+	def test_f_podpis_zamawiajacy_2_wielkimi_literami_polskie_znaki(self: "TestDrugiZamawiajacy") -> None:
+		kontakt2 = _kontakt2(first_name="Łukasz", last_name="Żółć")
+		kontekst = zbuduj_kontekst(
+			_umowa(), _deal(), _kontakt(), _zestaw(), _komponenty(), _stale(), _DZIS, kontakt2=kontakt2
+		)
+		self.assertEqual(kontekst["podpis_zamawiajacy_2"], "ŁUKASZ ŻÓŁĆ")
+
+	def test_g_klient2_adres_taki_sam_jak_klient_adres(self: "TestDrugiZamawiajacy") -> None:
+		# `Volteo Umowa` ma jeden wspólny zestaw pól adresu zamieszkania,
+		# `klient2_adres` reużywa dokładnie tę samą złożoną wartość co
+		# `klient_adres` osoby pierwszej (zob. docstring `zbuduj_kontekst`).
+		kontekst = zbuduj_kontekst(
+			_umowa(), _deal(), _kontakt(), _zestaw(), _komponenty(), _stale(), _DZIS, kontakt2=_kontakt2()
+		)
+		self.assertEqual(kontekst["klient2_adres"], kontekst["klient_adres"])
+		self.assertNotEqual(kontekst["klient2_adres"], "")
+
+	def test_h_kontakt2_nie_wplywa_na_klucze_osoby_pierwszej(self: "TestDrugiZamawiajacy") -> None:
+		bez_drugiego = _kontekst()
+		z_drugim = zbuduj_kontekst(
+			_umowa(), _deal(), _kontakt(), _zestaw(), _komponenty(), _stale(), _DZIS, kontakt2=_kontakt2()
+		)
+		self.assertEqual(bez_drugiego["klient_imie_nazwisko"], z_drugim["klient_imie_nazwisko"])
+		self.assertEqual(bez_drugiego["podpis_zamawiajacy"], z_drugim["podpis_zamawiajacy"])
+		self.assertEqual(bez_drugiego["klient_pesel"], z_drugim["klient_pesel"])
+
+	def test_i_rodo_data_imie_nazwisko_tylko_osoba_pierwsza(self: "TestDrugiZamawiajacy") -> None:
+		# rodo_data_imie_nazwisko nie zmienia się przy dodaniu kontakt2: mapa
+		# ma jeden taki klucz, nie dwa (zob. docstring `zbuduj_kontekst`).
+		bez_drugiego = _kontekst()
+		z_drugim = zbuduj_kontekst(
+			_umowa(), _deal(), _kontakt(), _zestaw(), _komponenty(), _stale(), _DZIS, kontakt2=_kontakt2()
+		)
+		self.assertEqual(bez_drugiego["rodo_data_imie_nazwisko"], z_drugim["rodo_data_imie_nazwisko"])
+		self.assertNotIn("Anna", z_drugim["rodo_data_imie_nazwisko"])
+
+	def test_j_nie_mutuje_kontakt2(self: "TestDrugiZamawiajacy") -> None:
+		kontakt2 = _kontakt2()
+		kopia = copy.deepcopy(kontakt2)
+		zbuduj_kontekst(_umowa(), _deal(), _kontakt(), _zestaw(), _komponenty(), _stale(), _DZIS, kontakt2)
+		self.assertEqual(kontakt2, kopia)
+
+	def test_k_brak_nazwiska_drugiego_pusty_string(self: "TestDrugiZamawiajacy") -> None:
+		kontakt2 = _kontakt2(first_name="", last_name="")
+		kontekst = zbuduj_kontekst(
+			_umowa(), _deal(), _kontakt(), _zestaw(), _komponenty(), _stale(), _DZIS, kontakt2=kontakt2
+		)
+		self.assertEqual(kontekst["podpis_zamawiajacy_2"], "")
+		self.assertEqual(kontekst["klient2_imie_nazwisko"], "")
 
 
 if __name__ == "__main__":

@@ -14,6 +14,7 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
 from crm.integrations.autenti.logika import SEND_BLOCKED_STATUSES
+from crm.volteo_naming import code_for
 
 KONSTRUKCJA_MONTAZ: dict[str, tuple[str, str | None]] = {
 	"Dach skośny - blacha": ("Dach", "Blacha"),
@@ -287,6 +288,38 @@ def czy_propagowac_zgody(autenti_status: str | None) -> bool:
 	if not autenti_status:
 		return True
 	return autenti_status not in SEND_BLOCKED_STATUSES
+
+
+def kod_szablonu(rodzaj_umowy: str | None, podwojna: bool) -> str:
+	"""Zwraca kod wbudowanego szablonu PDF-u umowy (klucz w
+	`crm.volteo_umowa_render.SZABLONY`) dla danego rodzaju umowy i obecności
+	drugiego Zamawiającego (ops#167).
+
+	Kod bazowy (`PV`/`PVME`/`ME`/`CP`/`XX`) jest DOKŁADNIE tym samym, co
+	zwraca `crm.volteo_naming.code_for`. Ta funkcja świadomie go reużywa,
+	zamiast duplikować mapowanie `custom_rodzaj_umowy` na kod, żeby nazewnictwo
+	umowy (`PRO/<KOD>/<RR>/<NNNN>`) i wybór szablonu PDF-u nigdy nie mogły się
+	rozjechać. `podwojna=True` dokleja `"_2"` (np. `"PV"` -> `"PV_2"`), dokładnie
+	te trzy klucze, pod którymi warianty dwuosobowe są zarejestrowane w
+	`SZABLONY` (`PV_2`/`PVME_2`/`ME_2`). `podwojna=False` zwraca kod bazowy bez
+	żadnej zmiany: ŚCIEŻKA JEDNOOSOBOWA JEST NIEZMIENIONA.
+
+	`CP` i `XX` nie mają wpisu w `SZABLONY` (ani w wariancie pojedynczym, ani
+	podwójnym). Ta funkcja tego nie sprawdza, to rola wołającego
+	(`crm/api/umowa.py`), tak jak już dziś sprawdza to dla kodu bazowego.
+	"""
+	kod = code_for(rodzaj_umowy)
+	return f"{kod}_2" if podwojna else kod
+
+
+def czy_umowa_podwojna(umowa: dict[str, Any]) -> bool:
+	"""Czy umowa ma drugiego Zamawiającego (ops#167/#168): bool z pola
+	`drugi_zamawiajacy` (Link do `Contact`, ustawiane przez `crm/api/umowa.py`).
+
+	Pusty string i `None` dają `False`; dowolna niepusta nazwa dokumentu daje
+	`True`. Nie mutuje `umowa`.
+	"""
+	return bool(umowa.get("drugi_zamawiajacy"))
 
 
 def kontakty_do_zgod(podstawowy: str | None, drugi: str | None) -> list[str]:
