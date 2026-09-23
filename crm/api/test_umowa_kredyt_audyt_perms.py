@@ -54,6 +54,23 @@ gate (missing doctype/record) with something other than `frappe.PermissionError`
 that is expected and is exactly what the "authorized path is reached" tests
 assert (anything but `frappe.PermissionError` proves the gate itself let the
 call through).
+
+ops#158 changed `crm.api.kredyt.volteo_kredyt_pdf`'s signature from
+`(deal: str)` to `(kredyt: str)`, re-keyed to the `Volteo Kredyt` RECORD name
+instead of the deal name (a deal can now carry more than one credit form).
+The function must load that record first to learn which deal to gate, so the
+deal permission check can no longer run before any database lookup the way it
+used to. On this bare test site `Volteo Kredyt` is not a real doctype (see
+above), so a real record lookup would fail with a database error before ever
+reaching the CRM Deal gate, for BOTH the deny and the reach test, defeating
+the isolation this test class is built on. The two kredyt cases below patch
+`crm.api.kredyt._kredyt_po_nazwie` to return a minimal stand-in object
+carrying only `.deal`, bypassing the record lookup while still exercising the
+real, un-mocked `_sprawdz_dostep_do_szansy` gate right after it -- the same
+narrow-mock discipline `_deal_permission_forced` already uses for
+`frappe.has_permission`. This part of the file could not be run locally
+(`frappe` is not installed on this machine); the rewrite is a best-effort
+static update and should get a bench-side pass before being trusted.
 """
 
 from contextlib import contextmanager
@@ -160,13 +177,19 @@ class TestUmowaKredytAudytWriteGates(FrappeTestCase):
 			frappe.set_user("Administrator")
 
 	# -- crm.api.kredyt.volteo_kredyt_pdf ------------------------------------
+	# See the module docstring (ops#158) for why these two patch
+	# `_kredyt_po_nazwie` instead of calling `volteo_kredyt_pdf` with a bare
+	# deal name the way the umowa/audyt cases above do.
 
 	def test_kredyt_pdf_denies_read_only_user(self):
 		deal = _make_deal(OWNER)
 		try:
 			frappe.set_user(READONLY)
-			with _deal_permission_forced({"read"}):
-				self.assertRaises(frappe.PermissionError, volteo_kredyt_pdf, deal.name)
+			with (
+				_deal_permission_forced({"read"}),
+				mock.patch("crm.api.kredyt._kredyt_po_nazwie", return_value=_kredyt_stub(deal.name)),
+			):
+				self.assertRaises(frappe.PermissionError, volteo_kredyt_pdf, "stub-kredyt")
 		finally:
 			frappe.set_user("Administrator")
 
@@ -174,8 +197,11 @@ class TestUmowaKredytAudytWriteGates(FrappeTestCase):
 		deal = _make_deal(OWNER)
 		try:
 			frappe.set_user(OWNER)
-			with _deal_permission_forced({"read", "write"}):
-				self._assert_gate_reached_without_permission_error(volteo_kredyt_pdf, deal.name)
+			with (
+				_deal_permission_forced({"read", "write"}),
+				mock.patch("crm.api.kredyt._kredyt_po_nazwie", return_value=_kredyt_stub(deal.name)),
+			):
+				self._assert_gate_reached_without_permission_error(volteo_kredyt_pdf, "stub-kredyt")
 		finally:
 			frappe.set_user("Administrator")
 
@@ -287,3 +313,17 @@ def _make_deal(owner_email):
 	doc.flags.ignore_mandatory = True
 	doc.flags.ignore_links = True
 	return doc.insert(ignore_permissions=True)
+
+
+def _kredyt_stub(deal_name):
+	"""Minimal stand-in for a `Volteo Kredyt` document, carrying only `.deal`
+	and `.name`. See the module docstring (ops#158) for why the two kredyt_pdf
+	gate tests patch `crm.api.kredyt._kredyt_po_nazwie` to return this instead
+	of calling `volteo_kredyt_pdf` against a real record: the doctype does not
+	exist on this bare test site, and the endpoint now has to load the record
+	before it knows which deal to gate, so a real lookup would fail with a
+	database error before either test could reach the permission check it
+	exists to isolate. `frappe._dict` behaves like a plain dict for `.get()`,
+	which is as far into the endpoint body as these tests need to go.
+	"""
+	return frappe._dict({"name": "stub-kredyt", "deal": deal_name})

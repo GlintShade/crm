@@ -11,8 +11,11 @@ frameworka (zapis do dokumentu, whitelisted API) mieszka gdzie indziej — tu
 tylko czyste funkcje.
 """
 
+import re
 from decimal import Decimal, InvalidOperation
 from typing import Any
+
+from crm.integrations.autenti.logika import czy_legacy_kredyt
 
 GRUPY_DOCHODU: dict[str, tuple[str, ...]] = {
 	"praca_wlaczone": (
@@ -416,3 +419,43 @@ def brakujace_dane_wnioskodawcy(kredyt: dict[str, Any]) -> list[str]:
 		for pole in POLA_WNIOSKODAWCY
 		if pole != "wnioskodawca_nr_lokalu" and _jest_puste(kredyt.get(pole))
 	]
+
+
+def pasuje_plik_kredytu(file_name: str, prefiks: str, kredyt_name: str, deal: str) -> bool:
+	"""Czy `file_name` to plik PDF formularza kredytowego wygenerowany DOKŁADNIE dla
+	rekordu `kredyt_name` tej szansy, nie dla żadnego INNEGO formularza `Volteo
+	Kredyt` tej samej szansy (ops#158, sprzątanie starych PDF-ów po wielu
+	formularzach na szansę wprowadzonych przez ops#159).
+
+	Pułapka, dla której ta funkcja istnieje: `prefiks` oczekiwany jest tutaj
+	jako BAZOWY prefiks szansy (`prefiks_pliku_kredytu(deal, deal)`, czyli
+	wariant legacy bez żadnego sufiksu rekordu), ten sam string, którego
+	wołający używa do pobrania kandydatów z bazy przez `LIKE 'prefiks%.pdf'`.
+	Ten prefiks bazowy jest jednocześnie ścisłym prefiksem STRINGA nazwy pliku
+	KAŻDEGO rodzeństwa tej szansy, także rekordów hashowych (prefiks hashowy to
+	zawsze prefiks bazowy plus doklejony sufiks). Samo dopasowanie LIKE
+	złapałoby więc pliki WSZYSTKICH formularzy tej szansy naraz. Ta funkcja
+	jest drugim, precyzyjnym sitem, wołanym w Pythonie PO takim LIKE:
+
+	- dla rekordu legacy (`czy_legacy_kredyt(deal, kredyt_name)` prawdziwe,
+	  czyli `kredyt_name == deal`) wymaga kształtu BEZ żadnego sufiksu
+	  hashowego: `<prefiks>-YYYYMMDD-HHMMSS.pdf` albo
+	  `<prefiks>-YYYYMMDD-HHMMSS-podpisany.pdf`;
+	- dla rekordu hashowego wymaga kształtu z DOKŁADNIE JEGO WŁASNYM
+	  8-znakowym sufiksem (`kredyt_name[:8]`, literalnie, nie wzorcem
+	  dowolnych znaków alfanumerycznych), nigdy z sufiksem żadnego INNEGO
+	  rekordu tej samej szansy.
+
+	Nigdy nie rzuca; pusty/`None` `file_name` daje `False`.
+	"""
+	if czy_legacy_kredyt(deal, kredyt_name):
+		wzorzec = "^" + re.escape(prefiks) + r"-\d{8}-\d{6}(-podpisany)?\.pdf$"
+	else:
+		wzorzec = (
+			"^"
+			+ re.escape(prefiks)
+			+ "-"
+			+ re.escape(kredyt_name[:8])
+			+ r"-\d{8}-\d{6}(-podpisany)?\.pdf$"
+		)
+	return bool(re.match(wzorzec, file_name or ""))

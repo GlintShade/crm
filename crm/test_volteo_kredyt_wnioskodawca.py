@@ -2,10 +2,12 @@ import copy
 import unittest
 from datetime import date
 
+from crm.integrations.autenti.logika import prefiks_pliku_kredytu
 from crm.volteo_kredyt import (
 	POLA_WNIOSKODAWCY,
 	brakujace_dane_wnioskodawcy,
 	kontakt_z_wnioskodawcy,
+	pasuje_plik_kredytu,
 	prefill_z_wnioskodawcy,
 )
 from crm.volteo_kredyt_pdf import zbuduj_kontekst_kredytu
@@ -241,6 +243,58 @@ class TestIntegracjaZBudujKontekstKredytu(unittest.TestCase):
 		self.assertEqual(kontekst["kod_pocztowy"], "")
 		self.assertEqual(kontekst["miejscowosc"], "")
 
+
+class TestPasujePlikKredytu(unittest.TestCase):
+	_DEAL = "PRO/PV/26/1011"
+
+	def test_a_legacy_wlasny_plik_bez_znacznika_pasuje(self: "TestPasujePlikKredytu") -> None:
+		prefiks = prefiks_pliku_kredytu(self._DEAL, self._DEAL)
+		nazwa = f"{prefiks}-20260923-120000.pdf"
+		self.assertTrue(pasuje_plik_kredytu(nazwa, prefiks, self._DEAL, self._DEAL))
+
+	def test_b_legacy_wlasny_plik_podpisany_pasuje(self: "TestPasujePlikKredytu") -> None:
+		prefiks = prefiks_pliku_kredytu(self._DEAL, self._DEAL)
+		nazwa = f"{prefiks}-20260923-120000-podpisany.pdf"
+		self.assertTrue(pasuje_plik_kredytu(nazwa, prefiks, self._DEAL, self._DEAL))
+
+	def test_c_legacy_nie_pasuje_do_pliku_rodzenstwa_hashowego(self: "TestPasujePlikKredytu") -> None:
+		# Pulapka opisana w docstringu pasuje_plik_kredytu: prefiks legacy jest
+		# scislym prefiksem stringa kazdego rodzenstwa hashowego tej samej szansy.
+		prefiks = prefiks_pliku_kredytu(self._DEAL, self._DEAL)
+		nazwa_hash = prefiks_pliku_kredytu(self._DEAL, "a1b2c3d4e5") + "-20260923-120000.pdf"
+		self.assertFalse(pasuje_plik_kredytu(nazwa_hash, prefiks, self._DEAL, self._DEAL))
+
+	def test_d_hash_wlasny_plik_pasuje(self: "TestPasujePlikKredytu") -> None:
+		prefiks_bazowy = prefiks_pliku_kredytu(self._DEAL, self._DEAL)
+		kredyt_name = "a1b2c3d4e5"
+		nazwa = prefiks_pliku_kredytu(self._DEAL, kredyt_name) + "-20260923-120000.pdf"
+		self.assertTrue(pasuje_plik_kredytu(nazwa, prefiks_bazowy, kredyt_name, self._DEAL))
+
+	def test_e_hash_wlasny_plik_podpisany_pasuje(self: "TestPasujePlikKredytu") -> None:
+		prefiks_bazowy = prefiks_pliku_kredytu(self._DEAL, self._DEAL)
+		kredyt_name = "a1b2c3d4e5"
+		nazwa = prefiks_pliku_kredytu(self._DEAL, kredyt_name) + "-20260923-120000-podpisany.pdf"
+		self.assertTrue(pasuje_plik_kredytu(nazwa, prefiks_bazowy, kredyt_name, self._DEAL))
+
+	def test_f_hash_nie_pasuje_do_innego_hashu(self: "TestPasujePlikKredytu") -> None:
+		prefiks_bazowy = prefiks_pliku_kredytu(self._DEAL, self._DEAL)
+		nazwa_innego = prefiks_pliku_kredytu(self._DEAL, "zzzzzzzzz9") + "-20260923-120000.pdf"
+		self.assertFalse(pasuje_plik_kredytu(nazwa_innego, prefiks_bazowy, "a1b2c3d4e5", self._DEAL))
+
+	def test_g_hash_nie_pasuje_do_pliku_legacy(self: "TestPasujePlikKredytu") -> None:
+		prefiks_bazowy = prefiks_pliku_kredytu(self._DEAL, self._DEAL)
+		nazwa_legacy = prefiks_bazowy + "-20260923-120000.pdf"
+		self.assertFalse(pasuje_plik_kredytu(nazwa_legacy, prefiks_bazowy, "a1b2c3d4e5", self._DEAL))
+
+	def test_h_pusta_nazwa_pliku_nie_pasuje(self: "TestPasujePlikKredytu") -> None:
+		prefiks = prefiks_pliku_kredytu(self._DEAL, self._DEAL)
+		self.assertFalse(pasuje_plik_kredytu("", prefiks, self._DEAL, self._DEAL))
+		self.assertFalse(pasuje_plik_kredytu(None, prefiks, self._DEAL, self._DEAL))
+
+	def test_i_zla_koncowka_nie_pasuje(self: "TestPasujePlikKredytu") -> None:
+		prefiks = prefiks_pliku_kredytu(self._DEAL, self._DEAL)
+		nazwa = f"{prefiks}-20260923-120000.docx"
+		self.assertFalse(pasuje_plik_kredytu(nazwa, prefiks, self._DEAL, self._DEAL))
 
 if __name__ == "__main__":
 	unittest.main()
