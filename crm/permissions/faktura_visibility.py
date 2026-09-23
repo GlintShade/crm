@@ -3,9 +3,10 @@
 
 """
 Deal-derived visibility scoping for doctypes that link a `CRM Deal` through
-their own `deal` Link field: `Volteo Faktura` (invoices attached to a deal)
-and `Volteo Trify Update` (Trify process log entries on a Czyste Powietrze
-deal, ops#75).
+their own `deal` Link field: `Volteo Faktura` (invoices attached to a deal),
+`Volteo Trify Update` (Trify process log entries on a Czyste Powietrze deal,
+ops#75), and `Volteo Kredyt` (per-applicant credit forms attached to a deal,
+issue #161).
 
 Volteo Faktura read access is granted without `if_owner` so that a D2D rep
 can see invoices backoffice added on the rep's own deals (backoffice is
@@ -21,6 +22,17 @@ the point of a shared process log. DocPerm (set up by `ops/crm-trify.py`)
 already narrows D2D to read+create with no write/delete; this hook is the
 deal-scoping layer underneath that, not a substitute for it.
 
+Volteo Kredyt closes the same gap for credit forms (issue #161, REVISIT.md
+A-6/K7, owner decision #4 from the 2026-09-16 credit/contract/Autenti audit):
+DocPerm for `Volteo D2D Sales` was widened in a separate change (A1) to
+read/write/create with no `if_owner` and `delete: 0`, so without a scoping
+hook here ANY user with that role could read/write EVERY Kredyt record
+across EVERY deal via the list/get API -- with N credit forms possible per
+deal (per-applicant, post-A1), a rep would otherwise be unable to see a
+Kredyt a colleague or backoffice created on the rep's OWN deal, the exact
+hole `Volteo Faktura` visibility was built to close. Kredyt follows Trify's
+fail-closed default, not Faktura's fail-open one -- see below.
+
 The rule enforced here, for both doctypes: a record is visible to a user iff
 its parent deal is visible to that user. Visibility is never computed
 independently -- it is entirely delegated to crm.permissions.org_hierarchy,
@@ -29,19 +41,26 @@ ToDo assignment). This avoids divergence between deal visibility and
 Faktura/Trify visibility as org_hierarchy's rules evolve.
 
 Bypass roles (System Manager, Volteo Backend, Volteo Core Admin) see all
-records for both doctypes regardless of deal visibility, mirroring
+records for all three doctypes regardless of deal visibility, mirroring
 crm/permissions/contact_visibility.py. Both a permission_query_conditions
 hook AND a has_permission hook are registered here for each doctype, for the
 same reason org_hierarchy and contact_visibility register both: a
 permission_query_conditions hook alone only filters list queries, not direct
 single-doc reads.
 
-The two doctypes differ in one respect, deliberately preserved: when a record
-has no `deal` yet, Faktura fails OPEN (`True` -- a defensive default that
-predates Trify and is left untouched here, ops#39 revisits Faktura's write
-semantics separately) while Trify fails CLOSED (`False` -- a Trify Update is
-only ever created via `frappe.client.insert` with `deal` populated up front,
-so a record with no `deal` is malformed, not mid-creation).
+Faktura and Trify differ in one respect, deliberately preserved: when a
+record has no `deal` yet, Faktura fails OPEN (`True` -- a defensive default
+that predates Trify and is left untouched here, ops#39 revisits Faktura's
+write semantics separately) while Trify fails CLOSED (`False` -- a Trify
+Update is only ever created via `frappe.client.insert` with `deal` populated
+up front, so a record with no `deal` is malformed, not mid-creation).
+
+Kredyt matches Trify's fail-closed behaviour, NOT Faktura's fail-open one --
+this is a deliberate, explicit choice per issue #161, not an oversight. A
+`Volteo Kredyt` with no `deal` yet is, like Trify, malformed rather than
+mid-creation, and an unresolved/deleted/inaccessible parent deal at check
+time must HIDE the Kredyt row, never show it: fail-open here would be the
+opposite of what this hook exists to prevent.
 """
 
 import frappe
@@ -143,4 +162,21 @@ def has_trify_permission(doc, ptype, user):
 	# check on the deal, create/write/delete map to a write check. DocPerm
 	# already narrows D2D to read+create with no write/delete -- this is the
 	# deal-scoping layer underneath that, not a substitute for it.
+	return _has_deal_scoped_permission(doc, ptype, user, fail_open=False)
+
+
+def get_kredyt_permission_query_conditions(user=None):
+	return _deal_scoped_query_conditions("Volteo Kredyt", user or frappe.session.user)
+
+
+def has_kredyt_permission(doc, ptype, user):
+	user = user or frappe.session.user
+
+	# Same shape as Trify, not Faktura: `ptype` matters (read maps to a read
+	# check on the deal, create/write/delete map to a write check) AND the
+	# empty-deal case fails CLOSED, per issue #161 -- an unresolved/deleted
+	# parent deal must hide the Kredyt row, never show it. DocPerm (A1)
+	# already narrows D2D to read/write/create with no delete and no
+	# `if_owner` -- this is the deal-scoping layer underneath that, not a
+	# substitute for it.
 	return _has_deal_scoped_permission(doc, ptype, user, fail_open=False)
