@@ -12,10 +12,18 @@
 // one but not the other. Keeping the whole lifecycle (mount → poll →
 // unmount) inside one function is what makes it safe to reuse verbatim.
 //
-// `dealId` accepts a plain string, a ref, or a getter function — call sites
-// differ (a prop can be read directly inside `<script setup>`, but passing
-// `props.dealId` by value here would freeze it at whatever the value was
-// when the composable ran) — `toValue()` normalizes all three at each call.
+// `docId` (ops#163) accepts a plain string, a ref, or a getter function,
+// call sites differ (a prop can be read directly inside `<script setup>`,
+// but passing `props.dealId` by value here would freeze it at whatever the
+// value was when the composable ran), `toValue()` normalizes all three at
+// each call. `docParam` is the payload key it is sent under: `'deal'`
+// (default) for a document keyed by the deal itself (UmowaTab.vue, still
+// exactly 1:1 with its shansa), `'kredyt'` for a document keyed by its own
+// record name (KredytTab.vue, one shansa can now carry several credit-form
+// records, ops#158/#159). `dealId` is kept as a backwards-compatible alias
+// for `docId` so UmowaTab.vue's existing call site (`dealId: () =>
+// props.dealId`) needs no change; when both are given, `docId` wins. Every
+// `call()` below sends `{ [docParam]: toValue(docId ?? dealId) }`.
 //
 // `statusMethod` / `sendMethod` are the full dotted whitelisted-API paths
 // (e.g. 'crm.integrations.autenti.api.autenti_umowa_status') — see
@@ -35,12 +43,30 @@
 // `umowa_exists` (same value, kept for whichever consumers still read it).
 // `showAutentiSendButton` below reads whichever is present so it works
 // unchanged against both payload shapes.
+//
+// `restart()` (ops#163): stops any in-flight polling, clears the current
+// `autenti` status, then reloads status for whatever `docId` currently
+// resolves to and restarts polling if that document turns out to be
+// in-flight. KredytTab.vue calls this whenever the rep switches to a
+// different credit-form record in the picker: without it, a poll interval
+// started for the PREVIOUSLY selected record keeps calling `statusMethod`
+// with the old `docId` closed over at `startAutentiPolling()` time (the
+// interval itself does not re-read `docId`, so switching forms would
+// silently keep polling, and later overwrite, the wrong record's status).
 import { call, toast } from 'frappe-ui'
 import { computed, onMounted, onUnmounted, ref, toValue } from 'vue'
 import { formatDate } from '@/utils'
 import { badgeFor, canSend, groupRecipients, isInFlight, sendButtonLabel } from '@/utils/autentiStatus'
 
-export function useAutenti({ dealId, statusMethod, sendMethod, sentToastLabel, dokument = 'umowa' }) {
+export function useAutenti({
+  dealId,
+  docId = dealId,
+  docParam = 'deal',
+  statusMethod,
+  sendMethod,
+  sentToastLabel,
+  dokument = 'umowa',
+}) {
   // Explicit `null` initial state (never a bare `reactive` key presence
   // check — see the CLAUDE.md note on the hasOwnProperty/reactive trap that
   // froze the CP admin panel). `autenti` is a plain ref holding the whole
@@ -54,7 +80,7 @@ export function useAutenti({ dealId, statusMethod, sendMethod, sentToastLabel, d
 
   async function loadAutentiStatus() {
     try {
-      const data = await call(statusMethod, { deal: toValue(dealId) })
+      const data = await call(statusMethod, { [docParam]: toValue(docId) })
       autenti.value = data || null
     } catch (err) {
       // Non-fatal and silent on purpose: this is a background status check
@@ -81,6 +107,19 @@ export function useAutenti({ dealId, statusMethod, sendMethod, sentToastLabel, d
     }
   }
 
+  // ops#163: switch this composable's instance to a different underlying
+  // record (KredytTab.vue calls this when the rep picks a different
+  // credit-form row). Stops any poll interval closed over the PREVIOUS
+  // docId, clears the stale status so the UI never shows the old record's
+  // badge/buttons for an instant, then reloads status for whatever docId
+  // resolves to NOW and restarts polling if that fresh status is in-flight.
+  async function restart() {
+    stopAutentiPolling()
+    autenti.value = null
+    await loadAutentiStatus()
+    if (isInFlight(autentiStatus.value)) startAutentiPolling()
+  }
+
   function toggleAutentiConfirm() {
     showAutentiConfirm.value = !showAutentiConfirm.value
   }
@@ -89,7 +128,7 @@ export function useAutenti({ dealId, statusMethod, sendMethod, sentToastLabel, d
     if (sendingAutenti.value || signerMissingEmail.value) return
     sendingAutenti.value = true
     try {
-      const data = await call(sendMethod, { deal: toValue(dealId) })
+      const data = await call(sendMethod, { [docParam]: toValue(docId) })
       autenti.value = autenti.value
         ? { ...autenti.value, autenti_status: data?.autenti_status || 'Wysyłanie' }
         : autenti.value
@@ -161,6 +200,7 @@ export function useAutenti({ dealId, statusMethod, sendMethod, sentToastLabel, d
     toggleAutentiConfirm,
     confirmSendAutenti,
     openSignedPdf,
+    restart,
     autentiEnabled,
     autentiStatus,
     autentiBadgeEntry,
