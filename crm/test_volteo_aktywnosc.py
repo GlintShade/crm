@@ -12,6 +12,7 @@ from crm.volteo_aktywnosc import (
 	ZNACZNIKI_ADMIN,
 	bez_znacznika,
 	czy_widoczny,
+	etykieta_wnioskodawcy,
 	grupuj,
 	linie_z_wersji,
 	maskuj_autora_cc,
@@ -538,6 +539,30 @@ class TestTekstSladu(unittest.TestCase):
 	def test_k_kredyt_pdf(self: "TestTekstSladu") -> None:
 		self.assertEqual(tekst_sladu("kredyt_pdf"), "wygenerowano PDF formularza kredytowego")
 
+	def test_k1_kredyt_utworzono_z_wnioskodawca(self: "TestTekstSladu") -> None:
+		self.assertEqual(
+			tekst_sladu("kredyt_utworzono", wnioskodawca="Kowalski Jan"),
+			"utworzono formularz kredytowy (Kowalski Jan)",
+		)
+
+	def test_k2_kredyt_utworzono_wnioskodawca_none_daje_stary_tekst(self: "TestTekstSladu") -> None:
+		self.assertEqual(
+			tekst_sladu("kredyt_utworzono", wnioskodawca=None),
+			"utworzono formularz kredytowy",
+		)
+
+	def test_k3_kredyt_pdf_z_wnioskodawca(self: "TestTekstSladu") -> None:
+		self.assertEqual(
+			tekst_sladu("kredyt_pdf", wnioskodawca="Kowalski Jan"),
+			"wygenerowano PDF formularza kredytowego (Kowalski Jan)",
+		)
+
+	def test_k4_kredyt_pdf_wnioskodawca_none_daje_stary_tekst(self: "TestTekstSladu") -> None:
+		self.assertEqual(
+			tekst_sladu("kredyt_pdf", wnioskodawca=None),
+			"wygenerowano PDF formularza kredytowego",
+		)
+
 	def test_l_koszty_nigdy_nie_niesie_kwot(self: "TestTekstSladu") -> None:
 		text = tekst_sladu("koszty", pozycje=3, dodatkowe=1)
 		self.assertEqual(text, f"{ZNACZNIK_KOSZTY} zaktualizowano koszty rzeczywiste (3 pozycji, 1 dodatkowych)")
@@ -588,6 +613,29 @@ class TestTekstSladu(unittest.TestCase):
 		self.assertTrue(text.startswith(ZNACZNIK_CC))
 		self.assertIn("Anna Nowak", text)
 		self.assertIn("Jan Kowalski", text)
+
+
+class TestEtykietaWnioskodawcy(unittest.TestCase):
+	def test_a_nazwisko_i_imiona_sklejone_spacja(self: "TestEtykietaWnioskodawcy") -> None:
+		self.assertEqual(etykieta_wnioskodawcy("Kowalski", "Jan"), "Kowalski Jan")
+
+	def test_b_przycina_biale_znaki_z_brzegow(self: "TestEtykietaWnioskodawcy") -> None:
+		self.assertEqual(etykieta_wnioskodawcy("  Kowalski  ", "  Jan  "), "Kowalski Jan")
+
+	def test_c_oba_puste_daja_bez_wnioskodawcy(self: "TestEtykietaWnioskodawcy") -> None:
+		self.assertEqual(etykieta_wnioskodawcy("", ""), "bez wnioskodawcy")
+
+	def test_d_oba_none_daja_bez_wnioskodawcy(self: "TestEtykietaWnioskodawcy") -> None:
+		self.assertEqual(etykieta_wnioskodawcy(None, None), "bez wnioskodawcy")
+
+	def test_e_tylko_nazwisko(self: "TestEtykietaWnioskodawcy") -> None:
+		self.assertEqual(etykieta_wnioskodawcy("Kowalski", None), "Kowalski")
+
+	def test_f_tylko_imiona(self: "TestEtykietaWnioskodawcy") -> None:
+		self.assertEqual(etykieta_wnioskodawcy(None, "Jan"), "Jan")
+
+	def test_g_nazwisko_puste_string_imiona_none(self: "TestEtykietaWnioskodawcy") -> None:
+		self.assertEqual(etykieta_wnioskodawcy("", None), "bez wnioskodawcy")
 
 
 class TestZapiszSladBezFrappe(unittest.TestCase):

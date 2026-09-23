@@ -190,6 +190,17 @@ def linie_z_wersji(data: dict, etykiety: dict[str, str], avoid: Iterable[str] = 
 	return linie
 
 
+def etykieta_wnioskodawcy(nazwisko: str | None, imiona: str | None) -> str:
+	"""Etykieta wnioskodawcy formularza kredytowego do śladu w Aktywności (ops#162):
+	`nazwisko` i `imiona`, sklejone spacją, obcięte z białych znaków na brzegach. Gdy
+	oba puste (formularz świeżo założony, migawka wnioskodawcy jeszcze nie wypełniona,
+	albo dane wnioskodawcy nie istnieją), zwraca „bez wnioskodawcy” zamiast pustego
+	stringa, żeby ślad nigdy nie kończył się pustym nawiasem."""
+	czesci = [str(nazwisko or "").strip(), str(imiona or "").strip()]
+	pelna = " ".join(czesc for czesc in czesci if czesc)
+	return pelna or "bez wnioskodawcy"
+
+
 def tekst_sladu(rodzaj: str, **dane: object) -> str:
 	"""Autorytatywne, bezosobowe polskie teksty śladów — feed pokazuje je po pogrubionym
 	autorze, jak istniejące `compose_volteo_linked_text` w `crm/api/activities.py`
@@ -221,9 +232,15 @@ def tekst_sladu(rodzaj: str, **dane: object) -> str:
 		return "wygenerowano PDF umowy"
 
 	if rodzaj == "kredyt_utworzono":
+		wnioskodawca = dane.get("wnioskodawca")
+		if wnioskodawca:
+			return f"utworzono formularz kredytowy ({wnioskodawca})"
 		return "utworzono formularz kredytowy"
 
 	if rodzaj == "kredyt_pdf":
+		wnioskodawca = dane.get("wnioskodawca")
+		if wnioskodawca:
+			return f"wygenerowano PDF formularza kredytowego ({wnioskodawca})"
 		return "wygenerowano PDF formularza kredytowego"
 
 	if rodzaj == "koszty":

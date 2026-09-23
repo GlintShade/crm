@@ -15,6 +15,7 @@ from crm.volteo_aktywnosc import (
 	ROLA_D2D,
 	bez_znacznika,
 	czy_widoczny,
+	etykieta_wnioskodawcy,
 	grupuj,
 	linie_z_wersji,
 	maskuj_autora_cc,
@@ -1044,8 +1045,27 @@ def compose_volteo_linked_text(dt: str, action: str, rec: dict, summary: str | N
 			if action == "added":
 				return _("utworzono formularz kredytowy")
 			if summary:
-				return _("zaktualizowano formularz kredytowy: {0}").format(summary)
-			return _("zaktualizowano formularz kredytowy")
+				text = _("zaktualizowano formularz kredytowy: {0}").format(summary)
+			else:
+				text = _("zaktualizowano formularz kredytowy")
+			# ops#162: dopisz etykietę wnioskodawcy TEGO formularza, żeby przy
+			# kilku formularzach kredytowych na jednej szansy (ops#157/#159
+			# zdjęło ograniczenie 1:1) dało się je odróżnić bez otwierania
+			# zakładki Kredyt. `rec["name"]` to docname formularza, ale wersja
+			# mogła dotyczyć rekordu, który od tego czasu został usunięty --
+			# wtedy `frappe.db.get_value` zwraca None i etykieta jest pomijana
+			# zamiast wywalać cały wpis feedu.
+			try:
+				dane_wnioskodawcy = frappe.db.get_value(
+					"Volteo Kredyt", rec.get("name"), ["wnioskodawca_nazwisko", "wnioskodawca_imiona"]
+				)
+			except Exception:
+				dane_wnioskodawcy = None
+			if dane_wnioskodawcy:
+				nazwisko, imiona = dane_wnioskodawcy
+				etykieta = etykieta_wnioskodawcy(nazwisko, imiona)
+				text += f" ({etykieta})"
+			return text
 	except Exception:
 		return None
 

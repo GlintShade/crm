@@ -58,7 +58,7 @@ from frappe.utils import cint, getdate
 from crm.api.umowa import _dane_kontaktu, _podstawowy_kontakt, _sprawdz_dostep_do_szansy, _sprawdz_role
 from crm.integrations.autenti import logika as autenti_logika
 from crm.permissions.file_nazwy_systemowe import plik_systemowy
-from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad
+from crm.volteo_aktywnosc import etykieta_wnioskodawcy, tekst_sladu, zapisz_slad
 from crm.volteo_kredyt import ETYKIETY_POL as _ETYKIETY_POL
 from crm.volteo_kredyt import ETYKIETY_WNIOSKODAWCY as _ETYKIETY_WNIOSKODAWCY
 from crm.volteo_kredyt import (
@@ -651,7 +651,14 @@ def volteo_kredyt_create(deal: str) -> dict[str, Any]:
 		_blad_ogolny()
 
 	try:
-		zapisz_slad(deal, tekst_sladu("kredyt_utworzono"))
+		# ops#162: etykieta wnioskodawcy w tekście śladu odróżnia formularze,
+		# gdy na jednej szansy powstaje ich więcej niż jeden (ops#157/#159
+		# zdjęło ograniczenie 1:1); dane biorą się z MIGAWKI zapisanej na
+		# `kredyt_doc` chwilę wcześniej (prefill), nie z aktualnej karty kontaktu.
+		etykieta = etykieta_wnioskodawcy(
+			kredyt_doc.get("wnioskodawca_nazwisko"), kredyt_doc.get("wnioskodawca_imiona")
+		)
+		zapisz_slad(deal, tekst_sladu("kredyt_utworzono", wnioskodawca=etykieta))
 	except Exception:
 		# Ślad w Aktywności to wygoda, nie warunek sukcesu: awaria zapisu
 		# śladu nie może cofnąć ani zablokować już utworzonego rekordu kredytu.
@@ -863,7 +870,12 @@ def volteo_kredyt_pdf(kredyt: str) -> dict[str, Any]:
 		_blad_zapisu_pliku()
 
 	try:
-		zapisz_slad(deal, tekst_sladu("kredyt_pdf"))
+		# ops#162: patrz analogiczny komentarz przy "kredyt_utworzono" powyżej;
+		# `kredyt_doc` tutaj jest tym samym rekordem, dla którego wygenerowano PDF.
+		etykieta = etykieta_wnioskodawcy(
+			kredyt_doc.get("wnioskodawca_nazwisko"), kredyt_doc.get("wnioskodawca_imiona")
+		)
+		zapisz_slad(deal, tekst_sladu("kredyt_pdf", wnioskodawca=etykieta))
 	except Exception:
 		# Ślad w Aktywności to wygoda, nie warunek sukcesu — awaria zapisu śladu
 		# nie może cofnąć ani zablokować już zapisanego pliku PDF.
