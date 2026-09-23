@@ -127,6 +127,53 @@
           </div>
         </div>
 
+        <!-- Drugi Zamawiający: umowa na dwie osoby (ops#171). Lives ONLY
+        here: the deal side panel keeps showing a single contact per the
+        2026-09-03 "szansa ma zawsze jednego klienta" decision, untouched
+        by this tab. -->
+        <div class="rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-4">
+          <Switch v-model="dwaZamawiajacy" :label="__('Umowa na dwie osoby')" />
+
+          <div v-if="dwaZamawiajacy" class="mt-4 flex flex-col gap-4">
+            <div class="max-w-sm">
+              <div class="mb-1 text-xs font-medium text-ink-gray-5">
+                {{ __('Drugi Zamawiający') }}
+              </div>
+              <Link
+                v-model="form.drugi_zamawiajacy"
+                doctype="Contact"
+                :filters="{ name: ['in', dealContactNames] }"
+                :placeholder="__('Wybierz kontakt')"
+              />
+              <div v-if="!dealContactNames.length" class="mt-1 text-xs text-ink-gray-4">
+                {{
+                  __(
+                    'Brak innych kontaktów przypiętych do tej szansy. Dodaj kontakt w panelu bocznym szansy, zanim wybierzesz drugiego Zamawiającego.',
+                  )
+                }}
+              </div>
+            </div>
+
+            <div
+              v-if="form.drugi_zamawiajacy"
+              class="rounded-lg border border-outline-gray-2 bg-surface-white p-4"
+            >
+              <div class="mb-3 text-sm font-semibold text-ink-gray-7">
+                {{ __('Dane drugiego Zamawiającego (z CRM)') }}
+              </div>
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div v-for="p in prefillDrugiDisplay" :key="p.key">
+                  <div class="text-xs text-ink-gray-5">{{ p.label }}</div>
+                  <div class="text-sm text-ink-gray-8">{{ p.value || '-' }}</div>
+                </div>
+              </div>
+              <div class="mt-3 text-xs text-ink-gray-4">
+                {{ __('Te dane edytuje się na karcie kontaktu, nie w tym formularzu.') }}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Autenti timestamps — small muted line under the header/badges -->
         <div
           v-if="autentiEnabled && (autentiSentAtDisplay || autentiSignedAtDisplay)"
@@ -166,8 +213,8 @@
             {{ __('Potwierdź wysyłkę do podpisu') }}
           </div>
 
-          <div v-if="signerMissingEmail" class="mb-3 text-sm text-ink-red-5">
-            {{ __('Kontakt szansy nie ma adresu e-mail — uzupełnij go w CRM.') }}
+          <div v-if="wysylkaZablokowanaBrakiemEmail" class="mb-3 text-sm text-ink-red-5">
+            {{ komunikatBrakuEmaila }}
           </div>
           <div v-else class="mb-3 text-sm text-ink-gray-6">
             <div>{{ __('Umowa zostanie wysłana do:') }}</div>
@@ -220,7 +267,8 @@
               variant="solid"
               :label="__('Wyślij')"
               :loading="sendingAutenti"
-              :disabled="signerMissingEmail"
+              :disabled="wysylkaZablokowanaBrakiemEmail"
+              :tooltip="komunikatBrakuEmaila"
               @click="confirmSendAutenti"
             />
             <Button variant="ghost" :label="__('Anuluj')" @click="toggleAutentiConfirm" />
@@ -229,7 +277,7 @@
 
         <!-- Missing-fields summary (populated after the last save attempt) -->
         <div
-          v-if="missingLabels.length || missingClientLabels.length"
+          v-if="missingLabels.length || missingClientLabels.length || missingSecondLabels.length"
           class="rounded-lg border border-outline-amber-3 bg-surface-amber-2 px-4 py-3 text-sm text-ink-amber-8"
         >
           <div v-if="missingLabels.length">
@@ -238,6 +286,10 @@
           <div v-if="missingClientLabels.length">
             {{ __('Brakujące dane klienta:') }} {{ missingClientLabels.join(', ') }}
             {{ __('Uzupełnij je na karcie klienta.') }}
+          </div>
+          <div v-if="missingSecondLabels.length">
+            {{ __('Brakujące dane drugiego Zamawiającego:') }} {{ missingSecondLabels.join(', ') }}
+            {{ __('Uzupełnij je na karcie kontaktu.') }}
           </div>
         </div>
 
@@ -327,9 +379,10 @@
 </template>
 
 <script setup>
+import Link from '@/components/Controls/Link.vue'
 import UmowaIcon from '@/components/Icons/UmowaIcon.vue'
-import { Badge, Button, FormControl, call, toast } from 'frappe-ui'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { Badge, Button, FormControl, Switch, call, createResource, toast } from 'frappe-ui'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { formatPlnAmount } from '@/utils/money'
 import { useAutenti } from '@/composables/useAutenti'
 
@@ -632,8 +685,79 @@ const saving = ref(false)
 const saveState = ref('idle') // idle | saving | saved | error
 const brakujace = ref([])
 const brakujaceKlienta = ref([])
+const brakujaceDrugiego = ref([])
 
 const form = reactive({})
+
+// --- Drugi Zamawiający (ops#171) --------------------------------------------------
+// Second Zamawiający lives ONLY in this tab (b56 decision: the deal side
+// panel keeps showing a single contact, that is untouched here) and is
+// chosen from contacts ALREADY attached to this deal (`deal_doc.contacts`),
+// never from a company-wide Contact search. Same source Deal.vue's side
+// panel reads (`get_deal_contacts`) and the same cache key, so this
+// resource costs no extra request when the side panel already loaded it.
+const dealContactsResource = createResource({
+  url: 'crm.fcrm.doctype.crm_deal.api.get_deal_contacts',
+  params: { name: props.dealId },
+  cache: ['deal_contacts', props.dealId],
+})
+if (!dealContactsResource.data) dealContactsResource.fetch()
+
+// The primary contact is excluded from the options: the backend rejects a
+// "second" Zamawiający identical to the primary one (see
+// _zwaliduj_i_dopnij_drugiego_zamawiajacego in crm/api/umowa.py), so
+// offering it here would only ever produce a save error.
+const dealContactOptions = computed(() =>
+  (dealContactsResource.data || []).filter((c) => !c.is_primary),
+)
+const dealContactNames = computed(() => dealContactOptions.value.map((c) => c.name))
+
+const prefillDrugi = ref({})
+const dwaZamawiajacy = ref(false)
+
+// Turning the toggle off clears the chosen contact too, so buildPayload()
+// below sends an empty `drugi_zamawiajacy` on the next save regardless of
+// whatever is still sitting in form.drugi_zamawiajacy.
+watch(dwaZamawiajacy, (wlaczone) => {
+  if (!wlaczone) form.drugi_zamawiajacy = ''
+})
+
+// Same key shape as `_dane_kontaktu()` in crm/api/umowa.py (prefill_drugi),
+// laid out the same way KredytTab.vue renders its "Dane klienta (z CRM)"
+// block (key/label/value triples fed straight into a v-for grid).
+const prefillDrugiOrder = [
+  'first_name',
+  'last_name',
+  'custom_pesel',
+  'mobile_no',
+  'email',
+  'custom_ulica',
+  'custom_nr_domu',
+  'custom_nr_mieszkania',
+  'custom_kod_pocztowy',
+  'custom_miasto',
+  'custom_wojewodztwo',
+]
+const prefillDrugiLabels = {
+  first_name: __('Imię'),
+  last_name: __('Nazwisko'),
+  custom_pesel: __('PESEL'),
+  mobile_no: __('Telefon'),
+  email: __('E-mail'),
+  custom_ulica: __('Ulica'),
+  custom_nr_domu: __('Nr domu'),
+  custom_nr_mieszkania: __('Nr mieszkania'),
+  custom_kod_pocztowy: __('Kod pocztowy'),
+  custom_miasto: __('Miasto'),
+  custom_wojewodztwo: __('Województwo'),
+}
+const prefillDrugiDisplay = computed(() =>
+  prefillDrugiOrder.map((key) => ({
+    key,
+    label: prefillDrugiLabels[key] || key,
+    value: prefillDrugi.value?.[key] || '',
+  })),
+)
 
 // --- Autenti e-signature state ----------------------------------------------------
 // Lifted into useAutenti() (shared with KredytTab.vue) — see that file's
@@ -663,6 +787,35 @@ const {
   sentToastLabel: __('Umowa wysłana do podpisu'),
 })
 
+// --- Autenti send gate, extended for a second Zamawiający (ops#171) --------------
+// `signerMissingEmail` (from useAutenti(), shared with KredytTab.vue) only
+// ever checks the PRIMARY contact. Extending it inside the shared
+// composable would also change KredytTab.vue's gate, which has no concept
+// of a second Zamawiający, so the combined gate stays local to this file.
+// The template below uses these computeds in place of the bare
+// `signerMissingEmail` for the confirm panel's message and the "Wyślij"
+// button's disabled state/tooltip.
+const drugiZamawiajacyBrakEmaila = computed(
+  () => dwaZamawiajacy.value && !!form.drugi_zamawiajacy && !prefillDrugi.value?.email,
+)
+const wysylkaZablokowanaBrakiemEmail = computed(
+  () => signerMissingEmail.value || drugiZamawiajacyBrakEmaila.value,
+)
+const komunikatBrakuEmaila = computed(() => {
+  if (signerMissingEmail.value) {
+    return __('Kontakt szansy nie ma adresu e-mail. Uzupełnij go w CRM.')
+  }
+  if (drugiZamawiajacyBrakEmaila.value) {
+    const imieNazwisko = [prefillDrugi.value?.first_name, prefillDrugi.value?.last_name]
+      .filter(Boolean)
+      .join(' ')
+    return imieNazwisko
+      ? __('Drugi Zamawiający ({0}) nie ma adresu e-mail. Uzupełnij go w CRM.', [imieNazwisko])
+      : __('Drugi Zamawiający nie ma adresu e-mail. Uzupełnij go w CRM.')
+  }
+  return ''
+})
+
 onMounted(() => {
   loadUmowa()
 })
@@ -686,6 +839,14 @@ function extractBrakujaceKlienta(data) {
   return Array.isArray(list) ? list : []
 }
 
+// Same shape/rule again, for the second Zamawiający (ops#171): empty when
+// the umowa has no drugi_zamawiajacy (single-signer contract, the common
+// case) or when that contact's own data is already complete.
+function extractBrakujaceDrugiego(data) {
+  const list = data?.wyliczenia?.brakujace_dane_drugiego
+  return Array.isArray(list) ? list : []
+}
+
 async function loadUmowa() {
   loading.value = true
   loadError.value = ''
@@ -693,9 +854,11 @@ async function loadUmowa() {
     const data = await call('crm.api.umowa.volteo_umowa_get', { deal: props.dealId })
     umowa.value = data?.umowa || null
     prefill.value = data?.prefill || {}
+    prefillDrugi.value = data?.prefill_drugi || {}
     wyliczenia.value = data?.wyliczenia || {}
     brakujace.value = extractBrakujace(data)
     brakujaceKlienta.value = extractBrakujaceKlienta(data)
+    brakujaceDrugiego.value = extractBrakujaceDrugiego(data)
     if (umowa.value) hydrateForm(umowa.value)
   } catch (err) {
     loadError.value = extractErrorMessage(err)
@@ -722,6 +885,15 @@ function hydrateForm(u) {
       form[fn] = valueOr(raw, p[fn])
     }
   })
+  // ops#171: drugi_zamawiajacy is NOT part of formSections/allFieldnames (it
+  // has its own dedicated UI block below, not a generic FormControl row), so
+  // it is hydrated separately here. The toggle mirrors the loaded value ONLY
+  // at hydration time (record load, or right after create/save). While the
+  // rep is mid-edit the toggle is left alone, which is why saveForm() below
+  // re-hydrates from the server's own response rather than from any locally
+  // held toggle state.
+  form.drugi_zamawiajacy = (u && u.drugi_zamawiajacy) || ''
+  dwaZamawiajacy.value = !!form.drugi_zamawiajacy
 }
 
 // --- Derived / read-only values --------------------------------------------------
@@ -752,6 +924,11 @@ const missingLabels = computed(() =>
 // the server (ops#146). Unlike `brakujace_pola`/`missingLabels`, there is no
 // fieldname-to-label lookup to do here.
 const missingClientLabels = computed(() => brakujaceKlienta.value)
+// `brakujace_dane_drugiego` (ops#171): same shape/rule as
+// missingClientLabels above, human-readable Polish labels already supplied
+// by the server, empty when the umowa has no second Zamawiający or that
+// contact's data is already complete.
+const missingSecondLabels = computed(() => brakujaceDrugiego.value)
 
 const recordStatus = computed(() => umowa.value?.status || 'Roboczy')
 const isKompletny = computed(() => recordStatus.value === 'Kompletny')
@@ -764,9 +941,11 @@ async function createUmowa() {
     const data = await call('crm.api.umowa.volteo_umowa_create', { deal: props.dealId })
     umowa.value = data?.umowa || null
     prefill.value = data?.prefill || {}
+    prefillDrugi.value = data?.prefill_drugi || {}
     wyliczenia.value = data?.wyliczenia || {}
     brakujace.value = extractBrakujace(data)
     brakujaceKlienta.value = extractBrakujaceKlienta(data)
+    brakujaceDrugiego.value = extractBrakujaceDrugiego(data)
     if (umowa.value) hydrateForm(umowa.value)
     toast.success(__('Utworzono formularz umowy'))
     // Refresh Autenti status so `umowa_exists` stops being stale — otherwise
@@ -785,6 +964,12 @@ function buildPayload() {
   allFieldnames.forEach((fn) => {
     payload[fn] = form[fn]
   })
+  // ops#171: drugi_zamawiajacy travels outside allFieldnames/formSections
+  // (see hydrateForm() above) and is sent as empty whenever the toggle is
+  // off, regardless of whatever is still sitting in form.drugi_zamawiajacy.
+  // That is what makes turning the toggle off and saving actually remove it
+  // server-side instead of leaving the last-picked contact in place.
+  payload.drugi_zamawiajacy = dwaZamawiajacy.value ? form.drugi_zamawiajacy || '' : ''
   return payload
 }
 
@@ -799,9 +984,11 @@ async function saveForm() {
     })
     umowa.value = data?.umowa || umowa.value
     prefill.value = data?.prefill || prefill.value
+    prefillDrugi.value = data?.prefill_drugi || prefillDrugi.value
     wyliczenia.value = data?.wyliczenia || wyliczenia.value
     brakujace.value = extractBrakujace(data)
     brakujaceKlienta.value = extractBrakujaceKlienta(data)
+    brakujaceDrugiego.value = extractBrakujaceDrugiego(data)
     hydrateForm(umowa.value)
     saveState.value = 'saved'
     if (brakujace.value.length) {
