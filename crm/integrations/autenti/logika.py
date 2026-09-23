@@ -149,21 +149,56 @@ def tytul_dokumentu_kredytu(signer_name: str | None) -> str:
 	return f"Formularz kredytowy ProEnergy - {signer_name}"
 
 
-def prefiks_pliku_kredytu(deal: str) -> str:
-	"""Prefiks nazwy pliku PDF-u formularza kredytowego dla danej szansy.
+def czy_legacy_kredyt(deal: str, kredyt_name: str) -> bool:
+	"""Czy `kredyt_name` to rekord `Volteo Kredyt` sprzed migracji na wiele
+	formularzy na szansę (ops#159): przed tą migracją doctype miał autoname
+	`field:deal`, więc `kredyt_name` był po prostu nazwą szansy. Rekordy
+	założone PO migracji dostają nazwę typu hash (10 małych znaków
+	alfanumerycznych, generowanych przez Frappe), nigdy równą `deal`.
+
+	Ten rozstrzygnik jest jedynym miejscem, gdzie ta reguła jest zapisana:
+	`prefiks_pliku_kredytu` (niżej) i każdy kod wołający ją muszą pytać TU,
+	nigdy nie zgadywać po kształcie stringa."""
+	return kredyt_name == deal
+
+
+def prefiks_pliku_kredytu(deal: str, kredyt_name: str) -> str:
+	"""Prefiks nazwy pliku PDF-u KONKRETNEGO formularza kredytowego danej szansy.
 
 	JEDYNE źródło prawdy tego prefiksu — dzielone z `crm/api/kredyt.py`
 	(generowanie PDF-u i sprzątanie starych plików, `_usun_stare_pliki_kredytu`)
 	oraz z odpytywania Autenti po prefiksie (LIKE) przy szukaniu pliku źródłowego
 	do wysyłki. Umowy tych trzech miejsc pękają, jeśli ten wzorzec się rozjedzie.
+
+	Reguła zgodności wstecz (ops#159, OBOWIĄZKOWA, osobna gałąź, NIGDY
+	realizowana przez `.replace('/', '-')` na całym wejściu): rekord legacy
+	(`czy_legacy_kredyt(deal, kredyt_name)` prawdziwe, czyli `kredyt_name ==
+	deal`) zachowuje STARY prefiks bez żadnego sufiksu, żeby pięć istniejących
+	produkcyjnych plików formularza kredytowego dalej pasowało bajt w bajt.
+	Każdy inny rekord (nazwa typu hash, założony po migracji na formularze 1:N)
+	dostaje NOWY prefiks z 8-znakowym sufiksem `kredyt_name`: bez tego dwa
+	formularze na jednej szansie dzieliłyby jeden prefiks, więc regeneracja
+	PDF-u formularza A kasowałaby po cichu plik formularza B
+	(`_usun_stare_pliki_kredytu` dopasowuje po prefiksie), a wysyłka formularza
+	A do Autenti podpinałaby po cichu plik formularza B (`_pdf_kredytu_plik`
+	bierze najnowszy pasujący plik).
+
+	Sufiks jest doklejany do gotowego prefiksu bazowego wprost, BEZ
+	`.replace('/', '-')`: nazwy hash to 10 małych znaków alfanumerycznych, bez
+	ukośników, więc ta normalizacja byłaby tu no-opem w praktyce, ale
+	stosowanie jej i tak ukryłoby błąd, gdyby kiedyś ktoś podał tu coś innego
+	niż nazwę rekordu.
 	"""
-	return f"Formularz-kredytowy-{deal.replace('/', '-')}"
+	prefiks_bazowy = f"Formularz-kredytowy-{deal.replace('/', '-')}"
+	if czy_legacy_kredyt(deal, kredyt_name):
+		return prefiks_bazowy
+	return f"{prefiks_bazowy}-{kredyt_name[:8]}"
 
 
-def nazwa_pliku_kredytu(deal: str) -> str:
+def nazwa_pliku_kredytu(deal: str, kredyt_name: str) -> str:
 	"""Stała, nieznacznikowana nazwa pliku PDF-u formularza kredytowego (niepodpisanego)
-	dla danej szansy — to po prostu nazwa, pod którą bajty PDF-u są wysyłane do
-	Autenti, czyli nazwa, którą podpisujący widzi w interfejsie Autenti.
+	dla danego rekordu `Volteo Kredyt`: to po prostu nazwa, pod którą bajty PDF-u są
+	wysyłane do Autenti, czyli nazwa, którą podpisujący widzi w interfejsie Autenti.
 
 	W odróżnieniu od plików generowanych lokalnie przez `volteo_kredyt_pdf`
 	(które NADAL mają znacznik czasu w nazwie, żeby ominąć cache przeglądarki —
@@ -172,13 +207,13 @@ def nazwa_pliku_kredytu(deal: str) -> str:
 	Autenti — problem cache przeglądarki, który wymusza znacznik czasu na
 	plikach zapisywanych lokalnie, nie dotyczy nazwy użytej przy wysyłce.
 	"""
-	return f"{prefiks_pliku_kredytu(deal)}.pdf"
+	return f"{prefiks_pliku_kredytu(deal, kredyt_name)}.pdf"
 
 
-def nazwa_pliku_kredytu_podpisanego(deal: str) -> str:
+def nazwa_pliku_kredytu_podpisanego(deal: str, kredyt_name: str) -> str:
 	"""Nazwa pliku podpisanego PDF-u formularza kredytowego pobranego z Autenti
-	po zakończeniu procesu."""
-	return f"{prefiks_pliku_kredytu(deal)}-podpisany.pdf"
+	po zakończeniu procesu, dla danego rekordu `Volteo Kredyt`."""
+	return f"{prefiks_pliku_kredytu(deal, kredyt_name)}-podpisany.pdf"
 
 
 WYSYLANIE_TIMEOUT_MIN = 15

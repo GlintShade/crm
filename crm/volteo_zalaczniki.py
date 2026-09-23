@@ -61,10 +61,22 @@ def czy_plik_systemowy(file_name: str, deal: str) -> bool:
 	Rozpoznanie jest po prefiksie, nie po pełnej nazwie: obejmuje to zarówno
 	niepodpisaną, jak i podpisaną wersję (`...-podpisana.pdf`/`...-podpisany.pdf`)
 	oraz warianty ze znacznikiem czasu w nazwie.
+
+	Ta funkcja odpowiada na pytanie "czy to plik systemowy TEJ szansy": nie
+	zna i nie musi znać, KTÓREGO konkretnie formularza kredytowego (od ops#159
+	jedna szansa może mieć wiele rekordów `Volteo Kredyt`). Dlatego woła
+	`prefiks_pliku_kredytu(deal, kredyt_name=deal)` celowo, wymuszając gałąź
+	legacy (`czy_legacy_kredyt` prawdziwe tylko, gdy oba argumenty są równe),
+	co daje prefiks bez sufiksu konkretnego rekordu. Ten prefiks jest ścisłym
+	prefiksem STRINGA każdej nazwy pliku formularza kredytowego tej szansy,
+	niezależnie od tego, czy plik nosi stary format (bez sufiksu) czy nowy
+	(z 8-znakowym sufiksem nazwy rekordu), bo sufiks jest zawsze DOKLEJANY
+	za tym samym prefiksem, nigdy nie zastępuje jego części. `startswith()`
+	więc poprawnie rozpoznaje pliki KAŻDEGO formularza tej szansy.
 	"""
 	nazwa_umowy = nazwa_pliku_umowy(deal)
 	prefiks_umowy = nazwa_umowy[: -len(".pdf")]
-	prefiks_kredytu = prefiks_pliku_kredytu(deal)
+	prefiks_kredytu = prefiks_pliku_kredytu(deal, deal)
 	return (file_name or "").startswith((prefiks_umowy, prefiks_kredytu))
 
 
@@ -85,6 +97,16 @@ Skompilowany raz na poziomie modułu, bez asercji końca (`$`) — tak samo jak
 `czy_plik_systemowy`, dopasowanie samego PREFIKSU wystarcza: obejmuje warianty
 ze znacznikiem czasu w nazwie (formularz kredytowy), sufiksem doklejonym przy
 kolizji ścieżki na dysku (np. `e41034`) i sufiksem "-podpisana"/"-podpisany".
+
+Od ops#159 obejmuje też, BEZ ŻADNEJ zmiany wzorca, formularz kredytowy w NOWYM
+kształcie z sufiksem 8-znakowej nazwy rekordu `Volteo Kredyt`:
+`Formularz-kredytowy-<deal>-<8 znaków>-YYYYMMDD-HHMMSS.pdf`. Ten sufiks jest
+tylko kolejnym fragmentem "reszty" nazwy po dopasowaniu grupy numeru szansy,
+dokładnie tak samo nieistotnym dla braku asercji końca jak znacznik czasu czy
+sufiks kolizji, opisane wyżej. Stary kształt bez tego sufiksu (pięć
+istniejących produkcyjnych plików, rekordy `Volteo Kredyt` sprzed migracji na
+formularze 1:N, `kredyt_name == deal`) pozostaje rozpoznawany bez zmian,
+patrz `test_volteo_zalaczniki.py` dla obu kształtów wprost.
 """
 
 

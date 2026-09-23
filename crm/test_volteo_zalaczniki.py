@@ -68,10 +68,29 @@ class TestVolteoZalaczniki(unittest.TestCase):
 		self.assertTrue(czy_plik_systemowy("Umowa-PRO-PV-26-1011e41034.pdf", "PRO/PV/26/1011"))
 
 	def test_o_plik_kredytu_jest_systemowy(self: "TestVolteoZalaczniki") -> None:
-		from crm.integrations.autenti.logika import prefiks_pliku_kredytu
-
-		nazwa = prefiks_pliku_kredytu("PRO/PV/26/1011") + "-podpisany.pdf"
+		nazwa = prefiks_pliku_kredytu("PRO/PV/26/1011", "PRO/PV/26/1011") + "-podpisany.pdf"
 		self.assertTrue(czy_plik_systemowy(nazwa, "PRO/PV/26/1011"))
+
+	def test_o2_plik_kredytu_hash_jest_systemowy(self: "TestVolteoZalaczniki") -> None:
+		# Formularz kredytowy w NOWYM formacie (rekord Volteo Kredyt założony po
+		# migracji na wiele formularzy na szansę, ops#159) musi zostać rozpoznany
+		# jako plik systemowy TEJ szansy, mimo że czy_plik_systemowy nie zna
+		# konkretnej nazwy rekordu.
+		deal = "PRO/PV/26/1011"
+		nazwa = prefiks_pliku_kredytu(deal, "a1b2c3d4e5") + "-podpisany.pdf"
+		self.assertTrue(czy_plik_systemowy(nazwa, deal))
+
+	def test_o3_plik_kredytu_legacy_i_hash_maja_wspolny_prefiks(
+		self: "TestVolteoZalaczniki",
+	) -> None:
+		# Prefiks legacy (rekord o nazwie == szansa) musi być ścisłym prefiksem
+		# stringa nazwy pliku każdego innego (hash) formularza tej samej szansy:
+		# na tym opiera się czy_plik_systemowy(deal), które zawsze pyta w trybie
+		# legacy (kredyt_name=deal) o wzorzec obejmujący WSZYSTKIE formularze.
+		deal = "PRO/PV/26/1011"
+		prefiks_legacy = prefiks_pliku_kredytu(deal, deal)
+		nazwa_hash = prefiks_pliku_kredytu(deal, "a1b2c3d4e5") + ".pdf"
+		self.assertTrue(nazwa_hash.startswith(prefiks_legacy))
 
 	def test_p_zwykly_plik_nie_jest_systemowy(self: "TestVolteoZalaczniki") -> None:
 		self.assertFalse(czy_plik_systemowy("Adobe Scan.pdf", "PRO/PV/26/1011"))
@@ -97,6 +116,23 @@ class TestVolteoZalaczniki(unittest.TestCase):
 	def test_s_nazwa_systemowa_formularz_kredytowy_pro(self: "TestVolteoZalaczniki") -> None:
 		self.assertTrue(
 			czy_nazwa_systemowa("Formularz-kredytowy-PRO-PV-26-1011-20260904-115057.pdf")
+		)
+
+	def test_s_nazwa_systemowa_formularz_kredytowy_hash(self: "TestVolteoZalaczniki") -> None:
+		# Nowy format (ops#159): sufiks 8-znakowej nazwy rekordu Volteo Kredyt
+		# przed znacznikiem czasu. Musi pozostać rozpoznawany identycznie jak
+		# stary format bez sufiksu, testowany wyżej.
+		self.assertTrue(
+			czy_nazwa_systemowa(
+				"Formularz-kredytowy-PRO-PV-26-1011-a1b2c3d4-20260923-120000.pdf"
+			)
+		)
+
+	def test_s_nazwa_systemowa_formularz_kredytowy_hash_podpisany(
+		self: "TestVolteoZalaczniki",
+	) -> None:
+		self.assertTrue(
+			czy_nazwa_systemowa("Formularz-kredytowy-PRO-PV-26-1011-a1b2c3d4-podpisany.pdf")
 		)
 
 	def test_s_nazwa_systemowa_umowa_podpisana(self: "TestVolteoZalaczniki") -> None:
@@ -134,7 +170,14 @@ class TestVolteoZalaczniki(unittest.TestCase):
 			with self.subTest(deal=deal):
 				self.assertTrue(czy_nazwa_systemowa(nazwa_pliku_umowy(deal)))
 				self.assertTrue(
-					czy_nazwa_systemowa(prefiks_pliku_kredytu(deal) + "-20260904-115057.pdf")
+					czy_nazwa_systemowa(
+						prefiks_pliku_kredytu(deal, deal) + "-20260904-115057.pdf"
+					)
+				)
+				self.assertTrue(
+					czy_nazwa_systemowa(
+						prefiks_pliku_kredytu(deal, "a1b2c3d4e5") + "-20260904-115057.pdf"
+					)
 				)
 
 	def test_v_spojnosc_czy_plik_systemowy_implikuje_czy_nazwa_systemowa(
@@ -147,7 +190,7 @@ class TestVolteoZalaczniki(unittest.TestCase):
 		warianty_sufiksow = ("", "-podpisana", "-podpisany", "e41034")
 		for deal in ("PRO/PV/26/1011", "PRO/CP/26/1024", "CRM-DEAL-2026-00016"):
 			nazwa_bazowa_umowy = nazwa_pliku_umowy(deal)[: -len(".pdf")]
-			prefiks_kredytu = prefiks_pliku_kredytu(deal)
+			prefiks_kredytu = prefiks_pliku_kredytu(deal, deal)
 			for sufiks in warianty_sufiksow:
 				for nazwa in (
 					f"{nazwa_bazowa_umowy}{sufiks}.pdf",
