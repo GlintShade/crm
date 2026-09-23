@@ -150,7 +150,7 @@
                     }})
                   </template>
                   <template v-if="user.mobile_no">
-                    · {{ user.mobile_no }}
+                    · <TelefonLink :numer="user.mobile_no" />
                   </template>
                 </span>
                 <Badge
@@ -211,6 +211,7 @@
 <script setup>
 import { validateEmail } from '@/utils'
 import { usersStore } from '@/stores/users'
+import TelefonLink from '@/components/TelefonLink.vue'
 import { useOnboarding, useTelemetry } from 'frappe-ui/frappe'
 import {
   toast,

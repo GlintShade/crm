@@ -153,6 +153,13 @@
                     @click="callEnabled && makeCall(contact.doc.mobile_no)"
                   />
                   <Button
+                    v-else-if="czyTelefon(contact.doc.mobile_no)"
+                    :label="__('Zadzwoń')"
+                    size="sm"
+                    :iconLeft="PhoneIcon"
+                    :link="telHref(contact.doc.mobile_no)"
+                  />
+                  <Button
                     v-if="canDelete"
                     :label="__('Delete')"
                     theme="red"
@@ -240,6 +247,7 @@ import { usersStore } from '@/stores/users.js'
 import { organizationsStore } from '@/stores/organizations.js'
 import { statusesStore } from '@/stores/statuses'
 import { callEnabled } from '@/composables/telephony'
+import { telHref, czyTelefon } from '@/utils/telefon'
 import {
   Breadcrumbs,
   Avatar,

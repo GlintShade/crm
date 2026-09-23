@@ -57,7 +57,7 @@
             :icon="PhoneIcon"
             @click="zadzwon"
           />
-          <span>{{ doc.mobile_no }}</span>
+          <TelefonLink :numer="doc.mobile_no" />
         </div>
       </div>
       <Button
@@ -181,6 +181,7 @@
 import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
 import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
 import SidePanelLayout from '@/components/SidePanelLayout.vue'
+import TelefonLink from '@/components/TelefonLink.vue'
 import PrzekazHandlowcowi from '@/components/PrzekazHandlowcowi.vue'
 import KomentarzeLeadaModal from '@/components/Modals/KomentarzeLeadaModal.vue'
 import LostReasonModal from '@/components/Modals/LostReasonModal.vue'

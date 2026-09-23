@@ -332,7 +332,12 @@
           <div v-if="!wnioskodawcaEdytowalny" class="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div v-for="p in wnioskodawcaWyswietlanie" :key="p.fieldname">
               <div class="text-xs text-ink-gray-5">{{ p.label }}</div>
-              <div class="text-sm text-ink-gray-8">{{ p.value || '-' }}</div>
+              <TelefonLink
+                v-if="czyPoleTelefonu(p.fieldname) && p.value"
+                :numer="p.value"
+                klasa="text-sm text-ink-gray-8"
+              />
+              <div v-else class="text-sm text-ink-gray-8">{{ p.value || '-' }}</div>
             </div>
           </div>
           <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -342,7 +347,17 @@
                 :label="f.label"
                 :disabled="saving"
                 v-model="form[f.fieldname]"
-              />
+              >
+                <template v-if="czyPoleTelefonu(f.fieldname) && czyTelefon(form[f.fieldname])" #suffix>
+                  <Button
+                    variant="ghost"
+                    icon="lucide-phone"
+                    class="!size-5"
+                    :tooltip="__('Zadzwoń')"
+                    :link="telHref(form[f.fieldname])"
+                  />
+                </template>
+              </FormControl>
             </div>
           </div>
 
@@ -437,7 +452,17 @@
                 :disabled="saving"
                 v-model="form[f.fieldname]"
                 @blur="onKwotaBlur(f)"
-              />
+              >
+                <template v-if="czyPoleTelefonu(f.fieldname) && czyTelefon(form[f.fieldname])" #suffix>
+                  <Button
+                    variant="ghost"
+                    icon="lucide-phone"
+                    class="!size-5"
+                    :tooltip="__('Zadzwoń')"
+                    :link="telHref(form[f.fieldname])"
+                  />
+                </template>
+              </FormControl>
             </div>
           </div>
         </section>
@@ -448,6 +473,8 @@
 
 <script setup>
 import KredytIcon from '@/components/Icons/KredytIcon.vue'
+import TelefonLink from '@/components/TelefonLink.vue'
+import { telHref, czyTelefon } from '@/utils/telefon'
 import { onClickOutside } from '@vueuse/core'
 import { Badge, Button, FormControl, call, toast } from 'frappe-ui'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
@@ -622,6 +649,20 @@ const formSections = [
     ],
   },
 ]
+
+// Fields carrying a phone number, across the applicant block
+// (wnioskodawca_telefon) and the income groups (praca_adres_telefon,
+// dzialalnosc_telefon): the small "Zadzwon" icon button next to the input,
+// and the tel: link on the read-only applicant display, both key off this.
+const POLA_TELEFONU = new Set([
+  'wnioskodawca_telefon',
+  'praca_adres_telefon',
+  'dzialalnosc_telefon',
+])
+
+function czyPoleTelefonu(fieldname) {
+  return POLA_TELEFONU.has(fieldname)
+}
 
 // --- Applicant block field metadata (10 wnioskodawca_* fields) -------------
 // Canon (fieldnames, order, PL labels) lives entirely in kredytForm.js's

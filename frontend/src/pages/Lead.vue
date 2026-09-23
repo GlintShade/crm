@@ -180,6 +180,12 @@
                             )
                     "
                   />
+                  <Button
+                    v-else-if="czyTelefon(doc.mobile_no)"
+                    :tooltip="__('Zadzwoń')"
+                    :icon="PhoneIcon"
+                    :link="telHref(doc.mobile_no)"
+                  />
 
                   <Button
                     :tooltip="__('Send an Email')"
@@ -342,6 +348,7 @@ import { getMeta } from '@/stores/meta'
 import { useDocument } from '@/data/document'
 import { whatsappEnabled } from '@/composables/whatsapp'
 import { callEnabled } from '@/composables/telephony'
+import { telHref, czyTelefon } from '@/utils/telefon'
 import {
   createResource,
   FileUploader,

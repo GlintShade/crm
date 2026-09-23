@@ -164,7 +164,12 @@
               <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div v-for="p in prefillDrugiDisplay" :key="p.key">
                   <div class="text-xs text-ink-gray-5">{{ p.label }}</div>
-                  <div class="text-sm text-ink-gray-8">{{ p.value || '-' }}</div>
+                  <TelefonLink
+                    v-if="p.key === 'mobile_no' && p.value"
+                    :numer="p.value"
+                    klasa="text-sm text-ink-gray-8"
+                  />
+                  <div v-else class="text-sm text-ink-gray-8">{{ p.value || '-' }}</div>
                 </div>
               </div>
               <div class="mt-3 text-xs text-ink-gray-4">
@@ -381,6 +386,7 @@
 <script setup>
 import Link from '@/components/Controls/Link.vue'
 import UmowaIcon from '@/components/Icons/UmowaIcon.vue'
+import TelefonLink from '@/components/TelefonLink.vue'
 import { Badge, Button, FormControl, Switch, call, createResource, toast } from 'frappe-ui'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { formatPlnAmount } from '@/utils/money'

@@ -182,6 +182,9 @@
                 })
             "
           />
+          <div v-else-if="column.key === 'mobile_no' && label" class="truncate text-base">
+            <TelefonLink :numer="getLabel(label, column)" />
+          </div>
           <div
             v-else-if="label"
             class="truncate text-base"
@@ -229,6 +232,7 @@ import HeartIcon from '@/components/Icons/HeartIcon.vue'
 import MultipleAvatar from '@/components/MultipleAvatar.vue'
 import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
 import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
+import TelefonLink from '@/components/TelefonLink.vue'
 import RatingInput from '@/components/Controls/RatingInput.vue'
 import ListBulkActions from '@/components/ListBulkActions.vue'
 import ListRows from '@/components/ListViews/ListRows.vue'

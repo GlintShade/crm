@@ -293,7 +293,17 @@
       :disabled="Boolean(field.read_only)"
       :description="field.description"
       @change="fieldChange($event.target.value, field)"
-    />
+    >
+      <template v-if="czyPoleTelefonu(field) && czyTelefon(data[field.fieldname])" #suffix>
+        <Button
+          variant="ghost"
+          icon="lucide-phone"
+          class="!size-5"
+          :tooltip="__('Zadzwoń')"
+          :link="telHref(data[field.fieldname])"
+        />
+      </template>
+    </FormControl>
   </div>
 </template>
 <script setup>
@@ -316,6 +326,7 @@ import TableMultiselectInput from '@/components/Controls/TableMultiselectInput.v
 import Link from '@/components/Controls/Link.vue'
 import Grid from '@/components/Controls/Grid.vue'
 import { createDocument } from '@/composables/document'
+import { telHref, czyTelefon } from '@/utils/telefon'
 import {
   getFormat,
   evaluateDependsOnValue,
@@ -566,6 +577,24 @@ const getPlaceholder = (field) => {
   } else {
     return __('Enter {0}', [__(field.label)])
   }
+}
+
+// Detects a phone-number field (fieldtype Phone, Data with options "Phone"
+// as Frappe stores mobile_no on CRM Lead/Deal/Contact, or a fieldname
+// ending in "telefon" for custom fields) so the editable text input below
+// can offer a small "Zadzwon" icon button next to it. Read-only phone
+// fields render through the disabled FormControl branch above and are not
+// covered here, they are handled per surface where the read-only value is
+// shown as plain text.
+function czyPoleTelefonu(field) {
+  if (field.fieldtype === 'Phone' || field.options === 'Phone') return true
+  const fieldname = (field.fieldname || '').toLowerCase()
+  return (
+    fieldname === 'mobile_no' ||
+    fieldname === 'phone' ||
+    fieldname === 'custom_telefon' ||
+    fieldname.endsWith('telefon')
+  )
 }
 
 const getOptions = (options) => {

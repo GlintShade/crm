@@ -225,7 +225,7 @@
                           class="flex items-center gap-3 p-1 py-1.5 text-ink-gray-8"
                         >
                           <PhoneIcon class="h-4 w-4" />
-                          {{ contact.mobile_no }}
+                          <TelefonLink :numer="contact.mobile_no" />
                         </div>
                         <div
                           v-if="!contact.email && !contact.mobile_no"
@@ -324,6 +324,7 @@
 import DeleteLinkedDocModal from '@/components/DeleteLinkedDocModal.vue'
 import ErrorPage from '@/components/ErrorPage.vue'
 import Icon from '@/components/Icon.vue'
+import TelefonLink from '@/components/TelefonLink.vue'
 import Resizer from '@/components/Resizer.vue'
 import LoadingIndicator from '@/components/Icons/LoadingIndicator.vue'
 import ActivityIcon from '@/components/Icons/ActivityIcon.vue'

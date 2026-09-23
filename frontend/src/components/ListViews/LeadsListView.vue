@@ -213,6 +213,9 @@
             :disabled="true"
             :max="column.options || 5"
           />
+          <div v-else-if="column.key === 'mobile_no' && label" class="truncate text-base">
+            <TelefonLink :numer="getLabel(label, column)" />
+          </div>
           <div v-else-if="label" class="truncate text-base">
             {{ getLabel(label, column) }}
           </div>
@@ -279,6 +282,7 @@ import CommentIcon from '@/components/Icons/CommentIcon.vue'
 import KomentarzeLeadaModal from '@/components/Modals/KomentarzeLeadaModal.vue'
 import LeadInlineCell from '@/components/ListViews/LeadInlineCell.vue'
 import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
+import TelefonLink from '@/components/TelefonLink.vue'
 import RatingInput from '@/components/Controls/RatingInput.vue'
 import MultipleAvatar from '@/components/MultipleAvatar.vue'
 import ListBulkActions from '@/components/ListBulkActions.vue'

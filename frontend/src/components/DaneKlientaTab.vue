@@ -125,7 +125,17 @@
                 :disabled="!mozeZapisywac"
                 :error="bledy.mobile_no"
                 @blur="onBlurTelefonGlowny"
-              />
+              >
+                <template v-if="czyTelefon(telefonGlowny)" #suffix>
+                  <Button
+                    variant="ghost"
+                    icon="lucide-phone"
+                    class="!size-5"
+                    :tooltip="__('Zadzwoń')"
+                    :link="telHref(telefonGlowny)"
+                  />
+                </template>
+              </FormControl>
             </div>
           </div>
         </div>
@@ -261,6 +271,7 @@
 <script setup>
 import { useDocument } from '@/data/document'
 import { usersStore } from '@/stores/users.js'
+import { telHref, czyTelefon } from '@/utils/telefon'
 import { call } from 'frappe-ui'
 import { computed, reactive, ref, watch } from 'vue'
 import {
