@@ -55,6 +55,45 @@ def mozna_wyslac(status: str | None) -> bool:
 	return status in {"Błąd", "Odrzucona", "Wygasła", "Wycofana"}
 
 
+def czy_wlaczone(wartosc: object) -> bool:
+	"""Poprawna koercja wartości pola Check `enabled` z `Volteo Autenti Settings` do
+	bool (ops#169, znaleziony przy okazji probki na żywo dla drugiego podpisujacego).
+
+	`frappe.db.get_singles_dict` (celowy wybor w `_autenti_ustawienia`, zamiast
+	`get_single_value`, ktore klamie o nieustawionym polu Single, patrz jej
+	docstring) zwraca wartosci Single jako STRINGI wprost z tabeli `tabSingles`,
+	nigdy jako Python bool ani int. Dla pola Check ustawionego na 0 to string
+	`"0"` - a `bool("0")` w Pythonie jest `True`, bo to niepusty string, nie liczba
+	zero. Goly `bool(wartosc)` w `_wlaczone` po cichu traktowal wylaczona integracje
+	jako wlaczona za kazdym razem, kiedy ktokolwiek jawnie zapisal `enabled=0`
+	(w odroznieniu od pola nigdy niezapisanego, gdzie `get_singles_dict` w ogole
+	nie zwraca klucza - `dict.get` wtedy daje `None`, ktory `czy_wlaczone` tez
+	traktuje jako wylaczone).
+
+	Akceptuje kazdy ksztalt, w jakim ta wartosc realnie sie pojawia: `None` i pusty
+	string (pole nigdy niezapisane albo puste) sa `False`; string `"0"` jest
+	`False`, kazdy inny niepusty string (w tym `"1"`) jest `True` po probie
+	parsowania jako liczba calkowita, z bezpiecznym domyslnym `True` dla
+	niepustego, nieliczbowego stringa (nierozpoznany ksztalt danych nie powinien
+	po cichu wylaczac integracji); liczby i bool przechodza przez zwykle `bool()`.
+	"""
+	if wartosc is None:
+		return False
+	if isinstance(wartosc, bool):
+		return wartosc
+	if isinstance(wartosc, int):
+		return wartosc != 0
+	if isinstance(wartosc, str):
+		okrojony = wartosc.strip()
+		if not okrojony:
+			return False
+		try:
+			return int(okrojony) != 0
+		except ValueError:
+			return True
+	return bool(wartosc)
+
+
 def tytul_dokumentu(signer_name: str | None) -> str:
 	"""Tytuł procesu dokumentu Autenti i nazwa pliku widoczna klientowi.
 
@@ -67,38 +106,62 @@ def tytul_dokumentu(signer_name: str | None) -> str:
 	return f"Umowa ProEnergy - {signer_name}"
 
 
+def _zrodlo_klienta(indeks: int) -> str:
+	"""Nazwa `zrodlo` dla kandydata na pozycji `indeks` (liczonej od zera) w liście
+	podpisujących klientów przekazanej do `zbuduj_odbiorcow` (ops#169): pierwszy
+	Zamawiający to `"klient"` (zgodność wsteczna ze sprzed listy, gdy był to
+	jedyny argument), drugi to `"klient2"`, kolejni `"klient3"`, `"klient4"` itd.
+	W praktyce lista ma dziś co najwyżej dwa elementy (umowa pojedyncza/podwójna),
+	ale funkcja nie zakłada górnego limitu."""
+	if indeks == 0:
+		return "klient"
+	return f"klient{indeks + 1}"
+
+
 def zbuduj_odbiorcow(
-	klient: dict[str, str | None] | None,
+	podpisujacy: list[dict[str, str | None] | None],
 	prezes: dict[str, str | None] | None,
 	handlowiec: dict[str, str | None] | None,
 	archiwum: dict[str, str | None] | None,
 ) -> list[dict[str, str]]:
-	"""Buduje uporządkowaną listę odbiorców procesu dokumentu Autenti z czterech
-	kandydatów, w stałej kolejności: klient -> prezes -> handlowiec -> archiwum.
+	"""Buduje uporządkowaną listę odbiorców procesu dokumentu Autenti: `podpisujacy`
+	to UPORZĄDKOWANA LISTA kandydatów-klientów (jeden element dla umowy
+	pojedynczej, dwa dla umowy podwójnej z drugim Zamawiającym, ops#169; kredyt
+	ma zawsze dokładnie jeden element, wnioskodawcę), plus stałe role `prezes`,
+	`handlowiec`, `archiwum`. Stała kolejność: wszyscy klienci z `podpisujacy`
+	(w kolejności listy) -> prezes -> handlowiec -> archiwum.
 
 	Każdy wejściowy słownik ma klucze `first_name`, `last_name`, `full_name`,
-	`email` (dowolny może brakować lub być pusty). `klient` i `prezes` stają się
-	SIGNER-ami, `handlowiec` i `archiwum` — VIEWER-ami. Każdy wynikowy wpis ma
-	klucze `first_name`, `last_name`, `full_name`, `email`, `role`, `zrodlo`
-	(`"klient"`/`"prezes"`/`"handlowiec"`/`"archiwum"`).
+	`email` (dowolny może brakować lub być pusty). Każdy element `podpisujacy`
+	i `prezes` stają się SIGNER-ami, `handlowiec` i `archiwum`, VIEWER-ami.
+	Każdy wynikowy wpis ma klucze `first_name`, `last_name`, `full_name`,
+	`email`, `role`, `zrodlo` (`"klient"`/`"klient2"`/`"prezes"`/`"handlowiec"`/
+	`"archiwum"`, patrz `_zrodlo_klienta`).
 
 	Kandydat jest pomijany, gdy jest `None` albo ma pusty/białoznakowy e-mail.
+	To zachowanie CELOWO nie odróżnia "ten sam handlowiec figuruje dwa razy"
+	(cicha deduplikacja, zamierzona) od "dwie różne osoby fizyczne mają
+	identyczny e-mail" (błąd danych): tę drugą sytuację musi wychwycić
+	wywołujący PRZED wywołaniem tej funkcji, przez `emaile_podpisujacych_rozlaczne`
+	na samej liście `podpisujacy`, i zwrócić czytelny błąd zamiast pozwolić tej
+	funkcji po cichu zwinąć obu klientów do jednego odbiorcy.
+
 	Deduplikacja jest po e-mailu, bez rozróżniania wielkości liter: późniejszy
-	duplikat jest odrzucany. Ponieważ kolejność wejść stawia obu SIGNER-ów przed
-	obu VIEWER-ami, SIGNER zawsze wygrywa z duplikatem VIEWER-a o tym samym
-	adresie — podpisujący nigdy nie zostaje po cichu zdegradowany do samego
-	podglądu.
+	duplikat jest odrzucany. Ponieważ kolejność wejść stawia wszystkich
+	SIGNER-ów przed obu VIEWER-ami, SIGNER zawsze wygrywa z duplikatem
+	VIEWER-a o tym samym adresie: podpisujący nigdy nie zostaje po cichu
+	zdegradowany do samego podglądu.
 
 	Nie wymyśla brakujących imion/nazwisk — puste pozostają pustymi stringami;
 	to wywołujący decyduje, czy dla `archiwum` (typowo generyczny viewer)
 	podstawić nazwę zastępczą.
 	"""
-	kandydaci = (
-		(klient, "SIGNER", "klient"),
-		(prezes, "SIGNER", "prezes"),
-		(handlowiec, "VIEWER", "handlowiec"),
-		(archiwum, "VIEWER", "archiwum"),
-	)
+	kandydaci: list[tuple[dict[str, str | None] | None, str, str]] = [
+		(dane, "SIGNER", _zrodlo_klienta(indeks)) for indeks, dane in enumerate(podpisujacy)
+	]
+	kandydaci.append((prezes, "SIGNER", "prezes"))
+	kandydaci.append((handlowiec, "VIEWER", "handlowiec"))
+	kandydaci.append((archiwum, "VIEWER", "archiwum"))
 
 	odbiorcy: list[dict[str, str]] = []
 	widziane_emaile: set[str] = set()
@@ -125,6 +188,38 @@ def zbuduj_odbiorcow(
 		)
 
 	return odbiorcy
+
+
+def emaile_podpisujacych_rozlaczne(podpisujacy: list[dict[str, str | None] | None]) -> bool:
+	"""Czy wszyscy kandydaci-klienci na liście `podpisujacy` (parametr
+	`zbuduj_odbiorcow` powyżej) mają WZAJEMNIE różne adresy e-mail, bez
+	rozróżniania wielkości liter (ops#169).
+
+	W odróżnieniu od deduplikacji wewnątrz `zbuduj_odbiorcow` (która cicho
+	zwija duplikat, zamierzone dla "ten sam handlowiec widnieje dwa razy"),
+	dwaj RÓŻNI klienci (pierwszy i drugi Zamawiający) dzielący jeden e-mail są
+	błędem danych, który wywołujący musi zgłosić jako czytelny komunikat,
+	stąd osobna, jawna funkcja zamiast poleganie na cichej deduplikacji.
+
+	Zwraca `True`, gdy lista ma mniej niż dwa elementy z niepustym e-mailem
+	(nie ma z czym kolidować), w tym dla pojedynczego formularza kredytowego
+	(zawsze jeden element) i dla umowy pojedynczej (jeden Zamawiający).
+	`None` i pusty/białoznakowy e-mail są pomijane tak samo jak w
+	`zbuduj_odbiorcow`, żeby te dwie funkcje widziały dokładnie ten sam zestaw
+	"prawdziwych" kandydatów.
+	"""
+	widziane: set[str] = set()
+	for dane in podpisujacy:
+		if not dane:
+			continue
+		email = (dane.get("email") or "").strip()
+		if not email:
+			continue
+		klucz = email.lower()
+		if klucz in widziane:
+			return False
+		widziane.add(klucz)
+	return True
 
 
 def nazwa_pliku_umowy(deal: str) -> str:

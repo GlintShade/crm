@@ -13,8 +13,10 @@ from crm.integrations.autenti.logika import (
 	czy_legacy_kredyt,
 	czy_logowac_brak_podpisanego_pliku,
 	czy_logowac_nierozpoznany_status,
+	czy_wlaczone,
 	czy_wysylanie_przekroczylo_timeout,
 	decyzja_ponownej_wysylki,
+	emaile_podpisujacych_rozlaczne,
 	komunikat_bledu_wysylki,
 	komunikat_nierozpoznanego_statusu,
 	mozna_wyslac,
@@ -61,6 +63,31 @@ class TestAutentiLogika(unittest.TestCase):
 	def test_e_mozna_wyslac_nierozpoznany_status(self: "TestAutentiLogika") -> None:
 		self.assertFalse(mozna_wyslac("Coś nieznanego"))
 
+	def test_e2_czy_wlaczone_none_falsz(self: "TestAutentiLogika") -> None:
+		self.assertFalse(czy_wlaczone(None))
+
+	def test_e3_czy_wlaczone_pusty_string_falsz(self: "TestAutentiLogika") -> None:
+		self.assertFalse(czy_wlaczone(""))
+		self.assertFalse(czy_wlaczone("   "))
+
+	def test_e4_czy_wlaczone_string_zero_falsz(self: "TestAutentiLogika") -> None:
+		# To jest dokladnie ksztalt, w jakim `frappe.db.get_singles_dict` zwraca
+		# wylaczone pole Check (ops#169) - `bool("0")` bylby tu blednie `True`.
+		self.assertFalse(czy_wlaczone("0"))
+
+	def test_e5_czy_wlaczone_int_zero_falsz(self: "TestAutentiLogika") -> None:
+		self.assertFalse(czy_wlaczone(0))
+
+	def test_e6_czy_wlaczone_string_jeden_prawda(self: "TestAutentiLogika") -> None:
+		self.assertTrue(czy_wlaczone("1"))
+
+	def test_e7_czy_wlaczone_int_jeden_prawda(self: "TestAutentiLogika") -> None:
+		self.assertTrue(czy_wlaczone(1))
+
+	def test_e8_czy_wlaczone_bool_prawda_i_falsz(self: "TestAutentiLogika") -> None:
+		self.assertTrue(czy_wlaczone(True))
+		self.assertFalse(czy_wlaczone(False))
+
 	def test_f_tytul_dokumentu_normalny(self: "TestAutentiLogika") -> None:
 		self.assertEqual(tytul_dokumentu("Jan Kowalski"), "Umowa ProEnergy - Jan Kowalski")
 		self.assertIn("-", tytul_dokumentu("Jan Kowalski"))
@@ -106,7 +133,7 @@ class TestAutentiLogika(unittest.TestCase):
 			"email": "umowy@proenergy.pro",
 		}
 
-		wynik = zbuduj_odbiorcow(klient, prezes, handlowiec, archiwum)
+		wynik = zbuduj_odbiorcow([klient], prezes, handlowiec, archiwum)
 
 		self.assertEqual(len(wynik), 4)
 		self.assertEqual([o["zrodlo"] for o in wynik], ["klient", "prezes", "handlowiec", "archiwum"])
@@ -135,7 +162,7 @@ class TestAutentiLogika(unittest.TestCase):
 			"email": wspolny_email,
 		}
 
-		wynik = zbuduj_odbiorcow(klient, prezes, None, None)
+		wynik = zbuduj_odbiorcow([klient], prezes, None, None)
 
 		self.assertEqual(len(wynik), 1)
 		self.assertEqual(wynik[0]["zrodlo"], "klient")
@@ -156,7 +183,7 @@ class TestAutentiLogika(unittest.TestCase):
 			"email": wspolny_email,
 		}
 
-		wynik = zbuduj_odbiorcow(klient, None, handlowiec, None)
+		wynik = zbuduj_odbiorcow([klient], None, handlowiec, None)
 
 		self.assertEqual(len(wynik), 1)
 		self.assertEqual(wynik[0]["zrodlo"], "klient")
@@ -170,7 +197,7 @@ class TestAutentiLogika(unittest.TestCase):
 			"email": "jan.kowalski@example.com",
 		}
 
-		wynik = zbuduj_odbiorcow(klient, None, None, None)
+		wynik = zbuduj_odbiorcow([klient], None, None, None)
 
 		self.assertEqual(len(wynik), 1)
 		self.assertEqual(wynik[0]["zrodlo"], "klient")
@@ -189,7 +216,7 @@ class TestAutentiLogika(unittest.TestCase):
 			"email": "   ",
 		}
 
-		wynik = zbuduj_odbiorcow(klient, None, None, archiwum_pusty)
+		wynik = zbuduj_odbiorcow([klient], None, None, archiwum_pusty)
 
 		self.assertEqual(len(wynik), 1)
 		self.assertEqual(wynik[0]["zrodlo"], "klient")
@@ -210,11 +237,142 @@ class TestAutentiLogika(unittest.TestCase):
 			"email": "jan.kowalski@example.com",
 		}
 
-		wynik = zbuduj_odbiorcow(klient, None, handlowiec, None)
+		wynik = zbuduj_odbiorcow([klient], None, handlowiec, None)
 
 		self.assertEqual(len(wynik), 1)
 		self.assertEqual(wynik[0]["zrodlo"], "klient")
 		self.assertEqual(wynik[0]["email"], "Jan.Kowalski@Example.com")
+
+	def test_o2_zbuduj_odbiorcow_dwoch_klientow_unikalne_emaile(self: "TestAutentiLogika") -> None:
+		klient1 = {
+			"first_name": "Jan",
+			"last_name": "Kowalski",
+			"full_name": "Jan Kowalski",
+			"email": "jan.kowalski@example.com",
+		}
+		klient2 = {
+			"first_name": "Anna",
+			"last_name": "Nowak",
+			"full_name": "Anna Nowak",
+			"email": "anna.nowak@example.com",
+		}
+		prezes = {
+			"first_name": "Leszek",
+			"last_name": "Furmann",
+			"full_name": "Leszek Furmann",
+			"email": "l.furmann@proenergy.pro",
+		}
+		handlowiec = {
+			"first_name": "Grzegorz",
+			"last_name": "Furmann",
+			"full_name": "Grzegorz Furmann",
+			"email": "g.furmann@proenergy.pro",
+		}
+		archiwum = {
+			"first_name": "Archiwum",
+			"last_name": "ProEnergy",
+			"full_name": "Archiwum ProEnergy",
+			"email": "umowy@proenergy.pro",
+		}
+
+		wynik = zbuduj_odbiorcow([klient1, klient2], prezes, handlowiec, archiwum)
+
+		self.assertEqual(len(wynik), 5)
+		self.assertEqual(
+			[o["zrodlo"] for o in wynik], ["klient", "klient2", "prezes", "handlowiec", "archiwum"]
+		)
+		self.assertEqual(
+			[o["role"] for o in wynik], ["SIGNER", "SIGNER", "SIGNER", "VIEWER", "VIEWER"]
+		)
+		self.assertEqual(wynik[0]["email"], "jan.kowalski@example.com")
+		self.assertEqual(wynik[1]["email"], "anna.nowak@example.com")
+
+	def test_o3_zbuduj_odbiorcow_dwoch_klientow_ten_sam_email_zwija_do_jednego(
+		self: "TestAutentiLogika",
+	) -> None:
+		wspolny_email = "para@example.com"
+		klient1 = {
+			"first_name": "Jan",
+			"last_name": "Kowalski",
+			"full_name": "Jan Kowalski",
+			"email": wspolny_email,
+		}
+		klient2 = {
+			"first_name": "Anna",
+			"last_name": "Kowalska",
+			"full_name": "Anna Kowalska",
+			"email": wspolny_email,
+		}
+
+		wynik = zbuduj_odbiorcow([klient1, klient2], None, None, None)
+
+		self.assertEqual(len(wynik), 1)
+		self.assertEqual(wynik[0]["zrodlo"], "klient")
+		self.assertEqual(wynik[0]["role"], "SIGNER")
+		self.assertFalse(emaile_podpisujacych_rozlaczne([klient1, klient2]))
+
+	def test_o4_zbuduj_odbiorcow_drugi_klient_bez_emaila_pomijany(self: "TestAutentiLogika") -> None:
+		klient1 = {
+			"first_name": "Jan",
+			"last_name": "Kowalski",
+			"full_name": "Jan Kowalski",
+			"email": "jan.kowalski@example.com",
+		}
+		klient2_bez_emaila = {
+			"first_name": "Anna",
+			"last_name": "Nowak",
+			"full_name": "Anna Nowak",
+			"email": "",
+		}
+
+		wynik = zbuduj_odbiorcow([klient1, klient2_bez_emaila], None, None, None)
+
+		self.assertEqual(len(wynik), 1)
+		self.assertEqual(wynik[0]["zrodlo"], "klient")
+		self.assertEqual(wynik[0]["email"], "jan.kowalski@example.com")
+
+	def test_o5_zbuduj_odbiorcow_kolejnosc_zachowana(self: "TestAutentiLogika") -> None:
+		klient1 = {
+			"first_name": "Jan",
+			"last_name": "Kowalski",
+			"full_name": "Jan Kowalski",
+			"email": "jan.kowalski@example.com",
+		}
+		klient2 = {
+			"first_name": "Anna",
+			"last_name": "Nowak",
+			"full_name": "Anna Nowak",
+			"email": "anna.nowak@example.com",
+		}
+		prezes = {
+			"first_name": "Leszek",
+			"last_name": "Furmann",
+			"full_name": "Leszek Furmann",
+			"email": "l.furmann@proenergy.pro",
+		}
+
+		wynik = zbuduj_odbiorcow([klient1, klient2], prezes, None, None)
+
+		self.assertEqual([o["email"] for o in wynik], [klient1["email"], klient2["email"], prezes["email"]])
+
+	def test_o6_emaile_podpisujacych_rozlaczne_dwaj_rozni_klienci_prawda(
+		self: "TestAutentiLogika",
+	) -> None:
+		klient1 = {"email": "jan.kowalski@example.com"}
+		klient2 = {"email": "anna.nowak@example.com"}
+		self.assertTrue(emaile_podpisujacych_rozlaczne([klient1, klient2]))
+
+	def test_o7_emaile_podpisujacych_rozlaczne_pojedynczy_klient_prawda(
+		self: "TestAutentiLogika",
+	) -> None:
+		self.assertTrue(emaile_podpisujacych_rozlaczne([{"email": "jan.kowalski@example.com"}]))
+
+	def test_o8_emaile_podpisujacych_rozlaczne_ignoruje_none_i_puste(
+		self: "TestAutentiLogika",
+	) -> None:
+		self.assertTrue(
+			emaile_podpisujacych_rozlaczne([None, {"email": ""}, {"email": "jan.kowalski@example.com"}])
+		)
 
 	def test_p_tytul_dokumentu_kredytu_normalny(self: "TestAutentiLogika") -> None:
 		self.assertEqual(

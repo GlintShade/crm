@@ -64,7 +64,16 @@ def _autenti_ustawienia() -> dict[str, Any]:
 
 
 def _wlaczone() -> bool:
-	return bool(_autenti_ustawienia().get("enabled"))
+	"""Czy integracja Autenti jest wlaczona - patrz `logika.czy_wlaczone` dla
+	uzasadnienia, dlaczego to NIE jest goly `bool(...)`: `_autenti_ustawienia`
+	czyta przez `get_singles_dict`, ktore zwraca wartosci Single jako stringi,
+	wiec pole Check ustawione na 0 przychodzi tu jako string "0", a
+	`bool("0")` jest `True` w Pythonie. Ten sam blad byl obecny (i naprawiony
+	w tym samym miejscu, ops#169) w kazdym innym miejscu tego modulu, ktore
+	czytalo `enabled` z tego samego slownika - patrz `autenti_is_enabled` i
+	`_status_dokumentu` nizej, teraz routowane przez ta sama funkcje albo
+	wprost przez `logika.czy_wlaczone`."""
+	return logika.czy_wlaczone(_autenti_ustawienia().get("enabled"))
 
 
 def _pdf_umowy_plik(deal: str) -> "frappe.model.document.Document | None":
@@ -235,44 +244,88 @@ def _identyfikacja_podpisujacego(deal_doc: "frappe.model.document.Document") -> 
 	return {"first_name": first_name, "last_name": last_name, "full_name": full_name, "email": email}
 
 
+def _drugi_podpisujacy_umowa(
+	dokument: "frappe.model.document.Document | None",
+) -> dict[str, Any] | None:
+	"""Dane drugiego Zamawiającego umowy jako kandydat SIGNER (ops#169), albo `None`,
+	gdy umowa nie istnieje albo nie ma ustawionego `drugi_zamawiajacy` (ops#168, pole
+	Link do `Contact` na `Volteo Umowa`). Używa dokładnie tego samego helpera co
+	`_identyfikacja_podpisujacego` dla kontaktu podstawowego (`_dane_kontaktu`), żeby
+	drugi podpisujący na dokumencie Autenti nigdy nie mógł się rozjechać z drugim
+	Zamawiającym widocznym na SAMEJ UMOWIE.
+
+	Pusty/brakujący e-mail jest zwrócony jako `None` w wynikowym słowniku, nie jako
+	pusty string: `zbuduj_odbiorcow` i `emaile_podpisujacych_rozlaczne` traktują taki
+	kandydat jako pomijalny (kontakt istnieje, ale nie ma jeszcze e-maila), `_wyslij_dokument`
+	blokuje na tym wysyłkę osobnym komunikatem, nazwanym po tej konkretnej osobie."""
+	if dokument is None:
+		return None
+	drugi = dokument.get("drugi_zamawiajacy")
+	if not drugi:
+		return None
+
+	dane = _dane_kontaktu(drugi)
+	first_name = (dane.get("first_name") or "").strip()
+	last_name = (dane.get("last_name") or "").strip()
+	full_name = f"{first_name} {last_name}".strip()
+	email = dane.get("email") or None
+	return {"first_name": first_name, "last_name": last_name, "full_name": full_name, "email": email}
+
+
 def _podpisujacy_umowa(
 	deal_doc: "frappe.model.document.Document", dokument: "frappe.model.document.Document | None"
-) -> dict[str, Any] | None:
-	"""`konfig["podpisujacy"]` dla UMOWY (ops#160) - cienki adapter nad
-	`_identyfikacja_podpisujacego`, dopasowujący kształt wywołania do wspólnego
-	przepływu (`konfig["podpisujacy"](deal_doc, dokument)`). `dokument` jest tu
-	świadomie ignorowany: podpisujący umowy zależy wyłącznie od kontaktu
-	podstawowego SZANSY, nigdy od samego rekordu umowy."""
-	return _identyfikacja_podpisujacego(deal_doc)
+) -> list[dict[str, Any] | None]:
+	"""`konfig["podpisujacy"]` dla UMOWY (ops#160, listowany od ops#169) - zwraca
+	uporządkowaną LISTĘ kandydatów SIGNER dla klienta: pierwszy element to zawsze
+	kontakt podstawowy szansy (`_identyfikacja_podpisujacego`, cienki adapter jak
+	poprzednio), drugi element (obecny WYŁĄCZNIE, gdy `dokument.drugi_zamawiajacy`
+	jest ustawiony) to drugi Zamawiający wariantu umowy podwójnej
+	(`_drugi_podpisujacy_umowa`). Lista ma więc jeden element dla umowy pojedynczej,
+	dwa dla podwójnej - nigdy więcej.
+
+	Pierwszy element może sam być `None` (brak kontaktu podstawowego na szansie) -
+	lista wtedy ma jednoznacznie `[None]`, zgodność z zachowaniem sprzed listy, gdzie
+	`_identyfikacja_podpisujacego` zwracało `None` wprost. Drugi element jest
+	DOPISYWANY do listy tylko, gdy `_drugi_podpisujacy_umowa` zwróci słownik (czyli
+	`drugi_zamawiajacy` jest ustawiony) - nigdy jako `None` na końcu listy, żeby
+	długość listy sama w sobie mówiła, czy to wariant podwójny."""
+	lista: list[dict[str, Any] | None] = [_identyfikacja_podpisujacego(deal_doc)]
+	drugi = _drugi_podpisujacy_umowa(dokument)
+	if drugi is not None:
+		lista.append(drugi)
+	return lista
 
 
 def _podpisujacy_kredyt(
 	deal_doc: "frappe.model.document.Document", dokument: "frappe.model.document.Document | None"
-) -> dict[str, Any] | None:
-	"""`konfig["podpisujacy"]` dla FORMULARZA KREDYTOWEGO (ops#160): podpisujący jest
-	wnioskodawcą zapisanym NA TYM KONKRETNYM rekordzie `Volteo Kredyt` (blok
-	`wnioskodawca_*`, `crm.volteo_kredyt.kontakt_z_wnioskodawcy`), NIGDY kontaktem
+) -> list[dict[str, Any] | None]:
+	"""`konfig["podpisujacy"]` dla FORMULARZA KREDYTOWEGO (ops#160, listowany od ops#169):
+	podpisujący jest wnioskodawcą zapisanym NA TYM KONKRETNYM rekordzie `Volteo Kredyt`
+	(blok `wnioskodawca_*`, `crm.volteo_kredyt.kontakt_z_wnioskodawcy`), NIGDY kontaktem
 	podstawowym szansy - każdy formularz kredytowy tej samej szansy ma swojego
 	WŁASNEGO wnioskodawcę, mogącego się różnić od klienta widocznego na umowie i
 	od wnioskodawcy INNEGO formularza tej samej szansy. Ten niezmiennik lustrzanie
 	odbija ten z `_identyfikacja_podpisujacego` (umowa): podpisujący formularza
 	kredytowego nigdy nie może się rozjechać z wnioskodawcą widocznym na SAMYM
-	FORMULARZU.
+	FORMULARZU. Formularz kredytowy nie ma drugiego podpisującego (jeden wnioskodawca
+	na rekord) - zachowanie tej funkcji jest więc BAJT W BAJT takie samo jak przed
+	ops#169, opakowane w jednoelementową listę.
 
 	`deal_doc` jest tu świadomie ignorowany (trzymany wyłącznie dla zgodności
-	kształtu wywołania z `_podpisujacy_umowa`). Zwraca `None` tylko wtedy, gdy
+	kształtu wywołania z `_podpisujacy_umowa`). Zwraca `[None]` tylko wtedy, gdy
 	`dokument` sam jest `None` (okno wyścigu opisane w `_kredyt_po_nazwie_lub_none`)
-	- w normalnym przepływie rekord zawsze tu istnieje, więc zwraca słownik nawet
-	gdy wszystkie pola wnioskodawcy są puste (spójne z tym, że `prefill` formularza
-	wypełnia ten blok od razu przy założeniu rekordu, `crm.api.kredyt.volteo_kredyt_create`)."""
+	- w normalnym przepływie rekord zawsze tu istnieje, więc zwraca listę ze
+	słownikiem nawet gdy wszystkie pola wnioskodawcy są puste (spójne z tym, że
+	`prefill` formularza wypełnia ten blok od razu przy założeniu rekordu,
+	`crm.api.kredyt.volteo_kredyt_create`)."""
 	if dokument is None:
-		return None
+		return [None]
 	surowy = kontakt_z_wnioskodawcy(dokument.as_dict())
 	first_name = (surowy.get("first_name") or "").strip()
 	last_name = (surowy.get("last_name") or "").strip()
 	full_name = f"{first_name} {last_name}".strip()
 	email = surowy.get("email") or None
-	return {"first_name": first_name, "last_name": last_name, "full_name": full_name, "email": email}
+	return [{"first_name": first_name, "last_name": last_name, "full_name": full_name, "email": email}]
 
 
 def _staly_podpisujacy(ustawienia: dict[str, Any]) -> dict[str, Any] | None:
@@ -393,7 +446,10 @@ def autenti_is_enabled() -> dict[str, Any]:
 	"""Tani, bezstanowy check widoczności funkcji podpisu w UI. Bez gate'u dostępu do
 	szansy - to globalny stan integracji, nie dane konkretnego dokumentu."""
 	ustawienia = _autenti_ustawienia()
-	return {"enabled": bool(ustawienia.get("enabled")), "environment": ustawienia.get("environment")}
+	return {
+		"enabled": logika.czy_wlaczone(ustawienia.get("enabled")),
+		"environment": ustawienia.get("environment"),
+	}
 
 
 def _status_dokumentu(nazwa: str, konfig: dict[str, Any]) -> dict[str, Any]:
@@ -407,7 +463,7 @@ def _status_dokumentu(nazwa: str, konfig: dict[str, Any]) -> dict[str, Any]:
 	jeden, tani endpoint per dokument, żeby te dwa przypadki nigdy się nie rozjechały.
 	"""
 	ustawienia = _autenti_ustawienia()
-	if not ustawienia.get("enabled"):
+	if not logika.czy_wlaczone(ustawienia.get("enabled")):
 		return {"enabled": False}
 
 	dokument = konfig["pobierz"](nazwa)
@@ -417,15 +473,20 @@ def _status_dokumentu(nazwa: str, konfig: dict[str, Any]) -> dict[str, Any]:
 	# skąd wziąć prawdziwego `deal`.
 	deal = dokument.deal if dokument is not None else nazwa
 	deal_doc = frappe.get_doc("CRM Deal", deal)
-	identyfikacja = konfig["podpisujacy"](deal_doc, dokument)
+	# Lista kandydatów SIGNER dla klienta (ops#169): jeden element dla umowy
+	# pojedynczej/kredytu, dwa dla umowy podwójnej z drugim Zamawiającym ustawionym
+	# (`Volteo Umowa.drugi_zamawiajacy`, ops#168) - patrz `_podpisujacy_umowa`/
+	# `_podpisujacy_kredyt`.
+	podpisujacy_lista = konfig["podpisujacy"](deal_doc, dokument)
+	pierwszy_podpisujacy = podpisujacy_lista[0] if podpisujacy_lista else None
 
-	# Informacyjny podgląd pełnej listy odbiorców (klient/wnioskodawca/prezes/
+	# Informacyjny podgląd pełnej listy odbiorców (klient(-ci)/wnioskodawca/prezes/
 	# handlowiec/archiwum) - ten sam budulec co w `_autenti_send_job`, więc
 	# podgląd nigdy nie rozjeżdża się z tym, co faktycznie trafi do procesu
 	# dokumentu. Zwracany zawsze, gdy integracja jest włączona - także po
 	# wysyłce, wyłącznie informacyjnie.
 	proponowani_odbiorcy = logika.zbuduj_odbiorcow(
-		identyfikacja,
+		podpisujacy_lista,
 		_staly_podpisujacy(ustawienia),
 		_handlowiec(frappe.session.user),
 		_archiwum(ustawienia),
@@ -444,10 +505,18 @@ def _status_dokumentu(nazwa: str, konfig: dict[str, Any]) -> dict[str, Any]:
 		"error_message": dokument.get("error_message") if dokument else None,
 		"signed_pdf_file": dokument.get("signed_pdf_file") if dokument else None,
 		"proposed_signer": (
-			{"full_name": identyfikacja["full_name"], "email": identyfikacja["email"]}
-			if identyfikacja
+			{"full_name": pierwszy_podpisujacy["full_name"], "email": pierwszy_podpisujacy["email"]}
+			if pierwszy_podpisujacy
 			else None
 		),
+		# Lista wszystkich proponowanych podpisujących klientów (ops#169) - dla umowy
+		# pojedynczej/kredytu jednoelementowa, tożsama treściowo z `proposed_signer`
+		# (zachowany dla zgodności wstecznej z frontendem sprzed tej zmiany). `None`
+		# na pierwszej pozycji (brak kontaktu podstawowego) jest pomijany, nie
+		# przepuszczany jako `null` w liście.
+		"proposed_signers": [
+			{"full_name": p["full_name"], "email": p["email"]} for p in podpisujacy_lista if p
+		],
 		"proposed_recipients": proponowani_odbiorcy,
 	}
 
@@ -569,9 +638,36 @@ def _wyslij_dokument(nazwa: str, konfig: dict[str, Any]) -> dict[str, Any]:
 		frappe.throw(_(konfig["komunikat_w_toku"]))
 
 	deal_doc = frappe.get_doc("CRM Deal", deal)
-	podpisujacy = konfig["podpisujacy"](deal_doc, dokument)
-	if not podpisujacy or not podpisujacy["email"]:
-		frappe.throw(_(konfig["komunikat_brak_email"]))
+	# Lista kandydatów SIGNER dla klienta (ops#169): patrz `_podpisujacy_umowa`/
+	# `_podpisujacy_kredyt` - jeden element dla umowy pojedynczej/kredytu, dwa dla
+	# umowy podwójnej z drugim Zamawiającym ustawionym.
+	podpisujacy_lista = konfig["podpisujacy"](deal_doc, dokument)
+
+	# Bramka e-maila KAŻDEGO podpisującego klienta (ops#169): pierwszy brak
+	# używa istniejącego, per-dokumentowego komunikatu (`komunikat_brak_email`,
+	# zachowanie sprzed listy niezmienione); każdy kolejny brak (drugi
+	# Zamawiający wariantu podwójnego) dostaje komunikat nazwany po TEJ
+	# KONKRETNEJ osobie, żeby przedstawiciel wiedział, komu brakuje e-maila,
+	# nie tylko że "komuś" brakuje.
+	for indeks, dane in enumerate(podpisujacy_lista):
+		if dane and dane.get("email"):
+			continue
+		if indeks == 0:
+			frappe.throw(_(konfig["komunikat_brak_email"]))
+		nazwa_osoby = (dane or {}).get("full_name") or "Drugi Zamawiający"
+		frappe.throw(
+			_(f"{nazwa_osoby} (drugi Zamawiający) nie ma adresu e-mail. Uzupełnij go w kontaktach.")
+		)
+
+	# Dwaj różni Zamawiający nie mogą dzielić jednego adresu e-mail (ops#169):
+	# `zbuduj_odbiorcow` deduplikuje po e-mailu i po cichu zwinęłaby ich do
+	# jednego odbiorcy, a drugi Zamawiający nigdy nie dostałby własnego
+	# żądania podpisu mimo widniejącej na umowie roli.
+	if not logika.emaile_podpisujacych_rozlaczne(podpisujacy_lista):
+		frappe.throw(_("Obie osoby podpisujące muszą mieć różne adresy e-mail."))
+
+	pierwszy_podpisujacy = podpisujacy_lista[0]
+	drugi_podpisujacy = podpisujacy_lista[1] if len(podpisujacy_lista) > 1 else None
 
 	ustawienia = _autenti_ustawienia()
 	if not _staly_podpisujacy(ustawienia) or not _archiwum(ustawienia):
@@ -599,19 +695,28 @@ def _wyslij_dokument(nazwa: str, konfig: dict[str, Any]) -> dict[str, Any]:
 	# jak rozpoznać, że rekord utknął w „Wysyłanie” dłużej niż
 	# `logika.WYSYLANIE_TIMEOUT_MIN` minut (worker mógł zginąć bez wejścia w
 	# `except`, np. OOM albo restart kontenera).
-	frappe.db.set_value(
-		konfig["doctype"],
-		nazwa,
-		{
-			"autenti_status": "Wysyłanie",
-			"signer_name": podpisujacy["full_name"],
-			"signer_email": podpisujacy["email"],
-			"sent_by": wysylajacy,
-			"sent_at": frappe.utils.now(),
-			"error_message": None,
-		},
-		update_modified=False,
-	)
+	wartosci_zapisu: dict[str, Any] = {
+		"autenti_status": "Wysyłanie",
+		"signer_name": pierwszy_podpisujacy["full_name"],
+		"signer_email": pierwszy_podpisujacy["email"],
+		"sent_by": wysylajacy,
+		"sent_at": frappe.utils.now(),
+		"error_message": None,
+	}
+
+	# `signer2_name`/`signer2_email` (ops#169) tylko, gdy doctype JUŻ ma te pola -
+	# `has_field` zamiast ślepego zapisu robi tę linię bezpieczną dla kolejności
+	# wdrożenia (ops schema przed obrazem, patrz CLAUDE.md): stary schemat bez
+	# tych dwóch pól nie dostaje ich w ogóle w słowniku zapisu, zamiast wysypać
+	# `frappe.db.set_value` na nieistniejącej kolumnie. Gdy pola istnieją, ale nie
+	# ma drugiego podpisującego (umowa pojedyncza, kredyt), oba są jawnie czyszczone
+	# do `None` - ponowna wysyłka tego samego dokumentu bez drugiego Zamawiającego
+	# (np. po jego usunięciu z umowy) nie może zostawić martwych danych po nim.
+	if frappe.get_meta(konfig["doctype"]).has_field("signer2_name"):
+		wartosci_zapisu["signer2_name"] = drugi_podpisujacy["full_name"] if drugi_podpisujacy else None
+		wartosci_zapisu["signer2_email"] = drugi_podpisujacy["email"] if drugi_podpisujacy else None
+
+	frappe.db.set_value(konfig["doctype"], nazwa, wartosci_zapisu, update_modified=False)
 	frappe.db.commit()
 
 	_slad_z_atrybucja(deal, tekst_sladu("autenti_wyslano", dokument=_etykieta_dokumentu(konfig)))
@@ -747,12 +852,17 @@ def _sprobuj_odzyskac_wyslany_proces(
 def _autenti_send_job(nazwa: str, wysylajacy: str | None = None, rodzaj: str = "umowa") -> None:
 	"""Zadanie w tle: pobiera zapisany PDF dokumentu `rodzaj` wskazanego przez
 	NAZWĘ REKORDU `nazwa` (ops#160; NIGDY świeży render - patrz docstring
-	modułu) i wywołuje Autenti, żeby utworzyć proces dokumentu, dodać CZTERECH
-	odbiorców (klient/wnioskodawca + prezes jako SIGNER-zy, handlowiec + archiwum
-	jako VIEWER-zy - patrz `logika.zbuduj_odbiorcow`), wgrać plik i wysłać (podpis
-	równoległy: wszyscy odbiorcy są dodani przed jednym wywołaniem `send()`).
-	Status w CRM osiąga „Podpisana” dopiero, gdy zdalny proces jest COMPLETED,
-	czyli po podpisaniu przez OBU sygnatariuszy.
+	modułu) i wywołuje Autenti, żeby utworzyć proces dokumentu, dodać odbiorców
+	(jeden lub dwaj klienci/wnioskodawca + prezes jako SIGNER-zy, handlowiec +
+	archiwum jako VIEWER-zy - patrz `logika.zbuduj_odbiorcow`; od ops#169 lista
+	klientów ma dwa elementy dla wariantu umowy podwójnej, `Volteo Umowa.drugi_zamawiajacy`
+	ustawiony), wgrać plik i wysłać (podpis równoległy: wszyscy odbiorcy są dodani
+	przed jednym wywołaniem `send()`). Status w CRM osiąga „Podpisana” dopiero,
+	gdy zdalny proces jest COMPLETED, czyli po podpisaniu przez WSZYSTKICH
+	sygnatariuszy - to zachowanie samego pollera (`_odpytaj_wyslane` niżej,
+	czekające na `SIGNED_CONTENT_FILE`) i NIE ZMIENIA SIĘ w ops#169: COMPLETED
+	po stronie Autenti już dziś oznacza podpisanie przez KAŻDEGO SIGNER-a
+	dodanego do procesu, niezależnie od tego, ilu ich jest.
 
 	`rodzaj` wybiera konfigurację z `KONFIGURACJE` (`"umowa"`/`"kredyt"`); domyślne
 	`"umowa"` jest tu wyłącznie dla zgodności ze starą sygnaturą wywoływaną przez
@@ -850,8 +960,15 @@ def _autenti_send_job(nazwa: str, wysylajacy: str | None = None, rodzaj: str = "
 		pdf_bytes = plik.get_content()
 
 		deal_doc = frappe.get_doc("CRM Deal", deal)
-		podpisujacy = konfig["podpisujacy"](deal_doc, dokument)
-		if not podpisujacy or not podpisujacy["email"]:
+		# Lista kandydatów SIGNER dla klienta (ops#169) - patrz `_podpisujacy_umowa`/
+		# `_podpisujacy_kredyt`. Defensywne powtórzenie tylko na PIERWSZYM podpisującym,
+		# tak jak przed tą zmianą: `_wyslij_dokument` już zweryfikowało e-maile
+		# WSZYSTKICH kandydatów (włącznie z rozłącznością) przed zakolejkowaniem tego
+		# joba, więc ten check jest wyłącznie na wypadek, gdyby stan zmienił się w
+		# oknie między akceptacją żądania a wykonaniem joba.
+		podpisujacy_lista = konfig["podpisujacy"](deal_doc, dokument)
+		pierwszy_podpisujacy = podpisujacy_lista[0] if podpisujacy_lista else None
+		if not pierwszy_podpisujacy or not pierwszy_podpisujacy["email"]:
 			frappe.db.set_value(
 				konfig["doctype"],
 				nazwa,
@@ -888,10 +1005,10 @@ def _autenti_send_job(nazwa: str, wysylajacy: str | None = None, rodzaj: str = "
 			return
 
 		handlowiec = _handlowiec(wysylajacy)
-		odbiorcy = logika.zbuduj_odbiorcow(podpisujacy, prezes, handlowiec, archiwum)
+		odbiorcy = logika.zbuduj_odbiorcow(podpisujacy_lista, prezes, handlowiec, archiwum)
 
 		signature_type = ustawienia.get("default_signature_type") or "BASIC"
-		tytul = konfig["tytul"](podpisujacy["full_name"])
+		tytul = konfig["tytul"](pierwszy_podpisujacy["full_name"])
 
 		doc_id = client.create_document_process(title=tytul)
 
