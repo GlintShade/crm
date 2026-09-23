@@ -248,7 +248,9 @@
                   :docname="dealId"
                   :disabled="readOnly"
                   :verdict-status="isReview ? verdictStatusFor(photoKey(slot.key)) : null"
+                  :preview-key="slot.key"
                   @change="(url) => onPhotoChange(slot.key, url)"
+                  @preview="otworzPodglad"
                 />
                 <AudytVerdictControls
                   :verdict="verdictFor(weryfikacja, photoKey(slot.key))"
@@ -274,7 +276,9 @@
                   doctype="Volteo Audyt"
                   :docname="dealId"
                   :disabled="readOnly"
+                  :preview-key="'extra-' + idx"
                   @change="(u) => onExtraPhotoChange(idx, u)"
+                  @preview="otworzPodglad"
                 />
                 <AudytPhotoSlot
                   v-if="editable && zdjeciaDodatkowe.length < 5"
@@ -387,6 +391,12 @@
         </section>
       </div>
     </div>
+
+    <AudytPodgladZdjec
+      v-model="podgladOtwarty"
+      :zdjecia="podgladLista"
+      v-model:indeks="podgladIndeks"
+    />
   </div>
 </template>
 
@@ -395,8 +405,10 @@ import AttachmentItem from '@/components/AttachmentItem.vue'
 import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
 import AudytIcon from '@/components/Icons/AudytIcon.vue'
 import AudytPhotoSlot from '@/components/deal/AudytPhotoSlot.vue'
+import AudytPodgladZdjec from '@/components/deal/AudytPodgladZdjec.vue'
 import AudytVerdictControls from '@/components/deal/AudytVerdictControls.vue'
 import { useAttachments } from '@/composables/useAttachments'
+import { indeksDlaKlucza, zbudujListePodgladu } from '@/utils/audytPodglad'
 import {
   VERDICT_META,
   aggregate,
@@ -679,6 +691,34 @@ const visiblePhotoSlots = computed(() => photoSlots.value.filter(depOk))
 const requiredPhotoSlots = computed(() => visiblePhotoSlots.value.filter(isPhotoRequired))
 const photosTotal = computed(() => requiredPhotoSlots.value.length)
 const photosDone = computed(() => requiredPhotoSlots.value.filter((s) => !!zdjecia[s.key]).length)
+
+// Jedna lista podglądu na całą zakładkę (sloty nazwane + zdjęcia dodatkowe,
+// w kolejności wyświetlania), zasilająca modal AudytPodgladZdjec. PDF-y
+// (faktura_energia) same odpadają w zbudujListePodgladu: otwierają się w
+// nowej karcie z poziomu AudytPhotoSlot, nigdy tutaj.
+const podgladLista = computed(() =>
+  zbudujListePodgladu([
+    ...visiblePhotoSlots.value.map((slot) => ({
+      klucz: slot.key,
+      url: zdjecia[slot.key] || null,
+      etykieta: slot.label,
+    })),
+    ...zdjeciaDodatkowe.value.map((url, idx) => ({
+      klucz: 'extra-' + idx,
+      url,
+      etykieta: __('Zdjęcie dodatkowe'),
+    })),
+  ]),
+)
+const podgladOtwarty = ref(false)
+const podgladIndeks = ref(0)
+
+function otworzPodglad(klucz) {
+  const idx = indeksDlaKlucza(podgladLista.value, klucz)
+  if (idx === -1) return
+  podgladIndeks.value = idx
+  podgladOtwarty.value = true
+}
 
 const complete = computed(
   () =>

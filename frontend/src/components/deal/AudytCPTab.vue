@@ -174,7 +174,9 @@
                 :docname="dealId"
                 :disabled="readOnly"
                 :verdict-status="isReview && dokumenty[slot.key] ? verdictStatusFor(slot.key) : null"
+                :preview-key="slot.key"
                 @change="(url) => onDocChange(slot.key, url)"
+                @preview="otworzPodglad"
               />
               <AudytVerdictControls
                 :verdict="verdictFor(weryfikacja, slot.key)"
@@ -204,7 +206,9 @@
               doctype="Volteo Audyt CP"
               :docname="dealId"
               :disabled="readOnly"
+              :preview-key="'zdjecie-' + idx"
               @change="(u) => onZdjecieChange(idx, u)"
+              @preview="otworzPodglad"
             />
             <AudytPhotoSlot
               v-if="editable && zdjeciaList.length < MAX_ZDJEC"
@@ -322,6 +326,12 @@
         </section>
       </div>
     </div>
+
+    <AudytPodgladZdjec
+      v-model="podgladOtwarty"
+      :zdjecia="podgladLista"
+      v-model:indeks="podgladIndeks"
+    />
   </div>
 </template>
 
@@ -330,9 +340,11 @@ import AttachmentItem from '@/components/AttachmentItem.vue'
 import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
 import AudytIcon from '@/components/Icons/AudytIcon.vue'
 import AudytPhotoSlot from '@/components/deal/AudytPhotoSlot.vue'
+import AudytPodgladZdjec from '@/components/deal/AudytPodgladZdjec.vue'
 import AudytVerdictControls from '@/components/deal/AudytVerdictControls.vue'
 import { useAttachments } from '@/composables/useAttachments'
 import { KLUCZ_ZDJECIA, MAX_ZDJEC, SLOTY, brakiDoPrzeslania, cpAggregate, cpElements, parsujListe, parsujMape } from '@/utils/audytCP'
+import { indeksDlaKlucza, zbudujListePodgladu } from '@/utils/audytPodglad'
 import { parseWeryfikacja, verdictFor } from '@/utils/audytWeryfikacja'
 import { Badge, Button, FileUploader, FormControl, call, createResource, toast } from 'frappe-ui'
 import { computed, reactive, ref, watch } from 'vue'
@@ -431,6 +443,34 @@ const submitBraki = computed(() => brakiDoPrzeslania(dokumenty, zdjeciaList.valu
 
 function verdictStatusFor(key) {
   return verdictFor(weryfikacja, key).status
+}
+
+// Jedna lista podglądu na całą zakładkę (dokumenty + zdjęcia, w kolejności
+// wyświetlania), zasilająca modal AudytPodgladZdjec. Dokumenty PDF (większość
+// SLOTY) same odpadają w zbudujListePodgladu: otwierają się w nowej karcie
+// z poziomu AudytPhotoSlot, nigdy tutaj.
+const podgladLista = computed(() =>
+  zbudujListePodgladu([
+    ...SLOTY.map((slot) => ({
+      klucz: slot.key,
+      url: dokumenty[slot.key] || null,
+      etykieta: slot.label,
+    })),
+    ...zdjeciaList.value.map((url, idx) => ({
+      klucz: 'zdjecie-' + idx,
+      url,
+      etykieta: __('Zdjęcie {0}', [idx + 1]),
+    })),
+  ]),
+)
+const podgladOtwarty = ref(false)
+const podgladIndeks = ref(0)
+
+function otworzPodglad(klucz) {
+  const idx = indeksDlaKlucza(podgladLista.value, klucz)
+  if (idx === -1) return
+  podgladIndeks.value = idx
+  podgladOtwarty.value = true
 }
 
 // --- Documents (immediate save) ----------------------------------------------

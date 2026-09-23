@@ -62,11 +62,41 @@
         <FileTextIcon class="size-8 text-ink-gray-5" />
         <span class="w-full truncate text-center text-xs text-ink-gray-6">{{ fileNameFromUrl }}</span>
       </div>
+      <!--
+        Na myszy caly kafelek ciemnieje na hover (bg-black/55). Na dotyku
+        (hover:none) nakladka jest widoczna cały czas (nie ma stanu hover do
+        wywolania), wiec pelne przyciemnienie zostalo zastapione gradientem
+        od dolu, zeby zdjecie nad paskiem przyciskow zostawalo czytelne.
+      -->
       <div
         v-if="!disabled"
-        class="absolute inset-0 flex items-center justify-center gap-2 bg-black/55 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
+        class="pointer-events-none absolute inset-0 flex items-end justify-center gap-2 pb-2 opacity-0 transition-opacity [@media(hover:hover)]:bg-black/55 [@media(hover:none)]:bg-gradient-to-t [@media(hover:none)]:from-black/60 [@media(hover:none)]:to-transparent [@media(hover:none)]:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
       >
+        <!--
+          Ponizej sm kafelek (2 kolumny, ok. 250px) jest za waski na dwa
+          przyciski z etykietami: „Usuń" wystawal poza kafelek i byl ucinany
+          przez overflow-hidden. Ponizej sm renderujemy same ikony z
+          tooltipem, od sm w gore zostaja przyciski z etykietami jak dotad.
+        -->
         <Button
+          class="pointer-events-auto sm:hidden"
+          size="sm"
+          variant="subtle"
+          icon="lucide-refresh-cw"
+          :tooltip="__('Podmień')"
+          @click.stop="showUploader = true"
+        />
+        <Button
+          class="pointer-events-auto sm:hidden"
+          size="sm"
+          variant="subtle"
+          theme="red"
+          icon="lucide-trash-2"
+          :tooltip="__('Usuń')"
+          @click.stop="removePhoto"
+        />
+        <Button
+          class="pointer-events-auto hidden sm:inline-flex"
           size="sm"
           variant="subtle"
           :label="__('Podmień')"
@@ -74,6 +104,7 @@
           @click.stop="showUploader = true"
         />
         <Button
+          class="pointer-events-auto hidden sm:inline-flex"
           size="sm"
           variant="subtle"
           theme="red"
@@ -102,6 +133,7 @@
 <script setup>
 import FileTextIcon from '@/components/Icons/FileTextIcon.vue'
 import FilesUploader from '@/components/FilesUploader/FilesUploader.vue'
+import { jestPdf, nazwaPlikuZUrl } from '@/utils/audytPodglad'
 import { VERDICT_META } from '@/utils/audytWeryfikacja'
 import { Button } from 'frappe-ui'
 import { computed, ref } from 'vue'
@@ -123,9 +155,14 @@ const props = defineProps({
   // (AudytVerdictControls), never here — this component stays presentational
   // and makes no API calls.
   verdictStatus: { type: String, default: null },
+  // Identyfikator tego slotu w liście podglądu budowanej przez rodzica
+  // (zbudujListePodgladu), przekazywany z powrotem w zdarzeniu `preview`,
+  // żeby rodzic wiedział, który indeks otworzyć w AudytPodgladZdjec. Puste
+  // sloty ("dodaj nowe") dostają go też, ale nigdy nie emitują `preview`.
+  previewKey: { type: String, default: null },
 })
 
-const emit = defineEmits(['change'])
+const emit = defineEmits(['change', 'preview'])
 
 const showUploader = ref(false)
 
@@ -162,18 +199,9 @@ const uploaderOptions = computed(() => ({
 // existing value may have been uploaded back when only images were allowed,
 // or `allowPdf` may have changed since. Query/hash suffixes are stripped
 // before checking the extension.
-const isPdfValue = computed(() => /\.pdf(?:[?#]|$)/i.test(props.value || ''))
+const isPdfValue = computed(() => jestPdf(props.value))
 
-const fileNameFromUrl = computed(() => {
-  if (!props.value) return ''
-  const path = props.value.split(/[?#]/)[0]
-  const last = path.split('/').pop() || path
-  try {
-    return decodeURIComponent(last)
-  } catch (e) {
-    return last
-  }
-})
+const fileNameFromUrl = computed(() => nazwaPlikuZUrl(props.value))
 
 function onAfterUpload(uploadedFiles) {
   if (uploadedFiles && uploadedFiles.length) {
@@ -185,7 +213,16 @@ function removePhoto() {
   emit('change', null)
 }
 
+// PDF-y zostają otwierane w nowej karcie (natywna przeglądarka PDF jest
+// lepsza niż iframe w modalu), decyzja właściciela. Obrazy otwierają się
+// w podglądzie w oknie CRM zamiast wychodzić poza aplikację; rodzic (nie
+// ten komponent) decyduje, który indeks pokazać, więc tylko emitujemy.
 function openFullImage() {
-  if (props.value) window.open(props.value, '_blank', 'noopener')
+  if (!props.value) return
+  if (isPdfValue.value) {
+    window.open(props.value, '_blank', 'noopener')
+  } else {
+    emit('preview', props.previewKey)
+  }
 }
 </script>
