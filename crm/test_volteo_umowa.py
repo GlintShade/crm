@@ -6,6 +6,8 @@ from crm.volteo_umowa import (
 	PROG_PPOZ_KW,
 	brakujace_dane_klienta,
 	brakujace_pola,
+	czy_propagowac_zgody,
+	kontakty_do_zgod,
 	kwota_kredytu,
 	miejsce_i_pokrycie,
 	ppoz_wymagane,
@@ -478,6 +480,72 @@ class TestDecimalLubZeroIKwotaKredytuNaSurowychDanych(unittest.TestCase):
 		self: "TestDecimalLubZeroIKwotaKredytuNaSurowychDanych",
 	) -> None:
 		self.assertEqual(kwota_kredytu("50000", "abc", "Kredyt + gotówka"), Decimal("50000.00"))
+
+
+class TestCzyPropagowacZgody(unittest.TestCase):
+	"""ops#170 / REVISIT.md A-3: propagacja zgod wylaczona po wyslaniu/podpisaniu dokumentu."""
+
+	def test_a_brak_statusu_none_propaguje(self: "TestCzyPropagowacZgody") -> None:
+		self.assertTrue(czy_propagowac_zgody(None))
+
+	def test_b_pusty_string_propaguje(self: "TestCzyPropagowacZgody") -> None:
+		self.assertTrue(czy_propagowac_zgody(""))
+
+	def test_c_wysylanie_nie_propaguje(self: "TestCzyPropagowacZgody") -> None:
+		self.assertFalse(czy_propagowac_zgody("Wysyłanie"))
+
+	def test_d_wyslana_nie_propaguje(self: "TestCzyPropagowacZgody") -> None:
+		self.assertFalse(czy_propagowac_zgody("Wysłana"))
+
+	def test_e_podpisana_nie_propaguje(self: "TestCzyPropagowacZgody") -> None:
+		self.assertFalse(czy_propagowac_zgody("Podpisana"))
+
+	def test_f_nierozpoznany_status_propaguje(self: "TestCzyPropagowacZgody") -> None:
+		# Terminalne statusy nie-sukcesu ("Błąd" i inne spoza SEND_BLOCKED_STATUSES)
+		# wracaja formularz do stanu roboczego, propagacja ma wtedy sens tak samo
+		# jak przed pierwsza wysylka.
+		self.assertTrue(czy_propagowac_zgody("Błąd"))
+
+	def test_g_odrzucona_propaguje(self: "TestCzyPropagowacZgody") -> None:
+		self.assertTrue(czy_propagowac_zgody("Odrzucona"))
+
+	def test_h_wygasla_propaguje(self: "TestCzyPropagowacZgody") -> None:
+		self.assertTrue(czy_propagowac_zgody("Wygasła"))
+
+	def test_i_wycofana_propaguje(self: "TestCzyPropagowacZgody") -> None:
+		self.assertTrue(czy_propagowac_zgody("Wycofana"))
+
+
+class TestKontaktyDoZgod(unittest.TestCase):
+	"""ops#170: lista kontaktow do stemplowania zgod, podstawowy pierwszy, drugi Zamawiajacy drugi."""
+
+	def test_a_oba_puste_daje_pusta_liste(self: "TestKontaktyDoZgod") -> None:
+		self.assertEqual(kontakty_do_zgod(None, None), [])
+
+	def test_b_oba_puste_string_daje_pusta_liste(self: "TestKontaktyDoZgod") -> None:
+		self.assertEqual(kontakty_do_zgod("", ""), [])
+
+	def test_c_tylko_podstawowy(self: "TestKontaktyDoZgod") -> None:
+		self.assertEqual(kontakty_do_zgod("CONT-0001", None), ["CONT-0001"])
+
+	def test_d_tylko_drugi_bez_podstawowego(self: "TestKontaktyDoZgod") -> None:
+		self.assertEqual(kontakty_do_zgod(None, "CONT-0002"), ["CONT-0002"])
+
+	def test_e_oba_ustawione_podstawowy_pierwszy(self: "TestKontaktyDoZgod") -> None:
+		self.assertEqual(kontakty_do_zgod("CONT-0001", "CONT-0002"), ["CONT-0001", "CONT-0002"])
+
+	def test_f_duplikat_zwraca_jeden_wpis(self: "TestKontaktyDoZgod") -> None:
+		self.assertEqual(kontakty_do_zgod("CONT-0001", "CONT-0001"), ["CONT-0001"])
+
+	def test_g_pusty_string_podstawowy_z_drugim_ustawionym(self: "TestKontaktyDoZgod") -> None:
+		self.assertEqual(kontakty_do_zgod("", "CONT-0002"), ["CONT-0002"])
+
+	def test_h_nie_mutuje_wejscia(self: "TestKontaktyDoZgod") -> None:
+		podstawowy = "CONT-0001"
+		drugi = "CONT-0002"
+		kontakty_do_zgod(podstawowy, drugi)
+		self.assertEqual(podstawowy, "CONT-0001")
+		self.assertEqual(drugi, "CONT-0002")
 
 
 if __name__ == "__main__":

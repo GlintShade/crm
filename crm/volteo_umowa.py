@@ -13,6 +13,8 @@ gdzie indziej — tu tylko czyste funkcje.
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
+from crm.integrations.autenti.logika import SEND_BLOCKED_STATUSES
+
 KONSTRUKCJA_MONTAZ: dict[str, tuple[str, str | None]] = {
 	"Dach skośny - blacha": ("Dach", "Blacha"),
 	"Dach skośny - dachówka": ("Dach", "Dachówka"),
@@ -266,3 +268,39 @@ def _jest_puste(wartosc: Any, pole: str) -> bool:
 		wynik = _sparsuj_decimal(wartosc)
 		return wynik is None or wynik == _ZERO
 	return False
+
+
+def czy_propagowac_zgody(autenti_status: str | None) -> bool:
+	"""Czy `_propaguj_zgody` (`crm/api/umowa.py`) powinno nadpisać zgody na karcie(-ach) kontaktu.
+
+	Fałsz dla `SEND_BLOCKED_STATUSES` (`crm.integrations.autenti.logika`, "Wysyłanie"/
+	"Wysłana"/"Podpisana"; REVISIT.md A-3, ops#170): dokument, który już poszedł do
+	podpisu albo został podpisany, nie powinien retroaktywnie zmieniać zgód na
+	kartach kontaktów przy późniejszym zapisie formularza, konsentem wiążącym jest
+	ten widoczny na podpisanym PDF-ie, nie ten ostatnio zaznaczony w formularzu.
+
+	Prawda dla `None`/pustego stringu (dokument nigdy niewysłany) i dla dowolnego
+	innego statusu, w tym terminalnych nie-sukcesu ("Błąd", "Odrzucona", "Wygasła",
+	"Wycofana"): po nich formularz wraca do stanu roboczego, więc propagacja zgód
+	ma taki sam sens jak przed pierwszą wysyłką.
+	"""
+	if not autenti_status:
+		return True
+	return autenti_status not in SEND_BLOCKED_STATUSES
+
+
+def kontakty_do_zgod(podstawowy: str | None, drugi: str | None) -> list[str]:
+	"""Lista nazw `Contact`, na które `_propaguj_zgody` ma zapisać zgody RODO/marketingowe.
+
+	Podstawowy kontakt szansy zawsze pierwszy, gdy ustawiony; drugi Zamawiający
+	(ops#168, `Volteo Umowa.drugi_zamawiajacy`) drugi, gdy ustawiony. Deduplikuje,
+	żeby ten sam kontakt wybrany omyłkowo w obu rolach nie dostał dwóch identycznych
+	zapisów. `None`/pusty string na dowolnej pozycji jest pomijany, nigdy nie
+	trafia do wyniku jako pusty wpis.
+	"""
+	kandydaci = [podstawowy, drugi]
+	wynik: list[str] = []
+	for kontakt in kandydaci:
+		if kontakt and kontakt not in wynik:
+			wynik.append(kontakt)
+	return wynik
