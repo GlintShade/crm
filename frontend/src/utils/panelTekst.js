@@ -21,7 +21,12 @@ export function czyPoleTekstowe(field) {
 
 /**
  * Liczy startowa liczbe wierszy dla natywnego <textarea>, zeby cala tresc
- * byla widoczna od razu (zanim auto-grow zmierzy DOM po zamontowaniu).
+ * byla widoczna od razu (zanim auto-grow zmierzy DOM po zamontowaniu) --
+ * albo gdy auto-grow z jakiegos powodu nie zadziala (fallback musi wtedy
+ * wystarczyc sam). Domyslne 40 znakow/wiersz zmierzone na realnej kolumnie
+ * panelu bocznego (~300px, tekst 13px): 48 (pierwotna wartosc) niedoszacowywalo
+ * szerokosci i dawalo scrollHeight > clientHeight zaraz po zamontowaniu, zanim
+ * auto-grow zdazyl poprawic wysokosc (headless po scaleniu #177).
  * Suma po liniach wejscia (split('\n')), kazda linia liczona jako
  * max(1, ceil(dlugosc / znakowNaWiersz)), suma przycieta do [min, max].
  *
@@ -32,7 +37,7 @@ export function czyPoleTekstowe(field) {
  * @param {number} max gorny limit liczby wierszy
  * @returns {number}
  */
-export function liczWierszeTekstu(tekst, znakowNaWiersz = 48, min = 4, max = 40) {
+export function liczWierszeTekstu(tekst, znakowNaWiersz = 40, min = 4, max = 40) {
   if (tekst === null || tekst === undefined) return min
 
   const napis = typeof tekst === 'string' ? tekst : String(tekst)

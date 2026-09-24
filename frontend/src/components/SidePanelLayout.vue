@@ -37,6 +37,7 @@
                   <div
                     v-if="field.visible && czyPoleTekstowe(field)"
                     class="field flex flex-col gap-1 px-3 py-1.5 leading-5 first:mt-3"
+                    :ref="(el) => setTextareaRef(field.fieldname, el)"
                   >
                     <Tooltip :text="__(field.label)" :hoverDelay="1">
                       <div class="flex items-center gap-0.5">
@@ -69,7 +70,6 @@
                       :placeholder="field.placeholder"
                       :rows="liczWierszeTekstu(doc[field.fieldname])"
                       :debounce="500"
-                      :ref="(el) => setTextareaRef(field.fieldname, el)"
                       @input="onTekstoweInput"
                       @change.stop="fieldChange($event.target.value, field)"
                     />
@@ -690,14 +690,23 @@ async function handleButtonClick(field) {
 // liczWierszeTekstu() daje sensowna wysokosc od razu (fallback, gdy DOM
 // jeszcze nie zmierzony), a ponizsze dopina textarea do faktycznej tresci po
 // zamontowaniu, na kazdym wpisywaniu i po kazdej zmianie wartosci pola spoza
-// samego pisania (np. odswiezenie dokumentu). frappe-ui Textarea eksponuje
-// natywny element jako `el` (defineExpose), a FormControl -- mimo ze samo
-// nie wola defineExpose -- renderuje Textarea jako jedyny korzen, wiec jego
-// `$el` to ten sam natywny <textarea>.
+// samego pisania (np. odswiezenie dokumentu).
+//
+// Pulapka znaleziona headless (Chromium+WebKit) po scaleniu #177: ref
+// bezposrednio na <FormControl> nie daje natywnego <textarea>. FormControl
+// to <script setup> bez defineExpose, a `$el` szablonowego refa na takim
+// komponencie nie jest gwarantowanym, jednowezlowym elementem -- w praktyce
+// wskazywal na cos bez `.style`, wiec `autoGrow` rzucal
+// "Cannot set properties of undefined (setting 'height')" przy kazdym
+// montowaniu i kazdej zmianie wartosci. Ref idzie teraz na OPAKOWUJACY
+// <div> pionowej galezi (zwykly element DOM, bez niejednoznacznosci), a
+// faktyczny <textarea> jest w nim wyszukiwany przez querySelector -- dziala
+// tez dla galezi read_only (bez textarea w ogole), ktora po prostu nic nie
+// znajduje i wychodzi bez efektu.
 const textareaWatchStops = {}
 
 function autoGrow(el) {
-  if (!el) return
+  if (!el || !el.style) return
   el.style.height = 'auto'
   el.style.height = `${el.scrollHeight}px`
 }
@@ -706,23 +715,27 @@ function onTekstoweInput(event) {
   autoGrow(event.target)
 }
 
-function setTextareaRef(fieldname, komponent) {
-  const el = komponent?.$el
-  if (el) {
-    autoGrow(el)
-    if (!textareaWatchStops[fieldname]) {
-      textareaWatchStops[fieldname] = watch(
-        () => doc.value[fieldname],
-        () => nextTick(() => autoGrow(el)),
-      )
-    }
+function setTextareaRef(fieldname, wrapper) {
+  const ta = wrapper?.querySelector?.('textarea')
+
+  if (!(ta instanceof HTMLTextAreaElement)) {
+    // Galaz read_only (bez textarea) albo pole odmontowane -- zatrzymaj
+    // watcher, zeby nie trzymac referencji do odlaczonego/nieistniejacego DOM.
+    textareaWatchStops[fieldname]?.()
+    delete textareaWatchStops[fieldname]
     return
   }
 
-  // Pole odmontowane (np. field.visible przeszlo na false) -- zatrzymaj
-  // watcher, zeby nie trzymac referencji do odlaczonego DOM.
-  textareaWatchStops[fieldname]?.()
-  delete textareaWatchStops[fieldname]
+  // nextTick, zeby mierzyc juz zamontowany/zaktualizowany DOM, nie wezel
+  // sprzed patcha.
+  nextTick(() => autoGrow(ta))
+
+  if (!textareaWatchStops[fieldname]) {
+    textareaWatchStops[fieldname] = watch(
+      () => doc.value[fieldname],
+      () => nextTick(() => autoGrow(ta)),
+    )
+  }
 }
 
 onBeforeUnmount(() => {
