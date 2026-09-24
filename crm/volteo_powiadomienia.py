@@ -83,6 +83,17 @@ KOLOR_MARKI = "#f97316"
 """Kolor akcentu maila (lewa krawędź bloku spotkania, przycisk) - pomarańcz marki
 ProEnergy, inline w HTML, bo mail nie dostaje `<style>` (poza allowlistą bleach)."""
 
+ZNACZNIK_TRESCI = 'data-volteo="powiadomienie"'
+"""Atrybut na korzeniu `email_content` kazdego z trzech budowniczych ponizej
+(`zbuduj_powiadomienie_przydzialu`, `zbuduj_powiadomienie_odebrania`,
+`zbuduj_powiadomienie_zmiany_terminu`) - bleach zachowuje kazdy atrybut `data-*`
+(`frappe/utils/html_utils.py::sanitize_html`), wiec przezywa sanitizacje az do
+szablonu. `crm/templates/emails/new_notification.html` szuka go w poczatku
+`description`, zeby odroznic nasza tresc od zwyklego powiadomienia rdzenia
+(wzmianka, przydzial szansy/zadania, udostepnienie) i wyrenderowac ja BEZ
+duplikujacego opakowania rdzenia (powtorzony temat jako akapit, szare
+`<blockquote>`, drugi link "Otworz dokument")."""
+
 POLA_LEADA: tuple[str, ...] = (
 	"lead_name",
 	"mobile_no",
@@ -347,7 +358,9 @@ def zbuduj_powiadomienie_przydzialu(
 	)
 
 	email_content = (
+		f'<div {ZNACZNIK_TRESCI}>'
 		f'<p style="margin:0 0 16px 0;">{powitanie}</p>{blok}{tabela}{_przycisk(url)}{_stopka()}'
+		"</div>"
 	)
 
 	return {
@@ -368,8 +381,10 @@ def zbuduj_powiadomienie_odebrania(lead: dict, *, url: str) -> dict:
 	subject = f"Klient {klient} został przekazany innemu handlowcowi"
 	email_header = "Zmiana przydziału"
 	email_content = (
+		f'<div {ZNACZNIK_TRESCI}>'
 		'<p style="margin:0 0 16px 0;">Dzień dobry,<br>ten klient został przekazany innemu handlowcowi '
 		f"i nie widnieje już jako Twoje przypisanie.</p>{_przycisk(url)}{_stopka()}"
+		"</div>"
 	)
 	return {
 		"subject": subject,
@@ -424,7 +439,9 @@ def zbuduj_powiadomienie_zmiany_terminu(
 	)
 
 	email_content = (
+		f'<div {ZNACZNIK_TRESCI}>'
 		f'<p style="margin:0 0 16px 0;">{powitanie}</p>{blok}{tabela}{_przycisk(url)}{_stopka()}'
+		"</div>"
 	)
 
 	return {
