@@ -256,7 +256,7 @@
                             :value="doc[field.fieldname]"
                             :format="getFormat('', '', true, true, false)"
                             :placeholder="field.placeholder"
-                            placement="left-start"
+                            :placement="isMobileView ? 'bottom-start' : 'left-start'"
                             @change="(v) => fieldChange(v, field)"
                           />
                         </div>
@@ -268,7 +268,7 @@
                             :value="doc[field.fieldname]"
                             :format="getFormat('', '', true, false, false)"
                             :placeholder="field.placeholder"
-                            placement="left-start"
+                            :placement="isMobileView ? 'bottom-start' : 'left-start'"
                             @change="(v) => fieldChange(v, field)"
                           />
                         </div>
