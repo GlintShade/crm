@@ -69,9 +69,13 @@
 <script setup>
 import Autocomplete from '@/components/frappe-ui/Autocomplete.vue'
 import { isTranslatable } from '@/utils'
+import { opcjeUzytkownikow, etykietaWartosciUzytkownika } from '@/utils/etykietaUzytkownika'
+import { usersStore } from '@/stores/users'
 import { watchDebounced } from '@vueuse/core'
 import { createResource } from 'frappe-ui'
 import { useAttrs, computed, ref, watch } from 'vue'
+
+const { getUser } = usersStore()
 
 const props = defineProps({
   doctype: { type: String, required: true },
@@ -107,6 +111,35 @@ const valuePropPassed = computed(() => 'value' in attrs)
 const value = computed({
   get: () => {
     let v = valuePropPassed.value ? attrs.value : props.modelValue
+
+    // Fix: filtr "po nazwie, nie po e-mailu" (patrz JSDoc w
+    // utils/etykietaUzytkownika.js). Dla doctype='User' zamknieta kontrolka
+    // (Autocomplete::displayValue) i dropdown maja pokazywac pelne imie i
+    // nazwisko, tak jak FieldLayout/Field.vue robi to od dawna przez
+    // usersStore().getUser(...).full_name -- emitowana wartosc (setter
+    // nizej) zostaje bez zmian, to zawsze e-mail. Przyjety efekt uboczny:
+    // Autocomplete przestaje podswietlac zaznaczony wiersz w liscie opcji,
+    // bo porownuje ten wyswietlany string z option.value (e-mailem), a nie
+    // z pelna nazwa.
+    //
+    // Straznik ponizej: kilka istniejacych wywolan tego komponentu (Field-
+    // Layout/Field.vue, Controls/Grid.vue, Telephony/TaskPanel.vue,
+    // pages/Dashboard.vue) juz dzisiaj samodzielnie licza getUser(...).
+    // full_name PRZED przekazaniem jako `value`, wiec `v` bywa tu gotowa
+    // nazwa, nie e-mail. Bez straznika etykietaWartosciUzytkownika
+    // dostalaby ta nazwe zamiast e-maila i zapytalaby getUser() o nia jak o
+    // e-mail, tworzac w usersStore smieciowy wpis pod kluczem = nazwa
+    // (i przy okazji zbedne zapytanie sieciowe, zanim tlo w pelni dociagnie
+    // liste userow). '@me' i wartosci z '@' (kazdy prawdziwy e-mail w tym
+    // projekcie) traktujemy jako surowy identyfikator do rozwiniecia;
+    // wszystko inne (w tym pusty string) zostaje bez zmian, jak dotychczas.
+    if (props.doctype === 'User') {
+      const surowyIdentyfikator = !v || v === '@me' || (typeof v === 'string' && v.includes('@'))
+      if (surowyIdentyfikator) {
+        return etykietaWartosciUzytkownika(v, getUser, props.meLabel)
+      }
+      return v
+    }
 
     if (isTranslatable(props.doctype)) return __(v)
     return v
@@ -333,13 +366,24 @@ const options = createResource({
     filters: effectiveFilters.value,
   },
   transform: (data) => {
-    let allData = data.map((option) => {
-      return {
-        label: option.label || option.value,
-        value: option.value,
-        description: stripHtml(option.description),
-      }
-    })
+    // Fix: filtr "po nazwie, nie po e-mailu" -- dla doctype='User'
+    // frappe.desk.search.search_link zwraca `value`=e-mail i
+    // `description`=pelna nazwa jako HTML, bez `label` w ogole, wiec
+    // gałąź ponizej ("label: option.label || option.value") pokazywala
+    // dropdown pogrubionym e-mailem. opcjeUzytkownikow (patrz
+    // utils/etykietaUzytkownika.js) ustawia label z usersStore().getUser
+    // (ten sam zrodlo co FieldLayout/Field.vue), z HTML-oczyszczonym
+    // description jako fallback.
+    let allData =
+      props.doctype === 'User'
+        ? opcjeUzytkownikow(data, getUser)
+        : data.map((option) => {
+            return {
+              label: option.label || option.value,
+              value: option.value,
+              description: stripHtml(option.description),
+            }
+          })
     if (!props.hideMe && props.doctype == 'User') {
       allData.unshift({
         label: props.meLabel,

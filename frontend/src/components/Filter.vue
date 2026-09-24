@@ -882,6 +882,13 @@ function getDefaultOperator(field) {
   if (typeDate.includes(fieldtype)) {
     return 'between'
   }
+  // Filtry uzytkownika (Przypisany handlowiec, Przypisany CC, Doradca,
+  // Opiekun) maja od razu otwierac autouzupelnianie Link.vue z
+  // wyszukiwaniem po imieniu i nazwisku, zamiast pola tekstowego na
+  // e-mail. Operator `like` zostaje dostepny na liscie operatorow.
+  if (fieldtype === 'Link' && field.options === 'User') {
+    return 'equals'
+  }
   return 'like'
 }
 
