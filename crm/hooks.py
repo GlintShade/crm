@@ -191,6 +191,17 @@ doc_events = {
 		"after_insert": ["crm.api.todo.after_insert"],
 		"on_update": ["crm.api.todo.on_update"],
 	},
+	# VOLTEO (ops#182): rdzeń Frappe (assign_to.notify_assignment) tworzy tu wiersz
+	# przy KAŻDYM przydziale/odebraniu przydziału leada. Kontroler NotificationLog ma
+	# WŁASNY before_insert, który kopiuje subject -> title i email_content ->
+	# description, i biegnie PRZED hakami doc_events tego samego eventu (zweryfikowane
+	# na lokalnym kontenerze, Frappe 15.118) - dlatego wzbogac_notification_log
+	# nadpisuje WSZYSTKIE pola (subject, title, email_header, email_content,
+	# description, link) naraz, zamiast liczyć na to, że kopiowanie jeszcze się nie
+	# wydarzyło.
+	"Notification Log": {
+		"before_insert": ["crm.volteo_powiadomienia.wzbogac_notification_log"],
+	},
 	"Communication": {
 		"after_insert": ["crm.utils.on_communication_insert"],
 		"on_update": ["crm.utils.on_communication_update"],

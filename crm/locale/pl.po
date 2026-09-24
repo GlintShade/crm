@@ -722,6 +722,12 @@ msgstr "Reguły przypisania"
 msgid "Assignment Schedule"
 msgstr "Harmonogram przypisania"
 
+#. VOLTEO (ops#182): nagłówek maila rdzenia Frappe (frappe/desk/doctype/notification_log)
+#. dla wiersza Notification Log typu Assignment, którego crm.volteo_powiadomienia nie
+#. przepisuje (CRM Deal/CRM Task - hak dotyka wyłącznie CRM Lead).
+msgid "Assignment Update on {0}"
+msgstr "Nowe przypisanie: {0}"
+
 #: frontend/src/components/Settings/Sla/SlaPolicyView.vue:104
 msgid "Assignment conditions"
 msgstr "Warunki przypisania"

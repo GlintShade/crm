@@ -15,6 +15,7 @@ from crm.fcrm.doctype.crm_status_change_log.crm_status_change_log import (
 )
 from crm.fcrm.doctype.utils import add_or_remove_lost_reason_section_in_sidepanel
 from crm.volteo_lista_szans import FILTER_FIELDS_LEAD, SORT_FIELDS_LEAD
+from crm.volteo_powiadomienia import powiadom_o_zmianie_terminu
 
 
 class CRMLead(Document):
@@ -98,6 +99,15 @@ class CRMLead(Document):
 
 	def before_save(self):
 		self.apply_sla()
+
+	def on_update(self):
+		# VOLTEO (ops#182): powiadamia handlowca mailem/dzwonkiem, gdy termin spotkania
+		# zmienil sie na leadzie, ktory juz ma wlasciciela (przydzial samego leada ma
+		# osobna sciezke, hak Notification Log.before_insert w wzbogac_notification_log
+		# ponizej w crm.volteo_powiadomienia - handlowiec nie ma dostac dwoch maili o
+		# tym samym zdarzeniu). Funkcja sama wychodzi po cichu, gdy nic sie nie
+		# zmienilo albo gdy to wlasnie pierwszy przydzial (patrz jej docstring).
+		powiadom_o_zmianie_terminu(self)
 
 	def validate_status(self):
 		if self.is_new() and not self.status:
