@@ -256,16 +256,26 @@ const { getLeadStatus } = statusesStore()
 const stan = reactive({ leady: [] })
 const blad = ref('')
 
+// VOLTEO (fix wyscigu, klik-test wlasciciela): createResource() woła RÓWNOCZEŚNIE
+// options.onSuccess/onError bazowe ORAZ tempOptions.onSuccess/onError przekazane
+// do submit() (frappe-ui resources.js, fetch()) - i robi to w kolejności
+// ROZSTRZYGNIĘCIA promise'a, nie wysłania żądania. Gdy przełączenie Lista->Mapa
+// z aktywnym filtrem wysyła dwa zbędne zapytania z pustymi filtrami (zanim
+// zasób `list` ma jeszcze ustawione `.params`, patrz guard w watchu niżej) i
+// dopiero potem trzecie, poprawne, odpowiedzi mogą wrócić w innej kolejności
+// niż zapytania poszły - dla dużych zbiorów (np. Administrator, ~10 849 pinów)
+// niefiltrowana odpowiedź bywa wolniejsza i nadpisuje `stan.leady` PO tym, jak
+// filtrowana już się wyświetliła. Rozwiązanie: każde submit() dostaje własny
+// numer w `zadanieSeq`, zamknięty w tempOptions.onSuccess/onError - handler
+// stosuje wynik TYLKO gdy jego numer wciąż jest najnowszym wysłanym, więc
+// spóźniona odpowiedź starszego zapytania jest po prostu odrzucana. Handlery
+// bazowe (options.onSuccess/onError) są celowo puste - cała logika żyje w
+// tempOptions per-submit, żeby mieć dostęp do domkniętego numeru sekwencji.
 const mapaResource = createResource({
   url: 'crm.api.volteo_leady.mapa',
-  onSuccess: (data) => {
-    stan.leady = data || []
-    blad.value = ''
-  },
-  onError: (err) => {
-    blad.value = extractErrorMessage(err) || __('Nie udało się wczytać leadów z mapy')
-  },
 })
+
+let zadanieSeq = 0
 
 // VOLTEO (issue #100): odpytanie mapy dopiero PO tym, jak Tabela skończy
 // własne odświeżenie z nowymi filtrami (.data, nie .params) - patrz
@@ -276,10 +286,38 @@ const mapaResource = createResource({
 watch(
   () => props.list.data,
   () => {
-    mapaResource.submit({
-      filters: JSON.stringify(props.list.params?.filters || {}),
-      default_filters: JSON.stringify(props.list.params?.default_filters || {}),
-    })
+    // VOLTEO (fix wyscigu): świeżo utworzony/jeszcze nieodpytany zasób `list`
+    // ma `list.params` == null (frappe-ui resources.js: `params: null` w
+    // stanie początkowym, ustawiane dopiero synchronicznie na starcie
+    // pierwszego fetch()/reload()) - w tym oknie zapytanie do mapa() poszłoby
+    // z pustymi filters/default_filters, czyli TYM SAMYM źródłem dwóch
+    // zbędnych zapytań opisanych wyżej. Pomijamy submit, dopóki `list.params`
+    // nie istnieje. To NIGDY nie blokuje prawdziwego pierwszego wejścia na
+    // Mapę z już załadowaną Tabelą: skoro `list.data` jest wypełnione, to
+    // `list.params` musiało już zostać ustawione synchronicznie PRZED tymi
+    // danymi (ten sam fetch() ustawia najpierw .params, potem, po odpowiedzi,
+    // .data) - `immediate: true` powyżej nadal odpytuje od razu w tym
+    // przypadku, tak jak dotychczas.
+    if (!props.list.params) return
+
+    const tenZadanieSeq = ++zadanieSeq
+    mapaResource.submit(
+      {
+        filters: JSON.stringify(props.list.params?.filters || {}),
+        default_filters: JSON.stringify(props.list.params?.default_filters || {}),
+      },
+      {
+        onSuccess: (data) => {
+          if (tenZadanieSeq !== zadanieSeq) return // spóźniona odpowiedź, nowsze zadanie już w locie
+          stan.leady = data || []
+          blad.value = ''
+        },
+        onError: (err) => {
+          if (tenZadanieSeq !== zadanieSeq) return
+          blad.value = extractErrorMessage(err) || __('Nie udało się wczytać leadów z mapy')
+        },
+      },
+    )
   },
   { immediate: true },
 )
