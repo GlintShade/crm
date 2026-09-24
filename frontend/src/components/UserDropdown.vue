@@ -48,14 +48,14 @@
 <script setup>
 import BrandLogo from '@/components/BrandLogo.vue'
 import FrappeCloudIcon from '@/components/Icons/FrappeCloudIcon.vue'
-import Apps from '@/components/Apps.vue'
+import AppsIcon from '@/components/Icons/AppsIcon.vue'
 import { sessionStore } from '@/stores/session'
 import { usersStore } from '@/stores/users'
 import { getSettings } from '@/stores/settings'
 import { showSettings, isMobileView } from '@/composables/settings'
 import { showAboutModal } from '@/composables/modals'
 import { confirmLoginToFrappeCloud } from '@/composables/frappecloud'
-import { Dropdown } from 'frappe-ui'
+import { Dropdown, createResource } from 'frappe-ui'
 import { computed, h, markRaw } from 'vue'
 
 defineProps({
@@ -67,6 +67,43 @@ const { logout } = sessionStore()
 const { getUser } = usersStore()
 
 const user = computed(() => getUser() || {})
+
+// Lista aplikacji do podmenu "Aplikacje". Desk jest w podmenu zawsze,
+// pozostale aplikacje dochodza dopiero po odpowiedzi serwera (bez crm,
+// bo ProEnergy CRM to ta sama aplikacja).
+const apps = createResource({
+  url: 'frappe.apps.get_apps',
+  cache: 'apps',
+  auto: true,
+  transform: (data) =>
+    data
+      .filter((app) => app.name !== 'crm')
+      .map((app) => ({
+        name: app.name,
+        logo: app.logo,
+        title: __(app.title),
+        route: app.route,
+      })),
+})
+
+function appsSubmenu() {
+  let deskItem = {
+    label: __('Desk'),
+    icon: markRaw(
+      h('img', {
+        src: '/assets/frappe/images/framework.png',
+        class: 'size-4 rounded',
+      }),
+    ),
+    onClick: () => (window.location.href = '/app'),
+  }
+  let otherApps = (apps.data || []).map((app) => ({
+    label: app.title,
+    icon: markRaw(h('img', { src: app.logo, class: 'size-4 rounded' })),
+    onClick: () => (window.location.href = app.route),
+  }))
+  return [deskItem, ...otherApps]
+}
 
 const dropdownItems = computed(() => {
   if (!settings.value?.dropdown_items) return []
@@ -123,7 +160,9 @@ function getStandardItem(item) {
   switch (item.name1) {
     case 'app_selector':
       return {
-        component: markRaw(Apps),
+        icon: AppsIcon,
+        label: __('Apps'),
+        submenu: appsSubmenu(),
       }
     case 'settings':
       return {
