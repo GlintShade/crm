@@ -147,7 +147,6 @@ export const GRUPY = [
     label: 'Umowa o pracę / zlecenie / dzieło',
     fields: [
       'praca_forma',
-      'praca_data_zatrudnienia',
       'praca_okres',
       'praca_okres_od',
       'praca_okres_do',
@@ -198,7 +197,7 @@ export const GRUPY = [
   },
 ]
 
-// Single canon of PL labels for all 64 `Volteo Kredyt` data fields
+// Single canon of PL labels for all 63 `Volteo Kredyt` data fields
 // (BASE_FIELDS + every GRUPY toggle + every GRUPY field, plus the 10
 // POLA_WNIOSKODAWCY fields mixed in at the end below), transcribed 1:1
 // from the doctype's own labels (ops/crm-kredyt.py's `KREDYT_FIELDS`),
@@ -256,7 +255,6 @@ export const ETYKIETY_POL = {
   numer_rachunku: 'Numer rachunku bankowego',
   praca_wlaczone: 'Dochód: umowa o pracę / zlecenie / dzieło',
   praca_forma: 'Forma zatrudnienia',
-  praca_data_zatrudnienia: 'Data zatrudnienia',
   praca_okres: 'Okres zatrudnienia',
   praca_okres_od: 'Zatrudnienie od',
   praca_okres_do: 'Zatrudnienie do',
@@ -609,7 +607,7 @@ export function brakujacePola(form) {
  * against the CURRENT contact card's `prefill`), this reads LIVE from
  * `form`, the applicant block is now an editable part of the form itself
  * (ops#157/#158/#163), so its completeness must update instantly as the rep
- * types, exactly like brakujacePola() already does for the 54 base fields.
+ * types, exactly like brakujacePola() already does for the 53 base fields.
  *
  * Never mutates `form`.
  *

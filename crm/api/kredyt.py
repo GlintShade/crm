@@ -22,7 +22,7 @@ jak formularz umowy, niekompletny zapis jest poprawnym stanem roboczym
 (`status="Roboczy"`), nie błędem; brakujące pola wracają w odpowiedzi, nigdy
 nie blokują `volteo_kredyt_save`. Generowanie PDF-u jest tu jednak świadomie
 SUROWSZE niż w `Volteo Umowa`: `volteo_kredyt_pdf` odmawia złożenia dokumentu,
-dopóki formularz (54 pola podstawowe) i blok wnioskodawcy zapisany NA TYM
+dopóki formularz (53 pola podstawowe) i blok wnioskodawcy zapisany NA TYM
 REKORDZIE (`wnioskodawca_*`, ops#157/#158, migawka z chwili założenia
 formularza, nie aktualna karta `Contact`) nie są komplet: decyzja
 właściciela, bo formularz kredytowy trafia do banku/pośrednika i częściowy
@@ -98,7 +98,6 @@ _DANE_POLA_PODSTAWOWE = [
 	"numer_rachunku",
 	"praca_wlaczone",
 	"praca_forma",
-	"praca_data_zatrudnienia",
 	"praca_okres",
 	"praca_okres_od",
 	"praca_okres_do",
@@ -133,20 +132,20 @@ _DANE_POLA_PODSTAWOWE = [
 	"inne_2_typ",
 	"inne_2_kwota",
 ]
-"""54 pola danych `Volteo Kredyt` sprzed ops#157/#158, bez bloku wnioskodawcy.
+"""53 pola danych `Volteo Kredyt` sprzed ops#157/#158, bez bloku wnioskodawcy.
 
 Osobno od pełnej allowlisty (`_DANE_POLA_DOZWOLONE` niżej), bo strażnik
 "formularz nietknięty" w `volteo_kredyt_create` (patrz `_formularz_nietkniety`)
-i liczenie `brakujace_pola`/`status` MUSZĄ patrzeć wyłącznie na te 54 pola:
+i liczenie `brakujace_pola`/`status` MUSZĄ patrzeć wyłącznie na te 53 pola:
 blok `wnioskodawca_*` jest wypełniany przez prefill od razu przy założeniu
 formularza, więc strażnik zbudowany na jego pustości nigdy by nie zadziałał
 (ops#158), a kompletność formularza (status Roboczy/Kompletny) była i zostaje
-liczona wyłącznie z tych 54 pól. Kompletność danych wnioskodawcy ma osobny,
+liczona wyłącznie z tych 53 pól. Kompletność danych wnioskodawcy ma osobny,
 odrębny sygnał (`brakujace_dane_wnioskodawcy`, blokuje tylko PDF)."""
 
 _DANE_POLA_DOZWOLONE = [*_DANE_POLA_PODSTAWOWE, *POLA_WNIOSKODAWCY]
 """Jedyne pola `Volteo Kredyt`, jakie `volteo_kredyt_save` przyjmuje od klienta:
-54 pola podstawowe (`_DANE_POLA_PODSTAWOWE`) plus 10 pól wnioskodawcy
+53 pola podstawowe (`_DANE_POLA_PODSTAWOWE`) plus 10 pól wnioskodawcy
 (`crm.volteo_kredyt.POLA_WNIOSKODAWCY`, ops#157/#158). Kanon kolejności i
 nazw pól wnioskodawcy żyje WYŁĄCZNIE w `crm.volteo_kredyt`, tu tylko domieszany.
 
@@ -180,7 +179,6 @@ _POLA_DATY = frozenset(
 	{
 		"data_wydania_dokumentu",
 		"data_waznosci_dokumentu",
-		"praca_data_zatrudnienia",
 		"praca_okres_od",
 		"praca_okres_do",
 		"emerytura_od_kiedy",
@@ -428,7 +426,7 @@ def _pole_puste(wartosc: Any) -> bool:
 
 
 def _formularz_nietkniety(kredyt_doc: "frappe.model.document.Document") -> bool:
-	"""Czy formularz jest NIETKNIĘTY: wszystkie 54 pola `_DANE_POLA_PODSTAWOWE` są
+	"""Czy formularz jest NIETKNIĘTY: wszystkie 53 pola `_DANE_POLA_PODSTAWOWE` są
 	puste (blok `wnioskodawca_*` SIĘ NIE LICZY: prefill wypełnia go od razu
 	przy założeniu formularza, więc strażnik zbudowany na jego pustości nigdy
 	by nie zadziałał, ops#158).
@@ -455,7 +453,7 @@ def _odpowiedz_kredytu(
 ) -> dict[str, Any]:
 	"""Kształt odpowiedzi wspólny dla `volteo_kredyt_create`: `kredyt` + `prefill`
 	kontaktu podstawowego szansy (do podglądu przed ewentualnym „Przywróć dane
-	klienta”) + `brakujace_pola` (54 pola podstawowe, bez bloku wnioskodawcy)."""
+	klienta”) + `brakujace_pola` (53 pola podstawowe, bez bloku wnioskodawcy)."""
 	dane_do_walidacji = {pole: kredyt_doc.get(pole) for pole in _DANE_POLA_PODSTAWOWE}
 	return {
 		"kredyt": _kredyt_do_dict(kredyt_doc),
@@ -569,7 +567,7 @@ def volteo_kredyt_get(kredyt: str) -> dict[str, Any]:
 	wnioskodawcy ZAPISANE NA TYM REKORDZIE, migawka z chwili założenia),
 	`prefill_kontakt` (AKTUALNE dane kontaktu podstawowego szansy, osobno, do
 	obsługi przycisku „Przywróć dane klienta” bez kolejnego endpointu),
-	`brakujace_pola` (54 pola podstawowe) i `brakujace_dane_wnioskodawcy`
+	`brakujace_pola` (53 pola podstawowe) i `brakujace_dane_wnioskodawcy`
 	(kompletność bloku wnioskodawcy, patrz `volteo_kredyt_pdf`).
 
 	Celowo BEZ bramki OZE (`_sprawdz_rodzaj_oze`), inaczej niż
@@ -603,7 +601,7 @@ def volteo_kredyt_create(deal: str) -> dict[str, Any]:
 	(ops#158, po zdjęciu ograniczenia 1:1 w #157/#159).
 
 	Strażnik przed podwójnym kliknięciem: jeśli na szansie istnieje formularz
-	w statusie `Roboczy`, który jest NIETKNIĘTY (wszystkie 54 pola
+	w statusie `Roboczy`, który jest NIETKNIĘTY (wszystkie 53 pola
 	`_DANE_POLA_PODSTAWOWE` puste, blok `wnioskodawca_*` SIĘ NIE LICZY, bo
 	prefill wypełnia go od razu przy założeniu i strażnik zbudowany na jego
 	pustości nigdy by nie zadziałał, patrz `_formularz_nietkniety`), zwraca
@@ -676,7 +674,7 @@ def volteo_kredyt_save(kredyt: str, dane: dict[str, Any]) -> dict[str, Any]:
 	Niekompletny zapis jest poprawnym stanem roboczym (przedstawiciel wypełnia
 	formularz stopniowo) — brakujące pola NIE blokują zapisu, tylko ustawiają
 	`status="Roboczy"` i trafiają do odpowiedzi, żeby UI mógł je podświetlić.
-	Dopiero komplet DANYCH PODSTAWOWYCH (54 pól, bez bloku wnioskodawcy) daje
+	Dopiero komplet DANYCH PODSTAWOWYCH (53 pól, bez bloku wnioskodawcy) daje
 	`status="Kompletny"`. Kompletność wnioskodawcy ma osobny sygnał
 	(`brakujace_dane_wnioskodawcy`, sprawdzany dopiero przy `volteo_kredyt_pdf`).
 	Blokada PDF-u dotyczy wyłącznie generowania, nie zapisu.
@@ -742,7 +740,7 @@ def volteo_kredyt_pdf(kredyt: str) -> dict[str, Any]:
 	W odróżnieniu od `volteo_umowa_pdf` (który generuje niekompletny PDF bez
 	blokady — dokument jest roboczy, wracany do edycji), generowanie tutaj jest
 	CELOWO zablokowane, dopóki: (1) formularz `Volteo Kredyt` nie ma żadnych
-	brakujących pól wg `crm.volteo_kredyt.brakujace_pola` (54 pola podstawowe),
+	brakujących pól wg `crm.volteo_kredyt.brakujace_pola` (53 pola podstawowe),
 	i (2) blok wnioskodawcy zapisany NA TYM REKORDZIE (`wnioskodawca_*`) nie ma
 	braków wg `crm.volteo_kredyt.brakujace_dane_wnioskodawcy`. Decyzja
 	właściciela: ten PDF trafia do banku/pośrednika kredytowego, więc

@@ -66,7 +66,8 @@ def _kredyt_pelny(**nadpisania: Any) -> dict[str, Any]:
 	pokryć każdą stronę mapy (`crm.volteo_kredyt_mapa.MAPA_KREDYT`)."""
 	baza: dict[str, Any] = {
 		"miejsce_urodzenia": "Wrocław",
-		"rodzaj_seria_numer_dokumentu": "Dowód osobisty XYZ654321",
+		"rodzaj_dokumentu": "Dowód osobisty",
+		"seria_numer_dokumentu": "XYZ654321",
 		"data_wydania_dokumentu": "2019-03-10",
 		"data_waznosci_dokumentu": "2029-03-10",
 		"adres_zameldowania_taki_sam": "Nie",
@@ -74,7 +75,7 @@ def _kredyt_pelny(**nadpisania: Any) -> dict[str, Any]:
 		"adres_korespondencji_taki_sam": "Nie",
 		"adres_korespondencji": "ul. Żeromskiego 9, 25-370 Kielce",
 		"wyksztalcenie": "wyższe",
-		"stan_cywilny": "W związku małżeńskim wspólnota majątkowa",
+		"stan_cywilny": "Małżeństwo - wspólnota majątkowa",
 		"liczba_osob_na_utrzymaniu": "2",
 		"kwota_800_plus": "1600",
 		"dochod_wspolmalzonka": "4500",
@@ -84,7 +85,6 @@ def _kredyt_pelny(**nadpisania: Any) -> dict[str, Any]:
 		"numer_rachunku": "PL61109010140000071219812874",
 		"praca_wlaczone": 1,
 		"praca_forma": "Umowa o pracę",
-		"praca_data_zatrudnienia": "2015-06-01",
 		"praca_okres": "Czas nieokreślony",
 		"praca_okres_od": "2015-06-01",
 		"praca_okres_do": "",
@@ -105,7 +105,8 @@ def _kredyt_pelny(**nadpisania: Any) -> dict[str, Any]:
 		"dzialalnosc_forma_inna": "",
 		"dzialalnosc_nip": "6559998877",
 		"dzialalnosc_nazwa": "Usługi Elektryczne Żółć-Jaśkiewicz",
-		"dzialalnosc_adres_telefon": "Kielce, ul. Ogrodowa 8, 41 222 11 00",
+		"dzialalnosc_adres": "Kielce, ul. Ogrodowa 8",
+		"dzialalnosc_telefon": "41 222 11 00",
 		"dzialalnosc_od_kiedy": "2018-04-01",
 		"dzialalnosc_kwota_dochodu": "3600",
 		"gospodarstwo_wlaczone": 1,
@@ -256,8 +257,11 @@ class TestZlozKredytPelnyPipeline(unittest.TestCase):
 		self.assertIn(kontekst["nazwisko"], tekst_wg_strony[0])
 		self.assertIn("Żółć-Jaśkiewicz", tekst_wg_strony[0])
 
-		# Strona 2 (indeks 1): §4 UMOWA O PRACĘ — nazwa zakładu pracy.
+		# Strona 2 (indeks 1): §4 UMOWA O PRACĘ, nazwa zakładu pracy oraz,
+		# po wycofaniu praca_data_zatrudnienia (ops#175), data „zatrudnienie
+		# od" wypisana w wariancie Czas nieokreślony (domyślny w _kredyt_pelny).
 		self.assertIn(kontekst["praca_nazwa_zakladu"], tekst_wg_strony[1])
+		self.assertIn(kontekst["praca_nieokreslony_od"], tekst_wg_strony[1])
 
 		# Strona 3 (indeks 2): §8 GOSPODARSTWO ROLNE + pierwsza linia podpisu.
 		self.assertIn(kontekst["gospodarstwo_nip"], tekst_wg_strony[2])
@@ -289,6 +293,41 @@ class TestZlozKredytPelnyPipeline(unittest.TestCase):
 		kontekst = zbuduj_kontekst_kredytu(_kredyt_pelny(), _kontakt_pelny(), date(2026, 8, 15))
 		with self.assertRaises(ValueError):
 			zloz_kredyt(kontekst, b"nieprawidlowy szablon")
+
+	def test_d_strazniki_tozsamosci_szablonu(self: "TestZlozKredytPelnyPipeline") -> None:
+		"""Regresja ops#175: nowy szablon (m156, 2026-09-24) nie ma juz wiersza
+		„DATA ZATRUDNIENIA" (str. 2) i ma nowy tytul „...ZDOLNOSCI..." (str. 1)
+		- gdyby ktos kiedys podmienil plik z powrotem na poprzednia wersje (m153)
+		bez aktualizacji SHA256_SZABLONU_KREDYT, ten test by tego NIE zlapal (to
+		robi bezpiecznik sumy kontrolnej), ale gdyby podmienil na inny plik o tej
+		samej sumie kontrolnej lub gdyby tresc wlasciwego pliku po cichu sie
+		zmienila, ten test wychwyci to jako pierwszy."""
+		czytnik_oryginalu = PdfReader(io.BytesIO(self._szablon))
+		tekst_oryginalu = [strona.extract_text() for strona in czytnik_oryginalu.pages]
+		self.assertNotIn("DATA ZATRUDNIENIA", tekst_oryginalu[1])
+		self.assertIn("ZDOLNOŚCI", tekst_oryginalu[0])
+
+	def test_e_wariant_czas_okreslony_od_i_do_na_stronie_2(
+		self: "TestZlozKredytPelnyPipeline",
+	) -> None:
+		"""Drugi wariant `praca_okres` (Czas określony): `_kredyt_pelny()` uzywa
+		domyslnie Czas nieokreslony (pokryte w test_b), wiec ten test dobiera
+		nadpisania tak, zeby routing `zbuduj_kontekst_kredytu` (patrz jego
+		docstring) wypelnil OBIE daty okreslone zamiast jednej nieokreslonej."""
+		dzis = date(2026, 8, 15)
+		kredyt = _kredyt_pelny(
+			praca_okres="Czas określony",
+			praca_okres_od="2020-03-01",
+			praca_okres_do="2026-03-01",
+		)
+		kontekst = zbuduj_kontekst_kredytu(kredyt, _kontakt_pelny(), dzis)
+		self.assertEqual(kontekst["praca_nieokreslony_od"], "")
+
+		wynik_bajty = zloz_kredyt(kontekst, self._szablon)
+		tekst_strona_2 = PdfReader(io.BytesIO(wynik_bajty)).pages[1].extract_text()
+
+		self.assertIn(kontekst["praca_okreslony_od"], tekst_strona_2)
+		self.assertIn(kontekst["praca_okreslony_do"], tekst_strona_2)
 
 
 class TestOstrzezenieBrakuFontuNieWymagaTtf(unittest.TestCase):

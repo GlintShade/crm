@@ -3,8 +3,10 @@
 
 """Mapa współrzędnych do nakładania danych formularza kredytowego na oryginalny plik PDF.
 
-Odpowiednik `crm/volteo_umowa_mapa.py` dla trzeciego dokumentu — „Ankieta danych
-do wniosku kredytowego" (`crm/szablony/formularz_kredytowy.pdf`, 6 stron). Moduł
+Odpowiednik `crm/volteo_umowa_mapa.py` dla trzeciego dokumentu, „Ankieta danych
+do oceny zdolności kredytowej" (`crm/szablony/formularz_kredytowy.pdf`, 6 stron,
+tytuł zmieniony przy wymianie szablonu 2026-09-24, patrz akapit „pomiar
+2026-09-24" niżej). Moduł
 celowo nie importuje ``frappe`` ani ``reportlab`` — jest to czysta struktura
 danych, więc daje się w pełni przetestować lokalnie, tak jak `MAPA`/`MAPA_PV`/
 `MAPA_ME`. `Pole` jest importowany z `crm.volteo_umowa_mapa` — NIE definiować
@@ -42,7 +44,8 @@ w prawej), inaczej niż umowy (akapity + podkreślenia). Trzy rodzaje pozycji:
    „standardowa" mała kratka w `volteo_umowa_mapa.py`) — rozmiar samego X był
    wtedy już dobry, ale pierwsza wersja tej naprawy (feedback #1) liczyła
    pionowe centrowanie od ``yMin``/``yMax`` GLIFU zmierzonego `pdftotext
-   -bbox` (13,41 pt — patrz `build_map.py` w raporcie zadania), traktując to
+   -bbox` (13,41 pt, patrz `proenergy-crm-ops/ops/dev-zmierz-mape-kredytu.py`,
+   skrypt pomiarowy commitowany od pomiaru 2026-09-24), traktując to
    jako wysokość samej kratki. To było błędne założenie: ``pdftotext -bbox``
    podaje ZEWNĘTRZNY prostokąt przydziału znaku (character advance box), NIE
    rozmiar narysowanego kwadratu ☐. Zrenderowano PDF w 600 dpi i zmierzono
@@ -109,15 +112,41 @@ tej wersji oryginału. Generator PDF-u ma sprawdzić sumę SHA-256 pliku
 wejściowego względem ``SHA256_SZABLONU_KREDYT`` przed użyciem tej mapy i
 przerwać z czytelnym komunikatem przy niezgodności — nigdy nie wpisywać danych
 w oparciu o niepewne współrzędne.
+
+POMIAR 2026-09-24 (ops#175): właściciel usunął wiersz „DATA ZATRUDNIENIA"
+(§4, str. 2) z papierowego formularza banku, a przy okazji zmienił tytuł na
+str. 1 na „ANKIETA DANYCH DO OCENY ZDOLNOŚCI KREDYTOWEJ"; nowy plik (Skia/PDF
+m156) ma tę samą siatkę tabel co poprzedni (m153): linie pionowe kolumn
+identyczne co do 0,01 pt na obu plikach (str. 1 do 3), więc każde ``x`` i
+``maks_szerokosc`` poniżej zostały PRZEPISANE bez zmian, poruszyło się
+wyłącznie ``y``. Zmierzone
+`proenergy-crm-ops/ops/dev-zmierz-mape-kredytu.py` (skrypt pomiarowy
+commitowany, patrz jego docstring dla wzorów i metody dopasowania pola do
+elementu strony): najpierw uruchomiony na STARYM pliku, gdzie odtworzył
+wszystkie 73 pozycje ówczesnej ``MAPA_KREDYT`` do 0,01 pt (dowód, że wzory są
+poprawne), dopiero potem na nowym. Delty (nowy minus stary) per strona: str. 0
+(indeks 0) niejednolicie +1,00 do +1,50 pt (etykiety w tabelach +1,24 pt,
+trzy wiersze centrowane, w kolejności definicji, +1,50/+1,40/+1,00 pt);
+str. 1 (indeks 1) 0,00 pt na
+trzech kratkach ``praca_forma`` (nad usuniętym wierszem) i dokładnie +30,00 pt
+na wszystkich pozostałych 22 polach tej strony (pod usuniętym wierszem, cała
+wysokość jego wiersza); str. 2 (indeks 2) jednolicie +35,85 do +35,86 pt na
+wszystkich 9 pozycjach; str. 4 (indeks 4, drugi podpis) 0,00 pt, ``_STRONA_5``
+poniżej zostaje nietknięta. Multizbiór słów str. 2 starego minus nowego to
+dokładnie ``{"DATA": 1, "ZATRUDNIENIA": 1}`` (drugie wystąpienie
+„ZATRUDNIENIA", w nagłówku „OKRES ZATRUDNIENIA", zostaje); strony 3 do 6
+(indeksy 2 do 5) mają identyczny tekst na obu plikach.
 """
 
 from crm.volteo_umowa_mapa import Pole
 
-SHA256_SZABLONU_KREDYT: str = "d766aadcebdfb0d66d84499fe2a4a4f0cf8a63b0a16f0c774dbaddba0604dd31"
+SHA256_SZABLONU_KREDYT: str = "37ad627f4463fec17ccf636129f51e0fd2227d8a5851eed10cf876c257cc322f"
 """SHA-256 pliku `Formularz kredytowy.pdf` (A4, 596x842 pt, 6 stron, bez pól
-formularza, wygenerowany przez Skia/PDF m153 Google Docs Renderer), policzone
-`shasum -a 256` na oryginale dostarczonym do tego zadania (2026-08-15) i
-zweryfikowane ponownie po skopiowaniu do `crm/szablony/formularz_kredytowy.pdf`.
+formularza, wygenerowany przez Skia/PDF m156 Google Docs Renderer), policzone
+`shasum -a 256` na oryginale dostarczonym do tego zadania (ops#175, 2026-09-24)
+i zweryfikowane ponownie po skopiowaniu do `crm/szablony/formularz_kredytowy.pdf`.
+Poprzedni szablon (m153, sha256 `d766aadc...4dd31`, wymieniony przy tym pomiarze)
+zostaje jako historyczna referencja w `docs/BUILD-b46-PLAN.md`.
 Mapa `MAPA_KREDYT` poniżej jest skalibrowana WYŁĄCZNIE dla tego dokładnego
 pliku — każda zmiana szablonu (nawet kosmetyczna) unieważnia współrzędne."""
 
@@ -135,52 +164,54 @@ _STRONA_1: tuple[Pole, ...] = (
     # wektorowo `pdfminer` LTLine), prawa krawędź tabeli x=523.5, 9 wierszy po
     # 15 pt (zweryfikowane: każde y poniżej mieści się w granicach swojego
     # wiersza z siatki LTLine).
-    Pole("pesel", 0, 296.50, 728.33, "tekst", maks_szerokosc=227.00),
-    Pole("miejsce_urodzenia", 0, 296.50, 713.33, "tekst", maks_szerokosc=227.00),
-    Pole("imiona", 0, 296.50, 698.33, "tekst", maks_szerokosc=227.00),
-    Pole("nazwisko", 0, 296.50, 683.33, "tekst", maks_szerokosc=227.00),
-    Pole("rodzaj_seria_numer_dokumentu", 0, 296.50, 668.33, "tekst", maks_szerokosc=227.00),
-    Pole("data_waznosci_dokumentu", 0, 296.50, 653.33, "tekst", maks_szerokosc=227.00),
-    Pole("data_wydania_dokumentu", 0, 296.50, 638.33, "tekst", maks_szerokosc=227.00),
-    Pole("telefon", 0, 296.50, 623.33, "tekst", maks_szerokosc=227.00),
-    Pole("email", 0, 296.50, 608.33, "tekst", maks_szerokosc=227.00),
+    Pole("pesel", 0, 296.50, 729.57, "tekst", maks_szerokosc=227.00),
+    Pole("miejsce_urodzenia", 0, 296.50, 714.57, "tekst", maks_szerokosc=227.00),
+    Pole("imiona", 0, 296.50, 699.57, "tekst", maks_szerokosc=227.00),
+    Pole("nazwisko", 0, 296.50, 684.57, "tekst", maks_szerokosc=227.00),
+    Pole("rodzaj_seria_numer_dokumentu", 0, 296.50, 669.57, "tekst", maks_szerokosc=227.00),
+    Pole("data_waznosci_dokumentu", 0, 296.50, 654.57, "tekst", maks_szerokosc=227.00),
+    Pole("data_wydania_dokumentu", 0, 296.50, 639.57, "tekst", maks_szerokosc=227.00),
+    Pole("telefon", 0, 296.50, 624.57, "tekst", maks_szerokosc=227.00),
+    Pole("email", 0, 296.50, 609.57, "tekst", maks_szerokosc=227.00),
     # §2 ADRES ZAMIESZKANIA — ta sama tabela (kolumny 290.5/523.5) kontynuuje
     # się przez KOD POCZTOWY..NR LOKALU (5 wierszy).
-    Pole("kod_pocztowy", 0, 296.50, 554.91, "tekst", maks_szerokosc=227.00),
-    Pole("miejscowosc", 0, 296.50, 539.16, "tekst", maks_szerokosc=227.00),
-    Pole("ulica", 0, 296.50, 523.79, "tekst", maks_szerokosc=227.00),
-    Pole("nr_domu", 0, 296.50, 508.41, "tekst", maks_szerokosc=227.00),
-    Pole("nr_lokalu", 0, 296.50, 493.79, "tekst", maks_szerokosc=227.00),
+    Pole("kod_pocztowy", 0, 296.50, 556.15, "tekst", maks_szerokosc=227.00),
+    Pole("miejscowosc", 0, 296.50, 540.40, "tekst", maks_szerokosc=227.00),
+    Pole("ulica", 0, 296.50, 525.03, "tekst", maks_szerokosc=227.00),
+    Pole("nr_domu", 0, 296.50, 509.65, "tekst", maks_szerokosc=227.00),
+    Pole("nr_lokalu", 0, 296.50, 495.03, "tekst", maks_szerokosc=227.00),
     # Pytanie „CZY ADRES ZAMIESZKANIA JEST TAKI SAM, JAK ADRES ZAMELDOWANIA?"
     # — kratki TAK/NIE (glif 13,41 pt, offset standardowy +3,0) + kropkowana
     # linia „Adres zamieszkania: ……" pod pytaniem.
-    Pole("adres_zameldowania_tak", 0, 299.52, 471.79, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("adres_zameldowania_nie", 0, 337.27, 471.79, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("adres_zameldowania", 0, 298.90, 448.79, "tekst", maks_szerokosc=209.80),
+    Pole("adres_zameldowania_tak", 0, 299.52, 473.03, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("adres_zameldowania_nie", 0, 337.27, 473.03, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("adres_zameldowania", 0, 298.90, 450.03, "tekst", maks_szerokosc=209.80),
     # Pytanie „CZY ADRES DO KORESPONDENCJI JEST TAKI SAM, JAK ADRES
     # ZAMELDOWANIA?" — analogicznie.
-    Pole("adres_korespondencji_tak", 0, 299.52, 422.22, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("adres_korespondencji_nie", 0, 337.27, 422.22, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("adres_korespondencji", 0, 298.90, 399.21, "tekst", maks_szerokosc=209.80),
+    Pole("adres_korespondencji_tak", 0, 299.52, 423.46, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("adres_korespondencji_nie", 0, 337.27, 423.46, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("adres_korespondencji", 0, 298.90, 400.46, "tekst", maks_szerokosc=209.80),
     # §3 INFORMACJE O WNIOSKODAWCY — WYKSZTAŁCENIE (4 kratki, x środek glifu
     # jednolity 249.27, jedna kolumna checkboxów).
-    Pole("wyksztalcenie_wyzsze", 0, 249.27, 351.47, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("wyksztalcenie_srednie", 0, 249.27, 337.67, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("wyksztalcenie_zawodowe", 0, 249.27, 323.87, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("wyksztalcenie_podstawowe", 0, 249.27, 310.07, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("wyksztalcenie_wyzsze", 0, 249.27, 352.71, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("wyksztalcenie_srednie", 0, 249.27, 338.91, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("wyksztalcenie_zawodowe", 0, 249.27, 325.11, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("wyksztalcenie_podstawowe", 0, 249.27, 311.31, "kratka", wyrownanie="srodek", rozmiar=8.0),
     # STAN CYWILNY (6 kratek, ta sama kolumna x=249.27).
-    Pole("stan_kawaler_panna", 0, 249.27, 295.52, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("stan_rozwiedziony", 0, 249.27, 281.72, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("stan_malzenstwo_rozdzielnosc", 0, 249.27, 267.92, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("stan_malzenstwo_wspolnota", 0, 249.27, 254.13, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("stan_wdowiec_wdowa", 0, 249.27, 240.33, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("stan_separacja", 0, 249.27, 226.53, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("stan_kawaler_panna", 0, 249.27, 296.76, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("stan_rozwiedziony", 0, 249.27, 282.96, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("stan_malzenstwo_rozdzielnosc", 0, 249.27, 269.17, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("stan_malzenstwo_wspolnota", 0, 249.27, 255.37, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("stan_wdowiec_wdowa", 0, 249.27, 241.57, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("stan_separacja", 0, 249.27, 227.77, "kratka", wyrownanie="srodek", rozmiar=8.0),
     # §3 ciąg dalszy — komórki tabeli (kolumna dzieli się teraz przy x=240.4,
     # szersza niż 290.5 powyżej, bo ten fragment tabeli mieści też checkboxy;
     # prawa krawędź x=523.9). 7 wierszy.
     # liczba_osob_na_utrzymaniu/dochod_wspolmalzonka/suma_zobowiazan sit in
-    # taller (19-20 pt), two-line-label rows (LTRect grid: y[204.5,224.5],
-    # y[170.5,189.5], y[121.5,140.5] — `extract_lines.py` page 0). The other,
+    # taller (19-20 pt), two-line-label rows (LTRect grid on the m156 template,
+    # measured 2026-09-24: y[206.5,225.5], y[172.0,190.8], y[122.5,141.5];
+    # m153 values before the swap were y[204.5,224.5], y[170.5,189.5],
+    # y[121.5,140.5]). The other,
     # single-line-label rows in this block anchor the value on the label's
     # own yMax, which lands ~2,7-2,9 pt above the row's bottom border — fine
     # for a 15 pt row, but for these three the label's LAST line sits right
@@ -190,13 +221,13 @@ _STRONA_1: tuple[Pole, ...] = (
     # the three well-behaved single-line rows in the same block
     # (kwota_800_plus/zrodlo_dochodu_malzonka/oplaty_miesieczne: 4,60/4,75/
     # 4,75 pt) — not guessed, calibrated from neighbouring rows.
-    Pole("liczba_osob_na_utrzymaniu", 0, 246.40, 209.80, "tekst", maks_szerokosc=277.50),
-    Pole("kwota_800_plus", 0, 246.40, 192.40, "tekst", maks_szerokosc=277.50),
-    Pole("dochod_wspolmalzonka", 0, 246.40, 175.30, "tekst", maks_szerokosc=277.50),
-    Pole("zrodlo_dochodu_malzonka", 0, 246.40, 158.25, "tekst", maks_szerokosc=277.50),
-    Pole("oplaty_miesieczne", 0, 246.40, 143.25, "tekst", maks_szerokosc=277.50),
-    Pole("suma_zobowiazan", 0, 246.40, 126.30, "tekst", maks_szerokosc=277.50),
-    Pole("numer_rachunku", 0, 246.40, 102.43, "tekst", maks_szerokosc=277.50),
+    Pole("liczba_osob_na_utrzymaniu", 0, 246.40, 211.30, "tekst", maks_szerokosc=277.50),
+    Pole("kwota_800_plus", 0, 246.40, 193.64, "tekst", maks_szerokosc=277.50),
+    Pole("dochod_wspolmalzonka", 0, 246.40, 176.70, "tekst", maks_szerokosc=277.50),
+    Pole("zrodlo_dochodu_malzonka", 0, 246.40, 159.49, "tekst", maks_szerokosc=277.50),
+    Pole("oplaty_miesieczne", 0, 246.40, 144.49, "tekst", maks_szerokosc=277.50),
+    Pole("suma_zobowiazan", 0, 246.40, 127.30, "tekst", maks_szerokosc=277.50),
+    Pole("numer_rachunku", 0, 246.40, 103.67, "tekst", maks_szerokosc=277.50),
 )
 
 # ---------------------------------------------------------------------------
@@ -208,39 +239,36 @@ _STRONA_2: tuple[Pole, ...] = (
     Pole("praca_umowa_o_prace", 1, 249.27, 740.53, "kratka", wyrownanie="srodek", rozmiar=8.0),
     Pole("praca_zlecenie", 1, 249.27, 726.73, "kratka", wyrownanie="srodek", rozmiar=8.0),
     Pole("praca_dzielo", 1, 249.27, 712.93, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    # DATA ZATRUDNIENIA — komórka tabeli (kolumna x=240.4/523.9, jak w dolnej
-    # części §3 na str. 1 — ten sam układ powtarza się na całej stronie 2).
-    Pole("praca_data_zatrudnienia", 1, 246.40, 690.45, "tekst", maks_szerokosc=277.50),
     # OKRES ZATRUDNIENIA — DWIE kropkowane linie „Czas określony od: … do: …"
     # NA JEDNEJ LINII (nie kratki — zgodnie z briefem) plus osobna linia niżej
     # „Czas nieokreślony od: …". Wszystkie trzy mieszczą się w tym samym,
     # wysokim (38 pt) wierszu tabeli.
-    Pole("praca_okreslony_od", 1, 318.84, 663.77, "tekst", maks_szerokosc=60.16),
-    Pole("praca_okreslony_do", 1, 400.54, 663.77, "tekst", maks_szerokosc=76.14),
-    Pole("praca_nieokreslony_od", 1, 329.50, 645.37, "tekst", maks_szerokosc=110.33),
-    Pole("praca_nip", 1, 246.40, 622.90, "tekst", maks_szerokosc=277.50),
-    Pole("praca_nazwa_zakladu", 1, 246.40, 592.90, "tekst", maks_szerokosc=277.50),
-    Pole("praca_adres_telefon", 1, 246.40, 558.30, "tekst", maks_szerokosc=277.50),
-    Pole("praca_kwota_dochodu", 1, 246.40, 532.90, "tekst", maks_szerokosc=277.50),
+    Pole("praca_okreslony_od", 1, 318.84, 693.77, "tekst", maks_szerokosc=60.16),
+    Pole("praca_okreslony_do", 1, 400.54, 693.77, "tekst", maks_szerokosc=76.14),
+    Pole("praca_nieokreslony_od", 1, 329.50, 675.37, "tekst", maks_szerokosc=110.33),
+    Pole("praca_nip", 1, 246.40, 652.90, "tekst", maks_szerokosc=277.50),
+    Pole("praca_nazwa_zakladu", 1, 246.40, 622.90, "tekst", maks_szerokosc=277.50),
+    Pole("praca_adres_telefon", 1, 246.40, 588.30, "tekst", maks_szerokosc=277.50),
+    Pole("praca_kwota_dochodu", 1, 246.40, 562.90, "tekst", maks_szerokosc=277.50),
     # §5 EMERYTURA
-    Pole("emerytura_numer_swiadczenia", 1, 246.40, 475.02, "tekst", maks_szerokosc=277.50),
-    Pole("emerytura_od_kiedy", 1, 246.40, 440.42, "tekst", maks_szerokosc=277.50),
-    Pole("emerytura_kwota_dochodu", 1, 246.40, 415.02, "tekst", maks_szerokosc=277.50),
+    Pole("emerytura_numer_swiadczenia", 1, 246.40, 505.02, "tekst", maks_szerokosc=277.50),
+    Pole("emerytura_od_kiedy", 1, 246.40, 470.42, "tekst", maks_szerokosc=277.50),
+    Pole("emerytura_kwota_dochodu", 1, 246.40, 445.02, "tekst", maks_szerokosc=277.50),
     # §6 RENTA
-    Pole("renta_numer_swiadczenia", 1, 246.40, 357.15, "tekst", maks_szerokosc=277.50),
-    Pole("renta_od_kiedy", 1, 246.40, 322.55, "tekst", maks_szerokosc=277.50),
-    Pole("renta_kwota_dochodu", 1, 246.40, 297.15, "tekst", maks_szerokosc=277.50),
+    Pole("renta_numer_swiadczenia", 1, 246.40, 387.15, "tekst", maks_szerokosc=277.50),
+    Pole("renta_od_kiedy", 1, 246.40, 352.55, "tekst", maks_szerokosc=277.50),
+    Pole("renta_kwota_dochodu", 1, 246.40, 327.15, "tekst", maks_szerokosc=277.50),
     # §7 DZIAŁALNOŚĆ GOSPODARCZA — forma opodatkowania: 3 kratki + kropkowana
     # linia obok „inne" (wszystkie w tym samym wierszu tabeli).
-    Pole("dzialalnosc_ryczalt", 1, 249.27, 247.20, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("dzialalnosc_kpir", 1, 249.27, 233.40, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("dzialalnosc_inne", 1, 249.27, 219.60, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    Pole("dzialalnosc_forma_inna", 1, 275.45, 220.45, "tekst", maks_szerokosc=81.92),
-    Pole("dzialalnosc_nip", 1, 246.40, 197.95, "tekst", maks_szerokosc=277.50),
-    Pole("dzialalnosc_nazwa", 1, 246.40, 169.60, "tekst", maks_szerokosc=277.50),
-    Pole("dzialalnosc_adres_telefon", 1, 246.40, 141.25, "tekst", maks_szerokosc=277.50),
-    Pole("dzialalnosc_od_kiedy", 1, 246.40, 103.71, "tekst", maks_szerokosc=277.50),
-    Pole("dzialalnosc_kwota_dochodu", 1, 246.40, 75.36, "tekst", maks_szerokosc=277.50),
+    Pole("dzialalnosc_ryczalt", 1, 249.27, 277.20, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("dzialalnosc_kpir", 1, 249.27, 263.40, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("dzialalnosc_inne", 1, 249.27, 249.60, "kratka", wyrownanie="srodek", rozmiar=8.0),
+    Pole("dzialalnosc_forma_inna", 1, 275.45, 250.45, "tekst", maks_szerokosc=81.92),
+    Pole("dzialalnosc_nip", 1, 246.40, 227.95, "tekst", maks_szerokosc=277.50),
+    Pole("dzialalnosc_nazwa", 1, 246.40, 199.60, "tekst", maks_szerokosc=277.50),
+    Pole("dzialalnosc_adres_telefon", 1, 246.40, 171.25, "tekst", maks_szerokosc=277.50),
+    Pole("dzialalnosc_od_kiedy", 1, 246.40, 133.71, "tekst", maks_szerokosc=277.50),
+    Pole("dzialalnosc_kwota_dochodu", 1, 246.40, 105.36, "tekst", maks_szerokosc=277.50),
 )
 
 # ---------------------------------------------------------------------------
@@ -248,22 +276,22 @@ _STRONA_2: tuple[Pole, ...] = (
 # + pierwsza linia podpisu (data, imię i nazwisko)
 # ---------------------------------------------------------------------------
 _STRONA_3: tuple[Pole, ...] = (
-    Pole("gospodarstwo_nip", 2, 246.40, 688.01, "tekst", maks_szerokosc=277.50),
-    Pole("gospodarstwo_od_kiedy", 2, 246.40, 653.41, "tekst", maks_szerokosc=277.50),
-    Pole("gospodarstwo_kwota_dochodu", 2, 246.40, 628.01, "tekst", maks_szerokosc=277.50),
+    Pole("gospodarstwo_nip", 2, 246.40, 723.86, "tekst", maks_szerokosc=277.50),
+    Pole("gospodarstwo_od_kiedy", 2, 246.40, 689.27, "tekst", maks_szerokosc=277.50),
+    Pole("gospodarstwo_kwota_dochodu", 2, 246.40, 663.86, "tekst", maks_szerokosc=277.50),
     # §9 INNE DOCHODY — dwie osobne, ułożone pionowo dwuwierszowe tabelki
     # (typ + kwota), jedna pod drugą.
-    Pole("inne_1_typ", 2, 246.40, 561.41, "tekst", maks_szerokosc=277.50),
-    Pole("inne_1_kwota", 2, 246.40, 531.41, "tekst", maks_szerokosc=277.50),
-    Pole("inne_2_typ", 2, 246.40, 482.73, "tekst", maks_szerokosc=277.50),
-    Pole("inne_2_kwota", 2, 246.40, 452.73, "tekst", maks_szerokosc=277.50),
+    Pole("inne_1_typ", 2, 246.40, 597.26, "tekst", maks_szerokosc=277.50),
+    Pole("inne_1_kwota", 2, 246.40, 567.26, "tekst", maks_szerokosc=277.50),
+    Pole("inne_2_typ", 2, 246.40, 518.58, "tekst", maks_szerokosc=277.50),
+    Pole("inne_2_kwota", 2, 246.40, 488.58, "tekst", maks_szerokosc=277.50),
     # Linia podpisu nad „(data, imię i nazwisko)" — JEDNA zmierzona kreska
     # ciągła (nie kropkowana, ale ta sama formuła x=xMin+3/y=842-yMax+2,5/
     # szerokość-6 stosuje się identycznie), podzielona na dwa nienachodzące
     # się pola: lewe ~32% szerokości na datę, reszta na imię i nazwisko
     # (zob. uzasadnienie podziału w docstringu modułu).
-    Pole("podpis_data", 2, 325.90, 174.82, "tekst", maks_szerokosc=45.59),
-    Pole("podpis_imie_nazwisko", 2, 377.49, 174.82, "tekst", maks_szerokosc=103.63),
+    Pole("podpis_data", 2, 325.90, 210.67, "tekst", maks_szerokosc=45.59),
+    Pole("podpis_imie_nazwisko", 2, 377.49, 210.67, "tekst", maks_szerokosc=103.63),
 )
 
 # ---------------------------------------------------------------------------
@@ -291,6 +319,6 @@ _STRONA_5: tuple[Pole, ...] = (
 _STRONA_6: tuple[Pole, ...] = ()
 
 MAPA_KREDYT: tuple[Pole, ...] = _STRONA_1 + _STRONA_2 + _STRONA_3 + _STRONA_4 + _STRONA_5 + _STRONA_6
-"""Pełna mapa współrzędnych formularza kredytowego: 72 pozycje na stronach
-0, 1, 2 (37 + 26 + 9) i 2 pozycje na stronie 4 (drugi podpis), razem 74;
+"""Pełna mapa współrzędnych formularza kredytowego: 71 pozycji na stronach
+0, 1, 2 (37 + 25 + 9) i 2 pozycje na stronie 4 (drugi podpis), razem 73;
 strony 3 i 5 celowo puste (patrz komentarze przy `_STRONA_4`/`_STRONA_6`)."""

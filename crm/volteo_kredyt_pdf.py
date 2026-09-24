@@ -126,7 +126,6 @@ KLUCZE_KONTEKSTU: frozenset[str] = frozenset(
 		"stan_wdowiec_wdowa",
 		"stan_separacja",
 		# Praca
-		"praca_data_zatrudnienia",
 		"praca_okreslony_od",
 		"praca_okreslony_do",
 		"praca_nieokreslony_od",
@@ -275,7 +274,6 @@ def _blok_stan_cywilny(wartosc: Any) -> dict[str, bool]:
 
 
 _PUSTE_PRACA: dict[str, str | bool] = {
-	"praca_data_zatrudnienia": "",
 	"praca_okreslony_od": "",
 	"praca_okreslony_do": "",
 	"praca_nieokreslony_od": "",
@@ -307,7 +305,6 @@ def _blok_praca(kredyt: dict[str, Any]) -> dict[str, str | bool]:
 
 	forma = kredyt.get("praca_forma")
 	return {
-		"praca_data_zatrudnienia": _data_pl(kredyt.get("praca_data_zatrudnienia")),
 		"praca_okreslony_od": okreslony_od,
 		"praca_okreslony_do": okreslony_do,
 		"praca_nieokreslony_od": nieokreslony_od,

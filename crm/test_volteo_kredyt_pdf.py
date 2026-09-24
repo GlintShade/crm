@@ -50,7 +50,6 @@ _OCZEKIWANE_KLUCZE = frozenset(
 		"stan_malzenstwo_wspolnota",
 		"stan_wdowiec_wdowa",
 		"stan_separacja",
-		"praca_data_zatrudnienia",
 		"praca_okreslony_od",
 		"praca_okreslony_do",
 		"praca_nieokreslony_od",
@@ -116,7 +115,6 @@ def _kredyt(**nadpisania: Any) -> dict[str, Any]:
 		"numer_rachunku": "PL61109010140000071219812874",
 		"praca_wlaczone": 0,
 		"praca_forma": "",
-		"praca_data_zatrudnienia": "",
 		"praca_okres": "",
 		"praca_okres_od": "",
 		"praca_okres_do": "",
@@ -298,7 +296,6 @@ class TestGrupaWylaczonaZerujePola(unittest.TestCase):
 		kredyt = _kredyt(
 			praca_wlaczone=0,
 			praca_forma="Umowa o pracę",
-			praca_data_zatrudnienia="2020-01-01",
 			praca_okres="Czas określony",
 			praca_okres_od="2020-01-01",
 			praca_okres_do="2026-01-01",
@@ -310,7 +307,6 @@ class TestGrupaWylaczonaZerujePola(unittest.TestCase):
 		kredyt_kopia = copy.deepcopy(kredyt)
 		kontekst = zbuduj_kontekst_kredytu(kredyt, _kontakt(), _DZIS)
 
-		self.assertEqual(kontekst["praca_data_zatrudnienia"], "")
 		self.assertEqual(kontekst["praca_okreslony_od"], "")
 		self.assertEqual(kontekst["praca_okreslony_do"], "")
 		self.assertEqual(kontekst["praca_nieokreslony_od"], "")
@@ -767,7 +763,7 @@ class TestBrakujacePolaGrupyDochodu(unittest.TestCase):
 	def test_b_praca_wlaczona_dodaje_jej_pola(self: "TestBrakujacePolaGrupyDochodu") -> None:
 		dane = _kredyt(praca_wlaczone=1)
 		wynik = brakujace_pola(dane)
-		for pole in ("praca_forma", "praca_data_zatrudnienia", "praca_okres", "praca_okres_od"):
+		for pole in ("praca_forma", "praca_okres", "praca_okres_od"):
 			self.assertIn(pole, wynik)
 		# praca_okres_do NIE jest wymagane, bo praca_okres nie jest "Czas określony".
 		self.assertNotIn("praca_okres_do", wynik)
@@ -776,7 +772,6 @@ class TestBrakujacePolaGrupyDochodu(unittest.TestCase):
 		dane_okreslony = _kredyt(
 			praca_wlaczone=1,
 			praca_forma="Umowa o pracę",
-			praca_data_zatrudnienia="2020-01-01",
 			praca_okres="Czas określony",
 			praca_okres_od="2020-01-01",
 			praca_nip="123",
@@ -863,6 +858,26 @@ class TestBrakujacePolaGrupyDochodu(unittest.TestCase):
 		self.assertIn("gospodarstwo_nip", wynik)
 		self.assertNotIn("emerytura_numer_swiadczenia", wynik)
 		self.assertNotIn("renta_numer_swiadczenia", wynik)
+
+	def test_m_nieokreslony_z_od_wypelnione_do_puste_grupa_praca_kompletna(
+		self: "TestBrakujacePolaGrupyDochodu",
+	) -> None:
+		"""Po wycofaniu `praca_data_zatrudnienia` (ops#175) grupa "praca" przy
+		Czasie nieokreślonym ma dokładnie jedną datę do wypełnienia (`od`);
+		`do` zostaje puste i nie jest wymagane."""
+		dane = _kredyt(
+			praca_wlaczone=1,
+			praca_forma="Umowa o pracę",
+			praca_okres="Czas nieokreślony",
+			praca_okres_od="2020-01-01",
+			praca_okres_do="",
+			praca_nip="123",
+			praca_nazwa_zakladu="Firma",
+			praca_adres_telefon="tel",
+			praca_kwota_dochodu="5000",
+		)
+		wynik = brakujace_pola(dane)
+		self.assertEqual([pole for pole in wynik if pole.startswith("praca_")], [])
 
 
 class TestJoinRodzajSeriaNumerDokumentu(unittest.TestCase):
