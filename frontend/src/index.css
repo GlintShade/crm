@@ -1,5 +1,13 @@
 @import 'frappe-ui/style.css';
 
+/* Siatka godzin (DateTimePickerSiatka): popover wyzszy niz miejsce na ekranie
+   (telefon) dostaje max-height z reka-ui i przewija sie zamiast wystawac
+   poza gorna krawedz. Celowane :has(), zeby nie ograniczac innych popoverow. */
+[data-slot="content-body"]:has([data-siatka-godzin]) {
+  max-height: var(--reka-popover-content-available-height);
+  overflow-y: auto;
+}
+
 @layer components {
   .prose-f {
     @apply break-all

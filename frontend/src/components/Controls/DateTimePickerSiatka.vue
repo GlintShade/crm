@@ -8,7 +8,7 @@
         :placeholder="__('Godzina, np. 16:15')"
         @change="setTime"
       />
-      <div class="grid grid-cols-4 gap-1 text-xs tabular-nums">
+      <div class="grid grid-cols-4 gap-1 text-xs tabular-nums" data-siatka-godzin>
         <button
           v-for="p in pola"
           :key="p.wartosc"
