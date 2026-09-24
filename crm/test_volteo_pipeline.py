@@ -45,7 +45,21 @@ class TestVolteoPipeline(unittest.TestCase):
 	def test_d_step_index_pierwszy_środkowy_ostatni_oze(self: "TestVolteoPipeline") -> None:
 		self.assertEqual(step_index("Fotowoltaika", "Lead"), 0)
 		self.assertEqual(step_index("Fotowoltaika", "Umowa Wygenerowana"), 1)
-		self.assertEqual(step_index("Fotowoltaika", "Finansowanie"), 4)
+		self.assertEqual(step_index("Fotowoltaika", "Finansowanie"), 3)
+
+	def test_d2_pipeline_oze_kolejnosc_finansowanie_przed_weryfikacja(self: "TestVolteoPipeline") -> None:
+		# Regresja ops#181 (2026-09-24, decyzja właściciela): "Finansowanie" poprzedza
+		# "Weryfikacja Backoffice" w procesie OZE (wcześniej było odwrotnie).
+		self.assertEqual(
+			PIPELINE_OZE,
+			(
+				"Lead",
+				"Umowa Wygenerowana",
+				"Umowa Podpisana",
+				"Finansowanie",
+				"Weryfikacja Backoffice",
+			),
+		)
 
 	def test_e_step_index_pierwszy_środkowy_ostatni_cp(self: "TestVolteoPipeline") -> None:
 		# Proces CP ma od b49 12 kroków (patrz PIPELINE_CP) — Lead pierwszy,
@@ -58,13 +72,14 @@ class TestVolteoPipeline(unittest.TestCase):
 	def test_f_finansowanie_wyłącznie_w_oze(self: "TestVolteoPipeline") -> None:
 		# Do b48 "Finansowanie" był jednym wierszem statusu współdzielonym przez oba
 		# procesy pod różnymi indeksami. Od b49 CP ma własny krok "Finansowanie Trify"
-		# w jego miejsce — "Finansowanie" jest teraz statusem wyłącznie OZE.
-		self.assertEqual(step_index("Fotowoltaika", "Finansowanie"), 4)
+		# w jego miejsce, "Finansowanie" jest teraz statusem wyłącznie OZE. Od
+		# 2026-09-24 (ops#181) "Finansowanie" poprzedza "Weryfikacja Backoffice" w OZE.
+		self.assertEqual(step_index("Fotowoltaika", "Finansowanie"), 3)
 		self.assertEqual(step_index("Czyste Powietrze", "Finansowanie"), -1)
 		self.assertEqual(step_index("Czyste Powietrze", "Finansowanie Trify"), 7)
 
 	def test_f2_weryfikacja_backoffice_wyłącznie_oze(self: "TestVolteoPipeline") -> None:
-		self.assertEqual(step_index("Fotowoltaika", "Weryfikacja Backoffice"), 3)
+		self.assertEqual(step_index("Fotowoltaika", "Weryfikacja Backoffice"), 4)
 		self.assertEqual(step_index("Czyste Powietrze", "Weryfikacja Backoffice"), -1)
 
 	def test_f3_oferta_docelowa_usunięta_z_obu_procesów(self: "TestVolteoPipeline") -> None:
@@ -92,12 +107,12 @@ class TestVolteoPipeline(unittest.TestCase):
 	def test_i_is_forward_do_przodu_prawda(self: "TestVolteoPipeline") -> None:
 		self.assertTrue(is_forward("Fotowoltaika", "Lead", "Umowa Wygenerowana"))
 		self.assertTrue(is_forward("Czyste Powietrze", "Dokumentacja", "Audyt Energetyczny"))
-		self.assertTrue(is_forward("Fotowoltaika", "Weryfikacja Backoffice", "Finansowanie"))
+		self.assertTrue(is_forward("Fotowoltaika", "Finansowanie", "Weryfikacja Backoffice"))
 
 	def test_j_is_forward_do_tyłu_fałsz(self: "TestVolteoPipeline") -> None:
 		self.assertFalse(is_forward("Fotowoltaika", "Umowa Podpisana", "Lead"))
 		self.assertFalse(is_forward("Czyste Powietrze", "Audyt Energetyczny", "Dokumentacja"))
-		self.assertFalse(is_forward("Fotowoltaika", "Finansowanie", "Weryfikacja Backoffice"))
+		self.assertFalse(is_forward("Fotowoltaika", "Weryfikacja Backoffice", "Finansowanie"))
 
 	def test_k_is_forward_ten_sam_status_fałsz(self: "TestVolteoPipeline") -> None:
 		self.assertFalse(is_forward("Fotowoltaika", "Lead", "Lead"))
@@ -114,8 +129,10 @@ class TestVolteoPipeline(unittest.TestCase):
 		self.assertFalse(is_forward("Czyste Powietrze", "Przegrana", "Realizacja"))
 
 	def test_m_notatka_for_zwraca_zdefiniowane_notatki(self: "TestVolteoPipeline") -> None:
+		# Od 2026-09-24 (ops#181) notatka "co dalej" siedzi pod "Finansowanie", bo audyt
+		# następuje TERAZ po finansowaniu, nie po podpisaniu umowy.
 		self.assertEqual(
-			notatka_for("Fotowoltaika", "Umowa Podpisana"),
+			notatka_for("Fotowoltaika", "Finansowanie"),
 			"Uzupełnij audyt i wyślij do weryfikacji.",
 		)
 		self.assertEqual(
@@ -128,6 +145,9 @@ class TestVolteoPipeline(unittest.TestCase):
 		self.assertIsNone(notatka_for("Czyste Powietrze", "Realizacja"))
 		self.assertIsNone(notatka_for("Fotowoltaika", None))
 		self.assertIsNone(notatka_for(None, "Lead"))
+		# "Umowa Podpisana" nie ma już notatki od 2026-09-24 (ops#181), przeniesiona
+		# na "Finansowanie", patrz test_m.
+		self.assertIsNone(notatka_for("Fotowoltaika", "Umowa Podpisana"))
 
 	def test_p_grupa_for_oze(self: "TestVolteoPipeline") -> None:
 		for rodzaj in OZE_RODZAJE:
@@ -294,8 +314,8 @@ class TestVolteoPipeline(unittest.TestCase):
 		self.assertEqual(etap_nr("Fotowoltaika", "Lead"), 1)
 		self.assertEqual(etap_nr("Fotowoltaika", "Umowa Wygenerowana"), 2)
 		self.assertEqual(etap_nr("Fotowoltaika", "Umowa Podpisana"), 3)
-		self.assertEqual(etap_nr("Fotowoltaika", "Weryfikacja Backoffice"), 4)
-		self.assertEqual(etap_nr("Fotowoltaika", "Finansowanie"), 5)
+		self.assertEqual(etap_nr("Fotowoltaika", "Finansowanie"), 4)
+		self.assertEqual(etap_nr("Fotowoltaika", "Weryfikacja Backoffice"), 5)
 		self.assertEqual(etap_nr("Fotowoltaika", "Wygrana – montaż"), 6)
 		self.assertEqual(etap_nr("Fotowoltaika", "Przegrana"), 7)
 

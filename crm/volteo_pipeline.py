@@ -43,10 +43,14 @@ PIPELINE_OZE: tuple[str, ...] = (
 	"Lead",
 	"Umowa Wygenerowana",
 	"Umowa Podpisana",
-	"Weryfikacja Backoffice",
 	"Finansowanie",
+	"Weryfikacja Backoffice",
 )
-"""Proces statusów dla linii OZE (fotowoltaika + magazyny energii), w kolejności przejścia."""
+"""Proces statusów dla linii OZE (fotowoltaika + magazyny energii), w kolejności przejścia.
+
+Od 2026-09-24 (decyzja właściciela, ops#181) „Finansowanie" poprzedza „Weryfikacja Backoffice"
+(wcześniej było odwrotnie). Skrypt ops `ops/crm-audyt.py` (Server Script) duplikuje prefiks tego
+procesu i musi zostać zsynchronizowany ręcznie przy każdej kolejnej zmianie kolejności."""
 
 PIPELINE_CP: tuple[str, ...] = (
 	"Lead",
@@ -74,7 +78,7 @@ stan pasma odznaki (wygrana/przegrana), nigdy jako ponumerowany krok; CP nie ma 
 terminala wygranej, bo „wygraność” niesie ostatni krok procesu („Projekt rozliczony”)."""
 
 NOTATKI: dict[str, dict[str, str]] = {
-	"OZE": {"Umowa Podpisana": "Uzupełnij audyt i wyślij do weryfikacji."},
+	"OZE": {"Finansowanie": "Uzupełnij audyt i wyślij do weryfikacji."},
 	"CP": {"Dokumentacja": "Umowa na obsługę dotacji, GOPS, pełnomocnictwo"},
 }
 """Notatka „co dalej” per proces i status bieżący; brak wpisu oznacza brak notatki."""
