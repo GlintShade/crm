@@ -1,5 +1,12 @@
 <template>
   <div class="sections flex flex-col overflow-y-auto">
+    <div
+      v-if="!preview && _sections.length"
+      class="flex items-center justify-end gap-2 px-3 py-1.5"
+    >
+      <div class="text-sm text-ink-gray-5">{{ __('Ukryj puste pola') }}</div>
+      <Switch size="sm" v-model="ukryjPuste" />
+    </div>
     <template v-for="(section, i) in _sections" :key="section.name">
       <div v-if="section.visible" class="section flex flex-col">
         <div
@@ -466,6 +473,8 @@ import { getMeta } from '@/stores/meta'
 import { parseLinkFilters } from '@/utils/fieldTransforms'
 import { czyPoleTagow } from '@/utils/tagiProduktow'
 import { czyPoleTekstowe, liczWierszeTekstu } from '@/utils/panelTekst'
+import { czyUkrycPole } from '@/utils/panelPuste'
+import { useUkryjPustePola } from '@/composables/useUkryjPustePola'
 import { usersStore } from '@/stores/users'
 import { isMobileView } from '@/composables/settings'
 import {
@@ -475,7 +484,7 @@ import {
   interpolateTemplate,
 } from '@/utils'
 import { flt } from '@/utils/numberFormat.js'
-import { Tooltip, DateTimePicker, DatePicker, TimePicker } from 'frappe-ui'
+import { Tooltip, DateTimePicker, DatePicker, TimePicker, Switch } from 'frappe-ui'
 import { useDocument } from '@/data/document'
 import {
   ref,
@@ -500,6 +509,8 @@ const { getFormattedPercent, getFormattedFloat, getFormattedCurrency } =
   getMeta(props.doctype)
 
 const { users, isManager, getUser } = usersStore()
+
+const { ukryjPuste } = useUkryjPustePola()
 
 const showSidePanelModal = ref(false)
 
@@ -602,6 +613,9 @@ function parsedField(field) {
   }
 
   _field.visible = isFieldVisible(_field, overrides?.hidden)
+  _field.visible =
+    _field.visible &&
+    !czyUkrycPole(_field, doc.value?.[_field.fieldname], ukryjPuste.value && !props.preview)
   return _field
 }
 
