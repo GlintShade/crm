@@ -8,6 +8,7 @@ from crm.volteo_powiadomienia import (
 	DNI_TYGODNIA,
 	ETYKIETY_PRODUKTOW,
 	MIESIACE_DOPELNIACZ,
+	ZNACZNIK_TRESCI,
 	czy_zmienil_sie_termin,
 	formatuj_date,
 	formatuj_termin,
@@ -348,6 +349,11 @@ class TestZbudujPowiadomienieePrzydzialu(unittest.TestCase):
 				for wartosc in d.values():
 					self.assertIsNone(_DASH_RE.search(wartosc), msg=wartosc)
 
+	def test_p_znacznik_tresci_na_korzeniu(self: "TestZbudujPowiadomienieePrzydzialu") -> None:
+		d = zbuduj_powiadomienie_przydzialu(LEAD_PELNY, url=URL, pokaz_przekazujacego=False, przekazujacy="")
+		self.assertTrue(d["email_content"].startswith(f"<div {ZNACZNIK_TRESCI}>"))
+		self.assertTrue(d["email_content"].endswith("</div>"))
+
 
 class TestZbudujPowiadomienieOdebrania(unittest.TestCase):
 	def test_a_temat_bez_bloku_spotkania(self: "TestZbudujPowiadomienieOdebrania") -> None:
@@ -374,6 +380,11 @@ class TestZbudujPowiadomienieOdebrania(unittest.TestCase):
 		kopia = dict(lead)
 		zbuduj_powiadomienie_odebrania(lead, url=URL)
 		self.assertEqual(lead, kopia)
+
+	def test_f_znacznik_tresci_na_korzeniu(self: "TestZbudujPowiadomienieOdebrania") -> None:
+		d = zbuduj_powiadomienie_odebrania(LEAD_PELNY, url=URL)
+		self.assertTrue(d["email_content"].startswith(f"<div {ZNACZNIK_TRESCI}>"))
+		self.assertTrue(d["email_content"].endswith("</div>"))
 
 
 class TestZbudujPowiadomienieZmianyTerminu(unittest.TestCase):
@@ -493,6 +504,13 @@ class TestZbudujPowiadomienieZmianyTerminu(unittest.TestCase):
 			)
 			for wartosc in d.values():
 				self.assertIsNone(_DASH_RE.search(wartosc), msg=wartosc)
+
+	def test_k_znacznik_tresci_na_korzeniu(self: "TestZbudujPowiadomienieZmianyTerminu") -> None:
+		d = zbuduj_powiadomienie_zmiany_terminu(
+			LEAD_PELNY, url=URL, stary=CZWARTEK, nowy=PIATEK, pokaz_zmieniajacego=False, zmieniajacy=""
+		)
+		self.assertTrue(d["email_content"].startswith(f"<div {ZNACZNIK_TRESCI}>"))
+		self.assertTrue(d["email_content"].endswith("</div>"))
 
 
 class TestKsztaltZwracanychSlownikow(unittest.TestCase):

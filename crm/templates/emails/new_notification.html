@@ -1,0 +1,31 @@
+{#- VOLTEO (ops#182): crm ma wlasny szablon dla tresci powiadomien z
+crm.volteo_powiadomienia (przydzial leada z terminem spotkania, zmiana/odwolanie
+terminu). Bez tego rdzeniowy szablon dodawal trzy naddatki nad nasza wlasna
+tresc: temat powtorzony jako akapit nad body_content, cale nasze HTML opakowane
+w szary <blockquote>, i drugi link "Otworz dokument" pod naszym wlasnym
+przyciskiem. Jinja loaduje szablony przez ChoiceLoader po
+reversed(get_installed_apps()) (frappe.utils.jinja.get_jloader), wiec kopia pod
+ta sama sciezka wzgledna w apps/crm przeslania kopie z apps/frappe - crm nie
+ustawia hooks.py:template_apps, wiec ten mechanizm dziala automatycznie, bez
+zadnej dodatkowej konfiguracji. Znacznik ZNACZNIK_TRESCI
+(data-volteo="powiadomienie") na korzeniu naszego description przezywa bleach
+(kazdy atrybut data-* jest zachowywany, frappe/utils/html_utils.py::sanitize_html)
+i pozwala odroznic nasza tresc od KAZDEGO innego powiadomienia typu Notification
+Log (wzmianka, przydzial szansy/zadania, udostepnienie) - te renderuja sie
+dokladnie jak w rdzeniu, galaz else ponizej jest bajt w bajt kopia
+apps/frappe/frappe/templates/emails/new_notification.html. -#}
+{%- if description and 'data-volteo="powiadomienie"' in description[:120] -%}
+{{ description | markdown }}
+{%- else -%}
+<p>
+	<p class="text-color">{{ body_content }}</p>
+</p>
+{% if description %}
+<blockquote>
+	{{ description | markdown }}
+</blockquote>
+{% endif %}
+<div class="more-info">
+	<a href="{{ doc_link }}">{{ _("Open Document") }}</a>
+</div>
+{%- endif -%}
