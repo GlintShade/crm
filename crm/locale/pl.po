@@ -9214,3 +9214,10 @@ msgstr "Zawiera"
 #: frontend/src/components/Filter.vue:735
 msgid "Nie zawiera"
 msgstr "Nie zawiera"
+
+# Issue #178: przelacznik "Ukryj puste pola" w panelach bocznych (lead,
+# szansa, klient). Klucz juz po polsku, wpis dla spojnosci katalogu, jak
+# przy ops#173 wyzej.
+#: frontend/src/components/SidePanelLayout.vue
+msgid "Ukryj puste pola"
+msgstr "Ukryj puste pola"
