@@ -5,6 +5,7 @@ import { useAttachments } from '@/composables/useAttachments'
 import { showSettings, activeSettingsPage } from '@/composables/settings'
 import { runSequentially, parseAssignees, sanitizeText } from '@/utils'
 import { findMissingMandatory } from '@/utils/fieldTransforms'
+import { opcjeWskaznikaZapisu } from '@/utils/wskaznikZapisu'
 import { createDocumentResource, createResource, toast } from 'frappe-ui'
 import { ref, reactive, getCurrentInstance } from 'vue'
 
@@ -52,7 +53,11 @@ export function useDocument(doctype, docname, resourceOverrides = {}) {
           setValue: {
             onSuccess: () => {
               triggerOnSave()
-              toast.success(__('Document updated successfully'))
+              // VOLTEO (klik-test 2026-09-24, uwaga 6): zamiast paska "Dokument zaktualizowany
+              // pomyslnie" (360 px, 4 s, zaslanial przycisk "Komentarze" w LeadSzybkiPodglad.vue)
+              // mala ikonka sukcesu, 0,8 s, przepuszczajaca klikniecia. Bledy zapisu (onError nizej)
+              // nadal pokazuja pelny toast z tekstem.
+              toast.success('', opcjeWskaznikaZapisu())
               processPendingDeletions()
             },
             onError: (err) => {
