@@ -168,7 +168,7 @@
       input-class="border-none"
       @change="(v) => fieldChange(v, field)"
     />
-    <DateTimePicker
+    <DateTimePickerSiatka
       v-else-if="field.fieldtype === 'Datetime'"
       :value="data[field.fieldname]"
       :format="getFormat('', '', true, true, false)"
@@ -342,9 +342,9 @@ import {
   Combobox,
   Tooltip,
   DatePicker,
-  DateTimePicker,
   TimePicker,
 } from 'frappe-ui'
+import DateTimePickerSiatka from '@/components/Controls/DateTimePickerSiatka.vue'
 import { computed, provide, inject, ref } from 'vue'
 
 const props = defineProps({

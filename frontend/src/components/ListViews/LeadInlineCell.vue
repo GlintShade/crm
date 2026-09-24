@@ -97,7 +97,7 @@
       @change="(v) => zapiszWartosc(column.key, v)"
     />
 
-    <DateTimePicker
+    <DateTimePickerSiatka
       v-else-if="column.key === 'custom_termin_spotkania'"
       :value="wartosc"
       :format="formatDatyCzasu"
@@ -128,12 +128,12 @@ import { isTranslatable, getFormat } from '@/utils'
 import {
   Button,
   DatePicker,
-  DateTimePicker,
   Dropdown,
   FormControl,
   call,
   toast,
 } from 'frappe-ui'
+import DateTimePickerSiatka from '@/components/Controls/DateTimePickerSiatka.vue'
 import { computed, ref, watch } from 'vue'
 
 const props = defineProps({
