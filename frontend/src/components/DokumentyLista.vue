@@ -135,65 +135,70 @@
           <div v-if="!visibleDocs.length" class="py-10 text-center text-sm text-ink-gray-5">
             {{ __('Brak dokumentów.') }}
           </div>
-          <div v-else class="flex flex-col gap-2">
-            <div
-              v-for="doc in visibleDocs"
-              :key="doc.name"
-              class="flex items-center gap-3 rounded-lg border border-outline-gray-2 p-3 transition-colors"
-              :class="doc.plik ? 'cursor-pointer hover:bg-surface-gray-1' : 'cursor-not-allowed opacity-70'"
-              @click="doc.plik && openDocument(doc)"
-            >
-              <FeatherIcon name="file-text" class="h-5 w-5 shrink-0 text-ink-gray-6" />
-              <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-                <div class="truncate text-sm-medium text-ink-gray-8">{{ doc.tytul }}</div>
-                <div class="flex items-center gap-2">
-                  <Badge
-                    v-if="doc.zaktualizowano"
-                    :theme="doc.nowosc ? 'blue' : 'gray'"
-                    variant="subtle"
-                    size="sm"
-                    :label="ostatniaAktualizacjaLabel(doc.zaktualizowano)"
-                  />
-                  <span v-else class="text-p-sm text-ink-gray-4">—</span>
-                  <Badge
-                    v-if="!doc.plik"
-                    theme="gray"
-                    variant="subtle"
-                    size="sm"
-                    :label="__('Brak pliku')"
-                  />
-                </div>
+          <div v-else class="flex flex-col gap-4">
+            <div v-for="grupa in grupyDokumentow" :key="grupa.kategoria || '__pozostale'" class="flex flex-col gap-2">
+              <div v-if="linia === 'OZE'" class="mt-2 text-base-semibold text-ink-gray-7">
+                {{ grupa.kategoria || __('Pozostałe') }}
               </div>
-              <div class="flex shrink-0 items-center gap-1" @click.stop>
-                <Button
-                  v-if="doc.plik"
-                  variant="ghost"
-                  :label="__('Pobierz')"
-                  icon-left="download"
-                  @click="downloadDocument(doc)"
-                />
-                <template v-if="stan.czyAdmin">
-                  <FileUploader
-                    :upload-args="{ private: true }"
-                    :file-types="['.pdf']"
-                    @success="(file) => onReplaceUploaded(doc, file)"
-                  >
-                    <template #default="{ openFileSelector, uploading }">
-                      <Button
-                        variant="ghost"
-                        :label="__('Zamień')"
-                        :loading="uploading || (replaceDocument.loading && replacingName === doc.name)"
-                        @click="openFileSelector"
-                      />
-                    </template>
-                  </FileUploader>
+              <div
+                v-for="doc in grupa.dokumenty"
+                :key="doc.name"
+                class="flex items-center gap-3 rounded-lg border border-outline-gray-2 p-3 transition-colors"
+                :class="doc.plik ? 'cursor-pointer hover:bg-surface-gray-1' : 'cursor-not-allowed opacity-70'"
+                @click="doc.plik && openDocument(doc)"
+              >
+                <FeatherIcon name="file-text" class="h-5 w-5 shrink-0 text-ink-gray-6" />
+                <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <div class="truncate text-sm-medium text-ink-gray-8">{{ doc.tytul }}</div>
+                  <div class="flex items-center gap-2">
+                    <Badge
+                      v-if="doc.zaktualizowano"
+                      :theme="doc.nowosc ? 'blue' : 'gray'"
+                      variant="subtle"
+                      size="sm"
+                      :label="ostatniaAktualizacjaLabel(doc.zaktualizowano)"
+                    />
+                    <span v-else class="text-p-sm text-ink-gray-4">—</span>
+                    <Badge
+                      v-if="!doc.plik"
+                      theme="gray"
+                      variant="subtle"
+                      size="sm"
+                      :label="__('Brak pliku')"
+                    />
+                  </div>
+                </div>
+                <div class="flex shrink-0 items-center gap-1" @click.stop>
                   <Button
+                    v-if="doc.plik"
                     variant="ghost"
-                    theme="red"
-                    :label="__('Usuń')"
-                    @click="openDeleteDialog(doc)"
+                    :label="__('Pobierz')"
+                    icon-left="download"
+                    @click="downloadDocument(doc)"
                   />
-                </template>
+                  <template v-if="stan.czyAdmin">
+                    <FileUploader
+                      :upload-args="{ private: true }"
+                      :file-types="['.pdf']"
+                      @success="(file) => onReplaceUploaded(doc, file)"
+                    >
+                      <template #default="{ openFileSelector, uploading }">
+                        <Button
+                          variant="ghost"
+                          :label="__('Zamień')"
+                          :loading="uploading || (replaceDocument.loading && replacingName === doc.name)"
+                          @click="openFileSelector"
+                        />
+                      </template>
+                    </FileUploader>
+                    <Button
+                      variant="ghost"
+                      theme="red"
+                      :label="__('Usuń')"
+                      @click="openDeleteDialog(doc)"
+                    />
+                  </template>
+                </div>
               </div>
             </div>
           </div>
@@ -209,6 +214,14 @@
             v-model="addForm.tytul"
             type="text"
             :label="__('Tytuł')"
+            :disabled="addDocument.loading"
+          />
+          <FormControl
+            v-if="linia === 'OZE'"
+            v-model="addForm.kategoria"
+            type="select"
+            :label="__('Kategoria')"
+            :options="kategoriaOpcje"
             :disabled="addDocument.loading"
           />
           <FileUploader
@@ -274,6 +287,7 @@
 
 <script setup>
 import CheckIcon from '@/components/Icons/CheckIcon.vue'
+import { grupujDokumenty } from '@/utils/dokumentyKategorie'
 import { onClickOutside } from '@vueuse/core'
 import {
   Badge,
@@ -304,6 +318,7 @@ const stan = reactive({
   wojewodztwaUzytkownika: [],
   wojewodztwaOpcje: [],
   czyAdmin: false,
+  kategorieOpcje: [],
 })
 const listError = ref('')
 
@@ -317,6 +332,7 @@ const listResource = createResource({
     stan.wojewodztwaUzytkownika = data.wojewodztwa_uzytkownika || []
     stan.wojewodztwaOpcje = data.wojewodztwa_opcje || []
     stan.czyAdmin = Boolean(data.czy_admin)
+    stan.kategorieOpcje = data.kategorie_opcje || []
     listError.value = ''
   },
   onError: (err) => {
@@ -422,6 +438,16 @@ const visibleDocs = computed(() => {
 
 const visibleDocsWithFile = computed(() => visibleDocs.value.filter((d) => d.plik))
 
+// Grupowanie po kategorii tylko dla OZE (CP nie ma kategorii -- jedna grupa
+// bez nagłówka renderuje się identycznie jak płaska lista sprzed tej
+// zmiany). `grupujDokumenty` jest czystą funkcją z utils/dokumentyKategorie.js.
+const grupyDokumentow = computed(() => {
+  if (props.linia === 'OZE') {
+    return grupujDokumenty(visibleDocs.value, stan.kategorieOpcje)
+  }
+  return [{ kategoria: '', dokumenty: visibleDocs.value }]
+})
+
 const currentWojewodztwo = computed(() =>
   props.linia === 'Czyste Powietrze' ? selectedFolder.value || '' : '',
 )
@@ -469,12 +495,20 @@ function handleDownloadZip() {
 // --- Admin: Dodaj dokument -----------------------------------------------
 
 const showAddDialog = ref(false)
-const addForm = reactive({ tytul: '', plik_url: '' })
+const addForm = reactive({ tytul: '', plik_url: '', kategoria: '' })
 const addError = ref('')
+
+// Pierwsza opcja to zawsze "Bez kategorii" (wartość '') -- kategoria nie
+// jest wymagana, więc dropdown musi mieć sensowny wybrany domyślnie wpis.
+const kategoriaOpcje = computed(() => [
+  { label: __('Bez kategorii'), value: '' },
+  ...stan.kategorieOpcje.map((kategoria) => ({ label: kategoria, value: kategoria })),
+])
 
 function openAddDialog() {
   addForm.tytul = ''
   addForm.plik_url = ''
+  addForm.kategoria = ''
   addError.value = ''
   showAddDialog.value = true
 }
@@ -483,6 +517,7 @@ function closeAddDialog() {
   showAddDialog.value = false
   addForm.tytul = ''
   addForm.plik_url = ''
+  addForm.kategoria = ''
   addError.value = ''
 }
 
@@ -513,6 +548,7 @@ function submitAddDocument() {
     linia: props.linia,
     plik_url: addForm.plik_url,
     wojewodztwo: currentWojewodztwo.value,
+    kategoria: props.linia === 'OZE' ? addForm.kategoria : '',
   })
 }
 

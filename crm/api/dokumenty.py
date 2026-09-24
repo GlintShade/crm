@@ -155,6 +155,18 @@ def _wczytaj_lub_utworz_ustawienia(uzytkownik: str) -> "frappe.model.document.Do
 	return doc
 
 
+def _kategorie_opcje() -> list[str]:
+	"""Zwraca listę opcji kategorii dokumentów OZE wprost z meta pola `kategoria`
+	na `Volteo Dokument` -- meta jest jedynym źródłem prawdy (nie stała w
+	forku): dodanie nowej kategorii to re-run skryptu ops (`ops/crm-dokumenty.py`),
+	bez zmiany kodu i bez obrazu. Brak pola (dev-site sprzed skryptu ops, albo
+	produkcja przed Fazą 1 tego issue) daje pustą listę, nigdy błąd."""
+	pole = frappe.get_meta(DOCTYPE).get_field("kategoria")
+	if pole is None:
+		return []
+	return [opcja for opcja in (pole.options or "").split("\n") if opcja.strip()]
+
+
 def _czy_nowy(zaktualizowano: Any, granica: Any, seen_iso: str | None) -> bool:
 	"""Dokument/folder jest "nowy", gdy `zaktualizowano` mieści się w oknie
 	`NOWOSC_DNI` dni ORAZ (nigdy nie oznaczono jako przeczytane, albo znacznik
@@ -199,6 +211,7 @@ def dokumenty_lista(linia: str) -> dict[str, Any]:
 			"wojewodztwa_uzytkownika": [],
 			"wojewodztwa_opcje": list(WOJEWODZTWA),
 			"czy_admin": _czy_admin(role_uzytkownika),
+			"kategorie_opcje": [],
 		}
 
 	ustawienia = _wczytaj_ustawienia(frappe.session.user)
@@ -207,7 +220,7 @@ def dokumenty_lista(linia: str) -> dict[str, Any]:
 	wiersze = frappe.get_all(
 		DOCTYPE,
 		filters={"linia": linia},
-		fields=["name", "tytul", "wojewodztwo", "plik", "kolejnosc", "zaktualizowano"],
+		fields=["name", "tytul", "wojewodztwo", "plik", "kolejnosc", "zaktualizowano", "kategoria"],
 		order_by="kolejnosc asc, tytul asc",
 	)
 
@@ -224,6 +237,7 @@ def dokumenty_lista(linia: str) -> dict[str, Any]:
 				"plik": wiersz.get("plik") or "",
 				"kolejnosc": wiersz.get("kolejnosc") or 0,
 				"zaktualizowano": zaktualizowano,
+				"kategoria": wiersz.get("kategoria") or "",
 				"nowosc": _czy_nowy(zaktualizowano, granica, odczyty.get(f"dokument:{wiersz['name']}")),
 			}
 		)
@@ -251,6 +265,7 @@ def dokumenty_lista(linia: str) -> dict[str, Any]:
 		"wojewodztwa_uzytkownika": ustawienia["wojewodztwa"],
 		"wojewodztwa_opcje": list(WOJEWODZTWA),
 		"czy_admin": _czy_admin(role_uzytkownika),
+		"kategorie_opcje": _kategorie_opcje() if linia == "OZE" else [],
 	}
 
 
@@ -360,7 +375,7 @@ def pobierz_zip(linia: str, wojewodztwo: str = "") -> None:
 	wiersze = frappe.get_all(
 		DOCTYPE,
 		filters=filtry,
-		fields=["name", "tytul", "plik"],
+		fields=["name", "tytul", "plik", "kategoria"],
 		order_by="kolejnosc asc, tytul asc",
 	)
 
@@ -389,7 +404,17 @@ def pobierz_zip(linia: str, wojewodztwo: str = "") -> None:
 			except Exception:
 				continue
 
-			nazwa_wpisu = _bezpieczna_nazwa_wpisu(wiersz.get("tytul"), plik_doc.file_name, nazwy_w_archiwum)
+			# OZE: archiwum odzwierciedla podział na sekcje z widoku (kategoria
+			# jako podfolder w ZIP-ie) -- CP nie ma kategorii, więc zostaje
+			# płaskie jak dotąd. Podfolder dokładany jest PRZED wywołaniem
+			# _bezpieczna_nazwa_wpisu, żeby dedup (`nazwy_w_archiwum`) liczył
+			# się po PEŁNEJ ścieżce w archiwum, a nie po samej nazwie pliku --
+			# inaczej ten sam tytuł w dwóch różnych kategoriach dostałby
+			# niepotrzebny przyrostek " (2)", mimo że w ZIP-ie trafia do
+			# osobnych folderów i żadna kolizja nie zachodzi.
+			kategoria = (wiersz.get("kategoria") or "").strip() if linia == "OZE" else ""
+			tytul_w_archiwum = f"{kategoria}/{wiersz.get('tytul')}" if kategoria else wiersz.get("tytul")
+			nazwa_wpisu = _bezpieczna_nazwa_wpisu(tytul_w_archiwum, plik_doc.file_name, nazwy_w_archiwum)
 			archiwum.writestr(nazwa_wpisu, tresc)
 			dodano += 1
 
@@ -412,6 +437,9 @@ def _wiersz_dokumentu(doc: "frappe.model.document.Document") -> dict[str, Any]:
 		"plik": doc.plik,
 		"kolejnosc": doc.kolejnosc or 0,
 		"zaktualizowano": doc.zaktualizowano,
+		# .get, nie doc.kategoria -- na dev-site sprzed skryptu ops pole może
+		# jeszcze nie istnieć w meta, a wtedy zwykły atrybut wywaliłby się.
+		"kategoria": doc.get("kategoria") or "",
 	}
 
 
@@ -510,6 +538,7 @@ def dodaj_dokument(
 	plik_url: str,
 	wojewodztwo: str = "",
 	kolejnosc: int = 0,
+	kategoria: str = "",
 ) -> dict[str, Any]:
 	"""Dodaje nowy dokument do biblioteki i podpina pod niego już przesłany
 	prywatny plik. Admin-only."""
@@ -528,6 +557,13 @@ def dodaj_dokument(
 	else:
 		wojewodztwo = ""
 
+	kategoria = (kategoria or "").strip()
+	if linia == "OZE":
+		if kategoria and kategoria not in _kategorie_opcje():
+			frappe.throw(_("Nieznana kategoria dokumentu."))
+	else:
+		kategoria = ""
+
 	plik_url = _wymagaj_prywatnego_pliku(plik_url)
 
 	doc = frappe.get_doc(
@@ -539,6 +575,7 @@ def dodaj_dokument(
 			"plik": plik_url,
 			"kolejnosc": cint(kolejnosc),
 			"zaktualizowano": now_datetime(),
+			"kategoria": kategoria,
 		}
 	)
 	doc.insert()
