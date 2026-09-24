@@ -2,6 +2,8 @@ import frappe
 from frappe import _
 
 from crm.fcrm.doctype.crm_notification.crm_notification import notify_user
+from crm.permissions.org_hierarchy import BYPASS_ROLES, czy_autor_ma_role_cc
+from crm.volteo_powiadomienia import nazwa_przydzielajacego
 
 
 def after_insert(doc, method):
@@ -30,7 +32,18 @@ def on_update(doc, method):
 
 def notify_assigned_user(doc, is_cancelled=False):
 	_doc = frappe.get_doc(doc.reference_type, doc.reference_name)
-	owner = frappe.get_cached_value("User", frappe.session.user, "full_name")
+	full_name = frappe.get_cached_value("User", frappe.session.user, "full_name")
+
+	# VOLTEO (ops#182): nazwisko przydzielajacego (autor tej ToDo, sesja biezacego
+	# uzytkownika) jest maskowane w dzwonku, gdy autor ma role Volteo Call Center, a
+	# odbiorca (doc.allocated_to) nie jest ani Administratorem, ani jedna z
+	# BYPASS_ROLES - lustro maskowania w Aktywnosci (ops#93,
+	# crm.permissions.org_hierarchy.czy_autor_ma_role_cc).
+	odbiorca_widzi_cc = doc.allocated_to == "Administrator" or bool(
+		set(frappe.get_roles(doc.allocated_to)) & BYPASS_ROLES
+	)
+	maskuj = czy_autor_ma_role_cc(frappe.session.user) and not odbiorca_widzi_cc
+	owner = nazwa_przydzielajacego(full_name, maskuj=maskuj)
 	notification_text = get_notification_text(owner, doc, _doc, is_cancelled)
 
 	message = (
