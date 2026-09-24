@@ -782,6 +782,9 @@ function rysujMarkery() {
     marker.bindTooltip(() => budujDymek(lead), {
       direction: 'top',
       offset: L.point(0, geometriaPinezki(STYL_PINEZKI.radius).srodekY - STYL_PINEZKI.radius),
+      // className: przelacza tlo/obramowanie/strzalke dymku na tokeny
+      // motywu, patrz blok <style> na koncu pliku.
+      className: 'volteo-mapa-dymek',
     })
     marker.on('click', () => {
       wybranyLead.value = lead
@@ -906,3 +909,47 @@ function destroyMap() {
 onMounted(() => initMap())
 onBeforeUnmount(() => destroyMap())
 </script>
+<style>
+/* Dymek nad pinezka: leaflet.css daje mu na sztywno biale tlo, a tresc
+   (budujDymek) uzywa tokenow frappe-ui, ktore w ciemnym motywie staja sie
+   jasne, wiec nazwisko (klasa text-ink-gray-9) bylo bialym tekstem na bialym tle.
+   Tlo, obramowanie i strzalka na tych samych tokenach co tresc, wiec dymek
+   przelacza sie z motywem. Bez `scoped`: element tworzy Leaflet, nie Vue,
+   wiec atrybut data-v by go nie objal.
+   Zmienne to gotowe funkcje koloru (oklch(...)), nie trojki RGB - stad
+   `var(--token)` wprost, bez owijania w rgb(...) (rgb(var(--token)) jest
+   tu nieprawidlowym CSS i cala deklaracja spada). Nazwy zgodne z tym, co
+   faktycznie trafia do zbudowanego CSS w tym repo (potwierdzone grepem
+   po ../crm/public/frontend/assets/index-*.css): --ink-gray-9 (bez
+   przedrostka text-) i --outline-gray-2 istnieja, ale --surface-modal juz
+   nie - w tej wersji frappe-ui/Tailwind zaden uzywany komponent go nie
+   generuje, wiec zastepuje go --surface-elevation-1 (biale w jasnym,
+   oklch(.239 0 0) w ciemnym), ten sam token co tlo panelu w
+   KalkulatorTab.vue/KalkulatorCPTab.vue (`background: var(--surface-elevation-1)`)
+   i LeadSzybkiPodglad.vue (`bg-surface-elevation-1`).
+   Selektor .leaflet-tooltip.volteo-mapa-dymek (dwie klasy), nie sama
+   .volteo-mapa-dymek: leaflet.css jest doladowywany dynamicznym importem
+   w initMap() (await import('leaflet/dist/leaflet.css')), wiec laduje sie
+   do <head> PO stylach tego komponentu, a jego .leaflet-tooltip ma taka
+   sama specyficznosc (jedna klasa) jak nasza pojedyncza klasa - przy
+   rownej specyficznosci wygrywa regula wstrzyknieta pozniej, czyli
+   leaflet.css. Druga klasa w selektorze podbija specyficznosc i wygrywa
+   niezaleznie od kolejnosci wstrzykniecia. */
+.leaflet-tooltip.volteo-mapa-dymek {
+  background-color: var(--surface-elevation-1);
+  border-color: var(--outline-gray-2);
+  color: var(--ink-gray-9);
+}
+.leaflet-tooltip.volteo-mapa-dymek.leaflet-tooltip-top::before {
+  border-top-color: var(--surface-elevation-1);
+}
+.leaflet-tooltip.volteo-mapa-dymek.leaflet-tooltip-bottom::before {
+  border-bottom-color: var(--surface-elevation-1);
+}
+.leaflet-tooltip.volteo-mapa-dymek.leaflet-tooltip-left::before {
+  border-left-color: var(--surface-elevation-1);
+}
+.leaflet-tooltip.volteo-mapa-dymek.leaflet-tooltip-right::before {
+  border-right-color: var(--surface-elevation-1);
+}
+</style>
