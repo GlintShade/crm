@@ -295,17 +295,6 @@
       afterInsert: (_doc) => addContact(_doc.name),
     }"
   />
-  <FilesUploader
-    v-model="showFilesUploader"
-    doctype="CRM Deal"
-    :docname="dealId"
-    @after="
-      () => {
-        activities?.all_activities?.reload()
-        changeTabTo('attachments')
-      }
-    "
-  />
   <DeleteLinkedDocModal
     v-if="showDeleteLinkedDocModal"
     v-model="showDeleteLinkedDocModal"
@@ -361,7 +350,6 @@ import DealNextStepNote from '@/components/deal/DealNextStepNote.vue'
 import OrganizationModal from '@/components/Modals/OrganizationModal.vue'
 import LostReasonModal from '@/components/Modals/LostReasonModal.vue'
 import AssignTo from '@/components/AssignTo.vue'
-import FilesUploader from '@/components/FilesUploader/FilesUploader.vue'
 import ContactModal from '@/components/Modals/ContactModal.vue'
 import Link from '@/components/Controls/Link.vue'
 import Section from '@/components/CollapsibleSection.vue'
@@ -508,7 +496,6 @@ onBeforeUnmount(() => {
 
 const reload = ref(false)
 const showOrganizationModal = ref(false)
-const showFilesUploader = ref(false)
 const _organization = ref({})
 
 const breadcrumbs = computed(() => {
@@ -665,10 +652,7 @@ const tabs = computed(() => {
 })
 
 // VOLTEO: domyślna zakładka Zestaw (decyzja właściciela 2026-09-23).
-// changeTabTo destructured because the page-level FilesUploader @after handler
-// (line ~305) calls it; that uploader has no UI trigger since ecf041ec removed
-// the header attach button, so the missing binding was latent, not a live error.
-const { tabIndex, changeTabTo } = useActiveTabManager(tabs, 'lastDealTab', 'zestaw')
+const { tabIndex } = useActiveTabManager(tabs, 'lastDealTab', 'zestaw')
 
 const sections = createResource({
   url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_sidepanel_sections',
