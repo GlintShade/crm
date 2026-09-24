@@ -1,16 +1,20 @@
+import json
 import unittest
 
 from crm.volteo_leady_import import KOLEJNOSC_PRODUKTOW, KOLEJNOSC_PRODUKTOW_PROCESU
 from crm.volteo_lista_szans import (
 	FILTER_FIELDS_DEAL,
 	FILTER_FIELDS_LEAD,
+	OPERATOR_TAGOW,
 	POLA_TAGOW_LEAD,
 	POLA_ZAWSZE_DOZWOLONE,
 	SORT_FIELDS_DEAL,
 	SORT_FIELDS_LEAD,
 	niedozwolone_klucze_filtrow,
 	podstaw_dzis,
+	polacz_zbiory_nazw,
 	rozpoznaj_filtr_tagu,
+	rozpoznaj_filtry_tagu,
 	wzory_tagu,
 )
 
@@ -714,6 +718,259 @@ class TestRozpoznajFiltrTagu(unittest.TestCase):
 		oryginal = ["PV", "ME"]
 		rozpoznaj_filtr_tagu("custom_posiadane_produkty", wartosc)
 		self.assertEqual(wartosc[1], oryginal)
+
+	def test_l_zlozony_zwraca_none_zgodnosc(self: "TestRozpoznajFiltrTagu") -> None:
+		# Issue ops#173: ksztalt zlozony z DWOMA stronami niepustymi daje
+		# dwa wpisy w `rozpoznaj_filtry_tagu` -- "wiecej niz jeden wpis",
+		# wiec sciezka zgodnosci wstecznej zwraca `None` (filtr zostaje
+		# nietkniety dla wywolujacych, ktorzy nie znaja jeszcze zlozonego
+		# ksztaltu).
+		self.assertIsNone(
+			rozpoznaj_filtr_tagu(
+				"custom_posiadane_produkty",
+				[OPERATOR_TAGOW, {"ma": ["PV"], "nie_ma": ["AUDYT", "ME"]}],
+			)
+		)
+
+
+class TestRozpoznajFiltryTagu(unittest.TestCase):
+	"""`rozpoznaj_filtry_tagu(pole, wartosc)` (liczba mnoga, issue ops#173)
+	-- zrodlo prawdy dla normalizacji wire formatu filtra tagow, w tym
+	nowego ksztaltu zlozonego "zawiera i nie zawiera" jednym warunkiem."""
+
+	def test_a_zlozony_ma_i_nie_ma(self: "TestRozpoznajFiltryTagu") -> None:
+		self.assertEqual(
+			rozpoznaj_filtry_tagu(
+				"custom_posiadane_produkty",
+				[OPERATOR_TAGOW, {"ma": ["PV"], "nie_ma": ["AUDYT", "ME"]}],
+			),
+			[("in", ["PV"]), ("not in", ["AUDYT", "ME"])],
+		)
+
+	def test_b_zlozony_tylko_ma(self: "TestRozpoznajFiltryTagu") -> None:
+		self.assertEqual(
+			rozpoznaj_filtry_tagu("custom_posiadane_produkty", [OPERATOR_TAGOW, {"ma": ["PV"]}]),
+			[("in", ["PV"])],
+		)
+
+	def test_c_zlozony_tylko_nie_ma(self: "TestRozpoznajFiltryTagu") -> None:
+		self.assertEqual(
+			rozpoznaj_filtry_tagu(
+				"custom_posiadane_produkty", [OPERATOR_TAGOW, {"nie_ma": ["AUDYT"]}]
+			),
+			[("not in", ["AUDYT"])],
+		)
+
+	def test_d_zlozony_oba_puste_daje_pusta_liste(
+		self: "TestRozpoznajFiltryTagu",
+	) -> None:
+		self.assertEqual(
+			rozpoznaj_filtry_tagu(
+				"custom_posiadane_produkty", [OPERATOR_TAGOW, {"ma": [], "nie_ma": []}]
+			),
+			[],
+		)
+		self.assertEqual(
+			rozpoznaj_filtry_tagu("custom_posiadane_produkty", [OPERATOR_TAGOW, {}]),
+			[],
+		)
+
+	def test_e_wielkosc_liter_operatora_bez_znaczenia(
+		self: "TestRozpoznajFiltryTagu",
+	) -> None:
+		self.assertEqual(
+			rozpoznaj_filtry_tagu(
+				"custom_posiadane_produkty", ["VOLTEO_TAGI", {"ma": ["PV"]}]
+			),
+			[("in", ["PV"])],
+		)
+		self.assertEqual(
+			rozpoznaj_filtry_tagu(
+				"custom_posiadane_produkty", ["Volteo_Tagi", {"nie_ma": ["PV"]}]
+			),
+			[("not in", ["PV"])],
+		)
+
+	def test_f_nieznane_klucze_ignorowane(self: "TestRozpoznajFiltryTagu") -> None:
+		self.assertEqual(
+			rozpoznaj_filtry_tagu(
+				"custom_posiadane_produkty",
+				[OPERATOR_TAGOW, {"ma": ["PV"], "ma_wszystkie": ["PC"]}],
+			),
+			[("in", ["PV"])],
+		)
+
+	def test_g_ma_nie_lista_zwraca_none(self: "TestRozpoznajFiltryTagu") -> None:
+		self.assertIsNone(
+			rozpoznaj_filtry_tagu("custom_posiadane_produkty", [OPERATOR_TAGOW, {"ma": "PV"}])
+		)
+
+	def test_h_nie_ma_nie_lista_zwraca_none(self: "TestRozpoznajFiltryTagu") -> None:
+		self.assertIsNone(
+			rozpoznaj_filtry_tagu(
+				"custom_posiadane_produkty", [OPERATOR_TAGOW, {"nie_ma": 42}]
+			)
+		)
+
+	def test_i_token_nie_string_zwraca_none(self: "TestRozpoznajFiltryTagu") -> None:
+		self.assertIsNone(
+			rozpoznaj_filtry_tagu("custom_posiadane_produkty", [OPERATOR_TAGOW, {"ma": [1, 2]}])
+		)
+
+	def test_j_payload_nie_dict_zwraca_none(self: "TestRozpoznajFiltryTagu") -> None:
+		self.assertIsNone(
+			rozpoznaj_filtry_tagu("custom_posiadane_produkty", [OPERATOR_TAGOW, ["PV"]])
+		)
+		self.assertIsNone(
+			rozpoznaj_filtry_tagu("custom_posiadane_produkty", [OPERATOR_TAGOW, "PV"])
+		)
+		self.assertIsNone(
+			rozpoznaj_filtry_tagu("custom_posiadane_produkty", [OPERATOR_TAGOW, None])
+		)
+
+	def test_k_legacy_skalar_jednoelementowe(self: "TestRozpoznajFiltryTagu") -> None:
+		self.assertEqual(
+			rozpoznaj_filtry_tagu("custom_posiadane_produkty", "PV"),
+			[("in", ["PV"])],
+		)
+
+	def test_l_legacy_rownosc_jednoelementowe(self: "TestRozpoznajFiltryTagu") -> None:
+		self.assertEqual(
+			rozpoznaj_filtry_tagu("custom_posiadane_produkty", ["=", "PV"]),
+			[("in", ["PV"])],
+		)
+
+	def test_m_legacy_in_jednoelementowe(self: "TestRozpoznajFiltryTagu") -> None:
+		self.assertEqual(
+			rozpoznaj_filtry_tagu("custom_posiadane_produkty", ["in", ["PV", "ME"]]),
+			[("in", ["PV", "ME"])],
+		)
+
+	def test_n_legacy_not_in_jednoelementowe(self: "TestRozpoznajFiltryTagu") -> None:
+		self.assertEqual(
+			rozpoznaj_filtry_tagu("custom_posiadane_produkty", ["not in", ["PV"]]),
+			[("not in", ["PV"])],
+		)
+
+	def test_o_nierozpoznany_ksztalt_zwraca_none(
+		self: "TestRozpoznajFiltryTagu",
+	) -> None:
+		self.assertIsNone(rozpoznaj_filtry_tagu("custom_posiadane_produkty", ["like", "%PV%"]))
+		self.assertIsNone(rozpoznaj_filtry_tagu("custom_posiadane_produkty", None))
+
+	def test_p_nie_mutuje_wejscia(self: "TestRozpoznajFiltryTagu") -> None:
+		payload = {"ma": ["PV"], "nie_ma": ["AUDYT"]}
+		wartosc = [OPERATOR_TAGOW, payload]
+		kopia_ma = list(payload["ma"])
+		kopia_nie_ma = list(payload["nie_ma"])
+		rozpoznaj_filtry_tagu("custom_posiadane_produkty", wartosc)
+		self.assertEqual(payload["ma"], kopia_ma)
+		self.assertEqual(payload["nie_ma"], kopia_nie_ma)
+
+	def test_q_json_round_trip(self: "TestRozpoznajFiltryTagu") -> None:
+		wartosc = [OPERATOR_TAGOW, {"ma": ["PV"], "nie_ma": ["AUDYT", "ME"]}]
+		po_przejsciu_przez_json = json.loads(json.dumps(wartosc))
+		self.assertEqual(
+			rozpoznaj_filtry_tagu("custom_posiadane_produkty", po_przejsciu_przez_json),
+			[("in", ["PV"]), ("not in", ["AUDYT", "ME"])],
+		)
+
+
+class TestPolaczZbioryNazw(unittest.TestCase):
+	"""`polacz_zbiory_nazw(dozwolone, wykluczone)` -- czysta algebra
+	laczenia zbiorow nazw z wielu warunkow "ma"/"nie_ma" naraz (issue
+	ops#173)."""
+
+	def test_a_przeciecie_minus_suma(self: "TestPolaczZbioryNazw") -> None:
+		self.assertEqual(
+			polacz_zbiory_nazw(
+				[{"L1", "L2", "L3"}, {"L2", "L3", "L4"}],
+				[{"L3"}],
+			),
+			("in", ["L2"]),
+		)
+
+	def test_b_tylko_wykluczone(self: "TestPolaczZbioryNazw") -> None:
+		self.assertEqual(
+			polacz_zbiory_nazw([], [{"L1"}, {"L2"}]),
+			("not in", ["L1", "L2"]),
+		)
+
+	def test_c_puste_dozwolone_daje_wartownika(self: "TestPolaczZbioryNazw") -> None:
+		self.assertEqual(
+			polacz_zbiory_nazw([{"L1"}, set()], []),
+			("in", [""]),
+		)
+
+	def test_d_brak_zbiorow_daje_none(self: "TestPolaczZbioryNazw") -> None:
+		self.assertIsNone(polacz_zbiory_nazw([], []))
+
+	def test_e_wykluczone_o_pustej_sumie_daje_none(
+		self: "TestPolaczZbioryNazw",
+	) -> None:
+		# "not in" ktory nie wykluczyl faktycznie zadnego dokumentu (zaden
+		# lead nie mial zadnego z filtrowanych tokenow) nie jest
+		# faktycznym ograniczeniem -- wolajacy (patrz `_rozwin_filtry_tagow`)
+		# ma wtedy usunac sztuczny filtr, nie zostawiac "not in []".
+		self.assertIsNone(polacz_zbiory_nazw([], [set()]))
+
+	def test_f_wynik_posortowany(self: "TestPolaczZbioryNazw") -> None:
+		self.assertEqual(
+			polacz_zbiory_nazw([{"C", "A", "B"}], []),
+			("in", ["A", "B", "C"]),
+		)
+		self.assertEqual(
+			polacz_zbiory_nazw([], [{"C", "A", "B"}]),
+			("not in", ["A", "B", "C"]),
+		)
+
+	def test_g_scenariusz_wlasciciela_pv_bez_audyt_me(
+		self: "TestPolaczZbioryNazw",
+	) -> None:
+		# Scenariusz z briefu ops#173: ma PV, nie ma AUDYT ani ME.
+		# `_pasuje_like` (helper testowy zdefiniowany wyzej w tym pliku,
+		# przy TestWzoryTaguHazardPvPvme) symuluje SQL LIKE na literalnych
+		# wartosciach pola, zeby zweryfikowac, ktore leady realnie
+		# przechodza przez "ma"/"nie_ma" po stronie SQL, zanim policzymy
+		# przeciecie/sume w Pythonie.
+		leady = {
+			"L-PV": "PV",
+			"L-PVPC": "PV+PC",
+			"L-PVME": "PV+ME",
+			"L-PVMEAUDYT": "PV+ME+AUDYT",
+			"L-PC": "PC",
+		}
+		# Zbior "ma PV": kazdy lead, ktorego wartosc pasuje do KTOREGOKOLWIEK
+		# z czterech wzorcow wzory_tagu dla tokenu "PV".
+		wzorce_pv = [w[2] for w in wzory_tagu("custom_posiadane_produkty", "PV") if w[1] == "like"]
+		wzorce_pv_rowne = [
+			w[2] for w in wzory_tagu("custom_posiadane_produkty", "PV") if w[1] == "="
+		]
+		zbior_ma_pv = {
+			nazwa
+			for nazwa, wartosc in leady.items()
+			if wartosc in wzorce_pv_rowne or any(_pasuje_like(wartosc, w) for w in wzorce_pv)
+		}
+		self.assertEqual(zbior_ma_pv, {"L-PV", "L-PVPC", "L-PVME", "L-PVMEAUDYT"})
+
+		def zbior_ma_token(token: str) -> set:
+			wzorce_rowne = [
+				w[2] for w in wzory_tagu("custom_posiadane_produkty", token) if w[1] == "="
+			]
+			wzorce_like = [
+				w[2] for w in wzory_tagu("custom_posiadane_produkty", token) if w[1] == "like"
+			]
+			return {
+				nazwa
+				for nazwa, wartosc in leady.items()
+				if wartosc in wzorce_rowne or any(_pasuje_like(wartosc, w) for w in wzorce_like)
+			}
+
+		zbior_audyt = zbior_ma_token("AUDYT")
+		zbior_me = zbior_ma_token("ME")
+
+		wynik = polacz_zbiory_nazw([zbior_ma_pv], [zbior_audyt, zbior_me])
+		self.assertEqual(wynik, ("in", ["L-PV", "L-PVPC"]))
 
 
 if __name__ == "__main__":

@@ -9190,3 +9190,27 @@ msgstr "Edytuj adres"
 #: frontend/src/components/Modals/DoctypeModal.vue:11
 msgid "Create Address"
 msgstr "Utwórz adres"
+
+# Issue ops#173: filtr zlozony "zawiera i nie zawiera" na pole tagow
+# produktow leada (custom_posiadane_produkty/custom_produkt_procesu).
+# Zrodla juz polskie (jak reszta etykiet operatorow w Filter.vue), wiec
+# msgstr = msgid.
+#: frontend/src/components/Filter.vue:578
+msgid "Zawiera którykolwiek z"
+msgstr "Zawiera którykolwiek z"
+
+#: frontend/src/components/Filter.vue:579
+msgid "Nie zawiera żadnego z"
+msgstr "Nie zawiera żadnego z"
+
+#: frontend/src/components/Filter.vue:580
+msgid "Zawiera i nie zawiera"
+msgstr "Zawiera i nie zawiera"
+
+#: frontend/src/components/Filter.vue:729
+msgid "Zawiera"
+msgstr "Zawiera"
+
+#: frontend/src/components/Filter.vue:735
+msgid "Nie zawiera"
+msgstr "Nie zawiera"

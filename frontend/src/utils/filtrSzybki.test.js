@@ -1,4 +1,5 @@
 import {
+  czyFiltrSzybkiZablokowany,
   czyWielokrotnyFiltrSzybki,
   etykietaChipaFiltraSzybkiego,
   przelaczWartoscWielokrotna,
@@ -6,6 +7,7 @@ import {
   spakujWartoscFiltraSzybkiego,
   ustawWartoscWielokrotna,
 } from './filtrSzybki'
+import { OPERATOR_TAGOW } from './tagiProduktow'
 
 describe('rozpakujWartoscFiltraSzybkiego', () => {
   it('skalar (dotychczasowy kształt jednej wartości) -> tablica jednoelementowa', () => {
@@ -30,6 +32,18 @@ describe('rozpakujWartoscFiltraSzybkiego', () => {
     expect(rozpakujWartoscFiltraSzybkiego(undefined)).toEqual([])
     expect(rozpakujWartoscFiltraSzybkiego(null)).toEqual([])
     expect(rozpakujWartoscFiltraSzybkiego('')).toEqual([])
+  })
+
+  it('issue ops#173: kształt złożony -> strona "ma"', () => {
+    expect(
+      rozpakujWartoscFiltraSzybkiego([
+        OPERATOR_TAGOW,
+        { ma: ['PV', 'PC'], nie_ma: ['AUDYT'] },
+      ]),
+    ).toEqual(['PV', 'PC'])
+    expect(rozpakujWartoscFiltraSzybkiego([OPERATOR_TAGOW, { nie_ma: ['AUDYT'] }])).toEqual(
+      [],
+    )
   })
 })
 
@@ -253,5 +267,24 @@ describe('ustawWartoscWielokrotna', () => {
     const wynik = ustawWartoscWielokrotna(wejscie, 'Odłożony', true)
     expect(wejscie).toEqual(['Nowy'])
     expect(wynik).not.toBe(wejscie)
+  })
+})
+
+describe('czyFiltrSzybkiZablokowany', () => {
+  it('true dla kształtu złożonego', () => {
+    expect(
+      czyFiltrSzybkiZablokowany([OPERATOR_TAGOW, { ma: ['PV'], nie_ma: ['AUDYT'] }]),
+    ).toBe(true)
+  })
+
+  it('true dla "not in"', () => {
+    expect(czyFiltrSzybkiZablokowany(['not in', ['PV']])).toBe(true)
+  })
+
+  it('false dla "in", skalara, braku wartości', () => {
+    expect(czyFiltrSzybkiZablokowany(['in', ['PV']])).toBe(false)
+    expect(czyFiltrSzybkiZablokowany('PV')).toBe(false)
+    expect(czyFiltrSzybkiZablokowany(undefined)).toBe(false)
+    expect(czyFiltrSzybkiZablokowany(null)).toBe(false)
   })
 })

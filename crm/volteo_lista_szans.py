@@ -387,34 +387,152 @@ def wzory_tagu(pole: str, token: str) -> list[list]:
 	]
 
 
-def rozpoznaj_filtr_tagu(pole: str, wartosc: object) -> tuple[str, list[str]] | None:
+# Filtr zlozony "zawiera i nie zawiera" na jedno pole tagow (issue ops#173,
+# scenariusz wlasciciela: ma PV, nie ma AUDYT ani ME, jednym wierszem
+# filtra). Pseudo-operator w slocie 0 (porownanie bez wielkosci liter, jak
+# "in"/"not in" powyzej), obiekt JSON w slocie 1 z opcjonalnymi kluczami
+# "ma" (ma ktorykolwiek, OR) i "nie_ma" (nie ma zadnego):
+#   {"custom_posiadane_produkty": ["volteo_tagi", {"ma": ["PV"], "nie_ma": ["AUDYT", "ME"]}]}
+OPERATOR_TAGOW = "volteo_tagi"
+KLUCZE_ZLOZONEGO_FILTRA_TAGOW = ("ma", "nie_ma")
+
+# Mapa klucz zlozonego filtra -> rodzaj rozpoznania (ten sam slownik rodzajow
+# co legacy `rozpoznaj_filtr_tagu`: "in" = ma ktorykolwiek, "not in" = nie ma
+# zadnego). Kolejnosc krotki `KLUCZE_ZLOZONEGO_FILTRA_TAGOW` ustala kolejnosc
+# wpisow w liscie zwracanej przez `rozpoznaj_filtry_tagu` dla ksztaltu
+# zlozonego -- "ma" zawsze przed "nie_ma", gdy oba obecne.
+_RODZAJ_KLUCZA_ZLOZONEGO = {"ma": "in", "nie_ma": "not in"}
+
+
+def rozpoznaj_filtry_tagu(pole: str, wartosc: object) -> list[tuple[str, list[str]]] | None:
 	"""Normalizuje wire format filtra na pole tagow (`pole` w
-	`POLA_TAGOW_LEAD`) do pary `(rodzaj, tokeny)`:
-	  - skalar `"PV"` albo `["=", "PV"]` -> `("in", ["PV"])` (ma tag PV);
-	  - `["in", [...]]` -> `("in", [...])` (ma KTORYKOLWIEK z tokenow);
-	  - `["not in", [...]]` -> `("not in", [...])` (nie ma ZADNEGO z
-	    tokenow).
+	`POLA_TAGOW_LEAD`) do LISTY par `(rodzaj, tokeny)` (liczba mnoga --
+	zrodlo prawdy, `rozpoznaj_filtr_tagu` ponizej jest juz tylko sciezka
+	zgodnosci wstecznej delegujaca tutaj):
+	  - skalar `"PV"` albo `["=", "PV"]` -> `[("in", ["PV"])]` (ma tag PV);
+	  - `["in", [...]]` -> `[("in", [...])]` (ma KTORYKOLWIEK z tokenow);
+	  - `["not in", [...]]` -> `[("not in", [...])]` (nie ma ZADNEGO z
+	    tokenow);
+	  - `["volteo_tagi", {"ma": [...], "nie_ma": [...]}]` (issue ops#173,
+	    porownanie tak jak pozostale, bez wzgledu na wielkosc liter) ->
+	    do DWOCH wpisow, `("in", ma)` i `("not in", nie_ma)`, w tej
+	    kolejnosci; strona z pusta lista (albo z brakujacym kluczem) jest
+	    POMIJANA (nie dodaje wpisu -- "brak ograniczenia z tej strony");
+	    obie puste/brakujace daje pusta liste `[]` ("klucz rozpoznany, brak
+	    ograniczenia"). Nieznane klucze w obiekcie sa ignorowane (rezerwa
+	    na przyszle np. "ma_wszystkie"). Wartosc pod "ma"/"nie_ma" nie
+	    bedaca lista/krotka, sam obiekt nie bedacy dict, albo token nie
+	    bedacy stringiem -> `None` dla CALEGO wywolania (filtr zostaje
+	    nietkniety, jak dzis `like`).
 	Kazdy inny ksztalt (`["like", ...]`, inny operator, `None`, cokolwiek
 	nie bedace stringiem ani para `[operator, wartosc]`) zwraca `None` --
 	sygnal dla wywolujacej `_rozwin_filtry_tagow`, zeby zostawic ten filtr
 	BEZ ZMIAN (idzie dalej jak dzis, bez rozwiniecia na `name in [...]`).
 
-	Operator rozpoznawany bez wzgledu na wielkosc liter (`"IN"`, `"Not In"`
-	itd. -- ten sam wzorzec co `_podstaw_wartosc_dzis` wyzej w tym module).
-	Nie mutuje `wartosc` (immutability): zwracana lista tokenow jest zawsze
-	NOWA lista (kopia), nie referencja do `wartosc[1]`."""
+	Operator rozpoznawany bez wzgledu na wielkosc liter (`"IN"`, `"Not In"`,
+	`"VOLTEO_TAGI"` itd. -- ten sam wzorzec co `_podstaw_wartosc_dzis` wyzej
+	w tym module). Nie mutuje `wartosc` (immutability): kazda zwracana
+	lista tokenow jest zawsze NOWA lista (kopia), nie referencja do wejscia."""
 	if isinstance(wartosc, str):
-		return ("in", [wartosc])
+		return [("in", [wartosc])]
 
 	if isinstance(wartosc, (list, tuple)) and len(wartosc) == 2:
 		operator, argument = wartosc
 		operator_l = operator.lower() if isinstance(operator, str) else operator
 
 		if operator_l == "=" and isinstance(argument, str):
-			return ("in", [argument])
+			return [("in", [argument])]
 		if operator_l == "in" and isinstance(argument, (list, tuple)):
-			return ("in", list(argument))
+			return [("in", list(argument))]
 		if operator_l == "not in" and isinstance(argument, (list, tuple)):
-			return ("not in", list(argument))
+			return [("not in", list(argument))]
+		if operator_l == OPERATOR_TAGOW:
+			return _rozpoznaj_zlozony_filtr_tagow(argument)
+
+	return None
+
+
+def _rozpoznaj_zlozony_filtr_tagow(payload: object) -> list[tuple[str, list[str]]] | None:
+	"""Rozpoznaje `payload` (slot 1 zlozonego filtra "volteo_tagi") jako
+	liste do dwoch wpisow `("in", ma)` / `("not in", nie_ma)`. `payload`
+	musi byc `dict` (inaczej `None`). Dla kazdego z dwoch znanych kluczy
+	(`KLUCZE_ZLOZONEGO_FILTRA_TAGOW`, kolejnosc "ma" -> "nie_ma"):
+	nieobecny klucz jest pomijany (brak ograniczenia z tej strony); obecny
+	klucz musi byc lista/krotka samych stringow (inaczej `None` dla calego
+	wywolania -- srodowisko nie probuje czesciowo ratowac zle uformowanego
+	filtra); niepusta lista dokladana jest do wyniku jako nowa lista
+	(immutability), pusta lista jest pomijana tak samo jak brak klucza.
+	Nieznane klucze w `payload` sa po prostu ignorowane (rezerwa na
+	przyszle rozszerzenia typu "ma_wszystkie")."""
+	if not isinstance(payload, dict):
+		return None
+
+	wpisy: list[tuple[str, list[str]]] = []
+	for klucz in KLUCZE_ZLOZONEGO_FILTRA_TAGOW:
+		if klucz not in payload:
+			continue
+		tokeny = payload[klucz]
+		if not isinstance(tokeny, (list, tuple)) or not all(isinstance(t, str) for t in tokeny):
+			return None
+		if tokeny:
+			wpisy.append((_RODZAJ_KLUCZA_ZLOZONEGO[klucz], list(tokeny)))
+
+	return wpisy
+
+
+def rozpoznaj_filtr_tagu(pole: str, wartosc: object) -> tuple[str, list[str]] | None:
+	"""LEGACY (issue ops#173): sciezka zgodnosci wstecznej dla wywolujacych,
+	ktorzy nie potrzebuja zlozonego ksztaltu "ma"+"nie_ma" naraz -- zrodlem
+	prawdy jest teraz `rozpoznaj_filtry_tagu` (liczba mnoga) powyzej, ta
+	funkcja tylko deleguje i rozpakowuje. Zwraca pojedynczy wpis TYLKO gdy
+	plural dal DOKLADNIE jeden wpis: skalar/`=`/`in`/`not in` (zawsze jeden
+	wpis, w tym pusta lista tokenow dla `["in", []]`) oraz ksztalt zlozony
+	z WYLACZNIE jedna strona niepusta ("ma" albo "nie_ma", nie oba). Kazdy
+	inny wynik plural -- `None` (ksztalt nierozpoznany) ALBO lista o
+	dlugosci 0 (zlozony z obu stron pustych) ALBO 2 (zlozony z obu stron
+	niepustych, "wiecej niz jeden wpis" z briefu ops#173) -- daje `None`
+	tutaj, sygnal dla wywolujacej, zeby zostawic filtr BEZ ZMIAN."""
+	rozpoznane = rozpoznaj_filtry_tagu(pole, wartosc)
+	if rozpoznane is None or len(rozpoznane) != 1:
+		return None
+	return rozpoznane[0]
+
+
+def polacz_zbiory_nazw(
+	dozwolone: list[set], wykluczone: list[set]
+) -> tuple[str, list[str]] | None:
+	"""Czysta algebra laczenia zbiorow nazw dokumentow z wielu filtrow tagow
+	naraz (issue ops#173) -- dokladnie ten sam rachunek, ktory
+	`crm.api.doc._rozwin_filtry_tagow` wykonywal wprost inline przed tym
+	wydzieleniem: kazdy zbior w `dozwolone` to nazwy pasujace do JEDNEGO
+	rozpoznanego warunku "ma" (lead musi pasowac do KAZDEGO z nich, wiec
+	PRZECIECIE), kazdy zbior w `wykluczone` to nazwy pasujace do jednego
+	warunku "nie ma" (lead nie moze pasowac do ZADNEGO, wiec SUMA
+	odejmowana od przeciecia dozwolonych).
+
+	  - `dozwolone` niepuste (przynajmniej jeden zbior, tresc zbioru moze
+	    byc pusta) -> `("in", sorted(przeciecie(dozwolone) - suma(wykluczone)))`,
+	    pusty wynik przeciecia daje wartownika `[""]` (pusty `in` w SQL
+	    dopasowuje wszystko -- `[""]` bezpiecznie nie dopasowuje nic);
+	  - `dozwolone` puste, `wykluczone` niepuste -> `("not in", sorted(suma(wykluczone)))`;
+	  - `wykluczone` niepuste, ale suma jest pustym zbiorem (kazdy warunek
+	    "nie ma" nie wykluczyl faktycznie zadnego dokumentu) -> `None`:
+	    wykluczenie "niczego" nie jest faktycznym ograniczeniem, wiec
+	    wolajacy ma wtedy NIE zostawiac po sobie sztucznego filtra;
+	  - oba puste (brak jakiegokolwiek zbioru do polaczenia) -> `None`.
+
+	Nie mutuje `dozwolone`/`wykluczone` (immutability, coding-style.md) --
+	czyta je wylacznie, nie modyfikuje w miejscu."""
+	if not dozwolone and not wykluczone:
+		return None
+
+	suma_wykluczonych = set.union(*wykluczone) if wykluczone else set()
+
+	if dozwolone:
+		przeciecie = set.intersection(*dozwolone) - suma_wykluczonych
+		return ("in", sorted(przeciecie) if przeciecie else [""])
+
+	if suma_wykluczonych:
+		return ("not in", sorted(suma_wykluczonych))
 
 	return None

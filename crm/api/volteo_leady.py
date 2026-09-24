@@ -666,7 +666,15 @@ def przydziel_cc(
 	dokładnie tym samym widokiem, którego używa lista/mapa -- zamiast
 	osobno odrzucać grupy tutaj polskim komunikatem (druga opcja z brief
 	issue #129), wybrano spójność: jeden helper, jedno miejsce prawdy o
-	tym, jak grupy się rozwijają."""
+	tym, jak grupy się rozwijają.
+
+	Issue ops#173: PO `rozwin_grupy`, `filters` przechodzi też przez
+	`_rozwin_filtry_tagow` (ten sam helper co `get_data`/`mapa`) -- bez
+	tego filtr po `custom_posiadane_produkty`/`custom_produkt_procesu`
+	(w tym kształt złożony "zawiera i nie zawiera", `["volteo_tagi",
+	{"ma": [...], "nie_ma": [...]}]`) trafiałby do `frappe.get_list`
+	niżej dosłownie -- niepoprawny operator dla `volteo_tagi`, i myląca
+	dokładna równość dla skalara/"in"/"not in" na stringu złączonym "+"."""
 	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
 
 	cc = (cc or "").strip()
@@ -686,6 +694,19 @@ def przydziel_cc(
 			frappe.throw(_("Lista leadów musi zawierać wyłącznie niepuste nazwy (stringi)."))
 	elif filters:
 		filters = rozwin_grupy("CRM Lead", filters)
+		# Issue ops#173: rozwija ewentualny filtr po polach "produktow
+		# leada" (custom_posiadane_produkty/custom_produkt_procesu) na
+		# zwykly filtr "name in [...]"/"name not in [...]" -- ten sam
+		# rozwijacz co `get_data`/`mapa` (crm.api.doc), zeby "Przydziel CC"
+		# z filtrem tagow (w tym zlozonym "ma"/"nie_ma") brala DOKLADNIE
+		# te leady, ktore pokazuje lista/mapa z tym samym filtrem, zamiast
+		# dostac cala tabele (`rozpoznaj_filtry_tagu`/`_rozwin_filtry_tagow`
+		# nie sa wolane tu wczesniej -- bez tego wywolania `filters[pole]`
+		# szedlby do `frappe.get_list` ponizej dosłownie, jako rownosc na
+		# stringu zlaczonym "+", gubiac wielotagowe leady). PO rozwin_grupy
+		# (moze dolozyc/zmienic filtr po "name", patrz jej docstring),
+		# PRZED _sprawdz_filtry.
+		filters = _rozwin_filtry_tagow("CRM Lead", filters)
 		_sprawdz_filtry("CRM Lead", filters)
 		limit = LIMIT_PRZYDZIAL_CC
 		if ilosc is not None:

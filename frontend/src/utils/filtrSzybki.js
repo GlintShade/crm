@@ -24,6 +24,7 @@
 // testowalne bezpośrednio przez vitest.
 
 import { czyWielokrotnyWybor, parsujWartoscWielokrotna } from './filtrWielokrotny'
+import { OPERATOR_TAGOW, czyZlozonyFiltrTagow, rozpakujZlozonyFiltrTagow } from './tagiProduktow'
 
 /**
  * Rozpakowuje surową wartość filtra (`list.params.filters[fieldname]`,
@@ -32,6 +33,12 @@ import { czyWielokrotnyWybor, parsujWartoscWielokrotna } from './filtrWielokrotn
  * `["in", [...]]` (wiele wartości, wielkość liter operatora bez znaczenia).
  * Każdy inny kształt tablicowy (np. `["like", "%x%"]`) zwraca pustą tablicę
  * nie ma z czego bezpiecznie odtworzyć zaznaczeń checkboxów.
+ *
+ * Issue ops#173: dla pól tagów wartość bywa też kształtem złożonym
+ * (`["volteo_tagi", {"ma": [...], "nie_ma": [...]}]`) -- pasek szybki
+ * pokazuje wtedy stronę "ma" jako zaznaczenia (strona "nie_ma" jest
+ * niewidoczna na pasku, ale przeżywa edycję z paska, patrz
+ * `czyFiltrSzybkiZablokowany`/`ViewControls.vue::applyQuickFilter`).
  */
 export function rozpakujWartoscFiltraSzybkiego(rawValue) {
   if (rawValue === undefined || rawValue === null || rawValue === '') return []
@@ -40,9 +47,31 @@ export function rozpakujWartoscFiltraSzybkiego(rawValue) {
     if (operator === 'in') {
       return parsujWartoscWielokrotna(rawValue[1])
     }
+    if (operator === OPERATOR_TAGOW) {
+      return rozpakujZlozonyFiltrTagow(rawValue).ma
+    }
     return []
   }
   return parsujWartoscWielokrotna(rawValue)
+}
+
+/**
+ * Rozstrzyga, czy `raw` (aktualna wartość filtra pola tagów w
+ * `list.params.filters`) jest kształtem, którego pasek szybki nie umie
+ * bezpiecznie przepisać "od zera" z samych zaznaczeń checkboxów bez utraty
+ * informacji: kształt złożony (`czyZlozonyFiltrTagow`, niesie "nie_ma", o
+ * którym pasek szybki nic nie wie) i `["not in", [...]]` (checkboxy paska
+ * reprezentują "ma", nie "nie_ma" -- przepisanie "od zera" zamieniłoby
+ * wykluczenie w dołączenie). `ViewControls.vue::applyQuickFilter` używa
+ * tego, żeby przy zablokowanym kształcie scalić nowe zaznaczenia w stronę
+ * "ma", zachowując "nie_ma" bez zmian, zamiast nadpisywać cały filtr.
+ */
+export function czyFiltrSzybkiZablokowany(raw) {
+  if (czyZlozonyFiltrTagow(raw)) return true
+  if (Array.isArray(raw)) {
+    return String(raw[0] ?? '').toLowerCase() === 'not in'
+  }
+  return false
 }
 
 /**

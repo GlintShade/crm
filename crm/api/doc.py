@@ -19,7 +19,8 @@ from crm.volteo_lista_szans import (
 	POLA_ZAWSZE_DOZWOLONE,
 	niedozwolone_klucze_filtrow,
 	podstaw_dzis,
-	rozpoznaj_filtr_tagu,
+	polacz_zbiory_nazw,
+	rozpoznaj_filtry_tagu,
 	wzory_tagu,
 )
 
@@ -270,7 +271,15 @@ def rozwin_grupy(doctype: str, filters: dict) -> dict:
 	słownikiem): `_podstaw_dzis(_podstaw_me(grupa), doctype)`. Grupa jest
 	płaskim słownikiem identycznym w kształcie do `filters` najwyższego
 	poziomu (zakaz zagnieżdżenia w `waliduj_grupy`), więc te same funkcje
-	są tu bezpiecznie stosowane ponownie bez żadnej zmiany w nich samych."""
+	są tu bezpiecznie stosowane ponownie bez żadnej zmiany w nich samych.
+
+	Fix (issue ops#173): przed `frappe.get_list` każdej grupy, `{**filtry_bez_grup,
+	**grupa}` przechodzi jeszcze przez `_rozwin_filtry_tagow` (ten sam
+	rozwijacz filtrów tagów co na najwyższym poziomie `filters` w
+	`get_data`) - bez tego pole tagów wewnątrz grupy trafiało do
+	`frappe.get_list` dosłownie (`{"custom_posiadane_produkty": "PV"}` jako
+	dokładna równość na stringu złączonym "+"), gubiąc leady typu
+	"PV+PC" i myląc "PV" z "PVME"."""
 	filtry_bez_grup, grupy = wydziel_grupy(filters)
 	if not grupy:
 		return filtry_bez_grup
@@ -287,7 +296,15 @@ def rozwin_grupy(doctype: str, filters: dict) -> dict:
 	nazwy: set = set()
 	for grupa in grupy:
 		_sprawdz_filtry(doctype, grupa)
-		grupa_polaczona = {**filtry_bez_grup, **grupa}
+		# Issue ops#173: tagi produktow leada (`custom_posiadane_produkty`/
+		# `custom_produkt_procesu`) WEWNATRZ grupy ALBO przechodza przez
+		# TEN SAM rozwijacz co na najwyzszym poziomie `filters` --
+		# `_rozwin_filtry_tagow` (zamiast pojechac do `frappe.get_list`
+		# jako dosłowne LIKE/rownosc na stringu zlaczonym "+", ktore nie
+		# rozroznia "PV" od "PVME"). Zamyka asymetrie sprzed tej zmiany,
+		# gdzie tag na najwyzszym poziomie byl rozpoznawany poprawnie, a
+		# w grupie -- nie.
+		grupa_polaczona = _rozwin_filtry_tagow(doctype, {**filtry_bez_grup, **grupa})
 		nazwy.update(
 			frappe.get_list(doctype, filters=grupa_polaczona, pluck="name", limit_page_length=0)
 		)
@@ -343,12 +360,21 @@ def _rozwin_filtry_tagow(doctype: str, filters: dict) -> dict:
 	tez woła te funkcje).
 
 	Dla kazdego klucza z `filters`, ktory jest w `POLA_TAGOW_LEAD`:
-	`rozpoznaj_filtr_tagu` normalizuje wartosc do `(rodzaj, tokeny)` albo
-	`None` (ksztalt spoza kontraktu in/not in/rownosc/skalar, np. "like" --
-	ten filtr zostaje WTEDY bez zmian, nie usuwany). Rozpoznany klucz jest
-	zawsze usuwany z wyniku (zastapiony przez `name` na koncu funkcji).
-	Pusta lista tokenow (`["in", []]`) = ograniczenie z tego pola usuniete
-	calkowicie (nie wplywa na `name`).
+	`rozpoznaj_filtry_tagu` normalizuje wartosc do LISTY par `(rodzaj,
+	tokeny)` albo `None` (ksztalt spoza kontraktu in/not in/rownosc/skalar/
+	zlozony "volteo_tagi", np. "like" -- ten filtr zostaje WTEDY bez zmian,
+	nie usuwany). Rozpoznany klucz jest zawsze usuwany z wyniku (zastapiony
+	przez `name` na koncu funkcji). Pusta lista tokenow (`["in", []]`) =
+	ograniczenie z tego pola usuniete calkowicie (nie wplywa na `name`).
+
+	Issue ops#173, filtr zlozony "zawiera i nie zawiera" JEDNYM warunkiem
+	na jedno pole (`["volteo_tagi", {"ma": [...], "nie_ma": [...]}]`,
+	scenariusz wlasciciela: ma PV, nie ma AUDYT ani ME): `rozpoznaj_filtry_tagu`
+	zwraca dla niego DO DWOCH wpisow naraz, `("in", ma)` i `("not in",
+	nie_ma)` -- petla ponizej je rozwija jak dwa niezalezne warunki tego
+	samego pola, kazdy dokladajacy WLASNY zbior nazw do wspolnej puli
+	(dokladnie ta sama mechanika co "kilka pol tagow naraz" opisana
+	nizej, tylko w obrebie jednego pola zamiast dwoch).
 
 	Dla NIEPUSTEJ listy tokenow: `wzory_tagu(pole, token)` dla kazdego
 	tokenu daje 4 warunki dokladnego dopasowania (patrz jej docstring w
@@ -406,24 +432,31 @@ def _rozwin_filtry_tagow(doctype: str, filters: dict) -> dict:
 	zbiory_wykluczonych: list[set] = []
 
 	for pole in klucze_tagow:
-		rozpoznany = rozpoznaj_filtr_tagu(pole, filters[pole])
-		if rozpoznany is None:
+		rozpoznane = rozpoznaj_filtry_tagu(pole, filters[pole])
+		if rozpoznane is None:
 			# Ksztalt spoza kontraktu (np. "like") -- filtr tego pola
 			# zostaje w wyniku BEZ ZMIAN, nie rozwijamy go na name.
 			continue
 
 		del wynik[pole]
-		kind, tokeny = rozpoznany
-		if not tokeny:
-			continue
 
-		warunki = [warunek for token in tokeny for warunek in wzory_tagu(pole, token)]
-		nazwy = set(frappe.get_all(doctype, pluck="name", or_filters=warunki, limit_page_length=0))
+		# Ksztalt zlozony "volteo_tagi" (issue ops#173) daje TU do dwoch
+		# wpisow naraz ("ma" i "nie_ma" tego samego pola) -- kazdy
+		# doklada WLASNY zbior nazw do wspolnej puli, dokladnie tak samo
+		# jak dwa RÓZNE pola tagow filtrowane jednoczesnie ponizej.
+		for kind, tokeny in rozpoznane:
+			if not tokeny:
+				continue
 
-		if kind == "not in":
-			zbiory_wykluczonych.append(nazwy)
-		else:
-			zbiory_dozwolonych.append(nazwy)
+			warunki = [warunek for token in tokeny for warunek in wzory_tagu(pole, token)]
+			nazwy = set(
+				frappe.get_all(doctype, pluck="name", or_filters=warunki, limit_page_length=0)
+			)
+
+			if kind == "not in":
+				zbiory_wykluczonych.append(nazwy)
+			else:
+				zbiory_dozwolonych.append(nazwy)
 
 	if "name" in wynik:
 		istniejacy = _nazwy_istniejacego_filtra_name(wynik["name"])
@@ -438,12 +471,10 @@ def _rozwin_filtry_tagow(doctype: str, filters: dict) -> dict:
 		# TYLKO gdy jest przynajmniej jeden rozpoznany zbior do polaczenia.
 
 	if zbiory_dozwolonych or zbiory_wykluczonych:
-		wykluczone = set.union(*zbiory_wykluczonych) if zbiory_wykluczonych else set()
-		if zbiory_dozwolonych:
-			dozwolone = set.intersection(*zbiory_dozwolonych) - wykluczone
-			wynik["name"] = ["in", sorted(dozwolone) if dozwolone else [""]]
-		elif wykluczone:
-			wynik["name"] = ["not in", sorted(wykluczone)]
+		polaczony = polacz_zbiory_nazw(zbiory_dozwolonych, zbiory_wykluczonych)
+		if polaczony is not None:
+			kind, nazwy_wynik = polaczony
+			wynik["name"] = [kind, nazwy_wynik]
 		else:
 			# Wszystkie zbiory "not in" okazaly sie puste (zaden lead nie ma
 			# zadnego z filtrowanych tokenow) -- brak faktycznego
