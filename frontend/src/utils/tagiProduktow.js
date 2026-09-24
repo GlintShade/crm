@@ -175,3 +175,34 @@ export function spakujZlozonyFiltrTagow({ ma, nie_ma } = {}) {
   if (listaMa.length === 0) return ['not in', listaNieMa]
   return [OPERATOR_TAGOW, { ma: listaMa, nie_ma: listaNieMa }]
 }
+
+/**
+ * Wariant `spakujZlozonyFiltrTagow` UŻYWANY WYŁĄCZNIE przez
+ * `Filter.vue::parseFilters`, NIGDY przez normalizujący wariant powyżej.
+ * Powód istnienia dwóch wariantów (issue ops#173, naprawa błędu z klik-testu
+ * 2026-09-24): w `Filter.vue` KAŻDA zmiana wartości/operatora woła `apply()`
+ * natychmiast, a `filters` (`computed`) jest odtwarzane z powrotem z
+ * `list.value.params.filters` przez `convertFilters` po każdym `apply()`.
+ * Normalizujący `spakujZlozonyFiltrTagow` -- poprawny dla
+ * `ViewControls.vue::applyQuickFilter`, gdzie normalizacja do "in"/"not in"
+ * jest pożądanym skrótem dla paska szybkich filtrów -- w `Filter.vue`
+ * niszczył jeszcze niedokończony wiersz w locie: obie strony puste (świeżo
+ * dodany warunek) dawały `undefined` -> klucz znikał z `p` -> wiersz znikał
+ * z ekranu w chwili wyboru operatora "Zawiera i nie zawiera"; tylko jedna
+ * strona wypełniona dawała `["in", ma]`/`["not in", nie_ma]` ->
+ * `convertFilters` odczytywał to z powrotem jako zwykły operator "in"/"not
+ * in", cichy powrót do poprzedniego operatora. Użytkownik nie miał żadnej
+ * ścieżki kliknięcia, żeby dotrzeć do obu MultiSelectów naraz. Ten wariant
+ * ZAWSZE zwraca kształt złożony -- oba pola przez `parsujWartoscWielokrotna`
+ * (puste listy dozwolone, `null`/`undefined`/śmieci -> pusta lista), nigdy
+ * `undefined`, nigdy `["in", ...]`/`["not in", ...]` -- więc wiersz
+ * przeżywa odtworzenie przez `convertFilters` (patrz `czyZlozonyFiltrTagow`:
+ * obiekt, także pusty, jest "prawdziwy") niezależnie od tego, ile pól
+ * użytkownik zdążył wypełnić.
+ */
+export function spakujZlozonyFiltrTagowWprost({ ma, nie_ma } = {}) {
+  return [
+    OPERATOR_TAGOW,
+    { ma: parsujWartoscWielokrotna(ma), nie_ma: parsujWartoscWielokrotna(nie_ma) },
+  ]
+}

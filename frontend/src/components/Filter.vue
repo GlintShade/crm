@@ -342,7 +342,7 @@ import {
   czyPoleTagow,
   czyZlozonyFiltrTagow,
   rozpakujZlozonyFiltrTagow,
-  spakujZlozonyFiltrTagow,
+  spakujZlozonyFiltrTagowWprost,
 } from '@/utils/tagiProduktow'
 import {
   MAX_GRUP,
@@ -1115,13 +1115,18 @@ function parseFilters(filters) {
   const filtersArray = Array.from(filters)
   const obj = filtersArray.map(transformIn).reduce((p, c) => {
     if (c.operator === OPERATOR_TAGOW) {
-      // Issue ops#173: filtr złożony pakowany do jego najprostszego
-      // przewodowego kształtu -- undefined (brak ograniczenia z tej
-      // strony -> klucz usunięty z filtrów) / ["in", ma] / ["not in",
-      // nie_ma] / ["volteo_tagi", {ma, nie_ma}], patrz
-      // spakujZlozonyFiltrTagow.
-      const packed = spakujZlozonyFiltrTagow(c.value)
-      if (packed !== undefined) p[c.fieldname] = packed
+      // Fix po klik-teście 2026-09-24: TU (w przeciwieństwie do
+      // `ViewControls.vue::applyQuickFilter`) NIE wolno normalizować do
+      // "in"/"not in"/undefined -- `apply()` woła `parseFilters` po KAŻDEJ
+      // zmianie wartości/operatora, a `filters` (computed) jest odtwarzane
+      // z powrotem z `list.value.params.filters` przez `convertFilters`.
+      // Normalizujący `spakujZlozonyFiltrTagow` gubił wtedy wiersz w
+      // momencie wyboru tego operatora (obie strony puste -> klucz znika
+      // -> wiersz znika z ekranu) albo cicho zamieniał go z powrotem na
+      // "in"/"not in" (tylko jedna strona wypełniona). Wprost wariant
+      // zawsze zwraca kształt złożony, więc wiersz przeżywa odtworzenie
+      // -- patrz JSDoc `spakujZlozonyFiltrTagowWprost` w tagiProduktow.js.
+      p[c.fieldname] = spakujZlozonyFiltrTagowWprost(c.value)
       return p
     }
     if (['equals', '='].includes(c.operator)) {
@@ -1140,7 +1145,8 @@ function transformIn(f) {
   // Issue ops#173: filtr złożony niesie `{ma, nie_ma}` w `f.value`, nie
   // string/tablicę -- `f.value.includes`/`.split` nie istnieją na obiekcie
   // zwykłym, więc ten wiersz wraca bez zmian, spakowanie idzie przez
-  // spakujZlozonyFiltrTagow w parseFilters powyżej, nie przez tę funkcję.
+  // spakujZlozonyFiltrTagowWprost w parseFilters powyżej, nie przez tę
+  // funkcję.
   if (f.operator === OPERATOR_TAGOW) return f
   if (f.operator.includes('like') && !f.value.includes('%')) {
     f.value = `%${f.value}%`

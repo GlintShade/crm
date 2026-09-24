@@ -6,6 +6,7 @@ import {
   rozbijTagi,
   rozpakujZlozonyFiltrTagow,
   spakujZlozonyFiltrTagow,
+  spakujZlozonyFiltrTagowWprost,
   zlaczTagi,
 } from './tagiProduktow'
 
@@ -212,5 +213,60 @@ describe('spakujZlozonyFiltrTagow', () => {
     const spakowane = spakujZlozonyFiltrTagow({ ma: ['PV'], nie_ma: ['AUDYT', 'ME'] })
     const poJson = JSON.parse(JSON.stringify(spakowane))
     expect(rozpakujZlozonyFiltrTagow(poJson)).toEqual({ ma: ['PV'], nie_ma: ['AUDYT', 'ME'] })
+  })
+})
+
+describe('spakujZlozonyFiltrTagowWprost', () => {
+  // Fix po klik-teście 2026-09-24 (regres w Filter.vue::parseFilters):
+  // w przeciwieństwie do spakujZlozonyFiltrTagow, ten wariant NIGDY nie
+  // normalizuje do undefined/["in", ...]/["not in", ...] -- zawsze zwraca
+  // ksztalt zlozony, zeby wiersz w Filter.vue przezyl odtworzenie przez
+  // convertFilters po kazdym apply().
+
+  it('obie strony puste -> ksztalt zlozony z pustymi listami, NIE undefined', () => {
+    expect(spakujZlozonyFiltrTagowWprost({ ma: [], nie_ma: [] })).toEqual([
+      OPERATOR_TAGOW,
+      { ma: [], nie_ma: [] },
+    ])
+    expect(spakujZlozonyFiltrTagowWprost({})).toEqual([OPERATOR_TAGOW, { ma: [], nie_ma: [] }])
+    expect(spakujZlozonyFiltrTagowWprost()).toEqual([OPERATOR_TAGOW, { ma: [], nie_ma: [] }])
+  })
+
+  it('tylko ma -> ksztalt zlozony, NIE ["in", ma]', () => {
+    expect(spakujZlozonyFiltrTagowWprost({ ma: ['PV'], nie_ma: [] })).toEqual([
+      OPERATOR_TAGOW,
+      { ma: ['PV'], nie_ma: [] },
+    ])
+  })
+
+  it('tylko nie_ma -> ksztalt zlozony, NIE ["not in", nie_ma]', () => {
+    expect(spakujZlozonyFiltrTagowWprost({ ma: [], nie_ma: ['AUDYT'] })).toEqual([
+      OPERATOR_TAGOW,
+      { ma: [], nie_ma: ['AUDYT'] },
+    ])
+  })
+
+  it('obie niepuste -> ksztalt zlozony (tak samo jak wariant normalizujacy)', () => {
+    expect(spakujZlozonyFiltrTagowWprost({ ma: ['PV'], nie_ma: ['AUDYT', 'ME'] })).toEqual([
+      OPERATOR_TAGOW,
+      { ma: ['PV'], nie_ma: ['AUDYT', 'ME'] },
+    ])
+  })
+
+  it('kazdy wynik przezywa czyZlozonyFiltrTagow, takze przy obu stronach pustych', () => {
+    expect(czyZlozonyFiltrTagow(spakujZlozonyFiltrTagowWprost({ ma: [], nie_ma: [] }))).toBe(true)
+    expect(
+      czyZlozonyFiltrTagow(spakujZlozonyFiltrTagowWprost({ ma: ['PV'], nie_ma: [] })),
+    ).toBe(true)
+  })
+
+  it('JSON round-trip przez rozpakujZlozonyFiltrTagow zachowuje semantyke, takze pustych stron', () => {
+    const spakowanePuste = spakujZlozonyFiltrTagowWprost({ ma: [], nie_ma: [] })
+    const poJsonPuste = JSON.parse(JSON.stringify(spakowanePuste))
+    expect(rozpakujZlozonyFiltrTagow(poJsonPuste)).toEqual({ ma: [], nie_ma: [] })
+
+    const spakowaneJednaStrona = spakujZlozonyFiltrTagowWprost({ ma: ['PV'], nie_ma: [] })
+    const poJsonJednaStrona = JSON.parse(JSON.stringify(spakowaneJednaStrona))
+    expect(rozpakujZlozonyFiltrTagow(poJsonJednaStrona)).toEqual({ ma: ['PV'], nie_ma: [] })
   })
 })
