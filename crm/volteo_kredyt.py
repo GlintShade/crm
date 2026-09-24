@@ -20,7 +20,6 @@ from crm.integrations.autenti.logika import czy_legacy_kredyt
 GRUPY_DOCHODU: dict[str, tuple[str, ...]] = {
 	"praca_wlaczone": (
 		"praca_forma",
-		"praca_data_zatrudnienia",
 		"praca_okres",
 		"praca_okres_od",
 		"praca_okres_do",
@@ -120,7 +119,6 @@ _ETYKIETY_KREDYT_POL: dict[str, str] = {
 	"numer_rachunku": "Numer rachunku bankowego",
 	"praca_wlaczone": "Dochód: umowa o pracę / zlecenie / dzieło",
 	"praca_forma": "Forma zatrudnienia",
-	"praca_data_zatrudnienia": "Data zatrudnienia",
 	"praca_okres": "Okres zatrudnienia",
 	"praca_okres_od": "Zatrudnienie od",
 	"praca_okres_do": "Zatrudnienie do",
@@ -155,7 +153,7 @@ _ETYKIETY_KREDYT_POL: dict[str, str] = {
 	"inne_2_typ": "Typ dochodu (2)",
 	"inne_2_kwota": "Kwota dochodu (2)",
 }
-"""Etykiety PL dla 54 pól danych formularza `Volteo Kredyt`
+"""Etykiety PL dla 53 pól danych formularza `Volteo Kredyt`
 (`_DANE_POLA_DOZWOLONE` w `crm/api/kredyt.py`): przepisane 1:1 z etykiet
 doctype'u (`ops/crm-kredyt.py`, sekcja `KREDYT_FIELDS`), które są zgodne z
 oryginalnym szablonem PDF-u (ops#148: front, komunikat blokujący PDF i Desk
@@ -165,8 +163,8 @@ Baza prywatna, złożona z `ETYKIETY_WNIOSKODAWCY` w publiczny kanon
 `ETYKIETY_POL` niżej, zamiast być konsumowana wprost."""
 
 ETYKIETY_POL: dict[str, str] = {**_ETYKIETY_KREDYT_POL, **ETYKIETY_WNIOSKODAWCY}
-"""Jedyny kanon etykiet PL dla wszystkich 64 pól danych formularza kredytowego:
-54 pola `Volteo Kredyt` (`_ETYKIETY_KREDYT_POL` wyżej) plus 10 pól
+"""Jedyny kanon etykiet PL dla wszystkich 63 pól danych formularza kredytowego:
+53 pola `Volteo Kredyt` (`_ETYKIETY_KREDYT_POL` wyżej) plus 10 pól
 wnioskodawcy (`ETYKIETY_WNIOSKODAWCY`, ops#157).
 
 Ta sama etykieta ma się pojawić w banerze braków, w komunikacie serwera

@@ -693,7 +693,6 @@ const grupaPola = {
       type: 'select',
       options: PRACA_FORMA_OPCJE,
     },
-    { fieldname: 'praca_data_zatrudnienia', label: __(ETYKIETY_POL.praca_data_zatrudnienia), type: 'date' },
     {
       fieldname: 'praca_okres',
       label: __(ETYKIETY_POL.praca_okres),

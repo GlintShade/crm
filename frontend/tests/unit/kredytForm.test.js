@@ -68,7 +68,6 @@ function kredytKompletny(nadpisania = {}) {
     numer_rachunku: 'PL61109010140000071219812874',
     praca_wlaczone: false,
     praca_forma: '',
-    praca_data_zatrudnienia: '',
     praca_okres: '',
     praca_okres_od: '',
     praca_okres_do: '',
@@ -257,7 +256,6 @@ describe('Kredyt form logic', () => {
       const dane = buildDane(form)
       expect(dane.praca_wlaczone).toBe(false)
       expect(dane.praca_forma).toBeNull()
-      expect(dane.praca_data_zatrudnienia).toBeNull()
       expect(dane.praca_okres).toBeNull()
       expect(dane.praca_okres_od).toBeNull()
       expect(dane.praca_okres_do).toBeNull()
@@ -271,7 +269,6 @@ describe('Kredyt form logic', () => {
       const form = defaultForm()
       form.praca_wlaczone = true
       form.praca_forma = 'Umowa o pracę'
-      form.praca_data_zatrudnienia = '2020-01-15'
       form.praca_okres = 'Czas określony'
       form.praca_okres_od = '2020-01-15'
       form.praca_okres_do = '2028-01-15'
@@ -284,7 +281,6 @@ describe('Kredyt form logic', () => {
       expect(dane).toMatchObject({
         praca_wlaczone: true,
         praca_forma: 'Umowa o pracę',
-        praca_data_zatrudnienia: '2020-01-15',
         praca_okres: 'Czas określony',
         praca_okres_od: '2020-01-15',
         praca_okres_do: '2028-01-15',
@@ -828,6 +824,24 @@ describe('Kredyt form logic', () => {
       expect(nazwy).toContain('praca_okres_od')
       expect(nazwy).not.toContain('praca_okres_do')
     })
+
+    it('regression (ops#139), required half: praca_okres = "Czas nieokreślony" requires praca_okres_od via brakujacePola, not praca_okres_do', () => {
+      const dane = kredytKompletny({
+        praca_wlaczone: 1,
+        praca_forma: 'Umowa o pracę',
+        praca_okres: 'Czas nieokreślony',
+        praca_okres_od: '',
+        praca_okres_do: '',
+        praca_nip: '123',
+        praca_nazwa_zakladu: 'Firma',
+        praca_adres_telefon: 'tel',
+        praca_kwota_dochodu: '5000',
+      })
+      const wynik = brakujacePola(dane)
+
+      expect(wynik).toContain('praca_okres_od')
+      expect(wynik).not.toContain('praca_okres_do')
+    })
   })
 
   describe('BAZA_WYMAGANE', () => {
@@ -930,7 +944,7 @@ describe('Kredyt form logic', () => {
       it('b: praca wlaczona dodaje jej pola', () => {
         const dane = kredytKompletny({ praca_wlaczone: 1 })
         const wynik = brakujacePola(dane)
-        ;['praca_forma', 'praca_data_zatrudnienia', 'praca_okres', 'praca_okres_od'].forEach((pole) => {
+        ;['praca_forma', 'praca_okres', 'praca_okres_od'].forEach((pole) => {
           expect(wynik).toContain(pole)
         })
         // praca_okres_do NIE jest wymagane, bo praca_okres nie jest "Czas określony".
@@ -941,7 +955,6 @@ describe('Kredyt form logic', () => {
         const daneOkreslony = kredytKompletny({
           praca_wlaczone: 1,
           praca_forma: 'Umowa o pracę',
-          praca_data_zatrudnienia: '2020-01-01',
           praca_okres: 'Czas określony',
           praca_okres_od: '2020-01-01',
           praca_nip: '123',
@@ -1053,6 +1066,22 @@ describe('Kredyt form logic', () => {
         expect(wynik).toContain('gospodarstwo_nip')
         expect(wynik).not.toContain('emerytura_numer_swiadczenia')
         expect(wynik).not.toContain('renta_numer_swiadczenia')
+      })
+
+      it('m: nieokreslony z od wypelnione i do puste daje komplet grupy praca (ops#175)', () => {
+        const dane = kredytKompletny({
+          praca_wlaczone: 1,
+          praca_forma: 'Umowa o pracę',
+          praca_okres: 'Czas nieokreślony',
+          praca_okres_od: '2020-01-01',
+          praca_okres_do: '',
+          praca_nip: '123',
+          praca_nazwa_zakladu: 'Firma',
+          praca_adres_telefon: 'tel',
+          praca_kwota_dochodu: '5000',
+        })
+        const wynik = brakujacePola(dane).filter((pole) => pole.startsWith('praca_'))
+        expect(wynik).toEqual([])
       })
     })
 
@@ -1399,7 +1428,6 @@ describe('Kredyt form logic', () => {
         praca_wlaczone: true,
         praca_okres: 'Czas określony',
         praca_forma: 'Umowa o pracę',
-        praca_data_zatrudnienia: '2020-01-01',
         praca_okres_od: '',
         praca_okres_do: '',
         praca_nip: '123',
@@ -1411,7 +1439,6 @@ describe('Kredyt form logic', () => {
         praca_wlaczone: true,
         praca_okres: 'Czas nieokreślony',
         praca_forma: 'Umowa o pracę',
-        praca_data_zatrudnienia: '2020-01-01',
         praca_okres_od: '',
         praca_nip: '123',
         praca_nazwa_zakladu: 'Firma',
@@ -1437,7 +1464,6 @@ describe('Kredyt form logic', () => {
         praca_wlaczone: true,
         praca_okres: 'Czas nieokreślony',
         praca_forma: 'Umowa o pracę',
-        praca_data_zatrudnienia: '2020-01-01',
         praca_okres_od: '2020-01-01',
         praca_nip: '123',
         praca_nazwa_zakladu: 'Firma',
@@ -1542,7 +1568,7 @@ describe('Kredyt form logic', () => {
 
   describe('allowlist (ops#149/#163): buildDane(defaultForm()) mirrors crm/api/kredyt.py::_DANE_POLA_DOZWOLONE', () => {
     // Retyped literal mirror of crm/api/kredyt.py's `_DANE_POLA_DOZWOLONE`
-    // (54 base names + 10 POLA_WNIOSKODAWCY names since ops#157/#158/#163,
+    // (53 base names + 10 POLA_WNIOSKODAWCY names since ops#157/#158/#163,
     // `[*_DANE_POLA_PODSTAWOWE, *POLA_WNIOSKODAWCY]`), the exact same
     // deliberate duplication pattern as ETYKIETY_KANON_DOCTYPE below (no
     // runtime bridge between the Python and JS suites, so both sides
@@ -1572,7 +1598,6 @@ describe('Kredyt form logic', () => {
       'numer_rachunku',
       'praca_wlaczone',
       'praca_forma',
-      'praca_data_zatrudnienia',
       'praca_okres',
       'praca_okres_od',
       'praca_okres_do',
@@ -1618,9 +1643,9 @@ describe('Kredyt form logic', () => {
       'wnioskodawca_nr_lokalu',
     ]
 
-    it('kanon ma dokładnie 64 unikalne nazwy pól', () => {
-      expect(DANE_POLA_DOZWOLONE_KANON.length).toBe(64)
-      expect(new Set(DANE_POLA_DOZWOLONE_KANON).size).toBe(64)
+    it('kanon ma dokładnie 63 unikalne nazwy pól', () => {
+      expect(DANE_POLA_DOZWOLONE_KANON.length).toBe(63)
+      expect(new Set(DANE_POLA_DOZWOLONE_KANON).size).toBe(63)
     })
 
     it('Object.keys(buildDane(defaultForm())) jest zbiorem równym kanonowi', () => {
@@ -1631,7 +1656,7 @@ describe('Kredyt form logic', () => {
 })
 
 // Mirror of ops/crm-kredyt.py's `KREDYT_FIELDS` labels (the doctype canon,
-// 54 data fields, `deal`/`status`/section breaks excluded), retyped here on
+// 53 data fields, `deal`/`status`/section breaks excluded), retyped here on
 // purpose rather than imported. The exact same deliberate duplication as
 // crm/test_volteo_kredyt_etykiety.py's `_ETYKIETY_KANON_DOCTYPE` (see that
 // file's header comment for the full rationale: there is no runtime bridge
@@ -1669,7 +1694,6 @@ const ETYKIETY_KANON_DOCTYPE = {
   numer_rachunku: 'Numer rachunku bankowego',
   praca_wlaczone: 'Dochód: umowa o pracę / zlecenie / dzieło',
   praca_forma: 'Forma zatrudnienia',
-  praca_data_zatrudnienia: 'Data zatrudnienia',
   praca_okres: 'Okres zatrudnienia',
   praca_okres_od: 'Zatrudnienie od',
   praca_okres_do: 'Zatrudnienie do',
@@ -1728,8 +1752,8 @@ describe('ETYKIETY_POL / ETYKIETY_PELNE (kanon etykiet, ops#148/#157/#163)', () 
     ...POLA_WNIOSKODAWCY,
   ]
 
-  it('ma dokładnie 64 pola (BASE_FIELDS + toggle + pola GRUPY + POLA_WNIOSKODAWCY)', () => {
-    expect(wszystkieFieldnames.length).toBe(64)
+  it('ma dokładnie 63 pola (BASE_FIELDS + toggle + pola GRUPY + POLA_WNIOSKODAWCY)', () => {
+    expect(wszystkieFieldnames.length).toBe(63)
   })
 
   it('klucze ETYKIETY_POL pokrywają się dokładnie z BASE_FIELDS + polami GRUPY + POLA_WNIOSKODAWCY', () => {

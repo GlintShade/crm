@@ -48,12 +48,12 @@ from crm.volteo_umowa_mapa import SZEROKOSC_STRONY_PT, WYSOKOSC_STRONY_PT, Pole
 # Klucz kontekstu, którego fizycznie nie ma gdzie wydrukować na formularzu,
 # byłby tu jawnie wymieniony z uzasadnieniem. Formularz kredytowy ma DOKŁADNIE
 # jeden szablon (w odróżnieniu od trzech szablonów umowy) i mapa pokrywa
-# każdy z 72 kluczy `KLUCZE_KONTEKSTU` — nie ma tu żadnego pola, które nie
+# każdy z 71 kluczy `KLUCZE_KONTEKSTU`: nie ma tu żadnego pola, które nie
 # miałoby gdzie się wydrukować, więc zbiór wyjątków jest pusty.
 # ---------------------------------------------------------------------------
 
 WYJATKI_KREDYT: frozenset[str] = frozenset()
-"""Formularz kredytowy ma jeden szablon obejmujący wszystkie 72 klucze
+"""Formularz kredytowy ma jeden szablon obejmujący wszystkie 71 kluczy
 kontekstu — brak kluczy bez pozycji w mapie, więc zbiór jest pusty."""
 
 # Strony (indeksy 0-based) na których każdy z dwóch kluczy podpisu ma DOKŁADNIE
@@ -131,7 +131,6 @@ def _kredyt_wszystko_wlaczone(**nadpisania: Any) -> dict[str, Any]:
 		"numer_rachunku": "PL61109010140000071219812874",
 		"praca_wlaczone": 1,
 		"praca_forma": "Umowa o pracę",
-		"praca_data_zatrudnienia": "2019-05-01",
 		"praca_okres": "Czas określony",
 		"praca_okres_od": "2019-05-01",
 		"praca_okres_do": "2026-05-01",
@@ -441,9 +440,9 @@ class TestStrony(unittest.TestCase):
 				self.assertNotIn(strona, strony_z_pozycjami)
 
 	def test_b_liczba_pozycji_wg_strony(self: "TestStrony") -> None:
-		# Rozkład zamrożony w docstringu `MAPA_KREDYT`: 37 + 26 + 9 na stronach
+		# Rozkład zamrożony w docstringu `MAPA_KREDYT`: 37 + 25 + 9 na stronach
 		# 0/1/2, 2 na stronie 4 (drugi podpis), zero na stronach 3 i 5.
-		oczekiwane = {0: 37, 1: 26, 2: 9, 3: 0, 4: 2, 5: 0}
+		oczekiwane = {0: 37, 1: 25, 2: 9, 3: 0, 4: 2, 5: 0}
 		for strona, liczba in oczekiwane.items():
 			with self.subTest(strona=strona):
 				self.assertEqual(
@@ -560,8 +559,8 @@ class TestPoleDataclass(unittest.TestCase):
 		self.assertGreater(len(MAPA_KREDYT), 50)
 
 	def test_c_liczba_pozycji_zgodna_z_dokumentacja_modulu(self: "TestPoleDataclass") -> None:
-		# 74 pozycje łącznie: 37 (str. 0) + 26 (str. 1) + 9 (str. 2) + 2 (str. 4).
-		self.assertEqual(len(MAPA_KREDYT), 74)
+		# 73 pozycje łącznie: 37 (str. 0) + 25 (str. 1) + 9 (str. 2) + 2 (str. 4).
+		self.assertEqual(len(MAPA_KREDYT), 73)
 
 
 class TestWartosciKontekstu(unittest.TestCase):

@@ -208,9 +208,6 @@ _STRONA_2: tuple[Pole, ...] = (
     Pole("praca_umowa_o_prace", 1, 249.27, 740.53, "kratka", wyrownanie="srodek", rozmiar=8.0),
     Pole("praca_zlecenie", 1, 249.27, 726.73, "kratka", wyrownanie="srodek", rozmiar=8.0),
     Pole("praca_dzielo", 1, 249.27, 712.93, "kratka", wyrownanie="srodek", rozmiar=8.0),
-    # DATA ZATRUDNIENIA — komórka tabeli (kolumna x=240.4/523.9, jak w dolnej
-    # części §3 na str. 1 — ten sam układ powtarza się na całej stronie 2).
-    Pole("praca_data_zatrudnienia", 1, 246.40, 690.45, "tekst", maks_szerokosc=277.50),
     # OKRES ZATRUDNIENIA — DWIE kropkowane linie „Czas określony od: … do: …"
     # NA JEDNEJ LINII (nie kratki — zgodnie z briefem) plus osobna linia niżej
     # „Czas nieokreślony od: …". Wszystkie trzy mieszczą się w tym samym,
@@ -291,6 +288,6 @@ _STRONA_5: tuple[Pole, ...] = (
 _STRONA_6: tuple[Pole, ...] = ()
 
 MAPA_KREDYT: tuple[Pole, ...] = _STRONA_1 + _STRONA_2 + _STRONA_3 + _STRONA_4 + _STRONA_5 + _STRONA_6
-"""Pełna mapa współrzędnych formularza kredytowego: 72 pozycje na stronach
-0, 1, 2 (37 + 26 + 9) i 2 pozycje na stronie 4 (drugi podpis), razem 74;
+"""Pełna mapa współrzędnych formularza kredytowego: 71 pozycji na stronach
+0, 1, 2 (37 + 25 + 9) i 2 pozycje na stronie 4 (drugi podpis), razem 73;
 strony 3 i 5 celowo puste (patrz komentarze przy `_STRONA_4`/`_STRONA_6`)."""

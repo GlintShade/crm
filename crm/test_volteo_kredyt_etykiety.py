@@ -2,7 +2,7 @@ import unittest
 
 from crm.volteo_kredyt import ETYKIETY_POL, ETYKIETY_WNIOSKODAWCY, POLA_WNIOSKODAWCY
 
-# Mirror of crm/api/kredyt.py's `_DANE_POLA_DOZWOLONE` (the 54 fieldnames
+# Mirror of crm/api/kredyt.py's `_DANE_POLA_DOZWOLONE` (the 53 fieldnames
 # `volteo_kredyt_save` accepts). Retyped independently rather than imported:
 # `crm.api.kredyt` needs `frappe`, which is not installed on this machine
 # (same reason `crm/volteo_kredyt.py` stays frappe-free, per its module
@@ -37,7 +37,6 @@ _DANE_POLA_DOZWOLONE = (
 	"numer_rachunku",
 	"praca_wlaczone",
 	"praca_forma",
-	"praca_data_zatrudnienia",
 	"praca_okres",
 	"praca_okres_od",
 	"praca_okres_do",
@@ -84,7 +83,7 @@ _DANE_POLA_DOZWOLONE = (
 )
 
 # Mirror of ops/crm-kredyt.py's `KREDYT_FIELDS` labels (the doctype canon,
-# 54 data fields, `deal`/`status`/section breaks excluded). Same
+# 53 data fields, `deal`/`status`/section breaks excluded). Same
 # independent-retype rationale as `_DANE_POLA_DOZWOLONE` above: a relabel in
 # ops/crm-kredyt.py requires the matching change here AND in
 # `crm/volteo_kredyt.py`'s `ETYKIETY_POL`.
@@ -118,7 +117,6 @@ _ETYKIETY_KANON_DOCTYPE = {
 	"numer_rachunku": "Numer rachunku bankowego",
 	"praca_wlaczone": "Dochód: umowa o pracę / zlecenie / dzieło",
 	"praca_forma": "Forma zatrudnienia",
-	"praca_data_zatrudnienia": "Data zatrudnienia",
 	"praca_okres": "Okres zatrudnienia",
 	"praca_okres_od": "Zatrudnienie od",
 	"praca_okres_do": "Zatrudnienie do",
@@ -169,10 +167,10 @@ class TestEtykietyKanonZgodneZDozwolonymiPolami(unittest.TestCase):
 	def test_a_klucze_etykiet_pokrywaja_sie_z_dozwolonymi_polami(self: "TestEtykietyKanonZgodneZDozwolonymiPolami") -> None:
 		self.assertEqual(set(ETYKIETY_POL.keys()), set(_DANE_POLA_DOZWOLONE))
 
-	def test_b_pol_jest_64(self: "TestEtykietyKanonZgodneZDozwolonymiPolami") -> None:
-		# 54 pola danych Volteo Kredyt + 10 pól wnioskodawcy (ops#157).
-		self.assertEqual(len(_DANE_POLA_DOZWOLONE), 64)
-		self.assertEqual(len(ETYKIETY_POL), 64)
+	def test_b_pol_jest_63(self: "TestEtykietyKanonZgodneZDozwolonymiPolami") -> None:
+		# 53 pola danych Volteo Kredyt + 10 pól wnioskodawcy (ops#157).
+		self.assertEqual(len(_DANE_POLA_DOZWOLONE), 63)
+		self.assertEqual(len(ETYKIETY_POL), 63)
 
 
 class TestEtykietyKanonZgodneZDoctype(unittest.TestCase):
