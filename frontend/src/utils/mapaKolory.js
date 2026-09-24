@@ -9,7 +9,7 @@
 // od HEX_PO_NAZWIE_KOLORU w MapaLeadow.vue (tamta mapuje NAZWY kolorów
 // statusów, ta losuje deterministycznie z hasha e-maila, więc kolizja
 // wartości nie ma znaczenia).
-const PALETA_UZYTKOWNIKOW = [
+export const PALETA_UZYTKOWNIKOW = [
   '#2563eb',
   '#15803d',
   '#dc2626',
@@ -62,30 +62,6 @@ export function kolorDlaUzytkownika(email) {
 
 export const TRYBY_KOLOROWANIA = ['status', 'handlowiec', 'cc']
 export const DOMYSLNY_TRYB_KOLOROWANIA = 'status'
-
-// Styl pinezki leada na mapie (L.circleMarker). Wybrany lead (otwarty panel
-// "Szybki podgląd") dostaje ponad dwukrotnie większy promień, grubszą
-// obwódkę i pełne wypełnienie, żeby dało się go odnaleźć po przeniesieniu
-// wzroku na panel i z powrotem (uwaga właściciela z klik-testu b62,
-// pozycja 9).
-export const STYL_ZNACZNIKA = Object.freeze({ radius: 6, weight: 1, fillOpacity: 0.75 })
-export const STYL_ZNACZNIKA_WYBRANEGO = Object.freeze({ radius: 13, weight: 3, fillOpacity: 1 })
-
-/**
- * Opcje stylu dla L.circleMarker.setStyle(...) / konstruktora. Zwraca zawsze
- * NOWY obiekt (coding-style.md: nowe obiekty, nie mutacja stałych powyżej).
- * Obwódka w kolorze wypełnienia, jak dotąd, więc pinezka zachowuje kolor
- * statusu/handlowca/CC w każdym trybie kolorowania, niezależnie od tego,
- * czy jest wybrana.
- *
- * @param {string} kolor
- * @param {boolean} wybrany
- * @returns {{radius: number, weight: number, fillOpacity: number, color: string, fillColor: string}}
- */
-export function stylZnacznika(kolor, wybrany = false) {
-  const baza = wybrany ? STYL_ZNACZNIKA_WYBRANEGO : STYL_ZNACZNIKA
-  return { ...baza, color: kolor, fillColor: kolor }
-}
 
 /**
  * Klucz grupowania leada dla danego trybu kolorowania (status/handlowiec/cc).

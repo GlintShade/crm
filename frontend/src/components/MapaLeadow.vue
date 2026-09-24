@@ -217,7 +217,6 @@ import {
   kolorDlaUzytkownika,
   legenda,
   poleObecneWDanych,
-  stylZnacznika,
   wczytajKlastrowanie,
   wczytajTrybKolorowania,
   wczytajUstawieniaDymka,
@@ -225,6 +224,15 @@ import {
   zapiszTrybKolorowania,
   zapiszUstawieniaDymka,
 } from '@/utils/mapaKolory'
+import {
+  KOLOR_OBWODKI,
+  KOLOR_WYBRANEJ,
+  STYL_PINEZKI,
+  geometriaPinezki,
+  kropkaPinezki,
+  sciezkaPinezki,
+  stylPinezki,
+} from '@/utils/mapaPinezka'
 import {
   Button,
   ErrorMessage,
@@ -580,6 +588,77 @@ let dopasowanoWidok = false
 // Pozwala ustawStylWybranego() zmienić styl JEDNEGO markera in-place (klik
 // w inną pinezkę, zamknięcie panelu) bez przebudowy całej warstwy.
 let markeryPoNazwie = new Map()
+// Podklasa L.CircleMarker rysująca pinezkę (patrz utworzKlasePinezki niżej) --
+// tworzona raz, dopiero gdy `L` jest już dostępne (klasa dziedziczy po
+// L.CircleMarker, więc nie da się jej zbudować przed leniwym importem).
+let PinezkaLeada = null
+
+// Podklasa L.CircleMarker rysująca teardrop-pinezkę zamiast kółka, wciąż
+// wektorowa na wspólnym canvasie (preferCanvas: true) -- z ~10 849 leadami
+// dla admina L.marker + divIcon/SVG (osobny element DOM na marker) byłby
+// zbyt wolny, patrz komentarz na górze pliku o preferCanvas. _updateBounds
+// i _containsPoint są nadpisane, bo domyślna geometria CircleMarker to
+// symetryczne kółko wokół kotwicy -- pinezka jest wysoka i wąska, z kotwicą
+// w czubku, nie w środku główki.
+function utworzKlasePinezki(Lref) {
+  return Lref.CircleMarker.extend({
+    // Prostokąt pikseli musi objąć całą kroplę (główkę NAD kotwicą), inaczej
+    // Canvas.js przy częściowym przerysowaniu (_redrawBounds, patrz
+    // _extendRedrawBounds w Canvas.js) obcina pinezki leżące na krawędzi
+    // przerysowywanego obszaru.
+    _updateBounds: function () {
+      const r = this._radius
+      const w = this._clickTolerance()
+      const g = geometriaPinezki(r)
+      this._pxBounds = new Lref.Bounds(
+        this._point.subtract([r + w, -g.srodekY + r + w]),
+        this._point.add([r + w, w]),
+      )
+    },
+    // Trafienie kursora/kliknięcia: główka (koło) albo trzon (zwężający się
+    // od środka główki do czubka pas) -- przybliżenie kształtu kropli,
+    // wystarczające jako tolerancja kliknięcia/hover.
+    _containsPoint: function (p) {
+      const r = this._radius + this._clickTolerance()
+      const g = geometriaPinezki(this._radius)
+      const srodek = this._point.add([0, g.srodekY])
+      if (p.distanceTo(srodek) <= r) return true
+      const dy = p.y - srodek.y
+      if (dy < 0 || dy > -g.srodekY) return false
+      const polSzer = r * (1 - dy / -g.srodekY)
+      return Math.abs(p.x - this._point.x) <= Math.max(polSzer, 2)
+    },
+    // Rysowanie na canvasie: ścieżka kropli (sciezkaPinezki) plus
+    // wypełnienie/obwódka przez ten sam _fillStroke co reszta warstw
+    // wektorowych Leafleta, plus biała kropka w środku główki na wierzchu.
+    // Poświata (halo) tylko dla wybranej pinezki (options.wybrany, ustawiane
+    // przez stylPinezki), żeby wyróżniała się nawet na gęsto upakowanej
+    // mapie po przeniesieniu wzroku na panel "Szybki podgląd" i z powrotem.
+    _updatePath: function () {
+      const renderer = this._renderer
+      if (!renderer._drawing || this._empty()) return
+      const ctx = renderer._ctx
+      const p = this._point
+      const r = Math.max(Math.round(this._radius), 1)
+
+      if (this.options.wybrany) {
+        ctx.beginPath()
+        ctx.arc(p.x, p.y + geometriaPinezki(r).srodekY, r * 1.9, 0, Math.PI * 2, false)
+        ctx.fillStyle = KOLOR_WYBRANEJ
+        ctx.globalAlpha = 0.25
+        ctx.fill()
+      }
+
+      sciezkaPinezki(ctx, p.x, p.y, r)
+      renderer._fillStroke(ctx, this)
+
+      ctx.globalAlpha = 1
+      kropkaPinezki(ctx, p.x, p.y, r)
+      ctx.fillStyle = KOLOR_OBWODKI
+      ctx.fill()
+    },
+  })
+}
 
 async function initMap() {
   if (!L) {
@@ -595,6 +674,7 @@ async function initMap() {
     // plugin dołącza się efektem ubocznym do tego samego singletona L, więc
     // import dopiero PO przypisaniu L.
     await import('leaflet.markercluster')
+    PinezkaLeada = utworzKlasePinezki(L)
   }
 
   mapInstance = L.map(mapId, { preferCanvas: true }).setView([52.0, 19.3], 6)
@@ -679,8 +759,16 @@ function rysujMarkery() {
 
     const kolor = kolorLeada(lead)
     const wybrany = lead.name === wybranyLead.value?.name
-    const marker = L.circleMarker([lat, lng], stylZnacznika(kolor, wybrany))
-    marker.bindTooltip(() => budujDymek(lead), { direction: 'top' })
+    const marker = new PinezkaLeada([lat, lng], stylPinezki(kolor, wybrany))
+    // Dymek nad główką, nie na czubku pinezki -- direction 'top' domyślnie
+    // stawia dolną krawędź dymku dokładnie na kotwicy (czubku), a główka
+    // pinezki jest NAD kotwicą, więc bez dodatkowego przesunięcia dymek
+    // nachodziłby na główkę. Offset odpowiada pełnej wysokości pinezki
+    // (geometriaPinezki().wysokosc), patrz komentarz przy geometriaPinezki.
+    marker.bindTooltip(() => budujDymek(lead), {
+      direction: 'top',
+      offset: L.point(0, geometriaPinezki(STYL_PINEZKI.radius).srodekY - STYL_PINEZKI.radius),
+    })
     marker.on('click', () => {
       wybranyLead.value = lead
     })
@@ -706,7 +794,7 @@ function rysujMarkery() {
 function ustawStylWybranego(nazwa, wybrany) {
   const wpis = markeryPoNazwie.get(nazwa)
   if (!wpis) return
-  wpis.marker.setStyle(stylZnacznika(kolorLeada(wpis.lead), wybrany))
+  wpis.marker.setStyle(stylPinezki(kolorLeada(wpis.lead), wybrany))
   if (wybrany) wpis.marker.bringToFront()
 }
 
