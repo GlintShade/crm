@@ -69,4 +69,25 @@ describe('czyWidokDozwolony', () => {
     expect(czyWidokDozwolony(widok, ['lead_owner', 'modified'])).toBe(true)
     expect(czyWidokDozwolony(widok, ['lead_owner'])).toBe(false)
   })
+
+  it('issue ops#173: zlozona wartosc filtra tagow (klucz dozwolony) -> dozwolony', () => {
+    const widok = {
+      filters: JSON.stringify({
+        custom_posiadane_produkty: ['volteo_tagi', { ma: ['PV'], nie_ma: ['AUDYT', 'ME'] }],
+      }),
+    }
+    expect(czyWidokDozwolony(widok, ['custom_posiadane_produkty'])).toBe(true)
+  })
+
+  it('issue ops#173: zlozona wartosc filtra tagow wewnatrz grupy ALBO -> dozwolony/niedozwolony po kluczu pola', () => {
+    const widok = {
+      filters: JSON.stringify({
+        [KLUCZ_GRUP]: [
+          { custom_posiadane_produkty: ['volteo_tagi', { ma: ['PV'], nie_ma: ['ME'] }] },
+        ],
+      }),
+    }
+    expect(czyWidokDozwolony(widok, ['custom_posiadane_produkty'])).toBe(true)
+    expect(czyWidokDozwolony(widok, ['status'])).toBe(false)
+  })
 })

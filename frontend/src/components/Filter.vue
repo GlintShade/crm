@@ -62,7 +62,7 @@
                     v-model="f.operator"
                     type="select"
                     :options="
-                      getOperators(f.field.fieldtype, f.field.fieldname)
+                      getOperators(f.field.fieldtype, f.field.fieldname, f.field)
                     "
                     :placeholder="__('Equals')"
                     @update:modelValue="() => updateOperator(f)"
@@ -117,7 +117,7 @@
                       v-model="f.operator"
                       type="select"
                       :options="
-                        getOperators(f.field.fieldtype, f.field.fieldname)
+                        getOperators(f.field.fieldtype, f.field.fieldname, f.field)
                       "
                       :placeholder="__('Equals')"
                       @update:modelValue="() => updateOperator(f)"
@@ -242,7 +242,7 @@
                     <FormControl
                       v-model="f.operator"
                       type="select"
-                      :options="getOperators(f.field.fieldtype, f.field.fieldname)"
+                      :options="getOperators(f.field.fieldtype, f.field.fieldname, f.field)"
                       :placeholder="__('Equals')"
                       @update:modelValue="() => updateOperator(f)"
                     />
@@ -337,7 +337,13 @@ import {
   czyWielokrotnyWybor,
   parsujWartoscWielokrotna,
 } from '@/utils/filtrWielokrotny'
-import { czyPoleTagow } from '@/utils/tagiProduktow'
+import {
+  OPERATOR_TAGOW,
+  czyPoleTagow,
+  czyZlozonyFiltrTagow,
+  rozpakujZlozonyFiltrTagow,
+  spakujZlozonyFiltrTagow,
+} from '@/utils/tagiProduktow'
 import {
   MAX_GRUP,
   MAX_WARUNKOW_W_GRUPIE,
@@ -516,11 +522,37 @@ function convertFilters(data, allFilters) {
   let f = []
   for (let [key, value] of Object.entries(allFilters)) {
     let field = data.find((f) => f.fieldname === key)
+
+    // Issue ops#173: filtr złożony "zawiera i nie zawiera"
+    // (`["volteo_tagi", {ma, nie_ma}]`) na polu tagów -- rozpakowywany do
+    // wiersza z operatorem `OPERATOR_TAGOW` i wartością `{ma, nie_ma}`,
+    // zanim ogólna ścieżka niżej (która zakłada `value[1]` jako
+    // pojedynczą wartość/tablicę stringów) zdąży go dotknąć.
+    if (field && czyPoleTagow(field) && czyZlozonyFiltrTagow(value)) {
+      f.push({
+        field,
+        fieldname: key,
+        operator: OPERATOR_TAGOW,
+        value: rozpakujZlozonyFiltrTagow(value),
+      })
+      continue
+    }
+
     if (typeof value !== 'object' || !value) {
       value = ['=', value]
       if (field?.fieldtype === 'Check') {
         value = ['equals', value[1] ? 'Yes' : 'No']
       }
+    }
+
+    // Stary skalarny zapis pola tagów (`"PV"` albo `["=", "PV"]`) --
+    // operator "equals" nie jest już oferowany dla pól tagów (patrz
+    // getOperators), więc otwiera się jako wiersz "Zawiera którykolwiek
+    // z" z jednym tokenem, zamiast operatora, którego Filter.vue już nie
+    // rozpoznaje dla tego pola.
+    if (field && czyPoleTagow(field) && value[0] === '=') {
+      f.push({ field, fieldname: key, operator: 'in', value: [value[1]] })
+      continue
     }
 
     if (field) {
@@ -535,7 +567,19 @@ function convertFilters(data, allFilters) {
   return new Set(f)
 }
 
-function getOperators(fieldtype, fieldname) {
+function getOperators(fieldtype, fieldname, field) {
+  // Issue ops#173: pole "produktów leada" (tagów) dostaje WYŁĄCZNIE te
+  // trzy operatory -- "equals"/"not equals"/"like"/"not like"/"is" z
+  // gałęzi typeString niżej są semantycznie złe dla stringów łączonych
+  // "+" (np. "not like '%PV%'" wyklucza też "PVME", "!= 'AUDYT'" liczy
+  // się z całym stringiem zamiast z pojedynczym tokenem).
+  if (czyPoleTagow(field)) {
+    return [
+      { label: __('Zawiera którykolwiek z'), value: 'in' },
+      { label: __('Nie zawiera żadnego z'), value: 'not in' },
+      { label: __('Zawiera i nie zawiera'), value: OPERATOR_TAGOW },
+    ]
+  }
   let options = []
   if (typeString.includes(fieldtype)) {
     options.push(
@@ -670,6 +714,30 @@ function getValueControl(f) {
       modelValue: f.value,
       'onUpdate:modelValue': (v) => updateValue(v, f),
     })
+  } else if (operator === OPERATOR_TAGOW && czyPoleTagow(f.field)) {
+    // Issue ops#173: filtr złożony "zawiera i nie zawiera" -- dwa
+    // MultiSelecty jeden pod drugim w tym samym wierszu warunku, "Zawiera"
+    // (strona "ma") i "Nie zawiera" (strona "nie_ma"), ten sam katalog
+    // opcji co pojedynczy MultiSelect operatorów in/not in niżej.
+    // `f.value` jest tu zawsze obiektem `{ma, nie_ma}` (patrz
+    // `updateOperator`/`getDefaultValue` -- oba budują ten kształt dla
+    // tego operatora).
+    const wartosc = f.value && typeof f.value === 'object' ? f.value : { ma: [], nie_ma: [] }
+    const opcjeWyboru = getSelectOptions(options).map((o) => ({ label: o, value: o }))
+    return h('div', { class: 'flex flex-col gap-1' }, [
+      h(MultiSelect, {
+        placeholder: __('Zawiera'),
+        options: opcjeWyboru,
+        modelValue: parsujWartoscWielokrotna(wartosc.ma),
+        'onUpdate:modelValue': (v) => updateValue({ ...wartosc, ma: v }, f),
+      }),
+      h(MultiSelect, {
+        placeholder: __('Nie zawiera'),
+        options: opcjeWyboru,
+        modelValue: parsujWartoscWielokrotna(wartosc.nie_ma),
+        'onUpdate:modelValue': (v) => updateValue({ ...wartosc, nie_ma: v }, f),
+      }),
+    ])
   } else if (
     czyWielokrotnyWybor(f.field, operator) &&
     (typeSelect.includes(fieldtype) || czyPoleTagow(f.field))
@@ -779,6 +847,12 @@ function getValueControl(f) {
 }
 
 function getDefaultValue(field) {
+  // Issue ops#173: pole tagów startuje zawsze z operatorem "in" (patrz
+  // getDefaultOperator), którego wartość domyślna to pusta tablica -- tak
+  // jak dla in/not in na Select/Link (czyWielokrotnyWybor), nie skalar.
+  if (czyPoleTagow(field)) {
+    return []
+  }
   if (typeSelect.includes(field.fieldtype)) {
     return getSelectOptions(field.options)[0]
   }
@@ -791,7 +865,14 @@ function getDefaultValue(field) {
   return ''
 }
 
-function getDefaultOperator(fieldtype) {
+function getDefaultOperator(field) {
+  // Issue ops#173: pole tagów dostaje domyślnie "Zawiera którykolwiek z"
+  // (in) -- getOperators dla tego pola nie oferuje już "equals", więc
+  // domyślny operator musi być jednym z trzech faktycznie oferowanych.
+  if (czyPoleTagow(field)) {
+    return 'in'
+  }
+  const fieldtype = field.fieldtype
   if (typeSelect.includes(fieldtype)) {
     return 'equals'
   }
@@ -818,7 +899,7 @@ function setfilter(data) {
       options: data.options,
     },
     fieldname: data.fieldname,
-    operator: getDefaultOperator(data.fieldtype),
+    operator: getDefaultOperator(data),
     value: getDefaultValue(data),
   })
   apply()
@@ -830,7 +911,7 @@ function updateFilter(data, index) {
   filters.value.delete(Array.from(filters.value)[index])
   filters.value.add({
     fieldname: data.fieldname,
-    operator: getDefaultOperator(data.fieldtype),
+    operator: getDefaultOperator(data),
     value: getDefaultValue(data),
     field: {
       label: data.label,
@@ -861,7 +942,7 @@ function zbudujWarunek(data) {
       options: data.options,
     },
     fieldname: data.fieldname,
-    operator: getDefaultOperator(data.fieldtype),
+    operator: getDefaultOperator(data),
     value: getDefaultValue(data),
   }
 }
@@ -955,6 +1036,29 @@ function updateValue(value, filter) {
 }
 
 function updateOperator(filter) {
+  if (czyPoleTagow(filter.field)) {
+    // Issue ops#173: pole tagów ma dokładnie 3 operatory (getOperators) --
+    // "in"/"not in" (wartość tablica stringów) i "volteo_tagi" (wartość
+    // obiekt {ma, nie_ma}). Przy zmianie MIĘDZY tymi trzema trzeba
+    // przekształcić kształt wartości, inaczej kontrolka (MultiSelect
+    // pojedynczy vs. podwójny) dostałaby wartość w złym kształcie.
+    if (filter.operator === OPERATOR_TAGOW) {
+      // Przełączenie na złożony "zawiera i nie zawiera": aktualnie
+      // zaznaczone tokeny (z poprzedniego "in"/"not in") przechodzą do
+      // strony "ma" -- użytkownik nie traci zaznaczenia przy przełączeniu.
+      filter.value = rozpakujZlozonyFiltrTagow(['in', parsujWartoscWielokrotna(filter.value)])
+    } else if (filter.value && typeof filter.value === 'object' && !Array.isArray(filter.value)) {
+      // Powrót ze złożonego na "in"/"not in": bierzemy stronę
+      // odpowiadającą NOWEMU operatorowi, druga strona jest tu świadomie
+      // porzucana -- to jest zmiana operatora (zamiana ograniczenia), nie
+      // edycja istniejącej wartości.
+      filter.value = filter.operator === 'not in' ? filter.value.nie_ma || [] : filter.value.ma || []
+    } else {
+      filter.value = parsujWartoscWielokrotna(filter.value)
+    }
+    apply()
+    return
+  }
   if (czyWielokrotnyWybor(filter.field, filter.operator)) {
     // Issue #103: dokładnie tam, gdzie getValueControl renderuje
     // MultiSelect/LinkMultiSelect (Select albo Link poza Dynamic Link i
@@ -1010,6 +1114,16 @@ const liczbaWarunkow = computed(() => liczbaWarunkowLacznie(filters.value.size, 
 function parseFilters(filters) {
   const filtersArray = Array.from(filters)
   const obj = filtersArray.map(transformIn).reduce((p, c) => {
+    if (c.operator === OPERATOR_TAGOW) {
+      // Issue ops#173: filtr złożony pakowany do jego najprostszego
+      // przewodowego kształtu -- undefined (brak ograniczenia z tej
+      // strony -> klucz usunięty z filtrów) / ["in", ma] / ["not in",
+      // nie_ma] / ["volteo_tagi", {ma, nie_ma}], patrz
+      // spakujZlozonyFiltrTagow.
+      const packed = spakujZlozonyFiltrTagow(c.value)
+      if (packed !== undefined) p[c.fieldname] = packed
+      return p
+    }
     if (['equals', '='].includes(c.operator)) {
       p[c.fieldname] =
         c.value == 'Yes' ? true : c.value == 'No' ? false : c.value
@@ -1023,6 +1137,11 @@ function parseFilters(filters) {
 }
 
 function transformIn(f) {
+  // Issue ops#173: filtr złożony niesie `{ma, nie_ma}` w `f.value`, nie
+  // string/tablicę -- `f.value.includes`/`.split` nie istnieją na obiekcie
+  // zwykłym, więc ten wiersz wraca bez zmian, spakowanie idzie przez
+  // spakujZlozonyFiltrTagow w parseFilters powyżej, nie przez tę funkcję.
+  if (f.operator === OPERATOR_TAGOW) return f
   if (f.operator.includes('like') && !f.value.includes('%')) {
     f.value = `%${f.value}%`
   }
@@ -1033,7 +1152,14 @@ function transformIn(f) {
 }
 
 function placeholder(f) {
-  if (f.operator === 'between') {
+  if (f.operator === OPERATOR_TAGOW) {
+    // Issue ops#173: wiersz złożony renderuje dwa MultiSelecty z własnymi
+    // placeholderami ("Zawiera"/"Nie zawiera", patrz getValueControl) --
+    // ten placeholder na poziomie całego wiersza (przekazywany do
+    // <component :is="getValueControl(f)" :placeholder="placeholder(f)">)
+    // nie trafia do żadnego z nich.
+    return ''
+  } else if (f.operator === 'between') {
     return __('01/01/2022 to 01/31/2022')
   } else if (f.operator === 'in' || f.operator === 'not in') {
     // Issue #103: pola z kontrolką wielokrotnego wyboru (MultiSelect dla
@@ -1092,6 +1218,7 @@ const operatorMap = {
   '<=': '<=',
   between: 'between',
   timespan: 'timespan',
+  [OPERATOR_TAGOW]: OPERATOR_TAGOW,
 }
 
 const oppositeOperatorMap = {
@@ -1112,6 +1239,7 @@ const oppositeOperatorMap = {
   '<=': '<=',
   between: 'between',
   timespan: 'timespan',
+  [OPERATOR_TAGOW]: OPERATOR_TAGOW,
 }
 
 const timespanOptions = [

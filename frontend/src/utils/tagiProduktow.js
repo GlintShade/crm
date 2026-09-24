@@ -27,11 +27,25 @@
 // Frappe-free (żadnego `__()` na poziomie modułu, patrz PUŁAPKA w
 // etapFiltr.js/filtrSzybki.js: eager chunk woła moduł przed i18n),
 // testowalne bezpośrednio przez vitest.
+//
+// Issue ops#173: filtr złożony "zawiera i nie zawiera" jednym wierszem na
+// pole tagów -- scenariusz właściciela "ma PV, nie ma AUDYT ani ME", nie do
+// ułożenia dotychczasowym słownikiem {pole: wartość} (jedno pole = jeden
+// warunek). Wire format (poza istniejącymi, które zostają bez zmian):
+//   {"custom_posiadane_produkty": ["volteo_tagi", {"ma": ["PV"], "nie_ma": ["AUDYT", "ME"]}]}
+// `OPERATOR_TAGOW`/`czyZlozonyFiltrTagow`/`rozpakujZlozonyFiltrTagow`/
+// `spakujZlozonyFiltrTagow` poniżej odpowiadają dokładnie
+// `crm.volteo_lista_szans.OPERATOR_TAGOW`/`rozpoznaj_filtry_tagu` po
+// stronie backendu -- ten sam kształt, ta sama semantyka pustych
+// list/kluczy.
+import { parsujWartoscWielokrotna } from './filtrWielokrotny'
 
 const NAZWY_POL_TAGOW = new Set([
   'custom_posiadane_produkty',
   'custom_produkt_procesu',
 ])
+
+export const OPERATOR_TAGOW = 'volteo_tagi'
 
 /**
  * Rozstrzyga, czy `field` jest polem "produktów leada" (tagów): prawda,
@@ -89,4 +103,75 @@ export function opcjeTagow(field) {
     .split('\n')
     .map((token) => token.trim())
     .filter((token) => token.length > 0)
+}
+
+/**
+ * Rozstrzyga, czy `raw` (wartość filtra wprost z `list.params.filters`
+ * albo z zapisanego widoku) ma kształt złożonego filtra tagów: tablica
+ * dwuelementowa, pierwszy element to `OPERATOR_TAGOW` (bez względu na
+ * wielkość liter), drugi element to obiekt (nie tablica, nie `null`).
+ * Zawartość obiektu (klucze "ma"/"nie_ma") NIE jest tu sprawdzana --
+ * `rozpakujZlozonyFiltrTagow` niżej robi to odpornie na śmieci.
+ */
+export function czyZlozonyFiltrTagow(raw) {
+  return Boolean(
+    Array.isArray(raw) &&
+      String(raw[0]).toLowerCase() === OPERATOR_TAGOW &&
+      raw[1] &&
+      typeof raw[1] === 'object' &&
+      !Array.isArray(raw[1]),
+  )
+}
+
+/**
+ * Rozpakowuje `raw` do `{ ma: string[], nie_ma: string[] }`, niezależnie
+ * od tego, w jakim kształcie wartość dotarła: złożonym (`czyZlozonyFiltrTagow`
+ * -- oba pola przez `parsujWartoscWielokrotna`, brakujący klucz/śmieci pod
+ * "ma"/"nie_ma" dają pustą listę z tej strony), `["in", [...]]` (cała
+ * wartość do "ma"), `["not in", [...]]` (cała wartość do "nie_ma"),
+ * skalarem/inną tablicą-stringiem (przez `parsujWartoscWielokrotna` do
+ * "ma", dla zgodności z dotychczasowym zapisem pola tagów). Każdy inny
+ * kształt tablicowy (np. `["like", ...]`) -- śmieci, obie strony puste.
+ */
+export function rozpakujZlozonyFiltrTagow(raw) {
+  if (czyZlozonyFiltrTagow(raw)) {
+    return {
+      ma: parsujWartoscWielokrotna(raw[1].ma),
+      nie_ma: parsujWartoscWielokrotna(raw[1].nie_ma),
+    }
+  }
+  if (Array.isArray(raw)) {
+    const operator = String(raw[0] ?? '').toLowerCase()
+    if (operator === 'in') {
+      return { ma: parsujWartoscWielokrotna(raw[1]), nie_ma: [] }
+    }
+    if (operator === 'not in') {
+      return { ma: [], nie_ma: parsujWartoscWielokrotna(raw[1]) }
+    }
+    return { ma: [], nie_ma: [] }
+  }
+  if (typeof raw === 'string') {
+    return { ma: parsujWartoscWielokrotna(raw), nie_ma: [] }
+  }
+  return { ma: [], nie_ma: [] }
+}
+
+/**
+ * Odwrotność `rozpakujZlozonyFiltrTagow`: pakuje `{ ma, nie_ma }` z powrotem
+ * do kształtu przesyłanego do backendu, w najprostszej postaci, jaka
+ * niesie tę samą semantykę (zgodność z paskiem szybkim i z zapisanymi
+ * widokami sprzed tej zmiany):
+ *   - obie strony puste -> `undefined` (wołający usuwa klucz filtra);
+ *   - tylko "ma" -> `['in', ma]` (dotychczasowy kształt "jest jednym z");
+ *   - tylko "nie_ma" -> `['not in', nie_ma]`;
+ *   - obie niepuste -> `[OPERATOR_TAGOW, { ma, nie_ma }]` (kształt złożony,
+ *     jedyny, który niesie oba ograniczenia naraz).
+ */
+export function spakujZlozonyFiltrTagow({ ma, nie_ma } = {}) {
+  const listaMa = parsujWartoscWielokrotna(ma)
+  const listaNieMa = parsujWartoscWielokrotna(nie_ma)
+  if (listaMa.length === 0 && listaNieMa.length === 0) return undefined
+  if (listaNieMa.length === 0) return ['in', listaMa]
+  if (listaMa.length === 0) return ['not in', listaNieMa]
+  return [OPERATOR_TAGOW, { ma: listaMa, nie_ma: listaNieMa }]
 }

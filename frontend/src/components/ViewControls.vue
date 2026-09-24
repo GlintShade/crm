@@ -329,10 +329,12 @@ import { usersStore } from '@/stores/users'
 import { getMeta } from '@/stores/meta'
 import { isEmoji } from '@/utils'
 import {
+  czyFiltrSzybkiZablokowany,
   czyWielokrotnyFiltrSzybki,
   rozpakujWartoscFiltraSzybkiego,
   spakujWartoscFiltraSzybkiego,
 } from '@/utils/filtrSzybki'
+import { rozpakujZlozonyFiltrTagow, spakujZlozonyFiltrTagow } from '@/utils/tagiProduktow'
 import {
   Tooltip,
   createResource,
@@ -989,7 +991,16 @@ function applyQuickFilter(filter, value) {
     // pusta). Serializacja: 0 -> klucz usunięty, 1 -> dotychczasowy
     // skalarny kształt, N -> ["in", [...]], ten sam format co operator
     // "jest jednym z" w rozwijanym Filter.vue (issue #103).
-    const packed = spakujWartoscFiltraSzybkiego(value)
+    //
+    // Issue ops#173: gdy istniejąca wartość filtra jest kształtem, którego
+    // pasek szybki nie umie bezpiecznie przepisać "od zera" (złożony
+    // "zawiera i nie zawiera" albo "not in" -- patrz
+    // czyFiltrSzybkiZablokowany), nowe zaznaczenia z checkboxów scalają
+    // się w stronę "ma", "nie_ma" przeżywa edycję z paska bez zmian.
+    const staraWartosc = filters[field]
+    const packed = czyFiltrSzybkiZablokowany(staraWartosc)
+      ? spakujZlozonyFiltrTagow({ ...rozpakujZlozonyFiltrTagow(staraWartosc), ma: value })
+      : spakujWartoscFiltraSzybkiego(value)
     if (packed === undefined) {
       delete filters[field]
     } else {

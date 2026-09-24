@@ -60,6 +60,27 @@ class TestWaliduGrupy(unittest.TestCase):
 		waliduj_grupy(None)
 		waliduj_grupy([])
 
+	def test_i_zlozona_wartosc_filtra_tagow_w_grupie_przechodzi(
+		self: "TestWaliduGrupy",
+	) -> None:
+		# Issue ops#173: filtr zlozony "zawiera i nie zawiera"
+		# (`["volteo_tagi", {"ma": [...], "nie_ma": [...]}]`) jest, z
+		# punktu widzenia `waliduj_grupy`, TYLKO wartoscia pod zwyklym
+		# kluczem pola -- walidacja sprawdza ksztalt GRUPY (dict, brak
+		# zagniezdzenia, limity), nie ksztalt wartosci pod poszczegolnymi
+		# kluczami, wiec przechodzi bez zmian.
+		waliduj_grupy(
+			[
+				{
+					"custom_posiadane_produkty": [
+						"volteo_tagi",
+						{"ma": ["PV"], "nie_ma": ["AUDYT", "ME"]},
+					]
+				},
+				{"status": ["in", ["Nowy", "Próba kontaktu"]]},
+			]
+		)
+
 	def test_b_poprawne_grupy_nie_rzucaja(self: "TestWaliduGrupy") -> None:
 		waliduj_grupy(
 			[
