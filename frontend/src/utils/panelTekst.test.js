@@ -39,19 +39,28 @@ describe('liczWierszeTekstu', () => {
 
   it('jedna dluga linia liczy sie proporcjonalnie do znakowNaWiersz', () => {
     const tekst = 'a'.repeat(500)
-    // ceil(500 / 48) = 11
-    expect(liczWierszeTekstu(tekst)).toBe(11)
+    // domyslne znakowNaWiersz = 40: ceil(500 / 40) = 13
+    expect(liczWierszeTekstu(tekst)).toBe(13)
   })
 
   it('wiele linii sumuje sie', () => {
     const tekst = Array(6).fill('krotka linia').join('\n')
-    // 6 linii, kazda ceil(<=48/48) = 1 -> suma 6
+    // 6 linii, kazda ceil(<=40/40) = 1 -> suma 6
     expect(liczWierszeTekstu(tekst)).toBe(6)
   })
 
   it('przyciecie do max', () => {
-    const tekst = 'a'.repeat(48 * 100)
+    const tekst = 'a'.repeat(40 * 100)
     expect(liczWierszeTekstu(tekst)).toBe(40)
+  })
+
+  it('tresc typowa dla realnej kolumny panelu (~300px) miesci sie bez auto-grow', () => {
+    // Przyklad zblizony do dlugich "Uwagi" z importu leadow (separator " | ").
+    const tekst =
+      'Klient zainteresowany PV + magazyn energii | telefon kontaktowy po 16 | dach dwuspadowy, poludniowa polac | wlasny grunt, bez wspolwlasnosci'
+    const wynik = liczWierszeTekstu(tekst)
+    expect(wynik).toBeGreaterThanOrEqual(4)
+    expect(wynik).toBeLessThanOrEqual(40)
   })
 
   it('respektuje niestandardowe znakowNaWiersz/min/max', () => {
