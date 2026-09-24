@@ -84,6 +84,7 @@ describe('geometriaPinezki', () => {
     expect(g.srodekY).toBeCloseTo(-11.4)
     expect(g.wysokosc).toBeCloseTo(17.4)
     expect(g.szerokosc).toBeCloseTo(12)
+    expect(g.poswiataR).toBeCloseTo(11.4)
   })
 
   it('zwraca zamrożony obiekt', () => {

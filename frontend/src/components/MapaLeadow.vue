@@ -602,22 +602,32 @@ let PinezkaLeada = null
 // w czubku, nie w środku główki.
 function utworzKlasePinezki(Lref) {
   return Lref.CircleMarker.extend({
-    // Prostokąt pikseli musi objąć całą kroplę (główkę NAD kotwicą), inaczej
-    // Canvas.js przy częściowym przerysowaniu (_redrawBounds, patrz
-    // _extendRedrawBounds w Canvas.js) obcina pinezki leżące na krawędzi
-    // przerysowywanego obszaru.
+    // Prostokąt pikseli musi objąć całą kroplę ORAZ poświatę wybranej
+    // pinezki (promień g.poswiataR WOKÓŁ środka główki, czyli sięgającą
+    // 3.8r nad kotwicę) -- liczone tak samo dla KAŻDEJ pinezki, wybranej
+    // czy nie, żeby _updateBounds nie zależał od tego, które options są
+    // akurat aktualne w chwili wywołania (setStyle zmienia _radius PRZED
+    // przeliczeniem bounds, patrz komentarz przy ustawStylWybranego niżej).
+    // Bez zapasu na poświatę Canvas.js przy częściowym przerysowaniu
+    // (_redrawBounds, patrz _extendRedrawBounds w Canvas.js) obcinał
+    // poświatę do prostokąta (płaskie krawędzie zamiast koła) i zostawiał
+    // fuksjowe resztki po odznaczeniu, bo obszar poza starym _pxBounds nigdy
+    // nie był czyszczony.
     _updateBounds: function () {
       const r = this._radius
       const w = this._clickTolerance()
       const g = geometriaPinezki(r)
+      const polSzerokosc = Math.max(r, g.poswiataR) + w
       this._pxBounds = new Lref.Bounds(
-        this._point.subtract([r + w, -g.srodekY + r + w]),
-        this._point.add([r + w, w]),
+        this._point.subtract([polSzerokosc, -g.srodekY + g.poswiataR + w]),
+        this._point.add([polSzerokosc, w]),
       )
     },
     // Trafienie kursora/kliknięcia: główka (koło) albo trzon (zwężający się
     // od środka główki do czubka pas) -- przybliżenie kształtu kropli,
-    // wystarczające jako tolerancja kliknięcia/hover.
+    // wystarczające jako tolerancja kliknięcia/hover. Obszar poświaty
+    // celowo NIE jest klikalny -- to tylko wizualne wyróżnienie, hit-area
+    // zostaje jak dotąd.
     _containsPoint: function (p) {
       const r = this._radius + this._clickTolerance()
       const g = geometriaPinezki(this._radius)
@@ -634,16 +644,20 @@ function utworzKlasePinezki(Lref) {
     // Poświata (halo) tylko dla wybranej pinezki (options.wybrany, ustawiane
     // przez stylPinezki), żeby wyróżniała się nawet na gęsto upakowanej
     // mapie po przeniesieniu wzroku na panel "Szybki podgląd" i z powrotem.
+    // Promień poświaty (g.poswiataR) MUSI być tym samym polem, którego
+    // używa _updateBounds wyżej -- inaczej odkrywamy dokładnie ten sam błąd
+    // przycinania od nowa przy następnej zmianie geometrii.
     _updatePath: function () {
       const renderer = this._renderer
       if (!renderer._drawing || this._empty()) return
       const ctx = renderer._ctx
       const p = this._point
       const r = Math.max(Math.round(this._radius), 1)
+      const g = geometriaPinezki(r)
 
       if (this.options.wybrany) {
         ctx.beginPath()
-        ctx.arc(p.x, p.y + geometriaPinezki(r).srodekY, r * 1.9, 0, Math.PI * 2, false)
+        ctx.arc(p.x, p.y + g.srodekY, g.poswiataR, 0, Math.PI * 2, false)
         ctx.fillStyle = KOLOR_WYBRANEJ
         ctx.globalAlpha = 0.25
         ctx.fill()

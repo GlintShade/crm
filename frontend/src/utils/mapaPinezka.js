@@ -45,10 +45,17 @@ export function stylPinezki(kolor, wybrany = false) {
  * kropli. Środek główki leży `r*1.9` nad kotwicą, więc cała pinezka ma
  * wysokość ok. `r*2.9` (główka + trzon do czubka) i szerokość `2r` (średnica
  * główki). `kropkaR` to promień białej kropki rysowanej w środku główki.
+ * `poswiataR` to promień poświaty (halo) rysowanej za wybraną pinezką,
+ * wspólne źródło prawdy dla rysowania (_updatePath w MapaLeadow.vue) i dla
+ * `_updateBounds` -- bez tego pola poświata (promień r*1.9 WOKÓŁ środka
+ * główki, czyli sięgająca 3.8r nad kotwicę) wystawała poza `_pxBounds`
+ * liczone tylko dla samej główki, co Canvas.js przycinał do prostokąta przy
+ * częściowym przerysowaniu (widoczne jako płaskie krawędzie na poświacie
+ * i fuksjowe resztki po odznaczeniu, patrz komentarz przy _updateBounds).
  * Zawsze NOWY, zamrożony obiekt.
  *
  * @param {number} r
- * @returns {{srodekY: number, wysokosc: number, szerokosc: number, kropkaR: number}}
+ * @returns {{srodekY: number, wysokosc: number, szerokosc: number, kropkaR: number, poswiataR: number}}
  */
 export function geometriaPinezki(r) {
   return Object.freeze({
@@ -56,6 +63,7 @@ export function geometriaPinezki(r) {
     wysokosc: r * 2.9,
     szerokosc: r * 2,
     kropkaR: r * 0.42,
+    poswiataR: r * 1.9,
   })
 }
 
