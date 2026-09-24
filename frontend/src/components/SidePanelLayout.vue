@@ -252,7 +252,7 @@
                           v-else-if="field.fieldtype === 'Datetime'"
                           class="form-control"
                         >
-                          <DateTimePicker
+                          <DateTimePickerSiatka
                             :value="doc[field.fieldname]"
                             :format="getFormat('', '', true, true, false)"
                             :placeholder="field.placeholder"
@@ -467,6 +467,7 @@ import ArrowUpRightIcon from '@/components/Icons/ArrowUpRightIcon.vue'
 import EditIcon from '@/components/Icons/EditIcon.vue'
 import Link from '@/components/Controls/Link.vue'
 import TagiProduktowInput from '@/components/Controls/TagiProduktowInput.vue'
+import DateTimePickerSiatka from '@/components/Controls/DateTimePickerSiatka.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import SidePanelModal from '@/components/Modals/SidePanelModal.vue'
 import { getMeta } from '@/stores/meta'
@@ -484,7 +485,7 @@ import {
   interpolateTemplate,
 } from '@/utils'
 import { flt } from '@/utils/numberFormat.js'
-import { Tooltip, DateTimePicker, DatePicker, TimePicker, Switch } from 'frappe-ui'
+import { Tooltip, DatePicker, TimePicker, Switch } from 'frappe-ui'
 import { useDocument } from '@/data/document'
 import {
   ref,

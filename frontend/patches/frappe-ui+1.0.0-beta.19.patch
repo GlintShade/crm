@@ -60,7 +60,7 @@ index a33cf45..ff53dce 100644
              :hide-out-of-month="isDualPaneActive"
              :center-header="isDualPaneActive"
 diff --git a/node_modules/frappe-ui/src/components/DatePicker/DateTimePicker.vue b/node_modules/frappe-ui/src/components/DatePicker/DateTimePicker.vue
-index 0ec591f..09c2486 100644
+index 0ec591f..680ae98 100644
 --- a/node_modules/frappe-ui/src/components/DatePicker/DateTimePicker.vue
 +++ b/node_modules/frappe-ui/src/components/DatePicker/DateTimePicker.vue
 @@ -62,7 +62,7 @@
@@ -72,15 +72,86 @@ index 0ec591f..09c2486 100644
              :min="resolvedMin"
              :max="resolvedMax"
              v-model:focused-date="focusedDate"
-@@ -82,7 +82,7 @@
-               :typeable="props.allowCustomTime"
-               side="bottom"
-               align="start"
+@@ -76,17 +76,31 @@
+             @navigate="onPanelNavigate"
+           />
+           <div class="flex flex-col gap-2 p-2 pt-0">
+-            <TimePicker
+-              ref="timePickerRef"
+-              :modelValue="timeValue"
+-              :typeable="props.allowCustomTime"
+-              side="bottom"
+-              align="start"
 -              placeholder="Select time"
-+              placeholder="Wybierz godzinę"
-               :min="computedMinTime"
-               :max="computedMaxTime"
-               @change="onTimeChange"
+-              :min="computedMinTime"
+-              :max="computedMaxTime"
+-              @change="onTimeChange"
+-            />
++            <!-- VOLTEO PATCH (siatka godzin): named slot for the time part.
++                 Fallback content = upstream TimePicker, so callers without the
++                 slot (filters, Grid, TaskPanel) behave exactly as before. -->
++            <slot
++              name="time"
++              v-bind="{
++                time: timeValue,
++                selected: selectedDate,
++                setTime: onTimeChange,
++                setDate: selectDate,
++                close,
++              }"
++            >
++              <TimePicker
++                ref="timePickerRef"
++                :modelValue="timeValue"
++                :typeable="props.allowCustomTime"
++                side="bottom"
++                align="start"
++                placeholder="Wybierz godzinę"
++                :min="computedMinTime"
++                :max="computedMaxTime"
++                @change="onTimeChange"
++              />
++            </slot>
+           </div>
+         </div>
+       </div>
+diff --git a/node_modules/frappe-ui/src/components/DatePicker/types.ts b/node_modules/frappe-ui/src/components/DatePicker/types.ts
+index ca66aa0..d721fb3 100644
+--- a/node_modules/frappe-ui/src/components/DatePicker/types.ts
++++ b/node_modules/frappe-ui/src/components/DatePicker/types.ts
+@@ -245,6 +245,18 @@ export interface DateTimePickerActionsSlotProps {
+   close: () => void
+ }
+ 
++/**
++ * VOLTEO PATCH (siatka godzin): props bound to the `time` slot on
++ * `DateTimePicker`.
++ */
++export interface DateTimePickerTimeSlotProps {
++  time: string
++  selected: string
++  setTime: (value: string) => void
++  setDate: (date: string | Date | Dayjs) => void
++  close: () => void
++}
++
+ export interface DatePickerSlots {
+   /** Custom trigger renderer for the picker. */
+   trigger?: (props: DatePickerTriggerSlotProps) => any
+@@ -301,6 +313,13 @@ export interface DateTimePickerSlots {
+    * omitted, the popover shows the calendar and time picker only.
+    */
+   actions?: (props: DateTimePickerActionsSlotProps) => any
++
++  /**
++   * VOLTEO PATCH (siatka godzin): custom renderer for the time part below
++   * the calendar. When omitted, the upstream `TimePicker` list renders as
++   * before (filters, Grid, TaskPanel keep the default behaviour).
++   */
++  time?: (props: DateTimePickerTimeSlotProps) => any
+ }
+ 
+ export type DatePickerViewMode = 'date' | 'monthYear'
 diff --git a/node_modules/frappe-ui/src/components/DatePicker/utils.ts b/node_modules/frappe-ui/src/components/DatePicker/utils.ts
 index 7d1ae5d..3bef72f 100644
 --- a/node_modules/frappe-ui/src/components/DatePicker/utils.ts
