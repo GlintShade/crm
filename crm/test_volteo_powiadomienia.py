@@ -264,6 +264,27 @@ class TestZbudujPowiadomienieePrzydzialu(unittest.TestCase):
 		self.assertIn("call center umówiło dla Ciebie spotkanie", d["email_content"])
 		self.assertNotIn("Anna Wiśniewska", d["email_content"])
 
+	def test_e1_bez_terminu_pokaz_przekazujacego_wstawia_nazwisko(
+		self: "TestZbudujPowiadomienieePrzydzialu",
+	) -> None:
+		# Przydział masowy admina/backoffice (crm.api.volteo_leady.przydziel): brak
+		# terminu jest normalny, a przekazujący nie jest CC, więc jego imię i
+		# nazwisko ma się pokazać, nie generyczne "call center".
+		d = zbuduj_powiadomienie_przydzialu(
+			LEAD_MINIMALNY, url=URL, pokaz_przekazujacego=True, przekazujacy="Anna Wiśniewska"
+		)
+		self.assertIn("Anna Wiśniewska przekazał Ci klienta do kontaktu.", d["email_content"])
+		self.assertNotIn("call center przekazało", d["email_content"])
+
+	def test_e2_bez_terminu_bez_pokaz_przekazujacego_tekst_generyczny(
+		self: "TestZbudujPowiadomienieePrzydzialu",
+	) -> None:
+		d = zbuduj_powiadomienie_przydzialu(
+			LEAD_MINIMALNY, url=URL, pokaz_przekazujacego=False, przekazujacy="Anna Wiśniewska"
+		)
+		self.assertIn("call center przekazało Ci klienta do kontaktu.", d["email_content"])
+		self.assertNotIn("Anna Wiśniewska", d["email_content"])
+
 	def test_f_escapuje_nazwisko_przekazujacego_ze_znacznikiem(
 		self: "TestZbudujPowiadomienieePrzydzialu",
 	) -> None:

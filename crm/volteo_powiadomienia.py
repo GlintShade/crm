@@ -13,11 +13,16 @@ Stan sprzed tego modułu (patrz opis w issue ops#182): mail o przydziale leada s
 w całości z rdzenia Frappe (``frappe.desk.form.assign_to`` -> ``Notification Log`` ->
 ``send_notification_email``) - bez terminu spotkania, z linkiem do Desku zamiast do
 ``/crm/leads/<name>`` i z wyciekiem nazwiska CC do handlowca w temacie maila. Ten
-moduł dopisuje własną treść na haku ``Notification Log.before_insert`` (rdzeń
-kopiuje ``subject``/``email_content`` na ``title``/``description`` w swoim
-``before_insert``, więc hak musi biec PRZED tym kopiowaniem i nadpisać oba zestawy
-pól) oraz dokłada osobne powiadomienie o zmianie terminu, którego rdzeń w ogóle nie
-generuje.
+moduł dopisuje własną treść na haku ``Notification Log.before_insert``. Kolejność jest
+istotna: ``Document.run_method`` woła NAJPIERW własny kontroler doctype'u (tu:
+``NotificationLog.before_insert``, który kopiuje ``subject`` -> ``title`` i
+``email_content`` -> ``description``), a DOPIERO POTEM haki ``doc_events`` tego
+samego eventu (zweryfikowane na lokalnym kontenerze, Frappe 15.118) - czyli
+kopiowanie już się wydarzyło, zanim nasz hak w ogóle zacznie działać. Dlatego
+``wzbogac_notification_log`` nadpisuje wszystkie cztery pola naraz (``subject``,
+``title``, ``email_header``, ``email_content``, ``description``), zamiast liczyć na
+to, że zdąży przed kopiowaniem. Moduł dokłada też osobne powiadomienie o zmianie
+terminu, którego rdzeń w ogóle nie generuje.
 
 Wszystkie funkcje budujące treść są immutable: zwracają nowe struktury (dict/str),
 nigdy nie mutują argumentów wejściowych (`lead` w szczególności).
@@ -310,18 +315,24 @@ def zbuduj_powiadomienie_przydzialu(
 		subject = f"Nowy klient do kontaktu: {klient}"
 		email_header = "Nowy klient do kontaktu"
 
-	if not ma_termin:
-		powitanie = "Dzień dobry,<br>call center przekazało Ci klienta do kontaktu."
+	if ma_termin:
+		if pokaz_przekazujacego and przekazujacy:
+			powitanie = (
+				f"Dzień dobry,<br>{html.escape(przekazujacy)} przekazał Ci klienta. "
+				"Poniżej wszystko, czego potrzebujesz przed wizytą."
+			)
+		else:
+			powitanie = (
+				"Dzień dobry,<br>call center umówiło dla Ciebie spotkanie. "
+				"Poniżej wszystko, czego potrzebujesz przed wizytą."
+			)
 	elif pokaz_przekazujacego and przekazujacy:
-		powitanie = (
-			f"Dzień dobry,<br>{html.escape(przekazujacy)} przekazał Ci klienta. "
-			"Poniżej wszystko, czego potrzebujesz przed wizytą."
-		)
+		# Przydział masowy admina/backoffice (crm.api.volteo_leady.przydziel): brak
+		# terminu jest normalny (lead dopiero co trafił do handlowca), a przekazujący
+		# NIE jest CC, więc nie ma powodu maskować go generycznym "call center".
+		powitanie = f"Dzień dobry,<br>{html.escape(przekazujacy)} przekazał Ci klienta do kontaktu."
 	else:
-		powitanie = (
-			"Dzień dobry,<br>call center umówiło dla Ciebie spotkanie. "
-			"Poniżej wszystko, czego potrzebujesz przed wizytą."
-		)
+		powitanie = "Dzień dobry,<br>call center przekazało Ci klienta do kontaktu."
 
 	adres = sklej_adres(lead)
 	blok = _blok_terminu("SPOTKANIE", pelna, godzina, adres, "Termin spotkania nie jest jeszcze ustalony.")
@@ -429,21 +440,38 @@ def wzbogac_notification_log(doc, method: str | None = None) -> None:
 	"""Hak `Notification Log.before_insert` (rejestrowany w `crm/hooks.py`). Rdzeń
 	Frappe (`assign_to.notify_assignment`) tworzy tu wiersz typu "Assignment" dla
 	`CRM Lead`/`CRM Deal`/`CRM Task`, zarówno przy przydziale, jak i przy odebraniu
-	przydziału (`assign_to.set_status`, wołane z `crm.api.doc.remove_assignments`);
-	rozróżniamy oba przypadki po tym, czy dla `doc.for_user` istnieje jeszcze
-	otwarte `ToDo`. Guard `not doc.email_header` chroni przed nadpisaniem wiersza,
-	który już ma treść z innego źródła (nie powinno się zdarzyć w praktyce, ale to
-	tani, tani do sprawdzenia warunek).
+	przydziału (`assign_to.set_status`, wołane z `crm.api.doc.remove_assignments`).
+	Guard `not doc.email_header` chroni przed nadpisaniem wiersza, który już ma
+	treść z innego źródła (nie powinno się zdarzyć w praktyce, ale to tani do
+	sprawdzenia warunek).
 
-	Ten hak biegnie PRZED kontrolerem `NotificationLog.before_insert`, który kopiuje
-	`subject` -> `title` i `email_content` -> `description` - stąd `doc.update(...)`
-	musi nadpisać wszystkie cztery pola (robi to, bo `zbuduj_powiadomienie_*` zwraca
-	komplet), nie tylko `subject`/`email_content`.
+	Kontroler `NotificationLog.before_insert` (kopiuje `subject` -> `title` i
+	`email_content` -> `description`) biegnie PRZED hakami `doc_events` tego samego
+	eventu - `Document.run_method` woła najpierw własną metodę kontrolera, dopiero
+	potem hooki (zweryfikowane na lokalnym kontenerze, Frappe 15.118). Czyli
+	kopiowanie już się wydarzyło, zanim ten hak w ogóle zacznie działać - stąd
+	`doc.update(...)` musi nadpisać wszystkie cztery pola (robi to, bo
+	`zbuduj_powiadomienie_*` zwraca komplet), nie tylko `subject`/`email_content`.
+
+	Rozróżnienie przydział/odebranie NIE odpytuje `ToDo`: wiersz `Notification Log`
+	powstaje w zadaniu RQ (`assign_to._add` -> `notify_assignment` w tle), które
+	potrafi odpalić się, zanim transakcja HTTP-a, który wstawił `ToDo`, w ogóle się
+	zacommitowała - `frappe.db.exists("ToDo", ...)` dla świeżego przydziału umiałby
+	wtedy zwrócić `False` i handlowiec dostałby tekst "przekazany innemu
+	handlowcowi" mimo że właśnie DOSTAŁ leada. Zamiast tego czytamy sygnał, który
+	rdzeń sam już ustawił, bez wyścigu: `assign_to._add` zawsze woła
+	`notify_assignment` z niepustym `description` (domyślnie "Assignment for {0}
+	{1}"), więc wiersz ASSIGN przychodzi z ustawionym `doc.email_content`; ścieżka
+	CLOSE (`assign_to.set_status` -> `notify_assignment(..., description=None)`)
+	przychodzi z pustym `email_content`. `strip_html` odcina tagi/encje rdzenia, a
+	dodatkowy test na `"<img"` łapie przypadek, w którym cały "tekst" to sam obrazek
+	(strip_html zwróciłby dla niego pusty string).
 
 	Owinięte w try/except: błąd tutaj nie ma prawa zablokować wstawienia
 	`Notification Log` (mail z rdzenia, choćby uboższy, jest lepszy niż brak
 	powiadomienia w ogóle)."""
 	import frappe
+	from frappe.utils import strip_html
 
 	try:
 		if not (doc.type == "Assignment" and doc.document_type == "CRM Lead" and not doc.email_header):
@@ -451,21 +479,14 @@ def wzbogac_notification_log(doc, method: str | None = None) -> None:
 
 		lead = frappe.db.get_value("CRM Lead", doc.document_name, list(POLA_LEADA), as_dict=True)
 		if not lead:
+			# Lead jeszcze nie zacommitowany (np. after_insert świeżo utworzonego
+			# leada z od razu ustawionym lead_owner) - po cichu zostawiamy tekst
+			# rdzenia, zamiast dopisywać treść dla leada, którego nie da się
+			# odczytać.
 			return
 
-		# Wciąż otwarte ToDo dla odbiorcy => to nadal aktywny przydział (nawet jeśli
-		# to REassignment po odebraniu komuś innemu). Brak otwartego ToDo => ten
-		# wiersz "Assignment" powstał z ODEBRANIA przydziału temu odbiorcy.
 		wciaz_przypisany = bool(
-			frappe.db.exists(
-				"ToDo",
-				{
-					"reference_type": "CRM Lead",
-					"reference_name": doc.document_name,
-					"allocated_to": doc.for_user,
-					"status": "Open",
-				},
-			)
+			strip_html(doc.email_content or "").strip() or "<img" in (doc.email_content or "")
 		)
 
 		from crm.permissions.org_hierarchy import BYPASS_ROLES, czy_autor_ma_role_cc
