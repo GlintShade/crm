@@ -73,9 +73,11 @@
             class="flex flex-1 flex-col justify-between overflow-hidden"
             style="--sidepanel-column-max-height: none"
           >
-            <!-- VOLTEO (issue #122b): jedna plaska sekcja/33 pola (issue
-                 #122), patrz analogiczny komentarz w Lead.vue -- zdejmujemy
-                 wewnetrzny limit 300px, zeby lista pol nie byla ucinana. -->
+            <!-- VOLTEO (issue #122b, od b62 panel w 5 nazwanych sekcjach
+                 wg osobnego issue ops zamiast jednej plaskiej sekcji z #122),
+                 patrz analogiczny komentarz w Lead.vue -- zdejmujemy
+                 wewnetrzny limit 300px, zeby zadna sekcja poza ostatnia nie
+                 byla ucinana. -->
             <SidePanelLayout
               :sections="sections.data"
               doctype="CRM Lead"

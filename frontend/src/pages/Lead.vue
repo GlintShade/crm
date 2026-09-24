@@ -65,11 +65,11 @@
             class="flex flex-1 flex-col justify-between overflow-hidden"
             style="--sidepanel-column-max-height: none"
           >
-            <!-- VOLTEO (issue #122b): panel leada to od #122 jedna plaska
-                 sekcja bez etykiety z 33 polami (ops/crm-leady-panel-plaski.py).
-                 Zdejmujemy wewnetrzny limit 300px z SidePanelLayout.vue tak
-                 samo jak LeadSzybkiPodglad.vue (ops#112), zeby ta jedna
-                 kolumna nigdy nie byla ucieta gradientem/scrollem -- ta
+            <!-- VOLTEO (issue #122b, od b62 panel w 5 nazwanych sekcjach
+                 wg osobnego issue ops zamiast jednej plaskiej sekcji z #122):
+                 zdejmujemy wewnetrzny limit 300px z SidePanelLayout.vue tak
+                 samo jak LeadSzybkiPodglad.vue (ops#112), zeby zadna sekcja
+                 poza ostatnia nie byla ucieta gradientem/scrollem -- ta
                  zakladka ma wlasny scroll strony (overflow-y-auto na
                  nadrzednym .sections w SidePanelLayout.vue), wiec brak
                  wewnetrznego limitu nie psuje wygladu. -->
@@ -240,8 +240,8 @@
           style="--sidepanel-column-max-height: none"
         >
           <!-- VOLTEO (issue #122b): patrz komentarz przy zakladce Szczegoly
-               wyzej -- ta sama jedna plaska sekcja/33 pola, ten sam zdjety
-               limit, zeby prawy panel boczny nie byl ucinany do 300px.
+               wyzej -- te same nazwane sekcje, ten sam zdjety limit, zeby
+               prawy panel boczny nie byl ucinany do 300px.
                :sections tutaj to sectionsBezEmailaWPrawymPanelu, NIE
                sections.data -- e-mail zostaje widoczny w zakladce
                "Szczegoly" (patrz uzycie wyzej), znika tylko z tego panelu. -->

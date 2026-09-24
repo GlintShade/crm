@@ -35,7 +35,47 @@
                   :key="field.fieldname"
                 >
                   <div
-                    v-if="field.visible"
+                    v-if="field.visible && czyPoleTekstowe(field)"
+                    class="field flex flex-col gap-1 px-3 py-1.5 leading-5 first:mt-3"
+                  >
+                    <Tooltip :text="__(field.label)" :hoverDelay="1">
+                      <div class="flex items-center gap-0.5">
+                        <div class="truncate text-sm text-ink-gray-5">
+                          {{ __(field.label) }}
+                        </div>
+                        <div
+                          v-if="
+                            field.reqd ||
+                            (field.mandatory_depends_on &&
+                              field.mandatory_via_depends_on)
+                          "
+                          class="text-ink-red-5"
+                        >
+                          *
+                        </div>
+                      </div>
+                    </Tooltip>
+                    <div
+                      v-if="field.read_only"
+                      class="whitespace-pre-wrap break-words px-2 py-1 text-base text-ink-gray-5"
+                    >
+                      {{ doc[field.fieldname] }}
+                    </div>
+                    <FormControl
+                      v-else
+                      class="form-control w-full"
+                      type="textarea"
+                      :value="doc[field.fieldname]"
+                      :placeholder="field.placeholder"
+                      :rows="liczWierszeTekstu(doc[field.fieldname])"
+                      :debounce="500"
+                      :ref="(el) => setTextareaRef(field.fieldname, el)"
+                      @input="onTekstoweInput"
+                      @change.stop="fieldChange($event.target.value, field)"
+                    />
+                  </div>
+                  <div
+                    v-else-if="field.visible"
                     class="field flex items-center gap-2 px-3 leading-5 first:mt-3"
                   >
                     <Tooltip
@@ -119,14 +159,7 @@
                           "
                         />
                         <FormControl
-                          v-else-if="
-                            [
-                              'Small Text',
-                              'Text',
-                              'Long Text',
-                              'Code',
-                            ].includes(field.fieldtype)
-                          "
+                          v-else-if="field.fieldtype === 'Code'"
                           class="form-control"
                           type="textarea"
                           :value="doc[field.fieldname]"
@@ -432,6 +465,7 @@ import SidePanelModal from '@/components/Modals/SidePanelModal.vue'
 import { getMeta } from '@/stores/meta'
 import { parseLinkFilters } from '@/utils/fieldTransforms'
 import { czyPoleTagow } from '@/utils/tagiProduktow'
+import { czyPoleTekstowe, liczWierszeTekstu } from '@/utils/panelTekst'
 import { usersStore } from '@/stores/users'
 import { isMobileView } from '@/composables/settings'
 import {
@@ -443,7 +477,14 @@ import {
 import { flt } from '@/utils/numberFormat.js'
 import { Tooltip, DateTimePicker, DatePicker, TimePicker } from 'frappe-ui'
 import { useDocument } from '@/data/document'
-import { ref, computed, getCurrentInstance } from 'vue'
+import {
+  ref,
+  computed,
+  getCurrentInstance,
+  watch,
+  nextTick,
+  onBeforeUnmount,
+} from 'vue'
 
 const props = defineProps({
   sections: { type: Object, default: () => ({}) },
@@ -644,6 +685,49 @@ async function handleButtonClick(field) {
     await triggerButton(field.fieldname)
   }
 }
+
+// Auto-grow pol tekstowych (Small Text/Text/Long Text, issue #177): rows z
+// liczWierszeTekstu() daje sensowna wysokosc od razu (fallback, gdy DOM
+// jeszcze nie zmierzony), a ponizsze dopina textarea do faktycznej tresci po
+// zamontowaniu, na kazdym wpisywaniu i po kazdej zmianie wartosci pola spoza
+// samego pisania (np. odswiezenie dokumentu). frappe-ui Textarea eksponuje
+// natywny element jako `el` (defineExpose), a FormControl -- mimo ze samo
+// nie wola defineExpose -- renderuje Textarea jako jedyny korzen, wiec jego
+// `$el` to ten sam natywny <textarea>.
+const textareaWatchStops = {}
+
+function autoGrow(el) {
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${el.scrollHeight}px`
+}
+
+function onTekstoweInput(event) {
+  autoGrow(event.target)
+}
+
+function setTextareaRef(fieldname, komponent) {
+  const el = komponent?.$el
+  if (el) {
+    autoGrow(el)
+    if (!textareaWatchStops[fieldname]) {
+      textareaWatchStops[fieldname] = watch(
+        () => doc.value[fieldname],
+        () => nextTick(() => autoGrow(el)),
+      )
+    }
+    return
+  }
+
+  // Pole odmontowane (np. field.visible przeszlo na false) -- zatrzymaj
+  // watcher, zeby nie trzymac referencji do odlaczonego DOM.
+  textareaWatchStops[fieldname]?.()
+  delete textareaWatchStops[fieldname]
+}
+
+onBeforeUnmount(() => {
+  Object.values(textareaWatchStops).forEach((stop) => stop())
+})
 
 function firstVisibleIndex() {
   return _sections.value.findIndex((section) => section.visible)
