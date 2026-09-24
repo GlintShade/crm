@@ -217,6 +217,7 @@ import {
   kolorDlaUzytkownika,
   legenda,
   poleObecneWDanych,
+  stylZnacznika,
   wczytajKlastrowanie,
   wczytajTrybKolorowania,
   wczytajUstawieniaDymka,
@@ -501,6 +502,19 @@ watch(leadyPrzefiltrowane, () => rysujMarkery())
 
 const wybranyLead = ref(null)
 
+// Powiększenie pinezki wybranego leada (issue z klik-testu b62, pozycja 9):
+// styl leży TEŻ tutaj, nie tylko w rysujMarkery(), bo watch(leadyPrzefiltrowane, ...)
+// i inne przebudowy warstwy (patrz niżej) wołają rysujMarkery() na każdą
+// zmianę danych/trybu/klastrowania -- gdyby styl "wybrany" żył wyłącznie w
+// click handlerze, kolejna przebudowa zgubiłaby go bez zmiany wybranyLead.
+// Porównanie po `name`, nie po referencji: patchujLeada() podmienia obiekt
+// leada w stan.leady na NOWY (immutability), więc stary===nowy byłoby zawsze
+// false mimo że to wciąż ten sam lead.
+watch(wybranyLead, (nowy, stary) => {
+  if (stary) ustawStylWybranego(stary.name, false)
+  if (nowy) ustawStylWybranego(nowy.name, true)
+})
+
 // Immutable patch (coding-style.md: nowe obiekty, nie mutacja) -- panel
 // emituje tylko status i/lub lead_owner (jedyne pola, po ktorych mapa
 // przebarwia/filtruje pinezke), wiec merge'ujemy wylacznie te dwa klucze,
@@ -562,6 +576,10 @@ let L = null
 let mapInstance = null
 let markerLayer = null
 let dopasowanoWidok = false
+// Nazwa leada -> { marker, lead }, przebudowywana przy każdym rysujMarkery().
+// Pozwala ustawStylWybranego() zmienić styl JEDNEGO markera in-place (klik
+// w inną pinezkę, zamknięcie panelu) bez przebudowy całej warstwy.
+let markeryPoNazwie = new Map()
 
 async function initMap() {
   if (!L) {
@@ -634,8 +652,10 @@ function ikonaKlastra(cluster) {
 // danych już w pamięci (stan.leady) - bez ponownego zapytania do serwera.
 // rysujMarkery() zawsze robi clearLayers()+odtwarza WSZYSTKIE markery od
 // zera (już tak działało dla zmiany trybu kolorowania), więc nie trzeba
-// clusterGroup.refreshClusters() - nie ma markera, na którym robilibyśmy
-// setStyle in-place.
+// clusterGroup.refreshClusters() - jest teraz dokładnie jeden marker, na
+// którym robimy setStyle in-place: wybrany lead (patrz ustawStylWybranego
+// i watch(wybranyLead, ...) wyżej), stylowany od razu wewnątrz
+// rysujMarkery() poniżej, żeby przebudowa nie gubiła powiększenia.
 function przebudujWarstwe() {
   if (!L || !mapInstance) return
   if (markerLayer) {
@@ -649,6 +669,7 @@ function rysujMarkery() {
   if (!L || !mapInstance || !markerLayer) return
 
   markerLayer.clearLayers()
+  markeryPoNazwie.clear()
 
   for (const lead of leadyPrzefiltrowane.value) {
     const jitter = potrzebujeJitteru(lead.custom_geo_dokladnosc)
@@ -657,18 +678,15 @@ function rysujMarkery() {
     if (!isFinite(lat) || !isFinite(lng)) continue
 
     const kolor = kolorLeada(lead)
-    const marker = L.circleMarker([lat, lng], {
-      radius: 6,
-      color: kolor,
-      weight: 1,
-      fillColor: kolor,
-      fillOpacity: 0.75,
-    })
+    const wybrany = lead.name === wybranyLead.value?.name
+    const marker = L.circleMarker([lat, lng], stylZnacznika(kolor, wybrany))
     marker.bindTooltip(() => budujDymek(lead), { direction: 'top' })
     marker.on('click', () => {
       wybranyLead.value = lead
     })
     marker.addTo(markerLayer)
+    markeryPoNazwie.set(lead.name, { marker, lead })
+    if (wybrany) marker.bringToFront()
   }
 
   if (!dopasowanoWidok && leadyPrzefiltrowane.value.length) {
@@ -678,6 +696,18 @@ function rysujMarkery() {
     }
     dopasowanoWidok = true
   }
+}
+
+// Styl "wybrany" na jednej pinezce, in-place, bez przebudowy warstwy (klik w
+// inną pinezkę, zamknięcie panelu przyciskiem X albo Escape -- oba robią
+// wybranyLead = null w komponencie nadrzędnym patrz watch(wybranyLead, ...)
+// wyżej). Brak wpisu w mapie jest normalny: lead odfiltrowany albo bez
+// współrzędnych po prostu nie ma markera.
+function ustawStylWybranego(nazwa, wybrany) {
+  const wpis = markeryPoNazwie.get(nazwa)
+  if (!wpis) return
+  wpis.marker.setStyle(stylZnacznika(kolorLeada(wpis.lead), wybrany))
+  if (wybrany) wpis.marker.bringToFront()
 }
 
 // Etykieta wiersza "Dokładność" w dymku (issue #102) - tylko cztery wartości

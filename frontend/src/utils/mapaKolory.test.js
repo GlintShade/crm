@@ -2,11 +2,14 @@ import {
   DOMYSLNE_KLASTROWANIE,
   DOMYSLNY_TRYB_KOLOROWANIA,
   KOLOR_BRAK,
+  STYL_ZNACZNIKA,
+  STYL_ZNACZNIKA_WYBRANEGO,
   domyslneUstawieniaDymka,
   hashString,
   kolorDlaUzytkownika,
   legenda,
   poleObecneWDanych,
+  stylZnacznika,
   wczytajKlastrowanie,
   wczytajTrybKolorowania,
   wczytajUstawieniaDymka,
@@ -128,6 +131,43 @@ describe('legenda', () => {
   it('pusta lista daje pustą legendę', () => {
     expect(legenda([], 'handlowiec')).toEqual([])
     expect(legenda(undefined, 'status')).toEqual([])
+  })
+})
+
+describe('stylZnacznika', () => {
+  it('domyślnie zwraca promień 6, obwódkę 1, wypełnienie 0.75, kolor na obu kluczach', () => {
+    const styl = stylZnacznika('#dc2626')
+    expect(styl.radius).toBe(6)
+    expect(styl.weight).toBe(1)
+    expect(styl.fillOpacity).toBe(0.75)
+    expect(styl.color).toBe('#dc2626')
+    expect(styl.fillColor).toBe('#dc2626')
+  })
+
+  it('dla wybrany=true zwraca promień 13, obwódkę 3, pełne wypełnienie, ten sam kolor na obu kluczach', () => {
+    const styl = stylZnacznika('#2563eb', true)
+    expect(styl.radius).toBe(13)
+    expect(styl.weight).toBe(3)
+    expect(styl.fillOpacity).toBe(1)
+    expect(styl.color).toBe('#2563eb')
+    expect(styl.fillColor).toBe('#2563eb')
+  })
+
+  it('zwraca nowy obiekt przy każdym wywołaniu i nie mutuje stałych', () => {
+    const a = stylZnacznika('#111111')
+    const b = stylZnacznika('#111111')
+    expect(a).not.toBe(b)
+    expect(Object.isFrozen(STYL_ZNACZNIKA)).toBe(true)
+    expect(Object.isFrozen(STYL_ZNACZNIKA_WYBRANEGO)).toBe(true)
+    expect(STYL_ZNACZNIKA).toEqual({ radius: 6, weight: 1, fillOpacity: 0.75 })
+    expect(STYL_ZNACZNIKA_WYBRANEGO).toEqual({ radius: 13, weight: 3, fillOpacity: 1 })
+  })
+
+  it('styl wybranego jest zawsze większy niż domyślny (promień i obwódka)', () => {
+    const domyslny = stylZnacznika('#000000', false)
+    const wybrany = stylZnacznika('#000000', true)
+    expect(wybrany.radius).toBeGreaterThan(domyslny.radius)
+    expect(wybrany.weight).toBeGreaterThan(domyslny.weight)
   })
 })
 
