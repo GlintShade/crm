@@ -23,6 +23,7 @@ from crm.volteo_lista_szans import (
 	rozpoznaj_filtry_tagu,
 	wzory_tagu,
 )
+from crm.volteo_usuwanie import AUTENTI_STATUSY_BLOKADY, OFERTA_STATUSY_BLOKADY
 
 # Bezpiecznik rozmiaru unii w `rozwin_grupy` (issue #129): patrz jej
 # docstring. Chroni zapytanie `name in [...]` przed nieograniczonym
@@ -1304,11 +1305,15 @@ def remove_assignments(doctype: str, name: str, assignees: str | list):
 
 @frappe.whitelist()
 def can_delete(doctype: str) -> bool:
-	from crm.permissions.delete_lockdown import LOCKED_DELETE_DOCTYPES, is_delete_admin
+	from crm.volteo_usuwanie import czy_wolno_usunac
 
-	if doctype in LOCKED_DELETE_DOCTYPES and not is_delete_admin(frappe.session.user):
-		return False
-	return bool(frappe.has_permission(doctype, ptype="delete"))
+	roles = set(frappe.get_roles(frappe.session.user))
+	# AND, nigdy OR: polityka (czy_wolno_usunac) tylko zawęża, DocPerm
+	# (frappe.has_permission) musi i tak przyznawać delete osobno: backoffice
+	# widzi "Usuń" na szansach dzięki obu naraz (patrz ops#183).
+	return czy_wolno_usunac(doctype, roles, frappe.session.user) and bool(
+		frappe.has_permission(doctype, ptype="delete")
+	)
 
 
 @frappe.whitelist()
@@ -1477,8 +1482,9 @@ DEAL_CASCADE_DOCTYPES = [
 	("Volteo Oferta", "deal"),
 	("Volteo CP Oferta", "deal"),
 ]
-AUTENTI_STATUSY_BLOKADY = {"Wysyłanie", "Wysłana", "Podpisana"}
-OFERTA_STATUSY_BLOKADY = {"Wysłana do podpisu", "Podpisana"}
+# AUTENTI_STATUSY_BLOKADY i OFERTA_STATUSY_BLOKADY mieszkaja teraz w
+# crm.volteo_usuwanie (frappe-free, testowalne), importowane wyzej i
+# zostawione tu importowalne pod dawnymi nazwami dla wstecznej zgodnosci.
 CONTACT_UNLINK_LINK_FIELDS = [("Volteo Oferta", "contact")]
 
 
@@ -1556,37 +1562,47 @@ def remove_linked_doc_reference(items: str | list, remove_contact: bool = False,
 	return "success"
 
 
-def _bezpiecznik_autenti(deal_name: str) -> str | None:
-	"""Blokuje usuniecie CRM Deal, jesli powiazany dokument Volteo ma juz
-	status podpisu (Autenti lub Oferta) — usuniecie kaskadowe skasowaloby
-	prawnie wiazacy dokument."""
+def _bezpiecznik_kaskady(deal_name: str) -> str | None:
+	"""Blokuje usuniecie CRM Deal, jesli ktorys powiazany dokument Volteo ma
+	juz status podpisu (Autenti / Oferta), albo jest audytem zastrzezonym
+	dla administratora (Volteo Audyt CP / Volteo Audyt zatwierdzony):
+	usuniecie kaskadowe skasowaloby prawnie wiazacy dokument, albo obeszloby
+	`delete_guard` / Server Script guard tych dwoch audytow (patrz
+	`_usun_jeden`, ktore usuwa wiersze kaskady z `ignore_permissions=True`,
+	wiec sam DocPerm ich juz nie zatrzyma). Reguly i teksty komunikatow
+	mieszkaja w `crm.volteo_usuwanie.powod_blokady_kaskady`; tu tylko
+	zbieramy wiersze, w tej samej kolejnosci co `DEAL_CASCADE_DOCTYPES`
+	(pierwszy pasujacy wiersz wygrywa)."""
+	from crm.permissions.delete_lockdown import is_delete_admin
+	from crm.volteo_usuwanie import powod_blokady_kaskady
+
+	wiersze = []
 	for cascade_doctype, cascade_field in DEAL_CASCADE_DOCTYPES:
 		if not frappe.db.exists("DocType", cascade_doctype):
 			continue
 
+		if cascade_doctype == "Volteo Audyt CP":
+			for row_name in frappe.get_all(
+				cascade_doctype, filters={cascade_field: deal_name}, pluck="name"
+			):
+				wiersze.append((cascade_doctype, row_name, None))
+			continue
+
 		meta = frappe.get_meta(cascade_doctype)
 		status_field = None
-		blocked_statuses = None
 		if cascade_doctype in ("Volteo Umowa", "Volteo Kredyt") and meta.has_field("autenti_status"):
 			status_field = "autenti_status"
-			blocked_statuses = AUTENTI_STATUSY_BLOKADY
-		elif cascade_doctype == "Volteo Oferta" and meta.has_field("status"):
+		elif cascade_doctype in ("Volteo Oferta", "Volteo Audyt") and meta.has_field("status"):
 			status_field = "status"
-			blocked_statuses = OFERTA_STATUSY_BLOKADY
 
 		if not status_field:
 			continue
 
 		rows = frappe.get_all(cascade_doctype, filters={cascade_field: deal_name}, fields=["name", status_field])
 		for row in rows:
-			status = row.get(status_field)
-			if status in blocked_statuses:
-				return (
-					f"Powiązany dokument {cascade_doctype} {row.name} ma status podpisu "
-					f"„{status}” — podpisanych lub wysłanych do podpisu dokumentów nie wolno usuwać."
-				)
+			wiersze.append((cascade_doctype, row.name, row.get(status_field)))
 
-	return None
+	return powod_blokady_kaskady(wiersze, is_delete_admin(frappe.session.user))
 
 
 def _usun_jeden(doctype: str, name: str, delete_linked: bool) -> None:
@@ -1596,7 +1612,7 @@ def _usun_jeden(doctype: str, name: str, delete_linked: bool) -> None:
 		frappe.throw(_("Brak uprawnień do usunięcia tego rekordu."), frappe.PermissionError)
 
 	if doctype == "CRM Deal":
-		powod = _bezpiecznik_autenti(name)
+		powod = _bezpiecznik_kaskady(name)
 		if powod:
 			frappe.throw(powod, frappe.ValidationError)
 
@@ -1604,7 +1620,19 @@ def _usun_jeden(doctype: str, name: str, delete_linked: bool) -> None:
 			if not frappe.db.exists("DocType", cascade_doctype):
 				continue
 			for row_name in frappe.get_all(cascade_doctype, filters={cascade_field: name}, pluck="name"):
-				frappe.delete_doc(cascade_doctype, row_name)
+				# ignore_permissions=True: autoryzacja juz sprawdzona wyzej
+				# (has_permission "delete" na szansie-rodzicu, na poczatku tej
+				# funkcji), a kazdy wiersz kaskady nalezy WYLACZNIE do tej
+				# jednej szansy (filtr po cascade_field), bez tego backoffice
+				# (delete=0 na np. Volteo Faktura / Volteo Montaz Update /
+				# Volteo Trify Update, tylko read na Volteo Oferta / Volteo CP
+				# Oferta) dostawalby PermissionError w polowie kaskady. Flaga
+				# NIE wylacza on_trash, kontroli linkow ani kasowania plikow
+				# zalacznika (`frappe/model/delete_doc.py`), te dwa strazniki
+				# (Volteo Audyt CP, Volteo Audyt zatwierdzony) nadal dzialaja:
+				# `_bezpiecznik_kaskady` wyzej daje ten sam werdykt wczesniej,
+				# z jednolitym komunikatem.
+				frappe.delete_doc(cascade_doctype, row_name, ignore_permissions=True)
 
 		linked_docs = get_linked_docs_of_document("CRM Deal", name)
 		for linked_doc in linked_docs:

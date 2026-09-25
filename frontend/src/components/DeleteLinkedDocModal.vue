@@ -9,9 +9,11 @@
           <div>
             <h3 class="text-3xl-semibold leading-6 text-ink-gray-9">
               {{
-                linkedDocs?.length == 0
-                  ? __('Delete')
-                  : __('Delete or unlink linked documents')
+                linkedDocs?.length > 0
+                  ? __('Delete or unlink linked documents')
+                  : isDealOstrzezenie
+                    ? ostrzezenieSzansy.tytul
+                    : __('Delete')
               }}
             </h3>
           </div>
@@ -50,7 +52,19 @@
               "
             />
           </div>
-          <div v-if="linkedDocs?.length == 0" class="text-ink-gray-5 text-base">
+          <div v-else-if="isDealOstrzezenie" class="flex flex-col gap-3">
+            <div class="text-ink-gray-8 text-base">
+              {{ ostrzezenieSzansy.akapity[0] }}
+            </div>
+            <div class="flex items-start gap-2 text-ink-red-4 text-base">
+              <FeatherIcon name="alert-triangle" class="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{{ ostrzezenieSzansy.akapity[1] }}</span>
+            </div>
+            <div class="text-ink-gray-8 text-base">
+              {{ ostrzezenieSzansy.akapity[2] }}
+            </div>
+          </div>
+          <div v-else class="text-ink-gray-5 text-base">
             {{
               __('Are you sure you want to delete {0} - {1}?', [
                 props.doctype,
@@ -90,7 +104,7 @@
             v-if="linkedDocs?.length == 0"
             variant="solid"
             icon-left="lucide-trash-2"
-            :label="__('Delete')"
+            :label="isDealOstrzezenie ? ostrzezenieSzansy.etykietaPrzycisku : __('Delete')"
             :loading="isDealCreating"
             theme="red"
             @click="deleteDoc()"
@@ -134,6 +148,7 @@
 import { createResource, call, toast } from 'frappe-ui'
 import { useRouter } from 'vue-router'
 import { computed, ref } from 'vue'
+import { trescOstrzezenia } from '@/utils/usuwanieSzansy'
 
 const show = defineModel({ type: Boolean })
 const router = useRouter()
@@ -143,6 +158,13 @@ const props = defineProps({
   docname: { type: String, required: true },
   reload: { type: Function, default: null },
 })
+
+// Ostrzeżenie ops#183: dla CRM Deal (szansa), zamiast generycznego pytania
+// "Are you sure...", pokazujemy dedykowaną treść (tytuł/akapity/przycisk z
+// usuwanieSzansy.js) w gałęzi bez powiązanych dokumentów (linkedDocs.length
+// == 0), jedynej, w której ten modal faktycznie usuwa CRM Deal wprost.
+const isDealOstrzezenie = computed(() => props.doctype === 'CRM Deal')
+const ostrzezenieSzansy = computed(() => trescOstrzezenia([props.docname]))
 const viewControls = ref({
   selections: [],
   updateSelections: (selections) => {
