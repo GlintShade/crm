@@ -1,11 +1,11 @@
 <!--
-  Modal podglądu zdjęć w zakładce Audyt (OZE i CP): powiększenie w oknie
-  CRM z nawigacją strzałkami/klawiaturą i licznikiem, zamiast otwierania
-  surowego pliku w nowej karcie. Wyłącznie prezentacyjny: dostaje gotową
-  listę pozycji (patrz `zbudujListePodgladu` w `@/utils/audytPodglad`) i
-  aktualny indeks, zero wywołań API i zero logiki uprawnień. PDF-y nie
-  trafiają tu wcale, zostają otwierane w nowej karcie przez
-  AudytPhotoSlot, więc lista zawsze zawiera same obrazy.
+  Modal podglądu zdjęć i wideo w zakładce Audyt (OZE i CP): powiększenie w
+  oknie CRM z nawigacją strzałkami/klawiaturą i licznikiem, zamiast
+  otwierania surowego pliku w nowej karcie. Wyłącznie prezentacyjny: dostaje
+  gotową listę pozycji (patrz `zbudujListePodgladu` w `@/utils/audytPodglad`)
+  i aktualny indeks, zero wywołań API i zero logiki uprawnień. PDF-y nie
+  trafiają tu wcale, zostają otwierane w nowej karcie przez AudytPhotoSlot,
+  więc lista zawiera obrazy i wideo.
 -->
 <template>
   <Dialog
@@ -26,7 +26,25 @@
             :tooltip="__('Poprzednie zdjęcie')"
             @click="poprzednie"
           />
+          <!--
+            `:key` na URL-u wymusza pełny remount elementu przy przejściu do
+            sąsiedniej pozycji, żeby poprzednie wideo faktycznie przestało
+            grać w tle zamiast zostać podmienione samym `src`. `preload=
+            "metadata"` trzyma modal od razu przy otwarciu bez ściągania
+            całego pliku, dociąga treść dopiero po kliknięciu play (galeria
+            CP może trzymać 20 plików po 50 MB).
+          -->
+          <video
+            v-if="jestWideo(aktualny.url)"
+            :key="aktualny.url"
+            :src="aktualny.url"
+            controls
+            playsinline
+            preload="metadata"
+            class="mx-auto max-h-[80vh] max-w-full"
+          />
           <img
+            v-else
             :src="aktualny.url"
             :alt="aktualny.etykieta"
             class="mx-auto max-h-[80vh] max-w-full object-contain"
@@ -58,7 +76,7 @@
 </template>
 
 <script setup>
-import { przesunIndeks } from '@/utils/audytPodglad'
+import { jestWideo, przesunIndeks } from '@/utils/audytPodglad'
 import { Button, Dialog } from 'frappe-ui'
 import { computed, onUnmounted, watch } from 'vue'
 

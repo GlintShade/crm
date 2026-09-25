@@ -244,6 +244,7 @@
                   :value="zdjecia[slot.key] || null"
                   :optional="!isPhotoRequired(slot)"
                   :allow-pdf="!!slot.pdf"
+                  :allow-video="!slot.pdf"
                   doctype="Volteo Audyt"
                   :docname="dealId"
                   :disabled="readOnly"
@@ -265,7 +266,7 @@
             <!-- Additional (optional) photos -->
             <div v-if="editable || zdjeciaDodatkowe.length" class="mt-5">
               <div class="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">
-                {{ __('Zdjęcia dodatkowe (opcjonalne, maks. 5)') }}
+                {{ __('Zdjęcia i filmy dodatkowe (opcjonalne, maks. 5)') }}
               </div>
               <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
                 <AudytPhotoSlot
@@ -276,6 +277,7 @@
                   doctype="Volteo Audyt"
                   :docname="dealId"
                   :disabled="readOnly"
+                  allow-video
                   :preview-key="'extra-' + idx"
                   @change="(u) => onExtraPhotoChange(idx, u)"
                   @preview="otworzPodglad"
@@ -288,6 +290,7 @@
                   doctype="Volteo Audyt"
                   :docname="dealId"
                   :disabled="false"
+                  allow-video
                   @change="onExtraPhotoAdd"
                 />
               </div>
