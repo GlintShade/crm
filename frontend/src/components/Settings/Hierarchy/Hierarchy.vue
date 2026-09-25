@@ -16,11 +16,16 @@
           </Tooltip>
         </div>
         <p class="text-p-base text-ink-gray-6">
-          {{
-            __(
-              'Restrict visibility of Leads and Deals based on a reporting tree.',
-            )
-          }}
+          <template v-if="canEdit">
+            {{
+              __(
+                'Restrict visibility of Leads and Deals based on a reporting tree.',
+              )
+            }}
+          </template>
+          <template v-else>
+            {{ __('Podgląd drzewa podległości. Zmiany wprowadza administrator.') }}
+          </template>
         </p>
       </div>
       <div
@@ -65,12 +70,16 @@
             {{ __('Restrict visibility using a reporting tree') }}
           </span>
           <Button
+            v-if="canEdit"
             variant="solid"
             :loading="fcrmSettings.setValue.loading"
             @click="toggleEnable(false)"
           >
             {{ __('Enable') }}
           </Button>
+          <span v-else class="text-center text-p-base text-ink-gray-6">
+            {{ __('Hierarchia sprzedaży jest wyłączona.') }}
+          </span>
         </div>
       </div>
     </div>
@@ -277,8 +286,12 @@ const ROLE_LABEL = {
   'Sales User': __('Sales User'),
 }
 
-const { users: usersResource, getUserRole, isAdmin } = usersStore()
-const canEdit = computed(() => isAdmin())
+const { users: usersResource, getUserRole, isVolteoAdmin } = usersStore()
+// canEdit: System Manager i Volteo Core Admin (isVolteoAdmin obejmuje oba).
+// Core Admin ma DocPerm write/create/delete od b50 (ops/crm-hierarchia-core-admin.py),
+// a upstream bramkowal isAdmin(), czyli tylko System Manager. Backoffice
+// (Volteo Backend) widzi drzewko wylacznie do odczytu (ops#187).
+const canEdit = computed(() => isVolteoAdmin())
 const { $dialog } = globalStore()
 
 const fcrmSettings = createDocumentResource({
