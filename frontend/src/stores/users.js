@@ -160,6 +160,14 @@ export const usersStore = defineStore('crm-users', () => {
     return getUser(email).roles?.includes('Volteo Call Center') === true
   }
 
+  // Backoffice (Volteo Backend, ops#183): wzorem isCallCenter, surowa
+  // tablica `roles` z get_users. Bez bypassu dla adminow -- miejsca uzycia
+  // (DealsListView.vue) same skladaja isVolteoAdmin() || isBackend(), tak
+  // samo jak isCallCenter powyzej.
+  function isBackend(email) {
+    return getUser(email).roles?.includes('Volteo Backend') === true
+  }
+
   function isWebsiteUser(email) {
     return getUser(email).user_type === 'Website User'
   }
@@ -231,6 +239,7 @@ export const usersStore = defineStore('crm-users', () => {
     isManager,
     isVolteoAdmin,
     isCallCenter,
+    isBackend,
     isSalesUser,
     isTelephonyAgent,
     getUserRole,

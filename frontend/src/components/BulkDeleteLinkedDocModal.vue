@@ -8,14 +8,26 @@
         <div class="mb-6 flex items-center justify-between">
           <div>
             <h3 class="text-3xl-semibold leading-6 text-ink-gray-9">
-              {{ __('Delete') }}
+              {{ isDealOstrzezenie ? ostrzezenieSzansy.tytul : __('Delete') }}
             </h3>
           </div>
           <div class="flex items-center gap-1">
             <Button variant="ghost" icon="lucide-x" @click="show = false" />
           </div>
         </div>
-        <div>
+        <div v-if="isDealOstrzezenie" class="flex flex-col gap-3">
+          <div class="text-ink-gray-8 text-base">
+            {{ ostrzezenieSzansy.akapity[0] }}
+          </div>
+          <div class="flex items-start gap-2 text-ink-red-4 text-base">
+            <FeatherIcon name="alert-triangle" class="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{{ ostrzezenieSzansy.akapity[1] }}</span>
+          </div>
+          <div class="text-ink-gray-8 text-base">
+            {{ ostrzezenieSzansy.akapity[2] }}
+          </div>
+        </div>
+        <div v-else>
           <div class="text-ink-gray-5 text-base">
             {{
               __('Are you sure you want to delete {0} items?', [
@@ -28,7 +40,11 @@
       <div v-if="!resultInfo" class="px-4 pb-7 pt-0 sm:px-6">
         <div class="flex flex-row-reverse gap-2">
           <Button
-            :label="__('Delete {0} items', [props.items.length])"
+            :label="
+              isDealOstrzezenie
+                ? ostrzezenieSzansy.etykietaPrzycisku
+                : __('Delete {0} items', [props.items.length])
+            "
             icon-left="lucide-trash-2"
             variant="solid"
             theme="red"
@@ -130,7 +146,8 @@
 
 <script setup>
 import { call, toast } from 'frappe-ui'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import { trescOstrzezenia } from '@/utils/usuwanieSzansy'
 
 const show = defineModel({ type: Boolean })
 const props = defineProps({
@@ -138,6 +155,13 @@ const props = defineProps({
   items: { type: Array, required: true },
   reload: { type: Function, required: true },
 })
+
+// Ostrzeżenie ops#183: dla CRM Deal (szansa) pierwszy krok pokazuje
+// dedykowaną treść zamiast generycznego pytania "Are you sure...", tylko
+// pierwszy krok/przycisk "Delete"; drugi krok (potwierdzenie) i przycisk
+// "Unlink & Delete" zostają bez zmian, patrz brief agenta.
+const isDealOstrzezenie = computed(() => props.doctype === 'CRM Deal')
+const ostrzezenieSzansy = computed(() => trescOstrzezenia(props.items))
 
 const confirmDeleteInfo = ref({
   show: false,

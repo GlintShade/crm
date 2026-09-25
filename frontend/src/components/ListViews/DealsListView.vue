@@ -224,7 +224,12 @@
     }"
     @loadMore="emit('loadMore')"
   />
-  <ListBulkActions ref="listBulkActionsRef" v-model="list" doctype="CRM Deal" />
+  <ListBulkActions
+    ref="listBulkActionsRef"
+    v-model="list"
+    doctype="CRM Deal"
+    :options="{ hideEdit: !isVolteoAdmin(), hideAssign: !isVolteoAdmin() }"
+  />
 </template>
 
 <script setup>
@@ -307,12 +312,14 @@ function goToDeal(row) {
 
 // Bulk actions (selection checkboxes + the select banner) are restricted to
 // administrative roles: System Manager (via isAdmin) and Volteo Core Admin
-// (the Volteo-specific admin role, folded into isVolteoAdmin). Volteo
-// Backend and Volteo D2D Sales deliberately do not get bulk actions — this
-// only hides the UI, the underlying bulk-action calls remain subject to
-// normal DocPerm checks.
-const { isVolteoAdmin } = usersStore()
-const canSelectRows = computed(() => isVolteoAdmin())
+// (the Volteo-specific admin role, folded into isVolteoAdmin), plus, since
+// ops#183, Volteo Backend, who may only delete (see the ListBulkActions
+// options below: hideEdit/hideAssign hide everything else in that menu for
+// backoffice, can_delete on the server is the real gate). Volteo D2D Sales
+// still deliberately does not get bulk actions: this only hides the UI,
+// the underlying bulk-action calls remain subject to normal DocPerm checks.
+const { isVolteoAdmin, isBackend } = usersStore()
+const canSelectRows = computed(() => isVolteoAdmin() || isBackend())
 
 const isLikeFilterApplied = computed(() => {
   return list.value.params?.filters?._liked_by ? true : false
