@@ -58,6 +58,9 @@ _DEAL_POLA_PREFILL = [
 	"custom_install_postal_code",
 	"custom_voivodeship",
 	"custom_rodzaj_umowy",
+	"custom_istniejaca_pv",
+	"custom_istniejaca_pv_moc_kwp",
+	"custom_ppoz",
 ]
 """Pola `CRM Deal` kopiowane bez zmian do bloku `prefill`."""
 
@@ -85,6 +88,8 @@ _PREFILL_MAPOWANIE: dict[str, str] = {
 	"custom_install_city": "adres_montaz_miasto",
 	"custom_kabel_m": "dodatkowy_kabel_m",
 	"custom_wplata_wlasna": "wklad_wlasny_pln",
+	"custom_istniejaca_pv": "istniejaca_pv",
+	"custom_istniejaca_pv_moc_kwp": "istniejaca_pv_moc_kwp",
 }
 """Mapowanie pole źródłowe (Deal/Contact) → pole `Volteo Umowa`, dopisywane do `prefill`.
 
@@ -98,6 +103,15 @@ Celowo BEZ mapowania: `adres_montaz_nr_domu` i `adres_montaz_nr_mieszkania`. Dea
 przechowuje adres montażu jako jedno pole tekstowe (`custom_install_address`) bez
 wydzielonego numeru domu/mieszkania — NIE wyciągać ich regexem z tego stringa. Te dwa
 pola formularza zostają puste, do ręcznego wypełnienia przez przedstawiciela.
+
+`custom_istniejaca_pv` i `custom_istniejaca_pv_moc_kwp` (ops#194) prefillują
+odpowiedź kalkulatora OZE o istniejącej instalacji klienta: przedstawiciel może
+je na formularzu umowy dowolnie poprawić, prefill jest tylko punktem startowym.
+`custom_ppoz` jest CELOWO bez wpisu w tym słowniku: to nie jest pole formularza
+umowy, tylko sygnał wejściowy dla `ppoz_wymagane()` po stronie serwera (patrz
+`_wyliczenia`/`volteo_umowa_save` niżej) i dla `ppozWymagane()` po stronie
+frontendu, który czyta je wprost z `prefill.custom_ppoz` (surowy klucz Deal,
+zostaje w `prefill` bez mapowania, jak każdy wpis `_DEAL_POLA_PREFILL`).
 """
 
 _DANE_POLA_DOZWOLONE = [
@@ -344,7 +358,12 @@ def _wyliczenia(
 	return {
 		"miejsce_montazu": miejsce,
 		"pokrycie_dachowe": pokrycie,
-		"ppoz_wymagane": ppoz_wymagane(deal_doc.get("custom_pv_power_kwp"), moc_istniejaca, istniejaca_pv),
+		# `deal_doc.get("custom_ppoz")` zwraca None, gdy pole nie istnieje jeszcze
+		# w schemacie (ops skrypt jeszcze nie uruchomiony), bezpieczne, bo `None`
+		# zostawia regułę progową bez zmian, patrz docstring `ppoz_wymagane` (ops#194).
+		"ppoz_wymagane": ppoz_wymagane(
+			deal_doc.get("custom_pv_power_kwp"), moc_istniejaca, istniejaca_pv, deal_doc.get("custom_ppoz")
+		),
 		"kwota_kredytu_pln": kwota_kredytu(deal_doc.get("deal_value"), wklad, finansowanie),
 		"brakujace_pola": brakujace_pola(dane_do_walidacji),
 		"brakujace_dane_klienta": brakujace_dane_klienta(kontakt_dane),
@@ -481,6 +500,19 @@ def volteo_umowa_create(deal: str) -> dict[str, Any]:
 					"status": "Roboczy",
 					"dodatkowy_kabel_m": deal_doc.get("custom_kabel_m"),
 					"wklad_wlasny_pln": deal_doc.get("custom_wplata_wlasna"),
+					# ops#194: świeżo utworzony rekord od razu niesie odpowiedź kalkulatora
+					# o istniejącej instalacji PLUS przeliczony wymóg PPOŻ, żeby PDF
+					# (`crm/volteo_umowa_pdf.py`, `_stan_bool(umowa.get("ppoz_wymagane"))`)
+					# nie musiał czekać na pierwsze „Zapisz": bez tego dokument utworzony
+					# i od razu wydrukowany (bez edycji) miałby `ppoz_wymagane=None`.
+					"istniejaca_pv": deal_doc.get("custom_istniejaca_pv"),
+					"istniejaca_pv_moc_kwp": deal_doc.get("custom_istniejaca_pv_moc_kwp"),
+					"ppoz_wymagane": ppoz_wymagane(
+						deal_doc.get("custom_pv_power_kwp"),
+						deal_doc.get("custom_istniejaca_pv_moc_kwp"),
+						deal_doc.get("custom_istniejaca_pv"),
+						deal_doc.get("custom_ppoz"),
+					),
 				}
 			)
 			umowa_doc.insert()
@@ -596,10 +628,14 @@ def volteo_umowa_save(deal: str, dane: dict[str, Any]) -> dict[str, Any]:
 	umowa_doc.kwota_kredytu_pln = kwota_kredytu(
 		deal_doc.get("deal_value"), umowa_doc.get("wklad_wlasny_pln"), umowa_doc.get("finansowanie")
 	)
+	# `deal_doc.get("custom_ppoz")` zwraca None, gdy pole nie istnieje jeszcze
+	# w schemacie (ops skrypt jeszcze nie uruchomiony), bezpieczne, bo `None`
+	# zostawia regułę progową bez zmian, patrz docstring `ppoz_wymagane` (ops#194).
 	umowa_doc.ppoz_wymagane = ppoz_wymagane(
 		deal_doc.get("custom_pv_power_kwp"),
 		umowa_doc.get("istniejaca_pv_moc_kwp"),
 		umowa_doc.get("istniejaca_pv"),
+		deal_doc.get("custom_ppoz"),
 	)
 
 	try:

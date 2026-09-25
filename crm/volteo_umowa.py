@@ -99,7 +99,9 @@ def miejsce_i_pokrycie(konstrukcja: str | None) -> tuple[str | None, str | None]
 	return KONSTRUKCJA_MONTAZ.get(konstrukcja.strip(), (None, None))
 
 
-def ppoz_wymagane(moc_nowa_kw: Any, moc_istniejaca_kw: Any, istniejaca_pv: Any) -> bool:
+def ppoz_wymagane(
+	moc_nowa_kw: Any, moc_istniejaca_kw: Any, istniejaca_pv: Any, ppoz_kalkulator: Any = None
+) -> bool:
 	"""Czy wymagana jest zgoda PPOŻ.
 
 	Zgodnie z umową próg dotyczy SUMY mocy nowej instalacji i ewentualnej
@@ -115,7 +117,21 @@ def ppoz_wymagane(moc_nowa_kw: Any, moc_istniejaca_kw: Any, istniejaca_pv: Any) 
 	policzyłby się z danych, których formularz jawnie się wyparł. Patrz
 	analogiczna zasada w `crm/volteo_umowa_pdf.py::zbuduj_kontekst` dla pól
 	drukowanych na PDF-ie (ops#145).
+
+	`ppoz_kalkulator` (ops#194, decyzja właściciela 2026-09-25) to odpowiedź
+	kalkulatora OZE (`CRM Deal.custom_ppoz`), który już doliczył klientowi
+	koszt uzgodnień PPOŻ do ceny w momencie wyceny. Gdy ta wartość to
+	dokładnie `"Tak"`, wynik jest `True` NIEZALEŻNIE od sumy mocy: umowa nie
+	ma prawa wyjść na "Nie", skoro klient już za to zapłacił. Każda inna
+	wartość ("Nie", `None`, pusty string, coś nierozpoznanego) zostawia
+	istniejącą regułę progu bez zmian. Dopasowanie jest dokładne (jak przy
+	`istniejaca_pv == "Tak"` wyżej), same białe znaki albo inna wielkość
+	liter ("tak") NIE są akceptowane. Parametr jest opcjonalny, żeby
+	dotychczasowe trzyargumentowe wywołania (np. w istniejących testach)
+	nadal działały bez zmian.
 	"""
+	if ppoz_kalkulator == "Tak":
+		return True
 	moc_istniejaca_liczona = moc_istniejaca_kw if istniejaca_pv == "Tak" else None
 	suma = _decimal_lub_zero(moc_nowa_kw) + _decimal_lub_zero(moc_istniejaca_liczona)
 	return suma > PROG_PPOZ_KW

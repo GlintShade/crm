@@ -375,15 +375,18 @@
             <FormControl
               type="text"
               :label="__('PPOŻ wymagane')"
-              :model-value="wyliczenia.ppoz_wymagane ? __('Tak') : __('Nie')"
+              :model-value="ppozWymaganeLive ? __('Tak') : __('Nie')"
               disabled
             />
             <div class="mt-1 text-xs text-ink-gray-4">
               {{
                 __(
-                  'Ustawiane automatycznie, gdy suma mocy nowej i istniejącej instalacji przekracza 6,5 kW.',
+                  'Ustawiane automatycznie: Tak, gdy kalkulator doliczył uzgodnienia PPOŻ albo gdy suma mocy nowej i istniejącej instalacji przekracza 6,5 kW.',
                 )
               }}
+            </div>
+            <div v-if="prefill?.custom_ppoz === 'Tak'" class="mt-1 text-xs text-ink-gray-4">
+              {{ __('Doliczone w kalkulatorze.') }}
             </div>
           </div>
         </section>
@@ -414,6 +417,7 @@ import ContactModal from '@/components/Modals/ContactModal.vue'
 import { Badge, Button, FormControl, Switch, call, createResource, toast } from 'frappe-ui'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { formatPlnAmount } from '@/utils/money'
+import { ppozWymagane } from '@/utils/pvForm'
 import { useAutenti } from '@/composables/useAutenti'
 import { canSend } from '@/utils/autentiStatus'
 
@@ -980,6 +984,19 @@ const kwotaKredytu = computed(() => {
   return Math.max(0, dealValue - wklad)
 })
 const kwotaKredytuDisplay = computed(() => formatPlnAmount(kwotaKredytu.value))
+
+// ops#194: ta sama reguła co na serwerze (`crm/volteo_umowa.py::ppoz_wymagane`),
+// przeliczana na żywo z pól formularza dla natychmiastowej podpowiedzi w trakcie
+// wpisywania danych, serwer i tak przelicza i nadpisuje wynik przy każdym
+// zapisie (`volteo_umowa_save`), to tylko podgląd, nigdy wartość wysyłana do API.
+const ppozWymaganeLive = computed(() =>
+  ppozWymagane({
+    mocNowaKw: prefill.value?.custom_pv_power_kwp,
+    istniejacaPv: form.istniejaca_pv,
+    mocIstniejacaKwp: form.istniejaca_pv_moc_kwp,
+    ppozKalkulator: prefill.value?.custom_ppoz,
+  }),
+)
 
 // Server-authoritative derived values. `null` means the chosen konstrukcja in
 // the calculator wasn't recognised — show a clear Polish note, not a blank gap.
