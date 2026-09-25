@@ -48,9 +48,10 @@
             icon-left="lucide-trash-2"
             variant="solid"
             theme="red"
-            @click="confirmDelete()"
+            @click="isDealOstrzezenie ? usunSzanse() : confirmDelete()"
           />
           <Button
+            v-if="!isDealOstrzezenie"
             :label="__('Unlink & Delete {0} items', [props.items.length])"
             icon-left="lucide-unlock"
             variant="solid"
@@ -157,9 +158,9 @@ const props = defineProps({
 })
 
 // Ostrzeżenie ops#183: dla CRM Deal (szansa) pierwszy krok pokazuje
-// dedykowaną treść zamiast generycznego pytania "Are you sure...", tylko
-// pierwszy krok/przycisk "Delete"; drugi krok (potwierdzenie) i przycisk
-// "Unlink & Delete" zostają bez zmian, patrz brief agenta.
+// dedykowaną treść zamiast generycznego pytania "Are you sure...". Decyzja
+// właściciela "jedno okno, jeden przycisk" (patrz usunSzanse() niżej) chowa
+// przycisk "Unlink & Delete" i pomija drugi krok potwierdzenia.
 const isDealOstrzezenie = computed(() => props.doctype === 'CRM Deal')
 const ostrzezenieSzansy = computed(() => trescOstrzezenia(props.items))
 
@@ -189,6 +190,13 @@ const confirmDelete = () => {
     ]),
     delete: true,
   }
+}
+
+// ops#183, decyzja właściciela "jedno okno, jeden przycisk": dla szansy
+// czerwony przycisk usuwa od razu, bez drugiego kroku potwierdzenia.
+const usunSzanse = () => {
+  confirmDeleteInfo.value = { show: false, title: '', delete: true }
+  deleteDocs()
 }
 
 const confirmUnlink = () => {
