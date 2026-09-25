@@ -21,10 +21,16 @@
   montowaniu, a ta zakładka montuje się zanim usersStore się załaduje —
   dlatego edytorowi przekazujemy `mentionsKonfig` (getter), nie listę
   bezpośrednio; patrz komentarz przy `mentionsKonfig` niżej.
+
+  `konfig.zdjecia === true` (tylko MONTAZ, ops#191) montuje nad kartą
+  "Dodaj wpis" galerię MontazZdjecia.vue, "Zdjęcia z realizacji" - jedna
+  wspólna galeria dla całej szansy, niezależna od wpisów tego strumienia.
 -->
 <template>
   <div class="flex flex-1 flex-col overflow-y-auto p-5">
     <div class="mx-auto flex w-full max-w-3xl flex-col gap-5">
+      <MontazZdjecia v-if="konfig.zdjecia" :deal-id="dealId" />
+
       <!-- Dodaj wpis -->
       <div class="rounded-lg border border-outline-gray-2 p-4">
         <div class="mb-3 flex items-center gap-2">
@@ -100,6 +106,7 @@
 <script setup>
 import { Badge, Button, FormControl, TextEditor, call, createResource, toast } from 'frappe-ui'
 import { reactive, ref, computed } from 'vue'
+import MontazZdjecia from '@/components/deal/MontazZdjecia.vue'
 import { usersStore } from '@/stores/users.js'
 import { sanitizeHTML } from '@/utils'
 import { tekstPusty } from '@/utils/aktualizacje'

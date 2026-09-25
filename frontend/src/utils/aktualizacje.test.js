@@ -1,4 +1,4 @@
-import { MONTAZ, TRIFY, tekstPusty } from '@/utils/aktualizacje'
+import { MONTAZ, TRIFY, tekstPusty, zdjeciaDoGalerii } from '@/utils/aktualizacje'
 
 function bezDuplikatow(arr) {
   return new Set(arr).size === arr.length
@@ -40,6 +40,59 @@ describe('konfiguracje strumieni aktualizacji', () => {
   it('doctype odpowiada oczekiwanym Frappe doctype', () => {
     expect(MONTAZ.doctype).toBe('Volteo Montaz Update')
     expect(TRIFY.doctype).toBe('Volteo Trify Update')
+  })
+
+  it('MONTAZ.zdjecia jest true (galeria zdjec z realizacji, ops#191)', () => {
+    expect(MONTAZ.zdjecia).toBe(true)
+  })
+
+  it('TRIFY.zdjecia jest falsy (bez galerii)', () => {
+    expect(TRIFY.zdjecia).toBeFalsy()
+  })
+})
+
+describe('zdjeciaDoGalerii', () => {
+  it('zwraca [] dla nie-tablicy', () => {
+    expect(zdjeciaDoGalerii(undefined)).toEqual([])
+    expect(zdjeciaDoGalerii(null)).toEqual([])
+    expect(zdjeciaDoGalerii('nie tablica')).toEqual([])
+    expect(zdjeciaDoGalerii({})).toEqual([])
+  })
+
+  it('zwraca [] dla pustej tablicy', () => {
+    expect(zdjeciaDoGalerii([])).toEqual([])
+  })
+
+  it('pomija wiersze bez name lub bez file_url', () => {
+    const wiersze = [
+      { name: 'File-1', file_url: '/files/a.jpg', file_name: 'a.jpg' },
+      { file_url: '/files/b.jpg', file_name: 'b.jpg' },
+      { name: 'File-3', file_name: 'c.jpg' },
+      null,
+      undefined,
+    ]
+    expect(zdjeciaDoGalerii(wiersze)).toEqual([
+      { klucz: 'File-1', url: '/files/a.jpg', etykieta: 'a.jpg' },
+    ])
+  })
+
+  it('zachowuje kolejnosc wejsciowa', () => {
+    const wiersze = [
+      { name: 'File-1', file_url: '/files/a.jpg', file_name: 'a.jpg' },
+      { name: 'File-2', file_url: '/files/b.jpg', file_name: 'b.jpg' },
+      { name: 'File-3', file_url: '/files/c.jpg', file_name: 'c.jpg' },
+    ]
+    expect(zdjeciaDoGalerii(wiersze).map((z) => z.klucz)).toEqual(['File-1', 'File-2', 'File-3'])
+  })
+
+  it('mapuje name na klucz i zwraca url oraz etykiete', () => {
+    const wiersze = [{ name: 'File-1', file_url: '/files/a.jpg', file_name: 'a.jpg' }]
+    expect(zdjeciaDoGalerii(wiersze)).toEqual([{ klucz: 'File-1', url: '/files/a.jpg', etykieta: 'a.jpg' }])
+  })
+
+  it('etykieta jest pustym stringiem gdy brak file_name', () => {
+    const wiersze = [{ name: 'File-1', file_url: '/files/a.jpg' }]
+    expect(zdjeciaDoGalerii(wiersze)).toEqual([{ klucz: 'File-1', url: '/files/a.jpg', etykieta: '' }])
   })
 })
 
