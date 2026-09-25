@@ -1,6 +1,9 @@
 import {
+  ROZSZERZENIA_WIDEO,
+  TYPY_PLIKOW_WIDEO,
   indeksDlaKlucza,
   jestPdf,
+  jestWideo,
   nazwaPlikuZUrl,
   przesunIndeks,
   zbudujListePodgladu,
@@ -63,6 +66,53 @@ describe('nazwaPlikuZUrl', () => {
   })
 })
 
+describe('jestWideo', () => {
+  it.each(['mp4', 'mov', 'webm', 'm4v'])('rozpoznaje rozszerzenie .%s', (rozszerzenie) => {
+    expect(jestWideo(`/private/files/nagranie.${rozszerzenie}`)).toBe(true)
+  })
+
+  it('odporne na wielkość liter (.MP4, .MOV)', () => {
+    expect(jestWideo('/private/files/NAGRANIE.MP4')).toBe(true)
+    expect(jestWideo('/private/files/NAGRANIE.MOV')).toBe(true)
+  })
+
+  it('odporne na ?query po rozszerzeniu', () => {
+    expect(jestWideo('/private/files/nagranie.mp4?v=123')).toBe(true)
+  })
+
+  it('odporne na #hash po rozszerzeniu', () => {
+    expect(jestWideo('/private/files/nagranie.webm#t=5')).toBe(true)
+  })
+
+  it('nie rozpoznaje obrazu ani PDF-a', () => {
+    expect(jestWideo('/private/files/zdjecie.jpg')).toBe(false)
+    expect(jestWideo('/private/files/zdjecie.png')).toBe(false)
+    expect(jestWideo('/private/files/faktura.pdf')).toBe(false)
+  })
+
+  it('nie daje się zmylić rozszerzeniem wideo w środku nazwy', () => {
+    expect(jestWideo('/private/files/film.mp4.jpg')).toBe(false)
+  })
+
+  it('null/undefined/pusty string -> false', () => {
+    expect(jestWideo(null)).toBe(false)
+    expect(jestWideo(undefined)).toBe(false)
+    expect(jestWideo('')).toBe(false)
+  })
+})
+
+describe('TYPY_PLIKOW_WIDEO', () => {
+  it('nie zawiera wpisu video/* (celowo, żeby nie dopuszczać wszystkich formatów wideo)', () => {
+    expect(TYPY_PLIKOW_WIDEO).not.toContain('video/*')
+  })
+
+  it('zawiera kropka-rozszerzenie dla każdego wpisu z ROZSZERZENIA_WIDEO', () => {
+    for (const rozszerzenie of ROZSZERZENIA_WIDEO) {
+      expect(TYPY_PLIKOW_WIDEO).toContain(`.${rozszerzenie}`)
+    }
+  })
+})
+
 describe('zbudujListePodgladu', () => {
   it('zachowuje kolejność wejściową i pomija PDF-y oraz puste sloty', () => {
     const wejscie = [
@@ -74,6 +124,18 @@ describe('zbudujListePodgladu', () => {
     expect(zbudujListePodgladu(wejscie)).toEqual([
       { klucz: 'a', url: '/private/files/a.jpg', etykieta: 'A' },
       { klucz: 'd', url: '/private/files/d.png', etykieta: 'D' },
+    ])
+  })
+
+  it('zachowuje wideo obok obrazu w kolejności wejściowej i pomija PDF', () => {
+    const wejscie = [
+      { klucz: 'a', url: '/private/files/a.jpg', etykieta: 'A' },
+      { klucz: 'b', url: '/private/files/b.mp4', etykieta: 'B' },
+      { klucz: 'c', url: '/private/files/c.pdf', etykieta: 'C' },
+    ]
+    expect(zbudujListePodgladu(wejscie)).toEqual([
+      { klucz: 'a', url: '/private/files/a.jpg', etykieta: 'A' },
+      { klucz: 'b', url: '/private/files/b.mp4', etykieta: 'B' },
     ])
   })
 

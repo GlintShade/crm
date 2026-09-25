@@ -1,9 +1,11 @@
 <!--
-  Audyt photo slot — a single named photo tile inside the Audyt tab's photo
-  grid (Dokumentacja zdjęciowa). Empty tiles open FilesUploader (camera or
-  device); filled tiles show a thumbnail with hover/touch overlay actions to
-  replace or remove. Purely presentational — the parent (AudytTab) owns the
-  `zdjecia` map and persists it via `zdjecia_json`.
+  Audyt photo slot, a single named tile inside the Audyt tab's photo grid
+  (Dokumentacja zdjęciowa). Holds a photo, a video (photo slots only, never
+  document slots), or a PDF (document slots only). Empty tiles open
+  FilesUploader (camera or device); filled tiles show a thumbnail (or an
+  icon tile for video/PDF) with hover/touch overlay actions to replace or
+  remove. Purely presentational, the parent (AudytTab) owns the `zdjecia`
+  map and persists it via `zdjecia_json`.
 -->
 <template>
   <div class="flex flex-col gap-1.5">
@@ -48,12 +50,20 @@
         :aria-label="verdictStatus"
       />
       <img
-        v-if="!isPdfValue"
+        v-if="!isPdfValue && !isVideoValue"
         :src="value"
         :alt="label"
         class="h-full w-full cursor-pointer object-cover"
         @click="openFullImage"
       />
+      <div
+        v-else-if="isVideoValue"
+        class="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 px-2"
+        @click="openFullImage"
+      >
+        <FileVideoIcon class="size-8 text-ink-gray-5" />
+        <span class="w-full truncate text-center text-xs text-ink-gray-6">{{ fileNameFromUrl }}</span>
+      </div>
       <div
         v-else
         class="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 px-2"
@@ -132,8 +142,9 @@
 
 <script setup>
 import FileTextIcon from '@/components/Icons/FileTextIcon.vue'
+import FileVideoIcon from '@/components/Icons/FileVideoIcon.vue'
 import FilesUploader from '@/components/FilesUploader/FilesUploader.vue'
-import { jestPdf, nazwaPlikuZUrl } from '@/utils/audytPodglad'
+import { TYPY_PLIKOW_WIDEO, jestPdf, jestWideo, nazwaPlikuZUrl } from '@/utils/audytPodglad'
 import { VERDICT_META } from '@/utils/audytWeryfikacja'
 import { Button } from 'frappe-ui'
 import { computed, ref } from 'vue'
@@ -149,6 +160,11 @@ const props = defineProps({
   // slot); true only for the one slot the server flags with `pdf: 1`
   // (faktura_energia) — see AudytTab's `visiblePhotoSlots` pass-through.
   allowPdf: { type: Boolean, default: false },
+  // Absent/false means no video, the safe default for every document slot
+  // (allowPdf ones); true only for photo slots: OZE named slots without
+  // `slot.pdf`, OZE extra photos, and the CP photo gallery. Never combined
+  // with allowPdf.
+  allowVideo: { type: Boolean, default: false },
   // Decoration only, set by AudytTab while the audit is in Weryfikacja —
   // one of 'waiting'/'accepted'/'error', or null outside that stage. The
   // verdict *controls* (accept/error/undo) live in the parent
@@ -186,20 +202,26 @@ const displayLabel = computed(() =>
   props.optional ? `${props.label} ${__('(opcjonalne)')}` : props.label,
 )
 
-const uploaderOptions = computed(() => ({
-  folder: 'Home/Attachments',
-  allowMultiple: false,
-  restrictions: {
-    maxNumberOfFiles: 1,
-    allowedFileTypes: props.allowPdf ? ['image/*', 'application/pdf'] : ['image/*'],
-  },
-}))
+const uploaderOptions = computed(() => {
+  const allowedFileTypes = ['image/*']
+  if (props.allowPdf) allowedFileTypes.push('application/pdf')
+  if (props.allowVideo) allowedFileTypes.push(...TYPY_PLIKOW_WIDEO)
+  return {
+    folder: 'Home/Attachments',
+    allowMultiple: false,
+    restrictions: {
+      maxNumberOfFiles: 1,
+      allowedFileTypes,
+    },
+  }
+})
 
 // Detected from the stored file URL, not the upload restriction — a slot's
 // existing value may have been uploaded back when only images were allowed,
-// or `allowPdf` may have changed since. Query/hash suffixes are stripped
-// before checking the extension.
+// or `allowPdf`/`allowVideo` may have changed since. Query/hash suffixes are
+// stripped before checking the extension.
 const isPdfValue = computed(() => jestPdf(props.value))
+const isVideoValue = computed(() => jestWideo(props.value))
 
 const fileNameFromUrl = computed(() => nazwaPlikuZUrl(props.value))
 
@@ -214,8 +236,8 @@ function removePhoto() {
 }
 
 // PDF-y zostają otwierane w nowej karcie (natywna przeglądarka PDF jest
-// lepsza niż iframe w modalu), decyzja właściciela. Obrazy otwierają się
-// w podglądzie w oknie CRM zamiast wychodzić poza aplikację; rodzic (nie
+// lepsza niż iframe w modalu), decyzja właściciela. Obrazy i wideo otwierają
+// się w podglądzie w oknie CRM zamiast wychodzić poza aplikację; rodzic (nie
 // ten komponent) decyduje, który indeks pokazać, więc tylko emitujemy.
 function openFullImage() {
   if (!props.value) return

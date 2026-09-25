@@ -24,9 +24,45 @@ export function nazwaPlikuZUrl(url) {
   }
 }
 
+// Rozszerzenia plików wideo dopuszczonych tam, gdzie dziś można wgrywać
+// zdjęcia (sloty OZE bez flagi pdf, dodatkowe zdjęcia OZE, galeria CP).
+// Sloty dokumentów (allowPdf) nie dostają wideo, ich lista formatów zostaje
+// bez zmian.
+export const ROZSZERZENIA_WIDEO = ['mp4', 'mov', 'webm', 'm4v']
+
+// Lista dla `allowedFileTypes` uploadera na slotach z `allowVideo`: MIME
+// plus kropka-rozszerzenie. Rozszerzenia są konieczne, nie kosmetyczne:
+// Android czasem podaje puste `file.type`, a `checkRestrictions` w
+// FilesUploaderArea.vue dopasowuje wpisy MIME wyrażeniem regularnym, a
+// wpisy z kropką po rozszerzeniu nazwy pliku. Celowo nigdy `video/*`.
+export const TYPY_PLIKOW_WIDEO = [
+  'video/mp4',
+  'video/quicktime',
+  'video/webm',
+  'video/x-m4v',
+  '.mp4',
+  '.mov',
+  '.webm',
+  '.m4v',
+]
+
+const WZORZEC_WIDEO = new RegExp(
+  `\\.(?:${ROZSZERZENIA_WIDEO.join('|')})(?:[?#]|$)`,
+  'i',
+)
+
+// Rozpoznaje, czy dany URL wskazuje na plik wideo (odporne na `?query`/
+// `#hash` i wielkość liter), ta sama reguła co `jestPdf`, tylko dla
+// rozszerzeń z ROZSZERZENIA_WIDEO.
+export function jestWideo(url) {
+  return WZORZEC_WIDEO.test(url || '')
+}
+
 // Buduje nową listę pozycji do podglądu (kolejność wejściowa zachowana),
 // pomijając sloty bez URL-a i sloty z PDF-em (PDF-y zostają otwierane w
-// nowej karcie, nigdy w modalu). Nie mutuje wejściowej tablicy.
+// nowej karcie, nigdy w modalu). Wideo zostaje na liście i jest renderowane
+// przez modal (AudytPodgladZdjec) obok obrazów. Nie mutuje wejściowej
+// tablicy.
 export function zbudujListePodgladu(pozycje) {
   if (!Array.isArray(pozycje)) return []
   return pozycje.filter((p) => p && p.url && !jestPdf(p.url))

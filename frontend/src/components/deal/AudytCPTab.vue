@@ -206,6 +206,7 @@
               doctype="Volteo Audyt CP"
               :docname="dealId"
               :disabled="readOnly"
+              allow-video
               :preview-key="'zdjecie-' + idx"
               @change="(u) => onZdjecieChange(idx, u)"
               @preview="otworzPodglad"
@@ -213,11 +214,12 @@
             <AudytPhotoSlot
               v-if="editable && zdjeciaList.length < MAX_ZDJEC"
               :key="'zdjecie-new-' + zdjeciaList.length"
-              :label="__('Dodaj zdjęcie')"
+              :label="__('Dodaj zdjęcie lub film')"
               :value="null"
               doctype="Volteo Audyt CP"
               :docname="dealId"
               :disabled="false"
+              allow-video
               @change="onZdjecieAdd"
             />
           </div>
