@@ -170,6 +170,25 @@
                 </div>
 
                 <div>
+                  <div class="mb-0.5 text-sm text-ink-gray-5">Czy klient ma już instalację PV?</div>
+                  <select v-model="sel.istniejacaPv" class="kalk-select">
+                    <option value="Nie">Nie</option>
+                    <option value="Tak">Tak</option>
+                  </select>
+                </div>
+                <div v-if="sel.istniejacaPv === 'Tak'">
+                  <div class="mb-0.5 text-sm text-ink-gray-5">Moc istniejącej instalacji (kWp)</div>
+                  <input v-model.number="sel.istniejacaPvMocKwp" type="number" min="0" step="0.1" class="kalk-input" />
+                </div>
+                <div>
+                  <!-- Read-only: PPOŻ ustalane automatycznie, bez ręcznego
+                       nadpisania (decyzja właściciela, ops#194). -->
+                  <div class="mb-0.5 text-sm text-ink-gray-5">Uzgodnienia PPOŻ<span v-if="ppozWymaganeLive && ppozCena > 0"> · +{{ formatPln(ppozCena) }} netto</span></div>
+                  <div class="text-sm font-medium text-ink-gray-9">{{ ppozWymaganeLive ? 'Tak' : 'Nie' }}</div>
+                  <div class="mt-0.5 text-xs text-ink-gray-4">Ustawiane automatycznie, gdy suma mocy nowej i istniejącej instalacji przekracza 6,5 kW.</div>
+                </div>
+
+                <div>
                   <div class="mb-0.5 text-sm text-ink-gray-5">Operator energetyczny</div>
                   <select v-model="sel.operator" class="kalk-select">
                     <option value="">—</option>
@@ -361,6 +380,7 @@ import {
   suggestedStorageKwh,
   pickBySpec,
   pickMounting,
+  ppozWymagane,
 } from '@/utils/pvForm'
 import { formatPln } from '@/utils/money'
 import { grupujBreakdown } from '@/utils/pvBreakdown'
@@ -410,6 +430,8 @@ const sel = reactive({
   kabelM: 0,
   spoldzielnia: 'Nie',
   licznik: 'Nie',
+  istniejacaPv: 'Nie',
+  istniejacaPvMocKwp: null,
   ulgaPct: 19,
   okresLat: 10, // domyślny okres finansowania 10 lat (decyzja właściciela 2026-09-10, było 5)
   wplataWlasna: 0,
@@ -446,6 +468,15 @@ watch(
   },
 )
 
+// Clearing "Czy klient ma już instalację PV?" back to Nie also clears its
+// power, so a stale value cannot silently re-enter the PPOŻ sum (ops#194).
+watch(
+  () => sel.istniejacaPv,
+  () => {
+    if (sel.istniejacaPv === 'Nie') sel.istniejacaPvMocKwp = null
+  },
+)
+
 // --- Catalog (names + non-secret tags only — no prices ever fetched) -------
 const catMap = reactive({})
 function byKat(kat) {
@@ -476,6 +507,10 @@ async function loadComponents() {
     // add-on, for display in the label only. 0 or missing means unknown; the
     // server remains authoritative and computes the actual amount at calc.
     licznikCena.value = Number(data && data.licznik_dodatkowy) || 0
+    // ppoz: customer list price of PPOZ fire-protection agreements, for
+    // display in the label only. 0 or missing means unknown; the server
+    // remains authoritative and computes the actual amount at calc (ops#194).
+    ppozCena.value = Number(data && data.ppoz) || 0
   } catch (err) {
     errorMsg.value = extractErrorMessage(err)
   }
@@ -625,6 +660,10 @@ const summary = reactive({
   lines: [],
   is_admin: false,
   breakdown: null,
+  // Server-authoritative PPOŻ verdict ("Tak"/"Nie"/"" before the first calc
+  // response); "" means no result yet, so the UI falls back to the local
+  // heuristic in ppozWymaganeLive (ops#194).
+  ppoz: '',
 })
 const grupyBreakdown = computed(() => grupujBreakdown(summary.breakdown))
 
@@ -657,6 +696,26 @@ const dotacjaLimity = ref({})
 // amount. Display only, server stays authoritative.
 const licznikCena = ref(0)
 
+// ppoz comes from volteo_quote_components (loadComponents above); 0 or
+// missing means the price is unknown, so the label shows no amount. Display
+// only, server stays authoritative (ops#194).
+const ppozCena = ref(0)
+
+// Local, presentation-only mirror of the server's PPOŻ rule (ppozWymagane in
+// pvForm.js), so the "Uzgodnienia PPOŻ" row updates live as the rep types,
+// instead of only after the debounced calc response arrives. Once a calc
+// result exists, summary.ppoz (server-authoritative) takes over; the local
+// heuristic stays as the fallback while the form is incomplete or before the
+// first response (ops#194).
+const ppozWymaganeLive = computed(() => {
+  if (summary.ppoz === 'Tak' || summary.ppoz === 'Nie') return summary.ppoz === 'Tak'
+  return ppozWymagane({
+    mocNowaKw: hasPv.value ? sel.mocPvKw : 0,
+    istniejacaPv: sel.istniejacaPv,
+    mocIstniejacaKwp: sel.istniejacaPvMocKwp,
+  })
+})
+
 const narzutValid = computed(() => {
   const n = Number(sel.narzut)
   return !isNaN(n) && n >= 0 && (narzutMax.value <= 0 || n <= narzutMax.value)
@@ -683,6 +742,8 @@ function buildCalcPayload() {
     kabel_m: Number(sel.kabelM) || 0,
     spoldzielnia: sel.spoldzielnia,
     licznik_dodatkowy: sel.licznik,
+    istniejaca_pv: sel.istniejacaPv,
+    istniejaca_pv_moc_kwp: sel.istniejacaPv === 'Tak' ? Number(sel.istniejacaPvMocKwp) || 0 : 0,
     ulga_pct: Number(sel.ulgaPct),
     okres_lat: Number(sel.okresLat),
     wplata_wlasna: Number(sel.wplataWlasna) || 0,
@@ -698,6 +759,7 @@ function clearSummary() {
   summary.lines = []
   summary.is_admin = false
   summary.breakdown = null
+  summary.ppoz = ''
 }
 
 // --- Live pricing (server-side; debounced) ----------------------------------
@@ -707,6 +769,7 @@ watch(
     sel.typKlienta, sel.variant, sel.producent, sel.falownik, sel.bateria,
     sel.panel, sel.mocPvKw, sel.konstrukcja, sel.kabelM, sel.spoldzielnia, sel.licznik, sel.ulgaPct,
     sel.okresLat, sel.wplataWlasna, sel.narzut, sel.zasadyDotacji,
+    sel.istniejacaPv, sel.istniejacaPvMocKwp,
   ],
   () => {
     if (calcTimer) clearTimeout(calcTimer)
@@ -736,6 +799,7 @@ async function runCalc() {
     summary.lines = data.lines || []
     summary.is_admin = !!data.is_admin
     summary.breakdown = data.is_admin ? data.breakdown || null : null
+    summary.ppoz = data.ppoz || ''
   } catch (err) {
     clearSummary()
     errorMsg.value = extractErrorMessage(err)
