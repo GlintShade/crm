@@ -816,20 +816,6 @@ function ustawStylWybranego(nazwa, wybrany) {
   if (wybrany) wpis.marker.bringToFront()
 }
 
-// Etykieta wiersza "Dokładność" w dymku (issue #102) - tylko cztery wartości
-// niosące realną informację o precyzji geokodu; "brak"/pusty custom_geo_dokladnosc
-// (backend jeszcze nie policzył albo nie znalazł trafienia) celowo bez etykiety,
-// żeby `if (!value) continue` w pętli budującej dymek pominęło ten wiersz.
-function etykietaDokladnosciGeokodu(dokladnosc) {
-  const etykiety = {
-    adres: __('adres'),
-    ulica: __('ulica'),
-    miejscowosc: __('miejscowość'),
-    kod: __('kod pocztowy'),
-  }
-  return etykiety[dokladnosc] || ''
-}
-
 // Dymek pinezki (hover, Leaflet Tooltip) -- skrot: nazwa, miasto, status,
 // zrodlo importu, obecne produkty, status zrodla. Klik w pinezke otwiera
 // panel LeadSzybkiPodglad.vue (patrz marker.on('click', ...) wyzej) zamiast
@@ -878,11 +864,7 @@ function budujDymek(lead) {
         ? formatujTermin(dayjsLocal(lead.custom_termin_spotkania).format('YYYY-MM-DD HH:mm:ss'))
         : '',
     ],
-    // Issue #102: wiersz dokładności geokodu. Etykieta "brak"/pusta nie ma
-    // sensu do pokazania w dymku (to brak dokładnego geokodu, nie wartość
-    // do zaprezentowania), więc mapa etykiet nie zna tego klucza i wiersz
-    // po prostu nie trafi tu przez `if (!value) continue` niżej.
-    [__('Dokładność'), etykietaDokladnosciGeokodu(lead.custom_geo_dokladnosc)],
+    // Wiersz "Dokładność" (issue #102) usunięty z dymka decyzją właściciela 2026-09-25.
   ].filter(Boolean)
   for (const [label, value, tagi] of wiersze) {
     if (!value) continue
