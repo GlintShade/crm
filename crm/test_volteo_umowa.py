@@ -140,6 +140,51 @@ class TestPpozWymaganeIstniejacaPvBramka(unittest.TestCase):
 		self.assertTrue(ppoz_wymagane(Decimal("10.0"), Decimal("4.0"), "Nie"))
 
 
+class TestPpozWymaganeKalkulator(unittest.TestCase):
+	"""ops#194 (decyzja właściciela 2026-09-25): kalkulator OZE dolicza koszt
+	uzgodnień PPOŻ do ceny klienta w momencie wyceny, więc gdy `custom_ppoz`
+	szansy to "Tak", umowa nie ma prawa wyjść na "Nie": czwarty argument
+	wygrywa z sumą mocy niezależnie od jej wartości."""
+
+	def test_a_tak_wygrywa_ponizej_progu(self: "TestPpozWymaganeKalkulator") -> None:
+		# Suma (3.0) daleko poniżej progu (6.5), ale kalkulator już doliczył PPOŻ.
+		self.assertTrue(ppoz_wymagane(Decimal("3.0"), None, "Nie", "Tak"))
+
+	def test_b_tak_wygrywa_mimo_istniejaca_pv_nie(self: "TestPpozWymaganeKalkulator") -> None:
+		self.assertTrue(ppoz_wymagane(Decimal("2.0"), Decimal("1.0"), "Nie", "Tak"))
+
+	def test_c_nie_z_kalkulatora_nie_zmienia_istniejacej_reguly(
+		self: "TestPpozWymaganeKalkulator",
+	) -> None:
+		# "Nie" z kalkulatora to no-op: reguła progowa liczy się jak dotychczas,
+		# zarówno poniżej, jak i powyżej progu.
+		self.assertFalse(ppoz_wymagane(Decimal("3.0"), None, "Nie", "Nie"))
+		self.assertTrue(ppoz_wymagane(Decimal("10.0"), None, "Nie", "Nie"))
+
+	def test_d_brak_wartosci_zachowuje_sie_jak_wywolanie_trzyargumentowe(
+		self: "TestPpozWymaganeKalkulator",
+	) -> None:
+		for wybor in (None, "", "coś nierozpoznanego"):
+			with self.subTest(wybor=wybor):
+				self.assertEqual(
+					ppoz_wymagane(Decimal("3.0"), Decimal("4.0"), "Tak", wybor),
+					ppoz_wymagane(Decimal("3.0"), Decimal("4.0"), "Tak"),
+				)
+				self.assertEqual(
+					ppoz_wymagane(Decimal("10.0"), None, "Nie", wybor),
+					ppoz_wymagane(Decimal("10.0"), None, "Nie"),
+				)
+
+	def test_e_dopasowanie_scisle_bez_bialych_znakow_i_wielkosci_liter(
+		self: "TestPpozWymaganeKalkulator",
+	) -> None:
+		# Suma (3.0) poniżej progu: gdyby dopasowanie nie było ścisłe, te warianty
+		# błędnie przełączyłyby wynik na True.
+		for wybor in (" Tak", "Tak ", "tak", "TAK"):
+			with self.subTest(wybor=wybor):
+				self.assertFalse(ppoz_wymagane(Decimal("3.0"), None, "Nie", wybor))
+
+
 class TestKwotaKredytu(unittest.TestCase):
 	# Wszystkie testy tej klasy przekazują trzeci argument jako
 	# "Kredyt + gotówka": to gałąź, która zachowuje klasyczną arytmetykę
