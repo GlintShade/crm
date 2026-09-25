@@ -745,12 +745,20 @@ const ppozWymaganeLive = computed(() => {
   })
 })
 
-// When the threshold alone requires PPOŻ, the select must show Tak; force it
-// so a stale "Nie" cannot linger after mocPvKw drops back down while the
-// select is disabled. Leaving ppozProgLive later (power drops below the
-// threshold again) does not revert the rep's choice (ops#194).
+// When the threshold alone requires PPOŻ, the select must show Tak and gets
+// disabled, so the rep cannot touch it during the lock; their last free
+// choice is remembered here and restored the moment the lock lifts, so a
+// correction that drops the power back below the threshold does not leave
+// the pricing-affecting select silently stuck on Tak (ops#194).
+let ppozRecznieSprzedLock = null
 watch(ppozProgLive, (locked) => {
-  if (locked) sel.ppozRecznie = 'Tak'
+  if (locked) {
+    if (ppozRecznieSprzedLock === null) ppozRecznieSprzedLock = sel.ppozRecznie
+    sel.ppozRecznie = 'Tak'
+  } else if (ppozRecznieSprzedLock !== null) {
+    sel.ppozRecznie = ppozRecznieSprzedLock
+    ppozRecznieSprzedLock = null
+  }
 })
 
 const narzutValid = computed(() => {
