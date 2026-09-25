@@ -7,14 +7,19 @@
           {{ __('Users') }}
         </h2>
         <p class="text-p-base text-ink-gray-6">
-          {{
-            __(
-              'Manage CRM users by adding or inviting them, and assign roles to control their access and permissions',
-            )
-          }}
+          <template v-if="canManage">
+            {{
+              __(
+                'Manage CRM users by adding or inviting them, and assign roles to control their access and permissions',
+              )
+            }}
+          </template>
+          <template v-else>
+            {{ __('Kliknij użytkownika, aby zobaczyć jego dane kontaktowe.') }}
+          </template>
         </p>
       </div>
-      <div class="flex item-center space-x-2 w-3/12 justify-end">
+      <div v-if="canManage" class="flex item-center space-x-2 w-3/12 justify-end">
         <Dropdown
           :options="[
             {
@@ -90,7 +95,10 @@
       </div>
       <ul class="divide-y divide-outline-elevation-2 overflow-y-auto px-2">
         <template v-for="user in usersList" :key="user.name">
-          <li class="flex items-center justify-between py-2">
+          <li
+            class="flex items-center justify-between py-2 cursor-pointer rounded hover:bg-surface-gray-1 px-1"
+            @click="openContact(user)"
+          >
             <div class="flex items-center">
               <Avatar
                 :image="user.user_image"
@@ -106,7 +114,11 @@
                 </div>
               </div>
             </div>
-            <div class="flex gap-2 items-center flex-row-reverse">
+            <div
+              v-if="canManage"
+              class="flex gap-2 items-center flex-row-reverse"
+              @click.stop
+            >
               <Dropdown
                 :options="getMoreOptions(user)"
                 :button="{
@@ -162,10 +174,16 @@
     v-if="showAddExistingModal"
     v-model="showAddExistingModal"
   />
+  <UzytkownikKontaktModal
+    v-if="showContact"
+    v-model="showContact"
+    :email="contactEmail"
+  />
 </template>
 
 <script setup>
 import AddExistingUserModal from '@/components/Modals/AddExistingUserModal.vue'
+import UzytkownikKontaktModal from '@/components/Modals/UzytkownikKontaktModal.vue'
 import EmptyState from '@/components/ListViews/EmptyState.vue'
 import { activeSettingsPage } from '@/composables/settings'
 import { usersStore } from '@/stores/users'
@@ -176,10 +194,21 @@ import { ConfirmDelete } from '../../utils'
 
 const { users, isAdmin, isManager } = usersStore()
 
+// Backoffice (Volteo Backend) widzi liste jako read-only, bez zarzadzania rolami (ops#188).
+const canManage = computed(() => isManager())
+
 const showAddExistingModal = ref(false)
 const searchRef = ref(null)
 const search = ref('')
 const currentRole = ref('All')
+
+const showContact = ref(false)
+const contactEmail = ref('')
+
+function openContact(user) {
+  contactEmail.value = user.name
+  showContact.value = true
+}
 
 const roleMap = {
   'System Manager': __('Admin'),

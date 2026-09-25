@@ -98,6 +98,11 @@ NADAWALNE_ROLE = (
 # Kto może wołać którąkolwiek funkcję tego modułu.
 DOPUSZCZONE_ROLE_WOLAJACEGO = ["Volteo Core Admin", "System Manager"]
 
+# Kto moze CZYTAC dane kontaktowe konta (okno w Settings -> Uzytkownicy, b63,
+# ops#188). Szerszy zbior niz DOPUSZCZONE_ROLE_WOLAJACEGO, ktore bramkuje ZAPISY:
+# backoffice (Volteo Backend) czyta, ale nie zaklada kont ani nie zmienia rol.
+ROLE_ODCZYTU_KONTAKTU = ["System Manager", "Volteo Core Admin", "Volteo Backend", "Sales Manager"]
+
 # Rola bazowa CRM wymagana przez get_session_role_flags() — patrz docstring.
 ROLA_BAZOWA = "Sales User"
 
@@ -507,3 +512,38 @@ def uzytkownicy_do_wzmianek() -> list[dict[str, str]]:
 		fields=["name", "full_name"],
 		order_by="full_name asc",
 	)
+
+
+@frappe.whitelist()
+def dane_kontaktowe_uzytkownika(email: str) -> dict:
+	"""Dane kontaktowe konta do okna read-only w Settings -> Użytkownicy (b63, ops#188).
+
+	Nie korzystamy z `USER_FIELDS` w `crm.api.session.get_users`: ta lista jest
+	odczytywana przez każdego handlowca i CC przy starcie sesji CRM, a numer
+	telefonu ma być widoczny wyłącznie dla backoffice/zarządu, nie dla
+	wszystkich. Osobny, wąski endpoint z własną bramką ról jest tu prostszy i
+	bezpieczniejszy niż dokładanie warunkowej logiki do wspólnej listy pól
+	sesyjnych.
+
+	Celowo `frappe.db.get_value` z jawną listą pól, nie `frappe.get_doc`: ten
+	drugi zwróciłby cały dokument `User`, włącznie z rolami, `api_key`,
+	`api_secret`, kluczami resetu hasła i wszystkim innym poza siedmioma
+	polami kontaktowymi, których to okno naprawdę potrzebuje.
+
+	Bez `@rate_limit`: to zapytanie tylko do odczytu, tego samego kształtu co
+	`widoczni_uzytkownicy` powyżej (które też go nie ma).
+	"""
+	frappe.only_for(ROLE_ODCZYTU_KONTAKTU, True)
+	email = (email or "").strip()
+	validate_email_address(email, throw=True)
+	if email in ("Administrator", "Guest"):
+		frappe.throw(_("Brak takiego użytkownika."), frappe.DoesNotExistError)
+	dane = frappe.db.get_value(
+		"User",
+		email,
+		["name", "full_name", "first_name", "last_name", "email", "mobile_no", "phone", "enabled", "user_image"],
+		as_dict=True,
+	)
+	if not dane:
+		frappe.throw(_("Brak takiego użytkownika."), frappe.DoesNotExistError)
+	return dane
