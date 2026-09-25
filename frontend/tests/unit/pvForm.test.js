@@ -22,6 +22,7 @@ import {
   pickMounting,
   PROG_PPOZ_KW,
   ppozWymagane,
+  ppozWymuszonyProgiem,
 } from '@/utils/pvForm'
 
 describe('PV form logic', () => {
@@ -338,6 +339,43 @@ describe('PV form logic', () => {
     it('accepts string numbers from number inputs', () => {
       expect(ppozWymagane({ mocNowaKw: '5', istniejacaPv: 'Tak', mocIstniejacaKwp: '3.5' })).toBe(true)
       expect(ppozWymagane({ mocNowaKw: '3', istniejacaPv: 'Tak', mocIstniejacaKwp: '3' })).toBe(false)
+    })
+
+    it('wins via ppozRecznie even below the threshold', () => {
+      expect(ppozWymagane({ mocNowaKw: 1, istniejacaPv: 'Nie', mocIstniejacaKwp: 0, ppozRecznie: 'Tak' })).toBe(true)
+    })
+
+    it('does not change the rule when ppozRecznie is "Nie" or undefined', () => {
+      expect(ppozWymagane({ mocNowaKw: 3, istniejacaPv: 'Nie', mocIstniejacaKwp: 0, ppozRecznie: 'Nie' })).toBe(false)
+      expect(ppozWymagane({ mocNowaKw: 7, istniejacaPv: 'Nie', mocIstniejacaKwp: 0, ppozRecznie: 'Nie' })).toBe(true)
+      expect(ppozWymagane({ mocNowaKw: 7, istniejacaPv: 'Nie', mocIstniejacaKwp: 0, ppozRecznie: undefined })).toBe(true)
+    })
+
+    it('does not accept case or whitespace variants of "Tak" for ppozRecznie', () => {
+      expect(ppozWymagane({ mocNowaKw: 1, istniejacaPv: 'Nie', mocIstniejacaKwp: 0, ppozRecznie: ' Tak' })).toBe(false)
+      expect(ppozWymagane({ mocNowaKw: 1, istniejacaPv: 'Nie', mocIstniejacaKwp: 0, ppozRecznie: 'tak' })).toBe(false)
+    })
+  })
+
+  describe('ppozWymuszonyProgiem', () => {
+    it('is false at exactly the threshold (strict greater-than)', () => {
+      expect(ppozWymuszonyProgiem({ mocNowaKw: PROG_PPOZ_KW, istniejacaPv: 'Nie', mocIstniejacaKwp: 0 })).toBe(false)
+    })
+
+    it('is true just above the threshold', () => {
+      expect(ppozWymuszonyProgiem({ mocNowaKw: PROG_PPOZ_KW + 0.1, istniejacaPv: 'Nie', mocIstniejacaKwp: 0 })).toBe(true)
+    })
+
+    it('is false below the threshold', () => {
+      expect(ppozWymuszonyProgiem({ mocNowaKw: 5, istniejacaPv: 'Nie', mocIstniejacaKwp: 0 })).toBe(false)
+    })
+
+    it('sums new and existing power', () => {
+      expect(ppozWymuszonyProgiem({ mocNowaKw: 3, istniejacaPv: 'Tak', mocIstniejacaKwp: 5 })).toBe(true)
+    })
+
+    it('ignores the existing power when istniejacaPv is "Nie"', () => {
+      expect(ppozWymuszonyProgiem({ mocNowaKw: 3, istniejacaPv: 'Nie', mocIstniejacaKwp: 5 })).toBe(false)
     })
   })
 })

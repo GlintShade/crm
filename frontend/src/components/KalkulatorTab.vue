@@ -181,11 +181,19 @@
                   <input v-model.number="sel.istniejacaPvMocKwp" type="number" min="0" step="0.1" class="kalk-input" />
                 </div>
                 <div>
-                  <!-- Read-only: PPOŻ ustalane automatycznie, bez ręcznego
-                       nadpisania (decyzja właściciela, ops#194). -->
+                  <!-- Select ręcznie ustawiany przez handlowca, zablokowany
+                       na Tak gdy próg mocy jest przekroczony (decyzja
+                       właściciela, ops#194). -->
                   <div class="mb-0.5 text-sm text-ink-gray-5">Uzgodnienia PPOŻ<span v-if="ppozWymaganeLive && ppozCena > 0"> · +{{ formatPln(ppozCena) }} netto</span></div>
-                  <div class="text-sm font-medium text-ink-gray-9">{{ ppozWymaganeLive ? 'Tak' : 'Nie' }}</div>
-                  <div class="mt-0.5 text-xs text-ink-gray-4">Ustawiane automatycznie, gdy suma mocy nowej i istniejącej instalacji przekracza 6,5 kW.</div>
+                  <select v-model="sel.ppozRecznie" class="kalk-select" :disabled="ppozProgLive">
+                    <option value="Nie">Nie</option>
+                    <option value="Tak">Tak</option>
+                  </select>
+                  <div class="mt-0.5 text-xs text-ink-gray-4">
+                    {{ ppozProgLive
+                      ? 'Wymagane automatycznie: suma mocy nowej i istniejącej instalacji przekracza 6,5 kW.'
+                      : 'Ustaw Tak ręcznie, gdy klient ma instalację, ale nie zna jej dokładnej mocy.' }}
+                  </div>
                 </div>
 
                 <div>
@@ -381,6 +389,7 @@ import {
   pickBySpec,
   pickMounting,
   ppozWymagane,
+  ppozWymuszonyProgiem,
 } from '@/utils/pvForm'
 import { formatPln } from '@/utils/money'
 import { grupujBreakdown } from '@/utils/pvBreakdown'
@@ -432,6 +441,7 @@ const sel = reactive({
   licznik: 'Nie',
   istniejacaPv: 'Nie',
   istniejacaPvMocKwp: null,
+  ppozRecznie: 'Nie',
   ulgaPct: 19,
   okresLat: 10, // domyślny okres finansowania 10 lat (decyzja właściciela 2026-09-10, było 5)
   wplataWlasna: 0,
@@ -664,6 +674,10 @@ const summary = reactive({
   // response); "" means no result yet, so the UI falls back to the local
   // heuristic in ppozWymaganeLive (ops#194).
   ppoz: '',
+  // Server-authoritative "threshold alone requires PPOŻ" flag ("Tak"/"Nie"/
+  // "" before the first calc response), used to lock sel.ppozRecznie on Tak
+  // (ops#194).
+  ppoz_prog: '',
 })
 const grupyBreakdown = computed(() => grupujBreakdown(summary.breakdown))
 
@@ -701,6 +715,20 @@ const licznikCena = ref(0)
 // only, server stays authoritative (ops#194).
 const ppozCena = ref(0)
 
+// Local, presentation-only mirror of the server's PPOŻ threshold check
+// (ppozWymuszonyProgiem in pvForm.js), used to lock sel.ppozRecznie on Tak
+// while the rep types, before the debounced calc response arrives. Once a
+// calc result exists, summary.ppoz_prog (server-authoritative) takes over
+// (ops#194).
+const ppozProgLive = computed(() => {
+  if (summary.ppoz_prog === 'Tak' || summary.ppoz_prog === 'Nie') return summary.ppoz_prog === 'Tak'
+  return ppozWymuszonyProgiem({
+    mocNowaKw: hasPv.value ? sel.mocPvKw : 0,
+    istniejacaPv: sel.istniejacaPv,
+    mocIstniejacaKwp: sel.istniejacaPvMocKwp,
+  })
+})
+
 // Local, presentation-only mirror of the server's PPOŻ rule (ppozWymagane in
 // pvForm.js), so the "Uzgodnienia PPOŻ" row updates live as the rep types,
 // instead of only after the debounced calc response arrives. Once a calc
@@ -713,7 +741,16 @@ const ppozWymaganeLive = computed(() => {
     mocNowaKw: hasPv.value ? sel.mocPvKw : 0,
     istniejacaPv: sel.istniejacaPv,
     mocIstniejacaKwp: sel.istniejacaPvMocKwp,
+    ppozRecznie: sel.ppozRecznie,
   })
+})
+
+// When the threshold alone requires PPOŻ, the select must show Tak; force it
+// so a stale "Nie" cannot linger after mocPvKw drops back down while the
+// select is disabled. Leaving ppozProgLive later (power drops below the
+// threshold again) does not revert the rep's choice (ops#194).
+watch(ppozProgLive, (locked) => {
+  if (locked) sel.ppozRecznie = 'Tak'
 })
 
 const narzutValid = computed(() => {
@@ -744,6 +781,7 @@ function buildCalcPayload() {
     licznik_dodatkowy: sel.licznik,
     istniejaca_pv: sel.istniejacaPv,
     istniejaca_pv_moc_kwp: sel.istniejacaPv === 'Tak' ? Number(sel.istniejacaPvMocKwp) || 0 : 0,
+    ppoz_recznie: sel.ppozRecznie,
     ulga_pct: Number(sel.ulgaPct),
     okres_lat: Number(sel.okresLat),
     wplata_wlasna: Number(sel.wplataWlasna) || 0,
@@ -760,6 +798,7 @@ function clearSummary() {
   summary.is_admin = false
   summary.breakdown = null
   summary.ppoz = ''
+  summary.ppoz_prog = ''
 }
 
 // --- Live pricing (server-side; debounced) ----------------------------------
@@ -769,7 +808,7 @@ watch(
     sel.typKlienta, sel.variant, sel.producent, sel.falownik, sel.bateria,
     sel.panel, sel.mocPvKw, sel.konstrukcja, sel.kabelM, sel.spoldzielnia, sel.licznik, sel.ulgaPct,
     sel.okresLat, sel.wplataWlasna, sel.narzut, sel.zasadyDotacji,
-    sel.istniejacaPv, sel.istniejacaPvMocKwp,
+    sel.istniejacaPv, sel.istniejacaPvMocKwp, sel.ppozRecznie,
   ],
   () => {
     if (calcTimer) clearTimeout(calcTimer)
@@ -800,6 +839,7 @@ async function runCalc() {
     summary.is_admin = !!data.is_admin
     summary.breakdown = data.is_admin ? data.breakdown || null : null
     summary.ppoz = data.ppoz || ''
+    summary.ppoz_prog = data.ppoz_prog || ''
   } catch (err) {
     clearSummary()
     errorMsg.value = extractErrorMessage(err)

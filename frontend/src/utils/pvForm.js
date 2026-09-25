@@ -88,6 +88,24 @@ export function licznikDostepny(producent) {
 export const PROG_PPOZ_KW = 6.5
 
 /**
+ * Sprawdza, czy sama suma mocy (nowa plus istniejąca) przekracza próg PPOŻ,
+ * bez uwzględnienia ręcznego ustawienia ani kalkulatora OZE. Używane do
+ * blokowania selecta "Uzgodnienia PPOŻ" na Tak, gdy próg jest przekroczony
+ * (ops#194): `ppozWymagane` poniżej jest zbudowane na tej funkcji.
+ *
+ * @param {object} params
+ * @param {number} params.mocNowaKw - moc nowej instalacji PV w kWp (0 dla wariantu bez PV)
+ * @param {string} params.istniejacaPv - "Tak"/"Nie", czy klient ma już instalację PV
+ * @param {number} params.mocIstniejacaKwp - moc istniejącej instalacji PV w kWp
+ * @returns {boolean} czy sama suma mocy przekracza PROG_PPOZ_KW
+ */
+export function ppozWymuszonyProgiem({ mocNowaKw, istniejacaPv, mocIstniejacaKwp }) {
+  const nowa = Number(mocNowaKw) || 0
+  const istniejaca = istniejacaPv === 'Tak' ? Number(mocIstniejacaKwp) || 0 : 0
+  return nowa + istniejaca > PROG_PPOZ_KW
+}
+
+/**
  * Sprawdza, czy uzgodnienia PPOŻ są wymagane dla danej konfiguracji.
  * WYŁĄCZNIE prezentacja: serwer pozostaje autorytatywny (patrz `ppoz` w
  * odpowiedzi `volteo_quote_calc`/`volteo_quote_generate`) i liczy tę samą
@@ -100,14 +118,14 @@ export const PROG_PPOZ_KW = 6.5
  * @param {string} params.istniejacaPv - "Tak"/"Nie", czy klient ma już instalację PV
  * @param {number} params.mocIstniejacaKwp - moc istniejącej instalacji PV w kWp
  * @param {string} [params.ppozKalkulator] - "Tak"/"Nie", wynik kalkulatora OZE (jeśli już doliczył PPOŻ, umowa go dziedziczy)
+ * @param {string} [params.ppozRecznie] - "Tak"/"Nie", ręczne ustawienie handlowca w kalkulatorze OZE; tylko "Tak" podnosi wynik, nigdy nie obniża go poniżej progu (ops#194)
  * @returns {boolean} czy PPOŻ jest wymagane
  */
-export function ppozWymagane({ mocNowaKw, istniejacaPv, mocIstniejacaKwp, ppozKalkulator }) {
+export function ppozWymagane({ mocNowaKw, istniejacaPv, mocIstniejacaKwp, ppozKalkulator, ppozRecznie }) {
   if (ppozKalkulator === 'Tak') return true
+  if (ppozRecznie === 'Tak') return true
 
-  const nowa = Number(mocNowaKw) || 0
-  const istniejaca = istniejacaPv === 'Tak' ? Number(mocIstniejacaKwp) || 0 : 0
-  return nowa + istniejaca > PROG_PPOZ_KW
+  return ppozWymuszonyProgiem({ mocNowaKw, istniejacaPv, mocIstniejacaKwp })
 }
 
 /**
