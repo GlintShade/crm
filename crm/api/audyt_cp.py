@@ -37,7 +37,7 @@ from typing import Any
 import frappe
 from frappe import _
 
-from crm.api.pipeline import dispatch_notification
+from crm.api.pipeline import dispatch_notification, dispatch_task
 from crm.czyste_powietrze.audyt import (
     KLUCZ_ZDJECIA,
     MAX_NOTATKA,
@@ -55,6 +55,7 @@ from crm.czyste_powietrze.audyt import (
 )
 from crm.permissions.org_hierarchy import BYPASS_ROLES
 from crm.volteo_aktywnosc import roznice_plikow_audytu
+from crm.volteo_zadania import KLUCZ_REGULY
 
 DOCTYPE = "Volteo Audyt CP"
 
@@ -215,6 +216,11 @@ def volteo_audyt_cp_submit(deal: str) -> dict[str, Any]:
     zapisuje status audytu przez `db.set_value`, więc `read` był
     niewystarczającą bramką; sprawdzenie recenzent/właściciel poniżej
     zostaje jako dodatkowa, węższa autoryzacja, nie zamiast tej bramki).
+
+    Po przesłaniu (ops#192) `dispatch_task` zakłada jedno zadanie `CRM Task`
+    na odbiorcę reguły `zadanie_audyt_cp_przeslany` (`Volteo Automatyzacja`
+    typu „Zadanie”), to NIE jest automatyzacja procesu: decyzja „ŻADNEJ
+    automatyzacji procesu” powyżej dotyczy statusu szansy i pozostaje bez zmian.
     """
     _sprawdz_dostep_do_szansy(deal, "write")
 
@@ -247,6 +253,7 @@ def volteo_audyt_cp_submit(deal: str) -> dict[str, Any]:
         "został przesłany do weryfikacji</div>"
     )
     dispatch_notification("powiadomienie_audyt_cp_przeslany", deal, tekst_html)
+    dispatch_task(KLUCZ_REGULY["cp"], deal, "cp")
 
     return {"ok": True, "status": "Weryfikacja"}
 

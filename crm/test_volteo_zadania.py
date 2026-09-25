@@ -181,8 +181,8 @@ class TestBrakMyslnikow(unittest.TestCase):
 		import crm.volteo_zadania as modul
 
 		zrodlo = inspect.getsource(modul)
-		self.assertNotIn("—", zrodlo)
-		self.assertNotIn("–", zrodlo)
+		self.assertNotIn("\u2014", zrodlo)  # em dash (unicode escape, not the literal character, per HARD RULE)
+		self.assertNotIn("\u2013", zrodlo)  # en dash (unicode escape, not the literal character, per HARD RULE)
 
 
 if __name__ == "__main__":

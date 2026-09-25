@@ -48,6 +48,7 @@ from crm.volteo_pipeline import (
 	podzadanie_def,
 	step_index,
 )
+from crm.volteo_zadania import dane_zadania, filtr_duplikatu, tytul_zadania
 
 
 def _sprawdz_dostep_do_szansy(deal: str, ptype: str = "read") -> None:
@@ -366,6 +367,32 @@ scaffolding: dodanie realnego kanału e-mail/SMS to podmiana jednej wartości
 w tym dict, bez zmiany `dispatch_notification`."""
 
 
+def _odbiorcy_reguly(regula: "frappe._dict", rule_key: str, deal: str) -> set[str]:
+	"""Zbiór odbiorców jednej reguły `Volteo Automatyzacja`: użytkownicy z tabeli
+	podrzędnej `Volteo Automatyzacja Odbiorca` plus, gdy `regula.odbiorca_handlowiec`
+	jest prawdziwe, właściciel szansy (`CRM Deal.deal_owner`), bez samego wywołującego
+	(np. handlowiec, który właśnie sam podpisał akcję wyzwalającą automatyzację, nie
+	musi dostać dzwoneczka/zadania o niej) i bez pustych/`None` wpisów.
+
+	Wspólne dla `dispatch_notification` i `dispatch_task`: obie funkcje mają
+	identyczną definicję „kto dostaje”, różniącą się tylko tym, CO dostaje (kanał
+	powiadomienia kontra zadanie `CRM Task`).
+	"""
+	odbiorcy = set(
+		frappe.get_all(
+			"Volteo Automatyzacja Odbiorca",
+			filters={"parent": rule_key, "parenttype": "Volteo Automatyzacja"},
+			pluck="uzytkownik",
+		)
+	)
+	if regula.odbiorca_handlowiec:
+		wlasciciel = frappe.db.get_value("CRM Deal", deal, "deal_owner")
+		if wlasciciel:
+			odbiorcy.add(wlasciciel)
+
+	return {o for o in odbiorcy if o and o != frappe.session.user}
+
+
 def dispatch_notification(rule_key: str, deal: str, tekst_html: str) -> None:
 	"""Wysyła powiadomienie o automatycznym zdarzeniu na procesie do odbiorców
 	reguły `rule_key` (wiersz `Volteo Automatyzacja`), przez włączone kanały.
@@ -385,22 +412,7 @@ def dispatch_notification(rule_key: str, deal: str, tekst_html: str) -> None:
 		if not regula or not regula.wlaczona:
 			return
 
-		odbiorcy = set(
-			frappe.get_all(
-				"Volteo Automatyzacja Odbiorca",
-				filters={"parent": rule_key, "parenttype": "Volteo Automatyzacja"},
-				pluck="uzytkownik",
-			)
-		)
-		if regula.odbiorca_handlowiec:
-			wlasciciel = frappe.db.get_value("CRM Deal", deal, "deal_owner")
-			if wlasciciel:
-				odbiorcy.add(wlasciciel)
-
-		# Bez samego wywołującego (np. handlowiec, który właśnie sam podpisał
-		# akcję wyzwalającą automatyzację, nie musi dostać dzwoneczka o niej)
-		# i bez pustych/`None` wpisów.
-		odbiorcy = {o for o in odbiorcy if o and o != frappe.session.user}
+		odbiorcy = _odbiorcy_reguly(regula, rule_key, deal)
 		if not odbiorcy:
 			return
 
@@ -411,3 +423,79 @@ def dispatch_notification(rule_key: str, deal: str, tekst_html: str) -> None:
 				kanal(odbiorca, deal, tekst_html)
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), f"Volteo Pipeline: dyspozytor powiadomień {rule_key} nie powiódł się")
+
+
+def dispatch_task(rule_key: str, deal: str, rodzaj: str) -> int:
+	"""Tworzy jedno zadanie `CRM Task` na odbiorcę reguły `rule_key` (wiersz
+	`Volteo Automatyzacja` typu „Zadanie”), po przesłaniu audytu (`rodzaj`: „oze”
+	albo „cp”) do weryfikacji. Zwraca liczbę faktycznie utworzonych zadań.
+
+	Deduplikacja (`crm.volteo_zadania.filtr_duplikatu`): odbiorca, który ma już
+	OTWARTE (nie Done/Canceled) zadanie o tym samym tytule dla tej szansy, nie
+	dostaje drugiego, ponowne przesłanie tego samego audytu, zanim ktoś zamknie
+	stare zadanie, nie zasypuje go duplikatami. Gdy stare zadanie jest już
+	Done/Canceled, powstaje świeże, to zamierzone, nie błąd.
+
+	Dzwoneczek dla odbiorcy NIE jest tworzony osobno tutaj: `CRMTask.after_insert`
+	woła `assign_to`, co zakłada `ToDo`, a `crm.api.todo` reaguje na to własnym
+	hookiem i tworzy powiadomienie, jeden wspólny kanał z każdym innym
+	przypisaniem zadania w aplikacji, nie osobny.
+
+	Tak samo jak `advance_deal_status`/`dispatch_notification`, NIGDY nie rzuca:
+	wołający (`crm.api.audyt_cp.volteo_audyt_cp_submit`, docelowo też Server Script
+	OZE) nie może zostać przerwany przez usterkę samego dyspozytora zadań. Reguła
+	brakująca/wyłączona daje `0` bez żadnego efektu ubocznego.
+
+	Kopia literałów tytułu/opisu/tekstu śladu dla ścieżki OZE żyje w
+	`ops/crm-audyt.py::SUBMIT_SCRIPT` (Server Script, nie może importować), patrz
+	nagłówek `crm.volteo_zadania`.
+	"""
+	try:
+		regula = frappe.db.get_value(
+			"Volteo Automatyzacja",
+			rule_key,
+			["wlaczona", "odbiorca_handlowiec", "termin_dni"],
+			as_dict=True,
+		)
+		if not regula or not regula.wlaczona:
+			return 0
+
+		odbiorcy = _odbiorcy_reguly(regula, rule_key, deal)
+		if not odbiorcy:
+			return 0
+
+		klient = frappe.db.get_value("CRM Deal", deal, "lead_name") or deal
+		autor = frappe.utils.get_fullname(frappe.session.user)
+		dzisiaj = frappe.utils.getdate(frappe.utils.nowdate())
+		tytul = tytul_zadania(rodzaj, klient)
+
+		utworzone = 0
+		for odbiorca in odbiorcy:
+			if frappe.get_all("CRM Task", filters=filtr_duplikatu(deal, odbiorca, tytul), limit=1):
+				continue
+			frappe.get_doc(
+				dane_zadania(rodzaj, klient, deal, autor, odbiorca, dzisiaj, regula.termin_dni)
+			).insert(ignore_permissions=True)
+			utworzone += 1
+
+		if utworzone > 0:
+			try:
+				zapisz_slad(
+					deal,
+					tekst_sladu(
+						"zadanie_auto",
+						automatyzacja=rule_key.replace("_", " "),
+						tytul=tytul,
+						liczba=utworzone,
+					),
+				)
+			except Exception:
+				frappe.log_error(
+					frappe.get_traceback(),
+					f"Volteo Pipeline: ślad dyspozytora zadań {rule_key} nie powiódł się",
+				)
+
+		return utworzone
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), f"Volteo Pipeline: dyspozytor zadań {rule_key} nie powiódł się")
+		return 0

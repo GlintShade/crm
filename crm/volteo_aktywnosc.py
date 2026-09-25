@@ -252,6 +252,9 @@ def tekst_sladu(rodzaj: str, **dane: object) -> str:
 	if rodzaj == "status_auto":
 		return f"status zmieniony automatycznie ({dane['automatyzacja']}): {dane['stary']} → {dane['nowy']}"
 
+	if rodzaj == "zadanie_auto":
+		return f"zadanie utworzone automatycznie ({dane['automatyzacja']}): „{dane['tytul']}”, odbiorcy: {dane['liczba']}"
+
 	if rodzaj == "kalkulator_oze":
 		return f"utworzono szansę z kalkulatora OZE: {dane['moc_kw']} kW, {dane['pozycje']} pozycji zestawu"
 
