@@ -19,13 +19,13 @@ class TestTytulZadania(unittest.TestCase):
 	def test_a_tytul_oze(self: "TestTytulZadania") -> None:
 		self.assertEqual(
 			tytul_zadania("oze", "Jan Kowalski"),
-			"Zweryfikuj audyt OZE: Jan Kowalski",
+			"Audyt OZE: Jan Kowalski",
 		)
 
 	def test_b_tytul_cp(self: "TestTytulZadania") -> None:
 		self.assertEqual(
 			tytul_zadania("cp", "Anna Nowak"),
-			"Zweryfikuj audyt CP: Anna Nowak",
+			"Audyt CP: Anna Nowak",
 		)
 
 	def test_c_nieznany_rodzaj_daje_value_error(self: "TestTytulZadania") -> None:
@@ -82,12 +82,12 @@ class TestObliczTermin(unittest.TestCase):
 class TestFiltrDuplikatu(unittest.TestCase):
 	def test_a_ksztalt_dokladny(self: "TestFiltrDuplikatu") -> None:
 		self.assertEqual(
-			filtr_duplikatu("PRO/PV/26/0001", "rep@proenergy.pro", "Zweryfikuj audyt OZE: Jan Kowalski"),
+			filtr_duplikatu("PRO/PV/26/0001", "rep@proenergy.pro", "Audyt OZE: Jan Kowalski"),
 			{
 				"reference_doctype": "CRM Deal",
 				"reference_docname": "PRO/PV/26/0001",
 				"assigned_to": "rep@proenergy.pro",
-				"title": "Zweryfikuj audyt OZE: Jan Kowalski",
+				"title": "Audyt OZE: Jan Kowalski",
 				"status": ["not in", ["Done", "Canceled"]],
 			},
 		)
@@ -119,7 +119,7 @@ class TestDaneZadania(unittest.TestCase):
 			wynik,
 			{
 				"doctype": "CRM Task",
-				"title": "Zweryfikuj audyt OZE: Jan Kowalski",
+				"title": "Audyt OZE: Jan Kowalski",
 				"description": (
 					"<p>Audyt OZE szansy <b>PRO/PV/26/0001</b> (klient: <b>Jan Kowalski</b>) "
 					"został przesłany do weryfikacji przez Anna Nowak.</p>"

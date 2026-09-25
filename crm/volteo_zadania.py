@@ -42,13 +42,13 @@ ponowne przeslanie audytu, gdy stare zadanie jest juz Done/Canceled, tworzy nowe
 
 
 def tytul_zadania(rodzaj: str, klient: str) -> str:
-	"""Tytul zadania: „Zweryfikuj audyt OZE: {klient}” albo „Zweryfikuj audyt CP: {klient}”.
+	"""Tytul zadania: „Audyt OZE: {klient}” albo „Audyt CP: {klient}”.
 
 	Nieznany `rodzaj` daje `ValueError`.
 	"""
 	if rodzaj not in ETYKIETA_RODZAJU:
 		raise ValueError(f"Nieznany rodzaj audytu: {rodzaj!r}")
-	return f"Zweryfikuj audyt {ETYKIETA_RODZAJU[rodzaj]}: {klient}"
+	return f"Audyt {ETYKIETA_RODZAJU[rodzaj]}: {klient}"
 
 
 def opis_zadania_html(rodzaj: str, klient: str, deal: str, autor: str) -> str:

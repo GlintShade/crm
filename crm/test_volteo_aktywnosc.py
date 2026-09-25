@@ -579,11 +579,11 @@ class TestTekstSladu(unittest.TestCase):
 			tekst_sladu(
 				"zadanie_auto",
 				automatyzacja="zadanie audyt przeslany",
-				tytul="Zweryfikuj audyt OZE: Jan Kowalski",
+				tytul="Audyt OZE: Jan Kowalski",
 				liczba=2,
 			),
 			"zadanie utworzone automatycznie (zadanie audyt przeslany): "
-			"„Zweryfikuj audyt OZE: Jan Kowalski”, odbiorcy: 2",
+			"„Audyt OZE: Jan Kowalski”, odbiorcy: 2",
 		)
 
 	def test_n_kalkulator_oze(self: "TestTekstSladu") -> None:
