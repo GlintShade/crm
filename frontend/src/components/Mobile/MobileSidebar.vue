@@ -31,6 +31,7 @@
                     :label="unreadNotificationsCount"
                     theme="red"
                     variant="solid"
+                    class="min-w-5 justify-center"
                   />
                 </template>
               </SidebarLink>
