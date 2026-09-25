@@ -21,6 +21,7 @@ export default defineConfig({
         'src/utils/kredytForm.js',
         'src/utils/etykietaMoje.js',
         'src/utils/etapFiltr.js',
+        'src/utils/dataPolska.js',
       ],
     },
   },

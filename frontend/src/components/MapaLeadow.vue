@@ -210,7 +210,7 @@ import { statusesStore } from '@/stores/statuses'
 import { colorNameFromParsed } from '@/utils/statusColors'
 import { widocznyLead } from '@/utils/mapaFiltry'
 import { rozbijTagi } from '@/utils/tagiProduktow'
-import { formatDate } from '@/utils'
+import { formatujTermin } from '@/utils/dataPolska'
 import {
   KOLOR_BRAK,
   hashString,
@@ -240,6 +240,7 @@ import {
   LoadingIndicator,
   Popover,
   createResource,
+  dayjsLocal,
 } from 'frappe-ui'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
@@ -856,7 +857,13 @@ function budujDymek(lead) {
 
   // Pola w dymku (issue #101): tylko te, które użytkownik zostawił zaznaczone
   // w popoverze ustawień (domyślnie wszystkie cztery). Termin spotkania
-  // formatowany przez formatDate() -- Datetime z serwera, nie surowy string.
+  // formatowany przez formatujTermin() (utils/dataPolska.js) -- polski skrót
+  // dnia tygodnia/miesiąca i godzina 24h, zamiast angielskiego 12h domyślnego
+  // z formatDate()/getFormat() w utils/index.js (item #31 rundy klik-testu po
+  // b63); dayjsLocal() z frappe-ui zamienia surowy Datetime z serwera na
+  // "YYYY-MM-DD HH:mm:ss" w lokalnej strefie, zachowując tę samą semantykę
+  // strefy czasowej co dawne formatDate(), zanim formatujTermin() sparsuje
+  // to na polski zapis.
   // Trzeci element (opcjonalny, `true`) oznacza wiersz "produktów leada"
   // (ops#150) -- tokeny renderowane jako span-chipy zamiast surowego
   // stringa "PV+PC" (patrz `rozbijTagi` w utils/tagiProduktow.js).
@@ -867,7 +874,9 @@ function budujDymek(lead) {
     ustawieniaDymka.statusZrodla && [__('Status źródła'), lead.custom_status_zrodla],
     ustawieniaDymka.terminSpotkania && [
       __('Termin spotkania'),
-      lead.custom_termin_spotkania ? formatDate(lead.custom_termin_spotkania) : '',
+      lead.custom_termin_spotkania
+        ? formatujTermin(dayjsLocal(lead.custom_termin_spotkania).format('YYYY-MM-DD HH:mm:ss'))
+        : '',
     ],
     // Issue #102: wiersz dokładności geokodu. Etykieta "brak"/pusta nie ma
     // sensu do pokazania w dymku (to brak dokładnego geokodu, nie wartość
