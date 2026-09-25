@@ -111,22 +111,25 @@
             @update:modelValue="(val) => (linieLeady = Boolean(val))"
           />
         </div>
-        <FormControl
-          v-model="poziomProwizji"
-          type="select"
-          class="mt-4"
-          :label="__('Poziom prowizji')"
-          :options="poziomProwizjiOptions"
-          :disabled="inviteByEmail.loading"
-        />
-        <FormControl
-          type="checkbox"
-          class="mt-2"
-          :label="__('Widzi prowizje')"
-          :modelValue="widziProwizje"
-          :disabled="inviteByEmail.loading"
-          @update:modelValue="(val) => (widziProwizje = Boolean(val))"
-        />
+        <!-- Prowizje ustawia tylko admin (System Manager / Volteo Core Admin); backoffice (ops#185) dostaje wartosci domyslne, serwer wymusza to samo w crm.api.invite_by_email. -->
+        <div v-if="isVolteoAdmin()">
+          <FormControl
+            v-model="poziomProwizji"
+            type="select"
+            class="mt-4"
+            :label="__('Poziom prowizji')"
+            :options="poziomProwizjiOptions"
+            :disabled="inviteByEmail.loading"
+          />
+          <FormControl
+            type="checkbox"
+            class="mt-2"
+            :label="__('Widzi prowizje')"
+            :modelValue="widziProwizje"
+            :disabled="inviteByEmail.loading"
+            @update:modelValue="(val) => (widziProwizje = Boolean(val))"
+          />
+        </div>
       </div>
       <template v-if="sortedInvitations.length">
         <div class="flex flex-col gap-4">
@@ -172,7 +175,9 @@
                   }}<template v-if="user.volteo_role">
                     · {{ volteoRoleMap[user.volteo_role] }}</template
                   >
-                  · {{ linieLabel(user) }} · {{ prowizjeLabel(user) }}
+                  · {{ linieLabel(user) }}<template v-if="isVolteoAdmin()">
+                    · {{ prowizjeLabel(user) }}</template
+                  >
                   <template v-if="sentDateLabel(user)">
                     · {{ __('sent {0}', [sentDateLabel(user)]) }}</template
                   >)

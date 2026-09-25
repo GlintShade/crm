@@ -282,6 +282,15 @@ def invite_by_email(
 	# on `User.custom_linia_leady`). No "at least one" requirement applies.
 	linia_leady = cint(linia_leady)
 
+	# Commission tier and visibility are admin-only settings (same rule as
+	# volteo_ustaw_prowizje in crm.api.volteo_uzytkownicy): a Sales Manager
+	# or Volteo Backend inviter (ops#185) always gets the defaults, silently,
+	# never an error, since the form already hides these controls for them
+	# and a stale/hand-crafted payload must not fail the whole invitation.
+	if not ("System Manager" in user_roles or "Volteo Core Admin" in user_roles):
+		widzi_prowizje = 1
+		poziom_prowizji = "Handlowiec"
+
 	# Commission-visibility settings (issue #51, schema: #48/ops#46): the
 	# inviter sets the invitee's commission tier the same way #17 set product
 	# lines. Unlike the "at least one product line" check above, a garbage
