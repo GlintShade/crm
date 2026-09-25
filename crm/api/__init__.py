@@ -193,6 +193,15 @@ def accept_invitation(key: str | None = None):
 		frappe.local.response["location"] = "/crm"
 
 
+# Roles allowed to create/resend a CRM Invitation at all (issue ops#185).
+# Passing this gate does NOT widen what a caller may grant: the escalation
+# guards inside invite_by_email/resend_invitation still restrict
+# Sales Manager / System Manager / Volteo Backend invitations to
+# System Manager (and, for Backoffice, Volteo Core Admin). A Volteo Backend
+# caller can therefore only invite Sales User + D2D Sales / Call Center.
+ROLE_ZAPRASZAJACE = ["Sales Manager", "System Manager", "Volteo Core Admin", "Volteo Backend"]
+
+
 @frappe.whitelist()
 def invite_by_email(
 	emails: str,
@@ -208,7 +217,7 @@ def invite_by_email(
 	widzi_prowizje: int = 1,
 	poziom_prowizji: str = "Handlowiec",
 ):
-	frappe.only_for(["Sales Manager", "System Manager", "Volteo Core Admin"], True)
+	frappe.only_for(ROLE_ZAPRASZAJACE, True)
 
 	user_roles = frappe.get_roles(frappe.session.user)
 
@@ -358,7 +367,7 @@ def resend_invitation(name: str):
 	Volteo fields, and the old row is deleted only once that insert has
 	succeeded.
 	"""
-	frappe.only_for(["Sales Manager", "System Manager", "Volteo Core Admin"], True)
+	frappe.only_for(ROLE_ZAPRASZAJACE, True)
 
 	try:
 		old = frappe.get_doc("CRM Invitation", name)
@@ -369,12 +378,14 @@ def resend_invitation(name: str):
 		frappe.throw(_("Invitation already accepted"))
 
 	# Same escalation guard as invite_by_email above: only_for lets any of
-	# Sales Manager / System Manager / Volteo Core Admin through, but a
-	# Sales Manager (or a Volteo Core Admin, for the Backoffice case) must
-	# not be able to use resend to reissue a role they were never allowed
-	# to invite in the first place. Without this a Volteo Core Admin could
-	# resend an expired System Manager invitation that only a System
-	# Manager was allowed to create.
+	# Sales Manager / System Manager / Volteo Core Admin / Volteo Backend
+	# through, but a Sales Manager (or a Volteo Core Admin or Volteo Backend,
+	# for the Backoffice case) must not be able to use resend to reissue a
+	# role they were never allowed to invite in the first place. Without this
+	# a Volteo Core Admin could resend an expired System Manager invitation
+	# that only a System Manager was allowed to create, and a Volteo Backend
+	# caller could resend an expired Sales Manager or Backoffice invitation
+	# it could never have created in the first place.
 	user_roles = frappe.get_roles(frappe.session.user)
 
 	if old.role == "System Manager" and "System Manager" not in user_roles:

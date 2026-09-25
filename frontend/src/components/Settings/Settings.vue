@@ -92,7 +92,7 @@ import AssignmentRulePage from './AssignmentRules/AssignmentRulePage.vue'
 import ShieldCheck from '~icons/lucide/shield-check'
 import SlaConfig from './Sla/SlaConfig.vue'
 
-const { isManager, isVolteoAdmin, getUser } = usersStore()
+const { isManager, isVolteoAdmin, isBackend, getUser } = usersStore()
 
 const user = computed(() => getUser() || {})
 
@@ -153,11 +153,12 @@ const tabs = computed(() => {
           component: markRaw(Users),
           condition: () => isManager(),
         },
+        // Volteo Backend zaprasza handlowcow (D2D/CC) bez roli Core Admin, issue ops#185; backend bramkuje zakres w crm.api.invite_by_email.
         {
           label: __('Invite User'),
           icon: 'user-plus',
           component: markRaw(InviteUserPage),
-          condition: () => isManager() || isVolteoAdmin(),
+          condition: () => isManager() || isVolteoAdmin() || isBackend(),
         },
         {
           label: __('Sales Hierarchy'),
@@ -190,7 +191,7 @@ const tabs = computed(() => {
           condition: () => isVolteoAdmin(),
         },
       ],
-      condition: () => isManager() || isVolteoAdmin(),
+      condition: () => isManager() || isVolteoAdmin() || isBackend(),
     },
     {
       label: __('Email'),
