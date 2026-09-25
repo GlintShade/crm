@@ -29,7 +29,8 @@
                   <Badge
                     v-if="unreadNotificationsCount"
                     :label="unreadNotificationsCount"
-                    variant="subtle"
+                    theme="red"
+                    variant="solid"
                   />
                 </template>
               </SidebarLink>
