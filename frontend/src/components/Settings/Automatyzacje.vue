@@ -8,7 +8,7 @@
       <p class="text-p-base text-ink-gray-6">
         {{
           __(
-            'Reguły automatycznego przesuwania statusu szansy i powiadomień zespołu. Reguły zakłada wyłącznie skrypt ops — tutaj tylko je włączasz, wybierasz odbiorców i kanały.',
+            'Reguły automatycznego przesuwania statusu szansy, powiadomień zespołu i zadań. Reguły zakłada wyłącznie skrypt ops, tutaj tylko je włączasz, wybierasz odbiorców, kanały i termin.',
           )
         }}
       </p>
@@ -21,7 +21,7 @@
     </template>
     <template v-else-if="!state.reguly.length">
       <div class="text-p-sm text-ink-gray-5 px-2">
-        {{ __('Brak reguł automatyzacji — zasiewa je skrypt ops.') }}
+        {{ __('Brak reguł automatyzacji, zasiewa je skrypt ops.') }}
       </div>
     </template>
     <template v-else>
@@ -45,6 +45,10 @@
       </div>
 
       <div v-if="regulyStatusu.length && regulyPowiadomien.length" class="border-t mx-2" />
+      <div
+        v-if="regulyStatusu.length && !regulyPowiadomien.length && regulyZadan.length"
+        class="border-t mx-2"
+      />
 
       <!-- Notification rules -->
       <div v-if="regulyPowiadomien.length" class="flex flex-col gap-4 px-2">
@@ -156,6 +160,102 @@
           </div>
         </div>
       </div>
+
+      <div v-if="regulyPowiadomien.length && regulyZadan.length" class="border-t mx-2" />
+
+      <!-- Task rules -->
+      <div v-if="regulyZadan.length" class="flex flex-col gap-4 px-2">
+        <div class="text-base-semibold">{{ __('Zadania') }}</div>
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <div
+            v-for="row in regulyZadan"
+            :key="row.klucz"
+            class="flex flex-col gap-4 rounded-lg border p-4"
+          >
+            <div class="flex items-start justify-between gap-4">
+              <p class="text-p-base text-ink-gray-8">{{ row.opis }}</p>
+              <Switch
+                :modelValue="Boolean(row.wlaczona)"
+                :disabled="isSaving(row.klucz)"
+                @update:modelValue="(val) => persist(row, { wlaczona: val ? 1 : 0 })"
+              />
+            </div>
+
+            <!-- Recipients -->
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs-medium text-ink-gray-5">{{ __('Odbiorcy') }}</label>
+              <div class="flex flex-wrap items-center gap-1.5">
+                <div
+                  v-for="email in row.odbiorcy"
+                  :key="email"
+                  class="flex items-center gap-1.5 rounded-full border border-outline-gray-1 bg-surface-gray-2 py-0.5 pl-1 pr-1.5 text-p-sm text-ink-gray-7"
+                >
+                  <UserAvatar :user="email" size="sm" />
+                  <span>{{ getUser(email).full_name }}</span>
+                  <button
+                    type="button"
+                    class="disabled:opacity-50"
+                    :disabled="isSaving(row.klucz)"
+                    @click="removeOdbiorca(row, email)"
+                  >
+                    <span class="lucide-x h-3 w-3 text-ink-gray-6" aria-hidden="true" />
+                  </button>
+                </div>
+
+                <Autocomplete
+                  :options="dostepniUzytkownicy(row)"
+                  value=""
+                  placement="bottom-start"
+                  @change="(option) => addOdbiorca(row, option)"
+                >
+                  <template #target="{ togglePopover }">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon-left="plus"
+                      :label="__('Dodaj odbiorcę')"
+                      :disabled="isSaving(row.klucz)"
+                      @click="togglePopover"
+                    />
+                  </template>
+                  <template #item-prefix="{ option }">
+                    <UserAvatar class="mr-2" :user="option.value" size="sm" />
+                  </template>
+                  <template #item-label="{ option }">
+                    <Tooltip :text="option.value">
+                      <div class="cursor-pointer text-ink-gray-9">
+                        {{ getUser(option.value).full_name }}
+                      </div>
+                    </Tooltip>
+                  </template>
+                </Autocomplete>
+              </div>
+            </div>
+
+            <FormControl
+              type="checkbox"
+              :label="__('Przypisany handlowiec')"
+              :description="__('dynamicznie: właściciel danej szansy')"
+              :modelValue="Boolean(row.odbiorca_handlowiec)"
+              :disabled="isSaving(row.klucz)"
+              @update:modelValue="(val) => persist(row, { odbiorca_handlowiec: val ? 1 : 0 })"
+            />
+
+            <FormControl
+              type="number"
+              :label="__('Termin (dni)')"
+              :description="__('0 = bez terminu; liczone od dnia przesłania audytu')"
+              min="0"
+              step="1"
+              :modelValue="terminDniDraft[row.klucz] ?? (row.termin_dni || 0)"
+              :disabled="isSaving(row.klucz)"
+              @update:modelValue="(val) => (terminDniDraft[row.klucz] = val)"
+              @focus="onTerminDniFocus(row)"
+              @blur="onTerminDniBlur(row)"
+            />
+          </div>
+        </div>
+      </div>
     </template>
   </div>
 </template>
@@ -176,7 +276,7 @@ import UserAvatar from '@/components/UserAvatar.vue'
 import { usersStore } from '@/stores/users'
 
 // Reactive state declares every key up front and is always replaced with a
-// fresh array on update — never gated on key presence (see CLAUDE.md:
+// fresh array on update, never gated on key presence (see CLAUDE.md:
 // hasOwnProperty on a reactive() object breaks Vue's dependency tracking
 // and froze the CP admin panel for its entire lifetime).
 const state = reactive({ reguly: [] })
@@ -190,6 +290,11 @@ const listResource = createResource({
   onSuccess: (data) => {
     state.reguly = data || []
     listError.value = ''
+    for (const row of state.reguly) {
+      if (row.typ === 'Zadanie') {
+        terminDniDraft[row.klucz] = row.termin_dni || 0
+      }
+    }
   },
   onError: (err) => {
     listError.value = err?.messages?.[0] || __('Nie udało się wczytać reguł automatyzacji')
@@ -198,6 +303,27 @@ const listResource = createResource({
 
 const regulyStatusu = computed(() => state.reguly.filter((row) => row.typ === 'Status'))
 const regulyPowiadomien = computed(() => state.reguly.filter((row) => row.typ === 'Powiadomienie'))
+const regulyZadan = computed(() => state.reguly.filter((row) => row.typ === 'Zadanie'))
+
+// Draft values for the "Termin (dni)" number input, keyed by `klucz`.
+// Persisted only on blur/change, never per keystroke. Read/written by
+// direct property access (never hasOwnProperty) so the reactive `get`
+// trap keeps tracking each row's draft correctly.
+const terminDniDraft = reactive({})
+
+function onTerminDniFocus(row) {
+  terminDniDraft[row.klucz] = row.termin_dni || 0
+}
+
+function onTerminDniBlur(row) {
+  const draftValue = terminDniDraft[row.klucz]
+  const parsed = Math.max(0, Math.trunc(Number(draftValue) || 0))
+  terminDniDraft[row.klucz] = parsed
+  const current = row.termin_dni || 0
+  if (parsed !== current) {
+    persist(row, { termin_dni: parsed })
+  }
+}
 
 function dostepniUzytkownicy(row) {
   const wybrani = new Set(row.odbiorcy || [])
@@ -237,6 +363,7 @@ function persist(row, patch) {
       wlaczona: optimistic.wlaczona ? 1 : 0,
       odbiorcy: JSON.stringify(optimistic.odbiorcy || []),
       odbiorca_handlowiec: optimistic.odbiorca_handlowiec ? 1 : 0,
+      termin_dni: Number(optimistic.termin_dni) || 0,
       kanal_bell: optimistic.kanal_bell ? 1 : 0,
       kanal_email: optimistic.kanal_email ? 1 : 0,
       kanal_sms: optimistic.kanal_sms ? 1 : 0,
@@ -244,6 +371,9 @@ function persist(row, patch) {
     {
       onSuccess: (data) => {
         replaceRow(data.klucz, data)
+        if (data.typ === 'Zadanie') {
+          terminDniDraft[data.klucz] = data.termin_dni || 0
+        }
         saving[row.klucz] = false
         toast.success(__('Zapisano'))
       },

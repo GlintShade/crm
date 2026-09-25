@@ -574,6 +574,18 @@ class TestTekstSladu(unittest.TestCase):
 			"status zmieniony automatycznie (Umowa Wygenerowana): Lead → Umowa Wygenerowana",
 		)
 
+	def test_m2_zadanie_auto(self: "TestTekstSladu") -> None:
+		self.assertEqual(
+			tekst_sladu(
+				"zadanie_auto",
+				automatyzacja="zadanie audyt przeslany",
+				tytul="Zweryfikuj audyt OZE: Jan Kowalski",
+				liczba=2,
+			),
+			"zadanie utworzone automatycznie (zadanie audyt przeslany): "
+			"„Zweryfikuj audyt OZE: Jan Kowalski”, odbiorcy: 2",
+		)
+
 	def test_n_kalkulator_oze(self: "TestTekstSladu") -> None:
 		self.assertEqual(
 			tekst_sladu("kalkulator_oze", moc_kw=6.5, pozycje=12),

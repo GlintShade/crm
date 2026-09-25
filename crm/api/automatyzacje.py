@@ -12,6 +12,14 @@ nigdy nie tworzy nowego wiersza. Sama logika przesuwania statusu i wysyłki
 powiadomień żyje w `crm.api.pipeline` (`advance_deal_status`,
 `dispatch_notification`); ten moduł tylko obsługuje panel konfiguracji.
 
+Od ops#192 istnieje trzeci `typ` reguły, „Zadanie” (np. `zadanie_audyt_przeslany`,
+`zadanie_audyt_cp_przeslany`): reguły tego typu korzystają z `odbiorcy`,
+`odbiorca_handlowiec` i `termin_dni` tak samo jak reguły powiadomień, ale
+ignorują flagi kanałów (`kanal_bell`/`kanal_email`/`kanal_sms`), bo zadanie
+`CRM Task` nie ma pojęcia kanału, jego dzwoneczek idzie przez przypisanie
+(`CRMTask.after_insert`), nie przez `_KANALY` w `crm.api.pipeline`. Logika
+tworzenia zadań żyje w `crm.api.pipeline.dispatch_task`.
+
 Model uprawnień
 ----------------
 Dostęp wyłącznie dla `Volteo Core Admin` / `System Manager` — wzorzec
@@ -38,6 +46,7 @@ _POLA_LISTY = (
 	"opis",
 	"wlaczona",
 	"odbiorca_handlowiec",
+	"termin_dni",
 	"kanal_bell",
 	"kanal_email",
 	"kanal_sms",
@@ -78,14 +87,21 @@ def volteo_automatyzacja_zapisz(
 	kanal_bell: int = 1,
 	kanal_email: int = 0,
 	kanal_sms: int = 0,
+	termin_dni: int = 0,
 ) -> dict[str, Any]:
 	"""Aktualizuje istniejącą regułę automatyzacji (flagi kanałów, odbiorca
-	handlowiec, lista odbiorców-użytkowników). NIGDY nie tworzy nowego wiersza —
-	nieznany `klucz` jest błędem, reguły są seedowane wyłącznie skryptem ops.
+	handlowiec, termin w dniach, lista odbiorców-użytkowników). NIGDY nie tworzy
+	nowego wiersza, nieznany `klucz` jest błędem, reguły są seedowane wyłącznie
+	skryptem ops.
 
-	`odbiorcy` przychodzi jako string JSON (lista adresów e-mail użytkowników) —
+	`odbiorcy` przychodzi jako string JSON (lista adresów e-mail użytkowników),
 	tak wysyła go frontend (`createResource`/`fetch` z ciałem JSON zagnieżdżonym
 	w formularzu); parsowane i walidowane tutaj, PRZED jakimkolwiek zapisem.
+
+	`termin_dni` (dni do terminu zadania, 0 = brak terminu) dotyczy wyłącznie
+	reguł typu „Zadanie” (ops#192), ale jest przyjmowany i zapisywany zawsze,
+	razem z resztą pól, bez sprawdzania `typ`: reguła powiadomień po prostu
+	nigdy go nie czyta (patrz `crm.api.pipeline.dispatch_task`).
 	"""
 	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
 
@@ -103,6 +119,7 @@ def volteo_automatyzacja_zapisz(
 	doc.kanal_bell = cint(kanal_bell)
 	doc.kanal_email = cint(kanal_email)
 	doc.kanal_sms = cint(kanal_sms)
+	doc.termin_dni = max(0, cint(termin_dni))
 
 	doc.set("odbiorcy", [])
 	for email in lista_odbiorcow:
