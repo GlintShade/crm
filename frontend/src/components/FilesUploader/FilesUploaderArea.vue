@@ -162,10 +162,16 @@ const allowTakePhoto = ref(
 const restrictions = ref(props.options.restrictions || {})
 
 onMounted(() => {
+  // Celowo bez klucza cache: createResource z takim samym kluczem zwraca JEDNĄ,
+  // współdzieloną instancję zasobu dla wszystkich okien dialogowych (frappe-ui
+  // przy powtórnym kluczu tylko woła reload() na już istniejącej instancji).
+  // Transform pierwszego okna zapisywał wtedy dane do restrictions pierwszego,
+  // już odmontowanego komponentu, więc każde kolejne okno „Załącz" w tej samej
+  // karcie miało maxFileSize = undefined i limit rozmiaru pliku nie działał
+  // (znalezione 2026-09-25 przy 50 MB, ops#190).
   createResource({
     url: 'crm.api.get_file_uploader_defaults',
     params: { doctype: props.doctype },
-    cache: ['file_uploader_defaults', props.doctype],
     auto: true,
     transform: (data) => {
       const propRestrictions = props.options.restrictions || {}
