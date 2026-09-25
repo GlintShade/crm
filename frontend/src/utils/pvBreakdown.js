@@ -37,6 +37,10 @@ const DEFINICJA_GRUP = [
       // `koszty_linie` silnika ops (patrz komentarz u góry pliku): zmieniaj
       // oba miejsca razem.
       ['k_licznik', 'Dodatkowy licznik'],
+      // Etykieta "Uzgodnienia PPOŻ" jest CELOWO zduplikowana w
+      // `koszty_linie` silnika ops (patrz komentarz u góry pliku): zmieniaj
+      // oba miejsca razem (ops#194).
+      ['k_ppoz', 'Uzgodnienia PPOŻ'],
     ],
   },
   {

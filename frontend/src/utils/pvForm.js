@@ -78,6 +78,38 @@ export function licznikDostepny(producent) {
   return producent === 'Sigenergy' || producent === 'Deye'
 }
 
+// Threshold above which PPOZ (fire-protection utility agreements) become
+// required: sum of the new installation's PV power plus any existing PV
+// power the client already has. Deliberately duplicated in two other places
+// that cannot import this module: `crm/volteo_umowa.py::ppoz_wymagane`
+// (frappe-free but a separate module, mirrored for the contract tab) and the
+// ops Server Script in `ops/crm-kalkulator-bom.py` (safe_exec, no imports
+// allowed at all). Change all three together (ops#194).
+export const PROG_PPOZ_KW = 6.5
+
+/**
+ * Sprawdza, czy uzgodnienia PPOŻ są wymagane dla danej konfiguracji.
+ * WYŁĄCZNIE prezentacja: serwer pozostaje autorytatywny (patrz `ppoz` w
+ * odpowiedzi `volteo_quote_calc`/`volteo_quote_generate`) i liczy tę samą
+ * regułę niezależnie od tego, co pokazuje ten formularz. Lustrzane odbicie
+ * `crm/volteo_umowa.py::ppoz_wymagane`, używane zarówno w KalkulatorTab.vue,
+ * jak i w UmowaTab.vue (ta sama sygnatura, ops#194).
+ *
+ * @param {object} params
+ * @param {number} params.mocNowaKw - moc nowej instalacji PV w kWp (0 dla wariantu bez PV)
+ * @param {string} params.istniejacaPv - "Tak"/"Nie", czy klient ma już instalację PV
+ * @param {number} params.mocIstniejacaKwp - moc istniejącej instalacji PV w kWp
+ * @param {string} [params.ppozKalkulator] - "Tak"/"Nie", wynik kalkulatora OZE (jeśli już doliczył PPOŻ, umowa go dziedziczy)
+ * @returns {boolean} czy PPOŻ jest wymagane
+ */
+export function ppozWymagane({ mocNowaKw, istniejacaPv, mocIstniejacaKwp, ppozKalkulator }) {
+  if (ppozKalkulator === 'Tak') return true
+
+  const nowa = Number(mocNowaKw) || 0
+  const istniejaca = istniejacaPv === 'Tak' ? Number(mocIstniejacaKwp) || 0 : 0
+  return nowa + istniejaca > PROG_PPOZ_KW
+}
+
 /**
  * Buduje listę opcji mocy PV: MOC_MIN_KW–MOC_MAX_KW co MOC_STEP_KW, z etykietą
  * pokazującą szacowaną liczbę paneli (moc * 2). Wyłącznie prezentacja — nie

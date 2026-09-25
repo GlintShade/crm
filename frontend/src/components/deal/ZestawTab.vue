@@ -207,6 +207,12 @@
           <div v-if="wycenaFields.custom_licznik_dodatkowy" class="flex justify-between py-0.5 text-ink-gray-7">
             <span>{{ __('Dodatkowy licznik') }}</span><span>{{ wycenaFields.custom_licznik_dodatkowy }}</span>
           </div>
+          <div v-if="wycenaFields.custom_istniejaca_pv" class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Istniejąca instalacja PV') }}</span><span>{{ istniejacaPvLabel }}</span>
+          </div>
+          <div v-if="wycenaFields.custom_ppoz" class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Uzgodnienia PPOŻ') }}</span><span>{{ wycenaFields.custom_ppoz }}</span>
+          </div>
 
           <div class="mb-1 mt-1 border-t border-outline-gray-2 pt-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Cena') }}</div>
           <div class="flex justify-between py-0.5 text-ink-gray-7">
@@ -475,6 +481,9 @@ const dealWycena = createResource({
       'custom_konstrukcja',
       'custom_kabel_m',
       'custom_licznik_dodatkowy',
+      'custom_istniejaca_pv',
+      'custom_istniejaca_pv_moc_kwp',
+      'custom_ppoz',
       'custom_netto',
       'custom_vat_pct',
       'deal_value',
@@ -678,6 +687,9 @@ const wycenaFields = computed(() => ({
   custom_konstrukcja: '',
   custom_kabel_m: 0,
   custom_licznik_dodatkowy: '',
+  custom_istniejaca_pv: '',
+  custom_istniejaca_pv_moc_kwp: 0,
+  custom_ppoz: '',
   custom_netto: 0,
   custom_vat_pct: 0,
   deal_value: 0,
@@ -706,4 +718,14 @@ const showWycena = computed(() =>
   PV_RODZAJE.has(wycenaFields.value.custom_rodzaj_umowy) &&
   (Number(wycenaFields.value.custom_netto) > 0 || Number(wycenaFields.value.deal_value) > 0),
 )
+
+// "Tak · 5 kWp" when the client already has a PV installation with a known
+// power, "Tak" alone when the power is not set, "Nie" otherwise (ops#194).
+const istniejacaPvLabel = computed(() => {
+  const moc = Number(wycenaFields.value.custom_istniejaca_pv_moc_kwp) || 0
+  if (wycenaFields.value.custom_istniejaca_pv === 'Tak') {
+    return moc > 0 ? `Tak · ${moc} kWp` : 'Tak'
+  }
+  return wycenaFields.value.custom_istniejaca_pv
+})
 </script>

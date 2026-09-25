@@ -20,6 +20,8 @@ import {
   suggestedStorageKwh,
   pickBySpec,
   pickMounting,
+  PROG_PPOZ_KW,
+  ppozWymagane,
 } from '@/utils/pvForm'
 
 describe('PV form logic', () => {
@@ -291,6 +293,51 @@ describe('PV form logic', () => {
 
     it('returns null for empty options', () => {
       expect(pickMocForTarget(10, 0)).toBeNull()
+    })
+  })
+
+  describe('ppozWymagane', () => {
+    it('is false at exactly the threshold (strict greater-than)', () => {
+      expect(ppozWymagane({ mocNowaKw: PROG_PPOZ_KW, istniejacaPv: 'Nie', mocIstniejacaKwp: 0 })).toBe(false)
+      expect(ppozWymagane({ mocNowaKw: 6.5, istniejacaPv: 'Nie', mocIstniejacaKwp: 0 })).toBe(false)
+    })
+
+    it('is false below the threshold', () => {
+      expect(ppozWymagane({ mocNowaKw: 5, istniejacaPv: 'Nie', mocIstniejacaKwp: 0 })).toBe(false)
+    })
+
+    it('is true above the threshold on new power alone', () => {
+      expect(ppozWymagane({ mocNowaKw: 7, istniejacaPv: 'Nie', mocIstniejacaKwp: 0 })).toBe(true)
+    })
+
+    it('is true when new plus existing power exceeds the threshold', () => {
+      expect(ppozWymagane({ mocNowaKw: 3, istniejacaPv: 'Tak', mocIstniejacaKwp: 5 })).toBe(true)
+    })
+
+    it('ignores the existing power when istniejacaPv is "Nie"', () => {
+      expect(ppozWymagane({ mocNowaKw: 3, istniejacaPv: 'Nie', mocIstniejacaKwp: 5 })).toBe(false)
+    })
+
+    it('wins via ppozKalkulator even below the threshold', () => {
+      expect(ppozWymagane({ mocNowaKw: 1, istniejacaPv: 'Nie', mocIstniejacaKwp: 0, ppozKalkulator: 'Tak' })).toBe(true)
+    })
+
+    it('does not change the rule when ppozKalkulator is "Nie" or undefined', () => {
+      expect(ppozWymagane({ mocNowaKw: 3, istniejacaPv: 'Nie', mocIstniejacaKwp: 0, ppozKalkulator: 'Nie' })).toBe(false)
+      expect(ppozWymagane({ mocNowaKw: 7, istniejacaPv: 'Nie', mocIstniejacaKwp: 0, ppozKalkulator: 'Nie' })).toBe(true)
+      expect(ppozWymagane({ mocNowaKw: 7, istniejacaPv: 'Nie', mocIstniejacaKwp: 0, ppozKalkulator: undefined })).toBe(true)
+    })
+
+    it('treats empty, null and undefined inputs as zero', () => {
+      expect(ppozWymagane({ mocNowaKw: null, istniejacaPv: 'Nie', mocIstniejacaKwp: null })).toBe(false)
+      expect(ppozWymagane({ mocNowaKw: undefined, istniejacaPv: 'Tak', mocIstniejacaKwp: undefined })).toBe(false)
+      expect(ppozWymagane({ mocNowaKw: '', istniejacaPv: 'Tak', mocIstniejacaKwp: '' })).toBe(false)
+      expect(ppozWymagane({ mocNowaKw: 7, istniejacaPv: 'Tak', mocIstniejacaKwp: NaN })).toBe(true)
+    })
+
+    it('accepts string numbers from number inputs', () => {
+      expect(ppozWymagane({ mocNowaKw: '5', istniejacaPv: 'Tak', mocIstniejacaKwp: '3.5' })).toBe(true)
+      expect(ppozWymagane({ mocNowaKw: '3', istniejacaPv: 'Tak', mocIstniejacaKwp: '3' })).toBe(false)
     })
   })
 })
