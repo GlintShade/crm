@@ -151,7 +151,7 @@ const tabs = computed(() => {
           label: __('Users'),
           icon: 'user',
           component: markRaw(Users),
-          condition: () => isManager(),
+          condition: () => isManager() || isBackend(),
         },
         // Volteo Backend zaprasza handlowcow (D2D/CC) bez roli Core Admin, issue ops#185; backend bramkuje zakres w crm.api.invite_by_email.
         {
@@ -164,7 +164,7 @@ const tabs = computed(() => {
           label: __('Sales Hierarchy'),
           icon: LucideNetwork,
           component: markRaw(Hierarchy),
-          condition: () => isManager() || isVolteoAdmin(),
+          condition: () => isManager() || isVolteoAdmin() || isBackend(),
         },
         {
           label: __('Konta Volteo'),
