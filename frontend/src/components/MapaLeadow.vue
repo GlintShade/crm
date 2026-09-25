@@ -816,74 +816,151 @@ function ustawStylWybranego(nazwa, wybrany) {
   if (wybrany) wpis.marker.bringToFront()
 }
 
-// Dymek pinezki (hover, Leaflet Tooltip) -- skrot: nazwa, miasto, status,
-// zrodlo importu, obecne produkty, status zrodla. Klik w pinezke otwiera
-// panel LeadSzybkiPodglad.vue (patrz marker.on('click', ...) wyzej) zamiast
-// nawigowac -- "Otworz leada" zyje teraz w naglowku tego panelu, nie tutaj.
+// Dymek pinezki (hover, Leaflet Tooltip), uklad D -- decyzja wlasciciela
+// 2026-09-25 (plan "Dymek pinezki na mapie leadow: uklady danych").
+// Naglowek: nazwisko leada plus pigulka statusu w kolorze statusu, w
+// jednej linii. Pod spodem miasto, potem (gdy termin jest ustawiony)
+// ramka z ikona kalendarza i terminem spotkania, a na koncu siatka 2
+// kolumn na zrodlo/status zrodla/produkty. Checkboxy z popovera ustawien
+// (ustawieniaDymka) tylko chowaja komorki siatki i ramke terminu --
+// naglowek i miasto sa zawsze widoczne, to podstawowa tozsamosc pinezki.
+// Gdy w siatce zostaje dokladnie jedna komorka, rozciaga sie na obie
+// kolumny; gdy zero, siatka w ogole sie nie pojawia. formatujTermin()
+// zostaje jak w item #31 (polski skrot dnia/miesiaca, godzina 24h) --
+// dayjsLocal() z frappe-ui zamienia surowy Datetime z serwera na lokalna
+// strefe, zanim formatujTermin() sparsuje to na polski zapis.
 // Budowane przez DOM (nie string HTML) - bezpieczne wobec lead_name z
-// dowolną treścią i nie wymaga v-html.
+// dowolna trescia i nie wymaga v-html.
 function budujDymek(lead) {
   const container = document.createElement('div')
-  container.className = 'flex flex-col gap-0.5'
+  container.className = 'flex flex-col gap-1.5'
+
+  const header = document.createElement('div')
+  header.className = 'flex items-center gap-2 whitespace-nowrap'
 
   const title = document.createElement('div')
-  title.className = 'text-sm font-medium text-ink-gray-9'
+  title.className = 'min-w-0 flex-1 truncate text-sm font-medium text-ink-gray-9'
   title.textContent = lead.lead_name || lead.name
-  container.appendChild(title)
+  header.appendChild(title)
+
+  const pill = document.createElement('span')
+  pill.className =
+    'inline-flex shrink-0 items-center gap-1.5 rounded-full bg-surface-gray-2 px-1.5 py-0.5 text-xs text-ink-gray-7'
+  const dot = document.createElement('span')
+  dot.className = 'h-2 w-2 shrink-0 rounded-full'
+  dot.style.backgroundColor = kolorStatusu(lead.status)
+  pill.appendChild(dot)
+  const statusText = document.createElement('span')
+  statusText.textContent = lead.status || BRAK_STATUSU
+  pill.appendChild(statusText)
+  header.appendChild(pill)
+
+  container.appendChild(header)
 
   const city = document.createElement('div')
-  city.className = 'text-sm text-ink-gray-6'
+  city.className = 'text-xs text-ink-gray-5'
   city.textContent = lead.custom_install_city || '-'
   container.appendChild(city)
 
-  const status = document.createElement('div')
-  status.className = 'text-sm text-ink-gray-6'
-  status.textContent = lead.status || BRAK_STATUSU
-  container.appendChild(status)
+  if (ustawieniaDymka.terminSpotkania && lead.custom_termin_spotkania) {
+    const box = document.createElement('div')
+    box.className =
+      'flex items-center gap-2 rounded border border-outline-gray-2 px-2 py-1.5 text-sm font-medium text-ink-gray-8'
 
-  // Pola w dymku (issue #101): tylko te, które użytkownik zostawił zaznaczone
-  // w popoverze ustawień (domyślnie wszystkie cztery). Termin spotkania
-  // formatowany przez formatujTermin() (utils/dataPolska.js) -- polski skrót
-  // dnia tygodnia/miesiąca i godzina 24h, zamiast angielskiego 12h domyślnego
-  // z formatDate()/getFormat() w utils/index.js (item #31 rundy klik-testu po
-  // b63); dayjsLocal() z frappe-ui zamienia surowy Datetime z serwera na
-  // "YYYY-MM-DD HH:mm:ss" w lokalnej strefie, zachowując tę samą semantykę
-  // strefy czasowej co dawne formatDate(), zanim formatujTermin() sparsuje
-  // to na polski zapis.
-  // Trzeci element (opcjonalny, `true`) oznacza wiersz "produktów leada"
-  // (ops#150) -- tokeny renderowane jako span-chipy zamiast surowego
-  // stringa "PV+PC" (patrz `rozbijTagi` w utils/tagiProduktow.js).
-  const wiersze = [
-    ustawieniaDymka.zrodlo && [__('Źródło'), lead.custom_import_source],
-    ustawieniaDymka.produkty && [__('Obecne produkty'), lead.custom_posiadane_produkty, true],
-    ustawieniaDymka.produkty && [__('Produkt w procesie'), lead.custom_produkt_procesu, true],
-    ustawieniaDymka.statusZrodla && [__('Status źródła'), lead.custom_status_zrodla],
-    ustawieniaDymka.terminSpotkania && [
-      __('Termin spotkania'),
-      lead.custom_termin_spotkania
-        ? formatujTermin(dayjsLocal(lead.custom_termin_spotkania).format('YYYY-MM-DD HH:mm:ss'))
-        : '',
-    ],
-    // Wiersz "Dokładność" (issue #102) usunięty z dymka decyzją właściciela 2026-09-25.
-  ].filter(Boolean)
-  for (const [label, value, tagi] of wiersze) {
-    if (!value) continue
-    const row = document.createElement('div')
-    row.className = 'text-xs text-ink-gray-5'
-    if (tagi) {
-      const etykieta = document.createElement('span')
-      etykieta.textContent = `${label}: `
-      row.appendChild(etykieta)
-      for (const token of rozbijTagi(value)) {
-        const chip = document.createElement('span')
-        chip.className = 'inline-block rounded bg-surface-gray-3 px-1 mr-1 text-ink-gray-7'
-        chip.textContent = token
-        row.appendChild(chip)
+    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    icon.setAttribute('width', '16')
+    icon.setAttribute('height', '16')
+    icon.setAttribute('viewBox', '0 0 24 24')
+    icon.setAttribute('fill', 'none')
+    icon.setAttribute('stroke', 'currentColor')
+    icon.setAttribute('stroke-width', '2')
+    icon.setAttribute('stroke-linecap', 'round')
+    icon.setAttribute('stroke-linejoin', 'round')
+    icon.setAttribute('class', 'shrink-0 text-ink-gray-6')
+
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+    rect.setAttribute('x', '3')
+    rect.setAttribute('y', '4')
+    rect.setAttribute('width', '18')
+    rect.setAttribute('height', '18')
+    rect.setAttribute('rx', '2')
+    rect.setAttribute('ry', '2')
+    icon.appendChild(rect)
+
+    const lineRight = document.createElementNS('http://www.w3.org/2000/svg', 'line')
+    lineRight.setAttribute('x1', '16')
+    lineRight.setAttribute('y1', '2')
+    lineRight.setAttribute('x2', '16')
+    lineRight.setAttribute('y2', '6')
+    icon.appendChild(lineRight)
+
+    const lineLeft = document.createElementNS('http://www.w3.org/2000/svg', 'line')
+    lineLeft.setAttribute('x1', '8')
+    lineLeft.setAttribute('y1', '2')
+    lineLeft.setAttribute('x2', '8')
+    lineLeft.setAttribute('y2', '6')
+    icon.appendChild(lineLeft)
+
+    const lineBottom = document.createElementNS('http://www.w3.org/2000/svg', 'line')
+    lineBottom.setAttribute('x1', '3')
+    lineBottom.setAttribute('y1', '10')
+    lineBottom.setAttribute('x2', '21')
+    lineBottom.setAttribute('y2', '10')
+    icon.appendChild(lineBottom)
+
+    box.appendChild(icon)
+
+    const text = document.createElement('span')
+    text.textContent = formatujTermin(
+      dayjsLocal(lead.custom_termin_spotkania).format('YYYY-MM-DD HH:mm:ss'),
+    )
+    box.appendChild(text)
+
+    container.appendChild(box)
+  }
+
+  // Kolejnosc komorek siatki (uklad D): zrodlo i status zrodla razem w
+  // pierwszym wierszu, oba pola produktow razem w drugim -- inaczej niz
+  // w poprzednim ukladzie, gdzie status zrodla siedzial pod produktami.
+  // Produkt w procesie dostaje chip akcentowy (bg-surface-gray-4), zeby
+  // odroznic sie od zwyklego chipu "Obecne produkty" (bg-surface-gray-3).
+  const cells = [
+    ustawieniaDymka.zrodlo && [__('Źródło'), lead.custom_import_source, false, false],
+    ustawieniaDymka.statusZrodla && [__('Status źródła'), lead.custom_status_zrodla, false, false],
+    ustawieniaDymka.produkty && [__('Obecne produkty'), lead.custom_posiadane_produkty, true, false],
+    ustawieniaDymka.produkty && [__('Produkt w procesie'), lead.custom_produkt_procesu, true, true],
+  ].filter((cell) => cell && cell[1])
+
+  if (cells.length) {
+    const grid = document.createElement('div')
+    grid.className = 'grid grid-cols-2 gap-x-3 gap-y-2'
+    for (const [label, value, tagi, akcent] of cells) {
+      const cell = document.createElement('div')
+      if (cells.length === 1) cell.className = 'col-span-2'
+
+      const labelEl = document.createElement('div')
+      labelEl.className = 'text-[11px] leading-4 text-ink-gray-5'
+      labelEl.textContent = label
+      cell.appendChild(labelEl)
+
+      const valueEl = document.createElement('div')
+      valueEl.className = 'text-xs text-ink-gray-8'
+      if (tagi) {
+        for (const token of rozbijTagi(value)) {
+          const chip = document.createElement('span')
+          chip.className = akcent
+            ? 'mr-1 inline-block rounded bg-surface-gray-4 px-1 font-medium text-ink-gray-9'
+            : 'mr-1 inline-block rounded bg-surface-gray-3 px-1 text-ink-gray-7'
+          chip.textContent = token
+          valueEl.appendChild(chip)
+        }
+      } else {
+        valueEl.textContent = value
       }
-    } else {
-      row.textContent = `${label}: ${value}`
+      cell.appendChild(valueEl)
+      grid.appendChild(cell)
     }
-    container.appendChild(row)
+    container.appendChild(grid)
   }
 
   return container
@@ -930,6 +1007,7 @@ onBeforeUnmount(() => destroyMap())
   background-color: var(--surface-elevation-1);
   border-color: var(--outline-gray-2);
   color: var(--ink-gray-9);
+  min-width: 260px;
 }
 .leaflet-tooltip.volteo-mapa-dymek.leaflet-tooltip-top::before {
   border-top-color: var(--surface-elevation-1);
