@@ -8,6 +8,7 @@ from frappe.query_builder import JoinType
 from frappe.translate import get_translated_doctypes
 
 from crm.api.koszty import ADMIN_ROLE
+from crm.api.montaz import ZNACZNIK_ZDJEC_MONTAZU
 from crm.fcrm.doctype.crm_call_log.crm_call_log import parse_call_log
 from crm.permissions.org_hierarchy import BYPASS_ROLES, czy_autor_ma_role_cc
 from crm.volteo_aktywnosc import (
@@ -1200,22 +1201,31 @@ def get_attachments(doctype: str, name: str):
 				"modified",
 				"creation",
 				"owner",
+				"attached_to_field",
 			],
 		)
 		or []
 	)
+	# VOLTEO (ops#191): zdjęcia galerii "Zdjęcia z realizacji" (zakładka Montaż,
+	# crm.api.montaz) to wiersze File ze znacznikiem attached_to_field ==
+	# ZNACZNIK_ZDJEC_MONTAZU, celowo pominięte tutaj, żeby nie dublowały się w
+	# zakładce Pliki. Filtr po wczytaniu, nie w SQL: zależność od tego, jak rdzeń
+	# traktuje NULL w ifnull(attached_to_field, ...), jest niepotrzebnym ryzykiem.
+	# Klucz attached_to_field jest zdejmowany z odpowiedzi, żeby kształt danych dla
+	# AttachmentArea.vue się nie zmienił.
 	# VOLTEO: flaga na wiersz dla ołówka zmiany nazwy w AttachmentArea.vue (issue
 	# ops#73). Pliki komentarzy/komunikacji (doctype != "CRM Deal") dostają ołówek
 	# zawsze; pliki systemowe wygenerowane dla szansy (umowa, formularz kredytowy —
 	# patrz crm.volteo_zalaczniki) go nie dostają, bo są wyszukiwane po nazwie.
 	return [
 		{
-			**wiersz,
+			**{klucz: wartosc for klucz, wartosc in wiersz.items() if klucz != "attached_to_field"},
 			"mozna_zmienic_nazwe": not (
 				doctype == "CRM Deal" and czy_plik_systemowy(wiersz.file_name, name)
 			),
 		}
 		for wiersz in zalaczniki
+		if wiersz.attached_to_field != ZNACZNIK_ZDJEC_MONTAZU
 	]
 
 

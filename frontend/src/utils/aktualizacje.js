@@ -5,6 +5,11 @@
 // decyduje jak je pokazać. Przyszła trzecia zakładka strumieniowa (np.
 // kredyt CP) dokłada tu kolejny obiekt konfiguracji, bez nowego komponentu.
 //
+// `zdjecia: true` (tylko MONTAZ, ops#191) włącza w AktualizacjeTab.vue
+// galerię "Zdjęcia z realizacji" (komponent MontazZdjecia.vue) nad kartą
+// "Dodaj wpis". TRIFY nie ma tego klucza wcale (nie samo `false`) - galeria
+// jest jedna, wspólna dla całej szansy, nie per strumień.
+//
 // PUŁAPKA (patrz CLAUDE.md → "Eager chunk a __()"): __() wolno wywoływać
 // tylko w script setup / funkcjach komponentu, NIGDY na poziomie modułu —
 // dlatego napisy poniżej są surowym polskim tekstem, a tłumaczenie przez
@@ -31,6 +36,7 @@ export const MONTAZ = {
   name: 'Montaz',
   doctype: 'Volteo Montaz Update',
   html: false,
+  zdjecia: true,
   typy: ['Notatka', 'Telefon', 'Wizyta', 'Termin montażu', 'Problem'],
   placeholder: 'Np. Umówiono termin montażu na 20.07…',
   pusty: 'Brak aktualizacji montażu.',
@@ -60,4 +66,15 @@ export function tekstPusty(html) {
   return !htmlNaTekst(html || '')
     .replace(/\u00A0/g, ' ')
     .trim()
+}
+
+// Mapuje surowe wiersze File (z crm.api.montaz.zdjecia_montazu) na kszta\u0142t
+// listy podgl\u0105du wsp\u00F3lny z zak\u0142adk\u0105 Audyt (@/utils/audytPodglad, klucz/url/
+// etykieta) - pomija wiersze bez name lub bez file_url, zachowuje kolejno\u015B\u0107
+// wej\u015Bciow\u0105 (serwer sortuje ju\u017C od najstarszego, creation asc).
+export function zdjeciaDoGalerii(wiersze) {
+  if (!Array.isArray(wiersze)) return []
+  return wiersze
+    .filter((w) => w && w.name && w.file_url)
+    .map((w) => ({ klucz: w.name, url: w.file_url, etykieta: w.file_name || '' }))
 }
