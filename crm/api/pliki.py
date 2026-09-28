@@ -13,11 +13,15 @@ Cała klasyfikacja/dedup/sortowanie/flagi żyje w `crm.volteo_pliki`
 (frappe-free, testowalne bez zainstalowanego `frappe`); ten moduł tylko
 czyta bazę, sprawdza uprawnienia i składa kontekst.
 
-Uprawnienia listy `File` są owner-based (`frappe.get_all("File", ...)` jako
-handlowiec zwróci tylko WŁASNE pliki, mimo że `has_permission("File", "read",
-doc=plik kolegi na tej samej szansie)` da `True` przez `attached_to`) -- patrz
-`crm.api.montaz` i `crm.api.activities.get_attachments`, ten sam problem, to
-samo rozwiązanie: `frappe.db.get_all` (pomija uprawnienia `File`), zawsze PO
+Uprawnienia listy `File` są bramkowane na poziomie DOCTYPE'U, nie dokumentu:
+`frappe.get_list("File", ...)` jako handlowiec pokaże KAŻDY plik podpięty pod
+jakikolwiek `CRM Deal` (`owner = user LUB attached_to_doctype z odczytem na
+poziomie doctype'u`, `frappe/core/doctype/file/file.py`), włącznie z plikami
+szans, których ten handlowiec wcale nie widzi -- a `frappe.get_all("File",
+...)` idzie jeszcze dalej i ignoruje uprawnienia CAŁKOWICIE (patrz akapit
+niżej). Żadne z tych dwóch wywołań się tu nie nadaje: patrz `crm.api.montaz`
+i `crm.api.activities.get_attachments`, ten sam problem, to samo rozwiązanie:
+`frappe.db.get_all` (pomija uprawnienia `File`), zawsze PO
 jawnym `frappe.has_permission` na dokumencie nadrzędnym (szansa i, per
 źródło, każdy dokument nadrzędny -- Volteo Umowa/Kredyt/Audyt/Audyt CP/
 Faktura, CRM Lead). Brak uprawnienia do dokumentu nadrzędnego = jego pliki
@@ -29,7 +33,7 @@ feedu.
 Pułapka nazewnicza Frappe warta zapamiętania: `frappe.get_all` NIE jest
 "permission-aware" -- jest dokładnie odwrotnie, `get_all` to `get_list` z
 `ignore_permissions=True` na sztywno (frappe/__init__.py). Do listowania
-`File` (owner-based, patrz akapit wyżej) ten fork świadomie chce
+`File` (bramka doctype-level, patrz akapit wyżej) ten fork świadomie chce
 `frappe.db.get_all` (dodatkowo pomija też `permission_query_conditions`).
 Do listowania rekordów `Volteo Faktura`/`Volteo Kredyt` samych w sobie --
 gdzie zależy nam WŁAŚNIE na uszanowaniu ich hooków deal-scoped
