@@ -9252,6 +9252,10 @@ msgid "Dodaj"
 msgstr "Dodaj"
 
 #: frontend/src/components/deal/NotatkiStrumien.vue
+msgid "Usuń plik"
+msgstr "Usuń plik"
+
+#: frontend/src/components/deal/NotatkiStrumien.vue
 msgid "Ładowanie…"
 msgstr "Ładowanie…"
 

@@ -89,9 +89,11 @@
           />
           <FilePdfIcon v-else class="h-3.5 w-3.5 shrink-0 text-ink-gray-5" />
           <span class="max-w-[10rem] truncate">{{ p.file_name }}</span>
-          <span
-            class="lucide-x h-3.5 w-3.5 shrink-0 cursor-pointer text-ink-gray-5"
-            aria-hidden="true"
+          <Button
+            variant="ghost"
+            size="xs"
+            icon="lucide-x"
+            :tooltip="__('Usuń plik')"
             @click.stop="usunPlikRoboczy(p)"
           />
         </div>
