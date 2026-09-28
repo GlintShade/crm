@@ -88,7 +88,7 @@
         v-for="p in dokumenty"
         :key="p.name"
         type="button"
-        class="flex h-24 w-24 shrink-0 flex-col items-start gap-1 rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-2 text-left"
+        class="flex h-24 w-24 shrink-0 flex-col items-start gap-1 overflow-hidden rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-2 text-left"
         @click="otworzDokument(p)"
       >
         <span
@@ -97,7 +97,7 @@
         >
           <component :is="ikonaDokumentu(p)" class="h-3.5 w-3.5" />
         </span>
-        <span class="line-clamp-2 flex-1 text-[11px] leading-tight text-ink-gray-8">{{ p.file_name }}</span>
+        <span class="line-clamp-2 w-full min-w-0 flex-1 break-all text-[11px] leading-tight text-ink-gray-8">{{ p.file_name }}</span>
         <span class="text-[10px] text-ink-gray-4">{{ formatujRozmiar(p.file_size) }}</span>
       </button>
 
