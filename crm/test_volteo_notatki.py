@@ -4,14 +4,19 @@ from crm.volteo_notatki import (
 	DOCTYPE,
 	DOZWOLONE_ROZSZERZENIA,
 	ETYKIETY_ZAKLADEK,
+	ETYKIETY_ZRODEL_DODATKOWYCH,
 	PREFIKS_ZNACZNIKA,
 	TYPY_BAZOWE,
 	TYPY_PER_ZAKLADKA,
 	ZAKLADKI,
 	ZNACZNIK_ROBOCZY,
+	ZRODLA_FEEDU,
 	czy_dozwolony,
 	czy_obraz,
 	czy_pdf,
+	etykieta_zrodla,
+	normalizuj_komentarz_audytu,
+	normalizuj_notatke,
 	posortuj,
 	rozbij_znacznik,
 	rozszerzenie,
@@ -22,6 +27,7 @@ from crm.volteo_notatki import (
 	wszystkie_typy,
 	zbuduj_powiadomienie,
 	zbuduj_znacznik,
+	zbuduj_zrodla,
 )
 
 
@@ -307,6 +313,252 @@ class TestVolteoNotatkiPosortuj(unittest.TestCase):
 
 	def test_d_pusta_lista(self: "TestVolteoNotatkiPosortuj") -> None:
 		self.assertEqual(posortuj([]), [])
+
+
+class TestVolteoNotatkiZrodlaFeedu(unittest.TestCase):
+	def test_a_dziesiec_zrodel(self: "TestVolteoNotatkiZrodlaFeedu") -> None:
+		self.assertEqual(len(ZRODLA_FEEDU), 10)
+
+	def test_b_bez_duplikatow(self: "TestVolteoNotatkiZrodlaFeedu") -> None:
+		self.assertEqual(len(ZRODLA_FEEDU), len(set(ZRODLA_FEEDU)))
+
+	def test_c_osiem_zakladek_potem_audyt_i_audytcp(self: "TestVolteoNotatkiZrodlaFeedu") -> None:
+		self.assertEqual(ZRODLA_FEEDU[:8], ZAKLADKI)
+		self.assertEqual(ZRODLA_FEEDU[8:], ("Audyt", "AudytCP"))
+
+	def test_d_audyt_i_audytcp_poza_zakladkami(self: "TestVolteoNotatkiZrodlaFeedu") -> None:
+		self.assertNotIn("Audyt", ZAKLADKI)
+		self.assertNotIn("AudytCP", ZAKLADKI)
+
+
+class TestVolteoNotatkiEtykietaZrodla(unittest.TestCase):
+	def test_a_zakladka_notatki(self: "TestVolteoNotatkiEtykietaZrodla") -> None:
+		self.assertEqual(etykieta_zrodla("Montaz"), "Montaż")
+		self.assertEqual(etykieta_zrodla("Zestaw"), "Zestaw")
+
+	def test_b_audyt_i_audytcp(self: "TestVolteoNotatkiEtykietaZrodla") -> None:
+		self.assertEqual(etykieta_zrodla("Audyt"), "Audyt")
+		self.assertEqual(etykieta_zrodla("AudytCP"), "Audyt CP")
+
+	def test_c_nieznane_zrodlo_spada_na_klucz(self: "TestVolteoNotatkiEtykietaZrodla") -> None:
+		self.assertEqual(etykieta_zrodla("CosNieznanego"), "CosNieznanego")
+
+	def test_d_kazde_zrodlo_feedu_ma_etykiete(self: "TestVolteoNotatkiEtykietaZrodla") -> None:
+		for zrodlo in ZRODLA_FEEDU:
+			self.assertTrue(etykieta_zrodla(zrodlo), zrodlo)
+
+	def test_e_dodatkowe_etykiety_maja_dokladnie_audyt_i_audytcp(
+		self: "TestVolteoNotatkiEtykietaZrodla",
+	) -> None:
+		self.assertEqual(set(ETYKIETY_ZRODEL_DODATKOWYCH), {"Audyt", "AudytCP"})
+
+
+class TestVolteoNotatkiNormalizujNotatke(unittest.TestCase):
+	def _wpis(self: "TestVolteoNotatkiNormalizujNotatke", **nadpisania: object) -> dict:
+		bazowy = {
+			"name": "NOTATKA-0001",
+			"zakladka": "Montaz",
+			"typ": "Telefon",
+			"data_zdarzenia": "2026-09-28 10:00:00",
+			"creation": "2026-09-28 09:00:00",
+			"tekst": "<p>Tresc notatki</p>",
+			"kredyt": None,
+			"owner": "jan@proenergy.pro",
+			"autor_nazwa": "Jan Kowalski",
+			"pliki": [{"name": "FILE-0001", "file_name": "a.pdf"}],
+		}
+		bazowy.update(nadpisania)
+		return bazowy
+
+	def test_a_ksztalt_wyniku(self: "TestVolteoNotatkiNormalizujNotatke") -> None:
+		wynik = normalizuj_notatke(self._wpis())
+		oczekiwane_klucze = {
+			"klucz",
+			"zrodlo",
+			"zrodlo_etykieta",
+			"zakladka_hash",
+			"typ",
+			"data",
+			"creation",
+			"autor",
+			"autor_nazwa",
+			"tekst_html",
+			"pliki",
+			"kredyt",
+		}
+		self.assertEqual(set(wynik.keys()), oczekiwane_klucze)
+
+	def test_b_klucz_prefiks_notatka(self: "TestVolteoNotatkiNormalizujNotatke") -> None:
+		wynik = normalizuj_notatke(self._wpis())
+		self.assertEqual(wynik["klucz"], "notatka:NOTATKA-0001")
+
+	def test_c_zrodlo_etykieta_i_hash_z_zakladki(self: "TestVolteoNotatkiNormalizujNotatke") -> None:
+		wynik = normalizuj_notatke(self._wpis(zakladka="Montaz"))
+		self.assertEqual(wynik["zrodlo"], "Montaz")
+		self.assertEqual(wynik["zrodlo_etykieta"], "Montaż")
+		self.assertEqual(wynik["zakladka_hash"], "montaz")
+
+	def test_d_data_spada_na_creation_gdy_brak_data_zdarzenia(
+		self: "TestVolteoNotatkiNormalizujNotatke",
+	) -> None:
+		wynik = normalizuj_notatke(self._wpis(data_zdarzenia=None))
+		self.assertEqual(wynik["data"], "2026-09-28 09:00:00")
+
+	def test_e_tekst_html_przepisany_bez_zmian(self: "TestVolteoNotatkiNormalizujNotatke") -> None:
+		wynik = normalizuj_notatke(self._wpis(tekst="<p>Bez zmian</p>"))
+		self.assertEqual(wynik["tekst_html"], "<p>Bez zmian</p>")
+
+	def test_f_autor_i_autor_nazwa(self: "TestVolteoNotatkiNormalizujNotatke") -> None:
+		wynik = normalizuj_notatke(self._wpis())
+		self.assertEqual(wynik["autor"], "jan@proenergy.pro")
+		self.assertEqual(wynik["autor_nazwa"], "Jan Kowalski")
+
+	def test_g_autor_nazwa_spada_na_owner_gdy_brak(self: "TestVolteoNotatkiNormalizujNotatke") -> None:
+		wynik = normalizuj_notatke(self._wpis(autor_nazwa=None))
+		self.assertEqual(wynik["autor_nazwa"], "jan@proenergy.pro")
+
+	def test_h_pliki_i_kredyt_przepisane(self: "TestVolteoNotatkiNormalizujNotatke") -> None:
+		wynik = normalizuj_notatke(self._wpis(kredyt="KREDYT-0001"))
+		self.assertEqual(wynik["kredyt"], "KREDYT-0001")
+		self.assertEqual(wynik["pliki"], [{"name": "FILE-0001", "file_name": "a.pdf"}])
+
+	def test_i_brak_plikow_daje_pusta_liste(self: "TestVolteoNotatkiNormalizujNotatke") -> None:
+		wynik = normalizuj_notatke(self._wpis(pliki=None))
+		self.assertEqual(wynik["pliki"], [])
+
+
+class TestVolteoNotatkiNormalizujKomentarzAudytu(unittest.TestCase):
+	def _komentarz(self: "TestVolteoNotatkiNormalizujKomentarzAudytu", **nadpisania: object) -> dict:
+		bazowy = {
+			"name": "COMMENT-0001",
+			"owner": "anna@proenergy.pro",
+			"creation": "2026-09-28 11:30:00",
+			"content": "Wszystko gotowe do wyslania",
+			"autor_nazwa": "Anna Nowak",
+			"pliki": [],
+		}
+		bazowy.update(nadpisania)
+		return bazowy
+
+	def test_a_ksztalt_wyniku(self: "TestVolteoNotatkiNormalizujKomentarzAudytu") -> None:
+		wynik = normalizuj_komentarz_audytu(self._komentarz(), "Audyt")
+		oczekiwane_klucze = {
+			"klucz",
+			"zrodlo",
+			"zrodlo_etykieta",
+			"zakladka_hash",
+			"typ",
+			"data",
+			"creation",
+			"autor",
+			"autor_nazwa",
+			"tekst_html",
+			"pliki",
+			"kredyt",
+		}
+		self.assertEqual(set(wynik.keys()), oczekiwane_klucze)
+
+	def test_b_klucz_prefiks_audyt(self: "TestVolteoNotatkiNormalizujKomentarzAudytu") -> None:
+		wynik = normalizuj_komentarz_audytu(self._komentarz(), "Audyt")
+		self.assertEqual(wynik["klucz"], "audyt:COMMENT-0001")
+
+	def test_c_zrodlo_oze_i_cp(self: "TestVolteoNotatkiNormalizujKomentarzAudytu") -> None:
+		wynik_oze = normalizuj_komentarz_audytu(self._komentarz(), "Audyt")
+		self.assertEqual(wynik_oze["zrodlo"], "Audyt")
+		self.assertEqual(wynik_oze["zrodlo_etykieta"], "Audyt")
+		self.assertEqual(wynik_oze["zakladka_hash"], "audyt")
+
+		wynik_cp = normalizuj_komentarz_audytu(self._komentarz(), "AudytCP")
+		self.assertEqual(wynik_cp["zrodlo"], "AudytCP")
+		self.assertEqual(wynik_cp["zrodlo_etykieta"], "Audyt CP")
+		self.assertEqual(wynik_cp["zakladka_hash"], "audytcp")
+
+	def test_d_typ_zawsze_komentarz(self: "TestVolteoNotatkiNormalizujKomentarzAudytu") -> None:
+		wynik = normalizuj_komentarz_audytu(self._komentarz(), "Audyt")
+		self.assertEqual(wynik["typ"], "Komentarz")
+
+	def test_e_kredyt_zawsze_none(self: "TestVolteoNotatkiNormalizujKomentarzAudytu") -> None:
+		wynik = normalizuj_komentarz_audytu(self._komentarz(), "Audyt")
+		self.assertIsNone(wynik["kredyt"])
+
+	def test_f_nieznane_zrodlo_rzuca_value_error(
+		self: "TestVolteoNotatkiNormalizujKomentarzAudytu",
+	) -> None:
+		with self.assertRaises(ValueError):
+			normalizuj_komentarz_audytu(self._komentarz(), "Zestaw")
+
+	def test_g_autor_i_autor_nazwa(self: "TestVolteoNotatkiNormalizujKomentarzAudytu") -> None:
+		wynik = normalizuj_komentarz_audytu(self._komentarz(), "Audyt")
+		self.assertEqual(wynik["autor"], "anna@proenergy.pro")
+		self.assertEqual(wynik["autor_nazwa"], "Anna Nowak")
+
+	def test_h_autor_nazwa_spada_na_owner_nigdy_na_comment_by(
+		self: "TestVolteoNotatkiNormalizujKomentarzAudytu",
+	) -> None:
+		# `comment_by` swiadomie zignorowane, nawet jesli jest obecne w
+		# wejsciu -- jedynym zrodlem prawdy o imieniu i nazwisku jest
+		# `autor_nazwa` (rozwiazane przez wywolujacego zbiorczym zapytaniem
+		# User.full_name), nigdy `Comment.comment_by`.
+		wynik = normalizuj_komentarz_audytu(
+			self._komentarz(autor_nazwa=None, comment_by="Ignorowane Pole"), "Audyt"
+		)
+		self.assertEqual(wynik["autor_nazwa"], "anna@proenergy.pro")
+
+	def test_i_tekst_zwykly_zamieniony_na_html_escapowany(
+		self: "TestVolteoNotatkiNormalizujKomentarzAudytu",
+	) -> None:
+		wynik = normalizuj_komentarz_audytu(
+			self._komentarz(content="<script>alert(1)</script>\ndruga linia"), "Audyt"
+		)
+		self.assertNotIn("<script>", wynik["tekst_html"])
+		self.assertIn("&lt;script&gt;", wynik["tekst_html"])
+		self.assertIn("<br>", wynik["tekst_html"])
+		self.assertTrue(wynik["tekst_html"].startswith("<p>"))
+
+	def test_j_pusta_tresc_daje_pusty_akapit(self: "TestVolteoNotatkiNormalizujKomentarzAudytu") -> None:
+		wynik = normalizuj_komentarz_audytu(self._komentarz(content=""), "Audyt")
+		self.assertEqual(wynik["tekst_html"], "<p></p>")
+
+	def test_k_pliki_przepisane(self: "TestVolteoNotatkiNormalizujKomentarzAudytu") -> None:
+		pliki = [{"name": "FILE-0002", "file_name": "zdjecie.png"}]
+		wynik = normalizuj_komentarz_audytu(self._komentarz(pliki=pliki), "Audyt")
+		self.assertEqual(wynik["pliki"], pliki)
+
+	def test_l_brak_plikow_daje_pusta_liste(self: "TestVolteoNotatkiNormalizujKomentarzAudytu") -> None:
+		wynik = normalizuj_komentarz_audytu(self._komentarz(pliki=None), "Audyt")
+		self.assertEqual(wynik["pliki"], [])
+
+
+class TestVolteoNotatkiZbudujZrodla(unittest.TestCase):
+	def test_a_wszystkie_zrodla_obecne_w_stalej_kolejnosci(
+		self: "TestVolteoNotatkiZbudujZrodla",
+	) -> None:
+		wynik = zbuduj_zrodla({})
+		self.assertEqual([w["klucz"] for w in wynik], list(ZRODLA_FEEDU))
+
+	def test_b_brak_licznika_daje_zero(self: "TestVolteoNotatkiZbudujZrodla") -> None:
+		wynik = zbuduj_zrodla({})
+		self.assertTrue(all(w["liczba"] == 0 for w in wynik))
+
+	def test_c_liczniki_przepisane_po_kluczu(self: "TestVolteoNotatkiZbudujZrodla") -> None:
+		wynik = zbuduj_zrodla({"Zestaw": 3, "Audyt": 1})
+		po_kluczu = {w["klucz"]: w["liczba"] for w in wynik}
+		self.assertEqual(po_kluczu["Zestaw"], 3)
+		self.assertEqual(po_kluczu["Audyt"], 1)
+		self.assertEqual(po_kluczu["Umowa"], 0)
+		self.assertEqual(po_kluczu["AudytCP"], 0)
+
+	def test_d_kazdy_wpis_ma_etykiete_niepusta(self: "TestVolteoNotatkiZbudujZrodla") -> None:
+		wynik = zbuduj_zrodla({})
+		for wpis in wynik:
+			self.assertTrue(wpis["etykieta"], wpis["klucz"])
+
+	def test_e_nieznany_klucz_w_licznikach_jest_ignorowany(
+		self: "TestVolteoNotatkiZbudujZrodla",
+	) -> None:
+		wynik = zbuduj_zrodla({"CosNieznanego": 5})
+		self.assertEqual(len(wynik), len(ZRODLA_FEEDU))
+		self.assertNotIn("CosNieznanego", [w["klucz"] for w in wynik])
 
 
 if __name__ == "__main__":

@@ -20,6 +20,11 @@
 // samo jest frappe-free (zero importów), więc to nie wprowadza żadnej
 // zależności od Vue/frappe-ui do tego pliku.
 import { zdjeciaDoGalerii } from './aktualizacje'
+// Import z `dataPolska.js` (NIE z barrelu `@/utils`) dla grupowania feedu po
+// dniu, niżej - `dataPolska.js` samo jest frappe-free (zero importów), więc
+// to nie wprowadza zależności od Vue/frappe-ui do tego pliku, ten sam
+// wyjątek udokumentowany jak import `zdjeciaDoGalerii` powyżej.
+import { DNI_TYGODNIA_SKROT, MIESIACE_SKROT } from './dataPolska'
 
 // Bazowy zestaw typów notatki, wspólny dla większości zakładek. Kolejność
 // ma znaczenie: pierwszy element jest domyślnie zaznaczony w selekcie
@@ -179,4 +184,207 @@ export const OZE_RODZAJE = new Set(['Fotowoltaika', 'Fotowoltaika + Magazyn', 'M
 
 export function czyOze(rodzaj) {
   return OZE_RODZAJE.has(rodzaj)
+}
+
+// ---------------------------------------------------------------------
+// Feed "Notatki" (issue ops#201, uwaga 40) - strumień łączący notatki z
+// każdej zakładki z komentarzami wątku "Komentarze" zakładki Audyt (OZE i
+// CP). Lustro backendu `crm/volteo_notatki.py::ZRODLA_FEEDU`/
+// `etykieta_zrodla` - zmieniać oba miejsca razem.
+
+// Etykiety wszystkich dziesięciu możliwych źródeł feedu (osiem zakładek
+// Volteo Notatka plus komentarze Audytu OZE/CP) - lustro backendowego
+// `ZRODLA_FEEDU` (kolejność) + `ETYKIETY_ZAKLADEK`/`ETYKIETY_ZRODEL_
+// DODATKOWYCH` (etykiety) połączonych w jeden słownik po stronie frontu,
+// bo tu nie ma potrzeby rozróżniać "zakładka notatki" od "audyt" - feed
+// traktuje je jednolicie jako "źródło". Backend i tak zwraca własne
+// `zrodlo_etykieta` per wpis oraz listę `zrodla` (z licznikami) w
+// `crm.api.notatki.feed` - ten słownik służy WYŁĄCZNIE jako domyślny,
+// pełny zestaw kluczy przed pierwszą odpowiedzią API (żeby lista
+// wielokrotnego wyboru i `wczytajFiltr` miały co pokazać/porównać zanim
+// `zrodla` z serwera dotrze).
+export const ETYKIETY_ZRODEL = {
+  Zestaw: 'Zestaw',
+  Umowa: 'Umowa',
+  Kredyt: 'Kredyt',
+  Faktury: 'Faktury',
+  Montaz: 'Montaż',
+  OSD: 'OSD',
+  Dotacja: 'Dotacja',
+  Trify: 'Trify',
+  Audyt: 'Audyt',
+  AudytCP: 'Audyt CP',
+}
+
+// Kierunki sortowania dropdownu feedu - wartości to dosłownie to, co
+// backendowe `crm.volteo_notatki.posortuj(kierunek=...)` rozumie
+// ("desc"/inny niż "desc" = rosnąco), żeby nie mieć dwóch słowników
+// kierunków w dwóch językach po dwóch stronach.
+export const KIERUNKI_SORTU = {
+  NAJNOWSZE: 'desc',
+  NAJSTARSZE: 'asc',
+}
+
+const KLUCZ_LOCALSTORAGE = 'notatki-filtr'
+
+// Rozbija string "YYYY-MM-DD..." (separator dnia/godziny spacja albo "T",
+// godzina/sekundy opcjonalne) na składniki kalendarzowe - NIE używa
+// `new Date(string)` na wejściu tekstowym z tego samego powodu co
+// `formatujTermin` w dataPolska.js (interpretacja jako UTC przesunęłaby
+// dzień). Przyjmuje też obiekt Date wprost (lokalne składniki).
+function _dzienKalendarzowy(dataCzas) {
+  if (dataCzas instanceof Date) {
+    if (Number.isNaN(dataCzas.getTime())) return null
+    return {
+      rok: dataCzas.getFullYear(),
+      miesiac: dataCzas.getMonth() + 1,
+      dzien: dataCzas.getDate(),
+    }
+  }
+  if (typeof dataCzas === 'string') {
+    const dopasowanie = /^(\d{4})-(\d{2})-(\d{2})/.exec(dataCzas)
+    if (!dopasowanie) return null
+    return {
+      rok: Number(dopasowanie[1]),
+      miesiac: Number(dopasowanie[2]),
+      dzien: Number(dopasowanie[3]),
+    }
+  }
+  return null
+}
+
+function _kluczDnia(skladniki) {
+  return `${skladniki.rok}-${String(skladniki.miesiac).padStart(2, '0')}-${String(skladniki.dzien).padStart(2, '0')}`
+}
+
+// Różnica w pełnych dniach kalendarzowych między dwoma zestawami składników
+// (a - b), liczona na lokalnej północy - odporna na przesunięcia czasu
+// letniego/zimowego (inaczej niż proste dzielenie różnicy milisekund przez
+// 86400000).
+function _roznicaDni(a, b) {
+  const da = new Date(a.rok, a.miesiac - 1, a.dzien)
+  const db = new Date(b.rok, b.miesiac - 1, b.dzien)
+  return Math.round((da - db) / 86400000)
+}
+
+// Etykieta dnia dla nagłówka grupy feedu: "Dziś", "Wczoraj", albo pełna
+// polska data bez godziny (np. "pt., 25 wrz 2026"). `teraz` domyślnie
+// bieżący moment, jawnie podawany w testach dla determinizmu na granicy
+// północy.
+export function etykietaDnia(dataCzas, teraz = new Date()) {
+  const skladniki = _dzienKalendarzowy(dataCzas)
+  const dzisiaj = _dzienKalendarzowy(teraz)
+  if (!skladniki || !dzisiaj) return ''
+
+  const roznica = _roznicaDni(dzisiaj, skladniki)
+  if (roznica === 0) return 'Dziś'
+  if (roznica === 1) return 'Wczoraj'
+
+  const dzienTygodnia = DNI_TYGODNIA_SKROT[new Date(skladniki.rok, skladniki.miesiac - 1, skladniki.dzien).getDay()]
+  const miesiacSkrot = MIESIACE_SKROT[skladniki.miesiac - 1]
+  return `${dzienTygodnia}, ${skladniki.dzien} ${miesiacSkrot} ${skladniki.rok}`
+}
+
+// Grupuje wpisy feedu (już posortowane przez wywołującego, patrz
+// `sortujFeed`) po dniu kalendarzowym ich pola `data`, zachowując kolejność
+// wejściową - kolejne wpisy tego samego dnia trafiają do tej samej grupy
+// (grupy nie są ponownie sortowane ani scalane nie-sąsiadująco, bo wejście
+// jest już posortowane chronologicznie). Zwraca `[{ etykieta, wpisy }]`;
+// wpis bez rozpoznawalnej daty trafia do własnej grupy z pustą etykietą
+// zamiast znikać z feedu.
+export function grupujPoDniu(wpisy, teraz = new Date()) {
+  const grupy = []
+  const indeksPoKluczu = new Map()
+
+  for (const wpis of Array.isArray(wpisy) ? wpisy : []) {
+    if (!wpis) continue
+    const skladniki = _dzienKalendarzowy(wpis.data)
+    const klucz = skladniki ? _kluczDnia(skladniki) : '\u0000brak-daty'
+
+    if (!indeksPoKluczu.has(klucz)) {
+      indeksPoKluczu.set(klucz, grupy.length)
+      grupy.push({ etykieta: etykietaDnia(wpis.data, teraz), wpisy: [] })
+    }
+    grupy[indeksPoKluczu.get(klucz)].wpisy.push(wpis)
+  }
+
+  return grupy
+}
+
+// Filtruje wpisy feedu do tych, których `zrodlo` jest w `zaznaczone` (lista
+// albo Set kluczy). Pusty wybór daje pusty wynik (decyzja świadoma: lista
+// wielokrotnego wyboru bez żadnego zaznaczenia oznacza "nic nie pokazuj",
+// nie "pokaż wszystko" - inaczej "Wyczyść" nie robiłoby nic widocznego).
+export function filtrujFeed(wpisy, zaznaczone) {
+  const zbior = zaznaczone instanceof Set ? zaznaczone : new Set(zaznaczone || [])
+  if (zbior.size === 0) return []
+  return (Array.isArray(wpisy) ? wpisy : []).filter((wpis) => wpis && zbior.has(wpis.zrodlo))
+}
+
+// Sortuje wpisy feedu po polu `data` (string ISO "YYYY-MM-DD HH:mm:ss",
+// porównywalny leksykograficznie) - nie mutuje wejścia. `kierunek` inny niż
+// `KIERUNKI_SORTU.NAJSTARSZE` sortuje malejąco (najnowsze pierwsze),
+// spójnie z domyślnym zachowaniem backendowego `posortuj`.
+export function sortujFeed(wpisy, kierunek = KIERUNKI_SORTU.NAJNOWSZE) {
+  const lista = Array.isArray(wpisy) ? [...wpisy] : []
+  const malejaco = kierunek !== KIERUNKI_SORTU.NAJSTARSZE
+  return lista.sort((a, b) => {
+    const da = a?.data || ''
+    const db = b?.data || ''
+    if (da === db) return 0
+    if (malejaco) return da < db ? 1 : -1
+    return da < db ? -1 : 1
+  })
+}
+
+// Odczytuje filtr feedu zapisany w localStorage (klucz "notatki-filtr"),
+// per przeglądarkę/użytkownika - `try/catch` na odczycie, bo localStorage
+// może rzucić (tryb prywatny, zablokowane site data) albo zwrócić coś, co
+// nie parsuje się jako JSON. `kluczeDostepne` (lista kluczy źródeł, zwykle
+// `zrodla.map(z => z.klucz)` z odpowiedzi API) jest ZAWSZE domyślnym i
+// filtrującym zbiorem: zaznaczenie zapisane wcześniej jest przycinane do
+// kluczy, które nadal istnieją, żeby źródło usunięte/przemianowane między
+// sesjami nie zostawiło martwego, niezaznaczalnego wpisu w zapisanym
+// stanie. Domyślnie (brak zapisu, zapis niepoprawny, albo pusty po
+// przycięciu) wszystko jest zaznaczone.
+export function wczytajFiltr(kluczeDostepne) {
+  const dostepne = Array.isArray(kluczeDostepne) ? kluczeDostepne : []
+  const domyslny = { zaznaczone: [...dostepne], kierunek: KIERUNKI_SORTU.NAJNOWSZE }
+
+  try {
+    const surowe = localStorage.getItem(KLUCZ_LOCALSTORAGE)
+    if (!surowe) return domyslny
+
+    const zapisany = JSON.parse(surowe)
+    const zaznaczoneZapisane = Array.isArray(zapisany?.zaznaczone)
+      ? zapisany.zaznaczone.filter((klucz) => dostepne.includes(klucz))
+      : null
+
+    const kierunek =
+      zapisany?.kierunek === KIERUNKI_SORTU.NAJSTARSZE
+        ? KIERUNKI_SORTU.NAJSTARSZE
+        : KIERUNKI_SORTU.NAJNOWSZE
+
+    return {
+      zaznaczone: zaznaczoneZapisane && zaznaczoneZapisane.length ? zaznaczoneZapisane : [...dostepne],
+      kierunek,
+    }
+  } catch {
+    return domyslny
+  }
+}
+
+// Zapisuje filtr feedu do localStorage - `try/catch` na zapisie (patrz
+// `wczytajFiltr`), cichy brak zapisu zamiast rzucania: filtr po prostu nie
+// przetrwa przeładowania w tej jednej sesji, reszta aplikacji działa dalej.
+export function zapiszFiltr(zaznaczone, kierunek) {
+  try {
+    localStorage.setItem(
+      KLUCZ_LOCALSTORAGE,
+      JSON.stringify({ zaznaczone: Array.isArray(zaznaczone) ? zaznaczone : [], kierunek }),
+    )
+  } catch {
+    // localStorage niedostępny (tryb prywatny, zablokowane site data) -
+    // filtr po prostu nie przetrwa przeładowania, reszta działa dalej.
+  }
 }

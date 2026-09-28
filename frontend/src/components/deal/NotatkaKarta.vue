@@ -11,10 +11,25 @@
   pole istnieje dla przyszłego użycia gdzie indziej, nie tutaj).
 
   `pokazZakladke` (domyślnie false) pokazuje dodatkowy chip z nazwą
-  zakładki wpisu - używany dopiero przez przyszły wspólny feed "Notatki"
-  (inny issue), gdzie wpisy z różnych zakładek mieszają się na jednej
-  liście i trzeba je rozróżnić. Żadne z czterech wywołań w tym issue tego
-  nie ustawia.
+  zakładki wpisu - używany przez wspólny feed "Notatki" (issue ops#201),
+  gdzie wpisy z różnych zakładek/źródeł mieszają się na jednej liście i
+  trzeba je rozróżnić. Żadne z czterech wywołań na samych zakładkach
+  (Zestaw/Umowa/Kredyt/Faktury) tego nie ustawia.
+
+  `ikonaZakladki` (opcjonalny komponent) i `etykietaZakladkiOverride`
+  (opcjonalny string) pozwalają wywołującemu nadpisać ikonę/etykietę chipu
+  zakładki zamiast wyliczania jej z `etykietaZakladki(wpis.zakladka)` - feed
+  potrzebuje TEGO, bo jego wpisy mają pole `zakladka` ustawione na klucz
+  `zrodlo` (który obejmuje też "Audyt"/"AudytCP", spoza ośmiu zakładek
+  `Volteo Notatka`, i backend już policzył dla nich `zrodlo_etykieta`), a
+  ikona źródła (Zestaw/Umowa/.../Audyt) nie ma żadnego odpowiednika na
+  samym wpisie. Bez override chip zachowuje się identycznie jak dotąd.
+
+  `tylkoGodzina` (domyślnie false) pokazuje w prawym górnym rogu wyłącznie
+  godzinę 24h (np. "17:00") zamiast pełnej daty z `formatujTermin` - feed
+  włącza to, bo dzień jest tam już pokazany raz, w nagłówku grupy dnia
+  (`grupujPoDniu` w utils/notatki.js); pokazywanie pełnej daty na KAŻDEJ
+  karcie pod nagłówkiem "Dziś" byłoby zwykłą powtórką.
 -->
 <template>
   <div class="rounded-lg border border-outline-gray-1 p-4">
@@ -28,8 +43,12 @@
           variant="subtle"
           theme="orange"
           size="sm"
-          :label="etykietaZakladki(wpis.zakladka)"
-        />
+          :label="etykietaChipu"
+        >
+          <template v-if="ikonaZakladki" #prefix>
+            <component :is="ikonaZakladki" class="h-2.5 w-2.5" />
+          </template>
+        </Badge>
       </div>
       <span class="shrink-0 text-xs text-ink-gray-4">{{ dataTekst }}</span>
     </div>
@@ -74,12 +93,32 @@ const props = defineProps({
   // autor_nazwa, pliki: [{name, file_name, file_url, file_type, file_size}] }.
   wpis: { type: Object, required: true },
   pokazZakladke: { type: Boolean, default: false },
+  ikonaZakladki: { type: [Object, Function], default: null },
+  etykietaZakladkiOverride: { type: String, default: '' },
+  tylkoGodzina: { type: Boolean, default: false },
 })
 
 const { getUser } = usersStore()
 
 const autor = computed(() => nazwaAutora(props.wpis, getUser))
-const dataTekst = computed(() => formatujTermin(props.wpis.data_zdarzenia || props.wpis.creation))
+const etykietaChipu = computed(
+  () => props.etykietaZakladkiOverride || etykietaZakladki(props.wpis.zakladka),
+)
+
+// Wyciąga wyłącznie "HH:mm" z surowego Datetime Frappe ("YYYY-MM-DD
+// HH:mm[:ss]") - celowo NIE przez `new Date(string)` (interpretacja jako
+// UTC przesunęłaby godzinę), sam koniec stringa wystarcza, bez potrzeby
+// pełnego parsowania jak w `formatujTermin`.
+function godzinaZTekstu(dataCzas) {
+  if (!dataCzas) return ''
+  const dopasowanie = /(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/.exec(String(dataCzas).trim())
+  return dopasowanie ? `${dopasowanie[1]}:${dopasowanie[2]}` : ''
+}
+
+const dataTekst = computed(() => {
+  const surowa = props.wpis.data_zdarzenia || props.wpis.creation
+  return props.tylkoGodzina ? godzinaZTekstu(surowa) : formatujTermin(surowa)
+})
 
 const podzial = computed(() => podzielPliki(props.wpis.pliki))
 const dokumenty = computed(() => podzial.value.dokumenty)
