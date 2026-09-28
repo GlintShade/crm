@@ -212,6 +212,7 @@
         <AudytTab v-else-if="tab.name === 'Audyt'" :deal-id="dealId" :rodzaj="doc.custom_rodzaj_umowy || ''" />
         <AudytCPTab v-else-if="tab.name === 'AudytCP'" :deal-id="dealId" />
         <AktualizacjeTab v-else-if="tab.name === 'Trify'" :deal-id="dealId" :konfig="TRIFY" />
+        <NotatkiTab v-else-if="tab.name === 'Notatki'" :deal-id="dealId" />
         <Activities
           v-else
           v-model:reload="reload"
@@ -292,7 +293,9 @@ import FakturyTab from '@/components/deal/FakturyTab.vue'
 import AktualizacjeTab from '@/components/deal/AktualizacjeTab.vue'
 import AudytTab from '@/components/deal/AudytTab.vue'
 import AudytCPTab from '@/components/deal/AudytCPTab.vue'
+import NotatkiTab from '@/components/deal/NotatkiTab.vue'
 import { MONTAZ, TRIFY } from '@/utils/aktualizacje'
+import { czyOze } from '@/utils/notatki'
 import DealPipelineBar from '@/components/deal/DealPipelineBar.vue'
 import DealNextStepNote from '@/components/deal/DealNextStepNote.vue'
 import OrganizationModal from '@/components/Modals/OrganizationModal.vue'
@@ -514,6 +517,17 @@ const tabs = computed(() => {
       label: __('Audyt'),
       icon: AudytIcon,
       condition: () => doc.value?.custom_rodzaj_umowy === 'Czyste Powietrze',
+    },
+    {
+      // Feed "Notatki" (issue ops#201, uwaga 40): strumień łączący notatki
+      // z każdej zakładki z komentarzami wątku Audytu. Faza 1 = tylko OZE
+      // (`czyOze`, lustro OZE_RODZAJE z Deal.vue/crm.volteo_pipeline.py) -
+      // Kredyt nie istnieje na tej stronie, więc bez wzoru "condition jak
+      // Kredyt" dosłownie, ale sama reguła OZE jest identyczna.
+      name: 'Notatki',
+      label: __('Notatki'),
+      icon: NoteIcon,
+      condition: () => czyOze(doc.value?.custom_rodzaj_umowy),
     },
     { name: 'Attachments', label: __('Pliki'), icon: AttachmentIcon },
     { name: 'Montaz', label: __('Montaż'), icon: MontazIcon },

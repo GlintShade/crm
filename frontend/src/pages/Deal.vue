@@ -78,6 +78,7 @@
         <AudytCPTab v-else-if="tab.name === 'AudytCP'" :deal-id="dealId" />
         <UmowaTab v-else-if="tab.name === 'Umowa'" :deal-id="dealId" />
         <KredytTab v-else-if="tab.name === 'Kredyt'" :deal-id="dealId" />
+        <NotatkiTab v-else-if="tab.name === 'Notatki'" :deal-id="dealId" />
         <AktualizacjeTab v-else-if="tab.name === 'Trify'" :deal-id="dealId" :konfig="TRIFY" />
       </template>
     </Tabs>
@@ -344,6 +345,7 @@ import AudytTab from '@/components/deal/AudytTab.vue'
 import AudytCPTab from '@/components/deal/AudytCPTab.vue'
 import UmowaTab from '@/components/deal/UmowaTab.vue'
 import KredytTab from '@/components/deal/KredytTab.vue'
+import NotatkiTab from '@/components/deal/NotatkiTab.vue'
 import { MONTAZ, TRIFY } from '@/utils/aktualizacje'
 import DealPipelineBar from '@/components/deal/DealPipelineBar.vue'
 import DealNextStepNote from '@/components/deal/DealNextStepNote.vue'
@@ -642,6 +644,15 @@ const tabs = computed(() => {
       label: __('Audyt'),
       icon: AudytIcon,
       condition: () => doc.value?.custom_rodzaj_umowy === 'Czyste Powietrze',
+    },
+    {
+      // Feed "Notatki" (issue ops#201, uwaga 40): strumień łączący notatki
+      // z każdej zakładki z komentarzami wątku Audytu. Faza 1 = tylko OZE,
+      // ten sam warunek co zakładka Kredyt powyżej.
+      name: 'Notatki',
+      label: __('Notatki'),
+      icon: NoteIcon,
+      condition: () => OZE_RODZAJE.has(doc.value?.custom_rodzaj_umowy),
     },
     { name: 'Attachments', label: __('Pliki'), icon: AttachmentIcon },
     { name: 'Montaz', label: __('Montaż'), icon: MontazIcon },

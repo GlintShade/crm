@@ -43,14 +43,19 @@ __all__ = [
 	"DOCTYPE",
 	"DOZWOLONE_ROZSZERZENIA",
 	"ETYKIETY_ZAKLADEK",
+	"ETYKIETY_ZRODEL_DODATKOWYCH",
 	"PREFIKS_ZNACZNIKA",
 	"TYPY_BAZOWE",
 	"TYPY_PER_ZAKLADKA",
 	"ZAKLADKI",
 	"ZNACZNIK_ROBOCZY",
+	"ZRODLA_FEEDU",
 	"czy_dozwolony",
 	"czy_obraz",
 	"czy_pdf",
+	"etykieta_zrodla",
+	"normalizuj_komentarz_audytu",
+	"normalizuj_notatke",
 	"posortuj",
 	"rozbij_znacznik",
 	"rozszerzenie",
@@ -61,6 +66,7 @@ __all__ = [
 	"wszystkie_typy",
 	"zbuduj_powiadomienie",
 	"zbuduj_znacznik",
+	"zbuduj_zrodla",
 ]
 
 DOCTYPE = "Volteo Notatka"
@@ -317,3 +323,119 @@ def posortuj(wpisy: list[dict], kierunek: str = "desc") -> list[dict]:
 		key=lambda wpis: (wpis.get("data_zdarzenia") or "", wpis.get("creation") or ""),
 		reverse=malejaco,
 	)
+
+
+# ---------------------------------------------------------------------------
+# Feed „Notatki" (issue ops#201, uwaga 40) -- strumien LACZACY notatki z
+# kazdej zakladki z komentarzami watku „Komentarze" zakladki Audyt (OZE i
+# CP). Wylacznie widok: bez karty dodawania, edycji ani kosza (te operacje
+# zyja na zakladce zrodlowej). Cala normalizacja ksztaltu wpisu mieszka tu,
+# frappe-free -- `crm.api.notatki.feed` tylko czyta z bazy (frappe.get_list/
+# get_all, uprawnienia) i woła te funkcje.
+# ---------------------------------------------------------------------------
+
+ZRODLA_FEEDU: tuple[str, ...] = (*ZAKLADKI, "Audyt", "AudytCP")
+"""Kolejnosc i zestaw wszystkich mozliwych wartosci `zrodlo` w feedzie:
+osiem zakladek `Volteo Notatka` (kolejnosc `ZAKLADKI`) plus dwa dodatkowe
+zrodla komentarzy watku Audytu (OZE i CP). `crm.api.notatki.feed` zwraca
+liste `zrodla` w DOKLADNIE tej kolejnosci (`zbuduj_zrodla` ponizej) -- lista
+filtrow po stronie frontu (`FiltrZrodel.vue`) pokazuje wiec zawsze ten sam
+uklad, niezaleznie od tego, ktore zrodla maja akurat jakies wpisy."""
+
+ETYKIETY_ZRODEL_DODATKOWYCH: dict[str, str] = {
+	"Audyt": "Audyt",
+	"AudytCP": "Audyt CP",
+}
+"""Etykiety dla dwoch zrodel spoza `ZAKLADKI` (komentarze watku Audytu OZE i
+CP) -- `Audyt`/`AudytCP` NIE sa wartosciami pola Select `zakladka` na
+`Volteo Notatka`, wiec nie naleza do `ETYKIETY_ZAKLADEK`; maja wlasny,
+osobny slownik etykiet."""
+
+
+def etykieta_zrodla(zrodlo: str) -> str:
+	"""Etykieta dowolnego zrodla feedu -- najpierw `ETYKIETY_ZAKLADEK` (osiem
+	zakladek notatki), potem `ETYKIETY_ZRODEL_DODATKOWYCH` (Audyt/AudytCP),
+	w ostatecznosci sam klucz (nieznane zrodlo, nie powinno sie zdarzyc przy
+	wejsciu z `ZRODLA_FEEDU`, ale bez rzucania wyjatku dla defensywnosci)."""
+	if zrodlo in ETYKIETY_ZAKLADEK:
+		return ETYKIETY_ZAKLADEK[zrodlo]
+	return ETYKIETY_ZRODEL_DODATKOWYCH.get(zrodlo, zrodlo)
+
+
+def normalizuj_notatke(wpis: dict) -> dict:
+	"""Normalizuje jeden wpis `Volteo Notatka` do wspolnego ksztaltu wpisu
+	feedu. `wpis` ma ksztalt, ktory `crm.api.notatki.lista()` juz zwraca dla
+	pojedynczego wpisu (wzbogacony o `autor_nazwa`/`pliki` PRZED wywolaniem
+	tej funkcji): `name`, `zakladka`, `typ`, `data_zdarzenia`, `tekst`,
+	`kredyt`, `owner`, `creation`, `autor_nazwa`, `pliki`.
+
+	`tekst` na `Volteo Notatka` jest juz bezpiecznym HTML-em (TipTap +
+	sanityzacja rdzenia przy zapisie dokumentu) -- `tekst_html` w wyniku jest
+	wiec przepisywany 1:1, bez przepuszczania przez `tekst_na_html` (ta
+	funkcja jest wylacznie dla zwyklego tekstu, patrz
+	`normalizuj_komentarz_audytu` ponizej)."""
+	zakladka = wpis.get("zakladka") or ""
+	return {
+		"klucz": "notatka:{0}".format(wpis.get("name")),
+		"zrodlo": zakladka,
+		"zrodlo_etykieta": etykieta_zrodla(zakladka),
+		"zakladka_hash": zakladka.lower(),
+		"typ": wpis.get("typ") or "",
+		"data": wpis.get("data_zdarzenia") or wpis.get("creation"),
+		"creation": wpis.get("creation"),
+		"autor": wpis.get("owner"),
+		"autor_nazwa": wpis.get("autor_nazwa") or wpis.get("owner") or "",
+		"tekst_html": wpis.get("tekst") or "",
+		"pliki": wpis.get("pliki") or [],
+		"kredyt": wpis.get("kredyt"),
+	}
+
+
+def normalizuj_komentarz_audytu(komentarz: dict, zrodlo: str) -> dict:
+	"""Normalizuje jeden komentarz watku „Komentarze" zakladki Audyt
+	(`Comment` z `reference_doctype in ("Volteo Audyt", "Volteo Audyt CP")`)
+	do wspolnego ksztaltu wpisu feedu. `komentarz` ma klucze `name`, `owner`,
+	`creation`, `content`, `autor_nazwa` (juz rozwiazane przez wywolujacego
+	JEDNYM zbiorczym zapytaniem `User.full_name` -- ta funkcja celowo NIE
+	czyta `comment_by`, zeby nie miec dwoch zrodel prawdy o imieniu i
+	nazwisku autora obok siebie w tym samym module), oraz opcjonalnie
+	`pliki` (zalaczniki `File` z `attached_to_doctype = "Comment"`).
+
+	`zrodlo` musi byc `"Audyt"` albo `"AudytCP"` -- kazda inna wartosc rzuca
+	`ValueError` (wywolujacy zna zrodlo z tego, KTORY doctype wlasnie
+	odpytal, wiec to jest tylko druga linia obrony, jak `typy_dla`).
+
+	Komentarz nie ma wlasnego `typ` (nie jest `Volteo Notatka`) -- w feedzie
+	dostaje stala etykiete `"Komentarz"`, zeby karta wpisu mogla pokazac cos
+	sensownego zamiast pustego chipu typu."""
+	if zrodlo not in ("Audyt", "AudytCP"):
+		raise ValueError(f"Nieznane zrodlo komentarza audytu: {zrodlo}")
+	return {
+		"klucz": "audyt:{0}".format(komentarz.get("name")),
+		"zrodlo": zrodlo,
+		"zrodlo_etykieta": etykieta_zrodla(zrodlo),
+		"zakladka_hash": zrodlo.lower(),
+		"typ": "Komentarz",
+		"data": komentarz.get("creation"),
+		"creation": komentarz.get("creation"),
+		"autor": komentarz.get("owner"),
+		"autor_nazwa": komentarz.get("autor_nazwa") or komentarz.get("owner") or "",
+		"tekst_html": tekst_na_html(komentarz.get("content") or ""),
+		"pliki": komentarz.get("pliki") or [],
+		"kredyt": None,
+	}
+
+
+def zbuduj_zrodla(liczniki: dict[str, int]) -> list[dict]:
+	"""Buduje liste `zrodla` zwracana przez `crm.api.notatki.feed`: jeden
+	wpis na kazde `ZRODLA_FEEDU`, w STALEJ kolejnosci, z etykieta i liczba
+	wpisow. Zrodlo bez zadnego wpisu w `liczniki` (bo jeszcze nie ma tam
+	zadnej notatki, albo -- dla Audyt/AudytCP -- bo dokument audytu nie
+	istnieje lub wywolujacy nie ma do niego uprawnien) dostaje `liczba: 0`,
+	NIE znika z listy -- lista wielokrotnego wyboru zrodel ma pokazywac
+	wszystkie mozliwe zrodla, zeby ich zestaw byl przewidywalny niezaleznie
+	od tego, co akurat jest na tej konkretnej szansie."""
+	return [
+		{"klucz": zrodlo, "etykieta": etykieta_zrodla(zrodlo), "liczba": liczniki.get(zrodlo, 0)}
+		for zrodlo in ZRODLA_FEEDU
+	]

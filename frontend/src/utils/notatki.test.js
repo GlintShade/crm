@@ -1,14 +1,22 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import {
+  ETYKIETY_ZRODEL,
+  KIERUNKI_SORTU,
   OZE_RODZAJE,
   TYPY_PLIKOW_NOTATKI,
   ZAKLADKI,
   czyOze,
+  etykietaDnia,
   etykietaZakladki,
+  filtrujFeed,
+  grupujPoDniu,
   nazwaAutora,
   plikiDoPodgladu,
   podzielPliki,
+  sortujFeed,
   typyDla,
+  wczytajFiltr,
+  zapiszFiltr,
 } from './notatki'
 
 describe('ZAKLADKI', () => {
@@ -213,5 +221,200 @@ describe('OZE_RODZAJE / czyOze', () => {
     expect(czyOze('')).toBe(false)
     expect(czyOze(undefined)).toBe(false)
     expect(czyOze(null)).toBe(false)
+  })
+})
+
+describe('ETYKIETY_ZRODEL', () => {
+  it('zna wszystkie dziesięć źródeł feedu (osiem zakładek plus Audyt/AudytCP)', () => {
+    expect(Object.keys(ETYKIETY_ZRODEL).sort()).toEqual(
+      [...Object.keys(ZAKLADKI), 'Audyt', 'AudytCP'].sort(),
+    )
+  })
+
+  it('Montaż ma etykietę z ogonkiem, Audyt/AudytCP mają własne etykiety', () => {
+    expect(ETYKIETY_ZRODEL.Montaz).toBe('Montaż')
+    expect(ETYKIETY_ZRODEL.Audyt).toBe('Audyt')
+    expect(ETYKIETY_ZRODEL.AudytCP).toBe('Audyt CP')
+  })
+})
+
+describe('KIERUNKI_SORTU', () => {
+  it('ma dokładnie dwie wartości, zgodne z backendowym posortuj()', () => {
+    expect(KIERUNKI_SORTU.NAJNOWSZE).toBe('desc')
+    expect(KIERUNKI_SORTU.NAJSTARSZE).toBe('asc')
+  })
+})
+
+describe('etykietaDnia', () => {
+  const teraz = new Date(2026, 8, 28, 15, 0, 0) // 28 wrz 2026, lokalny czas
+
+  it('zwraca "Dziś" dla tego samego dnia kalendarzowego co `teraz`', () => {
+    expect(etykietaDnia('2026-09-28 08:00:00', teraz)).toBe('Dziś')
+    // Granica północy: 23:59:59 tego samego dnia to nadal "Dziś".
+    expect(etykietaDnia('2026-09-28 23:59:59', teraz)).toBe('Dziś')
+  })
+
+  it('zwraca "Wczoraj" dla dnia bezpośrednio poprzedzającego `teraz`', () => {
+    expect(etykietaDnia('2026-09-27 23:59:59', teraz)).toBe('Wczoraj')
+    // Granica północy z drugiej strony: 00:00:00 dnia poprzedniego to
+    // nadal "Wczoraj", nie "Dziś" - liczy się data, nie godzina.
+    expect(etykietaDnia('2026-09-27 00:00:00', teraz)).toBe('Wczoraj')
+  })
+
+  it('zwraca pełną polską datę bez godziny dla starszych wpisów', () => {
+    expect(etykietaDnia('2026-09-25 17:00:00', teraz)).toBe('pt., 25 wrz 2026')
+  })
+
+  it('zwraca pełną datę też dla dnia w przyszłości względem `teraz`', () => {
+    expect(etykietaDnia('2026-09-29 09:00:00', teraz)).toBe('wt., 29 wrz 2026')
+  })
+
+  it('zwraca pusty string dla wejścia bez rozpoznawalnej daty', () => {
+    expect(etykietaDnia('', teraz)).toBe('')
+    expect(etykietaDnia(null, teraz)).toBe('')
+    expect(etykietaDnia('nie-data', teraz)).toBe('')
+  })
+})
+
+describe('grupujPoDniu', () => {
+  const teraz = new Date(2026, 8, 28, 15, 0, 0)
+
+  it('grupuje wpisy tego samego dnia razem, w kolejności napotkania', () => {
+    const wpisy = [
+      { klucz: 'a', data: '2026-09-28 12:00:00' },
+      { klucz: 'b', data: '2026-09-28 09:00:00' },
+      { klucz: 'c', data: '2026-09-27 18:00:00' },
+    ]
+    const grupy = grupujPoDniu(wpisy, teraz)
+    expect(grupy.map((g) => g.etykieta)).toEqual(['Dziś', 'Wczoraj'])
+    expect(grupy[0].wpisy.map((w) => w.klucz)).toEqual(['a', 'b'])
+    expect(grupy[1].wpisy.map((w) => w.klucz)).toEqual(['c'])
+  })
+
+  it('rozdziela wpisy z dwóch stron granicy północy do różnych grup', () => {
+    const wpisy = [
+      { klucz: 'przed-polnoca', data: '2026-09-27 23:59:59' },
+      { klucz: 'po-polnocy', data: '2026-09-28 00:00:00' },
+    ]
+    const grupy = grupujPoDniu(wpisy, teraz)
+    expect(grupy).toHaveLength(2)
+    expect(grupy[0].etykieta).toBe('Wczoraj')
+    expect(grupy[0].wpisy.map((w) => w.klucz)).toEqual(['przed-polnoca'])
+    expect(grupy[1].etykieta).toBe('Dziś')
+    expect(grupy[1].wpisy.map((w) => w.klucz)).toEqual(['po-polnocy'])
+  })
+
+  it('zwraca pustą listę grup dla pustego wejścia', () => {
+    expect(grupujPoDniu([], teraz)).toEqual([])
+    expect(grupujPoDniu(undefined, teraz)).toEqual([])
+  })
+
+  it('pomija wpisy null/undefined bez rzucania', () => {
+    const grupy = grupujPoDniu([null, { klucz: 'a', data: '2026-09-28 10:00:00' }, undefined], teraz)
+    expect(grupy).toHaveLength(1)
+    expect(grupy[0].wpisy).toEqual([{ klucz: 'a', data: '2026-09-28 10:00:00' }])
+  })
+})
+
+describe('filtrujFeed', () => {
+  const wpisy = [
+    { klucz: 'a', zrodlo: 'Zestaw' },
+    { klucz: 'b', zrodlo: 'Audyt' },
+    { klucz: 'c', zrodlo: 'Umowa' },
+  ]
+
+  it('zwraca tylko wpisy z zaznaczonych źródeł', () => {
+    expect(filtrujFeed(wpisy, ['Zestaw']).map((w) => w.klucz)).toEqual(['a'])
+    expect(filtrujFeed(wpisy, ['Zestaw', 'Umowa']).map((w) => w.klucz)).toEqual(['a', 'c'])
+  })
+
+  it('akceptuje Set tak samo jak tablicę', () => {
+    expect(filtrujFeed(wpisy, new Set(['Audyt'])).map((w) => w.klucz)).toEqual(['b'])
+  })
+
+  it('pusty wybór daje pusty wynik (nie "pokaż wszystko")', () => {
+    expect(filtrujFeed(wpisy, [])).toEqual([])
+    expect(filtrujFeed(wpisy, new Set())).toEqual([])
+  })
+
+  it('wszystkie źródła zaznaczone zwraca wszystkie wpisy, w tej samej kolejności', () => {
+    expect(filtrujFeed(wpisy, ['Zestaw', 'Audyt', 'Umowa']).map((w) => w.klucz)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('nie rzuca dla pustej/brakującej listy wpisów', () => {
+    expect(filtrujFeed([], ['Zestaw'])).toEqual([])
+    expect(filtrujFeed(undefined, ['Zestaw'])).toEqual([])
+  })
+})
+
+describe('sortujFeed', () => {
+  const wpisy = [
+    { klucz: 'srodkowy', data: '2026-09-27 10:00:00' },
+    { klucz: 'najnowszy', data: '2026-09-28 10:00:00' },
+    { klucz: 'najstarszy', data: '2026-09-26 10:00:00' },
+  ]
+
+  it('domyślnie sortuje od najnowszych', () => {
+    expect(sortujFeed(wpisy).map((w) => w.klucz)).toEqual(['najnowszy', 'srodkowy', 'najstarszy'])
+  })
+
+  it('KIERUNKI_SORTU.NAJSTARSZE sortuje rosnąco', () => {
+    expect(sortujFeed(wpisy, KIERUNKI_SORTU.NAJSTARSZE).map((w) => w.klucz)).toEqual([
+      'najstarszy',
+      'srodkowy',
+      'najnowszy',
+    ])
+  })
+
+  it('nie mutuje tablicy wejściowej', () => {
+    const kopia = [...wpisy]
+    sortujFeed(wpisy, KIERUNKI_SORTU.NAJSTARSZE)
+    expect(wpisy).toEqual(kopia)
+  })
+
+  it('zwraca pustą tablicę dla pustego/brakującego wejścia', () => {
+    expect(sortujFeed([])).toEqual([])
+    expect(sortujFeed(undefined)).toEqual([])
+  })
+})
+
+describe('wczytajFiltr / zapiszFiltr', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('bez zapisu w localStorage domyślnie zaznacza wszystkie dostępne klucze, sort najnowsze', () => {
+    const wynik = wczytajFiltr(['Zestaw', 'Umowa'])
+    expect(wynik).toEqual({ zaznaczone: ['Zestaw', 'Umowa'], kierunek: KIERUNKI_SORTU.NAJNOWSZE })
+  })
+
+  it('zapiszFiltr, potem wczytajFiltr odzyskuje ten sam wybór (przeżywa "przeładowanie")', () => {
+    zapiszFiltr(['Umowa'], KIERUNKI_SORTU.NAJSTARSZE)
+    const wynik = wczytajFiltr(['Zestaw', 'Umowa', 'Audyt'])
+    expect(wynik).toEqual({ zaznaczone: ['Umowa'], kierunek: KIERUNKI_SORTU.NAJSTARSZE })
+  })
+
+  it('przycina zapisane zaznaczenie do kluczy nadal dostępnych', () => {
+    zapiszFiltr(['Umowa', 'ZnikleZrodlo'], KIERUNKI_SORTU.NAJNOWSZE)
+    const wynik = wczytajFiltr(['Zestaw', 'Umowa'])
+    expect(wynik.zaznaczone).toEqual(['Umowa'])
+  })
+
+  it('zapisane zaznaczenie puste po przycięciu spada na "wszystko zaznaczone"', () => {
+    zapiszFiltr(['TylkoZnikleZrodlo'], KIERUNKI_SORTU.NAJNOWSZE)
+    const wynik = wczytajFiltr(['Zestaw', 'Umowa'])
+    expect(wynik.zaznaczone).toEqual(['Zestaw', 'Umowa'])
+  })
+
+  it('JSON uszkodzony w localStorage nie rzuca, spada na domyślny stan', () => {
+    localStorage.setItem('notatki-filtr', '{niepoprawny json')
+    const wynik = wczytajFiltr(['Zestaw'])
+    expect(wynik).toEqual({ zaznaczone: ['Zestaw'], kierunek: KIERUNKI_SORTU.NAJNOWSZE })
+  })
+
+  it('nieznana wartość kierunku spada na domyślne "najnowsze"', () => {
+    zapiszFiltr(['Zestaw'], 'cos-nieznanego')
+    const wynik = wczytajFiltr(['Zestaw'])
+    expect(wynik.kierunek).toBe(KIERUNKI_SORTU.NAJNOWSZE)
   })
 })

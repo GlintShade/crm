@@ -50,16 +50,23 @@ from crm.volteo_notatki import (
 	DOZWOLONE_ROZSZERZENIA,
 	ZAKLADKI,
 	ZNACZNIK_ROBOCZY,
+	normalizuj_komentarz_audytu,
+	normalizuj_notatke,
 	rozbij_znacznik,
 	rozszerzenie,
 	tekst_pusty,
 	typy_dla,
 	zbuduj_powiadomienie,
 	zbuduj_znacznik,
+	zbuduj_zrodla,
 )
 
 _POLA_WPISU = ["name", "zakladka", "typ", "data_zdarzenia", "tekst", "kredyt", "owner", "creation"]
 _POLA_PLIKU = ["name", "file_name", "file_url", "file_type", "file_size", "owner", "creation"]
+
+#: (doctype audytu, klucz zrodla feedu) -- kolejnosc jak w
+#: `crm.volteo_notatki.ZRODLA_FEEDU` (Audyt przed AudytCP).
+_DOCTYPY_AUDYTU_FEEDU = (("Volteo Audyt", "Audyt"), ("Volteo Audyt CP", "AudytCP"))
 
 
 @frappe.whitelist()
@@ -130,6 +137,175 @@ def lista(deal: str, zakladka: str | None = None) -> dict:
 		"robocze": robocze,
 		"can_add": bool(frappe.has_permission(DOCTYPE, "create"))
 		and bool(frappe.has_permission("CRM Deal", "read", deal)),
+		"can_delete": bool(frappe.has_permission(DOCTYPE, "delete")),
+	}
+
+
+@frappe.whitelist()
+def feed(deal: str) -> dict:
+	"""Zakladka „Notatki" (issue ops#201, uwaga 40, faza 1 = tylko OZE): jeden
+	strumien laczacy WSZYSTKIE notatki `Volteo Notatka` szansy (kazda
+	zakladka naraz, nie tylko jedna jak `lista()`) z komentarzami watku
+	„Komentarze" zakladki Audyt (`Volteo Audyt`/`Volteo Audyt CP`).
+	Wylacznie widok -- bramkuje wylacznie odczyt, zaden zapis nie idzie przez
+	ten endpoint.
+
+	Kazde zrodlo komentarzy audytu jest w OSOBNYM `try/except` (wzor
+	`crm.api.activities.get_volteo_linked_activities`): blad jednego zrodla
+	(np. brak doctype'u na starszym srodowisku) nie psuje calego feedu, tylko
+	pomija to jedno zrodlo i loguje `frappe.log_error`. Brak uprawnienia do
+	dokumentu audytu (`frappe.has_permission`, wzor
+	`crm.api.volteo_leady.komentarze`) rowniez tylko POMIJA to zrodlo -- w
+	odroznieniu od `komentarze()`, ktora w tym samym przypadku RZUCA, bo tam
+	caly widok jest jednym zrodlem; tu jedno pominiete zrodlo nie powinno
+	psuc feedu zlozonego z wielu.
+
+	Nazwiska: JEDNO zbiorcze zapytanie `User.full_name` po wszystkich
+	autorach (notatek i komentarzy razem), tak jak w `lista()` -- nigdy
+	`comment_by` z samego `Comment` (ten sam powod co w
+	`crm.volteo_notatki.normalizuj_komentarz_audytu`: jedno zrodlo prawdy o
+	imieniu i nazwisku, ktore odzwierciedla ewentualna zmiane nazwiska po
+	fakcie).
+	"""
+	if not frappe.has_permission("CRM Deal", "read", deal):
+		frappe.throw(_("Brak uprawnień do tej szansy sprzedaży."), frappe.PermissionError)
+
+	try:
+		notatki_raw = (
+			frappe.get_list(
+				DOCTYPE,
+				filters={"deal": deal},
+				fields=_POLA_WPISU,
+				order_by="data_zdarzenia desc, creation desc",
+				limit_page_length=0,
+			)
+			if frappe.db.exists("DocType", DOCTYPE)
+			else []
+		)
+	except Exception:
+		frappe.log_error(title="Notatki: feed nie mógł pobrać Volteo Notatka", message=frappe.get_traceback())
+		notatki_raw = []
+
+	wlasciciele: set[str] = {w.owner for w in notatki_raw}
+
+	pliki_per_notatka: dict[str, list] = {}
+	if notatki_raw:
+		try:
+			pliki_notatek = (
+				frappe.db.get_all(
+					"File",
+					filters={"attached_to_doctype": "CRM Deal", "attached_to_name": deal},
+					fields=["attached_to_field", *_POLA_PLIKU],
+				)
+				or []
+			)
+			for plik in pliki_notatek:
+				notatka_name = rozbij_znacznik(plik.attached_to_field)
+				if not notatka_name:
+					continue
+				pliki_per_notatka.setdefault(notatka_name, []).append(
+					{klucz: plik[klucz] for klucz in _POLA_PLIKU}
+				)
+		except Exception:
+			frappe.log_error(
+				title="Notatki: feed nie mógł pobrać plików notatek", message=frappe.get_traceback()
+			)
+
+	komentarze_raw: list[dict] = []
+	for doctype_audytu, zrodlo in _DOCTYPY_AUDYTU_FEEDU:
+		try:
+			if not frappe.db.exists("DocType", doctype_audytu):
+				continue
+			# Autoname `field:deal`: dokument audytu (jesli istnieje) nazywa
+			# sie dokladnie jak szansa -- `frappe.has_permission` na
+			# nieistniejacym dokumencie rzuca DoesNotExistError zamiast
+			# PermissionError, wiec istnienie sprawdzamy najpierw (wzor
+			# `crm.api.volteo_leady.komentarze`).
+			if not frappe.db.exists(doctype_audytu, deal):
+				continue
+			if not frappe.has_permission(doctype_audytu, "read", deal):
+				continue
+			wiersze = frappe.get_all(
+				"Comment",
+				filters={
+					"reference_doctype": doctype_audytu,
+					"reference_name": deal,
+					"comment_type": "Comment",
+				},
+				fields=["name", "owner", "creation", "content"],
+				order_by="creation asc",
+				limit_page_length=200,
+			)
+		except Exception:
+			frappe.log_error(
+				title="Notatki: feed nie mógł pobrać komentarzy audytu",
+				message=f"doctype={doctype_audytu}\n{frappe.get_traceback()}",
+			)
+			continue
+
+		for wiersz in wiersze:
+			wlasciciele.add(wiersz.owner)
+			komentarze_raw.append({**wiersz, "zrodlo": zrodlo})
+
+	autorzy: dict[str, str] = {}
+	if wlasciciele:
+		for wiersz in frappe.get_all(
+			"User", filters={"name": ["in", list(wlasciciele)]}, fields=["name", "full_name"]
+		):
+			autorzy[wiersz.name] = wiersz.full_name
+
+	pliki_per_komentarz: dict[str, list] = {}
+	if komentarze_raw:
+		try:
+			pliki_komentarzy = (
+				frappe.db.get_all(
+					"File",
+					filters={
+						"attached_to_doctype": "Comment",
+						"attached_to_name": ["in", [k["name"] for k in komentarze_raw]],
+					},
+					fields=["attached_to_name", *_POLA_PLIKU],
+				)
+				or []
+			)
+			for plik in pliki_komentarzy:
+				pliki_per_komentarz.setdefault(plik.attached_to_name, []).append(
+					{klucz: plik[klucz] for klucz in _POLA_PLIKU}
+				)
+		except Exception:
+			frappe.log_error(
+				title="Notatki: feed nie mógł pobrać plików komentarzy audytu",
+				message=frappe.get_traceback(),
+			)
+
+	wpisy_znormalizowane: list[dict] = []
+	liczniki: dict[str, int] = {}
+
+	for wpis in notatki_raw:
+		wzbogacony = {
+			**wpis,
+			"autor_nazwa": autorzy.get(wpis.owner) or wpis.owner,
+			"pliki": pliki_per_notatka.get(wpis.name, []),
+		}
+		znormalizowany = normalizuj_notatke(wzbogacony)
+		wpisy_znormalizowane.append(znormalizowany)
+		liczniki[znormalizowany["zrodlo"]] = liczniki.get(znormalizowany["zrodlo"], 0) + 1
+
+	for komentarz in komentarze_raw:
+		wzbogacony = {
+			**komentarz,
+			"autor_nazwa": autorzy.get(komentarz["owner"]) or komentarz["owner"],
+			"pliki": pliki_per_komentarz.get(komentarz["name"], []),
+		}
+		znormalizowany = normalizuj_komentarz_audytu(wzbogacony, komentarz["zrodlo"])
+		wpisy_znormalizowane.append(znormalizowany)
+		liczniki[znormalizowany["zrodlo"]] = liczniki.get(znormalizowany["zrodlo"], 0) + 1
+
+	wpisy_znormalizowane.sort(key=lambda wpis: wpis.get("data") or "", reverse=True)
+
+	return {
+		"wpisy": wpisy_znormalizowane,
+		"zrodla": zbuduj_zrodla(liczniki),
 		"can_delete": bool(frappe.has_permission(DOCTYPE, "delete")),
 	}
 
