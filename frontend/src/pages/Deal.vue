@@ -608,8 +608,11 @@ const NATIVE_TABS = [
 // <Activities> renders them; only the visible `label` is Polish). Zestaw /
 // Faktury / Montaż / Audyt / Umowa / Trify are custom panels (see the
 // #tab-panel branch).
-// Order follows the sales process (Zestaw, Umowa, Kredyt/Trify, Audyt, Pliki,
-// Montaż, Faktury, Aktywność), owner decision 2026-09-23.
+// Order follows the sales process, owner decision 2026-09-28: OZE is Zestaw,
+// Umowa, Kredyt, Audyt, Montaż, OSD, Dotacja, Faktury, Notatki, Pliki,
+// Aktywność; Czyste Powietrze is Zestaw, Umowa, Trify, Audyt, Montaż,
+// Faktury, Pliki, Aktywność (a single tabOptions order below yields both,
+// since each conditional entry simply drops out of the filtered list).
 // Mirrors OZE_RODZAJE in crm/volteo_pipeline.py — the Kredyt tab (credit
 // application for the bank/leasing partner) only makes sense for the PV/
 // storage product lines, never for Czyste Powietrze (subsidy, not credit).
@@ -669,16 +672,6 @@ const tabs = computed(() => {
       icon: AudytIcon,
       condition: () => doc.value?.custom_rodzaj_umowy === 'Czyste Powietrze',
     },
-    {
-      // Feed "Notatki" (issue ops#201, uwaga 40): strumień łączący notatki
-      // z każdej zakładki z komentarzami wątku Audytu. Faza 1 = tylko OZE,
-      // ten sam warunek co zakładka Kredyt powyżej.
-      name: 'Notatki',
-      label: __('Notatki'),
-      icon: NoteIcon,
-      condition: () => OZE_RODZAJE.has(doc.value?.custom_rodzaj_umowy),
-    },
-    { name: 'Attachments', label: __('Pliki'), icon: AttachmentIcon },
     { name: 'Montaz', label: __('Montaż'), icon: MontazIcon },
     {
       // OSD/Dotacja (ops#202): status ręczny + notatki, tylko OZE (Faza 1) -
@@ -691,6 +684,16 @@ const tabs = computed(() => {
       condition: () => OZE_RODZAJE.has(doc.value?.custom_rodzaj_umowy),
     },
     { name: 'Faktury', label: __('Faktury'), icon: FakturyIcon },
+    {
+      // Feed "Notatki" (issue ops#201, uwaga 40): strumień łączący notatki
+      // z każdej zakładki z komentarzami wątku Audytu. Faza 1 = tylko OZE,
+      // ten sam warunek co zakładka Kredyt powyżej.
+      name: 'Notatki',
+      label: __('Notatki'),
+      icon: NoteIcon,
+      condition: () => OZE_RODZAJE.has(doc.value?.custom_rodzaj_umowy),
+    },
+    { name: 'Attachments', label: __('Pliki'), icon: AttachmentIcon },
     { name: 'Activity', label: __('Aktywność'), icon: ActivityIcon },
   ]
   return tabOptions.filter((tab) => (tab.condition ? tab.condition() : true))

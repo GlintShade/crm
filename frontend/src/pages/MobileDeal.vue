@@ -494,8 +494,12 @@ usePageMeta(() => {
 // Curated Polish Szansa tabs (mobile). Keep Details (field panel), then mirror the
 // desktop set: Pliki reuses Attachments, Historia reuses Activity (native `name`,
 // Polish `label`); Zestaw/Faktury/Montaż/Audyt/Trify are custom panels.
-// Order follows the sales process (Dane, Zestaw, Trify, Audyt, Pliki, Montaż,
-// Faktury, Historia), owner decision 2026-09-23.
+// Order follows the sales process, owner decision 2026-09-28: OZE is Dane,
+// Zestaw, Audyt, Montaż, OSD, Dotacja, Faktury, Notatki, Pliki, Historia;
+// Czyste Powietrze is Dane, Zestaw, Trify, Audyt, Montaż, Faktury, Pliki,
+// Historia (mobile has no Kredyt tab; a single tabOptions order below yields
+// both, since each conditional entry simply drops out of the filtered
+// list).
 const tabs = computed(() => {
   let tabOptions = [
     {
@@ -530,6 +534,18 @@ const tabs = computed(() => {
       icon: AudytIcon,
       condition: () => doc.value?.custom_rodzaj_umowy === 'Czyste Powietrze',
     },
+    { name: 'Montaz', label: __('Montaż'), icon: MontazIcon },
+    {
+      // OSD/Dotacja (ops#202): status ręczny + notatki, tylko OZE (Faza 1),
+      // `czyOze` jak zakładka Notatki poniżej (ten sam import z @/utils/notatki).
+      name: 'OSD', label: __('OSD'), icon: OsdIcon,
+      condition: () => czyOze(doc.value?.custom_rodzaj_umowy),
+    },
+    {
+      name: 'Dotacja', label: __('Dotacja'), icon: DotacjaIcon,
+      condition: () => czyOze(doc.value?.custom_rodzaj_umowy),
+    },
+    { name: 'Faktury', label: __('Faktury'), icon: FakturyIcon },
     {
       // Feed "Notatki" (issue ops#201, uwaga 40): strumień łączący notatki
       // z każdej zakładki z komentarzami wątku Audytu. Faza 1 = tylko OZE
@@ -542,18 +558,6 @@ const tabs = computed(() => {
       condition: () => czyOze(doc.value?.custom_rodzaj_umowy),
     },
     { name: 'Attachments', label: __('Pliki'), icon: AttachmentIcon },
-    { name: 'Montaz', label: __('Montaż'), icon: MontazIcon },
-    {
-      // OSD/Dotacja (ops#202): status ręczny + notatki, tylko OZE (Faza 1),
-      // `czyOze` jak zakładka Notatki powyżej (ten sam import z @/utils/notatki).
-      name: 'OSD', label: __('OSD'), icon: OsdIcon,
-      condition: () => czyOze(doc.value?.custom_rodzaj_umowy),
-    },
-    {
-      name: 'Dotacja', label: __('Dotacja'), icon: DotacjaIcon,
-      condition: () => czyOze(doc.value?.custom_rodzaj_umowy),
-    },
-    { name: 'Faktury', label: __('Faktury'), icon: FakturyIcon },
     { name: 'Activity', label: __('Historia'), icon: ActivityIcon },
   ]
   return tabOptions.filter((tab) => (tab.condition ? tab.condition() : true))
