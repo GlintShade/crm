@@ -170,7 +170,7 @@ describe('Kredyt form logic', () => {
         [...STATUSY_FINANSOWANIA_OPCJE].sort(),
       )
       expect(KOLOR_STATUSU_FINANSOWANIA).toEqual({
-        Procesowane: 'amber',
+        Procesowane: 'blue',
         Odrzucone: 'red',
         Zaakceptowane: 'green',
       })
@@ -178,7 +178,7 @@ describe('Kredyt form logic', () => {
 
     describe('badgeStatusuFinansowania', () => {
       it.each([
-        ['Procesowane', 'amber'],
+        ['Procesowane', 'blue'],
         ['Odrzucone', 'red'],
         ['Zaakceptowane', 'green'],
       ])('returns {label, theme} for %s', (wartosc, theme) => {

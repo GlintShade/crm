@@ -73,10 +73,11 @@ export const STATUSY_FINANSOWANIA_OPCJE = ['Procesowane', 'Odrzucone', 'Zaakcept
 
 // Badge/button colors for each value above (keys of COLOR_BUTTON_CLASS_MAP
 // in utils/statusColors.js, and valid frappe-ui `Badge` themes). Owner
-// decision: Procesowane = amber (in progress), Odrzucone = red (rejected),
-// Zaakceptowane = green (accepted).
+// decision: Procesowane = blue (in progress; owner rule 2026-09-28: statusy
+// w trakcie zawsze niebieskie), Odrzucone = red (rejected), Zaakceptowane =
+// green (accepted).
 export const KOLOR_STATUSU_FINANSOWANIA = {
-  Procesowane: 'amber',
+  Procesowane: 'blue',
   Odrzucone: 'red',
   Zaakceptowane: 'green',
 }
