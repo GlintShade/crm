@@ -145,6 +145,13 @@
                       size="sm"
                       :label="badgeFor(w.autenti_status, 'kredyt').label"
                     />
+                    <Badge
+                      v-if="badgeStatusuFinansowania(w.status_finansowania)"
+                      :theme="badgeStatusuFinansowania(w.status_finansowania).theme"
+                      variant="subtle"
+                      size="sm"
+                      :label="badgeStatusuFinansowania(w.status_finansowania).label"
+                    />
                   </span>
                 </li>
               </ul>
@@ -171,6 +178,33 @@
               variant="subtle"
               size="lg"
               :label="autentiBadgeEntry.label"
+            />
+            <!-- Status finansowania (ops#197): backoffice/admins get an
+            editable dropdown, everyone else a read-only badge. -->
+            <Dropdown
+              v-if="canSetStatusFinansowania"
+              :options="opcjeStatusuFinansowania"
+              placement="bottom-start"
+            >
+              <template #default="{ open }">
+                <Button
+                  :label="statusFinansowaniaButtonLabel"
+                  :iconRight="open ? 'chevron-up' : 'chevron-down'"
+                  :class="statusButtonClass(statusFinansowaniaColor)"
+                  :disabled="ustawiajacStatusFinansowania"
+                >
+                  <template #prefix>
+                    <IndicatorIcon :class="statusFinansowaniaColor" />
+                  </template>
+                </Button>
+              </template>
+            </Dropdown>
+            <Badge
+              v-else-if="badgeStatusuFinansowania(kredyt?.status_finansowania)"
+              :theme="badgeStatusuFinansowania(kredyt?.status_finansowania).theme"
+              variant="subtle"
+              size="lg"
+              :label="badgeStatusuFinansowania(kredyt?.status_finansowania).label"
             />
           </div>
           <div class="flex items-center gap-3">
@@ -471,12 +505,16 @@
 <script setup>
 import KredytIcon from '@/components/Icons/KredytIcon.vue'
 import TelefonLink from '@/components/TelefonLink.vue'
+import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
 import { telHref, czyTelefon } from '@/utils/telefon'
 import { onClickOutside } from '@vueuse/core'
-import { Badge, Button, FormControl, call, toast } from 'frappe-ui'
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { Badge, Button, Dropdown, FormControl, call, toast } from 'frappe-ui'
+import { computed, h, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useAutenti } from '@/composables/useAutenti'
 import { badgeFor } from '@/utils/autentiStatus'
+import { usersStore } from '@/stores/users'
+import { statusButtonClass } from '@/utils/statusColors'
+import { parseColor } from '@/utils'
 import {
   GRUPY,
   POLA_WNIOSKODAWCY,
@@ -501,6 +539,9 @@ import {
   etykietaFormularza,
   ETYKIETY_POL,
   etykietaPelna,
+  STATUSY_FINANSOWANIA_OPCJE,
+  KOLOR_STATUSU_FINANSOWANIA,
+  badgeStatusuFinansowania,
 } from '@/utils/kredytForm'
 
 const props = defineProps({
@@ -1151,11 +1192,64 @@ function aktualizujWierszListy(record) {
           wnioskodawca_nazwisko: record.wnioskodawca_nazwisko,
           wnioskodawca_imiona: record.wnioskodawca_imiona,
           status: record.status,
+          status_finansowania: record.status_finansowania,
         }
       : w,
   )
   if (wybrany.value?.name === record.name) {
     wybrany.value = formularze.value.find((w) => w.name === record.name) || wybrany.value
+  }
+}
+
+// --- Status finansowania (ops#197) -----------------------------------------------
+// A third, independent status, changed only through
+// crm.api.kredyt.volteo_kredyt_status_finansowania (never part of
+// buildDane()/saveForm()). Backoffice/admins get the dropdown below;
+// everyone else only ever reads kredyt.value.status_finansowania as a
+// badge (see the template).
+const { isVolteoAdmin, isBackend } = usersStore()
+const canSetStatusFinansowania = computed(() => isVolteoAdmin() || isBackend())
+
+const ustawiajacStatusFinansowania = ref(false)
+
+const statusFinansowaniaColor = computed(() => {
+  const wartosc = kredyt.value?.status_finansowania
+  return parseColor(wartosc ? KOLOR_STATUSU_FINANSOWANIA[wartosc] || 'gray' : 'gray')
+})
+
+const statusFinansowaniaButtonLabel = computed(() => {
+  const wartosc = kredyt.value?.status_finansowania
+  return wartosc ? __(wartosc) : __('Status finansowania')
+})
+
+const opcjeStatusuFinansowania = computed(() =>
+  STATUSY_FINANSOWANIA_OPCJE.map((s) => ({
+    label: __(s),
+    value: s,
+    icon: () => h(IndicatorIcon, { class: parseColor(KOLOR_STATUSU_FINANSOWANIA[s]) }),
+    onClick: () => ustawStatusFinansowania(s),
+  })),
+)
+
+// No optimistic update (mirrors LeadInlineCell.vue's zapiszWartosc): the
+// button keeps showing the OLD status until the server confirms the new
+// one, so a failed call never shows a status that was never actually
+// persisted.
+async function ustawStatusFinansowania(s) {
+  if (!wybrany.value || ustawiajacStatusFinansowania.value) return
+  if (s === kredyt.value?.status_finansowania) return
+  ustawiajacStatusFinansowania.value = true
+  try {
+    const data = await call('crm.api.kredyt.volteo_kredyt_status_finansowania', {
+      kredyt: wybrany.value.name,
+      status: s,
+    })
+    kredyt.value = data?.kredyt || kredyt.value
+    aktualizujWierszListy(kredyt.value)
+  } catch (err) {
+    toast.error(extractErrorMessage(err))
+  } finally {
+    ustawiajacStatusFinansowania.value = false
   }
 }
 

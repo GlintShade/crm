@@ -57,6 +57,49 @@ export const DZIALALNOSC_FORMA_OPCJE = [
   'inne',
 ]
 
+// Status finansowania (ops#197): a third, independent status on each credit
+// form, changed by backoffice/admins via a color-coded dropdown in
+// KredytTab.vue's header, shown to everyone else as a read-only badge. Empty
+// by default (a brand-new form has no status yet).
+//
+// MIRROR (deliberate duplication, must change together): crm/volteo_kredyt.py
+// `STATUSY_FINANSOWANIA` (the Python list of the same three values) and
+// ops/crm-kredyt.py (the `status_finansowania` Select field's options). This
+// is NOT a doctype/form data field like BASE_FIELDS/GRUPY above: it is never
+// added to buildDane/hydrateFrom/defaultForm, it is set only through
+// crm.api.kredyt.volteo_kredyt_status_finansowania and never travels through
+// volteo_kredyt_save.
+export const STATUSY_FINANSOWANIA_OPCJE = ['Procesowane', 'Odrzucone', 'Zaakceptowane']
+
+// Badge/button colors for each value above (keys of COLOR_BUTTON_CLASS_MAP
+// in utils/statusColors.js, and valid frappe-ui `Badge` themes). Owner
+// decision: Procesowane = amber (in progress), Odrzucone = red (rejected),
+// Zaakceptowane = green (accepted).
+export const KOLOR_STATUSU_FINANSOWANIA = {
+  Procesowane: 'amber',
+  Odrzucone: 'red',
+  Zaakceptowane: 'green',
+}
+
+/**
+ * Badge metadata ({label, theme}) for a `status_finansowania` value, or
+ * `null` for empty/unknown so the caller renders no badge at all (an empty
+ * status is the default for a brand-new form, not an error state).
+ *
+ * `__()` is called here, inside the function body, never at module scope:
+ * same eager-chunk trap as `badgeFor()` in utils/autentiStatus.js (see that
+ * file's header comment).
+ *
+ * @param {string|null|undefined} wartosc - raw `status_finansowania` value
+ * @returns {{label: string, theme: string}|null}
+ */
+export function badgeStatusuFinansowania(wartosc) {
+  if (!wartosc) return null
+  const theme = KOLOR_STATUSU_FINANSOWANIA[wartosc]
+  if (!theme) return null
+  return { label: __(wartosc), theme }
+}
+
 // `prefill` keys returned by crm.api.kredyt.volteo_kredyt_get/create/save —
 // read-only CRM data (contact card), never part of the editable payload.
 export const PREFILL_KEYS = [

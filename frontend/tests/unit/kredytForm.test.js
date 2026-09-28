@@ -29,6 +29,9 @@ import {
   ETYKIETY_POL,
   ETYKIETY_PELNE,
   etykietaPelna,
+  STATUSY_FINANSOWANIA_OPCJE,
+  KOLOR_STATUSU_FINANSOWANIA,
+  badgeStatusuFinansowania,
 } from '@/utils/kredytForm'
 
 function deepFreeze(value) {
@@ -154,6 +157,40 @@ describe('Kredyt form logic', () => {
         'nr_domu',
         'nr_lokalu',
       ])
+    })
+  })
+
+  describe('status finansowania (ops#197)', () => {
+    it('declares exactly the 3 authoritative values', () => {
+      expect(STATUSY_FINANSOWANIA_OPCJE).toEqual(['Procesowane', 'Odrzucone', 'Zaakceptowane'])
+    })
+
+    it('maps a color for every value in STATUSY_FINANSOWANIA_OPCJE, and nothing else', () => {
+      expect(Object.keys(KOLOR_STATUSU_FINANSOWANIA).sort()).toEqual(
+        [...STATUSY_FINANSOWANIA_OPCJE].sort(),
+      )
+      expect(KOLOR_STATUSU_FINANSOWANIA).toEqual({
+        Procesowane: 'amber',
+        Odrzucone: 'red',
+        Zaakceptowane: 'green',
+      })
+    })
+
+    describe('badgeStatusuFinansowania', () => {
+      it.each([
+        ['Procesowane', 'amber'],
+        ['Odrzucone', 'red'],
+        ['Zaakceptowane', 'green'],
+      ])('returns {label, theme} for %s', (wartosc, theme) => {
+        expect(badgeStatusuFinansowania(wartosc)).toEqual({ label: wartosc, theme })
+      })
+
+      it.each([[''], [null], [undefined], ['Coś innego']])(
+        'returns null for empty/unknown value (%p)',
+        (wartosc) => {
+          expect(badgeStatusuFinansowania(wartosc)).toBeNull()
+        },
+      )
     })
   })
 
