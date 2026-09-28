@@ -27,6 +27,8 @@ argumentów wejściowych.
 import datetime
 from collections.abc import Iterable
 
+from crm.volteo_osd_dotacja import tekst_sladu_statusu
+
 POLA_WLASNA_LINIA: tuple[str, ...] = (
 	"status",
 	"lost_reason",
@@ -251,6 +253,9 @@ def tekst_sladu(rodzaj: str, **dane: object) -> str:
 		if stary:
 			return f"status finansowania: {stary} → {nowy}{sufiks}"
 		return f"ustawiono status finansowania: {nowy}{sufiks}"
+
+	if rodzaj == "status_zakladki":
+		return tekst_sladu_statusu(dane["zakladka"], dane.get("stary"), dane["nowy"])
 
 	if rodzaj == "koszty":
 		return (

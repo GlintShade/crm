@@ -29,6 +29,7 @@ export const COLOR_BUTTON_CLASS_MAP = {
   amber: '!bg-amber-100 !text-amber-800 hover:!bg-amber-200',
   yellow: '!bg-yellow-100 !text-yellow-800 hover:!bg-yellow-200',
   cyan: '!bg-cyan-100 !text-cyan-800 hover:!bg-cyan-200',
+  lime: '!bg-lime-100 !text-lime-800 hover:!bg-lime-200',
   teal: '!bg-teal-100 !text-teal-800 hover:!bg-teal-200',
   violet: '!bg-violet-100 !text-violet-800 hover:!bg-violet-200',
   purple: '!bg-purple-100 !text-purple-800 hover:!bg-purple-200',

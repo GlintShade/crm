@@ -9270,3 +9270,71 @@ msgstr "Nie udało się usunąć pliku"
 #: frontend/src/components/deal/NotatkiStrumien.vue
 msgid "Nie udało się dodać notatki"
 msgstr "Nie udało się dodać notatki"
+
+# ops#202: zakladki "OSD" i "Dotacja" na szansie OZE (status reczny + strumien
+# notatek). Klucze juz po polsku, wpis dla spojnosci katalogu, jak przy #198/
+# #200 wyzej. Wartosci Select (crm/volteo_osd_dotacja.py::STATUSY) sa
+# wspoldzielone miedzy obiema zakladkami tam, gdzie sie pokrywaja (Nie
+# rozpoczeto), wiec kazda wartosc ma tu dokladnie jeden wpis niezaleznie od
+# tego, w ilu miejscach sie pojawia.
+#: frontend/src/pages/Deal.vue
+#: frontend/src/pages/MobileDeal.vue
+msgid "OSD"
+msgstr "OSD"
+
+#: frontend/src/pages/Deal.vue
+#: frontend/src/pages/MobileDeal.vue
+msgid "Dotacja"
+msgstr "Dotacja"
+
+#: frontend/src/components/deal/StatusZakladki.vue
+msgid "Status OSD"
+msgstr "Status OSD"
+
+#: frontend/src/components/deal/StatusZakladki.vue
+msgid "Status dotacji"
+msgstr "Status dotacji"
+
+#: frontend/src/utils/osdDotacja.js
+msgid "Nie rozpoczęto"
+msgstr "Nie rozpoczęto"
+
+#: frontend/src/utils/osdDotacja.js
+msgid "Zgłoszenie wysłane"
+msgstr "Zgłoszenie wysłane"
+
+#: frontend/src/utils/osdDotacja.js
+msgid "Uwagi OSD"
+msgstr "Uwagi OSD"
+
+#: frontend/src/utils/osdDotacja.js
+msgid "Umowa przyłączeniowa"
+msgstr "Umowa przyłączeniowa"
+
+#: frontend/src/utils/osdDotacja.js
+msgid "Licznik wymieniony"
+msgstr "Licznik wymieniony"
+
+#: frontend/src/utils/osdDotacja.js
+msgid "Zakończone"
+msgstr "Zakończone"
+
+#: frontend/src/utils/osdDotacja.js
+msgid "Wniosek złożony"
+msgstr "Wniosek złożony"
+
+#: frontend/src/utils/osdDotacja.js
+msgid "Uzupełnienie"
+msgstr "Uzupełnienie"
+
+#: frontend/src/utils/osdDotacja.js
+msgid "Decyzja pozytywna"
+msgstr "Decyzja pozytywna"
+
+#: frontend/src/utils/osdDotacja.js
+msgid "Wypłacona"
+msgstr "Wypłacona"
+
+#: frontend/src/utils/osdDotacja.js
+msgid "Odrzucona"
+msgstr "Odrzucona"
