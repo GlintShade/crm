@@ -18,6 +18,24 @@ _OWNER_FIELD = {
 BYPASS_ROLES = {"System Manager", "Volteo Core Admin", "Volteo Backend"}
 
 
+def czy_admin_lub_bypass(user: str | None = None) -> bool:
+	"""True dla `Administrator` albo dla kogos z rola w `BYPASS_ROLES` (System
+	Manager / Volteo Core Admin / Volteo Backend).
+
+	Jedyne miejsce tej bramki -- `crm.api.__init__.volteo_zmien_nazwe_zalacznika`
+	(olowek zmiany nazwy zalacznika, ops#73) i `crm.api.pliki.feed`
+	(`can_rename` w feedzie "Pliki", ops#199) musza uzywac DOKLADNIE tej samej
+	funkcji, zeby "kto moze zmienic nazwe pliku" nigdy nie rozjechalo sie
+	miedzy dwoma miejscami liczacymi to samo osobnymi literalami.
+
+	`user=None` uzywa `frappe.session.user`/`frappe.get_roles()` (biezacy
+	wolajacy); jawny `user` pozwala sprawdzic innego uzytkownika."""
+	user = user or frappe.session.user
+	if user == "Administrator":
+		return True
+	return bool(set(frappe.get_roles(user)) & BYPASS_ROLES)
+
+
 def _ma_linie_leady(user: str) -> bool:
 	"""True if `user` may see the Leady module at all (issue #27's
 	`custom_linia_leady` gate on `User`).

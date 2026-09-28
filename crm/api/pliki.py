@@ -24,7 +24,17 @@ Faktura, CRM Lead). Brak uprawnienia do dokumentu nadrzędnego = jego pliki
 SĄ POMIJANE, nigdy wyjątek -- każde źródło żyje we własnym `try/except` z
 `frappe.log_error`, wzór `crm.api.activities.get_volteo_linked_activities`,
 żeby jeden zepsuty JSON audytu (albo brakujący dokument) nie wywalał całego
-feedu."""
+feedu.
+
+Pułapka nazewnicza Frappe warta zapamiętania: `frappe.get_all` NIE jest
+"permission-aware" -- jest dokładnie odwrotnie, `get_all` to `get_list` z
+`ignore_permissions=True` na sztywno (frappe/__init__.py). Do listowania
+`File` (owner-based, patrz akapit wyżej) ten fork świadomie chce
+`frappe.db.get_all` (dodatkowo pomija też `permission_query_conditions`).
+Do listowania rekordów `Volteo Faktura`/`Volteo Kredyt` samych w sobie --
+gdzie zależy nam WŁAŚNIE na uszanowaniu ich hooków deal-scoped
+(`faktura_visibility.py`) -- właściwym wyborem jest `frappe.get_list`
+(domyślnie `ignore_permissions=False`), nigdy `frappe.get_all`."""
 
 from typing import Any
 
@@ -34,7 +44,7 @@ from frappe import _
 from crm.czyste_powietrze.audyt import etykieta_dla as etykieta_slotu_cp
 from crm.czyste_powietrze.audyt import parsuj_liste, parsuj_mape
 from crm.integrations.autenti.logika import nazwa_pliku_umowy, prefiks_pliku_kredytu
-from crm.permissions.org_hierarchy import BYPASS_ROLES
+from crm.permissions.org_hierarchy import czy_admin_lub_bypass
 from crm.volteo_pliki import (
 	ZNACZNIK_ROBOCZY,
 	czy_widoczne_robocze,
@@ -75,20 +85,32 @@ def _pliki_dla(attached_to_doctype: str, attached_to_name: str | list[str]) -> l
 
 
 def _czy_plik_systemowy_umowy(deal: str):
+	"""Lustro `crm.volteo_zalaczniki.czy_plik_systemowy` (gałąź umowy), nie
+	import wprost: tamta funkcja odpowiada "czy TA konkretna nazwa jest
+	systemowa dla tej szansy" (umowa LUB kredyt, jednym boolem), a tutaj
+	trzeba wiedzieć KTÓRY z dwóch to (zwracamy `"umowa_pdf"` albo
+	`"kredyt_pdf"` osobno, patrz `zbuduj_callable_systemowe`) -- rozbicie na
+	dwie osobne, jednoznaczne funkcje jest czytelniejsze niż wywoływanie
+	`czy_plik_systemowy` dwukrotnie i zgadywanie, który przypadek trafił."""
 	prefiks = nazwa_pliku_umowy(deal)[: -len(".pdf")]
 	return lambda file_name: bool(file_name) and file_name.startswith(prefiks)
 
 
 def _czy_plik_systemowy_kredytu(deal: str):
+	"""Lustro `crm.volteo_zalaczniki.czy_plik_systemowy` (gałąź kredytu) --
+	patrz docstring `_czy_plik_systemowy_umowy` powyżej dla uzasadnienia."""
 	prefiks = prefiks_pliku_kredytu(deal, deal)
 	return lambda file_name: bool(file_name) and file_name.startswith(prefiks)
 
 
 def _zbierz_faktury(deal: str) -> tuple[set, list[dict[str, Any]]]:
-	"""Rekordy `Volteo Faktura` widoczne wołającemu (uprawnienia deal-scoped,
-	`frappe.get_all` -- permission-aware, patrz `faktura_visibility.py`) plus
-	pliki podpięte wprost pod nie."""
-	fakturas = frappe.get_all("Volteo Faktura", filters={"deal": deal}, fields=["name", "plik"]) or []
+	"""Rekordy `Volteo Faktura` widoczne wołającemu.
+
+	`frappe.get_list` (NIE `frappe.get_all` -- `get_all` to `get_list` z
+	`ignore_permissions=True` na sztywno, patrz docstring modułu), zeby
+	uszanować deal-scoped hook `has_faktura_permission`/
+	`get_faktura_permission_query_conditions` z `faktura_visibility.py`."""
+	fakturas = frappe.get_list("Volteo Faktura", filters={"deal": deal}, fields=["name", "plik"]) or []
 	url_faktur = {f.plik for f in fakturas if f.plik}
 	nazwy = [f.name for f in fakturas]
 	return url_faktur, _pliki_dla("Volteo Faktura", nazwy)
@@ -106,11 +128,13 @@ def _zbierz_umowe(deal: str) -> tuple[dict[str, str], list[dict[str, Any]]]:
 
 
 def _zbierz_kredyty(deal: str) -> tuple[dict[str, str], list[dict[str, Any]]]:
-	"""`Volteo Kredyt` jest N:1 z szansą (ops#159) -- `frappe.get_all` już
-	respektuje `has_kredyt_permission` (deal-scoped, fail-closed), więc każdy
-	niewidoczny formularz jest pominięty samym zapytaniem, bez dodatkowego
-	sprawdzenia tutaj."""
-	kredyty = frappe.get_all("Volteo Kredyt", filters={"deal": deal}, fields=["name", "signed_pdf_file"]) or []
+	"""`Volteo Kredyt` jest N:1 z szansą (ops#159).
+
+	`frappe.get_list` (NIE `frappe.get_all`, patrz docstring modułu i
+	`_zbierz_faktury`) respektuje `has_kredyt_permission` (deal-scoped,
+	fail-closed), więc każdy niewidoczny formularz jest pominięty samym
+	zapytaniem, bez dodatkowego sprawdzenia tutaj."""
+	kredyty = frappe.get_list("Volteo Kredyt", filters={"deal": deal}, fields=["name", "signed_pdf_file"]) or []
 	url_podpisanych = {k.signed_pdf_file: "kredyt_podpisany" for k in kredyty if k.signed_pdf_file}
 	nazwy = [k.name for k in kredyty]
 	return url_podpisanych, _pliki_dla("Volteo Kredyt", nazwy)
@@ -235,7 +259,15 @@ def _notatki_dla_szansy(deal: str) -> dict[str, str]:
 	`notatka_<nazwa>` na `CRM Deal`. `Volteo Notatka` (issue W1/ops#198) może
 	jeszcze nie istnieć na tym środowisku w chwili scalania tego chunka --
 	wtedy zwraca pusty słownik, a `crm.volteo_pliki` i tak sklasyfikuje te
-	pliki jako "notatka" po samym znaczniku (etykieta domyślna)."""
+	pliki jako "notatka" po samym znaczniku (etykieta domyślna).
+
+	Świadomie `frappe.db.get_all` (pomija uprawnienia), NIE `frappe.get_list`:
+	widoczność `Volteo Notatka` jest z założenia (W1/ops#198, ten sam wzorzec
+	co `Volteo Faktura`/`Volteo Trify Update`/`Volteo Kredyt` w
+	`faktura_visibility.py`) tożsama z widocznością jej szansy nadrzędnej, a
+	`feed()` już sprawdziło `has_permission("CRM Deal", "read", deal)` PRZED
+	wywołaniem tej funkcji -- powtórne sprawdzenie uprawnień tutaj byłoby
+	zbędne, ta funkcja tylko czyta metadane (nazwa, zakładka), nigdy treść."""
 	if not frappe.db.exists("DocType", "Volteo Notatka"):
 		return {}
 	wiersze = frappe.db.get_all("Volteo Notatka", filters={"deal": deal}, fields=["name", "zakladka"]) or []
@@ -388,7 +420,11 @@ def feed(deal: str) -> dict[str, Any]:
 	zdeduplikowane = scal_po_url(surowe)
 
 	can_write = bool(frappe.has_permission("CRM Deal", "write", deal))
-	can_rename = frappe.session.user == "Administrator" or bool(set(frappe.get_roles()) & BYPASS_ROLES)
+	# Dokladnie ta sama bramka co olowek zmiany nazwy zalacznika
+	# (crm.api.volteo_zmien_nazwe_zalacznika, ops#73): jedna definicja "kto
+	# moze zmienic nazwe pliku", zaimportowana, nie przepisana lokalnym
+	# literalem.
+	can_rename = czy_admin_lub_bypass()
 
 	nazwiska = _nazwiska_autorow({w.get("autor") for w in zdeduplikowane})
 	wiersze = [
