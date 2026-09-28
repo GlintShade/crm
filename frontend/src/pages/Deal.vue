@@ -61,7 +61,7 @@
     >
       <template #tab-panel="{ tab }">
         <Activities
-          v-if="NATIVE_TABS.includes(tab.name)"
+          v-if="jestNatywna(tab)"
           ref="activities"
           v-model:reload="reload"
           v-model:tabIndex="tabIndex"
@@ -82,6 +82,7 @@
         <AktualizacjeTab v-else-if="tab.name === 'Trify'" :deal-id="dealId" :konfig="TRIFY" />
         <OsdDotacjaTab v-else-if="tab.name === 'OSD'" :deal-id="dealId" zakladka="OSD" />
         <OsdDotacjaTab v-else-if="tab.name === 'Dotacja'" :deal-id="dealId" zakladka="Dotacja" />
+        <PlikiTab v-else-if="tab.name === 'Attachments'" :deal-id="dealId" />
       </template>
     </Tabs>
     <Resizer
@@ -351,6 +352,7 @@ import UmowaTab from '@/components/deal/UmowaTab.vue'
 import KredytTab from '@/components/deal/KredytTab.vue'
 import NotatkiTab from '@/components/deal/NotatkiTab.vue'
 import OsdDotacjaTab from '@/components/deal/OsdDotacjaTab.vue'
+import PlikiTab from '@/components/deal/PlikiTab.vue'
 import { MONTAZ, TRIFY } from '@/utils/aktualizacje'
 import DealPipelineBar from '@/components/deal/DealPipelineBar.vue'
 import DealNextStepNote from '@/components/deal/DealNextStepNote.vue'
@@ -583,8 +585,10 @@ usePageMeta(() => {
 })
 
 // Native tab names still handled by the shared <Activities> component (used for
-// Pliki=Attachments and Historia=Activity below; the rest are dropped from the
-// curated Szansa view but kept here so the branch stays correct if re-added).
+// Pliki=Attachments on CP/leads and Historia=Activity below; the rest are
+// dropped from the curated Szansa view but kept here so the branch stays
+// correct if re-added). On OZE, Attachments is carved out below
+// (`jestNatywna`) to render <PlikiTab> instead (issue ops#203, faza 1).
 const NATIVE_TABS = [
   'Activity',
   'Emails',
@@ -596,7 +600,8 @@ const NATIVE_TABS = [
   'WhatsApp',
 ]
 
-// Curated Polish Szansa tabs. Pliki reuses the native Attachments view and
+// Curated Polish Szansa tabs. Pliki reuses the native Attachments view on
+// CP/leads (PlikiTab replaces it on OZE, see `jestNatywna` below) and
 // Historia reuses the native Activity feed (keep their native `name` so
 // <Activities> renders them; only the visible `label` is Polish). Zestaw /
 // Faktury / Montaż / Audyt / Umowa / Trify are custom panels (see the
@@ -607,6 +612,18 @@ const NATIVE_TABS = [
 // application for the bank/leasing partner) only makes sense for the PV/
 // storage product lines, never for Czyste Powietrze (subsidy, not credit).
 const OZE_RODZAJE = new Set(['Fotowoltaika', 'Fotowoltaika + Magazyn', 'Magazyn energii'])
+
+// Attachments is "native" (rendered by <Activities>) everywhere EXCEPT on
+// OZE deals, where <PlikiTab> (issue ops#203, faza 1) takes over instead -
+// every other native tab name is unaffected. `jestNatywna` is the single
+// place this exception lives, so the `v-if`/`v-else-if` chain in the
+// #tab-panel template stays a plain, readable list of conditions.
+function jestNatywna(tab) {
+  return (
+    NATIVE_TABS.includes(tab.name) &&
+    !(tab.name === 'Attachments' && OZE_RODZAJE.has(doc.value?.custom_rodzaj_umowy))
+  )
+}
 
 const tabs = computed(() => {
   // First use of the tabs `condition` hook (see the filter below): a tab

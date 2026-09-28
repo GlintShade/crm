@@ -215,6 +215,10 @@
         <NotatkiTab v-else-if="tab.name === 'Notatki'" :deal-id="dealId" />
         <OsdDotacjaTab v-else-if="tab.name === 'OSD'" :deal-id="dealId" zakladka="OSD" />
         <OsdDotacjaTab v-else-if="tab.name === 'Dotacja'" :deal-id="dealId" zakladka="Dotacja" />
+        <PlikiTab
+          v-else-if="tab.name === 'Attachments' && czyOze(doc.custom_rodzaj_umowy)"
+          :deal-id="dealId"
+        />
         <Activities
           v-else
           v-model:reload="reload"
@@ -299,6 +303,7 @@ import AudytTab from '@/components/deal/AudytTab.vue'
 import AudytCPTab from '@/components/deal/AudytCPTab.vue'
 import NotatkiTab from '@/components/deal/NotatkiTab.vue'
 import OsdDotacjaTab from '@/components/deal/OsdDotacjaTab.vue'
+import PlikiTab from '@/components/deal/PlikiTab.vue'
 import { MONTAZ, TRIFY } from '@/utils/aktualizacje'
 import { czyOze } from '@/utils/notatki'
 import DealPipelineBar from '@/components/deal/DealPipelineBar.vue'

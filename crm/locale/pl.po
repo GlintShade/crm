@@ -9338,3 +9338,78 @@ msgstr "Wypłacona"
 #: frontend/src/utils/osdDotacja.js
 msgid "Odrzucona"
 msgstr "Odrzucona"
+
+# Issue GlintShade/proenergy-crm-ops#203 (uwaga 47): zakladka "Pliki" na
+# szansie OZE, feed kazdego zalacznika szansy (PlikiTab.vue, PlikWiersz.vue).
+# Klucze juz po polsku (jak reszta wpisow w tej konwencji ogona), wpis dla
+# spojnosci katalogu. "Prosze zmien nazwe"/"Anuluj"/"Zapisz"/"Otworz"/"Usun"
+# sa generyczne i dzialaja bez wpisu (renderuja sie jako sam msgid), ale
+# katalog dostaje je tak jak przy ops#201/#200 powyzej.
+
+#: frontend/src/components/deal/PlikiTab.vue
+msgid "Prześlij plik"
+msgstr "Prześlij plik"
+
+#: frontend/src/components/deal/PlikiTab.vue
+msgid "Brak dokumentów."
+msgstr "Brak dokumentów."
+
+#: frontend/src/components/deal/PlikiTab.vue
+msgid "Brak zdjęć i filmów."
+msgstr "Brak zdjęć i filmów."
+
+#: frontend/src/components/deal/PlikiTab.vue
+msgid "Brak plików."
+msgstr "Brak plików."
+
+#: frontend/src/components/deal/PlikiTab.vue
+msgid "Dokumenty"
+msgstr "Dokumenty"
+
+#: frontend/src/components/deal/PlikiTab.vue
+msgid "Zdjęcia i filmy"
+msgstr "Zdjęcia i filmy"
+
+#: frontend/src/components/deal/PlikiTab.vue
+msgid "Wszystko"
+msgstr "Wszystko"
+
+#: frontend/src/components/deal/PlikiTab.vue
+msgid "Zmień nazwę pliku"
+msgstr "Zmień nazwę pliku"
+
+#: frontend/src/components/deal/PlikiTab.vue
+msgid "Nazwa pliku"
+msgstr "Nazwa pliku"
+
+#: frontend/src/components/deal/PlikiTab.vue
+msgid "Anuluj"
+msgstr "Anuluj"
+
+#: frontend/src/components/deal/PlikiTab.vue
+msgid "Zapisz"
+msgstr "Zapisz"
+
+#: frontend/src/components/deal/PlikiTab.vue
+msgid "Nie udało się zmienić nazwy."
+msgstr "Nie udało się zmienić nazwy."
+
+#: frontend/src/components/deal/PlikiTab.vue
+msgid "Czy na pewno usunąć ten plik? Tej operacji nie można cofnąć."
+msgstr "Czy na pewno usunąć ten plik? Tej operacji nie można cofnąć."
+
+#: frontend/src/components/deal/PlikiTab.vue
+msgid "Nie udało się pobrać plików"
+msgstr "Nie udało się pobrać plików"
+
+#: frontend/src/components/deal/PlikWiersz.vue
+msgid "Otwórz"
+msgstr "Otwórz"
+
+#: frontend/src/components/deal/PlikWiersz.vue
+msgid "Zmień nazwę"
+msgstr "Zmień nazwę"
+
+#: frontend/src/components/deal/PlikWiersz.vue
+msgid "Usuń"
+msgstr "Usuń"
