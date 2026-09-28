@@ -208,6 +208,7 @@
         </div>
         <ZestawTab v-else-if="tab.name === 'Zestaw'" :deal-id="dealId" />
         <FakturyTab v-else-if="tab.name === 'Faktury'" :deal-id="dealId" />
+        <MontazTabOze v-else-if="tab.name === 'Montaz' && czyOze(doc.custom_rodzaj_umowy)" :deal-id="dealId" />
         <AktualizacjeTab v-else-if="tab.name === 'Montaz'" :deal-id="dealId" :konfig="MONTAZ" />
         <AudytTab v-else-if="tab.name === 'Audyt'" :deal-id="dealId" :rodzaj="doc.custom_rodzaj_umowy || ''" />
         <AudytCPTab v-else-if="tab.name === 'AudytCP'" :deal-id="dealId" />
@@ -299,6 +300,7 @@ import DotacjaIcon from '@/components/Icons/DotacjaIcon.vue'
 import ZestawTab from '@/components/deal/ZestawTab.vue'
 import FakturyTab from '@/components/deal/FakturyTab.vue'
 import AktualizacjeTab from '@/components/deal/AktualizacjeTab.vue'
+import MontazTabOze from '@/components/deal/MontazTabOze.vue'
 import AudytTab from '@/components/deal/AudytTab.vue'
 import AudytCPTab from '@/components/deal/AudytCPTab.vue'
 import NotatkiTab from '@/components/deal/NotatkiTab.vue'

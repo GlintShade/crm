@@ -458,6 +458,13 @@ def validate(doc, method: str | None = None) -> None:
 
 
 def after_insert(doc, method: str | None = None) -> None:
+	# Migracja Montazu OZE do Volteo Notatka (issue #204): ops/crm-notatki-
+	# migracja.py ustawia ta flage przed insert(), zeby wpisy przepisane ze
+	# starego Volteo Montaz Update nigdy nie wyslaly powiadomien o wzmiance
+	# -- ich tekst jest zwyklym escapowanym HTML-em bez spanow wzmianek, ale
+	# to jest druga linia obrony, nie polegajaca na tym fakcie.
+	if doc.flags.ignore_mentions:
+		return
 	# Błąd wysyłki powiadomienia NIGDY nie wycofuje samej notatki -- to log
 	# procesu handlowego, nie dokument finansowy; utrata notatki byłaby
 	# gorsza niż utrata jednego powiadomienia o wzmiance (ta sama zasada co

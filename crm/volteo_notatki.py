@@ -56,6 +56,7 @@ __all__ = [
 	"etykieta_zrodla",
 	"normalizuj_komentarz_audytu",
 	"normalizuj_notatke",
+	"odfiltruj_zmigrowane",
 	"posortuj",
 	"rozbij_znacznik",
 	"rozszerzenie",
@@ -323,6 +324,32 @@ def posortuj(wpisy: list[dict], kierunek: str = "desc") -> list[dict]:
 		key=lambda wpis: (wpis.get("data_zdarzenia") or "", wpis.get("creation") or ""),
 		reverse=malejaco,
 	)
+
+
+def odfiltruj_zmigrowane(rekordy: list[dict], zmigrowane_nazwy) -> list[dict]:
+	"""Migracja Montazu OZE do `Volteo Notatka` (issue #204): filtruje liste
+	rekordow starego zrodla (slowniki/`frappe._dict` z kluczem `name`, np.
+	wiersze `Volteo Montaz Update` odczytane przez
+	`crm.api.activities.get_volteo_linked_activities`), pomijajac te, ktorych
+	`name` jest w `zmigrowane_nazwy` -- zbiorze `zrodlo_name` notatek juz
+	zmigrowanych z tego zrodla na tej szansie.
+
+	Bez tej funkcji kazdy zmigrowany wpis Montazu dostalby DWIE linie w
+	Aktywnosci: jedna ze starego zrodla (`Volteo Montaz Update` nadal ma
+	swoj wlasny wpis w `VOLTEO_LINKED_SOURCES`, bez `skip_creation`, wiec
+	kazdy jego rekord i tak generuje zdarzenie "added"), druga z nowej
+	notatki (`Volteo Notatka`, rowniez bez `skip_creation` -- to jest CEL
+	tego zrodla). Filtrowanie starej galezi (nie nowej) jest wiec jedynym
+	sposobem na dokladnie jedna linie per zmigrowany wpis.
+
+	`zmigrowane_nazwy` przyjmuje dowolny kontener obslugujacy `in` (`set`,
+	`frozenset`, `list`) -- niepusty zbior jest konwertowany do `set` raz, a
+	nie sprawdzany elementem-po-elemencie przez `list.__contains__` (O(n) per
+	sprawdzenie) w petli filtrujacej."""
+	if not zmigrowane_nazwy:
+		return list(rekordy)
+	zbior = zmigrowane_nazwy if isinstance(zmigrowane_nazwy, (set, frozenset)) else set(zmigrowane_nazwy)
+	return [rekord for rekord in rekordy if rekord.get("name") not in zbior]
 
 
 # ---------------------------------------------------------------------------

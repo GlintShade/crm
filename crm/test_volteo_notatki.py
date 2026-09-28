@@ -17,6 +17,7 @@ from crm.volteo_notatki import (
 	etykieta_zrodla,
 	normalizuj_komentarz_audytu,
 	normalizuj_notatke,
+	odfiltruj_zmigrowane,
 	posortuj,
 	rozbij_znacznik,
 	rozszerzenie,
@@ -559,6 +560,51 @@ class TestVolteoNotatkiZbudujZrodla(unittest.TestCase):
 		wynik = zbuduj_zrodla({"CosNieznanego": 5})
 		self.assertEqual(len(wynik), len(ZRODLA_FEEDU))
 		self.assertNotIn("CosNieznanego", [w["klucz"] for w in wynik])
+
+
+class TestVolteoNotatkiOdfiltrujZmigrowane(unittest.TestCase):
+	def test_a_pusty_zbior_migracji_zwraca_wszystkie_rekordy_bez_zmian(
+		self: "TestVolteoNotatkiOdfiltrujZmigrowane",
+	) -> None:
+		rekordy = [{"name": "MU-0001"}, {"name": "MU-0002"}]
+		self.assertEqual(odfiltruj_zmigrowane(rekordy, set()), rekordy)
+
+	def test_b_none_jako_zbior_migracji_zwraca_wszystkie_rekordy(
+		self: "TestVolteoNotatkiOdfiltrujZmigrowane",
+	) -> None:
+		rekordy = [{"name": "MU-0001"}]
+		self.assertEqual(odfiltruj_zmigrowane(rekordy, None), rekordy)
+
+	def test_c_rekord_zmigrowany_jest_pominiety(self: "TestVolteoNotatkiOdfiltrujZmigrowane") -> None:
+		rekordy = [{"name": "MU-0001"}, {"name": "MU-0002"}]
+		wynik = odfiltruj_zmigrowane(rekordy, {"MU-0001"})
+		self.assertEqual([r["name"] for r in wynik], ["MU-0002"])
+
+	def test_d_wszystkie_rekordy_zmigrowane_daje_pusta_liste(
+		self: "TestVolteoNotatkiOdfiltrujZmigrowane",
+	) -> None:
+		rekordy = [{"name": "MU-0001"}, {"name": "MU-0002"}]
+		self.assertEqual(odfiltruj_zmigrowane(rekordy, {"MU-0001", "MU-0002"}), [])
+
+	def test_e_zachowuje_kolejnosc_wejsciowa(self: "TestVolteoNotatkiOdfiltrujZmigrowane") -> None:
+		rekordy = [{"name": "MU-0003"}, {"name": "MU-0001"}, {"name": "MU-0002"}]
+		wynik = odfiltruj_zmigrowane(rekordy, {"MU-0001"})
+		self.assertEqual([r["name"] for r in wynik], ["MU-0003", "MU-0002"])
+
+	def test_f_akceptuje_liste_zamiast_zbioru(self: "TestVolteoNotatkiOdfiltrujZmigrowane") -> None:
+		rekordy = [{"name": "MU-0001"}, {"name": "MU-0002"}]
+		wynik = odfiltruj_zmigrowane(rekordy, ["MU-0001"])
+		self.assertEqual([r["name"] for r in wynik], ["MU-0002"])
+
+	def test_g_pusta_lista_rekordow_zwraca_pusta_liste(
+		self: "TestVolteoNotatkiOdfiltrujZmigrowane",
+	) -> None:
+		self.assertEqual(odfiltruj_zmigrowane([], {"MU-0001"}), [])
+
+	def test_h_nie_mutuje_wejsciowej_listy(self: "TestVolteoNotatkiOdfiltrujZmigrowane") -> None:
+		rekordy = [{"name": "MU-0001"}, {"name": "MU-0002"}]
+		odfiltruj_zmigrowane(rekordy, {"MU-0001"})
+		self.assertEqual(len(rekordy), 2)
 
 
 if __name__ == "__main__":
