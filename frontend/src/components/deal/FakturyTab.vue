@@ -89,12 +89,19 @@
           </tbody>
         </table>
       </div>
+
+      <!--
+        Strumień notatek (issue #200): po tabeli faktur, w tym samym
+        max-w-3xl. Komponent sam renderuje `null` na szansach spoza OZE.
+      -->
+      <NotatkiStrumien :deal-id="dealId" zakladka="Faktury" />
     </div>
   </div>
 </template>
 
 <script setup>
 import { Badge, Button, FormControl, FileUploader, call, createResource, toast } from 'frappe-ui'
+import NotatkiStrumien from '@/components/deal/NotatkiStrumien.vue'
 import { reactive, ref, computed } from 'vue'
 import { formatPln } from '@/utils/money'
 

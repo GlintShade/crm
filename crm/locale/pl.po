@@ -9227,3 +9227,46 @@ msgstr "Nie zawiera"
 #: frontend/src/components/SidePanelLayout.vue
 msgid "Ukryj puste pola"
 msgstr "Ukryj puste pola"
+
+# Issue #200: wspolny strumien notatek na zakladkach szansy (Zestaw, Umowa,
+# Kredyt, Faktury). Klucze juz po polsku (jak reszta wpisow w tej konwencji
+# ogona), wpis dla spojnosci katalogu. Teksty dynamiczne per zakladka
+# (placeholder edytora, tekst pustej listy z @/utils/notatki ZAKLADKI) nie
+# maja tu odpowiednika, wzorem istniejacego konfig.placeholder/konfig.pusty
+# w aktualizacje.js (AktualizacjeTab.vue) - te takze nigdy nie trafily do
+# katalogu, bo __() na nich jest wolaniem dynamicznym, nie statycznym.
+#: frontend/src/components/deal/NotatkaKarta.vue
+msgid "Notatka"
+msgstr "Notatka"
+
+#: frontend/src/components/deal/NotatkiStrumien.vue
+msgid "Notatki ({0})"
+msgstr "Notatki ({0})"
+
+#: frontend/src/components/deal/NotatkiStrumien.vue
+msgid "Załącz plik"
+msgstr "Załącz plik"
+
+#: frontend/src/components/deal/NotatkiStrumien.vue
+msgid "Dodaj"
+msgstr "Dodaj"
+
+#: frontend/src/components/deal/NotatkiStrumien.vue
+msgid "Usuń plik"
+msgstr "Usuń plik"
+
+#: frontend/src/components/deal/NotatkiStrumien.vue
+msgid "Ładowanie…"
+msgstr "Ładowanie…"
+
+#: frontend/src/components/deal/NotatkiStrumien.vue
+msgid "Nie udało się pobrać notatek"
+msgstr "Nie udało się pobrać notatek"
+
+#: frontend/src/components/deal/NotatkiStrumien.vue
+msgid "Nie udało się usunąć pliku"
+msgstr "Nie udało się usunąć pliku"
+
+#: frontend/src/components/deal/NotatkiStrumien.vue
+msgid "Nie udało się dodać notatki"
+msgstr "Nie udało się dodać notatki"

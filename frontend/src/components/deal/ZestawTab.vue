@@ -347,6 +347,14 @@
         with the table above.
       -->
       <MontazKosztyPanel :deal-id="dealId" />
+
+      <!--
+        Strumień notatek (issue #200): na końcu zakładki, poza szerokością
+        tabeli powyżej ale w tym samym max-w-5xl. Komponent sam renderuje
+        `null`, gdy szansa nie jest OZE, więc żadnego dodatkowego v-if tutaj
+        nie potrzeba.
+      -->
+      <NotatkiStrumien class="mt-5" :deal-id="dealId" zakladka="Zestaw" />
     </div>
   </div>
 </template>
@@ -355,6 +363,7 @@
 import ZestawIcon from '@/components/Icons/ZestawIcon.vue'
 import { Badge, FeatherIcon, createResource } from 'frappe-ui'
 import MontazKosztyPanel from '@/components/deal/MontazKosztyPanel.vue'
+import NotatkiStrumien from '@/components/deal/NotatkiStrumien.vue'
 import { computed, ref } from 'vue'
 import { formatPln, roundPln } from '@/utils/money'
 
