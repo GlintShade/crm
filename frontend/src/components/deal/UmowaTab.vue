@@ -111,6 +111,12 @@
               @click="toggleAutentiConfirm"
             />
             <Button
+              v-if="autentiEnabled && autentiStatus === 'Podpisana' && autenti.signed_pdf_file"
+              variant="outline"
+              :label="__('Pobierz podpisaną umowę')"
+              @click="openSignedPdf"
+            />
+            <Button
               variant="outline"
               :label="__('Generuj PDF umowy')"
               :disabled="generatingPdf"
@@ -207,15 +213,6 @@
           class="rounded-lg border border-outline-red-3 bg-surface-red-2 px-4 py-3 text-sm text-ink-red-8"
         >
           {{ autenti.error_message }}
-        </div>
-
-        <!-- Autenti signed PDF download -->
-        <div v-if="autentiEnabled && autentiStatus === 'Podpisana' && autenti.signed_pdf_file">
-          <Button
-            variant="outline"
-            :label="__('Pobierz podpisaną umowę')"
-            @click="openSignedPdf"
-          />
         </div>
 
         <!-- Autenti send confirmation — inline panel, not a modal -->
