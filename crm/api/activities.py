@@ -23,6 +23,7 @@ from crm.volteo_aktywnosc import (
 	tekst_widoczny_dla,
 )
 from crm.volteo_notatki import PREFIKS_ZNACZNIKA as _PREFIKS_ZNACZNIKA_NOTATKI
+from crm.volteo_notatki import odfiltruj_zmigrowane as _odfiltruj_zmigrowane_notatki
 from crm.volteo_notatki import tekst_aktywnosci as _tekst_aktywnosci_notatki
 from crm.volteo_zalaczniki import czy_plik_systemowy
 
@@ -816,6 +817,33 @@ def get_volteo_linked_activities(name: str):
 				message=f"doctype={dt}\n{frappe.get_traceback()}",
 			)
 			continue
+
+		# Migracja Montazu OZE do Volteo Notatka (issue #204): kazdy zmigrowany
+		# wpis dostaje swoja jedyna linie Aktywnosci z NOWEGO zrodla ("Volteo
+		# Notatka", zbudowana ponizej z wlasnym "added"), wiec stara galaz
+		# ("Volteo Montaz Update", rowniez bez skip_creation) musi pominac
+		# dokladnie te rekordy, ktore juz maja odpowiednik w Volteo Notatka --
+		# inaczej kazdy zmigrowany wpis dawalby DWIE linie zamiast jednej.
+		# Jedno zapytanie, wylacznie dla tego jednego zrodla; DocType moze nie
+		# istniec jeszcze na tym srodowisku (przed obrazem b64) -- wtedy
+		# `frappe.db.exists("DocType", ...)` zwraca False i petla nic nie
+		# filtruje (zaden wpis nie jest jeszcze zmigrowany bez samego doctype'u).
+		if dt == "Volteo Montaz Update" and records:
+			try:
+				if frappe.db.exists("DocType", "Volteo Notatka"):
+					zmigrowane_nazwy = set(
+						frappe.get_all(
+							"Volteo Notatka",
+							filters={"deal": name, "zakladka": "Montaz", "zrodlo_doctype": dt},
+							pluck="zrodlo_name",
+						)
+					)
+					records = _odfiltruj_zmigrowane_notatki(records, zmigrowane_nazwy)
+			except Exception:
+				frappe.log_error(
+					title="Volteo linked activities: failed to dedupe migrated Montaz entries",
+					message=f"deal={name}\n{frappe.get_traceback()}",
+				)
 
 		fields_map = {}
 		if track_changes:
