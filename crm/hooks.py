@@ -138,6 +138,7 @@ permission_query_conditions = {
 	"Volteo Faktura": "crm.permissions.faktura_visibility.get_faktura_permission_query_conditions",
 	"Volteo Trify Update": "crm.permissions.faktura_visibility.get_trify_permission_query_conditions",
 	"Volteo Kredyt": "crm.permissions.faktura_visibility.get_kredyt_permission_query_conditions",
+	"Volteo Notatka": "crm.permissions.faktura_visibility.get_notatka_permission_query_conditions",
 	"FCRM Note": "crm.permissions.child_visibility.get_note_permission_query_conditions",
 	"CRM Task": "crm.permissions.child_visibility.get_task_permission_query_conditions",
 }
@@ -158,6 +159,7 @@ has_permission = {
 	"Volteo Faktura": "crm.permissions.faktura_visibility.has_faktura_permission",
 	"Volteo Trify Update": "crm.permissions.faktura_visibility.has_trify_permission",
 	"Volteo Kredyt": "crm.permissions.faktura_visibility.has_kredyt_permission",
+	"Volteo Notatka": "crm.permissions.faktura_visibility.has_notatka_permission",
 	"FCRM Note": [
 		"crm.permissions.child_visibility.has_note_permission",
 		"crm.permissions.delete_lockdown.block_nonadmin_delete",
@@ -286,6 +288,24 @@ doc_events = {
 		"validate": ["crm.api.trify.validate"],
 		"after_insert": ["crm.api.trify.after_insert"],
 	},
+	# Fundament notatek na szansie (issue #198, uwaga 43) -- doctype tworzy
+	# ops/crm-notatki.py (nie istnieje jeszcze na swiezym/lokalnym site).
+	# doc_events na nieistniejacym doctype sa bezpieczne -- patrz komentarz
+	# przy "Volteo Audyt CP" wyzej. after_insert, nie on_update: DocPerm daje
+	# D2D i Backendowi tylko create (bez edycji z UI, decyzja wlasciciela
+	# "pomylka = nowa notatka pod spodem"), wiec ponowny zapis nie moze
+	# wyslac powiadomienia o wzmiance drugi raz.
+	"Volteo Notatka": {
+		"validate": ["crm.api.notatki.validate"],
+		"after_insert": ["crm.api.notatki.after_insert"],
+		"on_trash": ["crm.api.notatki.on_trash"],
+	},
+	# Usuniecie jednego formularza kredytowego (nie calej szansy) nie moze
+	# utknac na LinkExistsError, gdy jakas notatka wskazuje na niego przez
+	# swoje pole `kredyt` -- notatka przezywa, traci tylko powiazanie.
+	"Volteo Kredyt": {
+		"on_trash": ["crm.api.notatki.odlacz_kredyt"],
+	},
 }
 
 # Scheduled Tasks
@@ -296,6 +316,7 @@ scheduler_events = {
 		"crm.fcrm.doctype.crm_view_settings.crm_view_settings.clear_old_versions",
 		"crm.permissions.kalkulator_guard.reconcile_kalkulator_perms",
 		"crm.fcrm.doctype.crm_invitation.crm_invitation.expire_invitations",
+		"crm.api.notatki.sprzatnij_robocze",
 	],
 	"daily_long": ["crm.lead_syncing.background_sync.sync_leads_from_sources_daily"],
 	"hourly_long": ["crm.lead_syncing.background_sync.sync_leads_from_sources_hourly"],

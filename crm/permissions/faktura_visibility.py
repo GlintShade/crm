@@ -5,8 +5,9 @@
 Deal-derived visibility scoping for doctypes that link a `CRM Deal` through
 their own `deal` Link field: `Volteo Faktura` (invoices attached to a deal),
 `Volteo Trify Update` (Trify process log entries on a Czyste Powietrze deal,
-ops#75), and `Volteo Kredyt` (per-applicant credit forms attached to a deal,
-issue #161).
+ops#75), `Volteo Kredyt` (per-applicant credit forms attached to a deal,
+issue #161), and `Volteo Notatka` (notes on a deal, one doctype for every tab,
+issue #198).
 
 Volteo Faktura read access is granted without `if_owner` so that a D2D rep
 can see invoices backoffice added on the rep's own deals (backoffice is
@@ -61,6 +62,14 @@ this is a deliberate, explicit choice per issue #161, not an oversight. A
 mid-creation, and an unresolved/deleted/inaccessible parent deal at check
 time must HIDE the Kredyt row, never show it: fail-open here would be the
 opposite of what this hook exists to prevent.
+
+`Volteo Notatka` (issue #198, foundation of the notes system on a deal,
+uwaga 43) is the fourth doctype scoped here, and follows Trify/Kredyt's
+fail-closed default, never Faktura's fail-open one: a note is created
+exclusively through `crm.api.notatki.dodaj` with `deal` populated up front,
+so a row with no `deal` is malformed, and an unresolved/deleted/inaccessible
+parent deal must hide the note, never show it -- notes can carry mentions and
+free text about a client, the same confidentiality bar as Trify/Kredyt.
 """
 
 import frappe
@@ -179,4 +188,20 @@ def has_kredyt_permission(doc, ptype, user):
 	# already narrows D2D to read/write/create with no delete and no
 	# `if_owner` -- this is the deal-scoping layer underneath that, not a
 	# substitute for it.
+	return _has_deal_scoped_permission(doc, ptype, user, fail_open=False)
+
+
+def get_notatka_permission_query_conditions(user=None):
+	return _deal_scoped_query_conditions("Volteo Notatka", user or frappe.session.user)
+
+
+def has_notatka_permission(doc, ptype, user):
+	user = user or frappe.session.user
+
+	# Same shape as Trify/Kredyt: `ptype` matters (read maps to a read check
+	# on the deal, create/write/delete map to a write check) and the
+	# empty-deal case fails CLOSED (issue #198) -- DocPerm already narrows
+	# D2D and Backend to read+create with no write/delete and no `if_owner`
+	# (visibility is scoped by the parent deal, not by ownership); this is
+	# the deal-scoping layer underneath that, not a substitute for it.
 	return _has_deal_scoped_permission(doc, ptype, user, fail_open=False)

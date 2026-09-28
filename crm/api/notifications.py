@@ -64,6 +64,11 @@ def get_hash(notification):
 		# wybiera zakładkę po hashu), nie nazwa dokumentu jak przy komentarzu
 		_hash = "#trify"
 
+	if notification.type == "Mention" and notification.notification_type_doctype == "Volteo Notatka":
+		# wzmianka w notatce (issue #198): tak samo jak Trify, hash to nazwa
+		# zakładki notatek, nie nazwa dokumentu
+		_hash = "#notatki"
+
 	if notification.type == "WhatsApp":
 		_hash = "#whatsapp"
 
