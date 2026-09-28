@@ -22,6 +22,8 @@ from crm.volteo_aktywnosc import (
 	maskuj_autora_cc,
 	tekst_widoczny_dla,
 )
+from crm.volteo_notatki import PREFIKS_ZNACZNIKA as _PREFIKS_ZNACZNIKA_NOTATKI
+from crm.volteo_notatki import tekst_aktywnosci as _tekst_aktywnosci_notatki
 from crm.volteo_zalaczniki import czy_plik_systemowy
 
 #: Limit wersji (Version) czytanych bezpośrednio dla samej szansy (CRM Deal) w get_deal_activities.
@@ -733,6 +735,21 @@ VOLTEO_LINKED_SOURCES = [
 			"sent_by", "sent_at", "signed_at", "error_message", "signed_pdf_file",
 		},
 	},
+	# Fundament notatek na szansie (issue #198, uwaga 43). Bez "skip_creation":
+	# w odroznieniu od Umowy/Kredytu, calym celem tej notatki w Aktywnosci JEST
+	# zdarzenie "added" z tekstem z crm.volteo_notatki.tekst_aktywnosci -- nic
+	# innego nie pisze rownowaznego sladu przy tworzeniu notatki.
+	# "skip_version_fields": edycja notatki z UI nie istnieje (decyzja
+	# wlasciciela), ale gdyby admin poprawil `tekst` recznie w Desk,
+	# podsumowanie zmiany pola tresci byloby nieczytelne (surowy HTML) --
+	# pominiete tak samo jak zdjecia/JSON-y audytow powyzej.
+	{
+		"doctype": "Volteo Notatka",
+		"label": _("Notatki"),
+		"link_field": "deal",
+		"text_fields": ["zakladka", "typ", "tekst"],
+		"skip_version_fields": {"tekst"},
+	},
 ]
 
 CUSTOM_ZESTAW_FIELDNAME = "custom_zestaw"
@@ -1067,6 +1084,14 @@ def compose_volteo_linked_text(dt: str, action: str, rec: dict, summary: str | N
 				etykieta = etykieta_wnioskodawcy(nazwisko, imiona)
 				text += f" ({etykieta})"
 			return text
+
+		if dt == "Volteo Notatka":
+			# Jedyne zrodlo prawdy dla tej linii to crm.volteo_notatki.tekst_aktywnosci
+			# (modul frappe-free) -- ten plik nie jest testowalny lokalnie, wiec
+			# formatowanie mieszka tam, gdzie da sie je przetestowac unittestem.
+			return _tekst_aktywnosci_notatki(
+				rec.get("zakladka") or "", rec.get("typ") or "", rec.get("tekst") or ""
+			)
 	except Exception:
 		return None
 
@@ -1213,6 +1238,12 @@ def get_attachments(doctype: str, name: str):
 	# traktuje NULL w ifnull(attached_to_field, ...), jest niepotrzebnym ryzykiem.
 	# Klucz attached_to_field jest zdejmowany z odpowiedzi, żeby kształt danych dla
 	# AttachmentArea.vue się nie zmienił.
+	# VOLTEO (issue #198): załączniki notatek (zakładka Notatki) to wiersze File
+	# ze znacznikiem attached_to_field zaczynającym się od PREFIKS_ZNACZNIKA
+	# ("notatka_", w tym sam ZNACZNIK_ROBOCZY) -- pominięte z tego samego powodu
+	# co zdjęcia Montażu: mają własny feed (crm.api.notatki.lista), nie mają się
+	# dublować w zakładce Pliki. Porównanie przez startswith w Pythonie, nigdy
+	# przez SQL LIKE -- "_" jest wildcardem LIKE.
 	# VOLTEO: flaga na wiersz dla ołówka zmiany nazwy w AttachmentArea.vue (issue
 	# ops#73). Pliki komentarzy/komunikacji (doctype != "CRM Deal") dostają ołówek
 	# zawsze; pliki systemowe wygenerowane dla szansy (umowa, formularz kredytowy —
@@ -1226,6 +1257,7 @@ def get_attachments(doctype: str, name: str):
 		}
 		for wiersz in zalaczniki
 		if wiersz.attached_to_field != ZNACZNIK_ZDJEC_MONTAZU
+		and not (wiersz.attached_to_field or "").startswith(_PREFIKS_ZNACZNIKA_NOTATKI)
 	]
 
 

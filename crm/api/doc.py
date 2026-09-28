@@ -1472,6 +1472,12 @@ def get_linked_docs_of_document(doctype: str, docname: str):
 # generyczny mechanizm reference_doctype/reference_docname ich nie zna,
 # wiec kaskada musi byc jawna.
 DEAL_CASCADE_DOCTYPES = [
+	# Volteo Notatka wchodzi PIERWSZY: moze linkowac Volteo Kredyt (pole
+	# `kredyt`), wiec musi zostac skasowana przed nim, zeby nie utknac na
+	# LinkExistsError w polowie kaskady (odlacz_kredyt w crm.api.notatki
+	# jest zabezpieczeniem dla usuniecia POJEDYNCZEGO formularza kredytowego
+	# poza kaskada calej szansy, nie dla tej sciezki).
+	("Volteo Notatka", "deal"),
 	("Volteo Umowa", "deal"),
 	("Volteo Kredyt", "deal"),
 	("Volteo Audyt", "deal"),
