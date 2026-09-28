@@ -140,7 +140,7 @@
         >
           {{
             __('Audyt zatwierdzony przez {0} · {1}', [
-              row?.zatwierdzony_przez || '—',
+              nazwaZatwierdzajacego || '-',
               fmtDate(row?.zatwierdzony_dnia),
             ])
           }}
@@ -344,6 +344,7 @@ import AudytIcon from '@/components/Icons/AudytIcon.vue'
 import AudytPhotoSlot from '@/components/deal/AudytPhotoSlot.vue'
 import AudytPodgladZdjec from '@/components/deal/AudytPodgladZdjec.vue'
 import AudytVerdictControls from '@/components/deal/AudytVerdictControls.vue'
+import { usersStore } from '@/stores/users.js'
 import { useAttachments } from '@/composables/useAttachments'
 import { KLUCZ_ZDJECIA, MAX_ZDJEC, SLOTY, brakiDoPrzeslania, cpAggregate, cpElements, parsujListe, parsujMape } from '@/utils/audytCP'
 import { indeksDlaKlucza, zbudujListePodgladu } from '@/utils/audytPodglad'
@@ -371,8 +372,18 @@ watch(
   },
 )
 
+const { getUser } = usersStore()
+
 const row = computed(() => resource.data?.audyt || null)
 const exists = computed(() => !!row.value?.name)
+
+// Imie i nazwisko zatwierdzajacego zamiast e-maila (uwaga z klik-testu 2026-09-28);
+// zatwierdzony_przez to surowy User.name, nazwisko rozwiazuje usersStore jak w AktualizacjeTab.vue.
+const nazwaZatwierdzajacego = computed(() => {
+  const email = row.value?.zatwierdzony_przez
+  if (!email) return ''
+  return (getUser(email)?.full_name || '').trim() || email
+})
 
 const canEditSrv = computed(() => !!resource.data?.can_edit)
 const canReview = computed(() => !!resource.data?.can_review)
