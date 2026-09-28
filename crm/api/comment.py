@@ -78,10 +78,34 @@ def _notify_mention(doc, reference_doc, mention):
 		# Dzwonek prowadzi na sama szanse (CRM Deal), a hash -- na zakladke
 		# Audyt/AudytCP; wzorem galezi Trify (notification_type_doctype
 		# rozpoznawany w crm.api.notifications.get_hash), nie na komentarz.
+		#
+		# `notification_type_doc` MUSI byc nazwa istniejacego dokumentu
+		# `notification_type_doctype` -- `CRM Notification.notification_type_doc`
+		# to Dynamic Link. Zostawienie tu `doc.name` (nazwa Commentu) rzucalo
+		# `LinkValidationError` przy kazdej wzmiance w audycie (brak
+		# `Volteo Audyt`/`Volteo Audyt CP` o nazwie rownej nazwie komentarza),
+		# polykany przez try/except w notify_mentions -- notyfikacja nigdy nie
+		# powstawala, bez sladu w Error Log (sonda odslonila to w rundzie
+		# 2026-09-28, A2/B2 FAIL). `doc.reference_name` to nazwa dokumentu
+		# audytu (autoname "field:deal", wiec rowna nazwie szansy) -- ten sam
+		# dokument, ktory faktycznie istnieje, dokladnie jak Trify daje
+		# `reference_docname = docname` swojego wlasnego wpisu.
+		#
+		# Skutek uboczny: `notify_user()` odrzuca duplikat przez
+		# `frappe.db.exists("CRM Notification", values)`, a `values` nie
+		# zawiera juz nazwy Commentu (byla unikalna per komentarz) -- teraz
+		# dwie ROZNE wzmianki na TYM SAMYM audycie koliduja tylko wtedy, gdy
+		# maja identyczny `message` (tresc HTML komentarza) I tego samego
+		# `assigned_to`. `message = doc.content`, wiec dwa komentarze musialyby
+		# byc bajt w bajt identyczne (ten sam znacznik wzmianki + ten sam
+		# otaczajacy tekst), co w praktyce nie zdarza sie przy prawdziwym
+		# wpisywaniu tekstu -- akceptowany, brzegowy kompromis tego samego
+		# mechanizmu dedupu, ktory dziala tak samo dla Trify/Notatek.
 		deal = reference_doc.get("deal") or doc.reference_name
 		name = deal
 		doctype = "audycie szansy"
 		notification_type_doctype = doc.reference_doctype
+		notification_type_doc = doc.reference_name
 		redirect_to_doctype = "CRM Deal"
 		redirect_to_docname = deal
 	else:
