@@ -319,9 +319,10 @@
                 </span>
                 <span class="text-xs text-ink-gray-4">{{ fmtDate(c.creation) }}</span>
               </div>
-              <div class="whitespace-pre-wrap text-sm text-ink-gray-7">
-                {{ commentText(c.content) }}
-              </div>
+              <div
+                class="prose-f whitespace-pre-wrap text-sm text-ink-gray-7"
+                v-html="sanitizeHTML(c.content)"
+              />
               <div
                 v-if="commentAttachments[c.name]?.length"
                 class="mt-2 flex flex-wrap gap-2"
@@ -338,10 +339,14 @@
           <div v-else class="text-sm text-ink-gray-5">{{ __('Brak komentarzy.') }}</div>
 
           <div class="mt-3 flex flex-col gap-2">
-            <FormControl
-              type="textarea"
-              :placeholder="__('Napisz komentarz…')"
-              v-model="newComment"
+            <TextEditor
+              ref="commentEditor"
+              :content="newComment"
+              :editor-class="['prose-sm max-w-none min-h-[4rem]']"
+              :placeholder="__('Napisz komentarz… (@ aby wspomnieć użytkownika)')"
+              :editable="true"
+              :mentions="mentionsKonfig"
+              @change="newComment = $event"
             />
             <div
               v-if="newCommentAttachments.length"
@@ -382,7 +387,7 @@
               <Button
                 variant="solid"
                 :label="__('Dodaj komentarz')"
-                :disabled="!newComment.trim() || posting"
+                :disabled="tekstPusty(newComment) || posting"
                 :loading="posting"
                 @click="postComment"
               />
@@ -412,6 +417,8 @@ import AudytPodgladZdjec from '@/components/deal/AudytPodgladZdjec.vue'
 import AudytVerdictControls from '@/components/deal/AudytVerdictControls.vue'
 import { usersStore } from '@/stores/users.js'
 import { useAttachments } from '@/composables/useAttachments'
+import { sanitizeHTML } from '@/utils'
+import { tekstPusty } from '@/utils/aktualizacje'
 import { indeksDlaKlucza, zbudujListePodgladu } from '@/utils/audytPodglad'
 import {
   VERDICT_META,
@@ -423,7 +430,16 @@ import {
   verdictFor,
   visibleElements,
 } from '@/utils/audytWeryfikacja'
-import { Badge, Button, FileUploader, FormControl, call, createResource, toast } from 'frappe-ui'
+import {
+  Badge,
+  Button,
+  FileUploader,
+  FormControl,
+  TextEditor,
+  call,
+  createResource,
+  toast,
+} from 'frappe-ui'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 
 const props = defineProps({
@@ -506,7 +522,7 @@ const audyt = createResource({
   auto: true,
 })
 
-const { getUser } = usersStore()
+const { getUser, listaWzmianek } = usersStore()
 
 const row = computed(() => audyt.data?.[0] || null)
 const exists = computed(() => !!row.value?.name)
@@ -994,6 +1010,13 @@ const commentsResource = createResource({
 const newComment = ref('')
 const newCommentAttachments = ref([])
 const posting = ref(false)
+const commentEditor = ref(null)
+
+// PUŁAPKA (issue #205, ops#75): TextEditor konfiguruje MentionExtension raz,
+// przy tworzeniu edytora (snapshot tablicy), patrz komentarz przy
+// mentionsKonfig w AktualizacjeTab.vue. Getter zamiast wartości bezpośredniej
+// jest tu jedyną formą, którą frappe-ui przepuszcza leniwie.
+const mentionsKonfig = { mentions: () => listaWzmianek() }
 
 // reference_doctype='Volteo Audyt' works unchanged against the generic
 // crm.api.comment.add_comment — it's already generic over reference_doctype.
@@ -1003,17 +1026,20 @@ const posting = ref(false)
 // Volteo Backend already hold read+create on — a real but slightly broader
 // gate (any role with Comment create rights, not just this deal's context).
 async function postComment() {
-  const text = newComment.value.trim()
-  if (!text || posting.value) return
+  if (tekstPusty(newComment.value) || posting.value) return
   posting.value = true
   try {
     await call('crm.api.comment.add_comment', {
       reference_doctype: 'Volteo Audyt',
       reference_name: props.dealId,
-      content: text,
+      content: newComment.value,
       attachments: newCommentAttachments.value.map((f) => f.name),
     })
     newComment.value = ''
+    // TipTap echem zwraca "<p></p>" po wyczyszczeniu treści przez v-model:
+    // nie pusty string (patrz tekstPusty powyżej), więc trzeba wyczyścić
+    // edytor jawnie, tak samo jak AktualizacjeTab.vue.
+    commentEditor.value?.editor?.commands.clearContent()
     newCommentAttachments.value = []
     await commentsResource.reload()
   } catch (err) {
@@ -1064,19 +1090,6 @@ async function loadCommentAttachments(names) {
   }
   Object.keys(commentAttachments).forEach((k) => delete commentAttachments[k])
   Object.assign(commentAttachments, grouped)
-}
-
-// Comment content may contain HTML — render it as plain text. DOMParser with
-// text/html neither executes scripts nor loads resources, so extracting
-// textContent is a safe way to strip markup.
-function commentText(html) {
-  if (!html) return ''
-  try {
-    const doc = new DOMParser().parseFromString(String(html), 'text/html')
-    return (doc.body.textContent || '').trim()
-  } catch (e) {
-    return String(html).replace(/<[^>]*>/g, '').trim()
-  }
 }
 
 // --- Helpers -------------------------------------------------------------------

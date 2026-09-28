@@ -9413,3 +9413,11 @@ msgstr "Zmień nazwę"
 #: frontend/src/components/deal/PlikWiersz.vue
 msgid "Usuń"
 msgstr "Usuń"
+
+# Issue #205: watek "Komentarze" zakladki Audyt (OZE i CP) dostaje edytor ze
+# wzmiankami @ zamiast zwyklej textarea -- placeholder zmieniony na taki sam
+# wzorzec jak w Trify/Notatkach ("@ aby wspomniec uzytkownika").
+#: frontend/src/components/deal/AudytTab.vue
+#: frontend/src/components/deal/AudytCPTab.vue
+msgid "Napisz komentarz… (@ aby wspomnieć użytkownika)"
+msgstr "Napisz komentarz… (@ aby wspomnieć użytkownika)"

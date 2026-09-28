@@ -507,8 +507,15 @@ class TestVolteoNotatkiNormalizujKomentarzAudytu(unittest.TestCase):
 	def test_i_tekst_zwykly_zamieniony_na_html_escapowany(
 		self: "TestVolteoNotatkiNormalizujKomentarzAudytu",
 	) -> None:
+		# Stary komentarz sprzed wzmianek @ (issue #205): zwykly tekst z
+		# dawnej `textarea`, ktory NIE zaczyna sie od `<` (nawet jesli ma go
+		# w srodku zdania) -- musi nadal trafiac do `tekst_na_html`
+		# (escapowanie + `<br>` za nowa linie), zeby nie renderowal sie jako
+		# zywy znacznik. `<script>` w tresci jest tu celowo w srodku, nie na
+		# poczatku -- patrz `_wyglada_na_html` w `crm/volteo_notatki.py`.
 		wynik = normalizuj_komentarz_audytu(
-			self._komentarz(content="<script>alert(1)</script>\ndruga linia"), "Audyt"
+			self._komentarz(content="Cena < 5000 zl, <script>alert(1)</script>\ndruga linia"),
+			"Audyt",
 		)
 		self.assertNotIn("<script>", wynik["tekst_html"])
 		self.assertIn("&lt;script&gt;", wynik["tekst_html"])
@@ -527,6 +534,32 @@ class TestVolteoNotatkiNormalizujKomentarzAudytu(unittest.TestCase):
 	def test_l_brak_plikow_daje_pusta_liste(self: "TestVolteoNotatkiNormalizujKomentarzAudytu") -> None:
 		wynik = normalizuj_komentarz_audytu(self._komentarz(pliki=None), "Audyt")
 		self.assertEqual(wynik["pliki"], [])
+
+	def test_m_tekst_html_z_edytora_przepisany_bez_zmian(
+		self: "TestVolteoNotatkiNormalizujKomentarzAudytu",
+	) -> None:
+		# Nowy komentarz z edytora TextEditor (issue #205): `content` jest
+		# juz bezpiecznym HTML-em zaczynajacym sie od znacznika blokowego --
+		# przepisany 1:1, BEZ przechodzenia przez `tekst_na_html` (inaczej
+		# `<p>` zamienioby sie w widoczne `&lt;p&gt;`).
+		html_z_edytora = "<p>Wszystko gotowe, sprawdz proszę.</p>"
+		wynik = normalizuj_komentarz_audytu(self._komentarz(content=html_z_edytora), "Audyt")
+		self.assertEqual(wynik["tekst_html"], html_z_edytora)
+
+	def test_n_wzmianka_we_wpisie_zachowana_bez_zmian(
+		self: "TestVolteoNotatkiNormalizujKomentarzAudytu",
+	) -> None:
+		# Wzmianka @ wewnatrz komentarza audytu -- znacznik
+		# `data-type="mention"` musi przetrwac normalizacje nietkniety,
+		# zeby feed „Notatki" pokazal ja tak samo jak watek Komentarze.
+		html_ze_wzmianka = (
+			'<p>Sprawdz to <span class="mention" data-type="mention" '
+			'data-id="handlowiec@proenergy.pro" data-label="Jan Kowalski">'
+			"@Jan Kowalski</span></p>"
+		)
+		wynik = normalizuj_komentarz_audytu(self._komentarz(content=html_ze_wzmianka), "AudytCP")
+		self.assertEqual(wynik["tekst_html"], html_ze_wzmianka)
+		self.assertIn('data-type="mention"', wynik["tekst_html"])
 
 
 class TestVolteoNotatkiZbudujZrodla(unittest.TestCase):
