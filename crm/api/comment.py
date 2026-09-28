@@ -10,7 +10,25 @@ from crm.fcrm.doctype.crm_notification.crm_notification import notify_user
 
 
 def on_update(self, method):
-	notify_mentions(self)
+	# VOLTEO (issue #205): wzmianka nigdy nie moze wywalic zapisu komentarza.
+	# `on_update` biegnie w tej samej transakcji co insert/save Comment, wiec
+	# nieobsluzony wyjatek tutaj cofa caly zapis -- dokladnie to, co dzialo
+	# sie z pierwsza wzmianka w komentarzu audytu (Volteo Audyt / Volteo
+	# Audyt CP nie maja pol lead_name/organization, patrz notify_mentions
+	# nizej). Zewnetrzny try/except to siatka bezpieczenstwa ponad
+	# wewnetrznymi try/except w notify_mentions -- na wypadek bledu, ktorego
+	# tamte nie przewidzialy.
+	try:
+		notify_mentions(self)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), "notify_mentions: nieoczekiwany blad")
+
+
+# VOLTEO (issue #205): doctype'y komentowane przez ten sam generyczny watek
+# co CRM Lead/CRM Deal, ale bez pol lead_name/organization. Sa 1:1 z CRM Deal
+# (autoname "field:deal"), wiec `reference_doc.name` == nazwa szansy; pole
+# `deal` czytamy explicite na wypadek zmiany autoname w przyszlosci.
+AUDYT_DOCTYPES = ("Volteo Audyt", "Volteo Audyt CP")
 
 
 def notify_mentions(doc):
@@ -22,37 +40,73 @@ def notify_mentions(doc):
 	if not content:
 		return
 	mentions = extract_mentions(content)
-	reference_doc = frappe.get_doc(doc.reference_doctype, doc.reference_name)
+	if not mentions:
+		return
+
+	try:
+		reference_doc = frappe.get_doc(doc.reference_doctype, doc.reference_name)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), "notify_mentions: brak dokumentu referencyjnego")
+		return
+
 	for mention in mentions:
-		owner = frappe.get_cached_value("User", doc.owner, "full_name")
-		doctype = doc.reference_doctype
-		if doctype.startswith("CRM "):
-			doctype = doctype[4:].lower()
+		try:
+			_notify_mention(doc, reference_doc, mention)
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), "notify_mentions: wzmianka nie zostala wyslana")
+
+
+def _notify_mention(doc, reference_doc, mention):
+	owner = frappe.get_cached_value("User", doc.owner, "full_name")
+	doctype = doc.reference_doctype
+
+	# Domyslnie (CRM Lead/CRM Deal): dzwonek prowadzi wprost na komentowany
+	# dokument, a hash w get_hash() wskazuje na sam komentarz (jego `name`).
+	notification_type_doctype = "Comment"
+	notification_type_doc = doc.name
+	redirect_to_doctype = doc.reference_doctype
+	redirect_to_docname = doc.reference_name
+
+	if doctype.startswith("CRM "):
+		doctype = doctype[4:].lower()
 		name = (
-			reference_doc.lead_name
+			reference_doc.get("lead_name")
 			if doctype == "lead"
-			else reference_doc.organization or reference_doc.lead_name
+			else reference_doc.get("organization") or reference_doc.get("lead_name")
 		)
-		notification_text = f"""
-            <div class="mb-2 leading-5 text-ink-gray-5">
-                <span class="font-medium text-ink-gray-9">{ owner }</span>
-                <span>{ _('mentioned you in {0}').format(doctype) }</span>
-                <span class="font-medium text-ink-gray-9">{ name }</span>
-            </div>
-        """
-		notify_user(
-			{
-				"owner": doc.owner,
-				"assigned_to": mention.email,
-				"notification_type": "Mention",
-				"message": doc.content,
-				"notification_text": notification_text,
-				"reference_doctype": "Comment",
-				"reference_docname": doc.name,
-				"redirect_to_doctype": doc.reference_doctype,
-				"redirect_to_docname": doc.reference_name,
-			}
-		)
+	elif doctype in AUDYT_DOCTYPES:
+		# Dzwonek prowadzi na sama szanse (CRM Deal), a hash -- na zakladke
+		# Audyt/AudytCP; wzorem galezi Trify (notification_type_doctype
+		# rozpoznawany w crm.api.notifications.get_hash), nie na komentarz.
+		deal = reference_doc.get("deal") or doc.reference_name
+		name = deal
+		doctype = "audycie szansy"
+		notification_type_doctype = doc.reference_doctype
+		redirect_to_doctype = "CRM Deal"
+		redirect_to_docname = deal
+	else:
+		name = reference_doc.get("name") or doc.reference_name
+
+	notification_text = f"""
+        <div class="mb-2 leading-5 text-ink-gray-5">
+            <span class="font-medium text-ink-gray-9">{ owner }</span>
+            <span>{ _('mentioned you in {0}').format(doctype) }</span>
+            <span class="font-medium text-ink-gray-9">{ name }</span>
+        </div>
+    """
+	notify_user(
+		{
+			"owner": doc.owner,
+			"assigned_to": mention.email,
+			"notification_type": "Mention",
+			"message": doc.content,
+			"notification_text": notification_text,
+			"reference_doctype": notification_type_doctype,
+			"reference_docname": notification_type_doc,
+			"redirect_to_doctype": redirect_to_doctype,
+			"redirect_to_docname": redirect_to_docname,
+		}
+	)
 
 
 def extract_mentions(html):

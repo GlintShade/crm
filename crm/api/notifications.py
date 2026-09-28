@@ -69,6 +69,17 @@ def get_hash(notification):
 		# zakładki notatek, nie nazwa dokumentu
 		_hash = "#notatki"
 
+	if notification.type == "Mention" and notification.notification_type_doctype == "Volteo Audyt":
+		# wzmianka w komentarzu audytu OZE (issue #205): tak samo jak
+		# Trify/Notatki wyżej, hash to nazwa zakładki Audyt (AudytTab.vue),
+		# nie nazwa komentarza
+		_hash = "#audyt"
+
+	if notification.type == "Mention" and notification.notification_type_doctype == "Volteo Audyt CP":
+		# jw., audyt Czyste Powietrze: hash z name.toLowerCase() zakładki
+		# AudytCP (AudytCPTab.vue)
+		_hash = "#audytcp"
+
 	if notification.type == "WhatsApp":
 		_hash = "#whatsapp"
 

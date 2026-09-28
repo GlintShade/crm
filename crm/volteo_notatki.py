@@ -418,6 +418,27 @@ def normalizuj_notatke(wpis: dict) -> dict:
 	}
 
 
+def _wyglada_na_html(tekst: str) -> bool:
+	"""Heurystyka odroznienia starych komentarzy watku Audytu (zwykly tekst
+	z dawnej `textarea`, sprzed wzmianek @ -- issue #205) od nowych (HTML z
+	edytora `TextEditor`, moze zawierac wzmianke jako
+	`<span data-type="mention" ...>`): czy `tekst`, po obcieciu bialych
+	znakow z lewej, zaczyna sie od `<`.
+
+	Rdzen CRM (`crm.api.comment.add_comment` -> `frappe_add_comment`) juz
+	dzis traktuje `Comment.content` jako HTML dla wszystkich innych watkow
+	komentarzy (lead/szansa) -- ale zanim ten watek dostal edytor TipTap,
+	front wysylal tu SUROWY tekst z `<textarea>` (bez zadnego escapowania
+	po stronie JS), wiec baza moze trzymac oba ksztalty na starych
+	rekordach. Rozroznienie po prefiksie `<` (a nie np. po obecnosci
+	jakiegokolwiek znacznika w srodku) jest celowe: prawdziwy komentarz w
+	zwyklym tekscie moze zawierac `<`/`>` w srodku zdania (np. „cena < 5000
+	zl") bez przestawania byc zwyklym tekstem, ale nie zaczyna sie nim --
+	edytor TipTap za to ZAWSZE zwraca HTML zaczynajacy sie od znacznika
+	blokowego (`<p>`, `<ul>`...)."""
+	return (tekst or "").lstrip().startswith("<")
+
+
 def normalizuj_komentarz_audytu(komentarz: dict, zrodlo: str) -> dict:
 	"""Normalizuje jeden komentarz watku „Komentarze" zakladki Audyt
 	(`Comment` z `reference_doctype in ("Volteo Audyt", "Volteo Audyt CP")`)
@@ -434,9 +455,18 @@ def normalizuj_komentarz_audytu(komentarz: dict, zrodlo: str) -> dict:
 
 	Komentarz nie ma wlasnego `typ` (nie jest `Volteo Notatka`) -- w feedzie
 	dostaje stala etykiete `"Komentarz"`, zeby karta wpisu mogla pokazac cos
-	sensownego zamiast pustego chipu typu."""
+	sensownego zamiast pustego chipu typu.
+
+	`tekst_html` (issue #205): odkad watek Komentarze ma edytor ze
+	wzmiankami, `content` JEST juz bezpiecznym HTML-em z TipTap -- przepisany
+	1:1, bez ponownego escapowania (inaczej wzmianka `<span data-type=
+	"mention" ...>` zamieniłaby sie w widoczny tekst znacznika). Stare
+	komentarze (zwykly tekst sprzed tej zmiany) nadal ida przez
+	`tekst_na_html` -- patrz `_wyglada_na_html` powyzej."""
 	if zrodlo not in ("Audyt", "AudytCP"):
 		raise ValueError(f"Nieznane zrodlo komentarza audytu: {zrodlo}")
+	tresc = komentarz.get("content") or ""
+	tekst_html = tresc if _wyglada_na_html(tresc) else tekst_na_html(tresc)
 	return {
 		"klucz": "audyt:{0}".format(komentarz.get("name")),
 		"zrodlo": zrodlo,
@@ -447,7 +477,7 @@ def normalizuj_komentarz_audytu(komentarz: dict, zrodlo: str) -> dict:
 		"creation": komentarz.get("creation"),
 		"autor": komentarz.get("owner"),
 		"autor_nazwa": komentarz.get("autor_nazwa") or komentarz.get("owner") or "",
-		"tekst_html": tekst_na_html(komentarz.get("content") or ""),
+		"tekst_html": tekst_html,
 		"pliki": komentarz.get("pliki") or [],
 		"kredyt": None,
 	}
