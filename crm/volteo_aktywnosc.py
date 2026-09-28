@@ -243,6 +243,15 @@ def tekst_sladu(rodzaj: str, **dane: object) -> str:
 			return f"wygenerowano PDF formularza kredytowego ({wnioskodawca})"
 		return "wygenerowano PDF formularza kredytowego"
 
+	if rodzaj == "kredyt_status_finansowania":
+		wnioskodawca = dane.get("wnioskodawca")
+		stary = dane.get("stary")
+		nowy = dane["nowy"]
+		sufiks = f" ({wnioskodawca})" if wnioskodawca else ""
+		if stary:
+			return f"status finansowania: {stary} → {nowy}{sufiks}"
+		return f"ustawiono status finansowania: {nowy}{sufiks}"
+
 	if rodzaj == "koszty":
 		return (
 			f"{ZNACZNIK_KOSZTY} zaktualizowano koszty rzeczywiste "

@@ -563,6 +563,50 @@ class TestTekstSladu(unittest.TestCase):
 			"wygenerowano PDF formularza kredytowego",
 		)
 
+	def test_v1_kredyt_status_finansowania_zmiana_z_wnioskodawca(self: "TestTekstSladu") -> None:
+		self.assertEqual(
+			tekst_sladu(
+				"kredyt_status_finansowania",
+				wnioskodawca="Kowalski Jan",
+				stary="Procesowane",
+				nowy="Zaakceptowane",
+			),
+			"status finansowania: Procesowane → Zaakceptowane (Kowalski Jan)",
+		)
+
+	def test_v2_kredyt_status_finansowania_bez_wnioskodawcy(self: "TestTekstSladu") -> None:
+		self.assertEqual(
+			tekst_sladu(
+				"kredyt_status_finansowania",
+				wnioskodawca=None,
+				stary="Procesowane",
+				nowy="Odrzucone",
+			),
+			"status finansowania: Procesowane → Odrzucone",
+		)
+
+	def test_v3_kredyt_status_finansowania_stary_pusty_daje_ustawiono(self: "TestTekstSladu") -> None:
+		self.assertEqual(
+			tekst_sladu(
+				"kredyt_status_finansowania",
+				wnioskodawca="Kowalski Jan",
+				stary="",
+				nowy="Procesowane",
+			),
+			"ustawiono status finansowania: Procesowane (Kowalski Jan)",
+		)
+
+	def test_v4_kredyt_status_finansowania_stary_none_jak_puste(self: "TestTekstSladu") -> None:
+		self.assertEqual(
+			tekst_sladu(
+				"kredyt_status_finansowania",
+				wnioskodawca=None,
+				stary=None,
+				nowy="Procesowane",
+			),
+			"ustawiono status finansowania: Procesowane",
+		)
+
 	def test_l_koszty_nigdy_nie_niesie_kwot(self: "TestTekstSladu") -> None:
 		text = tekst_sladu("koszty", pozycje=3, dodatkowe=1)
 		self.assertEqual(text, f"{ZNACZNIK_KOSZTY} zaktualizowano koszty rzeczywiste (3 pozycji, 1 dodatkowych)")

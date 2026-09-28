@@ -58,12 +58,14 @@ from frappe.utils import cint, getdate
 from crm.api.umowa import _dane_kontaktu, _podstawowy_kontakt, _sprawdz_dostep_do_szansy, _sprawdz_role
 from crm.integrations.autenti import logika as autenti_logika
 from crm.permissions.file_nazwy_systemowe import plik_systemowy
+from crm.permissions.org_hierarchy import BYPASS_ROLES
 from crm.volteo_aktywnosc import etykieta_wnioskodawcy, tekst_sladu, zapisz_slad
 from crm.volteo_kredyt import ETYKIETY_POL as _ETYKIETY_POL
 from crm.volteo_kredyt import ETYKIETY_WNIOSKODAWCY as _ETYKIETY_WNIOSKODAWCY
 from crm.volteo_kredyt import (
 	GRUPY_DOCHODU,
 	POLA_WNIOSKODAWCY,
+	STATUSY_FINANSOWANIA,
 	brakujace_dane_wnioskodawcy,
 	brakujace_pola,
 	kontakt_z_wnioskodawcy,
@@ -155,7 +157,10 @@ przeglądarkę — wszystko spoza tej listy jest po cichu odrzucane. `deal` i
 (przez `frappe.get_doc({"doctype": ..., "deal": deal, ...})`, nazwa dokumentu
 jest teraz hashem generowanym przez Frappe, NIE nazwą szansy, ops#159),
 `status` liczy wyłącznie serwer z `brakujace_pola` po każdym zapisie, klient
-nie może żadnego z nich nadpisać.
+nie może żadnego z nich nadpisać. `status_finansowania` (ops#197) jest też
+celowo poza tą listą i ma własny endpoint z osobną bramką backoffice/admin
+(`volteo_kredyt_status_finansowania`, `BYPASS_ROLES`), zamiast przechodzić
+przez zwykły zapis formularza dostępny każdemu przedstawicielowi.
 """
 
 _POLA_CHECKBOX = frozenset(
@@ -372,6 +377,7 @@ def _kredyt_do_dict(kredyt_doc: "frappe.model.document.Document") -> dict[str, A
 	wynik["name"] = kredyt_doc.name
 	wynik["deal"] = kredyt_doc.deal
 	wynik["status"] = kredyt_doc.status
+	wynik["status_finansowania"] = kredyt_doc.get("status_finansowania")
 	return wynik
 
 
@@ -550,6 +556,7 @@ def volteo_kredyt_lista(deal: str) -> dict[str, Any]:
 			"wnioskodawca_nazwisko",
 			"wnioskodawca_imiona",
 			"status",
+			"status_finansowania",
 			"autenti_status",
 			"creation",
 			"modified",
@@ -729,6 +736,63 @@ def volteo_kredyt_save(kredyt: str, dane: dict[str, Any]) -> dict[str, Any]:
 		"brakujace_pola": braki,
 		"brakujace_dane_wnioskodawcy": brakujace_dane_wnioskodawcy(kredyt_dict),
 	}
+
+
+@frappe.whitelist()
+@rate_limit(limit=60, seconds=60)
+def volteo_kredyt_status_finansowania(kredyt: str, status: str) -> dict[str, Any]:
+	"""Zmienia status finansowania formularza kredytowego (ops#197): trzeci,
+	niezależny status obok `status` (kompletność danych) i `autenti_status`
+	(bieg procesu e-podpisu), zmieniany wyłącznie przez backoffice i adminów,
+	nigdy przez przedstawiciela.
+
+	Bramka celowo NIE jest `_sprawdz_role()`/`KALKULATOR_ROLE`: ten gate
+	przepuszcza też `Volteo D2D Sales`, czyli handlowca, a status finansowania
+	ma decydować wyłącznie backoffice/admin. Gate jest więc bezpośrednio
+	`BYPASS_ROLES` (`crm.permissions.org_hierarchy`), ten sam zestaw ról co np.
+	widoczność kosztów w Aktywności.
+
+	Zapis idzie przez `db_set(..., update_modified=True)`, celowo NIE przez
+	`doc.save()`: `.save()` dopisałby wiersz `Version`, który czytnik
+	Aktywności (`crm.volteo_aktywnosc`) renderowałby jako drugą, czysto
+	etykietową linię obok śladu zapisywanego tu jawnie, czyli duplikat tego
+	samego zdarzenia w feedzie.
+
+	Ustawienie tej samej wartości, jaką rekord już ma, jest no-opem: bez
+	zapisu i bez śladu w Aktywności, bo nie ma tu żadnej zmiany do odnotowania.
+	"""
+	role_uzytkownika = set(frappe.get_roles(frappe.session.user))
+	if not BYPASS_ROLES & role_uzytkownika:
+		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
+
+	kredyt_doc = _kredyt_po_nazwie(kredyt)
+	deal = kredyt_doc.deal
+	_sprawdz_dostep_do_szansy(deal, "write")
+
+	deal_doc = frappe.get_doc("CRM Deal", deal)
+	_sprawdz_rodzaj_oze(deal_doc)
+
+	if status not in STATUSY_FINANSOWANIA:
+		frappe.throw(_("Nieznany status finansowania: {0}").format(status), frappe.ValidationError)
+
+	stary = kredyt_doc.get("status_finansowania")
+	if status == stary:
+		return {"kredyt": _kredyt_do_dict(kredyt_doc)}
+
+	kredyt_doc.db_set("status_finansowania", status, update_modified=True)
+
+	try:
+		etykieta = etykieta_wnioskodawcy(
+			kredyt_doc.get("wnioskodawca_nazwisko"), kredyt_doc.get("wnioskodawca_imiona")
+		)
+		zapisz_slad(
+			deal,
+			tekst_sladu("kredyt_status_finansowania", wnioskodawca=etykieta, stary=stary, nowy=status),
+		)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), "Volteo Kredyt: błąd zapisu śladu statusu finansowania")
+
+	return {"kredyt": _kredyt_do_dict(kredyt_doc)}
 
 
 @frappe.whitelist()

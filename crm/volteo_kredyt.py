@@ -457,3 +457,14 @@ def pasuje_plik_kredytu(file_name: str, prefiks: str, kredyt_name: str, deal: st
 			+ r"-\d{8}-\d{6}(-podpisany)?\.pdf$"
 		)
 	return bool(re.match(wzorzec, file_name or ""))
+
+
+STATUSY_FINANSOWANIA: tuple[str, ...] = ("Procesowane", "Odrzucone", "Zaakceptowane")
+"""Trzeci, niezależny status formularza kredytowego (ops#197), osobny od `status`
+(kompletność danych, liczona wyłącznie przez `brakujace_pola`) i od `autenti_status`
+(bieg procesu e-podpisu). Zmienia go wyłącznie backoffice/admin (`crm.api.kredyt.
+volteo_kredyt_status_finansowania`, bramka `BYPASS_ROLES`), nigdy przedstawiciel.
+
+Literały są celowo zduplikowane w dwóch innych miejscach, i wszystkie trzy muszą
+się zmieniać razem: `frontend/src/utils/kredytForm.js` (`STATUSY_FINANSOWANIA_OPCJE`)
+i `ops/crm-kredyt.py` (opcje pola Select na doctypie)."""
