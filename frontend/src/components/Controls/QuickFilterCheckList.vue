@@ -39,17 +39,30 @@
           />
         </div>
         <div class="max-h-60 overflow-y-auto">
-          <div
-            v-for="opcja in widoczneOpcje"
-            :key="opcja.value"
-            class="rounded px-2 py-1 hover:bg-surface-gray-2"
-          >
-            <Checkbox
-              :modelValue="jestZaznaczona(opcja.value)"
-              :label="opcja.label"
-              @update:modelValue="(zaznaczona) => przelacz(opcja.value, zaznaczona)"
-            />
-          </div>
+          <template v-for="(grupa, i) in grupyWidoczne" :key="grupa.group ?? i">
+            <div
+              v-if="grupa.group"
+              class="truncate px-2 py-1 text-sm-medium text-ink-gray-5"
+            >
+              {{ __(grupa.group) }}
+            </div>
+            <div
+              v-for="opcja in grupa.items"
+              :key="`${grupa.group ?? i}:${opcja.value}`"
+              class="rounded px-2 py-1 hover:bg-surface-gray-2"
+            >
+              <!-- Klucz łączy grupę z wartością, bo ta sama wartość statusu
+                   (np. "Lead") może wystąpić w dwóch grupach naraz (OZE i
+                   Czyste Powietrze) -- wiersze wszystkich grup są rodzeństwem
+                   w tym samym przewijanym div, więc sam opcja.value dawałby
+                   zdublowany klucz między grupami. -->
+              <Checkbox
+                :modelValue="jestZaznaczona(opcja.value)"
+                :label="opcja.label"
+                @update:modelValue="(zaznaczona) => przelacz(opcja.value, zaznaczona)"
+              />
+            </div>
+          </template>
           <div
             v-if="jestLink && zasob.loading"
             class="flex justify-center p-2"
@@ -91,9 +104,17 @@
 //
 // Dwa tryby, zależnie od fieldtype:
 //   Select: opcje statyczne z `options` (kształt {label, value}, tak jak
-//            zwraca crm.api.doc.get_quick_filters; placeholder pustej
-//            wartości '' pomijany, bo w liście checkboxów jest bez sensu,
-//            czyszczenie idzie przez "x" na chipie albo "Wyczyść" na dole).
+//            zwraca crm.api.doc.get_quick_filters, ALBO kształt pogrupowany
+//            {group, items} -- pole „Etap" na CRM Deal, owner remark #37,
+//            2026-09-28, patrz utils/etapFiltr.js::opcjeEtapu; oba kształty
+//            normalizuje grupyOpcjiFiltraSzybkiego w utils/filtrSzybki.js.
+//            Nagłówek grupy to zwykły, nieinteraktywny wiersz, tłumaczony
+//            __() w momencie renderowania (nazwy grup "OZE"/"Czyste
+//            Powietrze"/"Inne" nie mogą być tłumaczone w module, patrz
+//            PUŁAPKA eager chunk w etapFiltr.js). Placeholder pustej
+//            wartości '' pomijany wewnątrz każdej grupy, bo w liście
+//            checkboxów jest bez sensu, czyszczenie idzie przez "x" na
+//            chipie albo "Wyczyść" na dole.
 //   Link: opcje z frappe.desk.search.search_link (ten sam wzorzec co
 //            LinkMultiSelect.vue: debounce zapytania, scalanie wyników z
 //            aktualnie zaznaczonymi wartościami przez scalOpcjeZZaznaczonymi,
@@ -114,13 +135,17 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { scalOpcjeZZaznaczonymi } from '@/utils/filtrWielokrotny'
 import {
   etykietaChipaFiltraSzybkiego,
+  grupyOpcjiFiltraSzybkiego,
   ustawWartoscWielokrotna,
 } from '@/utils/filtrSzybki'
 
 const props = defineProps({
   label: { type: String, required: true },
   fieldtype: { type: String, required: true },
-  // Select: tablica {label, value}. Link: nazwa doctype'u do przeszukania.
+  // Select: tablica {label, value} (płaska) ALBO {group, items} (pogrupowana
+  // -- Etap na CRM Deal, owner remark #37, patrz utils/etapFiltr.js::opcjeEtapu
+  // i grupyOpcjiFiltraSzybkiego w utils/filtrSzybki.js, który oba kształty
+  // normalizuje). Link: nazwa doctype'u do przeszukania.
   options: { type: [Array, String], default: () => [] },
 })
 
@@ -206,12 +231,8 @@ function wyczyscIZamknij(close) {
 
 onBeforeUnmount(wyslijTeraz)
 
-// --- Select: opcje statyczne ---
-const opcjeStatyczne = computed(() =>
-  (Array.isArray(props.options) ? props.options : []).filter(
-    (o) => o?.value !== '' && o?.value != null,
-  ),
-)
+// --- Select: opcje statyczne, płaskie albo pogrupowane ---
+const grupyStatyczne = computed(() => grupyOpcjiFiltraSzybkiego(props.options))
 
 // --- Link: opcje z search_link ---
 const zapytanie = ref('')
@@ -258,8 +279,15 @@ const opcjeLinku = computed(() => {
   return scalOpcjeZZaznaczonymi([...wyniki, ...brakujaceZnane], wybrane.value)
 })
 
+// Link nie ma grup: jedna grupa bez nagłówka, tak jak płaska lista Select w
+// grupyOpcjiFiltraSzybkiego. `widoczneOpcje` (spłaszczone, bez podziału na
+// grupy) zostaje jako jedyne źródło dla etykietyWybranych/warunku "No
+// results" -- ich logika nie zależy od podziału na grupy.
+const grupyWidoczne = computed(() =>
+  jestLink.value ? [{ group: null, items: opcjeLinku.value }] : grupyStatyczne.value,
+)
 const widoczneOpcje = computed(() =>
-  jestLink.value ? opcjeLinku.value : opcjeStatyczne.value,
+  grupyWidoczne.value.flatMap((grupa) => grupa.items),
 )
 
 // Etykiety zaznaczonych wartości dla chipa, z listy widocznych opcji

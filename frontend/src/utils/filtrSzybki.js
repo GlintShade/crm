@@ -105,19 +105,73 @@ export function etykietaChipaFiltraSzybkiego(etykietaPola, wybraneEtykiety) {
 
 /**
  * Rozstrzyga, czy dane pole na pasku szybkich filtrów dostaje wielokrotny
- * wybór (issue #127): Select lub Link poza User (patrz czyWielokrotnyWybor)
- * z jednym dodatkowym wyłączeniem specyficznym dla paska szybkiego, nie
- * dla rozwijanego Filter.vue: pole „Etap" (`status`) na `CRM Deal` ma
- * własną, zawężoną do aktywnego procesu listę opcji (utils/etapFiltr.js,
- * `opcjeEtapu`) i zostaje na dotychczasowym pojedynczym Autocomplete,
- * ten sam wyjątek musi być zastosowany identycznie w QuickFilterField.vue
- * (kolejność gałęzi v-else-if) i w ViewControls.vue (`quickFilterList`,
- * inicjalizacja `filter.value`), inaczej dla Etapu przyszłaby tablica tam,
- * gdzie komponent oczekuje pojedynczej wartości.
+ * wybór (issue #127): Select lub Link poza User (patrz czyWielokrotnyWybor).
+ *
+ * Uwaga (owner remark #37, 2026-09-28): pole „Etap" (`status`) na `CRM Deal`
+ * NIE jest już wyjątkiem tutaj -- dostaje wielokrotny wybór jak każdy inny
+ * Link poza User. Jego własna, zawężona do aktywnego procesu lista opcji
+ * (utils/etapFiltr.js, `opcjeEtapu`, płaska ALBO pogrupowana OZE/Czyste
+ * Powietrze/Inne) jest teraz doprowadzana do `QuickFilterCheckList` przez
+ * `QuickFilterField.vue::opcjeCheckList`, a kształt pogrupowany normalizuje
+ * `grupyOpcjiFiltraSzybkiego` poniżej (ten sam plik, ta sama odpowiedzialność
+ * co reszta serializacji szybkiego filtra). `doctype` zostaje w sygnaturze
+ * wyłącznie dla stabilności trzech miejsc wywołania (QuickFilterField.vue,
+ * ViewControls.vue x2) -- ciało go już nie używa.
  */
 export function czyWielokrotnyFiltrSzybki(doctype, filter) {
-  if (doctype === 'CRM Deal' && filter?.fieldname === 'status') return false
   return czyWielokrotnyWybor(filter, 'in')
+}
+
+/**
+ * Normalizuje opcje kontrolki wielokrotnego wyboru (QuickFilterCheckList) do
+ * jednej, przewidywalnej postaci: tablicy grup `{ group: string|null, items:
+ * Array<{label, value}> }`, niezależnie od tego, czy `options` przyszło
+ * jako płaska lista `[{label,value}]` (zwykły Select/Link, kształt
+ * `crm.api.doc.get_quick_filters`), czy jako lista pogrupowana
+ * `[{group, items}]` (Etap na `CRM Deal`, `utils/etapFiltr.js::opcjeEtapu`,
+ * owner remark #37, 2026-09-28).
+ *
+ * Rozpoznanie pogrupowanego kształtu mirroruje `groups` computed w
+ * `components/frappe-ui/Autocomplete.vue`: wejście jest pogrupowane, gdy
+ * pierwszy element niesie tablicę `items` ALBO prawdziwy `group` -- dwa
+ * niezależne sygnały, bo grupa z pustym `group` (`''`) ma nadal `items`
+ * jako tablicę i musi zostać rozpoznana jako pogrupowana, nie jako pojedynczy
+ * płaski wpis.
+ *
+ * Płaska lista dostaje jedną grupę bez nagłówka (`group: null`) -- ten sam
+ * wpis do renderowania checkboxów co dotychczasowy `opcjeStatyczne` w
+ * `QuickFilterCheckList.vue`, tylko w jednolitym kształcie z grupami.
+ *
+ * Wewnątrz KAŻDEJ grupy (płaskiej i pogrupowanej identycznie) odrzucane są
+ * wpisy z `value === ''`/`value == null` -- placeholder pustej wartości
+ * Selecta jest bez sensu w liście checkboxów (dotychczasowa reguła
+ * `opcjeStatyczne`, przeniesiona tutaj). Grupy, które po tym odrzuceniu
+ * zostają puste, są usuwane z wyniku (np. `opcjeEtapu` przy wyścigu zimnego
+ * ładowania store'u statusów potrafi zwrócić pustą grupę OZE/Czyste
+ * Powietrze -- renderowanie pustego nagłówka byłoby mylące).
+ *
+ * Nie mutuje `options` (immutability): zawsze nowe tablice/obiekty.
+ *
+ * @param {Array<{label:string,value:string}>|Array<{group:string,items:Array<{label:string,value:string}>}>|null|undefined} options
+ * @returns {Array<{group: string|null, items: Array<{label:string,value:string}>}>}
+ */
+export function grupyOpcjiFiltraSzybkiego(options) {
+  if (!Array.isArray(options)) return []
+
+  const jestPogrupowany =
+    Array.isArray(options[0]?.items) || Boolean(options[0]?.group)
+  const grupyWejsciowe = jestPogrupowany
+    ? options
+    : [{ group: null, items: options }]
+
+  return grupyWejsciowe
+    .map((grupa) => ({
+      group: grupa.group || null,
+      items: (Array.isArray(grupa.items) ? grupa.items : []).filter(
+        (opcja) => opcja?.value !== '' && opcja?.value != null,
+      ),
+    }))
+    .filter((grupa) => grupa.items.length > 0)
 }
 
 /**

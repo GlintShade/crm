@@ -2,11 +2,13 @@ import {
   czyFiltrSzybkiZablokowany,
   czyWielokrotnyFiltrSzybki,
   etykietaChipaFiltraSzybkiego,
+  grupyOpcjiFiltraSzybkiego,
   przelaczWartoscWielokrotna,
   rozpakujWartoscFiltraSzybkiego,
   spakujWartoscFiltraSzybkiego,
   ustawWartoscWielokrotna,
 } from './filtrSzybki'
+import { opcjeEtapu } from './etapFiltr'
 import { OPERATOR_TAGOW } from './tagiProduktow'
 
 describe('rozpakujWartoscFiltraSzybkiego', () => {
@@ -152,14 +154,14 @@ describe('czyWielokrotnyFiltrSzybki', () => {
     ).toBe(false)
   })
 
-  it('CRM Deal status (Etap) → false mimo Link poza User, wyjątek na własną listę opcji procesu', () => {
+  it('owner remark #37 (2026-09-28): CRM Deal status (Etap) → true jak każdy Link poza User, lista opcji procesu żyje w QuickFilterField', () => {
     expect(
       czyWielokrotnyFiltrSzybki('CRM Deal', {
         fieldname: 'status',
         fieldtype: 'Link',
         options: 'CRM Deal Status',
       }),
-    ).toBe(false)
+    ).toBe(true)
   })
 
   it('ops#150: pole tagów (Data + volteo_tagi) → true, dostaje QuickFilterCheckList', () => {
@@ -181,7 +183,7 @@ describe('czyWielokrotnyFiltrSzybki', () => {
     ).toBe(true)
   })
 
-  it('status na innym doctype niż CRM Deal (np. CRM Lead) → true, wyjątek dotyczy tylko Deal', () => {
+  it('status na innym doctype niż CRM Deal (np. CRM Lead) → true', () => {
     expect(
       czyWielokrotnyFiltrSzybki('CRM Lead', {
         fieldname: 'status',
@@ -286,5 +288,145 @@ describe('czyFiltrSzybkiZablokowany', () => {
     expect(czyFiltrSzybkiZablokowany('PV')).toBe(false)
     expect(czyFiltrSzybkiZablokowany(undefined)).toBe(false)
     expect(czyFiltrSzybkiZablokowany(null)).toBe(false)
+  })
+})
+
+// Owner remark #37 (2026-09-28): Etap (status na CRM Deal) dostał
+// wielokrotny wybór z checkboxami, ale zostaje przy własnej, zawężonej do
+// procesu liście opcji z utils/etapFiltr.js::opcjeEtapu -- płaskiej albo
+// pogrupowanej OZE/Czyste Powietrze/Inne. grupyOpcjiFiltraSzybkiego
+// normalizuje oba kształty do jednej postaci, którą renderuje
+// QuickFilterCheckList.vue.
+describe('grupyOpcjiFiltraSzybkiego', () => {
+  it('płaska lista → jedna grupa z group: null i tymi samymi opcjami', () => {
+    expect(
+      grupyOpcjiFiltraSzybkiego([
+        { label: 'Nowy', value: 'Nowy' },
+        { label: 'Odłożony', value: 'Odłożony' },
+      ]),
+    ).toEqual([
+      {
+        group: null,
+        items: [
+          { label: 'Nowy', value: 'Nowy' },
+          { label: 'Odłożony', value: 'Odłożony' },
+        ],
+      },
+    ])
+  })
+
+  it('lista pogrupowana OZE/Czyste Powietrze/Inne → ta sama kolejność, etykiety i opcje', () => {
+    const wejscie = [
+      {
+        group: 'OZE',
+        items: [{ label: 'Lead', value: 'Lead' }],
+      },
+      {
+        group: 'Czyste Powietrze',
+        items: [{ label: 'Audyt', value: 'Audyt' }],
+      },
+      {
+        group: 'Inne',
+        items: [{ label: 'Ręczny', value: 'Ręczny' }],
+      },
+    ]
+    expect(grupyOpcjiFiltraSzybkiego(wejscie)).toEqual(wejscie)
+  })
+
+  it('wpisy z value: "" i value: null odrzucone wewnątrz grupy i w liście płaskiej', () => {
+    expect(
+      grupyOpcjiFiltraSzybkiego([
+        { label: '', value: '' },
+        { label: 'Nowy', value: 'Nowy' },
+        { label: 'Brak', value: null },
+      ]),
+    ).toEqual([{ group: null, items: [{ label: 'Nowy', value: 'Nowy' }] }])
+
+    expect(
+      grupyOpcjiFiltraSzybkiego([
+        {
+          group: 'OZE',
+          items: [
+            { label: '', value: '' },
+            { label: 'Lead', value: 'Lead' },
+            { label: 'Brak', value: null },
+          ],
+        },
+      ]),
+    ).toEqual([{ group: 'OZE', items: [{ label: 'Lead', value: 'Lead' }] }])
+  })
+
+  it('puste grupy (przypadek zimnego ładowania) są odrzucane', () => {
+    expect(
+      grupyOpcjiFiltraSzybkiego([
+        { group: 'OZE', items: [] },
+        { group: 'Czyste Powietrze', items: [] },
+      ]),
+    ).toEqual([])
+  })
+
+  it('undefined, null, string → pusta tablica', () => {
+    expect(grupyOpcjiFiltraSzybkiego(undefined)).toEqual([])
+    expect(grupyOpcjiFiltraSzybkiego(null)).toEqual([])
+    expect(grupyOpcjiFiltraSzybkiego('CRM Deal Status')).toEqual([])
+  })
+
+  it('grupa z pustym group (\'\') nadal rozpoznana jako pogrupowana przez items', () => {
+    expect(
+      grupyOpcjiFiltraSzybkiego([
+        { group: '', items: [{ label: 'Nowy', value: 'Nowy' }] },
+      ]),
+    ).toEqual([{ group: null, items: [{ label: 'Nowy', value: 'Nowy' }] }])
+  })
+
+  it('nie mutuje wejścia', () => {
+    const wejscie = [
+      { group: 'OZE', items: [{ label: 'Lead', value: 'Lead' }] },
+    ]
+    const kopiaWejscia = JSON.parse(JSON.stringify(wejscie))
+    grupyOpcjiFiltraSzybkiego(wejscie)
+    expect(wejscie).toEqual(kopiaWejscia)
+  })
+
+  it('end-to-end z opcjeEtapu (etapFiltr.js): bez zawężenia rodzaju → OZE/Czyste Powietrze/Inne', () => {
+    const grupy = {
+      Fotowoltaika: ['Lead', 'Umowa Wygenerowana', 'Wygrana'],
+      'Czyste Powietrze': ['Lead', 'Audyt', 'Wygrana'],
+    }
+    const isKnown = () => true
+    const wszystkieStatusy = [
+      'Lead',
+      'Umowa Wygenerowana',
+      'Wygrana',
+      'Audyt',
+      'Ręczny',
+    ]
+
+    const wynik = grupyOpcjiFiltraSzybkiego(
+      opcjeEtapu(grupy, null, isKnown, wszystkieStatusy),
+    )
+
+    expect(wynik).toEqual([
+      {
+        group: 'OZE',
+        items: [
+          { label: 'Lead', value: 'Lead' },
+          { label: 'Umowa Wygenerowana', value: 'Umowa Wygenerowana' },
+          { label: 'Wygrana', value: 'Wygrana' },
+        ],
+      },
+      {
+        group: 'Czyste Powietrze',
+        items: [
+          { label: 'Lead', value: 'Lead' },
+          { label: 'Audyt', value: 'Audyt' },
+          { label: 'Wygrana', value: 'Wygrana' },
+        ],
+      },
+      {
+        group: 'Inne',
+        items: [{ label: 'Ręczny', value: 'Ręczny' }],
+      },
+    ])
   })
 })

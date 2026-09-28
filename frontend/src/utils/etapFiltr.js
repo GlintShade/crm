@@ -12,7 +12,10 @@
 // modułu — tylko wewnątrz funkcji / `script setup`. Ten plik w ogóle nie
 // woła `__()` — etykiety opcji to gołe nazwy statusów (już polskie w bazie),
 // a nazwy grup ("OZE" / "Czyste Powietrze" / "Inne") tłumaczy dopiero
-// wołający, jeśli chce (patrz Filter.vue / QuickFilterField.vue).
+// wołający, jeśli chce (patrz Filter.vue, gdzie kontrolką zostaje
+// Autocomplete.vue, i QuickFilterField.vue, gdzie od owner remark #37,
+// 2026-09-28, kontrolką jest QuickFilterCheckList.vue, a kształt
+// pogrupowany normalizuje grupyOpcjiFiltraSzybkiego w utils/filtrSzybki.js).
 
 import { filterKnown } from './dealPipeline'
 
@@ -120,9 +123,13 @@ function doOpcji(name) {
 }
 
 /**
- * Opcje dla kontrolki filtra „Etap" (`Autocomplete`, patrz `Autocomplete.vue`
- * — obsługuje zarówno płaską listę `[{label,value}]`, jak i pogrupowaną
- * `[{group, items}]`).
+ * Opcje dla kontrolki filtra „Etap": obsługiwane zarówno przez Autocomplete
+ * (`Autocomplete.vue`, Filter.vue rozwijany) jak i przez QuickFilterCheckList
+ * (`QuickFilterCheckList.vue`, pasek filtrów szybkich, od owner remark #37,
+ * 2026-09-28), obie kontrolki przyjmują ten sam kształt zwrotny: płaską
+ * listę `[{label,value}]` albo pogrupowaną `[{group, items}]`; po stronie
+ * paska szybkiego kształt pogrupowany normalizuje `grupyOpcjiFiltraSzybkiego`
+ * w `utils/filtrSzybki.js`.
  *
  * Gdy filtr „Rodzaj umowy" zawęża do jednego procesu
  * ({@link procesDlaFiltraRodzaju} zwraca niepustą grupę): płaska lista, w

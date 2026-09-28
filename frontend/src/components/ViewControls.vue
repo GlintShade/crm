@@ -334,7 +334,11 @@ import {
   rozpakujWartoscFiltraSzybkiego,
   spakujWartoscFiltraSzybkiego,
 } from '@/utils/filtrSzybki'
-import { rozpakujZlozonyFiltrTagow, spakujZlozonyFiltrTagow } from '@/utils/tagiProduktow'
+import {
+  czyPoleTagow,
+  rozpakujZlozonyFiltrTagow,
+  spakujZlozonyFiltrTagow,
+} from '@/utils/tagiProduktow'
 import {
   Tooltip,
   createResource,
@@ -930,7 +934,7 @@ const quickFilterList = computed(() => {
 
   filters.forEach((filter) => {
     // Issue #127: pola z checkboxową listą wielokrotnego wyboru (Select i
-    // Link poza User/Etapem, patrz czyWielokrotnyFiltrSzybki) dostają
+    // Link poza User, patrz czyWielokrotnyFiltrSzybki) dostają
     // domyślną wartość [] zamiast '', i odtwarzają zaznaczenia z kształtu
     // ["in", [...]]: kształt, który przed tą zmianą ten kod w ogóle nie
     // rozpoznawał (wpadał w gałąź "nierozpoznana tablica" niżej i chip
@@ -992,15 +996,24 @@ function applyQuickFilter(filter, value) {
     // skalarny kształt, N -> ["in", [...]], ten sam format co operator
     // "jest jednym z" w rozwijanym Filter.vue (issue #103).
     //
-    // Issue ops#173: gdy istniejąca wartość filtra jest kształtem, którego
-    // pasek szybki nie umie bezpiecznie przepisać "od zera" (złożony
+    // Issue ops#173: gdy istniejąca wartość filtra TAGÓW jest kształtem,
+    // którego pasek szybki nie umie bezpiecznie przepisać "od zera" (złożony
     // "zawiera i nie zawiera" albo "not in" -- patrz
     // czyFiltrSzybkiZablokowany), nowe zaznaczenia z checkboxów scalają
     // się w stronę "ma", "nie_ma" przeżywa edycję z paska bez zmian.
+    //
+    // Owner remark #37 (2026-09-28): to scalanie jest wyłącznie dla pól
+    // TAGÓW (czyPoleTagow) -- teraz, gdy Etap na CRM Deal też dostaje
+    // wielokrotny wybór, `spakujZlozonyFiltrTagow` wołany dla NIE-tagowego
+    // pola wyemitowałby operator OPERATOR_TAGOW ("volteo_tagi"), którego
+    // backend nie rozwija dla pól spoza `crm.volteo_lista_szans.POLA_TAGOW_LEAD`
+    // -- dla każdego innego pola (w tym Etapu) istniejąca wartość
+    // ["not in", ...] jest po prostu nadpisywana zaznaczeniami z checkboxów.
     const staraWartosc = filters[field]
-    const packed = czyFiltrSzybkiZablokowany(staraWartosc)
-      ? spakujZlozonyFiltrTagow({ ...rozpakujZlozonyFiltrTagow(staraWartosc), ma: value })
-      : spakujWartoscFiltraSzybkiego(value)
+    const packed =
+      czyPoleTagow(filter) && czyFiltrSzybkiZablokowany(staraWartosc)
+        ? spakujZlozonyFiltrTagow({ ...rozpakujZlozonyFiltrTagow(staraWartosc), ma: value })
+        : spakujWartoscFiltraSzybkiego(value)
     if (packed === undefined) {
       delete filters[field]
     } else {
