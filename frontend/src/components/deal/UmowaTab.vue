@@ -388,6 +388,14 @@
           </div>
         </section>
       </div>
+
+      <!--
+        Strumień notatek (issue #200): sibling wobec całego łańcucha
+        loading/loadError/pusty/formularz powyżej, więc widoczny również,
+        gdy umowa jeszcze nie istnieje (empty state) albo trwa ładowanie.
+        Komponent sam renderuje `null` na szansach spoza OZE.
+      -->
+      <NotatkiStrumien class="mt-5" :deal-id="dealId" zakladka="Umowa" />
     </div>
   </div>
 
@@ -411,6 +419,7 @@ import Link from '@/components/Controls/Link.vue'
 import UmowaIcon from '@/components/Icons/UmowaIcon.vue'
 import TelefonLink from '@/components/TelefonLink.vue'
 import ContactModal from '@/components/Modals/ContactModal.vue'
+import NotatkiStrumien from '@/components/deal/NotatkiStrumien.vue'
 import { Badge, Button, FormControl, Switch, call, createResource, toast } from 'frappe-ui'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { formatPlnAmount } from '@/utils/money'

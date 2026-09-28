@@ -498,6 +498,16 @@
           </div>
         </section>
       </div>
+
+      <!--
+        Strumień notatek (issue #200): sibling wobec całego łańcucha
+        loading/pusty/brak-wybranego-formularza/formularz powyżej, widoczny
+        niezależnie od stanu formularza. `kredyt` to `wybrany?.name`:
+        notatka dodana bez wybranego formularza (wybrany === null) ma
+        `kredyt` puste, `lista()` i tak pokazuje WSZYSTKIE notatki zakładki
+        Kredyt niezależnie od tego, który formularz jest akurat otwarty.
+      -->
+      <NotatkiStrumien class="mt-5" :deal-id="dealId" zakladka="Kredyt" :kredyt="wybrany?.name" />
     </div>
   </div>
 </template>
@@ -506,6 +516,7 @@
 import KredytIcon from '@/components/Icons/KredytIcon.vue'
 import TelefonLink from '@/components/TelefonLink.vue'
 import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
+import NotatkiStrumien from '@/components/deal/NotatkiStrumien.vue'
 import { telHref, czyTelefon } from '@/utils/telefon'
 import { onClickOutside } from '@vueuse/core'
 import { Badge, Button, Dropdown, FormControl, call, toast } from 'frappe-ui'
