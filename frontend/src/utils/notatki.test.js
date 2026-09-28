@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import {
   ETYKIETY_ZRODEL,
   KIERUNKI_SORTU,
+  KOLORY_ZRODEL,
   OZE_RODZAJE,
   TYPY_PLIKOW_NOTATKI,
   ZAKLADKI,
@@ -9,11 +10,15 @@ import {
   etykietaDnia,
   etykietaZakladki,
   filtrujFeed,
+  godzinaZTekstu,
   grupujPoDniu,
+  kolorZrodla,
   nazwaAutora,
   plikiDoPodgladu,
+  podsumowanieFeedu,
   podzielPliki,
   sortujFeed,
+  szukajWFeedzie,
   typyDla,
   wczytajFiltr,
   zapiszFiltr,
@@ -416,5 +421,125 @@ describe('wczytajFiltr / zapiszFiltr', () => {
     zapiszFiltr(['Zestaw'], 'cos-nieznanego')
     const wynik = wczytajFiltr(['Zestaw'])
     expect(wynik.kierunek).toBe(KIERUNKI_SORTU.NAJNOWSZE)
+  })
+})
+
+describe('kolorZrodla / KOLORY_ZRODEL', () => {
+  it('zna kolor dla każdego z dziesięciu źródeł feedu', () => {
+    expect(Object.keys(KOLORY_ZRODEL).sort()).toEqual(Object.keys(ETYKIETY_ZRODEL).sort())
+  })
+
+  it('każdy kolor niesie krawędź, tło, tekst i kwadracik jako pełne literały klas', () => {
+    for (const [klucz, kolor] of Object.entries(KOLORY_ZRODEL)) {
+      expect(kolor.krawedz, klucz).toMatch(/^border-l-/)
+      expect(kolor.tlo, klucz).toMatch(/^bg-/)
+      expect(kolor.tekst, klucz).toMatch(/^text-/)
+      expect(kolor.kwadracik, klucz).toMatch(/^bg-/)
+    }
+  })
+
+  it('Audyt i AudytCP dzielą ten sam kolor (pink)', () => {
+    expect(kolorZrodla('Audyt')).toEqual(kolorZrodla('AudytCP'))
+  })
+
+  it('źródło nieznane dostaje szary fallback, nigdy undefined', () => {
+    const kolor = kolorZrodla('CośNieznanego')
+    expect(kolor).toBeTruthy()
+    expect(kolor.kwadracik).toBe('bg-gray-400')
+  })
+
+  it('fallback też działa dla klucza pustego/brakującego', () => {
+    expect(kolorZrodla('')).toEqual(kolorZrodla(undefined))
+  })
+})
+
+describe('godzinaZTekstu', () => {
+  it('wyciąga HH:mm z datetime z sekundami', () => {
+    expect(godzinaZTekstu('2026-09-28 15:25:07')).toBe('15:25')
+  })
+
+  it('wyciąga HH:mm z datetime z ułamkiem sekundy', () => {
+    expect(godzinaZTekstu('2026-09-28 15:25:07.291762')).toBe('15:25')
+  })
+
+  it('wyciąga HH:mm z datetime bez sekund i z separatorem "T"', () => {
+    expect(godzinaZTekstu('2026-09-28T09:05')).toBe('09:05')
+  })
+
+  it('zwraca pusty string dla wejścia pustego/niepoprawnego', () => {
+    expect(godzinaZTekstu('')).toBe('')
+    expect(godzinaZTekstu(null)).toBe('')
+    expect(godzinaZTekstu('nie-data')).toBe('')
+  })
+})
+
+describe('szukajWFeedzie', () => {
+  const wpisy = [
+    { klucz: 'a', tekst_html: '<p>Klient chce zmienić <b>falownik</b></p>', autor: 'a@x.pl', autor_nazwa: 'Łukasz Kowalski', pliki: [] },
+    { klucz: 'b', tekst_html: '<p>Zgłoszenie do OSD złożone</p>', autor: 'b@x.pl', autor_nazwa: 'Ala Nowak', pliki: [{ file_name: 'umowa-kredytowa.pdf' }] },
+    { klucz: 'c', tekst_html: '<p>Bez powiązania</p>', autor: 'c@x.pl', autor_nazwa: 'Grzegorz Żak', pliki: [] },
+  ]
+
+  it('pusta fraza zwraca wszystkie wpisy bez zmian', () => {
+    expect(szukajWFeedzie(wpisy, '')).toEqual(wpisy)
+    expect(szukajWFeedzie(wpisy, '   ')).toEqual(wpisy)
+  })
+
+  it('znajduje po treści HTML, bez znaczników i bez rozróżniania wielkości liter', () => {
+    expect(szukajWFeedzie(wpisy, 'FALOWNIK').map((w) => w.klucz)).toEqual(['a'])
+  })
+
+  it('znajduje po treści ignorując polskie ogonki (frazy i danych)', () => {
+    expect(szukajWFeedzie(wpisy, 'zmienic').map((w) => w.klucz)).toEqual(['a'])
+    expect(szukajWFeedzie(wpisy, 'zgloszenie').map((w) => w.klucz)).toEqual(['b'])
+  })
+
+  it('znajduje po imieniu i nazwisku autora, w tym po "ł" bez ogonka', () => {
+    expect(szukajWFeedzie(wpisy, 'lukasz').map((w) => w.klucz)).toEqual(['a'])
+    expect(szukajWFeedzie(wpisy, 'zak').map((w) => w.klucz)).toEqual(['c'])
+  })
+
+  it('znajduje po nazwie załączonego pliku', () => {
+    expect(szukajWFeedzie(wpisy, 'umowa-kredytowa').map((w) => w.klucz)).toEqual(['b'])
+  })
+
+  it('fraza bez dopasowania zwraca pustą listę', () => {
+    expect(szukajWFeedzie(wpisy, 'nieistniejaca-fraza')).toEqual([])
+  })
+
+  it('nie rzuca dla pustej/brakującej listy wpisów', () => {
+    expect(szukajWFeedzie([], 'cokolwiek')).toEqual([])
+    expect(szukajWFeedzie(undefined, 'cokolwiek')).toEqual([])
+  })
+})
+
+describe('podsumowanieFeedu', () => {
+  it('lista pusta daje zera i ostatnia=null', () => {
+    expect(podsumowanieFeedu([])).toEqual({ notatki: 0, zalaczniki: 0, ostatnia: null, autorzy: 0 })
+    expect(podsumowanieFeedu(undefined)).toEqual({ notatki: 0, zalaczniki: 0, ostatnia: null, autorzy: 0 })
+  })
+
+  it('liczy notatki, sumuje załączniki, znajduje najpóźniejszą datę i liczy unikalnych autorów', () => {
+    const wpisy = [
+      { klucz: 'a', data: '2026-09-27 10:00:00', autor: 'a@x.pl', pliki: [{ file_name: '1.pdf' }] },
+      { klucz: 'b', data: '2026-09-28 15:25:00', autor: 'b@x.pl', pliki: [{ file_name: '2.pdf' }, { file_name: '3.jpg' }] },
+      { klucz: 'c', data: '2026-09-26 08:00:00', autor: 'a@x.pl', pliki: [] },
+    ]
+    expect(podsumowanieFeedu(wpisy)).toEqual({
+      notatki: 3,
+      zalaczniki: 3,
+      ostatnia: '2026-09-28 15:25:00',
+      autorzy: 2,
+    })
+  })
+
+  it('wpis bez pliki/autor/data nie psuje liczenia pozostałych', () => {
+    const wpisy = [{ klucz: 'a' }, { klucz: 'b', data: '2026-09-28 10:00:00', autor: 'x@x.pl', pliki: [] }]
+    expect(podsumowanieFeedu(wpisy)).toEqual({
+      notatki: 2,
+      zalaczniki: 0,
+      ostatnia: '2026-09-28 10:00:00',
+      autorzy: 1,
+    })
   })
 })

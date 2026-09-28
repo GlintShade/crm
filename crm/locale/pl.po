@@ -9421,3 +9421,62 @@ msgstr "Usuń"
 #: frontend/src/components/deal/AudytCPTab.vue
 msgid "Napisz komentarz… (@ aby wspomnieć użytkownika)"
 msgstr "Napisz komentarz… (@ aby wspomnieć użytkownika)"
+
+# Issue GlintShade/proenergy-crm-ops#206 ("wariant C"): nowy wyglad zakladki
+# Notatki (pasek gorny: szukanie/podsumowanie/sortowanie, panel zrodel,
+# karta wspolna z etykieta/krawedzia w kolorze zrodla). Klucze juz po
+# polsku (jak reszta wpisow w tej konwencji ogona), wpis dla spojnosci
+# katalogu. "Od najnowszych"/"Od najstarszych"/"Brak notatek." istnialy juz
+# w kodzie przed tym issue (sort/pusty stan feedu), ale nigdy nie trafily
+# do katalogu - dogrywane tu przy okazji.
+#: frontend/src/components/deal/NotatkiTab.vue
+msgid "Szukaj w notatkach"
+msgstr "Szukaj w notatkach"
+
+#: frontend/src/components/deal/NotatkiTab.vue
+msgid "Kolejność"
+msgstr "Kolejność"
+
+#: frontend/src/components/deal/NotatkiTab.vue
+msgid "Od najnowszych"
+msgstr "Od najnowszych"
+
+#: frontend/src/components/deal/NotatkiTab.vue
+msgid "Od najstarszych"
+msgstr "Od najstarszych"
+
+#: frontend/src/components/deal/NotatkiTab.vue
+msgid "Brak notatek."
+msgstr "Brak notatek."
+
+#: frontend/src/components/deal/NotatkiTab.vue
+msgid "Brak wyników wyszukiwania."
+msgstr "Brak wyników wyszukiwania."
+
+#: frontend/src/components/deal/PanelZrodel.vue
+msgid "Źródła"
+msgstr "Źródła"
+
+#: frontend/src/components/deal/PanelZrodel.vue
+msgid "Wszystkie {0}"
+msgstr "Wszystkie {0}"
+
+#: frontend/src/components/deal/PodsumowanieNotatek.vue
+msgid "notatek"
+msgstr "notatek"
+
+#: frontend/src/components/deal/PodsumowanieNotatek.vue
+msgid "załączników"
+msgstr "załączników"
+
+#: frontend/src/components/deal/PodsumowanieNotatek.vue
+msgid "ostatnia"
+msgstr "ostatnia"
+
+#: frontend/src/components/deal/PodsumowanieNotatek.vue
+msgid "autorzy"
+msgstr "autorzy"
+
+#: frontend/src/components/deal/NotatkaKarta.vue
+msgid "Otwórz w zakładce {0}"
+msgstr "Otwórz w zakładce {0}"
