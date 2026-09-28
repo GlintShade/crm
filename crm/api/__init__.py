@@ -9,7 +9,7 @@ from frappe.translate import get_all_translations
 from frappe.utils import cint, cstr, split_emails, validate_email_address
 
 from crm.permissions.file_nazwy_systemowe import KOMUNIKAT_ZAREZERWOWANA
-from crm.permissions.org_hierarchy import BYPASS_ROLES
+from crm.permissions.org_hierarchy import czy_admin_lub_bypass
 from crm.utils import is_frappe_version
 from crm.volteo_zalaczniki import czy_nazwa_systemowa, czy_plik_systemowy, nowa_nazwa_pliku
 
@@ -456,11 +456,14 @@ def volteo_zmien_nazwe_zalacznika(name: str, nowy_trzon: str) -> dict[str, str]:
 	i sam plik na dysku pozostają bez zmian, rozszerzenie jest zachowywane
 	automatycznie z obecnej nazwy (patrz `crm.volteo_zalaczniki.nowa_nazwa_pliku`).
 
-	Bramka: admin (`Administrator`/`BYPASS_ROLES` — System Manager, Volteo Core
-	Admin, Volteo Backend) ORAZ `write` na dokumencie nadrzędnym (Frappe deleguje
+	Bramka: `crm.permissions.org_hierarchy.czy_admin_lub_bypass` (`Administrator`
+	albo rola w `BYPASS_ROLES`: System Manager, Volteo Core Admin, Volteo
+	Backend) ORAZ `write` na dokumencie nadrzędnym (Frappe deleguje
 	`has_permission("File", ...)` do tego dokumentu). Handlowcy (Volteo D2D
 	Sales) nigdy nie przechodzą tej bramki, niezależnie od uprawnień do
-	dokumentu nadrzędnego.
+	dokumentu nadrzędnego. Ta sama funkcja gatekeepuje `can_rename` w
+	`crm.api.pliki.feed` (feed "Pliki", ops#199): jedna definicja, kto może
+	zmienić nazwę pliku, nigdy dwa osobne literały.
 
 	Pliki generowane przez system dla szansy (umowa, formularz kredytowy) są
 	odrzucane celowo — `crm/api/umowa.py`, `crm/api/kredyt.py` i
@@ -480,7 +483,7 @@ def volteo_zmien_nazwe_zalacznika(name: str, nowy_trzon: str) -> dict[str, str]:
 	(rozmiar, duplikat treści, uprawnienia) dla operacji, która niczego z tego
 	nie zmienia.
 	"""
-	if frappe.session.user != "Administrator" and not (set(frappe.get_roles()) & BYPASS_ROLES):
+	if not czy_admin_lub_bypass():
 		frappe.throw(_("Brak uprawnień do zmiany nazwy załącznika."), frappe.PermissionError)
 
 	plik = frappe.db.get_value(
