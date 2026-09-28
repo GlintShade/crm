@@ -48,16 +48,23 @@ niepewne współrzędne.
 
 from dataclasses import dataclass
 
-SHA256_SZABLONU: str = "9d4ca0034bbd3921b96532e1588b6beae2f6feb371d64485e2fcf4a19a125bad"
-"""SHA-256 pliku `Umowa PV + ME ProEnergy - 28.07.2026-3.pdf` (A4, 596x842 pt, 18 stron,
-bez pól formularza), policzone `shasum -a 256` na oryginale dostarczonym do tego zadania
-(2026-08-06) i zweryfikowane ponownie po skopiowaniu do `crm/szablony/umowa_pv_me.pdf`.
-Mapa `MAPA` poniżej jest skalibrowana WYŁĄCZNIE dla tego dokładnego pliku — każda zmiana
-szablonu (nawet kosmetyczna, np. przesunięcie akapitu) unieważnia współrzędne. Ta wersja
-ZASTĘPUJE poprzednią kalibrację zrobioną na `Umowa PV + ME ProEnergy - 28.07.2026.pdf`
-(bez `-3`) — dokument się przesunął (przykładowo Pełnomocnictwo: str. 10 → str. 18;
-protokoły odbioru: str. 13/16 → str. 12/15), więc WSZYSTKIE współrzędne poniżej zostały
-wyznaczone od nowa, żadna nie jest przeniesiona ze starej wersji."""
+SHA256_SZABLONU: str = "2d05fe9e4f153b47fd84247b9c08e7e807d7684396ab7e1a57719640d7f6ffec"
+"""SHA-256 pliku `Umowa PV + ME ProEnergy - 28.07.2026.pdf` z biblioteki dokumentów
+`Volteo Dokument` (kategoria Wzory umów), podmiana 2026-09-28 (issue ops#196), Skia/PDF
+m156 Google Docs Renderer, A4 596x842 pt, 18 stron, bez pól formularza. Zmiana względem
+poprzedniej wersji (SHA-256 `9d4ca003...`, Skia/PDF m153) siedzi wyłącznie w bloku
+płatności na str. 2 (indeks 1): słownictwo „Kredyt" zastąpione „Finansowaniem
+zewnętrznym" („Kredyt 100% zawarty" -> „Finansowanie zewnętrzne 100% zawarte", „Kredyt
+zawarty ... z wkładem własnym" -> „Finansowanie zewnętrzne zawarte ... z wkładem
+własnym", etykieta „kredyt:" -> „finansowanie zewnętrzne:", „Gotówka/przelew" ->
+„Przelew"), a obie etykiety kwot na tej stronie przesunęły się w prawo wraz z dłuższym
+tekstem. Wszystkie pozostałe 17 stron potwierdzone identyczne co do liczby słów oraz
+Y pierwszego i ostatniego słowa (porównanie `pdftotext -bbox` strona po stronie); na
+str. 2 zmieniła się tylko liczba słów (354 -> 356) w obrębie tego samego bloku. Mapa
+`MAPA` poniżej jest skalibrowana WYŁĄCZNIE dla tego dokładnego pliku - każda zmiana
+szablonu (nawet kosmetyczna, np. przesunięcie akapitu) unieważnia współrzędne. Tylko
+dwa pola na str. 2 (`wklad_wlasny`, `kwota_kredytu`) mają nowe współrzędne x poniżej;
+Y i wszystkie pozostałe pola na wszystkich stronach zostają bez zmian."""
 
 SZEROKOSC_STRONY_PT: float = 596.0
 WYSOKOSC_STRONY_PT: float = 842.0
@@ -132,8 +139,13 @@ _STRONA_2: tuple[Pole, ...] = (
 	Pole("wynagrodzenie_brutto", 1, 113.78, 688.88, "tekst", maks_szerokosc=155.22),
 	Pole("fin_kredyt_100", 1, 115.5, 618.58, "kratka", wyrownanie="srodek"),
 	Pole("fin_kredyt_wklad", 1, 115.5, 598.75, "kratka", wyrownanie="srodek"),
-	Pole("wklad_wlasny", 1, 175.44, 556.64, "tekst", maks_szerokosc=280.31),
-	Pole("kwota_kredytu", 1, 143.78, 530.19, "tekst", maks_szerokosc=310.88),
+	# Podmiana szablonu ops#196 (2026-09-28): etykieta "wkład własny:" i podkreślenie po
+	# "finansowanie zewnętrzne:" przesunięte w prawo wraz z dłuższym tekstem bloku
+	# płatności; x poniżej zmierzone na nowo z `pdftotext -bbox` na nowym pliku (`xMax`
+	# etykiety "własny:" = 205.67, `xMin` podkreślenia po "zewnętrzne:" = 261.80), y bez
+	# zmian.
+	Pole("wklad_wlasny", 1, 211.44, 556.64, "tekst", maks_szerokosc=244.31),
+	Pole("kwota_kredytu", 1, 264.80, 530.19, "tekst", maks_szerokosc=249.73),
 	Pole("fin_gotowka", 1, 115.5, 512.79, "kratka", wyrownanie="srodek"),
 )
 
