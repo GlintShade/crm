@@ -21,6 +21,14 @@ describe('formatujTermin', () => {
     expect(formatujTermin('2026-09-25T17:00:00')).toBe('pt., 25 wrz 2026, 17:00')
   })
 
+  it('toleruje ułamkowe sekundy zwracane przez Frappe (data_zdarzenia/creation)', () => {
+    expect(formatujTermin('2026-09-28 15:19:56.291762')).toBe('pon., 28 wrz 2026, 15:19')
+  })
+
+  it('toleruje ułamkowe sekundy z separatorem "T"', () => {
+    expect(formatujTermin('2026-09-28T15:19:56.291762')).toBe('pon., 28 wrz 2026, 15:19')
+  })
+
   it('dzień bez zera wiodącego, minuta z zerem (czwartek)', () => {
     // new Date(2026, 0, 1).getDay() === 4 -> czwartek
     expect(formatujTermin('2026-01-01 00:05:00')).toBe('czw., 1 sty 2026, 00:05')

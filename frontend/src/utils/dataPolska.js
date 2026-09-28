@@ -26,8 +26,12 @@ export const MIESIACE_SKROT = [
 ]
 
 // `YYYY-MM-DD HH:mm` albo `YYYY-MM-DD HH:mm:ss` (surowy Frappe Datetime),
-// separator dnia i godziny spacja albo `T`, sekundy opcjonalne.
-const WZORZEC_DATY_CZASU = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/
+// separator dnia i godziny spacja albo `T`, sekundy opcjonalne, a gdy są -
+// opcjonalny ułamek sekundy (Frappe zwraca np. "15:19:56.291762" dla
+// `data_zdarzenia`/`creation`; ułamek jest tu tylko dopuszczony w
+// dopasowaniu, nigdy nie wchodzi do wyniku). Lustro tego samego tolerancyjnego
+// wzorca żyje w `godzinaZTekstu()` w NotatkaKarta.vue.
+const WZORZEC_DATY_CZASU = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$/
 
 /**
  * Formatuje datę/czas na polski zapis dla dymka mapy: skrót dnia tygodnia,

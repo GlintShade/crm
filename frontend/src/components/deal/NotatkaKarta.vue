@@ -111,6 +111,7 @@ const etykietaChipu = computed(
 // pełnego parsowania jak w `formatujTermin`.
 function godzinaZTekstu(dataCzas) {
   if (!dataCzas) return ''
+  // Ułamek sekundy w `(?:\.\d+)?` lustrzany w WZORZEC_DATY_CZASU dataPolska.js.
   const dopasowanie = /(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/.exec(String(dataCzas).trim())
   return dopasowanie ? `${dopasowanie[1]}:${dopasowanie[2]}` : ''
 }
