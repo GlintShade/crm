@@ -80,6 +80,8 @@
         <KredytTab v-else-if="tab.name === 'Kredyt'" :deal-id="dealId" />
         <NotatkiTab v-else-if="tab.name === 'Notatki'" :deal-id="dealId" />
         <AktualizacjeTab v-else-if="tab.name === 'Trify'" :deal-id="dealId" :konfig="TRIFY" />
+        <OsdDotacjaTab v-else-if="tab.name === 'OSD'" :deal-id="dealId" zakladka="OSD" />
+        <OsdDotacjaTab v-else-if="tab.name === 'Dotacja'" :deal-id="dealId" zakladka="Dotacja" />
       </template>
     </Tabs>
     <Resizer
@@ -338,6 +340,8 @@ import AudytIcon from '@/components/Icons/AudytIcon.vue'
 import UmowaIcon from '@/components/Icons/UmowaIcon.vue'
 import KredytIcon from '@/components/Icons/KredytIcon.vue'
 import TrifyIcon from '@/components/Icons/TrifyIcon.vue'
+import OsdIcon from '@/components/Icons/OsdIcon.vue'
+import DotacjaIcon from '@/components/Icons/DotacjaIcon.vue'
 import ZestawTab from '@/components/deal/ZestawTab.vue'
 import FakturyTab from '@/components/deal/FakturyTab.vue'
 import AktualizacjeTab from '@/components/deal/AktualizacjeTab.vue'
@@ -346,6 +350,7 @@ import AudytCPTab from '@/components/deal/AudytCPTab.vue'
 import UmowaTab from '@/components/deal/UmowaTab.vue'
 import KredytTab from '@/components/deal/KredytTab.vue'
 import NotatkiTab from '@/components/deal/NotatkiTab.vue'
+import OsdDotacjaTab from '@/components/deal/OsdDotacjaTab.vue'
 import { MONTAZ, TRIFY } from '@/utils/aktualizacje'
 import DealPipelineBar from '@/components/deal/DealPipelineBar.vue'
 import DealNextStepNote from '@/components/deal/DealNextStepNote.vue'
@@ -656,6 +661,16 @@ const tabs = computed(() => {
     },
     { name: 'Attachments', label: __('Pliki'), icon: AttachmentIcon },
     { name: 'Montaz', label: __('Montaż'), icon: MontazIcon },
+    {
+      // OSD/Dotacja (ops#202): status ręczny + notatki, tylko OZE (Faza 1) -
+      // ten sam OZE_RODZAJE co zakładka Kredyt powyżej.
+      name: 'OSD', label: __('OSD'), icon: OsdIcon,
+      condition: () => OZE_RODZAJE.has(doc.value?.custom_rodzaj_umowy),
+    },
+    {
+      name: 'Dotacja', label: __('Dotacja'), icon: DotacjaIcon,
+      condition: () => OZE_RODZAJE.has(doc.value?.custom_rodzaj_umowy),
+    },
     { name: 'Faktury', label: __('Faktury'), icon: FakturyIcon },
     { name: 'Activity', label: __('Aktywność'), icon: ActivityIcon },
   ]

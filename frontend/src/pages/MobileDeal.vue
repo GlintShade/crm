@@ -213,6 +213,8 @@
         <AudytCPTab v-else-if="tab.name === 'AudytCP'" :deal-id="dealId" />
         <AktualizacjeTab v-else-if="tab.name === 'Trify'" :deal-id="dealId" :konfig="TRIFY" />
         <NotatkiTab v-else-if="tab.name === 'Notatki'" :deal-id="dealId" />
+        <OsdDotacjaTab v-else-if="tab.name === 'OSD'" :deal-id="dealId" zakladka="OSD" />
+        <OsdDotacjaTab v-else-if="tab.name === 'Dotacja'" :deal-id="dealId" zakladka="Dotacja" />
         <Activities
           v-else
           v-model:reload="reload"
@@ -288,12 +290,15 @@ import FakturyIcon from '@/components/Icons/FakturyIcon.vue'
 import MontazIcon from '@/components/Icons/MontazIcon.vue'
 import AudytIcon from '@/components/Icons/AudytIcon.vue'
 import TrifyIcon from '@/components/Icons/TrifyIcon.vue'
+import OsdIcon from '@/components/Icons/OsdIcon.vue'
+import DotacjaIcon from '@/components/Icons/DotacjaIcon.vue'
 import ZestawTab from '@/components/deal/ZestawTab.vue'
 import FakturyTab from '@/components/deal/FakturyTab.vue'
 import AktualizacjeTab from '@/components/deal/AktualizacjeTab.vue'
 import AudytTab from '@/components/deal/AudytTab.vue'
 import AudytCPTab from '@/components/deal/AudytCPTab.vue'
 import NotatkiTab from '@/components/deal/NotatkiTab.vue'
+import OsdDotacjaTab from '@/components/deal/OsdDotacjaTab.vue'
 import { MONTAZ, TRIFY } from '@/utils/aktualizacje'
 import { czyOze } from '@/utils/notatki'
 import DealPipelineBar from '@/components/deal/DealPipelineBar.vue'
@@ -531,6 +536,16 @@ const tabs = computed(() => {
     },
     { name: 'Attachments', label: __('Pliki'), icon: AttachmentIcon },
     { name: 'Montaz', label: __('Montaż'), icon: MontazIcon },
+    {
+      // OSD/Dotacja (ops#202): status ręczny + notatki, tylko OZE (Faza 1),
+      // `czyOze` jak zakładka Notatki powyżej (ten sam import z @/utils/notatki).
+      name: 'OSD', label: __('OSD'), icon: OsdIcon,
+      condition: () => czyOze(doc.value?.custom_rodzaj_umowy),
+    },
+    {
+      name: 'Dotacja', label: __('Dotacja'), icon: DotacjaIcon,
+      condition: () => czyOze(doc.value?.custom_rodzaj_umowy),
+    },
     { name: 'Faktury', label: __('Faktury'), icon: FakturyIcon },
     { name: 'Activity', label: __('Historia'), icon: ActivityIcon },
   ]

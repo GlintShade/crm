@@ -607,6 +607,32 @@ class TestTekstSladu(unittest.TestCase):
 			"ustawiono status finansowania: Procesowane",
 		)
 
+	def test_w1_status_zakladki_osd_zmiana_ze_strzalka(self: "TestTekstSladu") -> None:
+		self.assertEqual(
+			tekst_sladu(
+				"status_zakladki",
+				zakladka="OSD",
+				stary="Zgłoszenie wysłane",
+				nowy="Zakończone",
+			),
+			"status OSD: Zgłoszenie wysłane → Zakończone",
+		)
+
+	def test_w2_status_zakladki_dotacja_pierwsze_ustawienie(self: "TestTekstSladu") -> None:
+		self.assertEqual(
+			tekst_sladu(
+				"status_zakladki",
+				zakladka="Dotacja",
+				stary=None,
+				nowy="Wniosek złożony",
+			),
+			"ustawiono status dotacji: Wniosek złożony",
+		)
+
+	def test_w3_status_zakladki_nieznana_zakladka_rzuca_value_error(self: "TestTekstSladu") -> None:
+		with self.assertRaises(ValueError):
+			tekst_sladu("status_zakladki", zakladka="Umowa", stary=None, nowy="cokolwiek")
+
 	def test_l_koszty_nigdy_nie_niesie_kwot(self: "TestTekstSladu") -> None:
 		text = tekst_sladu("koszty", pozycje=3, dodatkowe=1)
 		self.assertEqual(text, f"{ZNACZNIK_KOSZTY} zaktualizowano koszty rzeczywiste (3 pozycji, 1 dodatkowych)")
