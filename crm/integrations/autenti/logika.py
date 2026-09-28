@@ -29,6 +29,11 @@ STATUS_MAP = {
 """Mapowanie statusu procesu dokumentu Autenti (zdalny, angielski) na
 `Volteo Umowa.autenti_status` (lokalny, polski)."""
 
+ROLE_ODBIORCY = frozenset({"SIGNER", "VIEWER"})
+"""Dozwolone role odbiorcy procesu dokumentu Autenti: SIGNER podpisuje, VIEWER
+dostaje dokument wyłącznie do wglądu. Jedyne dwa kształty akceptowane przez
+`zbuduj_odbiorcow` niżej dla parametru `rola_prezesa`."""
+
 PENDING_REMOTE_STATUSES = ("DRAFT", "PROCESSING")
 """Potwierdzone (na sandboxie) nieterminalne statusy procesu dokumentu Autenti:
 DRAFT -> PROCESSING -> <terminalny>. Umowa zasadnie stoi w PROCESSING dni
@@ -123,6 +128,8 @@ def zbuduj_odbiorcow(
 	prezes: dict[str, str | None] | None,
 	handlowiec: dict[str, str | None] | None,
 	archiwum: dict[str, str | None] | None,
+	*,
+	rola_prezesa: str = "SIGNER",
 ) -> list[dict[str, str]]:
 	"""Buduje uporządkowaną listę odbiorców procesu dokumentu Autenti: `podpisujacy`
 	to UPORZĄDKOWANA LISTA kandydatów-klientów (jeden element dla umowy
@@ -133,10 +140,16 @@ def zbuduj_odbiorcow(
 
 	Każdy wejściowy słownik ma klucze `first_name`, `last_name`, `full_name`,
 	`email` (dowolny może brakować lub być pusty). Każdy element `podpisujacy`
-	i `prezes` stają się SIGNER-ami, `handlowiec` i `archiwum`, VIEWER-ami.
-	Każdy wynikowy wpis ma klucze `first_name`, `last_name`, `full_name`,
-	`email`, `role`, `zrodlo` (`"klient"`/`"klient2"`/`"prezes"`/`"handlowiec"`/
-	`"archiwum"`, patrz `_zrodlo_klienta`).
+	jest zawsze SIGNER-em; `handlowiec` i `archiwum` są zawsze VIEWER-ami;
+	`prezes` dostaje rolę `rola_prezesa` (domyślnie `"SIGNER"`, jak na umowie -
+	`"VIEWER"` dla formularza kredytowego, decyzja właściciela 2026-09-28,
+	ops#195, uwaga 36 z klik-testu: prezes nie podpisuje formularza kredytowego,
+	dostaje go wyłącznie do wglądu, podpisuje tylko wnioskodawca). Niedozwolona
+	wartość `rola_prezesa` (poza `ROLE_ODBIORCY`) rzuca `ValueError` - to błąd
+	konfiguracji wywołującego, nie stan do cichego zignorowania. Każdy wynikowy
+	wpis ma klucze `first_name`, `last_name`, `full_name`, `email`, `role`,
+	`zrodlo` (`"klient"`/`"klient2"`/`"prezes"`/`"handlowiec"`/`"archiwum"`,
+	patrz `_zrodlo_klienta`).
 
 	Kandydat jest pomijany, gdy jest `None` albo ma pusty/białoznakowy e-mail.
 	To zachowanie CELOWO nie odróżnia "ten sam handlowiec figuruje dwa razy"
@@ -147,19 +160,26 @@ def zbuduj_odbiorcow(
 	funkcji po cichu zwinąć obu klientów do jednego odbiorcy.
 
 	Deduplikacja jest po e-mailu, bez rozróżniania wielkości liter: późniejszy
-	duplikat jest odrzucany. Ponieważ kolejność wejść stawia wszystkich
-	SIGNER-ów przed obu VIEWER-ami, SIGNER zawsze wygrywa z duplikatem
-	VIEWER-a o tym samym adresie: podpisujący nigdy nie zostaje po cichu
-	zdegradowany do samego podglądu.
+	duplikat jest odrzucany. Gdy `rola_prezesa` jest `"SIGNER"` (umowa),
+	kolejność wejść stawia wszystkich SIGNER-ów przed obu VIEWER-ami, więc
+	SIGNER zawsze wygrywa z duplikatem VIEWER-a o tym samym adresie: podpisujący
+	nigdy nie zostaje po cichu zdegradowany do samego podglądu. Gdy
+	`rola_prezesa` jest `"VIEWER"` (kredyt) i prezes dzieli e-mail z
+	handlowcem, wygrywa prezes (pierwsze wystąpienie w `kandydaci`, `zrodlo`
+	pozostaje `"prezes"`) - nieszkodliwe, bo obaj są wtedy VIEWER-ami, żaden
+	podpisujący nie zostaje zdegradowany.
 
 	Nie wymyśla brakujących imion/nazwisk — puste pozostają pustymi stringami;
 	to wywołujący decyduje, czy dla `archiwum` (typowo generyczny viewer)
 	podstawić nazwę zastępczą.
 	"""
+	if rola_prezesa not in ROLE_ODBIORCY:
+		raise ValueError(f"Niedozwolona rola prezesa: {rola_prezesa!r}")
+
 	kandydaci: list[tuple[dict[str, str | None] | None, str, str]] = [
 		(dane, "SIGNER", _zrodlo_klienta(indeks)) for indeks, dane in enumerate(podpisujacy)
 	]
-	kandydaci.append((prezes, "SIGNER", "prezes"))
+	kandydaci.append((prezes, rola_prezesa, "prezes"))
 	kandydaci.append((handlowiec, "VIEWER", "handlowiec"))
 	kandydaci.append((archiwum, "VIEWER", "archiwum"))
 

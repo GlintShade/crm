@@ -6,6 +6,7 @@ from crm.integrations.autenti.logika import (
 	DECYZJA_ODZYSKAJ,
 	KOMUNIKAT_TIMEOUT_WYSYLANIA_BEZ_PROCESU,
 	PENDING_REMOTE_STATUSES,
+	ROLE_ODBIORCY,
 	SEND_BLOCKED_STATUSES,
 	STATUS_MAP,
 	WYSYLANIE_TIMEOUT_MIN,
@@ -658,6 +659,118 @@ class TestAutentiLogika(unittest.TestCase):
 	) -> None:
 		self.assertIsNone(wybierz_id_podpisanego_pliku([]))
 		self.assertIsNone(wybierz_id_podpisanego_pliku([{"id": "x", "filePurpose": "CONTENT_ARCHIVE"}]))
+
+	def test_ax_role_odbiorcy_dozwolone_wartosci(self: "TestAutentiLogika") -> None:
+		self.assertEqual(ROLE_ODBIORCY, frozenset({"SIGNER", "VIEWER"}))
+
+	def test_at_zbuduj_odbiorcow_prezes_viewer_dla_kredytu(self: "TestAutentiLogika") -> None:
+		klient = {
+			"first_name": "Jan",
+			"last_name": "Kowalski",
+			"full_name": "Jan Kowalski",
+			"email": "jan.kowalski@example.com",
+		}
+		prezes = {
+			"first_name": "Leszek",
+			"last_name": "Furmann",
+			"full_name": "Leszek Furmann",
+			"email": "l.furmann@proenergy.pro",
+		}
+		handlowiec = {
+			"first_name": "Grzegorz",
+			"last_name": "Furmann",
+			"full_name": "Grzegorz Furmann",
+			"email": "g.furmann@proenergy.pro",
+		}
+		archiwum = {
+			"first_name": "Archiwum",
+			"last_name": "ProEnergy",
+			"full_name": "Archiwum ProEnergy",
+			"email": "umowy@proenergy.pro",
+		}
+
+		wynik = zbuduj_odbiorcow([klient], prezes, handlowiec, archiwum, rola_prezesa="VIEWER")
+
+		self.assertEqual([o["zrodlo"] for o in wynik], ["klient", "prezes", "handlowiec", "archiwum"])
+		self.assertEqual([o["role"] for o in wynik], ["SIGNER", "VIEWER", "VIEWER", "VIEWER"])
+		prezes_wpis = wynik[1]
+		self.assertEqual(prezes_wpis["first_name"], prezes["first_name"])
+		self.assertEqual(prezes_wpis["last_name"], prezes["last_name"])
+		self.assertEqual(prezes_wpis["full_name"], prezes["full_name"])
+		self.assertEqual(prezes_wpis["email"], prezes["email"])
+
+	def test_au_zbuduj_odbiorcow_domyslna_rola_prezesa_signer(self: "TestAutentiLogika") -> None:
+		klient = {
+			"first_name": "Jan",
+			"last_name": "Kowalski",
+			"full_name": "Jan Kowalski",
+			"email": "jan.kowalski@example.com",
+		}
+		prezes = {
+			"first_name": "Leszek",
+			"last_name": "Furmann",
+			"full_name": "Leszek Furmann",
+			"email": "l.furmann@proenergy.pro",
+		}
+		handlowiec = {
+			"first_name": "Grzegorz",
+			"last_name": "Furmann",
+			"full_name": "Grzegorz Furmann",
+			"email": "g.furmann@proenergy.pro",
+		}
+		archiwum = {
+			"first_name": "Archiwum",
+			"last_name": "ProEnergy",
+			"full_name": "Archiwum ProEnergy",
+			"email": "umowy@proenergy.pro",
+		}
+
+		# Bez podania `rola_prezesa` - regresja pod umowę, gdzie prezes musi zostać SIGNER-em.
+		wynik = zbuduj_odbiorcow([klient], prezes, handlowiec, archiwum)
+
+		self.assertEqual([o["role"] for o in wynik], ["SIGNER", "SIGNER", "VIEWER", "VIEWER"])
+
+	def test_av_zbuduj_odbiorcow_niedozwolona_rola_prezesa_rzuca(self: "TestAutentiLogika") -> None:
+		klient = {
+			"first_name": "Jan",
+			"last_name": "Kowalski",
+			"full_name": "Jan Kowalski",
+			"email": "jan.kowalski@example.com",
+		}
+		prezes = {
+			"first_name": "Leszek",
+			"last_name": "Furmann",
+			"full_name": "Leszek Furmann",
+			"email": "l.furmann@proenergy.pro",
+		}
+
+		with self.assertRaises(ValueError):
+			zbuduj_odbiorcow([klient], prezes, None, None, rola_prezesa="REVIEWER")
+		with self.assertRaises(ValueError):
+			zbuduj_odbiorcow([klient], prezes, None, None, rola_prezesa="")
+
+	def test_aw_zbuduj_odbiorcow_prezes_viewer_dedupe_z_handlowcem(
+		self: "TestAutentiLogika",
+	) -> None:
+		wspolny_email = "wspolny@proenergy.pro"
+		prezes = {
+			"first_name": "Leszek",
+			"last_name": "Furmann",
+			"full_name": "Leszek Furmann",
+			"email": wspolny_email,
+		}
+		handlowiec = {
+			"first_name": "Leszek",
+			"last_name": "Furmann",
+			"full_name": "Leszek Furmann",
+			"email": wspolny_email.upper(),
+		}
+
+		wynik = zbuduj_odbiorcow([], prezes, handlowiec, None, rola_prezesa="VIEWER")
+
+		self.assertEqual(len(wynik), 1)
+		self.assertEqual(wynik[0]["zrodlo"], "prezes")
+		self.assertEqual(wynik[0]["role"], "VIEWER")
 
 
 if __name__ == "__main__":

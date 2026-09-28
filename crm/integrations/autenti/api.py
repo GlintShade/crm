@@ -329,8 +329,13 @@ def _podpisujacy_kredyt(
 
 
 def _staly_podpisujacy(ustawienia: dict[str, Any]) -> dict[str, Any] | None:
-	"""Stały podpisujący (prezes) z `Volteo Autenti Settings` - SIGNER na każdym
-	dokumencie, obok klienta. Zwraca `None`, dopóki imię, nazwisko i e-mail nie są
+	"""Stały podpisujący (prezes) z `Volteo Autenti Settings` - obowiązkowy odbiorca
+	na każdym dokumencie, obok klienta. Nazwa funkcji zostaje historyczna, ale od
+	ops#195 rola prezesa jest PER DOKUMENT, nie zawsze SIGNER: `KONFIG_UMOWA`
+	trzyma `rola_prezesa="SIGNER"` (podpisuje, jak zawsze), `KONFIG_KREDYT`
+	trzyma `rola_prezesa="VIEWER"` (na formularzu kredytowym dostaje dokument
+	wyłącznie do wglądu, decyzja właściciela 2026-09-28) - patrz
+	`logika.zbuduj_odbiorcow`. Zwraca `None`, dopóki imię, nazwisko i e-mail nie są
 	wszystkie skompletowane w ustawieniach - częściowo wypełniony rekord nie
 	jest wystarczający, żeby dodać stronę do procesu dokumentu."""
 	first_name = (ustawienia.get("staly_podpisujacy_imie") or "").strip()
@@ -391,6 +396,7 @@ KONFIG_UMOWA: dict[str, Any] = {
 	"podpisujacy": _podpisujacy_umowa,
 	"tytul": logika.tytul_dokumentu,
 	"awansuj_po_podpisie": True,
+	"rola_prezesa": "SIGNER",
 	# Pełne zdania, nie budowane z osobnej "etykiety" przez wspólny szablon: polska
 	# odmiana (rodzaj gramatyczny rzeczownika, przypadki: "umowę"/"umowy" vs
 	# "formularz kredytowy" bez odmiany w tych samych miejscach) sprawia, że
@@ -407,7 +413,8 @@ etapu „Umowa Podpisana” (`crm.volteo_pipeline`), analogicznie jak przed b47.
 `znajdz_pdf`/`nazwa_wysylki`/`nazwa_podpisanego`/`podpisujacy` przyjmują kształt
 `(deal, nazwa)`/`(deal_doc, dokument)` wspólny z `KONFIG_KREDYT` (ops#160) - dla
 umowy `nazwa`/`dokument` są tu świadomie ignorowane w adapterach, bo umowa
-pozostaje 1:1 z szansą."""
+pozostaje 1:1 z szansą. `rola_prezesa="SIGNER"` (ops#195): na umowie prezes
+podpisuje, tak jak zawsze."""
 
 KONFIG_KREDYT: dict[str, Any] = {
 	"rodzaj": "kredyt",
@@ -419,6 +426,10 @@ KONFIG_KREDYT: dict[str, Any] = {
 	"podpisujacy": _podpisujacy_kredyt,
 	"tytul": logika.tytul_dokumentu_kredytu,
 	"awansuj_po_podpisie": False,
+	# Decyzja właściciela 2026-09-28 (ops#195, uwaga 36 z klik-testu): prezes NIE
+	# podpisuje formularza kredytowego, dostaje go wyłącznie do wglądu; podpisuje
+	# tylko wnioskodawca. Umowa (`KONFIG_UMOWA`) bez zmian, tam prezes nadal SIGNER.
+	"rola_prezesa": "VIEWER",
 	# Pełne zdania - patrz komentarz przy `KONFIG_UMOWA` powyżej o tym, czemu nie ma
 	# tu wspólnego szablonu. "Formularz kredytowy" jest rodzaju męskiego, stąd
 	# "został podpisany" (nie "podpisana", jak dla "Umowa").
@@ -433,7 +444,9 @@ nie po `deal` - jedna szansa może mieć wiele rekordów `Volteo Kredyt`).
 w `crm.volteo_pipeline` (żaden z OZE_RODZAJE ani CP nie zyskał etapu „Kredyt”) -
 decyzja właściciela, 2026-08-17. Jego podpisanie aktualizuje wyłącznie
 `Volteo Kredyt.autenti_status`/`signed_at` TEGO KONKRETNEGO rekordu i podpina
-podpisany plik do niego; status szansy pozostaje nietknięty."""
+podpisany plik do niego; status szansy pozostaje nietknięty. `rola_prezesa="VIEWER"`
+(ops#195): prezes jest tu odbiorcą do wglądu, nie podpisującym, patrz
+`logika.zbuduj_odbiorcow`."""
 
 KONFIGURACJE: dict[str, dict[str, Any]] = {"umowa": KONFIG_UMOWA, "kredyt": KONFIG_KREDYT}
 """Rejestr wszystkich dokumentów obsługiwanych przez tę integrację, kluczowany
@@ -484,12 +497,16 @@ def _status_dokumentu(nazwa: str, konfig: dict[str, Any]) -> dict[str, Any]:
 	# handlowiec/archiwum) - ten sam budulec co w `_autenti_send_job`, więc
 	# podgląd nigdy nie rozjeżdża się z tym, co faktycznie trafi do procesu
 	# dokumentu. Zwracany zawsze, gdy integracja jest włączona - także po
-	# wysyłce, wyłącznie informacyjnie.
+	# wysyłce, wyłącznie informacyjnie. `rola_prezesa` czytana z `konfig`
+	# (ops#195), nigdy zahardkodowana tutaj osobno - podgląd i faktyczna wysyłka
+	# w `_autenti_send_job` biorą tę wartość z tego samego miejsca, więc nie mogą
+	# się rozjechać.
 	proponowani_odbiorcy = logika.zbuduj_odbiorcow(
 		podpisujacy_lista,
 		_staly_podpisujacy(ustawienia),
 		_handlowiec(frappe.session.user),
 		_archiwum(ustawienia),
+		rola_prezesa=konfig["rola_prezesa"],
 	)
 
 	return {
@@ -686,8 +703,11 @@ def _wyslij_dokument(nazwa: str, konfig: dict[str, Any]) -> dict[str, Any]:
 
 	ustawienia = _autenti_ustawienia()
 	if not _staly_podpisujacy(ustawienia) or not _archiwum(ustawienia):
-		# Prezes podpisuje KAŻDY dokument (patrz docstring modułu i specyfikacja) -
-		# ciche wysłanie bez niego byłoby defektem, nie tylko brakiem funkcji.
+		# Prezes jest obowiązkowym ODBIORCĄ na KAŻDYM dokumencie (patrz docstring
+		# modułu i specyfikacja) - ciche wysłanie bez niego byłoby defektem, nie
+		# tylko brakiem funkcji. Zmienia się tylko jego ROLA, nie obecność: od
+		# ops#195 podpisuje umowę (SIGNER), ale dostaje formularz kredytowy
+		# wyłącznie do wglądu (VIEWER, `konfig["rola_prezesa"]`).
 		frappe.throw(_("Uzupełnij stałego podpisującego i adres archiwum w Ustawieniach Autenti."))
 
 	# Wysyłający jest przechwytywany TERAZ (żądanie HTTP, `frappe.session.user`
@@ -879,9 +899,11 @@ def _autenti_send_job(nazwa: str, wysylajacy: str | None = None, rodzaj: str = "
 	"""Zadanie w tle: pobiera zapisany PDF dokumentu `rodzaj` wskazanego przez
 	NAZWĘ REKORDU `nazwa` (ops#160; NIGDY świeży render - patrz docstring
 	modułu) i wywołuje Autenti, żeby utworzyć proces dokumentu, dodać odbiorców
-	(jeden lub dwaj klienci/wnioskodawca + prezes jako SIGNER-zy, handlowiec +
-	archiwum jako VIEWER-zy - patrz `logika.zbuduj_odbiorcow`; od ops#169 lista
-	klientów ma dwa elementy dla wariantu umowy podwójnej, `Volteo Umowa.drugi_zamawiajacy`
+	(jeden lub dwaj klienci/wnioskodawca zawsze jako SIGNER-zy, handlowiec +
+	archiwum zawsze jako VIEWER-zy, prezes jako `konfig["rola_prezesa"]` - SIGNER
+	na umowie, VIEWER na formularzu kredytowym od ops#195 - patrz
+	`logika.zbuduj_odbiorcow`; od ops#169 lista klientów ma dwa elementy dla
+	wariantu umowy podwójnej, `Volteo Umowa.drugi_zamawiajacy`
 	ustawiony), wgrać plik i wysłać (podpis równoległy: wszyscy odbiorcy są dodani
 	przed jednym wywołaniem `send()`). Status w CRM osiąga „Podpisana” dopiero,
 	gdy zdalny proces jest COMPLETED, czyli po podpisaniu przez WSZYSTKICH
@@ -1011,7 +1033,9 @@ def _autenti_send_job(nazwa: str, wysylajacy: str | None = None, rodzaj: str = "
 
 		# Defensywne powtórzenie bramki z `_wyslij_dokument`: ustawienia mogły się
 		# zmienić w oknie między akceptacją żądania a wykonaniem joba w tle. Job nie
-		# może rzucić do przeglądarki - jedyna droga to zapisany stan błędu.
+		# może rzucić do przeglądarki - jedyna droga to zapisany stan błędu. Prezes
+		# zostaje obowiązkowym odbiorcą niezależnie od `rodzaj` - zmienia się tylko
+		# jego rola (`konfig["rola_prezesa"]`), nigdy to, czy w ogóle jest wymagany.
 		prezes = _staly_podpisujacy(ustawienia)
 		archiwum = _archiwum(ustawienia)
 		if not prezes or not archiwum:
@@ -1031,7 +1055,9 @@ def _autenti_send_job(nazwa: str, wysylajacy: str | None = None, rodzaj: str = "
 			return
 
 		handlowiec = _handlowiec(wysylajacy)
-		odbiorcy = logika.zbuduj_odbiorcow(podpisujacy_lista, prezes, handlowiec, archiwum)
+		odbiorcy = logika.zbuduj_odbiorcow(
+			podpisujacy_lista, prezes, handlowiec, archiwum, rola_prezesa=konfig["rola_prezesa"]
+		)
 
 		signature_type = ustawienia.get("default_signature_type") or "BASIC"
 		tytul = konfig["tytul"](pierwszy_podpisujacy["full_name"])
