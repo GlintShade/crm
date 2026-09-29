@@ -475,7 +475,7 @@ const field = computed(() => {
 
   if (field.fieldtype == 'Select' && typeof field.options === 'string') {
     field.options = field.options.split('\n').map((option) => {
-      return { label: option, value: option }
+      return { label: option ? __(option) : option, value: option }
     })
 
     if (field.options[0].value !== '' && !field.reqd) {

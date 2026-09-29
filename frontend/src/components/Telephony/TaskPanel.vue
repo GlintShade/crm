@@ -20,7 +20,7 @@
       <div class="flex gap-2">
         <Dropdown :options="taskStatusOptions(updateTaskStatus)">
           <Button
-            :label="task.status"
+            :label="__(task.status)"
             class="bg-surface-gray-9 text-ink-base hover:bg-surface-gray-8"
           >
             <template #prefix>
@@ -30,7 +30,7 @@
         </Dropdown>
         <Dropdown :options="taskPriorityOptions(updateTaskPriority)">
           <Button
-            :label="task.priority"
+            :label="__(task.priority)"
             class="bg-surface-gray-9 text-ink-base hover:bg-surface-gray-8"
           >
             <template #prefix>
