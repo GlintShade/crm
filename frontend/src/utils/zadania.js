@@ -100,3 +100,20 @@ export function tloWybranegoPriorytetu(priority) {
 export function kropkaStatusu(status) {
   return KROPKA_KOLORU[kolorStatusuZadania(status)] || KROPKA_KOLORU[DOMYSLNY_KOLOR]
 }
+
+/**
+ * Lista `name` uzytkownikow CRM dla filtra Link->User "Przypisano do"
+ * (ops#208, TaskModal.vue) - ten sam ksztalt filtra co Field.vue buduje dla
+ * kazdego pola Link->User. Przyjmuje surowa tablice `crmUsers` (z
+ * `users.data?.crmUsers` w usersStore, NIGDY z destrukturyzowanego
+ * `computed()` - patrz komentarz w TaskModal.vue przy `przypisanyFiltry` o
+ * tym, jak Pinia rozpakowuje computed na instancji store i czemu
+ * destrukturyzacja gubi reaktywnosc/.value). Brak listy albo nie-tablica ->
+ * pusta lista, nigdy wyjatek.
+ * @param {Array<{name: string}>|undefined|null} crmUsers
+ * @returns {string[]}
+ */
+export function nazwyUzytkownikowDoPrzypisania(crmUsers) {
+  if (!Array.isArray(crmUsers)) return []
+  return crmUsers.map((u) => u.name)
+}

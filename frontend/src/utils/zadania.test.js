@@ -7,6 +7,7 @@ import {
   tloWybranegoStatusu,
   tloWybranegoPriorytetu,
   kropkaStatusu,
+  nazwyUzytkownikowDoPrzypisania,
 } from '@/utils/zadania'
 
 describe('STATUSY_ZADANIA / PRIORYTETY_ZADANIA', () => {
@@ -95,5 +96,34 @@ describe('kropkaStatusu', () => {
     for (const status of STATUSY_ZADANIA) {
       expect(kropkaStatusu(status)).toMatch(/^text-[a-z]+-\d+$/)
     }
+  })
+})
+
+describe('nazwyUzytkownikowDoPrzypisania (ops#208, filtr Przypisano do w TaskModal.vue)', () => {
+  it('zwraca liste name z tablicy uzytkownikow CRM', () => {
+    const crmUsers = [
+      { name: 'a@proenergy.pro', full_name: 'A' },
+      { name: 'b@proenergy.pro', full_name: 'B' },
+    ]
+    expect(nazwyUzytkownikowDoPrzypisania(crmUsers)).toEqual([
+      'a@proenergy.pro',
+      'b@proenergy.pro',
+    ])
+  })
+
+  it('pusta tablica wejsciowa -> pusta tablica wyjsciowa', () => {
+    expect(nazwyUzytkownikowDoPrzypisania([])).toEqual([])
+  })
+
+  it('undefined (zasob users.data.crmUsers jeszcze nie doladowany) -> pusta tablica, nie wyjatek', () => {
+    expect(nazwyUzytkownikowDoPrzypisania(undefined)).toEqual([])
+  })
+
+  it('null -> pusta tablica, nie wyjatek', () => {
+    expect(nazwyUzytkownikowDoPrzypisania(null)).toEqual([])
+  })
+
+  it('nie-tablica (np. przypadkowy obiekt) -> pusta tablica, nie wyjatek', () => {
+    expect(nazwyUzytkownikowDoPrzypisania({})).toEqual([])
   })
 })

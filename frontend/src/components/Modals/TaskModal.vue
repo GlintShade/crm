@@ -274,6 +274,7 @@ import {
   kropkaStatusu,
   tloWybranegoStatusu,
   tloWybranegoPriorytetu,
+  nazwyUzytkownikowDoPrzypisania,
 } from '@/utils/zadania'
 import { TextEditor, Tooltip, createEditorButton, createResource } from 'frappe-ui'
 import { computed, ref, onMounted } from 'vue'
@@ -289,7 +290,7 @@ const show = defineModel({ type: Boolean })
 
 const emit = defineEmits(['afterInsert', 'afterUpdate'])
 
-const { getUser, crmUsers, listaWzmianek } = usersStore()
+const { getUser, users, listaWzmianek } = usersStore()
 
 const { document, triggerOnRender, triggerOnBeforeCreate } = useDocument(
   props.doctype,
@@ -312,8 +313,19 @@ const opisPrzyciski = przyciskiWedlugListy(['Bold', 'Italic', 'Bullet List', 'Li
 
 // Ten sam filtr co Field.vue buduje dla Link->User (field.fieldtype ===
 // 'Link' && field.options === 'User'): tylko użytkownicy CRM.
+//
+// PUŁAPKA (ops#208): usersStore().crmUsers to computed() - Pinia (setup
+// store) rozpakowuje computed/ref na instancji store przy odczycie przez
+// kropkę, więc destrukturyzacja `const { crmUsers } = usersStore()` daje
+// jednorazowy, nie-reaktywny snapshot (zwykłą tablicę albo undefined), NIE
+// ComputedRef; wcześniejszy kod czytał potem `crmUsers.value`, co na
+// zwykłej tablicy/undefined cicho zwraca undefined (bez wyjątku), więc
+// filtr zawsze wychodził pusty. Field.vue tego nie łapie, bo destrukturyzuje
+// sam zasób `users` (obiekt trzyma tożsamość, więc reaktywność przeżywa
+// destrukturyzację) i czyta `users.data?.crmUsers` wprost, bez `.value` -
+// ten sam wzorzec tutaj.
 const przypisanyFiltry = computed(() => ({
-  name: ['in', (crmUsers.value || []).map((u) => u.name)],
+  name: ['in', nazwyUzytkownikowDoPrzypisania(users.data?.crmUsers)],
   ignore_user_type: 1,
 }))
 
