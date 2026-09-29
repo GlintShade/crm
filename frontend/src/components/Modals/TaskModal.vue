@@ -50,16 +50,16 @@
   <Dialog v-model:open="show" size="3xl">
     <template #body>
       <div class="bg-surface-elevation-1 pb-6 pt-5">
-        <div class="mb-4 flex items-center justify-between gap-2 px-4 sm:px-6">
-          <div class="flex min-w-0 items-center gap-2">
-            <h3 class="truncate text-3xl-semibold leading-6 text-ink-gray-9">
+        <div class="mb-4 flex items-start justify-between gap-2 px-4 sm:items-center sm:px-6">
+          <div class="flex min-w-0 flex-col items-start gap-2 sm:flex-row sm:items-center">
+            <h3 class="text-3xl-semibold leading-6 text-ink-gray-9 sm:truncate">
               {{ editMode ? __('Edit Task') : __('Create Task') }}
             </h3>
             <Button
               v-if="referenceLabel"
               variant="subtle"
               size="sm"
-              class="shrink-0"
+              class="max-w-full truncate"
               :label="referenceLabel"
               :iconRight="ArrowUpRightIcon"
               @click="otworzReferencje"
@@ -214,7 +214,7 @@
                   :label="__('Za tydzień')"
                   @click="ustawTerminZaDni(7)"
                 />
-                <Button variant="ghost" size="sm" :label="__('Clear')" @click="wyczyscTermin" />
+                <Button variant="outline" size="sm" :label="__('Clear')" @click="wyczyscTermin" />
               </div>
             </div>
           </div>
