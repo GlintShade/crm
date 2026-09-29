@@ -118,10 +118,11 @@
           </div>
           <div
             v-else-if="column.key === 'status'"
-            class="flex flex-col gap-1 overflow-hidden py-1 leading-tight"
+            class="flex w-full flex-col gap-1 overflow-hidden py-1 leading-tight"
           >
             <Badge
               variant="subtle"
+              class="w-fit"
               :theme="item?.theme"
               size="md"
               :label="item?.label"
