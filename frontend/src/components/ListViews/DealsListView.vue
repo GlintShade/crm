@@ -23,7 +23,7 @@
         v-for="column in columns"
         :key="column.key"
         :item="column"
-        @columnWidthUpdated="emit('columnWidthUpdated', column)"
+        @columnWidthUpdated="onColumnWidthUpdated"
       >
         <Button
           v-if="column.key == '_liked_by'"
@@ -357,6 +357,36 @@ function getLabel(label, column) {
   if (column.type === 'Duration') return formatDuration(label)
   if (column.options && isTranslatable(column.options)) return __(label)
   return label
+}
+
+// Przeciaganie krawedzi naglowka do zmiany szerokosci kolumny (runda 4
+// klik-testu, 2026 09 29). frappe-ui's ListHeaderItem tylko EMITUJE
+// {key, width, save} przy kazdym mousemove (save=false na biezaco,
+// save=true raz, po 1 s debounce od ostatniego ruchu) - samo NIE zapisuje
+// nowej szerokosci nigdzie. Upstream wzorzec skopiowany do kazdej listy w
+// tej apce (`emit('columnWidthUpdated', column)`, od commitu ead04d4b,
+// bump 1.77.3) odrzuca ten payload i podaje dalej STARY obiekt kolumny
+// sprzed przeciagniecia, wiec szerokosc nigdy nie trafia do zadnego stanu
+// - std. dlaczego przeciaganie nie robilo nic na ZADNEJ liscie w tej
+// aplikacji, nie tylko na Umowach. Naprawa tylko tutaj (Umowy): kolumne
+// szukamy PO KLUCZU wprost w `list.value.data.columns` (prawdziwa,
+// reaktywna tablica zasobu `deals`, nie w lokalnym prop `columns` z
+// Deals.vue, ktory dla OSTATNIEJ kolumny jest swiezo tworzona kopia przez
+// spread w computed `columns` - mutacja klucza `width` na tej kopii
+// zgineloby przy najblizszym przeliczeniu). Mutacja `.width` na
+// prawdziwym obiekcie odswieza siatke na biezaco (frappe-ui czyta
+// `column.width` wprost w swoim :style). Payload podajemy dalej
+// niezmieniony (`emit('columnWidthUpdated', payload)`) - Deals.vue
+// (onColumnWidthUpdated tam) odczytuje `payload.save` i dopiero na
+// potwierdzonym, odebouncowanym zapisie wola trwaly zapis przez juz
+// istniejacy mechanizm tego pliku (`watch(resizeColumn, ...)` ->
+// `updateColumns()` w ViewControls.vue).
+function onColumnWidthUpdated(payload) {
+  const col = list.value?.data?.columns?.find((c) => c.key === payload?.key)
+  if (col && payload?.width) {
+    col.width = payload.width
+  }
+  emit('columnWidthUpdated', payload)
 }
 
 // Destination for the whole row link (ListView options.getRowRoute below).
