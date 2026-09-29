@@ -264,6 +264,19 @@ def tytul_dokumentu_kredytu(signer_name: str | None) -> str:
 	return f"Formularz kredytowy ProEnergy - {signer_name}"
 
 
+def tytul_umowy_obslugi_dotacji(signer_name: str | None) -> str:
+	"""Tytuł procesu dokumentu Autenti dla umowy o świadczenie usług obsługi
+	dofinansowania Czyste Powietrze (ops#212).
+
+	Analogicznie do `tytul_dokumentu`/`tytul_dokumentu_kredytu` - puste/`None`
+	imię i nazwisko podpisującego daje tytuł bez myślnika, nie "Umowa obsługi
+	dotacji ProEnergy - " z pustym ogonem.
+	"""
+	if not signer_name or not signer_name.strip():
+		return "Umowa obsługi dotacji ProEnergy"
+	return f"Umowa obsługi dotacji ProEnergy - {signer_name}"
+
+
 def czy_legacy_kredyt(deal: str, kredyt_name: str) -> bool:
 	"""Czy `kredyt_name` to rekord `Volteo Kredyt` sprzed migracji na wiele
 	formularzy na szansę (ops#159): przed tą migracją doctype miał autoname
