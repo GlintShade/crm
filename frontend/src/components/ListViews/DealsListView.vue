@@ -71,15 +71,6 @@
               size="sm"
             />
           </div>
-          <div v-else-if="column.key === 'deal_owner'">
-            <Avatar
-              v-if="item.full_name"
-              class="flex items-center"
-              :image="item.user_image"
-              :label="item.full_name"
-              size="sm"
-            />
-          </div>
           <div v-else-if="column.key === 'mobile_no' && item?.numer">
             <PhoneIcon class="h-4 w-4" />
           </div>
@@ -101,18 +92,25 @@
             v-if="column.key === 'lead_name'"
             class="flex flex-col overflow-hidden py-1 leading-tight"
           >
-            <span v-if="item?.label" class="truncate font-medium text-ink-gray-9">
+            <span
+              v-if="item?.label"
+              class="truncate font-medium text-ink-gray-9"
+              data-fit="lead_name"
+            >
               {{ item.label }}
             </span>
-            <span v-else class="truncate italic text-ink-gray-4">
+            <span v-else class="truncate italic text-ink-gray-4" data-fit="lead_name">
               {{ __('brak klienta') }}
             </span>
-            <span class="truncate text-sm text-ink-gray-5">{{ item?.dealName }}</span>
+            <span class="truncate text-sm text-ink-gray-5" data-fit="lead_name">{{
+              item?.dealName
+            }}</span>
           </div>
           <div
             v-else-if="column.key === 'custom_rodzaj_umowy'"
             class="truncate text-base"
             :title="item?.pelnaNazwa"
+            data-fit="custom_rodzaj_umowy"
           >
             {{ item?.kod }}
           </div>
@@ -148,6 +146,7 @@
             v-else-if="column.key === 'modified'"
             class="truncate text-base font-normal"
             :title="item?.pelnaData"
+            data-fit="modified"
             @click="
               (event) =>
                 emit('applyFilter', {
@@ -234,17 +233,42 @@
             "
           />
           <div
-            v-else-if="column.key === 'mobile_no'"
-            class="flex flex-col overflow-hidden py-1 leading-tight"
+            v-else-if="column.key === 'deal_owner'"
+            class="whitespace-nowrap text-base"
+            data-fit="deal_owner"
+            @click="
+              (event) =>
+                emit('applyFilter', {
+                  event,
+                  idx,
+                  column,
+                  item,
+                  firstColumn: columns[0],
+                })
+            "
           >
-            <TelefonLink :numer="item?.numer || ''" class="truncate" />
+            {{ item?.label }}
+          </div>
+          <div v-else-if="column.key === 'mobile_no'" class="overflow-hidden py-1">
+            <TelefonLink
+              :numer="item?.numer || ''"
+              class="truncate"
+              data-fit="mobile_no"
+            />
+          </div>
+          <div v-else-if="column.key === 'email'" class="overflow-hidden py-1">
             <a
               v-if="item?.email"
               :href="'mailto:' + item.email"
-              class="truncate text-sm text-ink-gray-7 hover:underline"
+              class="truncate text-base hover:underline"
+              data-fit="email"
               @click.stop
             >{{ item.email }}</a>
-            <span v-else class="truncate text-sm italic text-ink-gray-4">
+            <span
+              v-else
+              class="truncate text-base italic text-ink-gray-4"
+              data-fit="email"
+            >
               {{ __('brak maila') }}
             </span>
           </div>
@@ -320,10 +344,10 @@ import {
 } from 'frappe-ui'
 import { sessionStore } from '@/stores/session'
 import { usersStore } from '@/stores/users'
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 
-defineProps({
+const props = defineProps({
   rows: { type: Array, required: true },
   columns: { type: Array, required: true },
   options: {
@@ -388,6 +412,78 @@ function onColumnWidthUpdated(payload) {
   }
   emit('columnWidthUpdated', payload)
 }
+
+// Standardowe dopasowanie szerokości kolumn do treści (runda 4 klik-testu,
+// 2026 09 29, decyzja właściciela: układ hybrydowy). `default_list_data()`
+// w crm_deal.py celowo nie niesie już żadnej szerokości - po każdym
+// świeżym zestawie wierszy mierzymy najszerszą komórkę KAŻDEJ kolumny,
+// która jeszcze NIE MA szerokości (`col.width` fałszywe: świeży widok
+// domyślny z serwera, albo pierwszy przebieg tej funkcji w tej sesji) i
+// wpisujemy wynik w pikselach do `list.value.data.columns[i].width`,
+// dokładnie tym samym mechanizmem co ręczne przeciągnięcie
+// (onColumnWidthUpdated wyżej) - więc gdy użytkownik cokolwiek przeciągnie
+// i to się zapisze, CAŁY zestaw szerokości (auto-dopasowane + przeciągnięta)
+// zamraża się w zapisanym widoku (CRM View Settings), każda kolumna ma już
+// `.width`, i ta funkcja przestaje je ruszać - dokładnie takie samo
+// zachowanie jak reszta tej apki (bez zapisanego widoku = świeże domyślne,
+// z zapisanym widokiem = to, co w nim jest), żaden nowy, osobny mechanizm.
+//
+// Mierzymy po kluczu przez atrybut `data-fit="klucz-kolumny"` na
+// elementach treści komórek (patrz szablon wyżej) - `element.scrollWidth`
+// zwraca pełną szerokość treści nawet gdy element jest wizualnie obcięty
+// klasą `truncate` (overflow:hidden + text-overflow:ellipsis nie zmieniają
+// scrollWidth). Nagłówek kolumny NIE jest mierzony w DOM (zależałoby to od
+// wewnętrznej struktury frappe-ui's ListHeaderItem.vue, której ta lista
+// nie kontroluje) - zamiast tego każda kolumna ma bezpieczny, ręcznie
+// dobrany próg minimalny w MIN_SZEROKOSC_PX, wystarczający na jej własną
+// etykietę nagłówka (a dla "Etap procesu" dodatkowo na pasek segmentów i
+// najdłuższy realny status, "Weryfikacja Backoffice" - stały próg, żeby
+// kolumna nie skakała w zależności od tego, co akurat jest na stronie).
+//
+// `document.querySelectorAll` (nie zawężone do korzenia tego komponentu)
+// zakłada jedną listę Umowy na raz na stronie - trasa montuje dokładnie
+// jeden DealsListView.vue naraz, tak jak dziś.
+const MIN_SZEROKOSC_PX = {
+  lead_name: 110, // "Klient / szansa"
+  custom_rodzaj_umowy: 56, // "Rodzaj" - ma zostać kompaktowa (dawniej sztywne 3.5rem = 56px)
+  status: 280, // "Weryfikacja Backoffice" + pełny pasek etapu procesu
+  deal_owner: 70, // "Doradca"
+  mobile_no: 70, // "Telefon"
+  email: 50, // "Mail"
+  modified: 70, // "Zmiana"
+}
+const KOLUMNY_Z_IKONA_PREFIKSU = new Set(['mobile_no']) // ikona telefonu w #prefix (h-4 w-4 + gap-2)
+const ODDECH_PX = 24 // gap-2 w ListRowItem miedzy tresc/prefix/suffix + odrobina oddechu
+const IKONA_PREFIKSU_PX = 24 // 16px ikona + 8px gap
+
+function autoDopasujKolumny() {
+  const kolumny = list.value?.data?.columns
+  if (!kolumny?.length) return
+  for (const col of kolumny) {
+    if (col.width) continue
+    if (col.key === 'status') {
+      col.width = `${MIN_SZEROKOSC_PX.status}px`
+      continue
+    }
+    const elementy = document.querySelectorAll(`[data-fit="${col.key}"]`)
+    let najszersza = 0
+    elementy.forEach((el) => {
+      if (el.scrollWidth > najszersza) najszersza = el.scrollWidth
+    })
+    if (najszersza === 0) continue
+    let szerokosc = najszersza + ODDECH_PX
+    if (KOLUMNY_Z_IKONA_PREFIKSU.has(col.key)) szerokosc += IKONA_PREFIKSU_PX
+    const prog = MIN_SZEROKOSC_PX[col.key] || 0
+    col.width = `${Math.round(Math.max(szerokosc, prog))}px`
+  }
+}
+
+onMounted(() => nextTick(autoDopasujKolumny))
+watch(
+  () => props.rows,
+  () => nextTick(autoDopasujKolumny),
+  { flush: 'post' },
+)
 
 // Destination for the whole row link (ListView options.getRowRoute below).
 // The Szczegoly icon column that used to call this through a separate

@@ -493,13 +493,20 @@ function parseRows(rows, columns = []) {
           dealName: deal.name,
         }
       } else if (row == 'mobile_no') {
-        // VOLTEO (b65): kolumna "Kontakt" - telefon (linia 1, TelefonLink)
-        // i mail (linia 2, mailto) w jednej komórce. `label` = numer, dla
-        // Kanban (patrz komentarz przy custom_rodzaj_umowy wyżej) - karta
-        // Kanban dalej pokazuje tylko telefon, bez maila, tak jak dotąd.
+        // VOLTEO (b65, hybryda runda 4): kolumna "Telefon", jedna linia
+        // (TelefonLink). Mail wrócił do własnej kolumny (`email` niżej) -
+        // ta komórka nie niesie już `.email`. `label` = numer, dla Kanban
+        // (patrz komentarz przy custom_rodzaj_umowy wyżej).
         _rows[row] = {
           label: deal.mobile_no || '',
           numer: deal.mobile_no || '',
+        }
+      } else if (row == 'email') {
+        // VOLTEO (b65, hybryda runda 4): kolumna "Mail", własna, osobna od
+        // Telefonu. `label` trzyma się dla Kanban/generycznego fallbacku
+        // (patrz komentarz przy custom_rodzaj_umowy wyżej).
+        _rows[row] = {
+          label: deal.email || '',
           email: deal.email || '',
         }
       } else if (row == 'sla_status') {

@@ -309,24 +309,34 @@ class CRMDeal(Document):
 	# `organization` zniknęło z kolumn: jest ukryte (hidden=1) i puste w każdej szansie,
 	# a `crm/api/doc.py:365-368` i tak wyrzuca ukryte kolumny w locie.
 	#
-	# VOLTEO (b65): "wariant B" - wiersz dwuliniowy (44px), sześć kolumn zamiast
-	# ośmiu, bez ucinania treści. Kolumna "Klient / szansa" (klucz `lead_name`)
-	# niesie teraz dwie linie po stronie Vue (imię klienta i nazwa dokumentu
-	# szansy, np. "PRO/PVME/26/1022") - dawna osobna kolumna "Szansa" (też
-	# `key: "name"`) zniknęła, bo ta treść przeniosła się pod nazwę klienta.
-	# "Telefon" i "Mail" scaliły się w jedną kolumnę "Kontakt" (klucz
-	# `mobile_no`, `email` nadal w `rows` poniżej, żeby zapytanie SQL dalej je
-	# pobierało - kolumnowa reprezentacja e-maila po prostu zniknęła, treść
-	# renderuje się jako druga linia komórki `mobile_no` po stronie Vue).
-	# "Status" zmienił się na "Etap procesu" (odznaka + pasek segmentów
-	# procesu, Vue). Nowa kolumna "Zmiana" (klucz `modified`) zastępuje
-	# poprzedni brak jawnej kolumny czasu na liście.
+	# VOLTEO (b65): "wariant B", układ hybrydowy (runda 4 klik-testu, 2026 09 29,
+	# decyzja właściciela po klik-teście rundy 3) - wiersz dwuliniowy (44px),
+	# siedem kolumn. Kolumna "Klient / szansa" (klucz `lead_name`) niesie dwie
+	# linie po stronie Vue (imię klienta i nazwa dokumentu szansy, np.
+	# "PRO/PVME/26/1022") - dawna osobna kolumna "Szansa" (też `key: "name"`)
+	# zniknęła, ta treść przeniosła się pod nazwę klienta. "Status" zmienił się
+	# na "Etap procesu" (odznaka + pasek segmentów procesu, Vue, DealsListView.vue).
+	# "Doradca" (klucz `deal_owner`) wrócił do samego imienia i nazwiska, bez
+	# avatara (był w wariancie B, usunięty na żądanie właściciela). "Telefon"
+	# (klucz `mobile_no`) i "Mail" (klucz `email`) wróciły do dwóch osobnych
+	# kolumn zamiast jednej scalonej "Kontakt" - `email` była już w `rows`
+	# poniżej (serwer i tak ją pobierał), teraz dostaje też własną kolumnę.
+	# "Zmiana" (klucz `modified`) zastępuje poprzedni brak jawnej kolumny czasu.
 	#
 	# Pseudo kolumna "Szczegóły" (dzieliła `key: "name"` z resztą) istniała
 	# od b45 do b65, usunięta decyzją właściciela 2026 09 29 (runda 3 klik
 	# testu). `name` zostaje w `rows` mimo braku własnej kolumny, bo komórka
 	# klienta (`lead_name`) pokazuje go jako drugą linię (nazwa dokumentu
 	# szansy, np. "PRO/PVME/26/1022").
+	#
+	# Celowo BEZ klucza "width" na żadnej kolumnie (runda 4): frontend
+	# (DealsListView.vue) mierzy po renderze najszerszą komórkę każdej
+	# nieustawionej kolumny na bieżącej stronie i sam dopisuje szerokość w
+	# pikselach do `list.data.columns[i].width` - "standardowe dopasowanie do
+	# treści" zamiast sztywnych zgadywanek w rem. Gdy użytkownik przeciągnie
+	# krawędź nagłówka, ta (i każda inna w danym momencie) szerokość zapisuje
+	# się do `CRM View Settings` jak dotąd i od tej pory wygrywa nad
+	# auto-dopasowaniem, dopóki zapisany widok istnieje.
 	@staticmethod
 	def default_list_data():
 		columns = [
@@ -334,39 +344,38 @@ class CRMDeal(Document):
 				"label": "Klient / szansa",
 				"type": "Data",
 				"key": "lead_name",
-				"width": "16rem",
 			},
 			{
 				"label": "Rodzaj",
 				"type": "Select",
 				"key": "custom_rodzaj_umowy",
-				"width": "3.5rem",
 			},
 			{
 				"label": "Etap procesu",
 				"type": "Link",
 				"options": "CRM Deal Status",
 				"key": "status",
-				"width": "16rem",
 			},
 			{
 				"label": "Doradca",
 				"type": "Link",
 				"key": "deal_owner",
 				"options": "User",
-				"width": "13rem",
 			},
 			{
-				"label": "Kontakt",
+				"label": "Telefon",
 				"type": "Data",
 				"key": "mobile_no",
-				"width": "20rem",
+			},
+			{
+				"label": "Mail",
+				"type": "Data",
+				"key": "email",
 			},
 			{
 				"label": "Zmiana",
 				"type": "Datetime",
 				"key": "modified",
-				"width": "8rem",
 			},
 		]
 		rows = [
