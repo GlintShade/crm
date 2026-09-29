@@ -78,6 +78,7 @@
         <AudytTab v-else-if="tab.name === 'Audyt'" :deal-id="dealId" :rodzaj="doc.custom_rodzaj_umowy || ''" />
         <AudytCPTab v-else-if="tab.name === 'AudytCP'" :deal-id="dealId" />
         <UmowaTab v-else-if="tab.name === 'Umowa'" :deal-id="dealId" />
+        <UmowaCPTab v-else-if="tab.name === 'UmowaCP'" :deal-id="dealId" />
         <KredytTab v-else-if="tab.name === 'Kredyt'" :deal-id="dealId" />
         <NotatkiTab v-else-if="tab.name === 'Notatki'" :deal-id="dealId" />
         <AktualizacjeTab v-else-if="tab.name === 'Trify'" :deal-id="dealId" :konfig="TRIFY" />
@@ -350,6 +351,7 @@ import AktualizacjeTab from '@/components/deal/AktualizacjeTab.vue'
 import AudytTab from '@/components/deal/AudytTab.vue'
 import AudytCPTab from '@/components/deal/AudytCPTab.vue'
 import UmowaTab from '@/components/deal/UmowaTab.vue'
+import UmowaCPTab from '@/components/deal/UmowaCPTab.vue'
 import KredytTab from '@/components/deal/KredytTab.vue'
 import MontazTabOze from '@/components/deal/MontazTabOze.vue'
 import NotatkiTab from '@/components/deal/NotatkiTab.vue'
@@ -641,7 +643,25 @@ const tabs = computed(() => {
   // position.
   let tabOptions = [
     { name: 'Zestaw', label: __('Zestaw'), icon: ZestawIcon },
-    { name: 'Umowa', label: __('Umowa'), icon: UmowaIcon },
+    {
+      name: 'Umowa',
+      label: __('Umowa'),
+      icon: UmowaIcon,
+      // Negated on CP (not `OZE_RODZAJE.has(...)`) so deals with an
+      // unset/unrecognised custom_rodzaj_umowy keep seeing this tab, same
+      // as the Audyt/AudytCP pair below.
+      condition: () => doc.value?.custom_rodzaj_umowy !== 'Czyste Powietrze',
+    },
+    {
+      // CP's own small "Umowa o świadczenie usług obsługi dofinansowania"
+      // form (UmowaCPTab, not UmowaTab) - mutually exclusive with 'Umowa'
+      // above; both share the label 'Umowa' and UmowaIcon but never appear
+      // together for the same deal (issue ops#212, mirrors Audyt/AudytCP).
+      name: 'UmowaCP',
+      label: __('Umowa'),
+      icon: UmowaIcon,
+      condition: () => doc.value?.custom_rodzaj_umowy === 'Czyste Powietrze',
+    },
     {
       name: 'Kredyt',
       label: __('Kredyt'),
