@@ -322,16 +322,11 @@ class CRMDeal(Document):
 	# procesu, Vue). Nowa kolumna "Zmiana" (klucz `modified`) zastępuje
 	# poprzedni brak jawnej kolumny czasu na liście.
 	#
-	# Kolumna "Szczegóły" celowo dzieli `key: "name"` z resztą (identyczny
-	# powód jak wcześniej, gdy dzieliła go z "Szansa"). Powód: pętla w
-	# `crm/api/doc.py:356-358` dopisuje każdy klucz kolumny do listy pól SQL (`rows`),
-	# więc pseudo-klucz bez odpowiadającego pola w bazie wywaliłby zapytanie — przycisk
-	# "Szczegóły" (render po stronie Vue, ikona chevron) musi więc siedzieć na
-	# realnym polu, a `name` jest identyfikatorem, do którego przycisk i tak nawiguje.
-	# Weryfikacja braku kolizji: `rows` już zawiera "name", więc kolumna trafia
-	# w warunek `if column.get("key") not in rows` jako "already present" i klucz nie
-	# dubluje się w zapytaniu; `meta.get_field("name")` zwraca None (to nie DocField,
-	# tylko klucz główny), więc kolumna nie zostaje usunięta jako ukryta.
+	# Pseudo kolumna "Szczegóły" (dzieliła `key: "name"` z resztą) istniała
+	# od b45 do b65, usunięta decyzją właściciela 2026 09 29 (runda 3 klik
+	# testu). `name` zostaje w `rows` mimo braku własnej kolumny, bo komórka
+	# klienta (`lead_name`) pokazuje go jako drugą linię (nazwa dokumentu
+	# szansy, np. "PRO/PVME/26/1022").
 	@staticmethod
 	def default_list_data():
 		columns = [
@@ -345,14 +340,14 @@ class CRMDeal(Document):
 				"label": "Rodzaj",
 				"type": "Select",
 				"key": "custom_rodzaj_umowy",
-				"width": "5rem",
+				"width": "3.5rem",
 			},
 			{
 				"label": "Etap procesu",
 				"type": "Link",
 				"options": "CRM Deal Status",
 				"key": "status",
-				"width": "14rem",
+				"width": "16rem",
 			},
 			{
 				"label": "Doradca",
@@ -372,12 +367,6 @@ class CRMDeal(Document):
 				"type": "Datetime",
 				"key": "modified",
 				"width": "8rem",
-			},
-			{
-				"label": "Szczegóły",
-				"type": "Data",
-				"key": "name",
-				"width": "5rem",
 			},
 		]
 		rows = [
