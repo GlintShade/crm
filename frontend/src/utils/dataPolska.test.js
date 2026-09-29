@@ -4,6 +4,7 @@ import {
   MIESIACE_SKROT,
   formatujTermin,
   terminWzgledny,
+  relatywnie,
 } from '@/utils/dataPolska'
 
 describe('DNI_TYGODNIA_SKROT / MIESIACE_SKROT', () => {
@@ -117,5 +118,59 @@ describe('terminWzgledny', () => {
   it('zwraca "" dla niepoprawnego "teraz"', () => {
     expect(terminWzgledny('2026-09-29 09:00:00', new Date('abc'))).toBe('')
     expect(terminWzgledny('2026-09-29 09:00:00', 'nie-data')).toBe('')
+  })
+})
+
+describe('relatywnie', () => {
+  const teraz = new Date(2026, 8, 29, 12, 0, 0) // 2026-09-29 12:00 (wtorek)
+
+  it('"dziś HH:MM" dla różnicy 0 minut (dokładnie "teraz")', () => {
+    expect(relatywnie('2026-09-29 12:00:00', teraz)).toBe('dziś 12:00')
+  })
+
+  it('"dziś HH:MM" dla innej godziny tego samego dnia kalendarzowego', () => {
+    expect(relatywnie('2026-09-29 00:00:00', teraz)).toBe('dziś 00:00')
+    expect(relatywnie('2026-09-29 23:59:00', teraz)).toBe('dziś 23:59')
+  })
+
+  it('"wczoraj" dla 23:59 dnia poprzedzającego "teraz" (mniej niż godzina różnicy)', () => {
+    expect(relatywnie('2026-09-28 23:59:00', teraz)).toBe('wczoraj')
+  })
+
+  it('"wczoraj" dla dowolnej godziny dnia poprzedzającego', () => {
+    expect(relatywnie('2026-09-28 00:00:00', teraz)).toBe('wczoraj')
+    expect(relatywnie('2026-09-28 08:30:00', teraz)).toBe('wczoraj')
+  })
+
+  it('"N dni temu" w zakresie 2-30 dni', () => {
+    expect(relatywnie('2026-09-27 10:00:00', teraz)).toBe('2 dni temu')
+    expect(relatywnie('2026-09-20 10:00:00', teraz)).toBe('9 dni temu')
+  })
+
+  it('dokładnie 30 dni: jeszcze "N dni temu"', () => {
+    expect(relatywnie('2026-08-30 10:00:00', teraz)).toBe('30 dni temu')
+  })
+
+  it('31 dni: już pełna data DD.MM.RRRR', () => {
+    expect(relatywnie('2026-08-29 10:00:00', teraz)).toBe('29.08.2026')
+  })
+
+  it('data znacznie starsza: pełna data DD.MM.RRRR', () => {
+    expect(relatywnie('2026-01-05 10:00:00', teraz)).toBe('05.01.2026')
+  })
+
+  it('zwraca "" dla pustego/niepoprawnego wejścia', () => {
+    expect(relatywnie('', teraz)).toBe('')
+    expect(relatywnie(null, teraz)).toBe('')
+    expect(relatywnie(undefined, teraz)).toBe('')
+    expect(relatywnie('abc', teraz)).toBe('')
+  })
+
+  it('domyślny "teraz" to new Date() (nie rzuca, zwraca string)', () => {
+    expect(typeof relatywnie('2026-09-29 09:00:00')).toBe('string')
+  })
+
+  it('przyjmuje obiekt Date jako wejście', () => {
+    expect(relatywnie(new Date(2026, 8, 28, 23, 59), teraz)).toBe('wczoraj')
   })
 })
