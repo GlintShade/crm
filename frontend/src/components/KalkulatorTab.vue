@@ -192,7 +192,7 @@
                   <div class="mt-0.5 text-xs text-ink-gray-4">
                     {{ ppozProgLive
                       ? 'Wymagane automatycznie: suma mocy nowej i istniejącej instalacji przekracza 6,5 kW.'
-                      : 'Ustaw Tak ręcznie, gdy klient ma instalację, ale nie zna jej dokładnej mocy.' }}
+                      : 'Ustaw Tak ręcznie, jeśli aktualna moc PV i dokładana moc PV w sumie przekroczą 6,5 kW.' }}
                   </div>
                 </div>
 
