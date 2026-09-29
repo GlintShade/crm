@@ -98,19 +98,7 @@
         </template>
         <template #default="{ label }">
           <div
-            v-if="column.label === 'Szczegóły'"
-            class="flex items-center justify-center"
-          >
-            <Button
-              variant="ghost"
-              size="sm"
-              icon="lucide-chevron-right"
-              :title="__('Szczegóły')"
-              @click.stop.prevent="() => goToDeal(row)"
-            />
-          </div>
-          <div
-            v-else-if="column.key === 'lead_name'"
+            v-if="column.key === 'lead_name'"
             class="flex flex-col overflow-hidden py-1 leading-tight"
           >
             <span v-if="item?.label" class="truncate font-medium text-ink-gray-9">
@@ -332,7 +320,7 @@ import {
 import { sessionStore } from '@/stores/session'
 import { usersStore } from '@/stores/users'
 import { ref, computed, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 
 defineProps({
   rows: { type: Array, required: true },
@@ -360,7 +348,6 @@ const emit = defineEmits([
 ])
 
 const route = useRoute()
-const router = useRouter()
 
 const pageLengthCount = defineModel({ type: Number })
 const list = defineModel('list', { type: Object })
@@ -371,19 +358,16 @@ function getLabel(label, column) {
   return label
 }
 
-// Same destination the default row click already navigates to (see
-// getRowRoute below) — kept as one function so the "Szczegóły" button and
-// the row-level link never drift apart.
+// Destination for the whole row link (ListView options.getRowRoute below).
+// The Szczegoly icon column that used to call this through a separate
+// goToDeal helper was removed by owner decision (round 3 click test,
+// 2026 09 29), so this function is now used only here.
 function dealRoute(row) {
   return {
     name: 'Deal',
     params: { dealId: row.name },
     query: { view: route.query.view, viewType: route.params.viewType },
   }
-}
-
-function goToDeal(row) {
-  router.push(dealRoute(row))
 }
 
 // Pasek postępu procesu pod odznaką statusu (kolumna "Etap procesu",
