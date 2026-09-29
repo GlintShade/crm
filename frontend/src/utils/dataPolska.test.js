@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { DNI_TYGODNIA_SKROT, MIESIACE_SKROT, formatujTermin } from '@/utils/dataPolska'
+import {
+  DNI_TYGODNIA_SKROT,
+  MIESIACE_SKROT,
+  formatujTermin,
+  terminWzgledny,
+} from '@/utils/dataPolska'
 
 describe('DNI_TYGODNIA_SKROT / MIESIACE_SKROT', () => {
   it('mają po 7 i 12 wpisów', () => {
@@ -60,5 +65,57 @@ describe('formatujTermin', () => {
 
   it('zwraca "" dla niepoprawnego miesiąca (13)', () => {
     expect(formatujTermin('2026-13-01 10:00:00')).toBe('')
+  })
+})
+
+describe('terminWzgledny', () => {
+  const teraz = new Date(2026, 8, 29, 12, 0, 0) // 2026-09-29 12:00 (wtorek)
+
+  it('"dziś" dla tego samego dnia kalendarzowego, niezależnie od godziny', () => {
+    expect(terminWzgledny('2026-09-29 09:00:00', teraz)).toBe('dziś')
+    expect(terminWzgledny('2026-09-29 23:59:00', teraz)).toBe('dziś')
+    expect(terminWzgledny('2026-09-29 00:00:00', teraz)).toBe('dziś')
+  })
+
+  it('"jutro" dla następnego dnia kalendarzowego', () => {
+    expect(terminWzgledny('2026-09-30 08:00:00', teraz)).toBe('jutro')
+  })
+
+  it('"za {0} dni" dla terminów dalej w przyszłości', () => {
+    expect(terminWzgledny('2026-10-04 08:00:00', teraz)).toBe('za 5 dni')
+    expect(terminWzgledny('2026-10-02 08:00:00', teraz)).toBe('za 3 dni')
+  })
+
+  it('"Termin minął {0} dni temu" dla terminów w przeszłości', () => {
+    expect(terminWzgledny('2026-09-28 08:00:00', teraz)).toBe('Termin minął 1 dni temu')
+    expect(terminWzgledny('2026-09-24 08:00:00', teraz)).toBe('Termin minął 5 dni temu')
+  })
+
+  it('porównuje wyłącznie dzień kalendarzowy, nie 24h od "teraz"', () => {
+    // "teraz" to 29.09 12:00 - termin jutro o 01:00 jest tylko 13h w przodzie,
+    // ale to inny dzień kalendarzowy, więc ma być "jutro", nie "dziś".
+    expect(terminWzgledny('2026-09-30 01:00:00', teraz)).toBe('jutro')
+    // I odwrotnie: termin dziś o 23:00 to "dziś", mimo że to prawie 11h stąd.
+    expect(terminWzgledny('2026-09-29 23:00:00', teraz)).toBe('dziś')
+  })
+
+  it('przyjmuje obiekt Date jako dataCzas', () => {
+    expect(terminWzgledny(new Date(2026, 8, 30, 8, 0), teraz)).toBe('jutro')
+  })
+
+  it('domyślny "teraz" to new Date() (nie rzuca, zwraca string)', () => {
+    expect(typeof terminWzgledny('2026-09-29 09:00:00')).toBe('string')
+  })
+
+  it('zwraca "" dla pustego/niepoprawnego dataCzas', () => {
+    expect(terminWzgledny('', teraz)).toBe('')
+    expect(terminWzgledny(null, teraz)).toBe('')
+    expect(terminWzgledny(undefined, teraz)).toBe('')
+    expect(terminWzgledny('abc', teraz)).toBe('')
+  })
+
+  it('zwraca "" dla niepoprawnego "teraz"', () => {
+    expect(terminWzgledny('2026-09-29 09:00:00', new Date('abc'))).toBe('')
+    expect(terminWzgledny('2026-09-29 09:00:00', 'nie-data')).toBe('')
   })
 })

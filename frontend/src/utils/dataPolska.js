@@ -34,6 +34,60 @@ export const MIESIACE_SKROT = [
 const WZORZEC_DATY_CZASU = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$/
 
 /**
+ * Rozbiera surowy Datetime (string albo obiekt Date) na części
+ * kalendarzowe, bez interpretacji strefy czasowej (patrz komentarz przy
+ * `formatujTermin` - `new Date(string)` na wejściu tekstowym
+ * zniekształciłaby godzinę). Wspólny parser dla `formatujTermin` i
+ * `terminWzgledny`, żeby tolerancyjny regex i walidacja istniały w jednym
+ * miejscu.
+ *
+ * @param {string|Date} dataCzas
+ * @returns {{rok: number, miesiac: number, dzien: number, godzina: number, minuta: number}|null}
+ */
+function rozbierzDataCzas(dataCzas) {
+  if (dataCzas === null || dataCzas === undefined || dataCzas === '') return null
+
+  let rok, miesiac, dzien, godzina, minuta
+
+  if (dataCzas instanceof Date) {
+    if (Number.isNaN(dataCzas.getTime())) return null
+    rok = dataCzas.getFullYear()
+    miesiac = dataCzas.getMonth() + 1
+    dzien = dataCzas.getDate()
+    godzina = dataCzas.getHours()
+    minuta = dataCzas.getMinutes()
+  } else if (typeof dataCzas === 'string') {
+    const dopasowanie = WZORZEC_DATY_CZASU.exec(dataCzas)
+    if (!dopasowanie) return null
+    rok = Number(dopasowanie[1])
+    miesiac = Number(dopasowanie[2])
+    dzien = Number(dopasowanie[3])
+    godzina = Number(dopasowanie[4])
+    minuta = Number(dopasowanie[5])
+  } else {
+    return null
+  }
+
+  if (miesiac < 1 || miesiac > 12) return null
+  if (dzien < 1 || dzien > 31) return null
+  if (godzina < 0 || godzina > 23) return null
+  if (minuta < 0 || minuta > 59) return null
+
+  const data = new Date(rok, miesiac - 1, dzien)
+  // Odrzuca daty nieistniejące (np. 31 lutego), które JS po cichu przesuwa
+  // na kolejny miesiąc zamiast rzucić błąd.
+  if (
+    data.getFullYear() !== rok ||
+    data.getMonth() !== miesiac - 1 ||
+    data.getDate() !== dzien
+  ) {
+    return null
+  }
+
+  return { rok, miesiac, dzien, godzina, minuta }
+}
+
+/**
  * Formatuje datę/czas na polski zapis dla dymka mapy: skrót dnia tygodnia,
  * dzień bez zera wiodącego, skrót miesiąca, rok, godzina HH:mm (24h).
  *
@@ -47,49 +101,51 @@ const WZORZEC_DATY_CZASU = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2
  * @returns {string} np. "pt., 25 wrz 2026, 17:00", albo '' gdy wejście puste/niepoprawne
  */
 export function formatujTermin(dataCzas) {
-  if (dataCzas === null || dataCzas === undefined || dataCzas === '') return ''
+  const czesci = rozbierzDataCzas(dataCzas)
+  if (!czesci) return ''
 
-  let rok, miesiac, dzien, godzina, minuta
-
-  if (dataCzas instanceof Date) {
-    if (Number.isNaN(dataCzas.getTime())) return ''
-    rok = dataCzas.getFullYear()
-    miesiac = dataCzas.getMonth() + 1
-    dzien = dataCzas.getDate()
-    godzina = dataCzas.getHours()
-    minuta = dataCzas.getMinutes()
-  } else if (typeof dataCzas === 'string') {
-    const dopasowanie = WZORZEC_DATY_CZASU.exec(dataCzas)
-    if (!dopasowanie) return ''
-    rok = Number(dopasowanie[1])
-    miesiac = Number(dopasowanie[2])
-    dzien = Number(dopasowanie[3])
-    godzina = Number(dopasowanie[4])
-    minuta = Number(dopasowanie[5])
-  } else {
-    return ''
-  }
-
-  if (miesiac < 1 || miesiac > 12) return ''
-  if (dzien < 1 || dzien > 31) return ''
-  if (godzina < 0 || godzina > 23) return ''
-  if (minuta < 0 || minuta > 59) return ''
-
+  const { rok, miesiac, dzien, godzina, minuta } = czesci
   const data = new Date(rok, miesiac - 1, dzien)
-  // Odrzuca daty nieistniejące (np. 31 lutego), które JS po cichu przesuwa
-  // na kolejny miesiąc zamiast rzucić błąd.
-  if (
-    data.getFullYear() !== rok ||
-    data.getMonth() !== miesiac - 1 ||
-    data.getDate() !== dzien
-  ) {
-    return ''
-  }
-
   const dzienTygodnia = DNI_TYGODNIA_SKROT[data.getDay()]
   const miesiacSkrot = MIESIACE_SKROT[miesiac - 1]
   const godzinaStr = String(godzina).padStart(2, '0')
   const minutaStr = String(minuta).padStart(2, '0')
 
   return `${dzienTygodnia}, ${dzien} ${miesiacSkrot} ${rok}, ${godzinaStr}:${minutaStr}`
+}
+
+/**
+ * Tekst względny terminu (panel właściwości TaskModal.vue, issue
+ * GlintShade/proenergy-crm-ops#208): "dziś", "jutro", "za N dni" dla
+ * terminów w przyszłości, "Termin minął N dni temu" dla przeszłych,
+ * porównanie WYŁĄCZNIE po dniu kalendarzowym (godzina/minuta terminu nie
+ * wpływają na wynik) względem `teraz`.
+ *
+ * Frappe-free (bez importu `__`, `frappe-ui` ani dayjs) - zwraca gotowy,
+ * surowy polski tekst, dokładnie jak `formatujTermin` powyżej; wołający
+ * wyświetla go wprost, bez owijania w `__()`.
+ *
+ * Różnica dni liczona przez `Date.UTC(rok, miesiac - 1, dzien)` dla obu dat
+ * kalendarzowych (nie przez odejmowanie dwóch `Date` z godziną/minutą) -
+ * unika przesunięć przy zmianie czasu (DST) i przy różnicy godzin między
+ * terminem a `teraz` w tym samym dniu.
+ *
+ * @param {string|Date} dataCzas surowy Datetime z Frappe albo obiekt Date
+ * @param {Date} [teraz] punkt odniesienia "teraz" (domyślnie `new Date()`)
+ * @returns {string} np. "dziś", "jutro", "za 5 dni", "Termin minął 3 dni temu",
+ *   albo '' gdy `dataCzas` puste/niepoprawne
+ */
+export function terminWzgledny(dataCzas, teraz = new Date()) {
+  const czesci = rozbierzDataCzas(dataCzas)
+  if (!czesci) return ''
+  if (!(teraz instanceof Date) || Number.isNaN(teraz.getTime())) return ''
+
+  const dzienDocelowy = Date.UTC(czesci.rok, czesci.miesiac - 1, czesci.dzien)
+  const dzienDzisiejszy = Date.UTC(teraz.getFullYear(), teraz.getMonth(), teraz.getDate())
+  const roznicaDni = Math.round((dzienDocelowy - dzienDzisiejszy) / 86400000)
+
+  if (roznicaDni === 0) return 'dziś'
+  if (roznicaDni === 1) return 'jutro'
+  if (roznicaDni > 1) return `za ${roznicaDni} dni`
+  return `Termin minął ${Math.abs(roznicaDni)} dni temu`
 }
