@@ -429,16 +429,29 @@ function onColumnWidthUpdated(payload) {
 // z zapisanym widokiem = to, co w nim jest), żaden nowy, osobny mechanizm.
 //
 // Mierzymy po kluczu przez atrybut `data-fit="klucz-kolumny"` na
-// elementach treści komórek (patrz szablon wyżej) - `element.scrollWidth`
-// zwraca pełną szerokość treści nawet gdy element jest wizualnie obcięty
-// klasą `truncate` (overflow:hidden + text-overflow:ellipsis nie zmieniają
-// scrollWidth). Nagłówek kolumny NIE jest mierzony w DOM (zależałoby to od
-// wewnętrznej struktury frappe-ui's ListHeaderItem.vue, której ta lista
-// nie kontroluje) - zamiast tego każda kolumna ma bezpieczny, ręcznie
-// dobrany próg minimalny w MIN_SZEROKOSC_PX, wystarczający na jej własną
-// etykietę nagłówka (a dla "Etap procesu" dodatkowo na pasek segmentów i
-// najdłuższy realny status, "Weryfikacja Backoffice" - stały próg, żeby
-// kolumna nie skakała w zależności od tego, co akurat jest na stronie).
+// elementach treści komórek (patrz szablon wyżej). Nagłówek kolumny NIE
+// jest mierzony w DOM (zależałoby to od wewnętrznej struktury frappe-ui's
+// ListHeaderItem.vue, której ta lista nie kontroluje) - zamiast tego każda
+// kolumna ma bezpieczny, ręcznie dobrany próg minimalny w MIN_SZEROKOSC_PX,
+// wystarczający na jej własną etykietę nagłówka (a dla "Etap procesu"
+// dodatkowo na pasek segmentów i najdłuższy realny status, "Weryfikacja
+// Backoffice" - stały próg, żeby kolumna nie skakała w zależności od tego,
+// co akurat jest na stronie).
+//
+// PUŁAPKA znaleziona w QA tej rundy (2026 09 29): `element.scrollWidth`
+// zwraca szerokość WŁASNEGO BOX-u elementu, nie treści, gdy treść jest
+// WĘŻSZA niż box - `scrollWidth` "widzi" nadmiar tylko wtedy, gdy treść
+// PRZEPEŁNIA box, w przeciwnym razie zwraca po prostu `clientWidth`. Każdy
+// znaczony `[data-fit]` element w tym pliku jest w praktyce rozciągnięty:
+// świeża kolumna bez `.width` startuje z równym udziałem `1fr` (patrz
+// `getGridTemplateColumns` we frappe-ui), więc w momencie pomiaru krótki
+// numer telefonu siedzi w komórce już rozciągniętej do tego 1fr-owego
+// udziału - `scrollWidth` mierzył więc box, nie tekst, i Telefon/Mail
+// wychodziły identyczne (obie kolumny zaczynają z tym samym udziałem).
+// Naprawa: mierzyć faktyczny layout TREŚCI przez `Range` zamiast rozmiaru
+// elementu - `Range.getBoundingClientRect()` zwraca geometrię
+// wyrenderowanego tekstu, niezależną od tego, jak szeroki jest
+// zawierający go box.
 //
 // `document.querySelectorAll` (nie zawężone do korzenia tego komponentu)
 // zakłada jedną listę Umowy na raz na stronie - trasa montuje dokładnie
@@ -453,8 +466,33 @@ const MIN_SZEROKOSC_PX = {
   modified: 70, // "Zmiana"
 }
 const KOLUMNY_Z_IKONA_PREFIKSU = new Set(['mobile_no']) // ikona telefonu w #prefix (h-4 w-4 + gap-2)
-const ODDECH_PX = 24 // gap-2 w ListRowItem miedzy tresc/prefix/suffix + odrobina oddechu
-const IKONA_PREFIKSU_PX = 24 // 16px ikona + 8px gap
+// 12px, nie 24 (QA rundy 5, 2026 09 29): z poprawnym pomiarem tresci (Range,
+// nie scrollWidth) siedem kolumn z 24px oddechu kazda sumowalo sie do 1340px
+// tresci - wiecej niz miejsce dostepne na 1680px (zmierzone
+// scrollWidth>clientWidth na korzeniu ListView.vue, realny poziomy scroll,
+// „Zmiana" wypychana poza widok). Zadna z kolumn nie ma wlasnego paddingu
+// (ListRowItem to "flex items-center gap-2" bez px, gap dziala tylko MIEDZY
+// wieloma dziecmi, a wiekszosc kolumn ma tu tylko jedno) - 24px bylo czystym
+// zapasem bez konkretnego uzasadnienia. 12px dalej daje realny oddech
+// (zweryfikowane: 0/350 obcietych komorek na 1680 i 1280px) i miesci
+// wszystkie siedem kolumn w 1680px bez przewijania w poziomie.
+const ODDECH_PX = 12
+const IKONA_PREFIKSU_PX = 24 // 16px ikona + 8px gap (rzeczywisty, mierzony rozmiar - nie ruszane)
+
+// Szerokość faktycznie wyrenderowanej treści elementu (tekst i inline
+// dzieci), nie szerokość jego (być może rozciągniętego) boxu - patrz
+// pułapka opisana wyżej. `Range.selectNodeContents` + `getBoundingClientRect`
+// jest odporne na to, czy element jest blokowy/rozciągnięty flexem/gridem:
+// mierzy geometrię samej treści, tak jak by ją zaznaczyć myszką.
+function szerokoscTresci(el) {
+  if (!el || el.offsetParent === null) return 0 // display:none / niewidoczny (szybki filtr)
+  const zakres = document.createRange()
+  zakres.selectNodeContents(el)
+  const prostokat = zakres.getBoundingClientRect()
+  zakres.detach?.()
+  if (!prostokat || (prostokat.width === 0 && prostokat.height === 0)) return 0
+  return prostokat.width
+}
 
 function autoDopasujKolumny() {
   const kolumny = list.value?.data?.columns
@@ -468,7 +506,8 @@ function autoDopasujKolumny() {
     const elementy = document.querySelectorAll(`[data-fit="${col.key}"]`)
     let najszersza = 0
     elementy.forEach((el) => {
-      if (el.scrollWidth > najszersza) najszersza = el.scrollWidth
+      const w = szerokoscTresci(el)
+      if (w > najszersza) najszersza = w
     })
     if (najszersza === 0) continue
     let szerokosc = najszersza + ODDECH_PX
