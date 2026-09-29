@@ -223,7 +223,7 @@
       rowHeight: 44,
     }"
     @loadMore="() => loadMore++"
-    @columnWidthUpdated="() => triggerResize++"
+    @columnWidthUpdated="onColumnWidthUpdated"
     @updatePageCount="(count) => (updatedPageCount = count)"
     @applyLikeFilter="(data) => viewControls.applyLikeFilter(data)"
     @likeDoc="(data) => viewControls.likeDoc(data)"
@@ -301,6 +301,34 @@ const loadMore = ref(1)
 const triggerResize = ref(1)
 const updatedPageCount = ref(20)
 const viewControls = ref(null)
+
+// Zmiana szerokosci kolumny przeciaganiem naglowka (runda 4 klik-testu,
+// 2026 09 29). DealsListView.vue juz zmutowalo `deals.data.columns[i].width`
+// na zywo na KAZDY ruch myszy (widoczne od razu, bez zadnego zapytania do
+// serwera - patrz komentarz w DealsListView.vue's onColumnWidthUpdated).
+// Trwaly zapis (przetrwac reload) idzie juz istniejacym mechanizmem tego
+// pliku: `watch(resizeColumn, ...)` w ViewControls.vue wola updateColumns()
+// za kazdym razem, gdy `triggerResize` (tu, model `resizeColumn` tamtejszy)
+// sie zmieni - dlatego inkrementujemy go TYLKO na potwierdzonym,
+// odebouncowanym zapisie (`payload.save`, ustawianym przez frappe-ui 1 s po
+// ostatnim ruchu), NIGDY na kazdym surowym mousemove. Zrobienie tego na
+// kazdym ruchu (pierwsza wersja tej poprawki, zanim ponizszy warunek
+// powstal) wysylalo 10+ nakladajacych sie zapisow na jedno przeciagniecie i
+// gubilo sie w Frappe'owym optymistycznym blokowaniu (QueryDeadlockError
+// "Record has changed since last read"), zlapane headlessem w tej rundzie -
+// gotowa architektura tego pliku (triggerResize -> watch -> updateColumns)
+// juz istniala, brakowalo tylko poprawnego `.value` (patrz nizej) i
+// gate'owania na `save`.
+function onColumnWidthUpdated(payload) {
+  if (!payload?.save) return
+  // triggerResize.value++ (nie triggerResize++): to zwykla funkcja w
+  // <script setup>, nie wyrazenie szablonu - magia auto-odpakowania refa
+  // dziala tylko w <template>. Stary kod (`@columnWidthUpdated="() =>
+  // triggerResize++"`) dzialal, bo byl inline w szablonie; przeniesiony tu
+  // bez zmiany na `.value` rzucalby "Assignment to constant variable" i
+  // cichlaby przerywal cala funkcje.
+  triggerResize.value++
+}
 
 function getRow(name, field) {
   function getValue(value) {

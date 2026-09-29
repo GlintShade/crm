@@ -48,8 +48,8 @@ describe('kolorStatusuZadania', () => {
 })
 
 describe('kolorPriorytetuZadania', () => {
-  it('Low -> gray', () => {
-    expect(kolorPriorytetuZadania('Low')).toBe('gray')
+  it('Low -> blue (nie szary, decyzja wlasciciela 2026-09-29)', () => {
+    expect(kolorPriorytetuZadania('Low')).toBe('blue')
   })
 
   it('Medium -> yellow', () => {
@@ -69,6 +69,10 @@ describe('tloWybranegoStatusu / tloWybranegoPriorytetu', () => {
   it('zwraca literalne klasy tla+tekstu dla znanego koloru', () => {
     expect(tloWybranegoStatusu('In Progress')).toBe('bg-blue-100 text-blue-800')
     expect(tloWybranegoPriorytetu('High')).toBe('bg-red-100 text-red-800')
+  })
+
+  it('Niski priorytet ma niebieskie tlo (nie szare)', () => {
+    expect(tloWybranegoPriorytetu('Low')).toBe('bg-blue-100 text-blue-800')
   })
 
   it('nigdy nie zwraca pustego stringa dla nieznanej wartosci', () => {

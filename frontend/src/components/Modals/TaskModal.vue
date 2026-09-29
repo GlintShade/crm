@@ -100,21 +100,42 @@
 
             <div
               v-if="editMode"
-              class="flex flex-col gap-1 border-t border-outline-gray-2 pt-3 text-sm text-ink-gray-5"
+              class="flex flex-col gap-2 border-t border-outline-gray-2 pt-3 text-sm"
             >
               <div class="text-xs font-medium uppercase tracking-wide text-ink-gray-4">
                 {{ __('Historia') }}
               </div>
-              <div>{{ __('Utworzone {0}', [utworzoneTekst]) }}</div>
-              <div>{{ __('Ostatnia zmiana {0}', [ostatniaZmianaTekst]) }}</div>
+              <div class="grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-2">
+                <div class="text-ink-gray-5">{{ __('Utworzone') }}</div>
+                <div class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                  <UserAvatar v-if="doc.owner" :user="doc.owner" size="xs" />
+                  <span class="font-medium text-ink-gray-8">{{ utworzoneAutor }}</span>
+                  <span class="text-ink-gray-5">·</span>
+                  <span class="text-ink-gray-5">{{ utworzoneData }}</span>
+                </div>
+
+                <template v-if="pokazOstatniaZmiane">
+                  <div class="text-ink-gray-5">{{ __('Ostatnia zmiana') }}</div>
+                  <div class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                    <UserAvatar v-if="doc.modified_by" :user="doc.modified_by" size="xs" />
+                    <span class="font-medium text-ink-gray-8">{{ ostatniaZmianaAutor }}</span>
+                    <span class="text-ink-gray-5">·</span>
+                    <span class="text-ink-gray-5">{{ ostatniaZmianaData }}</span>
+                  </div>
+                </template>
+              </div>
             </div>
 
             <ErrorMessage v-if="error" :message="__(error)" />
           </div>
 
-          <!-- Prawa kolumna: panel właściwości -->
+          <!-- Prawa kolumna: panel właściwości - blok zamknięty z czterech
+          stron na mobile (border-t, pełna szerokość); na sm+ krawędź
+          górna+dolna+lewa (border-y+border-l, bez prawej, bo dochodzi do
+          krawędzi okna dialogu - patrz komentarz przy szablonie u góry
+          pliku), self-stretch na pełną wysokość wiersza siatki. -->
           <div
-            class="mt-4 flex flex-col gap-5 border-t border-outline-gray-2 bg-surface-gray-1 p-4 sm:mt-0 sm:border-l sm:border-t-0"
+            class="mt-4 flex flex-col gap-5 self-stretch border-t border-outline-gray-2 bg-surface-gray-1 p-4 sm:mt-0 sm:rounded-l-lg sm:border-b sm:border-l"
           >
             <div>
               <div class="mb-2 text-sm text-ink-gray-5">{{ __('Status') }}</div>
@@ -314,15 +335,25 @@ function otworzReferencje() {
 }
 
 // Historia (tylko w trybie edycji) - metadane dokumentu, bez Version.
-const utworzoneTekst = computed(() => {
-  const data = formatujTermin(doc.value.creation)
-  const autor = doc.value.owner ? getUser(doc.value.owner).full_name : ''
-  return [data, autor].filter(Boolean).join(' · ')
-})
-const ostatniaZmianaTekst = computed(() => {
-  const data = formatujTermin(doc.value.modified)
-  const autor = doc.value.modified_by ? getUser(doc.value.modified_by).full_name : ''
-  return [data, autor].filter(Boolean).join(' · ')
+// Dwa rzedy siatki (etykieta + avatar/autor/data) zamiast jednej dlugiej
+// linii - patrz szablon powyzej. Rzad "Ostatnia zmiana" pokazuje sie tylko
+// gdy faktycznie cos wnosi: pomijany, gdy `modified` pada w tej samej
+// minucie co `creation` (porownanie przez `formatujTermin`, ktory tnie do
+// minuty) I `modified_by` rowna sie `owner` - inaczej druga linia
+// powtarzalaby dokladnie te sama informacje co pierwsza.
+const utworzoneAutor = computed(() => (doc.value.owner ? getUser(doc.value.owner).full_name : ''))
+const utworzoneData = computed(() => formatujTermin(doc.value.creation))
+const ostatniaZmianaAutor = computed(() =>
+  doc.value.modified_by ? getUser(doc.value.modified_by).full_name : '',
+)
+const ostatniaZmianaData = computed(() => formatujTermin(doc.value.modified))
+const pokazOstatniaZmiane = computed(() => {
+  const takaSamaChwila =
+    doc.value.creation &&
+    doc.value.modified &&
+    formatujTermin(doc.value.creation) === formatujTermin(doc.value.modified)
+  const takiSamAutor = doc.value.modified_by === doc.value.owner
+  return !(takaSamaChwila && takiSamAutor)
 })
 
 // Ten sam format co Field.vue dla Datetime (onlyDate+onlyTime, withDate
