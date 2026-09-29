@@ -309,25 +309,14 @@ class CRMDeal(Document):
 	# `organization` zniknęło z kolumn: jest ukryte (hidden=1) i puste w każdej szansie,
 	# a `crm/api/doc.py:365-368` i tak wyrzuca ukryte kolumny w locie.
 	#
-	# VOLTEO (b65): "wariant B", układ hybrydowy (runda 4 klik-testu, 2026 09 29,
-	# decyzja właściciela po klik-teście rundy 3) - wiersz dwuliniowy (44px),
-	# siedem kolumn. Kolumna "Klient / szansa" (klucz `lead_name`) niesie dwie
-	# linie po stronie Vue (imię klienta i nazwa dokumentu szansy, np.
-	# "PRO/PVME/26/1022") - dawna osobna kolumna "Szansa" (też `key: "name"`)
-	# zniknęła, ta treść przeniosła się pod nazwę klienta. "Status" zmienił się
-	# na "Etap procesu" (odznaka + pasek segmentów procesu, Vue, DealsListView.vue).
-	# "Doradca" (klucz `deal_owner`) wrócił do samego imienia i nazwiska, bez
-	# avatara (był w wariancie B, usunięty na żądanie właściciela). "Telefon"
-	# (klucz `mobile_no`) i "Mail" (klucz `email`) wróciły do dwóch osobnych
-	# kolumn zamiast jednej scalonej "Kontakt" - `email` była już w `rows`
-	# poniżej (serwer i tak ją pobierał), teraz dostaje też własną kolumnę.
-	# "Zmiana" (klucz `modified`) zastępuje poprzedni brak jawnej kolumny czasu.
-	#
-	# Pseudo kolumna "Szczegóły" (dzieliła `key: "name"` z resztą) istniała
-	# od b45 do b65, usunięta decyzją właściciela 2026 09 29 (runda 3 klik
-	# testu). `name` zostaje w `rows` mimo braku własnej kolumny, bo komórka
-	# klienta (`lead_name`) pokazuje go jako drugą linię (nazwa dokumentu
-	# szansy, np. "PRO/PVME/26/1022").
+	# VOLTEO (b65, runda 5 klik-testu, 2026 09 29, decyzja właściciela): "Klient"
+	# i "Szansa" wracają jako dwie osobne kolumny, jak na produkcji, zamiast
+	# jednej dwuliniowej komórki "Klient / szansa" z rundy 4. "Klient" (klucz
+	# `lead_name`) to teraz jedna linia, samo imię klienta. "Szansa" (klucz
+	# `name`) to numer dokumentu szansy, np. "PRO/PVME/26/1022" - `name` był
+	# już w `rows` poniżej (druga linia dawnej komórki), teraz dostaje też
+	# własną kolumnę. Reszta układu (Rodzaj/Etap procesu/Doradca/Telefon/
+	# Mail/Zmiana) bez zmian wobec rundy 4.
 	#
 	# Celowo BEZ klucza "width" na żadnej kolumnie (runda 4): frontend
 	# (DealsListView.vue) mierzy po renderze najszerszą komórkę każdej
@@ -341,9 +330,14 @@ class CRMDeal(Document):
 	def default_list_data():
 		columns = [
 			{
-				"label": "Klient / szansa",
+				"label": "Klient",
 				"type": "Data",
 				"key": "lead_name",
+			},
+			{
+				"label": "Szansa",
+				"type": "Data",
+				"key": "name",
 			},
 			{
 				"label": "Rodzaj",

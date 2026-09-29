@@ -485,12 +485,13 @@ function parseRows(rows, columns = []) {
           raw: deal.custom_rodzaj_umowy || '',
         }
       } else if (row == 'lead_name') {
-        // VOLTEO (b65): kolumna "Klient / szansa" - druga linia (nazwa
-        // dokumentu szansy) dojeżdża obok istniejącego `label` (imię
-        // klienta), które wcześniej było jedyną treścią tego pola.
+        // VOLTEO (b65, runda 5): kolumna "Klient", z powrotem jedna linia,
+        // samo imię klienta - "Szansa" (klucz `name`) jest teraz osobną
+        // kolumną obok niej. `name` samo w sobie nie potrzebuje żadnej
+        // transformacji tutaj (zwykły string z `rows`), renderuje się przez
+        // generyczny fallback w DealsListView.vue.
         _rows[row] = {
           label: deal.lead_name,
-          dealName: deal.name,
         }
       } else if (row == 'mobile_no') {
         // VOLTEO (b65, hybryda runda 4): kolumna "Telefon", jedna linia

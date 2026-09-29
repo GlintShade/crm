@@ -90,7 +90,7 @@
         <template #default="{ label }">
           <div
             v-if="column.key === 'lead_name'"
-            class="flex flex-col overflow-hidden py-1 leading-tight"
+            class="overflow-hidden"
           >
             <span
               v-if="item?.label"
@@ -102,9 +102,13 @@
             <span v-else class="truncate italic text-ink-gray-4" data-fit="lead_name">
               {{ __('brak klienta') }}
             </span>
-            <span class="truncate text-sm text-ink-gray-5" data-fit="lead_name">{{
-              item?.dealName
-            }}</span>
+          </div>
+          <div
+            v-else-if="column.key === 'name'"
+            class="truncate text-base"
+            data-fit="name"
+          >
+            {{ item }}
           </div>
           <div
             v-else-if="column.key === 'custom_rodzaj_umowy'"
@@ -457,7 +461,8 @@ function onColumnWidthUpdated(payload) {
 // zakłada jedną listę Umowy na raz na stronie - trasa montuje dokładnie
 // jeden DealsListView.vue naraz, tak jak dziś.
 const MIN_SZEROKOSC_PX = {
-  lead_name: 110, // "Klient / szansa"
+  lead_name: 90, // "Klient"
+  name: 120, // "Szansa" - np. "PRO/PVME/26/1105" plus nagłówek "Szansa"
   custom_rodzaj_umowy: 56, // "Rodzaj" - ma zostać kompaktowa (dawniej sztywne 3.5rem = 56px)
   status: 280, // "Weryfikacja Backoffice" + pełny pasek etapu procesu
   deal_owner: 70, // "Doradca"
