@@ -220,6 +220,7 @@
       resizeColumn: true,
       rowCount: deals.data.row_count,
       totalCount: deals.data.total_count,
+      rowHeight: 44,
     }"
     @loadMore="() => loadMore++"
     @columnWidthUpdated="() => triggerResize++"
@@ -268,6 +269,8 @@ import { statusesStore } from '@/stores/statuses'
 import { callEnabled } from '@/composables/telephony'
 import { formatDate, timeAgo, website, formatTime } from '@/utils'
 import { timestampCell } from '@/composables/useTimelinePreferences'
+import { opisRodzajuUmowy } from '@/utils/rodzajUmowy'
+import { relatywnie, formatujTermin } from '@/utils/dataPolska'
 import { useOnboarding, useTelemetry } from 'frappe-ui/frappe'
 import { Tooltip, Avatar, Dropdown } from 'frappe-ui'
 import { useRoute } from 'vue-router'
@@ -428,6 +431,48 @@ function parseRows(rows, columns = []) {
         _rows[row] = {
           label: deal.status,
           color: getDealStatus(deal.status)?.color,
+          // VOLTEO (b65, lista Umowy wariant B): theme/type dodane OBOK
+          // istniejącego label/color (Kanban dalej czyta .color przez
+          // IndicatorIcon, patrz sloty #title/#fields KanbanView niżej w
+          // tym pliku) - theme zasila Badge w DealsListView.vue, type
+          // (Open/Ongoing/Won/Lost) zasila pasek segmentów procesu
+          // (utils/pasekEtapu.js).
+          theme: getDealStatus(deal.status)?.motyw,
+          type: getDealStatus(deal.status)?.type,
+        }
+      } else if (row == 'custom_rodzaj_umowy') {
+        // VOLTEO (b65): kolumna "Rodzaj" listy Umowy - kod krótki w
+        // komórce, pełna nazwa w title (utils/rodzajUmowy.js). `label`
+        // trzyma się dla Kanban (rows.js getRow() zawija surowe skalary w
+        // {label}, ale gdy pole staje się obiektem, musi mieć własny
+        // .label, żeby generyczny fallback karty Kanban dalej coś
+        // pokazywał - patrz #fields w szablonie KanbanView niżej). `raw`
+        // to surowa wartość custom_rodzaj_umowy, do dopasowania z grupą
+        // procesu w PasekEtapu (utils/pasekEtapu.js).
+        const opis = opisRodzajuUmowy(deal.custom_rodzaj_umowy)
+        _rows[row] = {
+          label: opis.kod,
+          kod: opis.kod,
+          pelnaNazwa: opis.pelnaNazwa,
+          raw: deal.custom_rodzaj_umowy || '',
+        }
+      } else if (row == 'lead_name') {
+        // VOLTEO (b65): kolumna "Klient / szansa" - druga linia (nazwa
+        // dokumentu szansy) dojeżdża obok istniejącego `label` (imię
+        // klienta), które wcześniej było jedyną treścią tego pola.
+        _rows[row] = {
+          label: deal.lead_name,
+          dealName: deal.name,
+        }
+      } else if (row == 'mobile_no') {
+        // VOLTEO (b65): kolumna "Kontakt" - telefon (linia 1, TelefonLink)
+        // i mail (linia 2, mailto) w jednej komórce. `label` = numer, dla
+        // Kanban (patrz komentarz przy custom_rodzaj_umowy wyżej) - karta
+        // Kanban dalej pokazuje tylko telefon, bez maila, tak jak dotąd.
+        _rows[row] = {
+          label: deal.mobile_no || '',
+          numer: deal.mobile_no || '',
+          email: deal.email || '',
         }
       } else if (row == 'sla_status') {
         let value = deal.sla_status
@@ -464,6 +509,15 @@ function parseRows(rows, columns = []) {
         }))
       } else if (['modified', 'creation'].includes(row)) {
         _rows[row] = timestampCell(deal[row])
+        if (row === 'modified') {
+          // VOLTEO (b65): kolumna "Zmiana" listy Umowy - relatywny opis po
+          // polsku (utils/dataPolska.js::relatywnie), dodany OBOK
+          // istniejących label/timeAgo (Kanban i inne widoki dalej czytają
+          // .timeAgo bez zmian, patrz komentarz przy 'status' wyżej).
+          // pelnaData (pełny dzień+godzina) idzie do atrybutu title.
+          _rows[row].relatywnie = relatywnie(deal.modified)
+          _rows[row].pelnaData = formatujTermin(deal.modified) || _rows[row].label
+        }
       } else if (
         ['first_response_time', 'first_responded_on', 'response_by'].includes(
           row,

@@ -1,5 +1,6 @@
 import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
 import { parseColor, isTranslatable } from '@/utils'
+import { motywDlaKoloru } from '@/utils/motywOdznaki'
 import { defineStore } from 'pinia'
 import { useTelemetry } from 'frappe-ui/frappe'
 import { createListResource } from 'frappe-ui'
@@ -37,6 +38,12 @@ export const statusesStore = defineStore('crm-statuses', () => {
     auto: true,
     transform(statuses) {
       for (let status of statuses) {
+        // VOLTEO (b65, lista Umowy wariant B): odczytać surowy kolor PRZED
+        // parseColor() poniżej go nadpisze klasą tekstową `!text-*` -
+        // `motyw` (Badge theme: gray/blue/green/amber/red/violet) jedzie
+        // obok `color`, nie zamiast niego, żeby Kanban i strona szansy
+        // (oba czytają `.color`) zostały bez zmian.
+        status.motyw = motywDlaKoloru(status.color)
         status.color = parseColor(status.color)
         dealStatusesByName[status.name] = status
       }

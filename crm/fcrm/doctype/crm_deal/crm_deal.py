@@ -309,68 +309,75 @@ class CRMDeal(Document):
 	# `organization` zniknęło z kolumn: jest ukryte (hidden=1) i puste w każdej szansie,
 	# a `crm/api/doc.py:365-368` i tak wyrzuca ukryte kolumny w locie.
 	#
-	# Kolumny "Szczegóły" i "Szansa" celowo dzielą `key: "name"`. Powód: pętla w
+	# VOLTEO (b65): "wariant B" - wiersz dwuliniowy (44px), sześć kolumn zamiast
+	# ośmiu, bez ucinania treści. Kolumna "Klient / szansa" (klucz `lead_name`)
+	# niesie teraz dwie linie po stronie Vue (imię klienta i nazwa dokumentu
+	# szansy, np. "PRO/PVME/26/1022") - dawna osobna kolumna "Szansa" (też
+	# `key: "name"`) zniknęła, bo ta treść przeniosła się pod nazwę klienta.
+	# "Telefon" i "Mail" scaliły się w jedną kolumnę "Kontakt" (klucz
+	# `mobile_no`, `email` nadal w `rows` poniżej, żeby zapytanie SQL dalej je
+	# pobierało - kolumnowa reprezentacja e-maila po prostu zniknęła, treść
+	# renderuje się jako druga linia komórki `mobile_no` po stronie Vue).
+	# "Status" zmienił się na "Etap procesu" (odznaka + pasek segmentów
+	# procesu, Vue). Nowa kolumna "Zmiana" (klucz `modified`) zastępuje
+	# poprzedni brak jawnej kolumny czasu na liście.
+	#
+	# Kolumna "Szczegóły" celowo dzieli `key: "name"` z resztą (identyczny
+	# powód jak wcześniej, gdy dzieliła go z "Szansa"). Powód: pętla w
 	# `crm/api/doc.py:356-358` dopisuje każdy klucz kolumny do listy pól SQL (`rows`),
 	# więc pseudo-klucz bez odpowiadającego pola w bazie wywaliłby zapytanie — przycisk
-	# "Szczegóły" (render po stronie Vue, osobne zadanie) musi więc siedzieć na
+	# "Szczegóły" (render po stronie Vue, ikona chevron) musi więc siedzieć na
 	# realnym polu, a `name` jest identyfikatorem, do którego przycisk i tak nawiguje.
-	# Weryfikacja braku kolizji: `rows` już zawiera "name", więc obie kolumny trafiają
+	# Weryfikacja braku kolizji: `rows` już zawiera "name", więc kolumna trafia
 	# w warunek `if column.get("key") not in rows` jako "already present" i klucz nie
 	# dubluje się w zapytaniu; `meta.get_field("name")` zwraca None (to nie DocField,
-	# tylko klucz główny), więc żadna z dwóch kolumn nie zostaje usunięta jako ukryta.
-	# Rozróżnienie renderowania obu kolumn robi etykieta, po stronie Vue.
+	# tylko klucz główny), więc kolumna nie zostaje usunięta jako ukryta.
 	@staticmethod
 	def default_list_data():
 		columns = [
 			{
-				"label": "Szczegóły",
-				"type": "Data",
-				"key": "name",
-				"width": "7rem",
-			},
-			{
-				"label": "Klient",
+				"label": "Klient / szansa",
 				"type": "Data",
 				"key": "lead_name",
-				"width": "11rem",
+				"width": "16rem",
 			},
 			{
-				"label": "Szansa",
-				"type": "Data",
-				"key": "name",
-				"width": "10rem",
+				"label": "Rodzaj",
+				"type": "Select",
+				"key": "custom_rodzaj_umowy",
+				"width": "5rem",
+			},
+			{
+				"label": "Etap procesu",
+				"type": "Link",
+				"options": "CRM Deal Status",
+				"key": "status",
+				"width": "14rem",
 			},
 			{
 				"label": "Doradca",
 				"type": "Link",
 				"key": "deal_owner",
 				"options": "User",
-				"width": "10rem",
+				"width": "13rem",
 			},
 			{
-				"label": "Status",
-				"type": "Link",
-				"options": "CRM Deal Status",
-				"key": "status",
-				"width": "10rem",
-			},
-			{
-				"label": "Telefon",
+				"label": "Kontakt",
 				"type": "Data",
 				"key": "mobile_no",
-				"width": "11rem",
+				"width": "17rem",
 			},
 			{
-				"label": "Mail",
+				"label": "Zmiana",
+				"type": "Datetime",
+				"key": "modified",
+				"width": "8rem",
+			},
+			{
+				"label": "Szczegóły",
 				"type": "Data",
-				"key": "email",
-				"width": "12rem",
-			},
-			{
-				"label": "Rodzaj",
-				"type": "Select",
-				"key": "custom_rodzaj_umowy",
-				"width": "10rem",
+				"key": "name",
+				"width": "3rem",
 			},
 		]
 		rows = [

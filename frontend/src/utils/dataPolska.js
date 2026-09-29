@@ -149,3 +149,44 @@ export function terminWzgledny(dataCzas, teraz = new Date()) {
   if (roznicaDni > 1) return `za ${roznicaDni} dni`
   return `Termin minął ${Math.abs(roznicaDni)} dni temu`
 }
+
+/**
+ * Relatywny opis znacznika czasu PRZESZŁEGO, po polsku, dla kolumny "Zmiana"
+ * listy Umowy (wariant B, b65): "dziś HH:MM" (dziś, z godziną), "wczoraj"
+ * (dzień wcześniej kalendarzowo, bez godziny), "N dni temu" (2 do 30 dni),
+ * pełna data DD.MM.RRRR poza tym zakresem (także dla dat przyszłych,
+ * teoretycznie niemożliwych dla pola `modified`, ale bez specjalnego
+ * rzucania błędu - po prostu pełna data).
+ *
+ * Inna semantyka niż `terminWzgledny` powyżej (ten jest o terminach
+ * PRZYSZŁYCH - "za N dni"/"jutro" - i nigdy nie pokazuje godziny): ta
+ * funkcja jest o znacznikach czasu PRZESZŁYCH (kiedy coś się ostatnio
+ * zmieniło), więc "dziś" niesie godzinę, a odległość ogranicza się do 30
+ * dni zamiast rosnąć bez końca. Współdzieli z `terminWzgledny` tylko
+ * parser (`rozbierzDataCzas`) i regułę "różnica liczona po kalendarzowej
+ * północy, nie po pełnych 24h" - zdarzenie o 23:59 dnia poprzedzającego
+ * `teraz` jest "wczoraj" nawet gdy dzieli je mniej niż godzina.
+ *
+ * @param {string|Date} dataCzas surowy Datetime z Frappe albo obiekt Date
+ * @param {Date} [teraz] punkt odniesienia "teraz" (domyślnie `new Date()`)
+ * @returns {string} np. "dziś 14:32", "wczoraj", "5 dni temu", "12.08.2026",
+ *   albo '' dla pustego/niepoprawnego wejścia
+ */
+export function relatywnie(dataCzas, teraz = new Date()) {
+  const czesci = rozbierzDataCzas(dataCzas)
+  if (!czesci) return ''
+  if (!(teraz instanceof Date) || Number.isNaN(teraz.getTime())) return ''
+
+  const { rok, miesiac, dzien, godzina, minuta } = czesci
+  const dzienZdarzenia = new Date(rok, miesiac - 1, dzien)
+  const dzienDzis = new Date(teraz.getFullYear(), teraz.getMonth(), teraz.getDate())
+  const diffDni = Math.round((dzienDzis - dzienZdarzenia) / 86400000)
+
+  if (diffDni === 0) {
+    return `dziś ${String(godzina).padStart(2, '0')}:${String(minuta).padStart(2, '0')}`
+  }
+  if (diffDni === 1) return 'wczoraj'
+  if (diffDni >= 2 && diffDni <= 30) return `${diffDni} dni temu`
+
+  return `${String(dzien).padStart(2, '0')}.${String(miesiac).padStart(2, '0')}.${rok}`
+}

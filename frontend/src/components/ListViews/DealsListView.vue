@@ -8,6 +8,7 @@
       selectable: canSelectRows,
       showTooltip: options.showTooltip,
       resizeColumn: options.resizeColumn,
+      rowHeight: options.rowHeight,
       selectionText: (n) =>
         n === 1 ? __('Zaznaczono 1 wiersz') : __('Zaznaczono {0} wierszy', [n]),
     }"
@@ -61,9 +62,6 @@
               "
             />
           </div>
-          <div v-else-if="column.key === 'status'">
-            <IndicatorIcon :class="item.color" />
-          </div>
           <div v-else-if="column.key === 'organization'">
             <Avatar
               v-if="item.label"
@@ -82,7 +80,7 @@
               size="sm"
             />
           </div>
-          <div v-else-if="column.key === 'mobile_no' && item">
+          <div v-else-if="column.key === 'mobile_no' && item?.numer">
             <PhoneIcon class="h-4 w-4" />
           </div>
           <div v-else-if="column.key === '_liked_by'">
@@ -99,20 +97,84 @@
           </div>
         </template>
         <template #default="{ label }">
-          <div v-if="column.label === 'Szczegóły'" class="flex items-center">
+          <div
+            v-if="column.label === 'Szczegóły'"
+            class="flex items-center justify-center"
+          >
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
-              class="w-fit"
+              icon="lucide-chevron-right"
+              :title="__('Szczegóły')"
               @click.stop.prevent="() => goToDeal(row)"
-            >
-              {{ __('Szczegóły') }}
-            </Button>
+            />
+          </div>
+          <div
+            v-else-if="column.key === 'lead_name'"
+            class="flex flex-col overflow-hidden py-1 leading-tight"
+          >
+            <span v-if="item?.label" class="truncate font-medium text-ink-gray-9">
+              {{ item.label }}
+            </span>
+            <span v-else class="truncate italic text-ink-gray-4">
+              {{ __('brak klienta') }}
+            </span>
+            <span class="truncate text-sm text-ink-gray-5">{{ item?.dealName }}</span>
+          </div>
+          <div
+            v-else-if="column.key === 'custom_rodzaj_umowy'"
+            class="truncate text-base"
+            :title="item?.pelnaNazwa"
+          >
+            {{ item?.kod }}
+          </div>
+          <div
+            v-else-if="column.key === 'status'"
+            class="flex flex-col gap-1 overflow-hidden py-1 leading-tight"
+          >
+            <Badge
+              variant="subtle"
+              :theme="item?.theme"
+              size="md"
+              :label="item?.label"
+              @click="
+                (event) =>
+                  emit('applyFilter', {
+                    event,
+                    idx,
+                    column,
+                    item,
+                    firstColumn: columns[0],
+                  })
+              "
+            />
+            <PasekEtapu
+              v-if="segmentyDlaWiersza(row) > 0"
+              :etap="wypelnioneDlaWiersza(row)"
+              :etapow="segmentyDlaWiersza(row)"
+              :theme="item?.theme"
+            />
+          </div>
+          <div
+            v-else-if="column.key === 'modified'"
+            class="truncate text-base font-normal"
+            :title="item?.pelnaData"
+            @click="
+              (event) =>
+                emit('applyFilter', {
+                  event,
+                  idx,
+                  column,
+                  item,
+                  firstColumn: columns[0],
+                })
+            "
+          >
+            {{ item?.relatywnie }}
           </div>
           <div
             v-else-if="
               [
-                'modified',
                 'creation',
                 'first_response_time',
                 'first_responded_on',
@@ -182,8 +244,20 @@
                 })
             "
           />
-          <div v-else-if="column.key === 'mobile_no' && label" class="truncate text-base">
-            <TelefonLink :numer="getLabel(label, column)" />
+          <div
+            v-else-if="column.key === 'mobile_no'"
+            class="flex flex-col overflow-hidden py-1 leading-tight"
+          >
+            <TelefonLink :numer="item?.numer || ''" class="truncate" />
+            <a
+              v-if="item?.email"
+              :href="'mailto:' + item.email"
+              class="truncate text-sm text-ink-gray-7 hover:underline"
+              @click.stop
+            >{{ item.email }}</a>
+            <span v-else class="truncate text-sm italic text-ink-gray-4">
+              {{ __('brak maila') }}
+            </span>
           </div>
           <div
             v-else-if="label"
@@ -235,14 +309,15 @@
 <script setup>
 import HeartIcon from '@/components/Icons/HeartIcon.vue'
 import MultipleAvatar from '@/components/MultipleAvatar.vue'
-import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
 import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
 import TelefonLink from '@/components/TelefonLink.vue'
+import PasekEtapu from '@/components/PasekEtapu.vue'
 import RatingInput from '@/components/Controls/RatingInput.vue'
 import ListBulkActions from '@/components/ListBulkActions.vue'
 import ListRows from '@/components/ListViews/ListRows.vue'
 import ListFooterVolteo from '@/components/ListFooterVolteo.vue'
 import { isTranslatable, formatDuration } from '@/utils'
+import { liczbaSegmentow, segmentyWypelnione } from '@/utils/pasekEtapu'
 import {
   Avatar,
   ListView,
@@ -252,6 +327,7 @@ import {
   ListSelectBanner,
   Dropdown,
   Tooltip,
+  createResource,
 } from 'frappe-ui'
 import { sessionStore } from '@/stores/session'
 import { usersStore } from '@/stores/users'
@@ -308,6 +384,30 @@ function dealRoute(row) {
 
 function goToDeal(row) {
   router.push(dealRoute(row))
+}
+
+// Pasek postępu procesu pod odznaką statusu (kolumna "Etap procesu",
+// wariant B, b65) - ten sam zasób co Filter.vue/QuickFilterField.vue
+// (cache 'volteo-pipeline-grupy', patrz utils/etapFiltr.js), więc zwykle
+// jest już ciepły w cache przy wejściu na listę szans. Liczby segmentów
+// liczone są z tych danych (utils/pasekEtapu.js), nigdy hardkodowane.
+const grupyStatusow = createResource({
+  url: 'crm.api.pipeline.volteo_pipeline_grupy',
+  cache: ['volteo-pipeline-grupy'],
+  auto: true,
+})
+
+function segmentyDlaWiersza(row) {
+  return liczbaSegmentow(grupyStatusow.data, row?.custom_rodzaj_umowy?.raw)
+}
+
+function wypelnioneDlaWiersza(row) {
+  return segmentyWypelnione(
+    grupyStatusow.data,
+    row?.custom_rodzaj_umowy?.raw,
+    row?.status?.label,
+    row?.status?.type,
+  )
 }
 
 // Bulk actions (selection checkboxes + the select banner) are restricted to
