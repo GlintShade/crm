@@ -978,13 +978,17 @@ def volteo_umowa_pdf(deal: str) -> dict[str, Any]:
 	wyłącznie pola `panel_*` — kosztowe/marżowe pola tej Single nigdy nie trafiają
 	na wydrukowaną stronę).
 
-	Rodzaj umowy bez wbudowanego szablonu (pusty/nierozpoznany `custom_rodzaj_umowy`,
-	albo „Czyste Powietrze” — ten PDF obejmuje wyłącznie umowy PV/magazyn) odmawia
-	generowania OD RAZU, przed odczytem pliku szablonu (patrz
-	`_blad_rodzaju_umowy_bez_szablonu`) — celowo rozróżnione od braku rekordu
-	`Volteo Umowa` (formularz jeszcze niewypełniony, poniżej) i od braku/uszkodzenia
-	samego pliku szablonu na dysku (awaria wdrożenia, `_blad_brakujacego_szablonu`) —
-	trzy różne przyczyny, trzy różne, jednoznaczne komunikaty dla użytkownika.
+	Rodzaj umowy: szansa Czyste Powietrze rozgałęzia się WCZEŚNIEJ, do
+	`_volteo_umowa_pdf_cp` (ops#212, własny szablon
+	`crm/szablony/umowa_cp_obsluga_dotacji.pdf`), zanim ta funkcja w ogóle
+	sprawdzi `kod`/`SZABLONY` niżej - patrz `_czy_cp`. Dla pozostałych rodzajów
+	(PV/magazyn), rodzaj umowy bez wbudowanego szablonu (pusty albo
+	nierozpoznany `custom_rodzaj_umowy`) odmawia generowania OD RAZU, przed
+	odczytem pliku szablonu (patrz `_blad_rodzaju_umowy_bez_szablonu`) -
+	celowo rozróżnione od braku rekordu `Volteo Umowa` (formularz jeszcze
+	niewypełniony, poniżej) i od braku/uszkodzenia samego pliku szablonu na
+	dysku (awaria wdrożenia, `_blad_brakujacego_szablonu`) - trzy różne
+	przyczyny, trzy różne, jednoznaczne komunikaty dla użytkownika.
 	"""
 	_sprawdz_role()
 	_sprawdz_dostep_do_szansy(deal, "write")
