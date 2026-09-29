@@ -35,8 +35,11 @@ const KOLOR_STATUSU = {
   Canceled: 'red',
 }
 
+// Priorytet Niski jest niebieski, nie szary (decyzja wlasciciela po
+// klik-tescie 2026-09-29) - szary segment w panelu wlasciwosci wygladal
+// jak "wylaczony"/nieaktywny, nie jak wybrany priorytet.
 const KOLOR_PRIORYTETU = {
-  Low: 'gray',
+  Low: 'blue',
   Medium: 'yellow',
   High: 'red',
 }

@@ -115,6 +115,31 @@ export function formatujTermin(dataCzas) {
 }
 
 /**
+ * Krótki polski zapis daty/czasu, bez dnia tygodnia i bez roku (wiersz
+ * zadania w wąskim panelu bocznym, TaskArea.vue, issue
+ * GlintShade/proenergy-crm-ops#208, druga runda): dzień bez zera
+ * wiodącego, skrót miesiąca, godzina HH:mm (24h) - np. "30 wrz, 18:41".
+ * Dzieli parser (`rozbierzDataCzas`) i słownik miesięcy z `formatujTermin`
+ * powyżej, po prostu pomija dzień tygodnia i rok - format dla wąskiego
+ * miejsca, nie dla dymka mapy.
+ *
+ * @param {string|Date} dataCzas surowy Datetime z Frappe ("YYYY-MM-DD HH:mm[:ss]",
+ *   dopuszczalny separator "T") albo obiekt Date
+ * @returns {string} np. "30 wrz, 18:41", albo '' gdy wejście puste/niepoprawne
+ */
+export function formatujTerminKrotko(dataCzas) {
+  const czesci = rozbierzDataCzas(dataCzas)
+  if (!czesci) return ''
+
+  const { dzien, miesiac, godzina, minuta } = czesci
+  const miesiacSkrot = MIESIACE_SKROT[miesiac - 1]
+  const godzinaStr = String(godzina).padStart(2, '0')
+  const minutaStr = String(minuta).padStart(2, '0')
+
+  return `${dzien} ${miesiacSkrot}, ${godzinaStr}:${minutaStr}`
+}
+
+/**
  * Tekst względny terminu (panel właściwości TaskModal.vue, issue
  * GlintShade/proenergy-crm-ops#208): "dziś", "jutro", "za N dni" dla
  * terminów w przyszłości, "Termin minął N dni temu" dla przeszłych,

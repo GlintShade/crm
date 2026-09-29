@@ -9498,12 +9498,12 @@ msgid "Historia"
 msgstr "Historia"
 
 #: frontend/src/components/Modals/TaskModal.vue
-msgid "Utworzone {0}"
-msgstr "Utworzone {0}"
+msgid "Utworzone"
+msgstr "Utworzone"
 
 #: frontend/src/components/Modals/TaskModal.vue
-msgid "Ostatnia zmiana {0}"
-msgstr "Ostatnia zmiana {0}"
+msgid "Ostatnia zmiana"
+msgstr "Ostatnia zmiana"
 
 #: frontend/src/components/Modals/TaskModal.vue
 msgid "Dziś"
