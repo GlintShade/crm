@@ -1,6 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import { pipelineOnly, liczbaSegmentow, segmentyWypelnione } from '@/utils/pasekEtapu'
 
+// Escape Unicode ponizej koduje szeroki myslnik, ktory realna nazwa
+// statusu w bazie faktycznie niesie (crm/volteo_pipeline.py, TERMINALE).
+// Zasada projektu zabrania literalnego znaku takiego myslnika w plikach
+// autorstwa tej sesji, wiec dopasowanie idzie przez escape, nie przez
+// wklejony znak - jedna stala, uzywana wszedzie w tym pliku, zamiast
+// powtarzac escape w kazdym miejscu z osobna.
+const NAZWA_WYGRANA_MONTAZ = 'Wygrana \u2013 monta\u017c'
+
 // Lustro crm.volteo_pipeline.PIPELINE_OZE / PIPELINE_CP / TERMINALE (5 + 2
 // kroki OZE, 12 + 1 krok CP; grupa_for = pipeline + terminale).
 const GRUPA_OZE = [
@@ -9,7 +17,7 @@ const GRUPA_OZE = [
   'Umowa Podpisana',
   'Finansowanie',
   'Weryfikacja Backoffice',
-  'Wygrana – montaż',
+  NAZWA_WYGRANA_MONTAZ,
   'Przegrana',
 ]
 
@@ -90,8 +98,8 @@ describe('segmentyWypelnione', () => {
     ).toBe(5)
   })
 
-  it('OZE "Wygrana – montaż" (poza procesem, Won) -> pelny pasek', () => {
-    expect(segmentyWypelnione(GRUPY, 'Fotowoltaika', 'Wygrana – montaż', 'Won')).toBe(5)
+  it('OZE status wygrany poza procesem (Won) -> pelny pasek', () => {
+    expect(segmentyWypelnione(GRUPY, 'Fotowoltaika', NAZWA_WYGRANA_MONTAZ, 'Won')).toBe(5)
   })
 
   it('OZE "Przegrana" (poza procesem, Lost) -> pusty pasek', () => {
