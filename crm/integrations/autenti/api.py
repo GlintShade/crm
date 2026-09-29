@@ -1,8 +1,11 @@
-"""Whitelisted API integracji Autenti dla podpisu elektronicznego DWÓCH dokumentów:
-UMOWY (`Volteo Umowa`) i formularza kredytowego (`Volteo Kredyt`, od b47).
+"""Whitelisted API integracji Autenti dla podpisu elektronicznego DWÓCH doctype'ów w
+TRZECH rolach: UMOWY PV/magazyn (`Volteo Umowa`, `KONFIG_UMOWA`), umowy obsługi
+dotacji Czyste Powietrze (TEN SAM doctype `Volteo Umowa`, `KONFIG_UMOWA_CP`, ops#212)
+i formularza kredytowego (`Volteo Kredyt`, `KONFIG_KREDYT`, od b47).
 
-UMOWA pozostaje 1:1 z `CRM Deal` (`autoname: field:deal`) -- nazwa dokumentu jest
-tożsama z nazwą szansy, `deal` i nazwa rekordu poniżej to zawsze ten sam string.
+UMOWA (oba rodzaje, PV/magazyn i CP) pozostaje 1:1 z `CRM Deal`
+(`autoname: field:deal`) -- nazwa dokumentu jest tożsama z nazwą szansy, `deal` i
+nazwa rekordu poniżej to zawsze ten sam string, dla obu wariantów jednocześnie.
 
 FORMULARZ KREDYTOWY od ops#158/#159 jest N:1 -- jedna szansa może mieć wiele
 rekordów `Volteo Kredyt`, każdy z własną, wygenerowaną (hashową) nazwą, więc
@@ -14,12 +17,16 @@ statusu procesu, wyprowadzenie `CRM Deal` dla podpisującego). Endpointy umowy
 zostają kluczowane po `deal` (bo to i tak ten sam string), endpointy kredytu
 (`autenti_kredyt_status`, `autenti_send_kredyt`) -- po `kredyt` (nazwa rekordu).
 
-Wspólny przepływ obu dokumentów żyje za modułowymi słownikami konfiguracji
-(`KONFIG_UMOWA`, `KONFIG_KREDYT`, zebrane w `KONFIGURACJE`) -- jedyna różnica
-między wysyłką umowy i wysyłką formularza kredytowego to WARTOŚCI w tych
-słownikach (doctype, sposób pobrania rekordu, sposób odnalezienia PDF-u do
-wysyłki, generatory tytułu/nazw plików, sposób wyprowadzenia podpisującego i czy
-podpisanie przesuwa proces szansy), nigdy osobna kopia logiki.
+Wspólny przepływ trzech ról żyje za modułowymi słownikami konfiguracji
+(`KONFIG_UMOWA`, `KONFIG_KREDYT`, `KONFIG_UMOWA_CP`) -- jedyna różnica między
+wysyłką umowy PV/magazyn, wysyłką formularza kredytowego i wysyłką umowy obsługi
+dotacji CP to WARTOŚCI w tych słownikach (doctype, sposób pobrania rekordu,
+sposób odnalezienia PDF-u do wysyłki, generatory tytułu/nazw plików, sposób
+wyprowadzenia podpisującego, czy podpisanie przesuwa proces szansy, kto dostaje
+slot VIEWER `handlowiec`), nigdy osobna kopia logiki. `KONFIG_UMOWA_CP` jest
+CELOWO poza `KONFIGURACJE` (rejestr pollera) i żyje wyłącznie w
+`KONFIGURACJE_WYSYLKI` (rejestr `_autenti_send_job`) -- patrz docstringi obu przy
+ich definicji, w tym uzasadnienie, dlaczego to bezpieczne.
 
 Wysyłka do podpisu wysyła DOKŁADNIE te bajty PDF-u, które rep już wygenerował
 i przejrzał przez `volteo_umowa_pdf`/`volteo_kredyt_pdf` -- NIGDY świeżo
@@ -296,6 +303,22 @@ def _podpisujacy_umowa(
 	return lista
 
 
+def _podpisujacy_umowa_cp(
+	deal_doc: "frappe.model.document.Document", dokument: "frappe.model.document.Document | None"
+) -> list[dict[str, Any] | None]:
+	"""`konfig["podpisujacy"]` dla UMOWY OBSŁUGI DOTACJI Czyste Powietrze (ops#212) -
+	cienka nakładka nad `_podpisujacy_umowa`: umowa obsługi dotacji jest
+	JEDNOOSOBOWA, bez wariantu z drugim Zamawiającym (ops#167/#168 dotyczą
+	wyłącznie umowy PV/magazyn), więc obcina wynik `_podpisujacy_umowa` do
+	pierwszego elementu. Bezpieczne niezależnie od tego, czy `dokument` (rekord
+	`Volteo Umowa` linii CP) przypadkiem niesie ustawiony `drugi_zamawiajacy` -
+	`_podpisujacy_umowa` sam w sobie tego nie sprawdza; lingerujący drugi
+	Zamawiający jest twardo zablokowany dopiero przy generowaniu PDF-u
+	(`crm.api.umowa._volteo_umowa_pdf_cp`), tu jest po prostu odcinany z listy
+	odbiorców procesu podpisu."""
+	return _podpisujacy_umowa(deal_doc, dokument)[:1]
+
+
 def _podpisujacy_kredyt(
 	deal_doc: "frappe.model.document.Document", dokument: "frappe.model.document.Document | None"
 ) -> list[dict[str, Any] | None]:
@@ -386,6 +409,45 @@ def _handlowiec(user: str | None) -> dict[str, Any] | None:
 	return {"first_name": first_name, "last_name": last_name, "full_name": full_name, "email": email}
 
 
+def _wglad_dla(
+	konfig: dict[str, Any],
+	deal_doc: "frappe.model.document.Document",
+	domyslny_user: str | None,
+) -> dict[str, Any] | None:
+	"""Wybiera VIEWER-a w slocie `handlowiec` procesu dokumentu Autenti (ops#212):
+	doradcę szansy (`CRM Deal.deal_owner`, gdy `konfig.get("wglad") == "doradca"`),
+	albo domyślnie `domyslny_user` (wysyłający w `_autenti_send_job`, odpytujący w
+	`_status_dokumentu`) dla każdej innej wartości `konfig.get("wglad")`, w tym
+	nieustawionej. Umowa PV/magazyn (`KONFIG_UMOWA`) i formularz kredytowy
+	(`KONFIG_KREDYT`) nie ustawiają `"wglad"` w ogóle, więc zachowują dotychczasowe
+	zachowanie sprzed tego zadania bajt w bajt - wyłącznie umowa obsługi dotacji CP
+	(`KONFIG_UMOWA_CP`, `"wglad": "doradca"`) dostaje tu doradcę szansy zamiast
+	osoby, która akurat wysłała dokument albo otworzyła zakładkę: decyzja
+	właściciela - to doradca ma widzieć wysłaną umowę obsługi dotacji, nie
+	KAŻDY, kto ją wysłał czy podejrzał jej status.
+
+	Cienka nakładka nad `_handlowiec` - obie gałęzie w końcu wołają tę samą
+	funkcję, różni je tylko WEJŚCIE (`deal_doc.get("deal_owner")` vs
+	`domyslny_user`), więc reguły pomijania (Administrator/Guest, brak e-maila,
+	`@example.com`) są dla obu identyczne."""
+	if konfig.get("wglad") == "doradca":
+		return _handlowiec(deal_doc.get("deal_owner"))
+	return _handlowiec(domyslny_user)
+
+
+KOMUNIKAT_UMOWA_BRAK_REKORDU = "Najpierw wygeneruj umowę dla tej szansy sprzedaży."
+KOMUNIKAT_UMOWA_BRAK_PDF = "Najpierw wygeneruj PDF umowy."
+KOMUNIKAT_UMOWA_W_TOKU = "Umowa jest już w trakcie podpisywania lub podpisana."
+KOMUNIKAT_UMOWA_BRAK_EMAIL = "Kontakt szansy nie ma adresu e-mail - uzupełnij go w CRM."
+"""Cztery literały komunikatów błędów dzielone przez `KONFIG_UMOWA` i (ops#212)
+`KONFIG_UMOWA_CP` - umowa PV/magazyn i umowa obsługi dotacji CP to ten sam
+doctype (`Volteo Umowa`, patrz `UMOWA_DOCTYPE`), więc dzielą też te same,
+celowo generyczne (samo „umowę”, nie „umowę PV” ani „umowę obsługi dotacji”)
+komunikaty błędów wysyłki/statusu. Wydzielone z literałów wcześniej wpisanych
+inline w `KONFIG_UMOWA`, żeby `KONFIG_UMOWA_CP` nie duplikował ich osobno -
+przyszła poprawka treści (np. literówka) w jednym miejscu obejmuje automatycznie
+oba rodzaje umowy, zamiast wymagać ręcznej synchronizacji dwóch kopii."""
+
 KONFIG_UMOWA: dict[str, Any] = {
 	"rodzaj": "umowa",
 	"doctype": UMOWA_DOCTYPE,
@@ -401,20 +463,26 @@ KONFIG_UMOWA: dict[str, Any] = {
 	# odmiana (rodzaj gramatyczny rzeczownika, przypadki: "umowę"/"umowy" vs
 	# "formularz kredytowy" bez odmiany w tych samych miejscach) sprawia, że
 	# jeden dzielony szablon produkuje błędną gramatykę dla jednego z dwóch
-	# dokumentów - stąd gotowe, przetestowane literały per dokument.
-	"komunikat_brak_rekordu": "Najpierw wygeneruj umowę dla tej szansy sprzedaży.",
-	"komunikat_brak_pdf": "Najpierw wygeneruj PDF umowy.",
-	"komunikat_w_toku": "Umowa jest już w trakcie podpisywania lub podpisana.",
-	"komunikat_brak_email": "Kontakt szansy nie ma adresu e-mail - uzupełnij go w CRM.",
+	# dokumentów - stąd gotowe, przetestowane literały per dokument, teraz jako
+	# stałe modułowe (ops#212), patrz `KOMUNIKAT_UMOWA_*` powyżej.
+	"komunikat_brak_rekordu": KOMUNIKAT_UMOWA_BRAK_REKORDU,
+	"komunikat_brak_pdf": KOMUNIKAT_UMOWA_BRAK_PDF,
+	"komunikat_w_toku": KOMUNIKAT_UMOWA_W_TOKU,
+	"komunikat_brak_email": KOMUNIKAT_UMOWA_BRAK_EMAIL,
 }
-"""Konfiguracja dokumentu UMOWA dla wspólnego przepływu wysyłki/statusu/odpytywania
-poniżej. `awansuj_po_podpisie=True`: podpisanie umowy przesuwa proces szansy do
-etapu „Umowa Podpisana” (`crm.volteo_pipeline`), analogicznie jak przed b47.
+"""Konfiguracja dokumentu UMOWA (PV/magazyn) dla wspólnego przepływu wysyłki/statusu/
+odpytywania poniżej. `awansuj_po_podpisie=True`: podpisanie umowy przesuwa proces
+szansy do etapu „Umowa Podpisana” (`crm.volteo_pipeline`), analogicznie jak przed b47.
 `znajdz_pdf`/`nazwa_wysylki`/`nazwa_podpisanego`/`podpisujacy` przyjmują kształt
 `(deal, nazwa)`/`(deal_doc, dokument)` wspólny z `KONFIG_KREDYT` (ops#160) - dla
 umowy `nazwa`/`dokument` są tu świadomie ignorowane w adapterach, bo umowa
 pozostaje 1:1 z szansą. `rola_prezesa="SIGNER"` (ops#195): na umowie prezes
-podpisuje, tak jak zawsze."""
+podpisuje, tak jak zawsze. Bez klucza `"wglad"` (patrz `_wglad_dla`, ops#212) -
+slot `handlowiec` zostaje więc odpytującym/wysyłającym użytkownikiem, jak zawsze.
+
+Od ops#212 istnieje TAKŻE `KONFIG_UMOWA_CP` (niżej, za `KONFIG_KREDYT`) dla umowy
+obsługi dotacji Czyste Powietrze - ten sam `doctype`, inny podpisujący/tytuł/
+widz."""
 
 KONFIG_KREDYT: dict[str, Any] = {
 	"rodzaj": "kredyt",
@@ -448,10 +516,88 @@ podpisany plik do niego; status szansy pozostaje nietknięty. `rola_prezesa="VIE
 (ops#195): prezes jest tu odbiorcą do wglądu, nie podpisującym, patrz
 `logika.zbuduj_odbiorcow`."""
 
+KONFIG_UMOWA_CP: dict[str, Any] = {
+	"rodzaj": "umowa_cp",
+	"doctype": UMOWA_DOCTYPE,
+	"pobierz": _pobierz_umowe,
+	"znajdz_pdf": _pdf_umowy_plik_dla_wysylki,
+	"nazwa_wysylki": _nazwa_pliku_umowy_wysylki,
+	"nazwa_podpisanego": _nazwa_pliku_umowy_podpisanego,
+	"podpisujacy": _podpisujacy_umowa_cp,
+	"tytul": logika.tytul_umowy_obslugi_dotacji,
+	"awansuj_po_podpisie": False,
+	"rola_prezesa": "SIGNER",
+	"wglad": "doradca",
+	"komunikat_brak_rekordu": KOMUNIKAT_UMOWA_BRAK_REKORDU,
+	"komunikat_brak_pdf": KOMUNIKAT_UMOWA_BRAK_PDF,
+	"komunikat_w_toku": KOMUNIKAT_UMOWA_W_TOKU,
+	"komunikat_brak_email": KOMUNIKAT_UMOWA_BRAK_EMAIL,
+}
+"""Konfiguracja umowy o świadczenie usług obsługi dofinansowania Czyste Powietrze
+(ops#212) - TEN SAM doctype co `KONFIG_UMOWA` (`Volteo Umowa`, 1:1 z szansą), więc
+`doctype`/`pobierz`/`znajdz_pdf`/`nazwa_wysylki`/`nazwa_podpisanego`/komunikaty są
+dzielone bez zmian (patrz `KOMUNIKAT_UMOWA_*` powyżej - te same, celowo generyczne
+teksty). Różni się tylko: `podpisujacy` (`_podpisujacy_umowa_cp`, jednoosobowo -
+umowa obsługi dotacji nie ma wariantu z drugim Zamawiającym), `tytul`
+(`logika.tytul_umowy_obslugi_dotacji`) i `wglad="doradca"` (`_wglad_dla` -
+slot `handlowiec` procesu dokumentu Autenti to doradca szansy, nie wysyłający/
+odpytujący, decyzja właściciela 2026-09-29). `rola_prezesa="SIGNER"`: na umowie
+obsługi dotacji prezes PODPISUJE, tak jak na umowie PV/magazyn - w odróżnieniu od
+formularza kredytowego, gdzie jest wyłącznie VIEWER-em (ops#195).
+`awansuj_po_podpisie=False`: umowa obsługi dotacji CP nie ma własnego kroku w
+`crm.volteo_pipeline.PIPELINE_CP` (proces CP idzie „Lead” -> „Dokumentacja” -> ...,
+bez „Umowa Wygenerowana”/„Umowa Podpisana” - te dwa statusy istnieją wyłącznie w
+`PIPELINE_OZE`), więc to pole jest tu ustawione dla jasności, choć w praktyce
+niesprawdzane: gdyby jednak ten rekord kiedyś trafił pod `poll_autenti_status`
+(patrz akapit niżej), `advance_deal_status(..., "Umowa Podpisana", ...)` i tak
+byłoby cichym no-opem, bo `is_forward` zawsze zwraca `False`, gdy `target` nie
+jest krokiem procesu bieżącego rodzaju umowy.
+
+CELOWO NIE w `KONFIGURACJE` (rejestr, po którym iteruje WYŁĄCZNIE
+`poll_autenti_status` - sprawdzone wprost przez przeczytanie całej pętli
+schedulera): dodanie tu drugiego wpisu dla doctype `Volteo Umowa` zamiatałoby
+KAŻDY rekord `Volteo Umowa` (OZE i CP naraz) DWA RAZY na jeden przebieg pollera -
+raz pod kluczem "umowa", raz pod "umowa_cp", oba operujące na tej samej tabeli.
+Sam poller (`_odpytaj_wyslane`, `_odzyskaj_utkniete_wysylanie`,
+`_ponow_pobranie_podpisanych_plikow` i ich pomocnicy `_sprobuj_odzyskac_wyslany_proces`/
+`_attach_signed_pdf`) czyta z `konfig` WYŁĄCZNIE `doctype`, `awansuj_po_podpisie` i
+`nazwa_podpisanego` (nigdy `tytul`/`podpisujacy`/`wglad`/`rola_prezesa` - te trzy
+funkcje i ich pomocnicy zostały przeczytane w całości, żeby to potwierdzić), więc
+rekordy CP zamiatane POD `KONFIG_UMOWA` (nie pod `KONFIG_UMOWA_CP`) są mimo to
+obsłużone poprawnie: ten sam `doctype`, ta sama funkcja nazwy pliku podpisanego.
+Jedyny efekt uboczny odziedziczonego `awansuj_po_podpisie=True` z `KONFIG_UMOWA` -
+`advance_deal_status(wiersz.deal, "Umowa Podpisana", "umowa_podpisana")` wołane dla
+szansy CP - jest celowo nieszkodliwy: „Umowa Podpisana” nie jest krokiem
+`PIPELINE_CP`, więc `crm.volteo_pipeline.is_forward` zwraca `False`
+(`step_index` daje -1 dla kroku spoza procesu bieżącego rodzaju) i
+`advance_deal_status` zwraca `False` bez żadnego zapisu - status szansy CP nigdy
+się nie rusza przez ten mechanizm, dokładnie jak przy generowaniu PDF-u
+(`crm.api.umowa._zapisz_i_dokoncz_pdf_umowy`, ta sama automatyzacja, ta sama
+gwarancja no-opu dla CP).
+
+Ta konfiguracja jest więc używana WYŁĄCZNIE do wysyłki/odczytu statusu ręcznego
+(`_konfig_umowy`, `autenti_umowa_status`/`autenti_send_umowa` poniżej) i przez
+`KONFIGURACJE_WYSYLKI` (do rozwiązania `rodzaj="umowa_cp"` w `_autenti_send_job`),
+nigdy przez pętlę `poll_autenti_status`."""
+
 KONFIGURACJE: dict[str, dict[str, Any]] = {"umowa": KONFIG_UMOWA, "kredyt": KONFIG_KREDYT}
-"""Rejestr wszystkich dokumentów obsługiwanych przez tę integrację, kluczowany
-`rodzaj` - `poll_autenti_status` iteruje po tym słowniku, `_autenti_send_job`
-wybiera z niego konfigurację po nazwie przekazanej przez kolejkę."""
+"""Rejestr dokumentów zamiatanych przez pętlę schedulera, kluczowany `rodzaj` -
+`poll_autenti_status` iteruje WYŁĄCZNIE po tym słowniku (ops#212: `KONFIG_UMOWA_CP`
+świadomie NIE tu, patrz jej docstring). `_autenti_send_job` NIE czyta już z tego
+słownika bezpośrednio (patrz `KONFIGURACJE_WYSYLKI` niżej) - to rozdzielenie jest
+nowe w ops#212, wcześniej te dwa użycia dzieliły jeden rejestr, bo istniały
+dokładnie te same dwa rodzaje ("umowa"/"kredyt") w obu rolach."""
+
+KONFIGURACJE_WYSYLKI: dict[str, dict[str, Any]] = {**KONFIGURACJE, "umowa_cp": KONFIG_UMOWA_CP}
+"""Rejestr do rozwiązania `rodzaj` na konfigurację WYŁĄCZNIE w `_autenti_send_job`
+(ops#212) - w odróżnieniu od `KONFIGURACJE` (jedyny konsument: pętla
+`poll_autenti_status`, patrz jej docstring i docstring `KONFIG_UMOWA_CP` dla
+uzasadnienia, czemu CP nie ma tam osobnego wpisu), `_autenti_send_job` musi umieć
+rozwiązać WSZYSTKIE TRZY rodzaje wysyłki - "umowa", "kredyt", "umowa_cp" - z
+pojedynczego argumentu `rodzaj` przekazanego przez `frappe.enqueue`
+(`_wyslij_dokument`, `rodzaj=konfig["rodzaj"]`). Bez tego rejestru wysyłka umowy
+CP kończyłaby się `KeyError` w jobie w tle, ponieważ `"umowa_cp"` nie jest kluczem
+`KONFIGURACJE`."""
 
 
 @frappe.whitelist()
@@ -500,11 +646,13 @@ def _status_dokumentu(nazwa: str, konfig: dict[str, Any]) -> dict[str, Any]:
 	# wysyłce, wyłącznie informacyjnie. `rola_prezesa` czytana z `konfig`
 	# (ops#195), nigdy zahardkodowana tutaj osobno - podgląd i faktyczna wysyłka
 	# w `_autenti_send_job` biorą tę wartość z tego samego miejsca, więc nie mogą
-	# się rozjechać.
+	# się rozjechać. Slot `handlowiec` idzie przez `_wglad_dla` (ops#212): dla
+	# umowy/kredytu to nadal odpytujący (`frappe.session.user`), dla umowy
+	# obsługi dotacji CP to doradca szansy - patrz jej docstring.
 	proponowani_odbiorcy = logika.zbuduj_odbiorcow(
 		podpisujacy_lista,
 		_staly_podpisujacy(ustawienia),
-		_handlowiec(frappe.session.user),
+		_wglad_dla(konfig, deal_doc, frappe.session.user),
 		_archiwum(ustawienia),
 		rola_prezesa=konfig["rola_prezesa"],
 	)
@@ -538,6 +686,21 @@ def _status_dokumentu(nazwa: str, konfig: dict[str, Any]) -> dict[str, Any]:
 	}
 
 
+def _konfig_umowy(deal: str) -> dict[str, Any]:
+	"""Wybiera konfigurację `KONFIG_UMOWA_CP` dla szansy linii Czyste Powietrze,
+	`KONFIG_UMOWA` dla każdej innej (ops#212) - `Volteo Umowa` jest ten sam
+	doctype dla obu rodzajów umowy, 1:1 z szansą, więc rozstrzyga wyłącznie
+	`custom_rodzaj_umowy` odczytany wprost z bazy (bez ładowania całego
+	dokumentu szansy - tania kolumna, ten sam wzorzec co gdzie indziej w tym
+	module, np. `_sprawdz_rodzaj_oze` w `crm.api.kredyt`). Używana przez
+	`autenti_umowa_status`/`autenti_send_umowa` PO ich własnych bramkach
+	roli/dostępu, nigdy przed."""
+	rodzaj_umowy = frappe.db.get_value("CRM Deal", deal, "custom_rodzaj_umowy")
+	if rodzaj_umowy == "Czyste Powietrze":
+		return KONFIG_UMOWA_CP
+	return KONFIG_UMOWA
+
+
 @frappe.whitelist()
 @rate_limit(limit=60, seconds=60)
 def autenti_umowa_status(deal: str) -> dict[str, Any]:
@@ -547,11 +710,13 @@ def autenti_umowa_status(deal: str) -> dict[str, Any]:
 
 	Umowa pozostaje 1:1 z szansą (ops#160 nie zmienia tego endpointu): `deal`
 	jest jednocześnie nazwą rekordu `Volteo Umowa` przekazywaną do `_status_dokumentu`.
+	Konfiguracja jest wybrana wg rodzaju szansy (`_konfig_umowy`, ops#212) -
+	`KONFIG_UMOWA_CP` dla Czyste Powietrze, `KONFIG_UMOWA` dla PV/magazyn.
 	"""
 	_sprawdz_role()
 	_sprawdz_dostep_do_szansy(deal, "read")
 
-	wynik = _status_dokumentu(deal, KONFIG_UMOWA)
+	wynik = _status_dokumentu(deal, _konfig_umowy(deal))
 	if "dokument_exists" in wynik:
 		# Zgodność wdrożeniowa: `dokument_exists` to nowy, ogólny klucz od b47
 		# (dzielony z `autenti_kredyt_status`), ale ewentualny nieodświeżony
@@ -783,11 +948,16 @@ def autenti_send_umowa(deal: str) -> dict[str, Any]:
 
 	Umowa pozostaje 1:1 z szansą (ops#160 nie zmienia tego endpointu): `deal`
 	jest jednocześnie nazwą rekordu `Volteo Umowa` przekazywaną do `_wyslij_dokument`.
+	Konfiguracja jest wybrana wg rodzaju szansy (`_konfig_umowy`, ops#212) -
+	`KONFIG_UMOWA_CP` dla Czyste Powietrze, `KONFIG_UMOWA` dla PV/magazyn; jej
+	`"rodzaj"` (`"umowa_cp"`/`"umowa"`) trafia do kolejki (`_wyslij_dokument` ->
+	`frappe.enqueue(..., rodzaj=konfig["rodzaj"])`), gdzie `_autenti_send_job`
+	rozwiązuje go z powrotem na tę samą konfigurację przez `KONFIGURACJE_WYSYLKI`.
 	"""
 	_sprawdz_role()
 	_sprawdz_dostep_do_szansy(deal, "write")
 
-	return _wyslij_dokument(deal, KONFIG_UMOWA)
+	return _wyslij_dokument(deal, _konfig_umowy(deal))
 
 
 @frappe.whitelist()
@@ -912,9 +1082,11 @@ def _autenti_send_job(nazwa: str, wysylajacy: str | None = None, rodzaj: str = "
 	po stronie Autenti już dziś oznacza podpisanie przez KAŻDEGO SIGNER-a
 	dodanego do procesu, niezależnie od tego, ilu ich jest.
 
-	`rodzaj` wybiera konfigurację z `KONFIGURACJE` (`"umowa"`/`"kredyt"`); domyślne
-	`"umowa"` jest tu wyłącznie dla zgodności ze starą sygnaturą wywoływaną przez
-	`_autenti_send_umowa_job` (patrz jej docstring niżej).
+	`rodzaj` wybiera konfigurację z `KONFIGURACJE_WYSYLKI` (`"umowa"`/`"kredyt"`/
+	`"umowa_cp"`, ops#212 - NIE `KONFIGURACJE`, patrz docstring `KONFIGURACJE_WYSYLKI`
+	dla uzasadnienia tego rozdziału); domyślne `"umowa"` jest tu wyłącznie dla
+	zgodności ze starą sygnaturą wywoływaną przez `_autenti_send_umowa_job`
+	(patrz jej docstring niżej).
 
 	`nazwa` to nazwa REKORDU (dla umowy tożsama z `deal`, dla kredytu nazwa
 	KONKRETNEGO formularza) - `deal`, potrzebny do śladu aktywności i do
@@ -926,7 +1098,7 @@ def _autenti_send_job(nazwa: str, wysylajacy: str | None = None, rodzaj: str = "
 	jest sesją wysyłającego. Nie jest whitelisted - wywoływane wyłącznie przez
 	`frappe.enqueue`.
 	"""
-	konfig = KONFIGURACJE[rodzaj]
+	konfig = KONFIGURACJE_WYSYLKI[rodzaj]
 	dokument = konfig["pobierz"](nazwa)
 	if dokument is None:
 		# Rekord zniknął między enqueue a wykonaniem joba - nie powinno się zdarzyć
@@ -1054,7 +1226,13 @@ def _autenti_send_job(nazwa: str, wysylajacy: str | None = None, rodzaj: str = "
 			)
 			return
 
-		handlowiec = _handlowiec(wysylajacy)
+		# Slot `handlowiec` idzie przez `_wglad_dla` (ops#212): dla umowy/kredytu to
+		# nadal `wysylajacy` (kto faktycznie kliknął wyślij), dla umowy obsługi
+		# dotacji CP to doradca szansy (`deal_doc.get("deal_owner")`) - patrz
+		# docstring `_wglad_dla`. `sent_by`/atrybucja śladu aktywności NIE ulega tej
+		# zmianie: to wciąż zawsze prawdziwy wysyłający, zmienia się wyłącznie
+		# odbiorca w roli VIEWER dodawany do procesu dokumentu.
+		handlowiec = _wglad_dla(konfig, deal_doc, wysylajacy)
 		odbiorcy = logika.zbuduj_odbiorcow(
 			podpisujacy_lista, prezes, handlowiec, archiwum, rola_prezesa=konfig["rola_prezesa"]
 		)

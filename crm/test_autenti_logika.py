@@ -28,6 +28,7 @@ from crm.integrations.autenti.logika import (
 	prefiks_pliku_kredytu,
 	tytul_dokumentu,
 	tytul_dokumentu_kredytu,
+	tytul_umowy_obslugi_dotacji,
 	wybierz_id_podpisanego_pliku,
 	zbuduj_odbiorcow,
 )
@@ -771,6 +772,88 @@ class TestAutentiLogika(unittest.TestCase):
 		self.assertEqual(len(wynik), 1)
 		self.assertEqual(wynik[0]["zrodlo"], "prezes")
 		self.assertEqual(wynik[0]["role"], "VIEWER")
+
+	def test_ay_tytul_umowy_obslugi_dotacji_z_imieniem(self: "TestAutentiLogika") -> None:
+		self.assertEqual(
+			tytul_umowy_obslugi_dotacji("Jan Kowalski"),
+			"Umowa obsługi dotacji ProEnergy - Jan Kowalski",
+		)
+
+	def test_az_tytul_umowy_obslugi_dotacji_puste_lub_none(self: "TestAutentiLogika") -> None:
+		self.assertEqual(tytul_umowy_obslugi_dotacji(None), "Umowa obsługi dotacji ProEnergy")
+		self.assertEqual(tytul_umowy_obslugi_dotacji(""), "Umowa obsługi dotacji ProEnergy")
+		self.assertEqual(tytul_umowy_obslugi_dotacji("   "), "Umowa obsługi dotacji ProEnergy")
+
+	def test_ba_zbuduj_odbiorcow_umowa_cp_klient_prezes_doradca_viewer(
+		self: "TestAutentiLogika",
+	) -> None:
+		# Modeluje zestaw odbiorców umowy obsługi dotacji CP (ops#212): klient
+		# SIGNER, prezes SIGNER (rola_prezesa="SIGNER", jak na umowie PV/magazyn -
+		# KONFIG_UMOWA_CP w crm.integrations.autenti.api), doradca (deal_owner
+		# szansy, w slocie `handlowiec`) jako VIEWER, archiwum jako VIEWER.
+		klient = {
+			"first_name": "Jan",
+			"last_name": "Kowalski",
+			"full_name": "Jan Kowalski",
+			"email": "jan.kowalski@example.com",
+		}
+		prezes = {
+			"first_name": "Leszek",
+			"last_name": "Furmann",
+			"full_name": "Leszek Furmann",
+			"email": "l.furmann@proenergy.pro",
+		}
+		doradca = {
+			"first_name": "Grzegorz",
+			"last_name": "Furmann",
+			"full_name": "Grzegorz Furmann",
+			"email": "g.furmann@proenergy.pro",
+		}
+		archiwum = {
+			"first_name": "Archiwum",
+			"last_name": "ProEnergy",
+			"full_name": "Archiwum ProEnergy",
+			"email": "umowy@proenergy.pro",
+		}
+
+		wynik = zbuduj_odbiorcow([klient], prezes, doradca, archiwum, rola_prezesa="SIGNER")
+
+		self.assertEqual([o["zrodlo"] for o in wynik], ["klient", "prezes", "handlowiec", "archiwum"])
+		self.assertEqual([o["role"] for o in wynik], ["SIGNER", "SIGNER", "VIEWER", "VIEWER"])
+		self.assertEqual(wynik[2]["email"], doradca["email"])
+
+	def test_bb_zbuduj_odbiorcow_umowa_cp_doradca_dzieli_email_z_prezesem(
+		self: "TestAutentiLogika",
+	) -> None:
+		# Gdy doradca (deal_owner) dzieli e-mail z prezesem, deduplikacja
+		# `zbuduj_odbiorcow` zwija ich do jednego odbiorcy - prezes wygrywa
+		# (pierwsze wystąpienie w kolejności kandydatów: klient -> prezes ->
+		# handlowiec -> archiwum), nieszkodliwie: obaj mieliby tu rolę SIGNER,
+		# więc żaden podpisujący nie zostaje po cichu zdegradowany do VIEWER-a.
+		wspolny_email = "wspolny@proenergy.pro"
+		klient = {
+			"first_name": "Jan",
+			"last_name": "Kowalski",
+			"full_name": "Jan Kowalski",
+			"email": "jan.kowalski@example.com",
+		}
+		prezes = {
+			"first_name": "Leszek",
+			"last_name": "Furmann",
+			"full_name": "Leszek Furmann",
+			"email": wspolny_email,
+		}
+		doradca = {
+			"first_name": "Leszek",
+			"last_name": "Furmann",
+			"full_name": "Leszek Furmann",
+			"email": wspolny_email.upper(),
+		}
+
+		wynik = zbuduj_odbiorcow([klient], prezes, doradca, None, rola_prezesa="SIGNER")
+
+		self.assertEqual([o["zrodlo"] for o in wynik], ["klient", "prezes"])
+		self.assertEqual(wynik[1]["role"], "SIGNER")
 
 
 if __name__ == "__main__":
