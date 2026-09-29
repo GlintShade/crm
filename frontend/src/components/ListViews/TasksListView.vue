@@ -241,6 +241,7 @@ const list = defineModel('list', { type: Object })
 
 function getLabel(label, column) {
   if (column.type === 'Duration') return formatDuration(label)
+  if (['status', 'priority'].includes(column.key)) return __(label)
   if (column.options && isTranslatable(column.options)) return __(label)
   return label
 }

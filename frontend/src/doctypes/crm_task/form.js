@@ -1,12 +1,15 @@
 export class CRMTask {
   onRender() {
     if (this.doc.reference_doctype && this.doc.reference_docname) {
-      let label = this.doc.reference_doctype.replace('CRM ', '')
+      let label =
+        this.doc.reference_doctype == 'CRM Deal'
+          ? __('Open Deal')
+          : __('Open Lead')
 
       this.actions = [
         {
           name: 'Redirect Action',
-          label: __('Open {0}', [__(label)]),
+          label: label,
           onClick: (close) => {
             if (!this.doc.reference_docname) return
             let name =
