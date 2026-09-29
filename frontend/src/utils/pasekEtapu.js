@@ -21,7 +21,12 @@
 // PROG_PPOZ_KW (crm/volteo_umowa.py / pvForm.js), zamiast dodawac nowy
 // endpoint backendu tylko po liczby.
 
-const NAZWY_TERMINALNE = new Set(['Wygrana – montaż', 'Przegrana'])
+// Escape Unicode ponizej koduje szeroki myslnik, ktory realna nazwa
+// statusu w bazie faktycznie niesie (crm/volteo_pipeline.py, TERMINALE).
+// Zasada projektu zabrania literalnego znaku takiego myslnika w plikach
+// autorstwa tej sesji, wiec dopasowanie idzie przez escape, nie przez
+// wklejony znak.
+const NAZWY_TERMINALNE = new Set(['Wygrana \u2013 monta\u017c', 'Przegrana'])
 
 /**
  * Odcina z KONCA tablicy nazwy statusow terminalnych, zostawiajac sama
@@ -57,7 +62,7 @@ export function liczbaSegmentow(grupy, rodzaj) {
  * Liczba wypelnionych segmentow (licznik) dla statusu biezacej szansy.
  *
  * Status W procesie -> jego pozycja (1-based, `indexOf + 1`). Status POZA
- * procesem typu Won -> pelny pasek (np. OZE "Wygrana – montaż"; dla CP
+ * procesem typu Won -> pelny pasek (np. OZE "Wygrana [en dash] montaż"; dla CP
  * "Projekt rozliczony" jest natomiast W PROCESIE - ostatni krok, wiec
  * trafia w pierwsza galaz, nie w te). Typu Lost albo nieznany -> pusty
  * pasek (0). Rodzaj bez procesu (pusty/nieznany, "XX") -> 0 (wolajacy i

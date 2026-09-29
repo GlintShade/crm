@@ -365,7 +365,7 @@ class CRMDeal(Document):
 				"label": "Kontakt",
 				"type": "Data",
 				"key": "mobile_no",
-				"width": "17rem",
+				"width": "20rem",
 			},
 			{
 				"label": "Zmiana",
@@ -377,7 +377,7 @@ class CRMDeal(Document):
 				"label": "Szczegóły",
 				"type": "Data",
 				"key": "name",
-				"width": "3rem",
+				"width": "5rem",
 			},
 		]
 		rows = [
