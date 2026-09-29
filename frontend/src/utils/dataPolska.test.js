@@ -3,6 +3,7 @@ import {
   DNI_TYGODNIA_SKROT,
   MIESIACE_SKROT,
   formatujTermin,
+  formatujTerminKrotko,
   terminWzgledny,
   relatywnie,
 } from '@/utils/dataPolska'
@@ -66,6 +67,35 @@ describe('formatujTermin', () => {
 
   it('zwraca "" dla niepoprawnego miesiąca (13)', () => {
     expect(formatujTermin('2026-13-01 10:00:00')).toBe('')
+  })
+})
+
+describe('formatujTerminKrotko', () => {
+  it('formatuje bez dnia tygodnia i bez roku, godzina 24h', () => {
+    expect(formatujTerminKrotko('2026-09-30 18:41:00')).toBe('30 wrz, 18:41')
+  })
+
+  it('toleruje brak sekund', () => {
+    expect(formatujTerminKrotko('2026-09-30 18:41')).toBe('30 wrz, 18:41')
+  })
+
+  it('toleruje separator "T" i ułamkowe sekundy', () => {
+    expect(formatujTerminKrotko('2026-09-28T15:19:56.291762')).toBe('28 wrz, 15:19')
+  })
+
+  it('dzień bez zera wiodącego, minuta z zerem', () => {
+    expect(formatujTerminKrotko('2026-01-01 00:05:00')).toBe('1 sty, 00:05')
+  })
+
+  it('zwraca "" dla pustego/niepoprawnego wejścia', () => {
+    expect(formatujTerminKrotko('')).toBe('')
+    expect(formatujTerminKrotko(null)).toBe('')
+    expect(formatujTerminKrotko(undefined)).toBe('')
+    expect(formatujTerminKrotko('abc')).toBe('')
+  })
+
+  it('akceptuje obiekt Date', () => {
+    expect(formatujTerminKrotko(new Date(2026, 8, 30, 18, 41, 0))).toBe('30 wrz, 18:41')
   })
 })
 

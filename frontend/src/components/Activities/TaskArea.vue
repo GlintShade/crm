@@ -2,41 +2,37 @@
   <div v-if="tasks.length">
     <div v-for="(task, i) in tasks" :key="task.name">
       <div
-        class="activity flex cursor-pointer gap-6 rounded p-2.5 duration-300 ease-in-out hover:bg-surface-gray-1"
+        class="activity flex cursor-pointer gap-3 rounded p-2.5 duration-300 ease-in-out hover:bg-surface-gray-1"
         @click="modalRef.showTask(task)"
       >
-        <div class="flex flex-1 flex-col gap-1.5 text-base truncate">
-          <div class="font-medium text-ink-gray-9 truncate">
+        <div class="flex min-w-0 flex-1 flex-col gap-1 text-base">
+          <div class="truncate font-medium text-ink-gray-9" :title="task.title">
             {{ task.title }}
           </div>
-          <div class="flex gap-1.5 text-ink-gray-8">
+          <div
+            v-if="task.assigned_to"
+            class="flex min-w-0 items-center gap-1.5 text-ink-gray-8"
+          >
+            <UserAvatar :user="task.assigned_to" size="xs" />
+            <span class="truncate">{{ getUser(task.assigned_to).full_name }}</span>
+          </div>
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-gray-5">
+            <div
+              v-if="task.due_date"
+              class="flex items-center gap-1.5"
+              :class="terminPrzeterminowany(task) ? 'text-ink-red-4' : ''"
+              :title="formatujTermin(task.due_date)"
+            >
+              <CalendarIcon class="h-3.5 w-3.5 shrink-0" />
+              {{ formatujTerminKrotko(task.due_date) }}
+            </div>
             <div class="flex items-center gap-1.5">
-              <UserAvatar :user="task.assigned_to" size="xs" />
-              {{ getUser(task.assigned_to).full_name }}
-            </div>
-            <div v-if="task.due_date" class="flex items-center justify-center">
-              <DotIcon class="h-2.5 w-2.5 text-ink-gray-5" :radius="2" />
-            </div>
-            <div v-if="task.due_date">
-              <Tooltip
-                :text="formatDate(task.due_date, 'ddd, MMM D, YYYY | hh:mm a')"
-              >
-                <div class="flex gap-2">
-                  <CalendarIcon />
-                  <div>{{ formatDate(task.due_date, 'D MMM, hh:mm a') }}</div>
-                </div>
-              </Tooltip>
-            </div>
-            <div class="flex items-center justify-center">
-              <DotIcon class="h-2.5 w-2.5 text-ink-gray-5" :radius="2" />
-            </div>
-            <div class="flex gap-2">
               <TaskPriorityIcon class="!h-2 !w-2" :priority="task.priority" />
               {{ __(task.priority) }}
             </div>
           </div>
         </div>
-        <div class="flex items-center gap-1">
+        <div class="flex shrink-0 items-center gap-1 self-start">
           <Dropdown
             :options="taskStatusOptions(modalRef.updateTaskStatus, task)"
           >
@@ -94,12 +90,12 @@
 import CalendarIcon from '@/components/Icons/CalendarIcon.vue'
 import TaskStatusIcon from '@/components/Icons/TaskStatusIcon.vue'
 import TaskPriorityIcon from '@/components/Icons/TaskPriorityIcon.vue'
-import DotIcon from '@/components/Icons/DotIcon.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
-import { formatDate, taskStatusOptions } from '@/utils'
+import { taskStatusOptions } from '@/utils'
+import { formatujTermin, formatujTerminKrotko, terminWzgledny } from '@/utils/dataPolska'
 import { usersStore } from '@/stores/users'
 import { globalStore } from '@/stores/global'
-import { Tooltip, Dropdown } from 'frappe-ui'
+import { Dropdown } from 'frappe-ui'
 
 defineProps({
   tasks: { type: Array, default: () => [] },
@@ -108,4 +104,13 @@ defineProps({
 
 const { getUser } = usersStore()
 const { $dialog } = globalStore()
+
+// Wiersz zadania w waskim panelu bocznym (TasksSection.vue, ok. 360 px) -
+// termin na czerwono tylko gdy faktycznie minal I zadanie nie jest juz
+// zamkniete (Done/Canceled), zeby stare zakonczone zadania nie straszyly
+// czerwienia bez powodu.
+function terminPrzeterminowany(task) {
+  if (task.status === 'Done' || task.status === 'Canceled') return false
+  return terminWzgledny(task.due_date).startsWith('Termin minął')
+}
 </script>
