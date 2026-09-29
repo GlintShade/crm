@@ -9480,3 +9480,55 @@ msgstr "autorzy"
 #: frontend/src/components/deal/NotatkaKarta.vue
 msgid "Otwórz w zakładce {0}"
 msgstr "Otwórz w zakładce {0}"
+
+# Issue GlintShade/proenergy-crm-ops#208: dedykowane okno zadania (CRM Task),
+# wariant C planu wizualnego (dwie kolumny, panel wlasciwosci po prawej),
+# TaskModal.vue. Statusy/priorytety zadania (Backlog/Todo/In Progress/Done/
+# Canceled, Low/Medium/High) juz maja msgid gdzie indziej w tym pliku,
+# ponownie uzyte tutaj bez zmian. Chipy terminu ("Dzis"/"Jutro"/"Za
+# tydzien") sa etykietami przyciskow wolanymi przez __() wprost w
+# TaskModal.vue. "dzis"/"jutro" (mala litera, tekst wzgledny wewnatrz
+# zdania z terminWzgledny() w utils/dataPolska.js) i "za {0} dni"/"Termin
+# minal {0} dni temu" sa surowym polskim tekstem zwracanym przez ta
+# funkcje (frappe-free, bez wywolania __() w samym pliku - ten sam wzorzec
+# co formatujTermin() obok), wpis dla spojnosci katalogu, jak przy STATUSY
+# w osdDotacja.js wyzej.
+#: frontend/src/components/Modals/TaskModal.vue
+msgid "Historia"
+msgstr "Historia"
+
+#: frontend/src/components/Modals/TaskModal.vue
+msgid "Utworzone {0}"
+msgstr "Utworzone {0}"
+
+#: frontend/src/components/Modals/TaskModal.vue
+msgid "Ostatnia zmiana {0}"
+msgstr "Ostatnia zmiana {0}"
+
+#: frontend/src/components/Modals/TaskModal.vue
+msgid "Dziś"
+msgstr "Dziś"
+
+#: frontend/src/components/Modals/TaskModal.vue
+msgid "Jutro"
+msgstr "Jutro"
+
+#: frontend/src/components/Modals/TaskModal.vue
+msgid "Za tydzień"
+msgstr "Za tydzień"
+
+#: frontend/src/utils/dataPolska.js
+msgid "dziś"
+msgstr "dziś"
+
+#: frontend/src/utils/dataPolska.js
+msgid "jutro"
+msgstr "jutro"
+
+#: frontend/src/utils/dataPolska.js
+msgid "za {0} dni"
+msgstr "za {0} dni"
+
+#: frontend/src/utils/dataPolska.js
+msgid "Termin minął {0} dni temu"
+msgstr "Termin minął {0} dni temu"
