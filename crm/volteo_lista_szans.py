@@ -403,6 +403,94 @@ leada" na `CRM Lead`. Konsumowana przez `crm.api.doc._rozwin_filtry_tagow`
 front rozpoznal pole tagow bez duplikowania slownika w JS)."""
 
 
+# Zrodla importu leada jako pole tagow z DYNAMICZNYM slownikiem (issue
+# #217, decyzja wlasciciela 2026-10-01 "jesli bedziemy dodawali nowe
+# zrodla, zeby nowe pojawilo sie do wyboru"): w odroznieniu od
+# `POLA_TAGOW_LEAD` wyzej (slownik tokenow znany w kodzie), ten zbior to
+# pola tagow, ktorych slownik NIE jest tu zapisany wprost -- wylicza go
+# wywolujacy (`crm.api.doc._slownik_dynamicznego_pola_tagow`) z faktycznych
+# wartosci w bazie (DISTINCT na kolumnie), zeby nowe zrodlo z kolejnego
+# importu (np. "FB") pojawilo sie w filtrach samo, bez zmiany kodu.
+#
+# `custom_import_source` ma juz WLASNY staly kanon tokenow,
+# `KOLEJNOSC_ZRODEL` w `crm.volteo_leady_import` -- swiadomie NIE uzyty
+# tutaj. Ten kanon sluzy wylacznie do normalizacji KOLEJNOSCI tokenow w
+# zapisywanej wartosci przy imporcie (`normalizuj_zrodlo`); slownik
+# widoczny w filtrach ma z zalozenia rosnac wraz z danymi, wiec oparcie go
+# o ta sama stala zaprzeczyloby calemu celowi tego issue.
+POLA_TAGOW_LEAD_DYNAMICZNE: frozenset[str] = frozenset({"custom_import_source"})
+
+# Suma POLA_TAGOW_LEAD (stale) i POLA_TAGOW_LEAD_DYNAMICZNE (dynamiczne) --
+# jedyny zbior, ktorego powinien uzywac kod ROZPOZNAJACY, czy dane pole w
+# ogole jest polem tagow (np. `crm.api.doc._rozwin_filtry_tagow`), w
+# odroznieniu od kodu, ktoremu potrzebny jest sam slownik stale zapisany w
+# kodzie (`POLA_TAGOW_LEAD` samo, bez dynamicznych).
+WSZYSTKIE_POLA_TAGOW_LEAD: frozenset[str] = frozenset(POLA_TAGOW_LEAD) | POLA_TAGOW_LEAD_DYNAMICZNE
+
+
+def rozloz_tokeny_dynamicznego_slownika(wartosci: Iterable[str | None]) -> list[str]:
+	"""Rozbija surowe wartosci pola tagow o slowniku DYNAMICZNYM (np.
+	DISTINCT `custom_import_source` z bazy -- jedna wartosc moze byc
+	zlozeniem kilku tokenow zlaczonych "+", np. "ARG+SD") na POSORTOWANA
+	alfabetycznie liste pojedynczych tokenow, bez duplikatow i bez pustych
+	(`None`, pusty string, sam biale znaki -- przycinane przed sprawdzeniem
+	dlugosci, tak jak `opcjeTagow` po stronie frontu rozbija analogiczny
+	string zlaczony "\\n"). Uzywana przez
+	`crm.api.doc._slownik_dynamicznego_pola_tagow`, ktora dostarcza
+	`wartosci` (ten modul jest frappe-free, patrz docstring modulu, wiec
+	sam nie odpytuje bazy).
+
+	Nie mutuje `wartosci` (immutability, coding-style.md) -- zwraca zawsze
+	NOWA liste."""
+	tokeny: set[str] = set()
+	for wartosc in wartosci:
+		if not wartosc:
+			continue
+		for token in wartosc.split("+"):
+			token = token.strip()
+			if token:
+				tokeny.add(token)
+	return sorted(tokeny)
+
+
+# Znaki, ktore w tokenie filtra tagow (dowolne pole z WSZYSTKIE_POLA_TAGOW_LEAD)
+# psuja albo omijaja semantyke `wzory_tagu` (issue #217): "+" jest separatorem
+# tokenow WEWNATRZ wartosci pola -- token zawierajacy "+" nigdy nie pasuje do
+# zadnego z czterech wzorcow dokladnego dopasowania (bezuzyteczny, ale lepiej
+# odrzucic go jawnie niz wyslac bezsensowne zapytanie), a "%" i "_" to
+# wildcardy SQL LIKE -- token "%" dopasowalby KAZDA niepusta wartosc pola,
+# token z "_" dopasowalby dowolny pojedynczy znak w tym miejscu. Przed tym
+# issue zaden token nie byl tu w ogole sprawdzany: wartosc filtra trafiala do
+# `wzory_tagu` wprost z wejscia wywolania -- nieszkodliwe dopoki jedynym
+# zrodlem byl front (ktory zawsze wysyla tokeny ze znanego slownika), ale
+# whitelisted API jest wolane tez bezposrednio, nie tylko z SPA forka.
+_ZNAKI_NIEBEZPIECZNE_W_TOKENIE: frozenset[str] = frozenset({"+", "%", "_"})
+
+
+def token_bezpieczny(token: object) -> bool:
+	"""Prawda, gdy `token` jest stringiem niezawierajacym zadnego ze znakow
+	`_ZNAKI_NIEBEZPIECZNE_W_TOKENIE` -- patrz jej docstring. Kazdy token nie
+	bedacy stringiem (np. liczba, `None`, zagniezdzona lista) jest zawsze
+	niebezpieczny (fail-closed): `wzory_tagu` oczekuje stringa, a wartosci
+	spoza kontraktu nie da sie bezpiecznie ocenic."""
+	return isinstance(token, str) and not any(
+		znak in token for znak in _ZNAKI_NIEBEZPIECZNE_W_TOKENIE
+	)
+
+
+def tokeny_bezpieczne(tokeny: Iterable[object]) -> list[str]:
+	"""Filtruje `tokeny` przez `token_bezpieczny`, zachowujac kolejnosc i
+	duplikaty (odrzucenie duplikatow nie jest rola tej funkcji). Uzywana
+	przez `crm.api.doc._rozwin_filtry_tagow` PRZED zbudowaniem wzorcow
+	`wzory_tagu` z kazdego tokenu rozpoznanego przez `rozpoznaj_filtry_tagu`
+	-- token odrzucony tutaj po prostu nie dokada zadnego warunku do
+	zapytania (ciche pominiecie, nie blad calego filtra: reszta tokenow z
+	tego samego wywolania zostaje rozpatrzona normalnie).
+
+	Zwraca NOWA liste (immutability, coding-style.md)."""
+	return [token for token in tokeny if token_bezpieczny(token)]
+
+
 def wzory_tagu(pole: str, token: str) -> list[list]:
 	"""Zwraca 4 warunki dokladnego dopasowania `token` wewnatrz pola `pole`
 	zlaczonego "+" (np. `custom_posiadane_produkty` = "PV+ME+PC"):

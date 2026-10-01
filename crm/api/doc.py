@@ -16,12 +16,16 @@ from crm.utils import is_frappe_version
 from crm.volteo_grupy_filtrow import klucze_z_grup, waliduj_grupy, wydziel_grupy
 from crm.volteo_lista_szans import (
 	POLA_TAGOW_LEAD,
+	POLA_TAGOW_LEAD_DYNAMICZNE,
 	POLA_ZAWSZE_DOZWOLONE,
+	WSZYSTKIE_POLA_TAGOW_LEAD,
 	niedozwolone_klucze_filtrow,
 	podstaw_dzis,
 	podstaw_me,
 	polacz_zbiory_nazw,
+	rozloz_tokeny_dynamicznego_slownika,
 	rozpoznaj_filtry_tagu,
+	tokeny_bezpieczne,
 	wzory_tagu,
 )
 from crm.volteo_usuwanie import AUTENTI_STATUSY_BLOKADY, OFERTA_STATUSY_BLOKADY
@@ -410,7 +414,14 @@ def _rozwin_filtry_tagow(doctype: str, filters: dict) -> dict:
 	if doctype != "CRM Lead":
 		return filters
 
-	klucze_tagow = [pole for pole in filters if pole in POLA_TAGOW_LEAD]
+	# VOLTEO (issue #217): rozpoznanie "czy to pole tagow" idzie przez
+	# WSZYSTKIE_POLA_TAGOW_LEAD (stale POLA_TAGOW_LEAD + dynamiczne
+	# POLA_TAGOW_LEAD_DYNAMICZNE, np. custom_import_source) -- slownik
+	# tokenow samych pol dynamicznych NIE jest tu potrzebny wcale, bo
+	# `wzory_tagu` buduje wzorce z dowolnego tokenu bez sprawdzania go
+	# wzgledem zadnego slownika (slownik sluzy wylacznie do zbudowania
+	# opcji checkboxow w UI, patrz `_dolacz_tagi_lead` nizej).
+	klucze_tagow = [pole for pole in filters if pole in WSZYSTKIE_POLA_TAGOW_LEAD]
 	if not klucze_tagow:
 		return filters
 
@@ -432,6 +443,13 @@ def _rozwin_filtry_tagow(doctype: str, filters: dict) -> dict:
 		# doklada WLASNY zbior nazw do wspolnej puli, dokladnie tak samo
 		# jak dwa RÓZNE pola tagow filtrowane jednoczesnie ponizej.
 		for kind, tokeny in rozpoznane:
+			# VOLTEO (issue #217): token zawierajacy "+"/"%"/"_" jest
+			# odrzucany PRZED zbudowaniem wzorcow LIKE -- patrz docstring
+			# `crm.volteo_lista_szans.token_bezpieczny`. Dotyczy KAZDEGO
+			# pola tagow (stalego i dynamicznego): nawet dla pola o
+			# slowniku stalym wartosc filtra przychodzi z wejscia wywolania
+			# bez wczesniejszej walidacji wzgledem tego slownika.
+			tokeny = tokeny_bezpieczne(tokeny)
 			if not tokeny:
 				continue
 
@@ -544,19 +562,67 @@ def sort_options(doctype: str):
 	return fields
 
 
+def _slownik_dynamicznego_pola_tagow(doctype: str, fieldname: str) -> tuple[str, ...]:
+	"""Wylicza slownik tokenow dla JEDNEGO pola tagow o slowniku DYNAMICZNYM
+	(`POLA_TAGOW_LEAD_DYNAMICZNE`, issue #217, np. `custom_import_source`):
+	DISTINCT wartosci kolumny `fieldname` na `doctype` (NULL/pusty string
+	pominiete przez filtr `["is", "set"]`), rozbite na pojedyncze tokeny
+	przez frappe-free `crm.volteo_lista_szans.rozloz_tokeny_dynamicznego_
+	slownika` -- ten modul dostarcza jej surowe wartosci z bazy, ona sama o
+	bazie nic nie wie (patrz docstring modulu `crm.volteo_lista_szans`).
+
+	`frappe.get_all` (NIE `get_list`), celowo, tak samo jak w
+	`_rozwin_filtry_tagow` nizej: ten odczyt sluzy WYLACZNIE do zbudowania
+	slownika OPCJI widocznych w UI filtra (checkboxy), nie do odczytu samych
+	dokumentow, wiec normalny scoping uprawnien (`crm/permissions/
+	org_hierarchy.py`, ktory zawezalby DISTINCT do leadow widocznych
+	wolajacemu) jest tu swiadomie pominiety. Zrodlo importu nie jest polem
+	tajnym (sama nazwa tokenu "ARG"/"SD"/"CC" nie jest danymi wrazliwymi,
+	w odroznieniu od tresci dokumentu), a slownik MA byc identyczny dla
+	kazdego uzytkownika -- inaczej handlowiec widzacy tylko wlasna galaz
+	hierarchii dostalby wezszy, niespojny slownik filtra niz administrator,
+	co dla samego katalogu mozliwych wartosci (nie danych) nie ma uzasadnienia.
+
+	Zwraca krotke (moze byc pusta, gdy w bazie nie ma jeszcze ani jednej
+	niepustej wartosci -- `_dolacz_tagi_lead` wtedy nie dokleja flagi tagow,
+	tak samo jak dla kazdego innego falszywego slownika)."""
+	surowe = frappe.get_all(
+		doctype,
+		pluck=fieldname,
+		distinct=True,
+		filters={fieldname: ["is", "set"]},
+	)
+	return tuple(rozloz_tokeny_dynamicznego_slownika(surowe))
+
+
 def _dolacz_tagi_lead(doctype: str, field: dict) -> dict:
-	"""Dla pol z `POLA_TAGOW_LEAD` na `CRM Lead` (issue ops#150) doklada do
-	slownika pola `"options"` (kanoniczny slownik tokenow tego pola,
-	zlaczony `"\\n"`, dokladnie tak jak Frappe przechowuje opcje pola
+	"""Dla pol z `POLA_TAGOW_LEAD` (slownik staly, issue ops#150) i
+	`POLA_TAGOW_LEAD_DYNAMICZNE` (slownik wyliczony z bazy, issue #217) na
+	`CRM Lead` doklada do slownika pola `"options"` (slownik tokenow tego
+	pola, zlaczony `"\\n"`, dokladnie tak jak Frappe przechowuje opcje pola
 	Select) i `"volteo_tagi": 1`, po ktorym front
 	(`frontend/src/utils/tagiProduktow.js::czyPoleTagow`) rozpoznaje pole
 	tagow bez duplikowania slownika w JS -- `field.fieldtype` zostaje
-	`"Data"` bez zmian (te dwa pola SA Data, model A+ z briefu ops#150
-	celowo nie zmienia schematu), wiec galezie kodu zalezne wprost od
+	`"Data"` bez zmian (te pola SA Data, model A+ z briefu ops#150 celowo
+	nie zmienia schematu), wiec galezie kodu zalezne wprost od
 	`fieldtype == "Select"` (np. w tej samej funkcji nizej, albo
 	`get_quick_filters`) same z siebie NIE obejma tych pol -- front
 	dostaje osobna galaz zaleznosc od flagi `volteo_tagi` (patrz
 	`Filter.vue`/`filtrWielokrotny.js`/`QuickFilterField.vue`).
+
+	Ta flaga (`field.volteo_tagi`) rzadzi WYLACZNIE filtrowaniem (popover
+	"Filtr" i pasek szybkich filtrow, jedyni konsumenci wynikow
+	`get_filterable_fields`/`get_quick_filters`) -- NIE wyswietlaniem ani
+	edycja. Kolumna listy leadow (`crm/fcrm/doctype/crm_lead/crm_lead.py`)
+	i chipy w kolumnie (`LeadsListView.vue`/`Leads.vue`) sa kluczowane
+	doslownie po `column.key`/`row === 'custom_posiadane_produkty'` itd.,
+	a panel boczny (`SidePanelLayout.vue`) idzie przez fallback
+	`NAZWY_POL_TAGOW` w `tagiProduktow.js` (osobna, czysto frontowa lista
+	dwoch nazw pol -- `custom_import_source` tam CELOWO nie jest, patrz
+	brief issue #217 pkt 3) -- zaden z tych trzech konsumentow displayu nie
+	czyta `field.volteo_tagi` wcale, wiec dolozenie tej flagi tutaj dla
+	`custom_import_source` zmienia WYLACZNIE zachowanie filtrow, zgodnie z
+	twardym warunkiem briefu.
 
 	Uzywana zarowno w `get_filterable_fields` nizej (gdzie wpisy w
 	`fields` sa juz plain dictami, bo `meta = frappe.get_meta(doctype).
@@ -566,13 +632,18 @@ def _dolacz_tagi_lead(doctype: str, field: dict) -> dict:
 	sprowadza wpis do plain dicta, zeby `**field` nizej dzialalo
 	bezpiecznie w obu przypadkach.
 
-	Zwraca `field` BEZ ZMIAN dla kazdego innego doctype'u/pola
+	Zwraca `field` BEZ ZMIAN dla kazdego innego doctype'u/pola, i dla pole
+	ze slownikiem dynamicznym, ktory akurat wyszedl pusty (zero niepustych
+	wartosci w bazie -- nie ma czego oferowac w checkboxach)
 	(immutability: gdy faktycznie doklada atrybuty, zwraca NOWY dict, nie
 	mutuje `field`)."""
 	if doctype != "CRM Lead":
 		return field
 
-	slownik = POLA_TAGOW_LEAD.get(field.get("fieldname"))
+	fieldname = field.get("fieldname")
+	slownik = POLA_TAGOW_LEAD.get(fieldname)
+	if slownik is None and fieldname in POLA_TAGOW_LEAD_DYNAMICZNE:
+		slownik = _slownik_dynamicznego_pola_tagow(doctype, fieldname)
 	if not slownik:
 		return field
 
