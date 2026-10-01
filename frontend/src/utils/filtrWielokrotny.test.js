@@ -1,10 +1,12 @@
 import {
+  czyPustyWarunekWielokrotny,
   czyWielokrotnyWybor,
   domyslnaWartoscFiltra,
   domyslnyOperatorWielokrotny,
   parsujWartoscWielokrotna,
   scalOpcjeZZaznaczonymi,
 } from './filtrWielokrotny'
+import { OPERATOR_TAGOW } from './tagiProduktow'
 
 describe('parsujWartoscWielokrotna', () => {
   it('tablica stringów → ta sama tablica, przycięta', () => {
@@ -298,5 +300,71 @@ describe('domyslnaWartoscFiltra', () => {
   it('brak pola → pusty string', () => {
     expect(domyslnaWartoscFiltra(null, 'in')).toBe('')
     expect(domyslnaWartoscFiltra(undefined, 'equals')).toBe('')
+  })
+})
+
+describe('czyPustyWarunekWielokrotny', () => {
+  // Regresja po #215 (zgłoszona z headless QA 2026-10-01): warunek "jest
+  // jednym z"/"nie jest żadnym z" bez zaznaczonej wartości nie może trafić
+  // do filtrów wysyłanych do backendu -- IN () na pustej liście zawęża
+  // wynik do rekordów z pustym polem zamiast nie zawężać wcale.
+  describe('in/not in, pusta wartość po normalizacji → true', () => {
+    it.each([
+      ['[]', []],
+      ["['']", ['']],
+      ["['', '  ']", ['', '  ']],
+      ["''", ''],
+      ['undefined', undefined],
+      ['null', null],
+    ])('%s', (_nazwa, value) => {
+      expect(czyPustyWarunekWielokrotny('in', value)).toBe(true)
+      expect(czyPustyWarunekWielokrotny('not in', value)).toBe(true)
+    })
+  })
+
+  describe('in/not in, niepusta wartość → false', () => {
+    it('tablica z przynajmniej jedną niepustą wartością', () => {
+      expect(czyPustyWarunekWielokrotny('in', ['Mazowieckie'])).toBe(false)
+      expect(czyPustyWarunekWielokrotny('not in', ['Mazowieckie', ''])).toBe(false)
+    })
+
+    it('string po przecinku (kompatybilność wsteczna) z treścią', () => {
+      expect(czyPustyWarunekWielokrotny('in', 'Mazowieckie, Śląskie')).toBe(false)
+    })
+  })
+
+  it('equals z pustym stringiem → false, to NIE jest pusty warunek w tym sensie', () => {
+    expect(czyPustyWarunekWielokrotny('equals', '')).toBe(false)
+    expect(czyPustyWarunekWielokrotny('equals', null)).toBe(false)
+  })
+
+  it('inny jednowartościowy operator (like, is, between...) → zawsze false', () => {
+    expect(czyPustyWarunekWielokrotny('like', '')).toBe(false)
+    expect(czyPustyWarunekWielokrotny('is', null)).toBe(false)
+    expect(czyPustyWarunekWielokrotny('between', [])).toBe(false)
+  })
+
+  describe('OPERATOR_TAGOW ({ma, nie_ma})', () => {
+    it('obie strony puste → true', () => {
+      expect(czyPustyWarunekWielokrotny(OPERATOR_TAGOW, { ma: [], nie_ma: [] })).toBe(true)
+      expect(czyPustyWarunekWielokrotny(OPERATOR_TAGOW, { ma: [''], nie_ma: [] })).toBe(true)
+      expect(czyPustyWarunekWielokrotny(OPERATOR_TAGOW, {})).toBe(true)
+      expect(czyPustyWarunekWielokrotny(OPERATOR_TAGOW, null)).toBe(true)
+      expect(czyPustyWarunekWielokrotny(OPERATOR_TAGOW, undefined)).toBe(true)
+    })
+
+    it('tylko "ma" niepuste → false, zostaje bez zmian', () => {
+      expect(czyPustyWarunekWielokrotny(OPERATOR_TAGOW, { ma: ['PV'], nie_ma: [] })).toBe(false)
+    })
+
+    it('tylko "nie_ma" niepuste → false, zostaje bez zmian', () => {
+      expect(czyPustyWarunekWielokrotny(OPERATOR_TAGOW, { ma: [], nie_ma: ['AUDYT'] })).toBe(false)
+    })
+
+    it('obie strony niepuste → false', () => {
+      expect(
+        czyPustyWarunekWielokrotny(OPERATOR_TAGOW, { ma: ['PV'], nie_ma: ['AUDYT'] }),
+      ).toBe(false)
+    })
   })
 })

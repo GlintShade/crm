@@ -17,7 +17,7 @@
 // etapFiltr.js / etykietaMoje.js: eager chunk wywołuje moduł przed
 // zainicjowaniem i18n), testowalne bezpośrednio przez vitest.
 
-import { czyPoleTagow } from './tagiProduktow'
+import { OPERATOR_TAGOW, czyPoleTagow } from './tagiProduktow'
 
 /**
  * Normalizuje wartość filtra in/not in do tablicy niepustych stringów.
@@ -189,4 +189,51 @@ export function domyslnaWartoscFiltra(field, operator, pierwszaOpcja) {
     return null
   }
   return ''
+}
+
+/**
+ * Rozstrzyga, czy warunek z operatorem wielowartościowym ("in"/"not in"
+ * albo OPERATOR_TAGOW) jest PUSTY -- "jeszcze nic nie wybrano" (issue #215,
+ * regresja zgłoszona z headless QA 2026-10-01). Taki warunek NIE może
+ * trafić do filtrów wysyłanych do backendu: `Filter.vue::setfilter` woła
+ * `apply()` OD RAZU po dodaniu pola, więc operator domyślny "in" z
+ * wartością `[]` (patrz `domyslnyOperatorWielokrotny`/`domyslnaWartoscFiltra`
+ * wyżej) leciałby na przewód jako `{pole: ["in", []]}` zanim użytkownik
+ * zdąży cokolwiek zaznaczyć -- Frappe/MariaDB traktuje `IN ()` na pustej
+ * liście tak, że zapytanie zawęża się do rekordów z PUSTYM polem (Powiat:
+ * 163 leadów zamiast 10864), zamiast nie zawężać wcale. To samo po
+ * odznaczeniu ostatniego checkboxa z powrotem do `[]`.
+ *
+ * Normalizacja idzie przez `parsujWartoscWielokrotna` (ta sama funkcja, co
+ * reszta modułu) -- pokrywa więc `[]`, pusty string, listę/string samych
+ * pustych wpisów i `null`/`undefined` jednym mechanizmem, bez duplikowania
+ * logiki przycinania.
+ *
+ * Dla OPERATOR_TAGOW (filtr złożony "zawiera i nie zawiera", wartość w
+ * kształcie `{ma, nie_ma}`, patrz tagiProduktow.js) warunek jest pusty
+ * WYŁĄCZNIE, gdy OBIE strony są puste -- jedna niepusta strona to już
+ * realne ograniczenie i musi zostać wysłana bez zmian.
+ *
+ * Każdy inny operator (equals, like, is, between...) nigdy nie jest pusty
+ * w tym sensie -- pusty string albo `null` bywa tam poprawną,
+ * jednowartościową wartością (np. "equals" pustego stringa), celowo poza
+ * zakresem tej funkcji; wołający (`Filter.vue::apply`) stosuje ją
+ * WYŁĄCZNIE do wierszy z operatorem in/not in/OPERATOR_TAGOW.
+ *
+ * Frappe-free, bez zależności od Vue/komponentów.
+ *
+ * @param {string} operator
+ * @param {*} value
+ * @returns {boolean}
+ */
+export function czyPustyWarunekWielokrotny(operator, value) {
+  if (operator === OPERATOR_TAGOW) {
+    const strony = value && typeof value === 'object' ? value : {}
+    return (
+      parsujWartoscWielokrotna(strony.ma).length === 0 &&
+      parsujWartoscWielokrotna(strony.nie_ma).length === 0
+    )
+  }
+  if (!['in', 'not in'].includes(operator)) return false
+  return parsujWartoscWielokrotna(value).length === 0
 }

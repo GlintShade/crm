@@ -335,6 +335,7 @@ import RatingInput from '@/components/Controls/RatingInput.vue'
 import { etykietaMoje } from '@/utils/etykietaMoje'
 import { opcjeEtapu } from '@/utils/etapFiltr'
 import {
+  czyPustyWarunekWielokrotny,
   czyWielokrotnyWybor,
   domyslnaWartoscFiltra,
   domyslnyOperatorWielokrotny,
@@ -426,7 +427,24 @@ onMounted(() => {
   filterableFields.fetch()
 })
 
-const filters = computed(() => {
+// Fix regresji po #215 (headless QA 2026-10-01): `apply()` celowo NIE
+// wysyła warunku wielokrotnego wyboru bez zaznaczonej wartości (patrz
+// czyPustyWarunekWielokrotny w utils/filtrWielokrotny.js -- IN () na
+// pustej liście zawęża wynik do rekordów z pustym polem zamiast nie
+// zawężać wcale), więc taki klucz nigdy nie trafia do
+// `list.value.params.filters`. Gdyby `filters` zostało czystym
+// `computed` odtwarzanym z powrotem WYŁĄCZNIE z tego słownika (jak przed
+// tą poprawką), wiersz znikałby z popoveru natychmiast po dodaniu pola
+// (albo po odznaczeniu ostatniego checkboxa) -- nie byłoby z czego go
+// odtworzyć. `filters` jest więc, tak jak `grupy` niżej, `ref`-em
+// synchronizowanym `watch`-em -- tylko że scalającym, nie nadpisującym:
+// `scalFiltryZPustymi` dokleja z powrotem do świeżo odtworzonego echa
+// każdy lokalny wiersz, którego pole nie ma odpowiednika w echu ORAZ ma
+// aktualnie pustą wartość wielokrotnego wyboru -- dokładnie ten stan,
+// którego `apply()` nie wysyła. Wiersz usunięty przez użytkownika
+// (`removeFilter`/`clearfilter`) jest już usunięty z lokalnego Seta
+// PRZED wywołaniem `apply()`, więc nie zostanie przypadkiem przywrócony.
+const filtersPochodne = computed(() => {
   if (!list.value?.data) return new Set()
   let allFilters =
     list.value?.params?.filters || list.value.data?.params?.filters
@@ -441,6 +459,21 @@ const filters = computed(() => {
     allFilters = removeCommonFilters(props.default_filters, allFilters)
   }
   return convertFilters(filterableFields.data, allFilters)
+})
+
+function scalFiltryZPustymi(nowe, stare) {
+  const fieldnamesNowe = new Set(Array.from(nowe).map((f) => f.fieldname))
+  const brakujacePuste = Array.from(stare || []).filter(
+    (f) =>
+      !fieldnamesNowe.has(f.fieldname) &&
+      czyPustyWarunekWielokrotny(f.operator, f.value),
+  )
+  return new Set([...nowe, ...brakujacePuste])
+}
+
+const filters = ref(filtersPochodne.value)
+watch(filtersPochodne, (nowe) => {
+  filters.value = scalFiltryZPustymi(nowe, filters.value)
 })
 
 const availableFilters = computed(() => {
@@ -467,20 +500,30 @@ const availableFilters = computed(() => {
 // swoje własne funkcje niżej, delegujące do czystych helperów w
 // grupyFiltrow.js (immutability, coding-style.md).
 //
-// W odróżnieniu od `filters` (computed, mutowany w miejscu przez
-// `.add()`/`.delete()` na Set-ie i odczytywany na nowo z `list.value`
-// dopiero po `apply()`, wzorzec sprzed tego issue) `grupy` jest zwykłym
-// `ref` synchronizowanym `watch`-em: `apply()` NIGDY nie wysyła grupy o
-// zerowej liczbie warunków (patrz `polaczGrupy` -- pusta grupa
-// dopasowałaby WSZYSTKIE wiersze w zapytaniu backendu, zepsułoby to
-// semantykę ALBO), więc gdyby `grupy` była computed jak `filters`,
-// dodanie grupy bez żadnego warunku zniknęłoby natychmiast z widoku przy
-// najbliższym odczycie (nic nie zostało wysłane, więc "z powrotem" nie
-// ma czego odtworzyć). Dlatego `dodajGrupa()` niżej zawsze wstawia
-// pierwszy warunek OD RAZU (domyślne pole), więc grupa nigdy nie jest
-// faktycznie pusta w stanie UI -- ten sam efekt uboczny (nigdy nie wysyłać
-// pustej grupy) jest więc osiągnięty bez potrzeby utrzymywania osobnego,
-// niewysyłanego stanu "placeholder pustej grupy".
+// Tak jak `filters` wyżej, `grupy` jest `ref`-em synchronizowanym
+// `watch`-em zamiast czystego `computed` -- z tego samego dwojakiego
+// powodu. Po pierwsze (powód sprzed tej poprawki, patrz #129): `apply()`
+// NIGDY nie wysyła grupy o zerowej liczbie warunków (patrz `polaczGrupy`
+// -- pusta grupa dopasowałaby WSZYSTKIE wiersze w zapytaniu backendu,
+// zepsułoby to semantykę ALBO), więc gdyby `grupy` było computed jak
+// `filters` kiedyś było, dodanie grupy bez żadnego warunku zniknęłoby
+// natychmiast z widoku przy najbliższym odczycie. Temu zapobiega
+// `dodajGrupa()` niżej, zawsze wstawiając pierwszy warunek OD RAZU.
+// Po drugie (fix regresji po #215, ten sam powód co dla `filters` wyżej):
+// pojedynczy warunek wielokrotnego wyboru bez wartości wewnątrz grupy nie
+// jest wysyłany przez `apply()` (patrz `czyPustyWarunekWielokrotny`), a
+// gdy to był JEDYNY warunek grupy, cała grupa serializuje się do `{}` i
+// `polaczGrupy` ją odsiewa -- znika z echa serwera CAŁKOWICIE, mimo że
+// `addGroup()` wstawił do niej warunek. Dlatego watch niżej scala
+// (`scalGrupyZPustymi`), nie nadpisuje: dokleja z powrotem brakujące
+// puste warunki wewnątrz istniejących grup PO INDEKSIE, a grupy, które
+// zniknęły z echa W CAŁOŚCI (bo wszystkie ich warunki były puste),
+// dokłada z powrotem na końcu listy -- kolejność grup jest semantycznie
+// bez znaczenia (suma ALBO), więc ewentualne przesunięcie takiej grupy na
+// koniec przy tym rzadkim zbiegu okoliczności jest kosmetyczne, nie
+// merytoryczne. Dopasowanie po indeksie zakłada, że NIE znika jednocześnie
+// więcej niż jedna grupa w tym samym cyklu `apply()` -- przy typowej
+// edycji (jedna grupa na raz) to założenie trzyma.
 function grupaZDict(dict) {
   if (!filterableFields.data) return []
   return Array.from(convertFilters(filterableFields.data, dict))
@@ -505,10 +548,35 @@ function wyliczGrupy() {
 // pierwszy warunek od razu (patrz komentarz przy `grupy` niżej), więc
 // nigdy nie ma lokalnego stanu "pusta grupa-placeholder", którego
 // odtworzenie z powrotem z `list.value.params.filters` mogłoby zgubić.
+function scalGrupyZPustymi(nowe, stare) {
+  const listaStarych = stare || []
+  const wynik = nowe.map((noweWarunki, i) => {
+    const fieldnamesNowe = new Set(noweWarunki.map((w) => w.fieldname))
+    const brakujace = (listaStarych[i] || []).filter(
+      (w) =>
+        !fieldnamesNowe.has(w.fieldname) &&
+        czyPustyWarunekWielokrotny(w.operator, w.value),
+    )
+    return [...noweWarunki, ...brakujace]
+  })
+  // Grupa, w której WSZYSTKIE warunki były puste, znika z przewodu
+  // CAŁKOWICIE (patrz komentarz przy deklaracji `grupy` wyżej) -- nie ma
+  // już żadnego odpowiednika w `nowe`. Dokładamy ją z powrotem na końcu,
+  // jeśli nadal wszystkie jej warunki są puste.
+  for (let i = nowe.length; i < listaStarych.length; i++) {
+    const warunkiGrupy = listaStarych[i] || []
+    const calaPusta =
+      warunkiGrupy.length > 0 &&
+      warunkiGrupy.every((w) => czyPustyWarunekWielokrotny(w.operator, w.value))
+    if (calaPusta) wynik.push(warunkiGrupy)
+  }
+  return wynik
+}
+
 const grupyPochodne = computed(wyliczGrupy)
 const grupy = ref(grupyPochodne.value)
 watch(grupyPochodne, (nowe) => {
-  grupy.value = nowe
+  grupy.value = scalGrupyZPustymi(nowe, grupy.value)
 })
 
 function removeCommonFilters(commonFilters, allFilters) {
@@ -1147,8 +1215,20 @@ function updateOperator(filter) {
 }
 
 function apply() {
+  // Fix regresji po #215 (headless QA 2026-10-01): warunek "jest jednym
+  // z"/"nie jest żadnym z" (albo OPERATOR_TAGOW z obiema stronami puste)
+  // bez zaznaczonej wartości NIE trafia do filtrów wysyłanych do backendu
+  // -- IN () na pustej liście zawęża wynik do rekordów z pustym polem
+  // zamiast nie zawężać wcale (patrz JSDoc czyPustyWarunekWielokrotny w
+  // utils/filtrWielokrotny.js). Pominięcie na WARTOŚCI, przed
+  // parseFilters/transformIn (który dopiero robi split po przecinku) --
+  // wiersz NIE jest usuwany z `filters.value`/`grupy.value` (lokalny stan
+  // UI), tylko wyłączony z tego, co ląduje w emitowanym słowniku.
+  const niePusty = (f) => !czyPustyWarunekWielokrotny(f.operator, f.value)
+
   let _filters = []
   filters.value.forEach((f) => {
+    if (!niePusty(f)) return
     _filters.push({
       fieldname: f.fieldname,
       operator: f.operator,
@@ -1160,9 +1240,14 @@ function apply() {
   // Issue #129: każda grupa serializowana tą samą `parseFilters` co
   // filtry wspólne wyżej (ten sam kształt wiersza, ten sam operatorMap/
   // transformIn), a `polaczGrupy` doklada wynik pod `volteo_grupy` --
-  // pomijając grupy o zerowej liczbie warunków (patrz jej JSDoc), czego
-  // w praktyce i tak nie ma, bo `addGroup()` zawsze wstawia pierwszy
-  // warunek od razu (patrz komentarz przy deklaracji `grupy` wyżej).
+  // pomijając grupy o zerowej liczbie warunków (patrz jej JSDoc). Od tej
+  // poprawki to już NIE jest tylko teoretyczny przypadek: warunek
+  // wielokrotnego wyboru bez wartości jest wyżej pomijany tak samo jak dla
+  // filtrów wspólnych, więc grupa, w której to był JEDYNY warunek,
+  // serializuje się do {} i `polaczGrupy` ją odsiewa -- poprawne, bo pusta
+  // grupa ALBO nie może dopasować WSZYSTKICH wierszy (zepsułoby to
+  // semantykę sumy OR), ale oznacza też, że sama grupa zniknie z popupu do
+  // czasu zaznaczenia w niej czegokolwiek, tak jak każda inna pusta grupa.
   // Tak jak `_filters` wyżej: kopie zwykłych obiektów, NIE same wiersze
   // z `grupy.value` -- `transformIn` w `parseFilters` mutuje `.value` (np.
   // dokleja "%...%"), a wiersze w `grupy.value` muszą zostać nietknięte,
@@ -1170,7 +1255,9 @@ function apply() {
   // użytkownika, nie jej opakowaną, "przewodową" postać.
   const grupyWire = grupy.value.map((warunki) =>
     parseFilters(
-      warunki.map((f) => ({ fieldname: f.fieldname, operator: f.operator, value: f.value })),
+      warunki
+        .filter(niePusty)
+        .map((f) => ({ fieldname: f.fieldname, operator: f.operator, value: f.value })),
     ),
   )
 
