@@ -48,14 +48,39 @@
   ośmiu zakładek `Volteo Notatka`) i nowym opcjonalnym propem `pokazUsun`
   (dodanym w tym issue, domyślnie false - żadne z ośmiu istniejących użyć
   go nie ustawia, więc "BEZ kosza" dla zwykłych notatek zostaje nienaruszone).
+
+  Kolorystyka (issue #213): przemalowane z neutralnego szarego na bursztynowy
+  (`outline-amber-3`/`surface-amber-2`/`ink-amber-8`) - dokładnie ten sam
+  zestaw tokenów, którym MontazKosztyPanel.vue, KalkulatorTab.vue
+  (rozbicie kosztów), KalkulatorCPTab.vue (rozbicie kosztów i piaskownica
+  modelowania) i ZestawTab.vue (blok prowizji) oznaczają "to jest strefa
+  administracji" w całej tej rodzinie zakładek szansy, patrz komentarz przy
+  bloku prowizji w ZestawTab.vue ("NOT the plain gray of the customer-facing
+  subsidy box above, so nobody mistakes it for a quotable figure"). Tylko
+  kontener-ramka i etykieta nagłówka ("Notatki prywatne" / "Widoczne tylko
+  dla administracji") dostają bursztyn - dokładnie jak nagłówki/obwódki w
+  tamtych plikach; dane wewnątrz (stan "Ładowanie…"/"Brak notatek
+  prywatnych.", dymki załączników w edytorze) zostają w zwykłej szarej
+  palecie, bo to samo robi MontazKosztyPanel.vue dla "Brak dodatkowych
+  pozycji" wewnątrz swojego bursztynowego panelu. Pole edytora
+  (`bg-surface-white`) było już białą kartą na (wtedy szarym) tle i zostaje
+  bez zmian - ten sam kontrast "biała karta na kolorowym tle", którym
+  `.mk-input` w MontazKosztyPanel.vue radzi sobie z polami edytowalnymi na
+  bursztynowym tle. `NotatkaKarta.vue` sama w sobie nie ma własnego tła
+  (celowo, żeby pasować do białego tła zakładek, w których normalnie żyje),
+  więc na bursztynowym tle tego panelu dostaje `class="bg-surface-white"`
+  z rodzica - Vue scala atrybut `class` automatycznie z korzeniem
+  komponentu (brak `inheritAttrs: false`, jeden korzeń), więc to nie
+  wymaga żadnej zmiany w samym współdzielonym komponencie ani nie wpływa
+  na pozostałych siedem miejsc, które go używają.
 -->
 <template>
-  <div v-if="jestAdmin" class="rounded-lg border border-outline-gray-2 bg-surface-gray-2 p-4">
+  <div v-if="jestAdmin" class="rounded-lg border border-outline-amber-3 bg-surface-amber-2 p-4">
     <div class="mb-3 flex items-start gap-2">
-      <FeatherIcon name="lock" class="mt-0.5 h-4 w-4 shrink-0 text-ink-gray-6" />
+      <FeatherIcon name="lock" class="mt-0.5 h-4 w-4 shrink-0 text-ink-amber-8" />
       <div>
-        <div class="text-base font-medium text-ink-gray-9">{{ __('Notatki prywatne') }}</div>
-        <div class="text-xs text-ink-gray-5">{{ __('Widoczne tylko dla administracji') }}</div>
+        <div class="text-base font-medium text-ink-amber-8">{{ __('Notatki prywatne') }}</div>
+        <div class="text-xs text-ink-amber-8">{{ __('Widoczne tylko dla administracji') }}</div>
       </div>
     </div>
 
@@ -126,6 +151,7 @@
         <NotatkaKarta
           v-for="w in wpisy"
           :key="w.name"
+          class="bg-surface-white"
           :wpis="w"
           :etykieta-zakladki-override="__('Notatka prywatna')"
           pokaz-usun
