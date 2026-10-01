@@ -63,13 +63,16 @@
   prywatnych.", dymki załączników w edytorze) zostają w zwykłej szarej
   palecie, bo to samo robi MontazKosztyPanel.vue dla "Brak dodatkowych
   pozycji" wewnątrz swojego bursztynowego panelu. Pole edytora
-  (`bg-surface-white`) było już białą kartą na (wtedy szarym) tle i zostaje
+  (`bg-surface-base`) było już białą kartą na (wtedy szarym) tle i zostaje
   bez zmian - ten sam kontrast "biała karta na kolorowym tle", którym
   `.mk-input` w MontazKosztyPanel.vue radzi sobie z polami edytowalnymi na
-  bursztynowym tle. `NotatkaKarta.vue` sama w sobie nie ma własnego tła
-  (celowo, żeby pasować do białego tła zakładek, w których normalnie żyje),
-  więc na bursztynowym tle tego panelu dostaje `class="bg-surface-white"`
-  z rodzica - Vue scala atrybut `class` automatycznie z korzeniem
+  bursztynowym tle. Klasa `bg-surface-white` nie istnieje w tej wersji
+  frappe-ui (zero selektorów `.bg-surface-white` w zbudowanym CSS), więc
+  oba miejsca używają `bg-surface-base`, dokładnie tego tokenu co
+  `var(--surface-base)` w `.mk-input`. `NotatkaKarta.vue` sama w sobie nie
+  ma własnego tła (celowo, żeby pasować do białego tła zakładek, w których
+  normalnie żyje), więc na bursztynowym tle tego panelu dostaje
+  `class="bg-surface-base"` z rodzica - Vue scala atrybut `class` automatycznie z korzeniem
   komponentu (brak `inheritAttrs: false`, jeden korzeń), więc to nie
   wymaga żadnej zmiany w samym współdzielonym komponencie ani nie wpływa
   na pozostałych siedem miejsc, które go używają.
@@ -84,7 +87,7 @@
       </div>
     </div>
 
-    <div class="rounded-lg border border-outline-gray-2 bg-surface-white p-3">
+    <div class="rounded-lg border border-outline-gray-2 bg-surface-base p-3">
       <TextEditor
         ref="textEditor"
         :content="draft.tekst"
@@ -151,7 +154,7 @@
         <NotatkaKarta
           v-for="w in wpisy"
           :key="w.name"
-          class="bg-surface-white"
+          class="bg-surface-base"
           :wpis="w"
           :etykieta-zakladki-override="__('Notatka prywatna')"
           pokaz-usun
