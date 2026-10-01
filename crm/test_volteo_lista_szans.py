@@ -7,15 +7,20 @@ from crm.volteo_lista_szans import (
 	FILTER_FIELDS_LEAD,
 	OPERATOR_TAGOW,
 	POLA_TAGOW_LEAD,
+	POLA_TAGOW_LEAD_DYNAMICZNE,
 	POLA_ZAWSZE_DOZWOLONE,
 	SORT_FIELDS_DEAL,
 	SORT_FIELDS_LEAD,
+	WSZYSTKIE_POLA_TAGOW_LEAD,
 	niedozwolone_klucze_filtrow,
 	podstaw_dzis,
 	podstaw_me,
 	polacz_zbiory_nazw,
+	rozloz_tokeny_dynamicznego_slownika,
 	rozpoznaj_filtr_tagu,
 	rozpoznaj_filtry_tagu,
+	token_bezpieczny,
+	tokeny_bezpieczne,
 	wzory_tagu,
 )
 
@@ -644,6 +649,133 @@ class TestPolaTagowLead(unittest.TestCase):
 
 	def test_c_jest_dict(self: "TestPolaTagowLead") -> None:
 		self.assertIsInstance(POLA_TAGOW_LEAD, dict)
+
+
+class TestPolaTagowLeadDynamiczne(unittest.TestCase):
+	"""`POLA_TAGOW_LEAD_DYNAMICZNE` / `WSZYSTKIE_POLA_TAGOW_LEAD` (issue
+	#217) -- pola tagow leada, ktorych slownik NIE jest zapisany w kodzie,
+	tylko wyliczony przez `crm.api.doc` z bazy."""
+
+	def test_a_tylko_zrodlo_importu(self: "TestPolaTagowLeadDynamiczne") -> None:
+		self.assertEqual(set(POLA_TAGOW_LEAD_DYNAMICZNE), {"custom_import_source"})
+
+	def test_b_rozlaczne_ze_statycznymi(self: "TestPolaTagowLeadDynamiczne") -> None:
+		self.assertEqual(set(POLA_TAGOW_LEAD) & POLA_TAGOW_LEAD_DYNAMICZNE, set())
+
+	def test_c_suma_obejmuje_oba_zbiory(self: "TestPolaTagowLeadDynamiczne") -> None:
+		self.assertEqual(
+			WSZYSTKIE_POLA_TAGOW_LEAD,
+			{
+				"custom_posiadane_produkty",
+				"custom_produkt_procesu",
+				"custom_import_source",
+			},
+		)
+
+	def test_d_frozenset(self: "TestPolaTagowLeadDynamiczne") -> None:
+		self.assertIsInstance(POLA_TAGOW_LEAD_DYNAMICZNE, frozenset)
+		self.assertIsInstance(WSZYSTKIE_POLA_TAGOW_LEAD, frozenset)
+
+
+class TestRozlozTokenyDynamicznegoSlownika(unittest.TestCase):
+	"""`rozloz_tokeny_dynamicznego_slownika` (issue #217) -- rozbija surowe
+	wartosci DISTINCT z bazy (np. `custom_import_source`) na posortowany,
+	bez duplikatow, bez pustych, zbior pojedynczych tokenow."""
+
+	def test_a_rozklad_jak_na_produkcji(
+		self: "TestRozlozTokenyDynamicznegoSlownika",
+	) -> None:
+		# Rozklad custom_import_source na produkcji (2026-10-01, z briefu
+		# issue #217): SD, ARG, CC, ARG+SD, ARG+CC, CC+SD, ARG+CC+SD.
+		surowe = ["SD", "ARG", "CC", "ARG+SD", "ARG+CC", "CC+SD", "ARG+CC+SD"]
+		self.assertEqual(
+			rozloz_tokeny_dynamicznego_slownika(surowe), ["ARG", "CC", "SD"]
+		)
+
+	def test_b_puste_i_none_pominiete(
+		self: "TestRozlozTokenyDynamicznegoSlownika",
+	) -> None:
+		self.assertEqual(
+			rozloz_tokeny_dynamicznego_slownika(["ARG", "", None, "   ", "SD"]),
+			["ARG", "SD"],
+		)
+
+	def test_c_biale_znaki_wokol_plusa_przycinane(
+		self: "TestRozlozTokenyDynamicznegoSlownika",
+	) -> None:
+		# Brief issue #217: "SD + ARG" (spacje wokol "+") musi dac te same
+		# dwa tokeny co "SD+ARG" -- inaczej dynamiczny slownik nie
+		# zgadzalby sie z tym, co faktycznie dopasuje wzory_tagu.
+		self.assertEqual(
+			rozloz_tokeny_dynamicznego_slownika(["SD + ARG"]), ["ARG", "SD"]
+		)
+
+	def test_d_nowy_token_pojawia_sie_bez_zmiany_kodu(
+		self: "TestRozlozTokenyDynamicznegoSlownika",
+	) -> None:
+		# Kryterium akceptacji issue #217: lead ze zrodlem "TEST" dodaje
+		# token TEST do slownika, bez jakiejkolwiek zmiany w tym module.
+		self.assertEqual(
+			rozloz_tokeny_dynamicznego_slownika(["ARG", "TEST"]), ["ARG", "TEST"]
+		)
+
+	def test_e_pusta_lista_daje_pusta_liste(
+		self: "TestRozlozTokenyDynamicznegoSlownika",
+	) -> None:
+		self.assertEqual(rozloz_tokeny_dynamicznego_slownika([]), [])
+
+	def test_f_nie_mutuje_wejscia(self: "TestRozlozTokenyDynamicznegoSlownika") -> None:
+		surowe = ["SD", "ARG"]
+		kopia = list(surowe)
+		rozloz_tokeny_dynamicznego_slownika(surowe)
+		self.assertEqual(surowe, kopia)
+
+	def test_g_zwraca_nowa_liste(self: "TestRozlozTokenyDynamicznegoSlownika") -> None:
+		a = rozloz_tokeny_dynamicznego_slownika(["ARG"])
+		b = rozloz_tokeny_dynamicznego_slownika(["ARG"])
+		self.assertIsNot(a, b)
+
+
+class TestTokenBezpieczny(unittest.TestCase):
+	"""`token_bezpieczny`/`tokeny_bezpieczne` (issue #217) -- odrzuca token
+	filtra tagow mogacy wstrzyknac wzorzec LIKE albo zlamac separator "+"
+	uzywany przez `wzory_tagu`."""
+
+	def test_a_zwykly_token_bezpieczny(self: "TestTokenBezpieczny") -> None:
+		self.assertTrue(token_bezpieczny("SD"))
+		self.assertTrue(token_bezpieczny("ARG"))
+		self.assertTrue(token_bezpieczny("PV"))
+
+	def test_b_plus_niebezpieczny(self: "TestTokenBezpieczny") -> None:
+		self.assertFalse(token_bezpieczny("SD+ARG"))
+
+	def test_c_procent_niebezpieczny(self: "TestTokenBezpieczny") -> None:
+		self.assertFalse(token_bezpieczny("%"))
+		self.assertFalse(token_bezpieczny("SD%"))
+
+	def test_d_podkreslnik_niebezpieczny(self: "TestTokenBezpieczny") -> None:
+		self.assertFalse(token_bezpieczny("SD_X"))
+
+	def test_e_nie_string_niebezpieczny(self: "TestTokenBezpieczny") -> None:
+		self.assertFalse(token_bezpieczny(1))
+		self.assertFalse(token_bezpieczny(None))
+		self.assertFalse(token_bezpieczny(["SD"]))
+
+	def test_f_tokeny_bezpieczne_filtruje_zachowujac_kolejnosc(
+		self: "TestTokenBezpieczny",
+	) -> None:
+		self.assertEqual(
+			tokeny_bezpieczne(["SD", "SD%", "ARG", "A+B", "CC"]),
+			["SD", "ARG", "CC"],
+		)
+
+	def test_g_tokeny_bezpieczne_puste_wejscie(self: "TestTokenBezpieczny") -> None:
+		self.assertEqual(tokeny_bezpieczne([]), [])
+
+	def test_h_tokeny_bezpieczne_zwraca_nowa_liste(self: "TestTokenBezpieczny") -> None:
+		wejscie = ["SD", "ARG"]
+		wynik = tokeny_bezpieczne(wejscie)
+		self.assertIsNot(wynik, wejscie)
 
 
 class TestWzoryTagu(unittest.TestCase):
