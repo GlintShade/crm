@@ -64,16 +64,22 @@ export function scalOpcjeZZaznaczonymi(opcje, zaznaczoneWartosci) {
  * kontrolkę wielokrotnego wyboru (MultiSelect dla Select, LinkMultiSelect
  * dla Link) zamiast pola tekstowego z wartościami po przecinku (issue
  * #103). Prawda dokładnie dla operatorów "in"/"not in" na polu Select albo
- * na polu Link, z dwoma wyłączeniami:
+ * na polu Link, z JEDNYM wyłączeniem:
  *   - Dynamic Link: docelowy doctype zmienia się per wiersz, nie ma jednego
- *     stałego katalogu do przeszukania przez search_link;
- *   - Link, którego `options === 'User'` (np. lead_owner, custom_cc,
- *     deal_owner, custom_opiekun): LinkMultiSelect pyta search_link wprost,
- *     z pominięciem zakresów, które dla pól User nakłada Link.vue
- *     (`userScope`, znaczniki `volteo_scope_handlowcy`/`volteo_scope_cc`):
- *     bez tego wyłączenia handlowiec dostałby w wynikach pełną listę
- *     użytkowników zamiast zawężonej. Te pola zostają na dotychczasowym
- *     polu tekstowym.
+ *     stałego katalogu do przeszukania przez search_link.
+ *
+ * Issue #214 (2026-10-01, decyzja właściciela): pola Link do User (np.
+ * lead_owner, custom_cc, deal_owner, custom_opiekun, _assign) dostają od
+ * teraz TĘ SAMĄ kontrolkę wielokrotnego wyboru co każdy inny Link --
+ * wcześniej były tu wyłączone, bo LinkMultiSelect/QuickFilterCheckList
+ * pytały `frappe.desk.search.search_link` wprost, z pominięciem zakresu,
+ * który dla pól User nakłada Link.vue (`userScope`,
+ * `crm.api.volteo_uzytkownicy.widoczni_uzytkownicy`). Oba komponenty dostały
+ * ten sam zakres (i opcję "@me") z nowego, wspólnego modułu
+ * `utils/zakresUzytkownikow.js` -- patrz jego JSDoc -- więc wyłączenie
+ * przestało być potrzebne. Zawężenie listy osób to nadal wyłącznie
+ * ergonomia UI, nie granica uprawnień (patrz brief issue #214): widoczność
+ * rekordów pilnują hooki `crm/permissions/*`, nie ta funkcja.
  *
  * Frappe-free: przyjmuje `field` w kształcie `{ fieldtype, options }` (ten
  * sam kształt, co `f.field` w Filter.vue), żadnej zależności od Vue ani
@@ -90,7 +96,30 @@ export function czyWielokrotnyWybor(field, operator) {
   if (!field) return false
   if (!['in', 'not in'].includes(operator)) return false
   if (field.fieldtype === 'Select') return true
-  if (field.fieldtype === 'Link' && field.options !== 'User') return true
+  if (field.fieldtype === 'Link') return true
   if (czyPoleTagow(field)) return true
   return false
+}
+
+/**
+ * Operator domyślny wymuszony przez wielokrotny wybór (issue #215, decyzja
+ * właściciela 2026-10-01): każde pole, dla którego
+ * `czyWielokrotnyWybor(field, 'in')` zwraca prawdę (Select, Link poza
+ * Dynamic Link, pola tagów -- patrz jej JSDoc), ma od razu otwierać listę
+ * checkboxów z operatorem "jest jednym z" zamiast pojedynczej wartości
+ * ("równa się"/"zawiera"), bez konieczności ręcznej zmiany operatora.
+ *
+ * Zwraca `'in'`, gdy wielokrotny wybór ma zastosowanie, albo `null`, gdy
+ * wołający (Filter.vue::getDefaultOperator) ma zdecydować sam na
+ * podstawie `fieldtype` -- `null`, nie `'equals'`/`'like'`, bo ta funkcja
+ * nie zna reszty drabinki fieldtype'ów (Check/Number/Date/...) i nie
+ * powinna jej duplikować.
+ *
+ * Frappe-free, ten sam kształt `field` co `czyWielokrotnyWybor`.
+ *
+ * @param {{fieldtype: string, options?: string}|null|undefined} field
+ * @returns {'in'|null}
+ */
+export function domyslnyOperatorWielokrotny(field) {
+  return czyWielokrotnyWybor(field, 'in') ? 'in' : null
 }

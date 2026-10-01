@@ -19,6 +19,7 @@ from crm.volteo_lista_szans import (
 	POLA_ZAWSZE_DOZWOLONE,
 	niedozwolone_klucze_filtrow,
 	podstaw_dzis,
+	podstaw_me,
 	polacz_zbiory_nazw,
 	rozpoznaj_filtry_tagu,
 	wzory_tagu,
@@ -118,32 +119,17 @@ def _pola_dozwolone(doctype: str, parenttype: str | None = None) -> set[str]:
 
 def _podstaw_me(filters: dict) -> dict:
 	"""Podstawia frappe.session.user za literal "@me" (takze wewnatrz "%@me%"
-	w filtrach LIKE, uzywanych przez operator LIKE) w wartosciach `filters`.
-	Wyciagnieta z `get_data` (issue #100), zeby `crm.api.volteo_leady.mapa`
-	mogla podstawiac "@me" identycznie jak SPA forka zamiast duplikowac te
-	sama logike osobno dla mapy leadow.
+	w filtrach LIKE, uzywanych przez operator LIKE, i wewnatrz list
+	operatorow "in"/"not in", issue #214) w wartosciach `filters`. Wyciagnieta
+	z `get_data` (issue #100), zeby `crm.api.volteo_leady.mapa` mogla
+	podstawiac "@me" identycznie jak SPA forka zamiast duplikowac te sama
+	logike osobno dla mapy leadow.
 
-	Zwraca NOWY dict i nie mutuje ani `filters`, ani zagniezdzonych list w
-	jego wartosciach (coding-style.md: immutability)  -  oryginalny kod w
-	`get_data` mutowal listy w miejscu, co bylo nieszkodliwe dopoki jedynym
-	wolajacym byl ten sam request; wspoldzielenie z drugim wolajacym usuwa
-	to bezpieczne zalozenie."""
-	wynik: dict = {}
-	for key, value in filters.items():
-		if isinstance(value, list):
-			nowa_wartosc = list(value)
-			if "@me" in nowa_wartosc:
-				nowa_wartosc[nowa_wartosc.index("@me")] = frappe.session.user
-			elif "%@me%" in nowa_wartosc:
-				for i, v in enumerate(nowa_wartosc):
-					if v == "%@me%":
-						nowa_wartosc[i] = "%" + frappe.session.user + "%"
-			wynik[key] = nowa_wartosc
-		elif value == "@me":
-			wynik[key] = frappe.session.user
-		else:
-			wynik[key] = value
-	return wynik
+	Cienki wrapper (issue #214): cala logika zamiany mieszka teraz we
+	frappe-free `crm.volteo_lista_szans.podstaw_me` (testowalna bez `frappe`,
+	patrz `crm.test_volteo_lista_szans`) -- ta funkcja tylko wstrzykuje
+	`frappe.session.user` jako wartosc podstawiana."""
+	return podstaw_me(filters, frappe.session.user)
 
 
 def _podstaw_dzis(filters: dict, doctype: str) -> dict:

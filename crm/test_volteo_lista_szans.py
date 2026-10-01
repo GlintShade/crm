@@ -12,6 +12,7 @@ from crm.volteo_lista_szans import (
 	SORT_FIELDS_LEAD,
 	niedozwolone_klucze_filtrow,
 	podstaw_dzis,
+	podstaw_me,
 	polacz_zbiory_nazw,
 	rozpoznaj_filtr_tagu,
 	rozpoznaj_filtry_tagu,
@@ -542,6 +543,83 @@ class TestPodstawDzis(unittest.TestCase):
 
 	def test_n_puste_filtry(self: "TestPodstawDzis") -> None:
 		self.assertEqual(podstaw_dzis({}, self.DZIS, self.JUTRO, self._czy_datetime), {})
+
+
+class TestPodstawMe(unittest.TestCase):
+	"""`podstaw_me` (issue #214) -- rdzen frappe-free wyciagniety z
+	`crm.api.doc._podstaw_me` (issue #100 go tam wprowadzil), tak samo jak
+	`podstaw_dzis` powyzej dla "@dzis". `user` jest tu wstrzykiwany wprost,
+	tak jak w produkcji przekazuje go `crm.api.doc._podstaw_me`
+	(`frappe.session.user`)."""
+
+	USER = "jan@proenergy.pro"
+
+	def test_a_skalar(self: "TestPodstawMe") -> None:
+		filtry = {"deal_owner": "@me"}
+		wynik = podstaw_me(filtry, self.USER)
+		self.assertEqual(wynik, {"deal_owner": self.USER})
+
+	def test_b_operator_rownosci(self: "TestPodstawMe") -> None:
+		filtry = {"deal_owner": ["=", "@me"]}
+		wynik = podstaw_me(filtry, self.USER)
+		self.assertEqual(wynik, {"deal_owner": ["=", self.USER]})
+
+	def test_c_wzorzec_like(self: "TestPodstawMe") -> None:
+		filtry = {"_assign": ["like", "%@me%"]}
+		wynik = podstaw_me(filtry, self.USER)
+		self.assertEqual(wynik, {"_assign": ["like", f"%{self.USER}%"]})
+
+	def test_d_in_lista_z_me_i_innym_uzytkownikiem(self: "TestPodstawMe") -> None:
+		# Issue #214: pola osob z wielokrotnym wyborem -- "@me" wewnatrz listy
+		# operatora "in" musi zostac podstawiony, pozostale wartosci listy
+		# (prawdziwe adresy e-mail) zostaja bez zmian.
+		filtry = {"custom_cc": ["in", ["@me", "jan.kowalski@proenergy.pro"]]}
+		wynik = podstaw_me(filtry, self.USER)
+		self.assertEqual(
+			wynik, {"custom_cc": ["in", [self.USER, "jan.kowalski@proenergy.pro"]]}
+		)
+
+	def test_e_not_in_lista_z_me(self: "TestPodstawMe") -> None:
+		filtry = {"deal_owner": ["not in", ["@me"]]}
+		wynik = podstaw_me(filtry, self.USER)
+		self.assertEqual(wynik, {"deal_owner": ["not in", [self.USER]]})
+
+	def test_f_in_lista_bez_me_bez_zmian(self: "TestPodstawMe") -> None:
+		filtry = {"deal_owner": ["in", ["jan@x.pl", "ewa@x.pl"]]}
+		wynik = podstaw_me(filtry, self.USER)
+		self.assertEqual(wynik, filtry)
+
+	def test_g_in_lista_rowniez_wzorzec_like(self: "TestPodstawMe") -> None:
+		# Nie ma dzis takiego wywolania z frontu (LIKE jest zawsze
+		# jednowartosciowy), ale rekurencja dziala identycznie dla
+		# "%@me%" wewnatrz listy, nie tylko dla gorego "@me".
+		filtry = {"_assign": ["in", ["%@me%", "%ewa@x.pl%"]]}
+		wynik = podstaw_me(filtry, self.USER)
+		self.assertEqual(wynik, {"_assign": ["in", [f"%{self.USER}%", "%ewa@x.pl%"]]})
+
+	def test_h_brak_literalu_bez_zmian(self: "TestPodstawMe") -> None:
+		filtry = {
+			"status": "Odłożony",
+			"lead_name": ["like", "%Kowalski%"],
+			"deal_owner": ["in", ["jan@x.pl"]],
+		}
+		wynik = podstaw_me(filtry, self.USER)
+		self.assertEqual(wynik, filtry)
+
+	def test_i_puste_filtry(self: "TestPodstawMe") -> None:
+		self.assertEqual(podstaw_me({}, self.USER), {})
+
+	def test_j_zwraca_nowy_dict(self: "TestPodstawMe") -> None:
+		filtry = {"status": "Odłożony"}
+		wynik = podstaw_me(filtry, self.USER)
+		self.assertIsNot(wynik, filtry)
+
+	def test_k_nie_mutuje_oryginalu(self: "TestPodstawMe") -> None:
+		oryginalna_lista = ["in", ["@me", "jan@x.pl"]]
+		filtry = {"custom_cc": oryginalna_lista}
+		podstaw_me(filtry, self.USER)
+		self.assertEqual(oryginalna_lista, ["in", ["@me", "jan@x.pl"]])
+		self.assertEqual(filtry, {"custom_cc": oryginalna_lista})
 
 
 class TestPolaTagowLead(unittest.TestCase):

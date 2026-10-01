@@ -36,6 +36,10 @@ describe('rozpakujWartoscFiltraSzybkiego', () => {
     expect(rozpakujWartoscFiltraSzybkiego('')).toEqual([])
   })
 
+  it('issue #214: skalar "@me" (zapisany widok sprzed wielokrotnego wyboru pól osób, np. custom_cc: "@me") -> jedno zaznaczenie "@me"', () => {
+    expect(rozpakujWartoscFiltraSzybkiego('@me')).toEqual(['@me'])
+  })
+
   it('issue ops#173: kształt złożony -> strona "ma"', () => {
     expect(
       rozpakujWartoscFiltraSzybkiego([
@@ -128,21 +132,21 @@ describe('czyWielokrotnyFiltrSzybki', () => {
     ).toBe(true)
   })
 
-  it('Link options===User (custom_cc, lead_owner) → false', () => {
+  it('issue #214: Link options===User (custom_cc, lead_owner) → true, checkboxy z zakresem Sales Hierarchy w QuickFilterCheckList', () => {
     expect(
       czyWielokrotnyFiltrSzybki('CRM Lead', {
         fieldname: 'custom_cc',
         fieldtype: 'Link',
         options: 'User',
       }),
-    ).toBe(false)
+    ).toBe(true)
     expect(
       czyWielokrotnyFiltrSzybki('CRM Lead', {
         fieldname: 'lead_owner',
         fieldtype: 'Link',
         options: 'User',
       }),
-    ).toBe(false)
+    ).toBe(true)
   })
 
   it('Date/Datetime → false', () => {

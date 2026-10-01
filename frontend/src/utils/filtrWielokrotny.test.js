@@ -1,5 +1,6 @@
 import {
   czyWielokrotnyWybor,
+  domyslnyOperatorWielokrotny,
   parsujWartoscWielokrotna,
   scalOpcjeZZaznaczonymi,
 } from './filtrWielokrotny'
@@ -97,9 +98,9 @@ describe('czyWielokrotnyWybor', () => {
     expect(czyWielokrotnyWybor({ fieldtype: 'Link', options: 'CRM Deal Status' }, 'not in')).toBe(true)
   })
 
-  it('Link z options === "User" (lead_owner, custom_cc, deal_owner, custom_opiekun...) → false, zostaje pole tekstowe', () => {
-    expect(czyWielokrotnyWybor({ fieldtype: 'Link', options: 'User' }, 'in')).toBe(false)
-    expect(czyWielokrotnyWybor({ fieldtype: 'Link', options: 'User' }, 'not in')).toBe(false)
+  it('issue #214: Link z options === "User" (lead_owner, custom_cc, deal_owner, custom_opiekun...) → true, dostaje wielokrotny wybór jak każdy inny Link', () => {
+    expect(czyWielokrotnyWybor({ fieldtype: 'Link', options: 'User' }, 'in')).toBe(true)
+    expect(czyWielokrotnyWybor({ fieldtype: 'Link', options: 'User' }, 'not in')).toBe(true)
   })
 
   it('Dynamic Link → false, doctype zmienia się per wiersz', () => {
@@ -145,5 +146,42 @@ describe('czyWielokrotnyWybor', () => {
       volteo_tagi: 1,
     }
     expect(czyWielokrotnyWybor(field, 'equals')).toBe(false)
+  })
+})
+
+describe('domyslnyOperatorWielokrotny', () => {
+  it('Select → "in"', () => {
+    expect(domyslnyOperatorWielokrotny({ fieldtype: 'Select', options: 'A\nB' })).toBe('in')
+  })
+
+  it('Link, w tym options === "User" (issue #214/#215) → "in"', () => {
+    expect(domyslnyOperatorWielokrotny({ fieldtype: 'Link', options: 'CRM Lead Status' })).toBe(
+      'in',
+    )
+    expect(domyslnyOperatorWielokrotny({ fieldtype: 'Link', options: 'User' })).toBe('in')
+  })
+
+  it('pole tagów (ops#150) → "in"', () => {
+    expect(
+      domyslnyOperatorWielokrotny({ fieldtype: 'Data', fieldname: 'custom_produkt_procesu' }),
+    ).toBe('in')
+  })
+
+  it('Dynamic Link → null, wołający decyduje sam', () => {
+    expect(
+      domyslnyOperatorWielokrotny({ fieldtype: 'Dynamic Link', options: 'reference_doctype' }),
+    ).toBeNull()
+  })
+
+  it('inny fieldtype (Data, Int, Check, Date...) → null, wołający decyduje sam', () => {
+    expect(domyslnyOperatorWielokrotny({ fieldtype: 'Data' })).toBeNull()
+    expect(domyslnyOperatorWielokrotny({ fieldtype: 'Int' })).toBeNull()
+    expect(domyslnyOperatorWielokrotny({ fieldtype: 'Check' })).toBeNull()
+    expect(domyslnyOperatorWielokrotny({ fieldtype: 'Date' })).toBeNull()
+  })
+
+  it('brak pola → null', () => {
+    expect(domyslnyOperatorWielokrotny(null)).toBeNull()
+    expect(domyslnyOperatorWielokrotny(undefined)).toBeNull()
   })
 })

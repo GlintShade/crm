@@ -250,6 +250,54 @@ def niedozwolone_klucze_filtrow(
 	return niedozwolone
 
 
+def podstaw_me(filters: Mapping[str, object], user: str) -> dict:
+	"""Podstawia `user` za literal ``"@me"`` w wartościach `filters` (takze
+	wewnatrz wzorca LIKE ``"%@me%"`` i wewnatrz list operatorow ``"in"``/
+	``"not in"``, issue #214). Frappe-free rdzen wydzielony z
+	``crm.api.doc._podstaw_me`` (issue #100 go tam wprowadzil, issue #214 go
+	stad wyciaga) -- `crm.api.doc._podstaw_me` jest teraz cienkim
+	wrapperem przekazujacym `frappe.session.user` jako `user`.
+
+	Obslugiwane ksztalty wartosci filtra:
+	  - skalar ``"@me"`` -> `user`;
+	  - ``[operator, "@me"]`` -> ``[operator, user]`` (dowolny operator, np.
+	    ``"="``);
+	  - ``[operator, "%@me%"]`` (wzorzec operatora LIKE) -> ``[operator,
+	    "%" + user + "%"]``;
+	  - ``["in"/"not in", [...]]`` (issue #214: pola osob z wielokrotnym
+	    wyborem, np. ``["in", ["@me", "jan@x.pl"]]``) -> kazdy element
+	    rownowagi listy rowny ``"@me"`` zamieniany na `user`, kazdy element
+	    rowny ``"%@me%"`` zamieniany na ``"%" + user + "%"`` -- rekurencyjnie,
+	    wiec dzialą takze zagniezdzone ksztalty zlozone z wiecej niz jednym
+	    poziomem listy.
+	Wartosci bez literalu ``"@me"``/``"%@me%"`` w zadnej z powyzszych pozycji
+	wracaja bez zmian.
+
+	Zwraca NOWY dict i nie mutuje ani `filters`, ani zagniezdzonych list w
+	jego wartosciach (coding-style.md: immutability) -- oryginalny kod w
+	`get_data` mutowal listy w miejscu, co bylo nieszkodliwe dopoki jedynym
+	wolajacym byl ten sam request; wspoldzielenie z `crm.api.volteo_leady.mapa`
+	(drugi wolajacy `_podstaw_me`) usuwa to bezpieczne zalozenie."""
+	wynik: dict = {}
+	for pole, wartosc in filters.items():
+		wynik[pole] = _podstaw_element_me(wartosc, user)
+	return wynik
+
+
+def _podstaw_element_me(wartosc: object, user: str) -> object:
+	"""Podstawianie dla JEDNEGO elementu (wartosci filtra ALBO elementu
+	zagniezdzonej listy) -- wydzielone z `podstaw_me`, zeby rekurencja w
+	głąb list (`["in", ["@me", ...]]`) uzywala dokladnie tej samej reguly
+	zamiany co poziom najwyzszy, bez duplikowania jej w dwoch miejscach."""
+	if isinstance(wartosc, list):
+		return [_podstaw_element_me(element, user) for element in wartosc]
+	if wartosc == "@me":
+		return user
+	if wartosc == "%@me%":
+		return "%" + user + "%"
+	return wartosc
+
+
 def podstaw_dzis(
 	filters: Mapping[str, object],
 	dzis: str,
