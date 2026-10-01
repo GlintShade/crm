@@ -1478,6 +1478,14 @@ DEAL_CASCADE_DOCTYPES = [
 	# jest zabezpieczeniem dla usuniecia POJEDYNCZEGO formularza kredytowego
 	# poza kaskada calej szansy, nie dla tej sciezki).
 	("Volteo Notatka", "deal"),
+	# Volteo Notatka Prywatna (issue #213, admin-only, crm.api.notatki.*): nie
+	# linkuje zaden inny doctype kaskady (tylko pole "deal"), wiec pozycja w
+	# tej liscie nie jest load-bearing jak przy Volteo Notatka powyzej -- tuz
+	# obok niej wylacznie dla czytelnosci (dwa doktypy notatek razem). Kasacja
+	# idzie z ignore_permissions=True w _usun_jeden() ponizej, wiec backoffice
+	# (ops#183, zero DocPerm na tym doctype) moze mimo to skasowac caly dom
+	# kaskadowo razem z szansa.
+	("Volteo Notatka Prywatna", "deal"),
 	("Volteo Umowa", "deal"),
 	("Volteo Kredyt", "deal"),
 	("Volteo Audyt", "deal"),

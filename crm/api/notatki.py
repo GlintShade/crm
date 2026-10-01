@@ -44,6 +44,7 @@ import frappe
 from frappe import _
 
 from crm.api.comment import extract_mentions
+from crm.api.koszty import ADMIN_ROLE
 from crm.fcrm.doctype.crm_notification.crm_notification import notify_user
 from crm.volteo_notatki import (
 	DOCTYPE,
@@ -489,6 +490,123 @@ def on_trash(doc, method: str | None = None) -> None:
 		pluck="name",
 	):
 		frappe.delete_doc("File", plik_name, ignore_permissions=True)
+
+
+# ---------------------------------------------------------------------------
+# Notatki prywatne administracji (issue #213) -- doctype calkowicie osobny
+# od Volteo Notatka powyzej, `Volteo Notatka Prywatna` (ops/crm-notatki-
+# prywatne.py). Widoczne i zapisywalne WYLACZNIE dla System Manager / Volteo
+# Core Admin (ta sama para co `crm.api.koszty.ADMIN_ROLE`, NIE BYPASS_ROLES z
+# `crm.permissions.org_hierarchy` -- ten zbior obejmuje Volteo Backend, ktory
+# tu musi zostac calkowicie slepy). Zero hooka widocznosci-po-szansie: DocPerm
+# sam w sobie jest wystarczajacym straznikiem (admin i tak widzi kazda
+# szanse), a bramka ADMIN_ROLE ponizej jest DRUGA linia obrony -- tak samo jak
+# `crm.api.koszty.volteo_koszty_zapisz` sprawdza role przed delegowaniem do
+# rdzenia, mimo ze DocPerm juz by i tak zablokowal zapis.
+#
+# Zalaczniki ida BEZPOSREDNIO pod notatke (`attached_to_doctype =
+# "Volteo Notatka Prywatna"`), nie pod CRM Deal ze znacznikiem jak w
+# `Volteo Notatka` wyzej -- ten doctype rowniez nie ma pola Attach (ten sam
+# powod: rdzen Frappe duplikowalby wiersz File przy kazdym zapisie dokumentu
+# majacego pole Attach), ale upload idzie DOPIERO PO utworzeniu notatki
+# (frontend trzyma wybrane pliki lokalnie do chwili zapisu tekstu), wiec nie
+# ma potrzeby na posrednia faze "roboczy". Kasacja notatki (delete_doc)
+# sprzata zalaczniki ZA DARMO -- rdzen Frappe kasuje kazdy File podpiety
+# bezposrednio pod dokument, ktory wlasnie kasuje, bez wlasnego on_trash.
+# ---------------------------------------------------------------------------
+
+_POLA_WPISU_PRYWATNE = ["name", "tekst", "owner", "creation"]
+PRYWATNA_DOCTYPE = "Volteo Notatka Prywatna"
+
+
+def _bramka_notatek_prywatnych() -> None:
+	if not ADMIN_ROLE & set(frappe.get_roles(frappe.session.user)):
+		frappe.throw(_("Brak uprawnień."), frappe.PermissionError)
+
+
+@frappe.whitelist()
+def lista_prywatne(deal: str) -> dict:
+	_bramka_notatek_prywatnych()
+	if not frappe.has_permission("CRM Deal", "read", deal):
+		frappe.throw(_("Brak uprawnień do tej szansy sprzedaży."), frappe.PermissionError)
+
+	wpisy = frappe.get_list(
+		PRYWATNA_DOCTYPE,
+		filters={"deal": deal},
+		fields=_POLA_WPISU_PRYWATNE,
+		order_by="creation desc",
+		limit_page_length=0,
+	)
+
+	autorzy: dict[str, str] = {}
+	if wpisy:
+		for wiersz in frappe.get_all(
+			"User",
+			filters={"name": ["in", list({w.owner for w in wpisy})]},
+			fields=["name", "full_name"],
+		):
+			autorzy[wiersz.name] = wiersz.full_name
+
+	# frappe.db.get_all (nie frappe.get_all): uprawnienia File sa owner-based,
+	# a te pliki moga naleziec do roznych adminow na TEJ SAMEJ szansie -- ten
+	# sam powod co pliki `Volteo Notatka` wyzej.
+	pliki_per_notatka: dict[str, list] = {}
+	if wpisy:
+		pliki = (
+			frappe.db.get_all(
+				"File",
+				filters={
+					"attached_to_doctype": PRYWATNA_DOCTYPE,
+					"attached_to_name": ["in", [w.name for w in wpisy]],
+				},
+				fields=["attached_to_name", *_POLA_PLIKU],
+			)
+			or []
+		)
+		for plik in pliki:
+			pliki_per_notatka.setdefault(plik.attached_to_name, []).append(
+				{klucz: plik[klucz] for klucz in _POLA_PLIKU}
+			)
+
+	wynik = [
+		{
+			**wpis,
+			"autor_nazwa": autorzy.get(wpis.owner) or wpis.owner,
+			"pliki": pliki_per_notatka.get(wpis.name, []),
+		}
+		for wpis in wpisy
+	]
+
+	return {"wpisy": wynik}
+
+
+@frappe.whitelist(methods=["POST"])
+def dodaj_prywatna(deal: str, tekst: str) -> dict:
+	_bramka_notatek_prywatnych()
+	if not frappe.has_permission("CRM Deal", "read", deal):
+		frappe.throw(_("Brak uprawnień do tej szansy sprzedaży."), frappe.PermissionError)
+	if tekst_pusty(tekst):
+		frappe.throw(_("Treść notatki nie może być pusta."))
+
+	doc = frappe.get_doc({"doctype": PRYWATNA_DOCTYPE, "deal": deal, "tekst": tekst})
+	# BEZ ignore_permissions: DocPerm create (wylacznie System Manager /
+	# Volteo Core Admin) decyduje, czy ten insert w ogole przejdzie -- druga
+	# linia obrony po bramce ADMIN_ROLE powyzej.
+	doc.insert()
+
+	return {"name": doc.name}
+
+
+@frappe.whitelist(methods=["POST"])
+def usun_prywatna(name: str) -> None:
+	_bramka_notatek_prywatnych()
+	if not frappe.db.exists(PRYWATNA_DOCTYPE, name):
+		frappe.throw(_("Notatka nie istnieje."), frappe.DoesNotExistError)
+	# BEZ ignore_permissions: DocPerm delete (wylacznie System Manager /
+	# Volteo Core Admin) decyduje. Rdzen Frappe kasuje przy okazji kazdy
+	# File podpiety bezposrednio pod ten dokument (patrz komentarz naglowka
+	# sekcji) -- bez potrzeby wlasnego on_trash.
+	frappe.delete_doc(PRYWATNA_DOCTYPE, name)
 
 
 def odlacz_kredyt(doc, method: str | None = None) -> None:
