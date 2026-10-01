@@ -119,9 +119,16 @@
 //            LinkMultiSelect.vue: debounce zapytania, scalanie wyników z
 //            aktualnie zaznaczonymi wartościami przez scalOpcjeZZaznaczonymi,
 //            żeby zaznaczenie zostało widoczne nawet gdy kolejne zapytanie
-//            zawęzi wyniki i akurat pominie już wybraną wartość). Ten
-//            komponent nigdy nie dostaje doctype='User', patrz wyłączenie
-//            w czyWielokrotnyWybor i jego JSDoc.
+//            zawęzi wyniki i akurat pominie już wybraną wartość). Issue #214
+//            (2026-10-01): gdy `options === 'User'` (np. custom_cc,
+//            lead_owner), dochodzi zawężenie do poddrzewa Sales Hierarchy i
+//            opcja "@me" jako pierwsza pozycja -- ten sam, wspólny,
+//            frappe-free moduł `utils/zakresUzytkownikow.js`, z którego
+//            korzysta też LinkMultiSelect.vue (popover "Filtr") i Link.vue
+//            (wybór pojedynczy). Przed tym issue to pole w ogóle nie
+//            docierało tutaj (patrz wyłączenie User w
+//            utils/filtrWielokrotny.js::czyWielokrotnyWybor, usunięte tym
+//            issue).
 import {
   Button,
   Checkbox,
@@ -133,6 +140,9 @@ import {
 } from 'frappe-ui'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { scalOpcjeZZaznaczonymi } from '@/utils/filtrWielokrotny'
+import { opcjeUzytkownikow } from '@/utils/etykietaUzytkownika'
+import { dolozOpcjeMoje, filtrZakresuUzytkownikow } from '@/utils/zakresUzytkownikow'
+import { usersStore } from '@/stores/users'
 import {
   etykietaChipaFiltraSzybkiego,
   grupyOpcjiFiltraSzybkiego,
@@ -147,7 +157,12 @@ const props = defineProps({
   // i grupyOpcjiFiltraSzybkiego w utils/filtrSzybki.js, który oba kształty
   // normalizuje). Link: nazwa doctype'u do przeszukania.
   options: { type: [Array, String], default: () => [] },
+  // Issue #214: etykieta opcji "@me" (utils/etykietaMoje.js), uwzględniana
+  // wyłącznie gdy fieldtype==='Link' i options==='User'.
+  meLabel: { type: String, default: '@me' },
 })
+
+const { getUser } = usersStore()
 
 const model = defineModel({ type: Array, default: () => [] })
 
@@ -189,6 +204,9 @@ watch(
 const wybrane = computed(() => lokalneWybrane.value)
 
 const jestLink = computed(() => props.fieldtype === 'Link')
+// Issue #214: pole Link do User (custom_cc, lead_owner, deal_owner,
+// custom_opiekun...) -- zawężenie do poddrzewa hierarchii i opcja "@me".
+const jestUser = computed(() => jestLink.value && props.options === 'User')
 
 function jestZaznaczona(wartosc) {
   return wybrane.value.includes(wartosc)
@@ -238,6 +256,34 @@ const grupyStatyczne = computed(() => grupyOpcjiFiltraSzybkiego(props.options))
 const zapytanie = ref('')
 const znaneEtykiety = ref(new Map())
 
+// Issue #214: zakres widocznych użytkowników (ten sam zasób/cache co
+// Link.vue i LinkMultiSelect.vue, pobierany raz na stronę) -- WYŁĄCZNIE gdy
+// jestUser.
+const widoczniUzytkownicy = createResource({
+  url: 'crm.api.volteo_uzytkownicy.widoczni_uzytkownicy',
+  cache: ['widoczni_uzytkownicy'],
+})
+
+watch(
+  jestUser,
+  (aktywne) => {
+    if (aktywne && !widoczniUzytkownicy.fetched && !widoczniUzytkownicy.loading) {
+      widoczniUzytkownicy.fetch()
+    }
+  },
+  { immediate: true },
+)
+
+// `null` = "jeszcze nie gotowe" (dopóki zakres dla doctype='User' nie
+// dotarł) -- ten sam wzorzec co Link.vue::effectiveFilters i
+// LinkMultiSelect.vue::effectiveFilters. `{}` dla każdego pola Link
+// spoza User (zachowanie sprzed issue #214).
+const effectiveFilters = computed(() => {
+  if (!jestUser.value) return {}
+  if (!widoczniUzytkownicy.fetched) return null
+  return filtrZakresuUzytkownikow({}, widoczniUzytkownicy.data)
+})
+
 const zasob = createResource({
   url: 'frappe.desk.search.search_link',
   method: 'POST',
@@ -247,27 +293,48 @@ const zasob = createResource({
     filters: {},
   },
   transform: (data) => {
-    const wynik = (data || []).map((o) => ({
-      label: o.label || o.value,
-      value: o.value,
-    }))
+    let wynik = jestUser.value
+      ? opcjeUzytkownikow(data, getUser)
+      : (data || []).map((o) => ({
+          label: o.label || o.value,
+          value: o.value,
+        }))
+    if (jestUser.value) {
+      // Issue #214: "@me" jako pierwsza pozycja, patrz
+      // utils/zakresUzytkownikow.js::dolozOpcjeMoje.
+      wynik = dolozOpcjeMoje(wynik, props.meLabel)
+    }
     for (const opcja of wynik) znaneEtykiety.value.set(opcja.value, opcja)
     return wynik
   },
 })
 
+function wyszukajLink(txt) {
+  // Issue #214: dopóki jestUser i zakres jeszcze nie dotarł
+  // (effectiveFilters === null), nie odpytujemy -- watch(effectiveFilters)
+  // niżej wywoła wyszukiwanie ponownie, gdy zakres dotrze.
+  if (jestUser.value && effectiveFilters.value === null) return
+  zasob.update({ params: { txt, doctype: props.options, filters: effectiveFilters.value } })
+  zasob.fetch()
+}
+
 let debounceTimer = null
 function naZmianeZapytania(txt) {
   zapytanie.value = txt
   clearTimeout(debounceTimer)
-  debounceTimer = setTimeout(() => {
-    zasob.update({ params: { txt, doctype: props.options, filters: {} } })
-    zasob.fetch()
-  }, 300)
+  debounceTimer = setTimeout(() => wyszukajLink(txt), 300)
 }
 
 onMounted(() => {
-  if (jestLink.value) zasob.fetch()
+  if (jestLink.value) wyszukajLink('')
+})
+
+// Issue #214: gdy effectiveFilters przechodzi z `null` na gotowy obiekt
+// (zakres dotarł z serwera), uruchom wyszukiwanie od razu.
+watch(effectiveFilters, (wartosc, poprzednia) => {
+  if (poprzednia === null && wartosc !== null) {
+    wyszukajLink(zapytanie.value)
+  }
 })
 
 const opcjeLinku = computed(() => {

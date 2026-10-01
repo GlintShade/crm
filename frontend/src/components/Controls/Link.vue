@@ -70,6 +70,7 @@
 import Autocomplete from '@/components/frappe-ui/Autocomplete.vue'
 import { isTranslatable } from '@/utils'
 import { opcjeUzytkownikow, etykietaWartosciUzytkownika } from '@/utils/etykietaUzytkownika'
+import { dolozOpcjeMoje, filtrZakresuUzytkownikow } from '@/utils/zakresUzytkownikow'
 import { usersStore } from '@/stores/users'
 import { watchDebounced } from '@vueuse/core'
 import { createResource } from 'frappe-ui'
@@ -295,24 +296,23 @@ const effectiveFilters = computed(() => {
   // jako `undefined`, nie `null`. Porównanie luźne `== null` łapie oba
   // przypadki naraz — obydwa znaczą to samo: „bez ograniczenia".
   if (lista == null) return usunZnacznikiZakresow(props.filters)
-  // Każda wartość, która dotrze inna niż tablica (np. literał `{}`
-  // z jakiegoś pośredniego cache'a albo przyszła zmiana kontraktu API),
-  // traktujemy tak samo jak „bez ograniczenia" zamiast rzucać
-  // TypeError na `.length` niżej — bez logowania, bo projekt zakazuje
-  // console.* w kodzie produkcyjnym; to ma być cichy, bezpieczny fallback.
-  if (!Array.isArray(lista)) return usunZnacznikiZakresow(props.filters)
 
   // W kontekstach filtrowania (jedyne dziś użycie userScope) filters nie
   // jest przekazywane (domyślne [] traktujemy jak {}); gdyby kiedyś ktoś
   // przekazał tablicę/string razem z userScope, i tak nie umiemy scalić
   // formatu tablicowego filtrów Frappe z dict-em wymaganym przez
   // search_link, więc bezpiecznie zaczynamy od pustego obiektu.
+  //
+  // Issue #214: sama reguła budowania filtra `name` z `lista` (łącznie z
+  // wartownikiem `['in', ['']]` dla pustej listy i bezpiecznym fallbackiem
+  // dla `lista` nie będącej tablicą) żyje teraz we wspólnym, frappe-free
+  // `utils/zakresUzytkownikow.js::filtrZakresuUzytkownikow`, tej samej,
+  // z której korzystają QuickFilterCheckList.vue i LinkMultiSelect.vue.
   const baza =
     props.filters && typeof props.filters === 'object' && !Array.isArray(props.filters)
       ? usunZnacznikiZakresow(props.filters)
       : {}
-  baza.name = lista.length ? ['in', lista] : ['in', ['']]
-  return baza
+  return filtrZakresuUzytkownikow(baza, lista)
 })
 
 watchDebounced(
@@ -384,11 +384,12 @@ const options = createResource({
               description: stripHtml(option.description),
             }
           })
-    if (!props.hideMe && props.doctype == 'User') {
-      allData.unshift({
-        label: props.meLabel,
-        value: '@me',
-      })
+    if (props.doctype == 'User') {
+      // Issue #214: ta sama logika (opcja "@me" jako pierwsza pozycja,
+      // pomijana gdy hideMe) żyje teraz we wspólnym
+      // utils/zakresUzytkownikow.js::dolozOpcjeMoje, z której korzystają
+      // też QuickFilterCheckList.vue i LinkMultiSelect.vue.
+      allData = dolozOpcjeMoje(allData, props.meLabel, props.hideMe)
     }
     if (props.sortComparator) {
       allData = [...allData].sort(props.sortComparator)

@@ -11,6 +11,7 @@
     :label="filter.label"
     :fieldtype="typCheckList"
     :options="opcjeCheckList"
+    :meLabel="etykietaMoje(doctype)"
     :modelValue="parsujWartoscWielokrotna(filter.value)"
     @update:modelValue="(wartosci) => updateFilter(filter, wartosci)"
   />
