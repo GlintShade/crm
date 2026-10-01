@@ -30,12 +30,12 @@
       <div
         class="my-1 w-60 rounded-lg bg-surface-elevation-2 p-1 shadow-2xl ring-1 ring-black ring-opacity-5 focus:outline-none"
       >
-        <div v-if="jestLink" class="p-1">
+        <div v-if="jestLink || jestWartosciSerwera" class="p-1">
           <FormControl
             type="text"
             :placeholder="__('Search')"
-            :modelValue="zapytanie"
-            @input="(e) => naZmianeZapytania(e.target.value)"
+            :modelValue="jestLink ? zapytanie : zapytanieWartosciSerwera"
+            @input="(e) => naZmianeWyszukiwania(e.target.value)"
           />
         </div>
         <div class="max-h-60 overflow-y-auto">
@@ -64,10 +64,16 @@
             </div>
           </template>
           <div
-            v-if="jestLink && zasob.loading"
+            v-if="(jestLink && zasob.loading) || (jestWartosciSerwera && ladowanieWartosciSerwera)"
             class="flex justify-center p-2"
           >
             <LoadingIndicator class="h-4 w-4" />
+          </div>
+          <div
+            v-else-if="jestWartosciSerwera && bladWartosciSerwera"
+            class="px-2 py-1.5 text-sm text-ink-red-4"
+          >
+            {{ bladWartosciSerwera }}
           </div>
           <div
             v-else-if="!widoczneOpcje.length"
@@ -129,6 +135,23 @@
 //            docierało tutaj (patrz wyłączenie User w
 //            utils/filtrWielokrotny.js::czyWielokrotnyWybor, usunięte tym
 //            issue).
+//   Wartości z serwera (issue #218, prop `serverValues`): trzeci tryb, dla
+//            pól z `field.volteo_wartosci` (np. Powiat na CRM Lead,
+//            zawężony do aktywnego filtra Województwo). W odróżnieniu od
+//            Link (zapytanie do search_link za każdym wciśnięciem klawisza)
+//            PEŁNA lista opcji jest pobierana RAZ (i ponownie przy każdej
+//            zmianie zależnego filtra) z `serverValues.url`, a wyszukiwanie
+//            w polu tekstowym filtruje ją WYŁĄCZNIE po stronie klienta --
+//            katalog jest mały (rząd setek pozycji, nie tysięcy), więc
+//            kolejne zapytanie do serwera na każdy znak byłoby niepotrzebne.
+//            Licznik żądań (`numerZapytaniaWartosciSerwera`) chroni przed
+//            wyścigiem, gdy zależny filtr zmienia się szybciej niż
+//            odpowiada serwer -- ten sam wzorzec co
+//            `LeadyPrzydzial.vue::numerZapytaniaPowiaty`. Żadnego `cache:`
+//            w `createResource` poniżej: ten komponent montuje się
+//            wielokrotnie na tej samej stronie (raz na pole filtra), a
+//            współdzielony zasób nadpisywałby stan jednej instancji danymi
+//            przeznaczonymi dla innej.
 import {
   Button,
   Checkbox,
@@ -160,6 +183,17 @@ const props = defineProps({
   // Issue #214: etykieta opcji "@me" (utils/etykietaMoje.js), uwzględniana
   // wyłącznie gdy fieldtype==='Link' i options==='User'.
   meLabel: { type: String, default: '@me' },
+  // Issue #218: konfiguracja trybu "wartości z serwera" --
+  // `{ url, parametr, zaleznaWartosc }`. Obecność (nie-null) tego propa
+  // WYMUSZA ten tryb niezależnie od `fieldtype`/`options` -- wołający
+  // (QuickFilterField.vue/Filter.vue) ustala to z wyprzedzeniem na
+  // podstawie `field.volteo_wartosci` (utils/filtrSzybki.js::
+  // zaleznaWartoscFiltraSerwera), ten komponent sam nie zna żadnej nazwy
+  // pola. `url`: whitelisted API frontu zwracające tablicę stringów.
+  // `parametr`: nazwa parametru tego API, pod którym wysyłana jest
+  // `zaleznaWartosc`. `zaleznaWartosc`: aktualnie rozpakowana wartość
+  // filtra zależnego (tablica stringów, może być pusta -- "bez zawężenia").
+  serverValues: { type: Object, default: null },
 })
 
 const { getUser } = usersStore()
@@ -207,6 +241,8 @@ const jestLink = computed(() => props.fieldtype === 'Link')
 // Issue #214: pole Link do User (custom_cc, lead_owner, deal_owner,
 // custom_opiekun...) -- zawężenie do poddrzewa hierarchii i opcja "@me".
 const jestUser = computed(() => jestLink.value && props.options === 'User')
+// Issue #218: tryb "wartości z serwera" -- patrz JSDoc propa serverValues.
+const jestWartosciSerwera = computed(() => Boolean(props.serverValues))
 
 function jestZaznaczona(wartosc) {
   return wybrane.value.includes(wartosc)
@@ -325,8 +361,21 @@ function naZmianeZapytania(txt) {
   debounceTimer = setTimeout(() => wyszukajLink(txt), 300)
 }
 
+// Issue #218: dyspozytor pola wyszukiwania -- Link pyta serwer (debounce,
+// naZmianeZapytania powyżej), wartości z serwera filtrują PO STRONIE
+// KLIENTA listę już pobraną (patrz docstring modułu), bez żadnego
+// zapytania dodatkowego.
+function naZmianeWyszukiwania(txt) {
+  if (jestLink.value) {
+    naZmianeZapytania(txt)
+  } else if (jestWartosciSerwera.value) {
+    zapytanieWartosciSerwera.value = txt
+  }
+}
+
 onMounted(() => {
   if (jestLink.value) wyszukajLink('')
+  if (jestWartosciSerwera.value) wczytajWartosciSerwera()
 })
 
 // Issue #214: gdy effectiveFilters przechodzi z `null` na gotowy obiekt
@@ -346,13 +395,92 @@ const opcjeLinku = computed(() => {
   return scalOpcjeZZaznaczonymi([...wyniki, ...brakujaceZnane], wybrane.value)
 })
 
+// --- Wartości z serwera (issue #218) ---
+const zapytanieWartosciSerwera = ref('')
+const opcjeSurowe = ref([])
+const bladWartosciSerwera = ref('')
+const ladowanieWartosciSerwera = ref(false)
+
+// `auto: false` -- pobranie startuje jawnie z wczytajWartosciSerwera
+// (onMounted/watch poniżej), nigdy przy samym utworzeniu zasobu. Bez
+// `cache:`, patrz komentarz modułu u góry pliku.
+//
+// `url` jest ustalany RAZ, przy tworzeniu zasobu: frappe-ui's `update({url})`
+// zmienia wyłącznie widoczną z zewnątrz (reaktywną) właściwość `url` zasobu,
+// NIE adres faktycznie używany przez kolejne `fetch`/`submit` (ten zostaje
+// zamknięty w `options` z chwili `createResource`, patrz `resources.js` w
+// frappe-ui) -- wywołanie `.update({url: inny})` byłoby więc ciche i
+// mylące, nie zmieniałoby faktycznego zapytania. Niegroźne tutaj: jedna
+// instancja tego komponentu renderuje zawsze TO SAMO pole filtra przez cały
+// swój cykl życia, więc `serverValues.url` jest de facto stały.
+const zasobWartosciSerwera = createResource({
+  url: props.serverValues?.url || '',
+  auto: false,
+})
+
+let numerZapytaniaWartosciSerwera = 0
+async function wczytajWartosciSerwera() {
+  if (!jestWartosciSerwera.value) return
+  const tenNumer = ++numerZapytaniaWartosciSerwera
+  bladWartosciSerwera.value = ''
+  ladowanieWartosciSerwera.value = true
+  try {
+    const { parametr, zaleznaWartosc } = props.serverValues
+    const dane = await zasobWartosciSerwera.submit({
+      [parametr]: JSON.stringify(zaleznaWartosc || []),
+    })
+    // Odpowiedź na przestarzałe zapytanie (zależny filtr zmienił się
+    // ponownie zanim ta odpowiedź wróciła) -- zignoruj, patrz komentarz
+    // modułu u góry pliku (ten sam wzorzec co LeadyPrzydzial.vue).
+    if (tenNumer !== numerZapytaniaWartosciSerwera) return
+    opcjeSurowe.value = Array.isArray(dane) ? dane : []
+  } catch (err) {
+    if (tenNumer !== numerZapytaniaWartosciSerwera) return
+    bladWartosciSerwera.value =
+      err?.messages?.[0] || __('Nie udało się wczytać listy wartości')
+    opcjeSurowe.value = []
+  } finally {
+    if (tenNumer === numerZapytaniaWartosciSerwera) ladowanieWartosciSerwera.value = false
+  }
+}
+
+// Zmiana zależnego filtra (np. innego Województwa) -- porównanie przez
+// JSON.stringify, żeby nowa-ale-równa tablica z rodzica (nowa tożsamość
+// przy każdym jego przeliczeniu) nie wywoływała zbędnego zapytania.
+watch(
+  () => JSON.stringify(props.serverValues?.zaleznaWartosc || []),
+  () => {
+    if (jestWartosciSerwera.value) wczytajWartosciSerwera()
+  },
+)
+
+// Scalenie z zaznaczonymi PRZED filtrowaniem wyszukiwarką -- ten sam powód
+// co scalOpcjeZZaznaczonymi dla Linku: zaznaczony powiat spoza aktualnie
+// zawężonej (po Województwie) listy zostaje widoczny i zaznaczony
+// (decyzja orkiestratora, issue #218), nie znika po cichu.
+const opcjePelneWartosciSerwera = computed(() =>
+  scalOpcjeZZaznaczonymi(
+    opcjeSurowe.value.map((w) => ({ label: w, value: w })),
+    wybrane.value,
+  ),
+)
+const opcjeWidoczneWartosciSerwera = computed(() => {
+  const tekst = zapytanieWartosciSerwera.value.trim().toLowerCase()
+  if (!tekst) return opcjePelneWartosciSerwera.value
+  return opcjePelneWartosciSerwera.value.filter((opcja) =>
+    opcja.label.toLowerCase().includes(tekst),
+  )
+})
+
 // Link nie ma grup: jedna grupa bez nagłówka, tak jak płaska lista Select w
 // grupyOpcjiFiltraSzybkiego. `widoczneOpcje` (spłaszczone, bez podziału na
 // grupy) zostaje jako jedyne źródło dla etykietyWybranych/warunku "No
 // results" -- ich logika nie zależy od podziału na grupy.
-const grupyWidoczne = computed(() =>
-  jestLink.value ? [{ group: null, items: opcjeLinku.value }] : grupyStatyczne.value,
-)
+const grupyWidoczne = computed(() => {
+  if (jestLink.value) return [{ group: null, items: opcjeLinku.value }]
+  if (jestWartosciSerwera.value) return [{ group: null, items: opcjeWidoczneWartosciSerwera.value }]
+  return grupyStatyczne.value
+})
 const widoczneOpcje = computed(() =>
   grupyWidoczne.value.flatMap((grupa) => grupa.items),
 )

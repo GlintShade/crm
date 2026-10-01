@@ -1,5 +1,6 @@
 import {
   czyWielokrotnyWybor,
+  domyslnaWartoscFiltra,
   domyslnyOperatorWielokrotny,
   parsujWartoscWielokrotna,
   scalOpcjeZZaznaczonymi,
@@ -147,6 +148,29 @@ describe('czyWielokrotnyWybor', () => {
     }
     expect(czyWielokrotnyWybor(field, 'equals')).toBe(false)
   })
+
+  it('issue #218: pole z wartościami z serwera (Data + volteo_wartosci) + in/not in → true', () => {
+    const field = {
+      fieldtype: 'Data',
+      fieldname: 'custom_powiat',
+      volteo_wartosci: {
+        url: 'crm.api.volteo_leady.powiaty_filtra',
+        zalezy_od: 'custom_voivodeship',
+        parametr: 'wojewodztwa',
+      },
+    }
+    expect(czyWielokrotnyWybor(field, 'in')).toBe(true)
+    expect(czyWielokrotnyWybor(field, 'not in')).toBe(true)
+  })
+
+  it('issue #218: pole z wartościami z serwera na inny operator → false, zostaje bez zmian', () => {
+    const field = {
+      fieldtype: 'Data',
+      fieldname: 'custom_powiat',
+      volteo_wartosci: { url: 'x', zalezy_od: 'y', parametr: 'z' },
+    }
+    expect(czyWielokrotnyWybor(field, 'equals')).toBe(false)
+  })
 })
 
 describe('domyslnyOperatorWielokrotny', () => {
@@ -167,6 +191,16 @@ describe('domyslnyOperatorWielokrotny', () => {
     ).toBe('in')
   })
 
+  it('issue #215/#218: pole z wartościami z serwera (ops#150-podobne) → "in"', () => {
+    expect(
+      domyslnyOperatorWielokrotny({
+        fieldtype: 'Data',
+        fieldname: 'custom_powiat',
+        volteo_wartosci: { url: 'x', zalezy_od: 'y', parametr: 'z' },
+      }),
+    ).toBe('in')
+  })
+
   it('Dynamic Link → null, wołający decyduje sam', () => {
     expect(
       domyslnyOperatorWielokrotny({ fieldtype: 'Dynamic Link', options: 'reference_doctype' }),
@@ -183,5 +217,86 @@ describe('domyslnyOperatorWielokrotny', () => {
   it('brak pola → null', () => {
     expect(domyslnyOperatorWielokrotny(null)).toBeNull()
     expect(domyslnyOperatorWielokrotny(undefined)).toBeNull()
+  })
+})
+
+describe('domyslnaWartoscFiltra', () => {
+  // Fix regresji po #215 (zgłoszone przy #218): Filter.vue::updateOperator
+  // wołał getDefaultValue(field) (BEZ operatora) nawet przy przełączeniu
+  // NA operator jednowartościowy, a stara getDefaultValue sprawdzała tylko
+  // domyslnyOperatorWielokrotny(field) (operator na sztywno "in") -- więc
+  // Select/Link/tagi/Powiat dostawały [] zamiast skalara przy "equals"/
+  // "like"/"is". domyslnaWartoscFiltra naprawia to, biorąc operator jako
+  // osobny argument.
+  const pole = { fieldtype: 'Select', options: 'A\nB\nC' }
+  const poleLink = { fieldtype: 'Link', options: 'CRM Lead Status' }
+  const poleUser = { fieldtype: 'Link', options: 'User' }
+  const poleTagow = {
+    fieldtype: 'Data',
+    fieldname: 'custom_produkt_procesu',
+    volteo_tagi: 1,
+  }
+  const polePowiat = {
+    fieldtype: 'Data',
+    fieldname: 'custom_powiat',
+    volteo_wartosci: { url: 'x', zalezy_od: 'custom_voivodeship', parametr: 'wojewodztwa' },
+  }
+
+  describe('operator in/not in → [] dla każdego pola z wielokrotnym wyborem', () => {
+    it.each([
+      ['Select', pole],
+      ['Link', poleLink],
+      ['Link + User', poleUser],
+      ['tagi', poleTagow],
+      ['Powiat (volteo_wartosci)', polePowiat],
+    ])('%s', (_nazwa, field) => {
+      expect(domyslnaWartoscFiltra(field, 'in')).toEqual([])
+      expect(domyslnaWartoscFiltra(field, 'not in')).toEqual([])
+    })
+  })
+
+  describe('Select, operator jednowartościowy → pierwsza opcja (regresja #215)', () => {
+    it.each(['equals', 'not equals', 'like', 'not like', 'is'])('%s', (operator) => {
+      expect(domyslnaWartoscFiltra(pole, operator, 'A')).toBe('A')
+    })
+
+    it('bez podanej pierwszaOpcja → pusty string, nie undefined', () => {
+      expect(domyslnaWartoscFiltra(pole, 'equals')).toBe('')
+    })
+  })
+
+  describe('Link (zwykły i User), operator jednowartościowy → pusty string (regresja #215)', () => {
+    it.each(['equals', 'not equals', 'like', 'not like', 'is'])('Link %s', (operator) => {
+      expect(domyslnaWartoscFiltra(poleLink, operator)).toBe('')
+    })
+    it.each(['equals', 'not equals', 'like', 'not like', 'is'])('Link + User %s', (operator) => {
+      expect(domyslnaWartoscFiltra(poleUser, operator)).toBe('')
+    })
+  })
+
+  describe('Powiat (volteo_wartosci), operator jednowartościowy → pusty string (regresja #218)', () => {
+    it.each(['equals', 'like', 'is'])('%s', (operator) => {
+      expect(domyslnaWartoscFiltra(polePowiat, operator)).toBe('')
+    })
+  })
+
+  it('Check → zawsze "Yes", niezależnie od operatora (niewielokrotny)', () => {
+    const poleCheck = { fieldtype: 'Check' }
+    expect(domyslnaWartoscFiltra(poleCheck, 'equals')).toBe('Yes')
+  })
+
+  it('Date/Datetime → zawsze null, niezależnie od operatora', () => {
+    expect(domyslnaWartoscFiltra({ fieldtype: 'Date' }, 'equals')).toBeNull()
+    expect(domyslnaWartoscFiltra({ fieldtype: 'Datetime' }, 'between')).toBeNull()
+  })
+
+  it('inny fieldtype (Int, Currency...) operator jednowartościowy → pusty string', () => {
+    expect(domyslnaWartoscFiltra({ fieldtype: 'Int' }, 'equals')).toBe('')
+    expect(domyslnaWartoscFiltra({ fieldtype: 'Currency' }, '>')).toBe('')
+  })
+
+  it('brak pola → pusty string', () => {
+    expect(domyslnaWartoscFiltra(null, 'in')).toBe('')
+    expect(domyslnaWartoscFiltra(undefined, 'equals')).toBe('')
   })
 })

@@ -17,6 +17,7 @@ from crm.volteo_grupy_filtrow import klucze_z_grup, waliduj_grupy, wydziel_grupy
 from crm.volteo_lista_szans import (
 	POLA_TAGOW_LEAD,
 	POLA_TAGOW_LEAD_DYNAMICZNE,
+	POLA_WARTOSCI_LEAD,
 	POLA_ZAWSZE_DOZWOLONE,
 	WSZYSTKIE_POLA_TAGOW_LEAD,
 	niedozwolone_klucze_filtrow,
@@ -653,6 +654,46 @@ def _dolacz_tagi_lead(doctype: str, field: dict) -> dict:
 	return {**field, "options": "\n".join(slownik), "volteo_tagi": 1}
 
 
+def _dolacz_wartosci_serwera_lead(doctype: str, field: dict) -> dict:
+	"""Dla pol z `POLA_WARTOSCI_LEAD` (issue #218, np. `custom_powiat` na
+	`CRM Lead`) dokladla do slownika pola `"volteo_wartosci"`
+	(`{url, zalezy_od, parametr}`, kopia konfiguracji z
+	`crm.volteo_lista_szans.POLA_WARTOSCI_LEAD`), po ktorej front
+	(`QuickFilterCheckList.vue`, przez `QuickFilterField.vue`/`Filter.vue`)
+	rozpoznaje pole jako liste wartosci pobieranych Z SERWERA, zawezana do
+	aktualnego zaznaczenia pola `zalezy_od` -- analogicznie do
+	`_dolacz_tagi_lead` powyzej (ta sama zasada: front nie zna ani nazwy
+	pola, ani adresu endpointu na sztywno, rozpoznaje WYLACZNIE obecnosc
+	flagi w odpowiedzi).
+
+	W odroznieniu od `_dolacz_tagi_lead`, NIE doklada `options` -- katalog
+	wartosci (306 roznych powiatow na produkcji) jest zbyt duzy/zmienny,
+	zeby wysylac go przy kazdym odczycie `get_quick_filters`/
+	`get_filterable_fields`; front dociaga go sam, dopiero przy otwarciu
+	popovera/paska, przez endpoint z konfiguracji (`powiaty_filtra` w
+	`crm.api.volteo_leady` dla `custom_powiat`).
+
+	Uzywana w tych samych dwoch miejscach co `_dolacz_tagi_lead`
+	(`get_filterable_fields`, `get_quick_filters`) -- `field` moze byc
+	plain dictem albo prawdziwym `DocField`, stad to samo `as_dict()`
+	zabezpieczenie.
+
+	Zwraca `field` BEZ ZMIAN dla kazdego innego doctype'u/pola
+	(immutability: gdy faktycznie doklada atrybut, zwraca NOWY dict, nie
+	mutuje `field`)."""
+	if doctype != "CRM Lead":
+		return field
+
+	konfiguracja = POLA_WARTOSCI_LEAD.get(field.get("fieldname"))
+	if konfiguracja is None:
+		return field
+
+	if hasattr(field, "as_dict"):
+		field = field.as_dict()
+
+	return {**field, "volteo_wartosci": dict(konfiguracja)}
+
+
 @frappe.whitelist()
 def get_filterable_fields(doctype: str, scope: str = "list"):
 	if not frappe.has_permission(doctype, "read"):
@@ -738,11 +779,16 @@ def get_filterable_fields(doctype: str, scope: str = "list"):
 			# slownika w JS -- patrz docstring _dolacz_tagi_lead. No-op dla
 			# kazdego innego pola/doctype'u.
 			entry = _dolacz_tagi_lead(doctype, entry)
+			# VOLTEO (issue #218): pola z wartosciami z serwera (np.
+			# custom_powiat) dostaja tutaj "volteo_wartosci" -- patrz
+			# docstring _dolacz_wartosci_serwera_lead. No-op dla kazdego
+			# innego pola/doctype'u.
+			entry = _dolacz_wartosci_serwera_lead(doctype, entry)
 			allowlisted.append(entry)
 		return allowlisted
 
 	fields = [
-		_dolacz_tagi_lead(doctype, field)
+		_dolacz_wartosci_serwera_lead(doctype, _dolacz_tagi_lead(doctype, field))
 		for field in fields
 		if field.get("fieldname") in permitted
 	]
@@ -860,6 +906,11 @@ def get_quick_filters(doctype: str, cached: bool = True):
 		# obslugiwane przez _dolacz_tagi_lead. No-op dla kazdego innego
 		# pola/doctype'u.
 		field = _dolacz_tagi_lead(doctype, field)
+		# VOLTEO (issue #218): pola z wartosciami z serwera (np.
+		# custom_powiat) dostaja tutaj "volteo_wartosci" -- patrz docstring
+		# _dolacz_wartosci_serwera_lead. No-op dla kazdego innego
+		# pola/doctype'u.
+		field = _dolacz_wartosci_serwera_lead(doctype, field)
 		options = field.get("options")
 		if field.get("fieldtype") == "Select" and options and isinstance(options, str):
 			options = options.split("\n")
@@ -873,6 +924,11 @@ def get_quick_filters(doctype: str, cached: bool = True):
 				"fieldtype": field.get("fieldtype"),
 				"options": options,
 				**({"volteo_tagi": 1} if field.get("volteo_tagi") else {}),
+				# VOLTEO (issue #218): przeniesienie "volteo_wartosci" do
+				# wynikowego dicta -- ten slownik wyzej buduje odpowiedz od
+				# zera, wiec bez tego front nigdy by nie zobaczyl flagi
+				# dolozonej przez _dolacz_wartosci_serwera_lead powyzej.
+				**({"volteo_wartosci": field.get("volteo_wartosci")} if field.get("volteo_wartosci") else {}),
 			}
 		)
 

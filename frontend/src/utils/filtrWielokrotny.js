@@ -91,6 +91,14 @@ export function scalOpcjeZZaznaczonymi(opcje, zaznaczoneWartosci) {
  * celowo nie zmienia typu pola, więc rozpoznanie idzie przez osobną flagę
  * (`field.volteo_tagi`, dołożoną przez `crm.api.doc.get_filterable_fields`/
  * `get_quick_filters`) zamiast przez fieldtype.
+ *
+ * Issue #218: pole z wartościami pobieranymi z serwera (np. `custom_powiat`
+ * na `CRM Lead`, zawężony do aktywnego filtra województwa) dostaje TĘ SAMĄ
+ * kontrolkę z dokładnie tego samego powodu co pole tagów -- `field.fieldtype`
+ * zostaje `'Data'` bez zmian, rozpoznanie idzie przez osobną flagę
+ * (`field.volteo_wartosci`, ten sam kształt dołożenia co `volteo_tagi`, patrz
+ * `crm.api.doc._dolacz_wartosci_serwera_lead`). Front NIE zna nazwy pola ani
+ * adresu endpointu na sztywno -- rozpoznaje WYŁĄCZNIE obecność tej flagi.
  */
 export function czyWielokrotnyWybor(field, operator) {
   if (!field) return false
@@ -98,6 +106,7 @@ export function czyWielokrotnyWybor(field, operator) {
   if (field.fieldtype === 'Select') return true
   if (field.fieldtype === 'Link') return true
   if (czyPoleTagow(field)) return true
+  if (field.volteo_wartosci) return true
   return false
 }
 
@@ -122,4 +131,62 @@ export function czyWielokrotnyWybor(field, operator) {
  */
 export function domyslnyOperatorWielokrotny(field) {
   return czyWielokrotnyWybor(field, 'in') ? 'in' : null
+}
+
+/**
+ * Wartość domyślna filtra, ZALEŻNA OD OPERATORA (naprawa regresji po
+ * #215, zgłoszona w #218): `czyWielokrotnyWybor(field, operator)` zwraca
+ * prawdę WYŁĄCZNIE dla operatorów "in"/"not in" -- dla każdego innego
+ * operatora (np. "equals" na Select, "like" na Link/polu z wartościami z
+ * serwera) wartość domyślna musi wrócić do skalarnych wartości sprzed
+ * #215, a nie zostać przy pustej tablicy.
+ *
+ * `Filter.vue::updateOperator` wołał dotychczas `getDefaultValue(field)`
+ * (bez operatora) w gałęzi "każdy inny operator", a `getDefaultValue`
+ * sama w sobie sprawdzała WYŁĄCZNIE `domyslnyOperatorWielokrotny(field)`
+ * (operator na sztywno `'in'`, patrz jej JSDoc) -- więc pole z
+ * wielokrotnym wyborem (Select/Link/tagi/wartości z serwera) dostawało
+ * `[]` przy PRZEŁĄCZENIU na "equals"/"like" zamiast właściwej skalarnej
+ * wartości (pierwsza opcja Select, pusty string dla reszty), a
+ * `transformIn`/kontrolka tekstowa dostawały tablicę zamiast stringa.
+ *
+ * Reguła (ta sama drabina co `Filter.vue::getDefaultValue` sprzed #215):
+ *   - `czyWielokrotnyWybor(field, operator)` prawda -> `[]`;
+ *   - fieldtype `'Select'` -> `pierwszaOpcja` (pierwszy element
+ *     `field.options.split('\n')`, policzony przez wołającego -- ten
+ *     moduł nie zna żadnej logiki UI rozbijania opcji, tylko przyjmuje
+ *     gotową wartość) albo `''`, gdy `pierwszaOpcja` nie podano;
+ *   - fieldtype `'Check'` -> `'Yes'`;
+ *   - fieldtype `'Date'`/`'Datetime'` -> `null`;
+ *   - każdy inny fieldtype (Link, Data, Int, Currency...) -> `''`
+ *     (dotychczasowe pole tekstowe z wartością po przecinku).
+ *
+ * Pola tagów (`czyPoleTagow`) z operatorem `OPERATOR_TAGOW`
+ * (`"volteo_tagi"`, kształt złożony `{ma, nie_ma}`) są świadomie POZA
+ * zakresem tej funkcji -- `Filter.vue::updateOperator` ma dla nich
+ * własną, wcześniejszą gałąź (zamiana kształtu wartości między
+ * in/not in/volteo_tagi), niezmienioną tą poprawką.
+ *
+ * Frappe-free, ten sam kształt `field` co `czyWielokrotnyWybor`.
+ *
+ * @param {{fieldtype: string, options?: string}|null|undefined} field
+ * @param {string} operator
+ * @param {string} [pierwszaOpcja] pierwsza opcja Select (`field.options.split('\n')[0]`), policzona przez wołającego
+ * @returns {string[]|string|null}
+ */
+export function domyslnaWartoscFiltra(field, operator, pierwszaOpcja) {
+  if (!field) return ''
+  if (czyWielokrotnyWybor(field, operator)) {
+    return []
+  }
+  if (field.fieldtype === 'Select') {
+    return pierwszaOpcja ?? ''
+  }
+  if (field.fieldtype === 'Check') {
+    return 'Yes'
+  }
+  if (['Date', 'Datetime'].includes(field.fieldtype)) {
+    return null
+  }
+  return ''
 }

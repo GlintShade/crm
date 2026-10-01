@@ -7,6 +7,7 @@ import {
   rozpakujWartoscFiltraSzybkiego,
   spakujWartoscFiltraSzybkiego,
   ustawWartoscWielokrotna,
+  zaleznaWartoscFiltraSerwera,
 } from './filtrSzybki'
 import { opcjeEtapu } from './etapFiltr'
 import { OPERATOR_TAGOW } from './tagiProduktow'
@@ -432,5 +433,63 @@ describe('grupyOpcjiFiltraSzybkiego', () => {
         items: [{ label: 'Ręczny', value: 'Ręczny' }],
       },
     ])
+  })
+})
+
+describe('zaleznaWartoscFiltraSerwera', () => {
+  const konfiguracjaPowiatu = {
+    url: 'crm.api.volteo_leady.powiaty_filtra',
+    zalezy_od: 'custom_voivodeship',
+    parametr: 'wojewodztwa',
+  }
+
+  it('pole bez volteo_wartosci -> pusta tablica', () => {
+    expect(zaleznaWartoscFiltraSerwera({ fieldtype: 'Data' }, {})).toEqual([])
+    expect(zaleznaWartoscFiltraSerwera(null, {})).toEqual([])
+    expect(zaleznaWartoscFiltraSerwera(undefined, { custom_voivodeship: 'mazowieckie' })).toEqual(
+      [],
+    )
+  })
+
+  it('zalezny filtr nieustawiony -> pusta tablica (serwer nie zaweza)', () => {
+    const field = { fieldtype: 'Data', volteo_wartosci: konfiguracjaPowiatu }
+    expect(zaleznaWartoscFiltraSerwera(field, {})).toEqual([])
+    expect(zaleznaWartoscFiltraSerwera(field, undefined)).toEqual([])
+  })
+
+  it('zalezny filtr skalarem (jedno wojewodztwo) -> tablica jednoelementowa', () => {
+    const field = { fieldtype: 'Data', volteo_wartosci: konfiguracjaPowiatu }
+    expect(
+      zaleznaWartoscFiltraSerwera(field, { custom_voivodeship: 'mazowieckie' }),
+    ).toEqual(['mazowieckie'])
+  })
+
+  it('zalezny filtr ["in", [...]] (kilka wojewodztw) -> tablica wartosci', () => {
+    const field = { fieldtype: 'Data', volteo_wartosci: konfiguracjaPowiatu }
+    expect(
+      zaleznaWartoscFiltraSerwera(field, {
+        custom_voivodeship: ['in', ['mazowieckie', 'slaskie']],
+      }),
+    ).toEqual(['mazowieckie', 'slaskie'])
+  })
+
+  it('zalezny filtr nierozpoznanym ksztaltem (np. like) -> pusta tablica', () => {
+    const field = { fieldtype: 'Data', volteo_wartosci: konfiguracjaPowiatu }
+    expect(
+      zaleznaWartoscFiltraSerwera(field, { custom_voivodeship: ['like', '%maz%'] }),
+    ).toEqual([])
+  })
+
+  it('czyta klucz zalezny_od z konfiguracji pola, nie nazwe pola samego', () => {
+    const field = {
+      fieldtype: 'Data',
+      volteo_wartosci: { url: 'x', zalezy_od: 'inny_klucz', parametr: 'p' },
+    }
+    expect(
+      zaleznaWartoscFiltraSerwera(field, {
+        custom_voivodeship: 'mazowieckie',
+        inny_klucz: 'wartosc',
+      }),
+    ).toEqual(['wartosc'])
   })
 })

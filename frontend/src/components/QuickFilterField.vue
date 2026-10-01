@@ -11,6 +11,7 @@
     :label="filter.label"
     :fieldtype="typCheckList"
     :options="opcjeCheckList"
+    :serverValues="konfiguracjaWartosciSerwera"
     :meLabel="etykietaMoje(doctype)"
     :modelValue="parsujWartoscWielokrotna(filter.value)"
     @update:modelValue="(wartosci) => updateFilter(filter, wartosci)"
@@ -48,7 +49,7 @@ import { useDebounceFn } from '@vueuse/core'
 import { etykietaMoje } from '@/utils/etykietaMoje'
 import { opcjeEtapu } from '@/utils/etapFiltr'
 import { parsujWartoscWielokrotna } from '@/utils/filtrWielokrotny'
-import { czyWielokrotnyFiltrSzybki } from '@/utils/filtrSzybki'
+import { czyWielokrotnyFiltrSzybki, zaleznaWartoscFiltraSerwera } from '@/utils/filtrSzybki'
 import { czyPoleTagow, opcjeTagow } from '@/utils/tagiProduktow'
 import { statusesStore } from '@/stores/statuses'
 import { computed, reactive, watch } from 'vue'
@@ -139,6 +140,27 @@ const opcjeCheckList = computed(() =>
 // kolejność.
 const typCheckList = computed(() =>
   jestEtapSzansy.value ? 'Select' : filter.fieldtype,
+)
+
+// Issue #218: pole z wartościami pobieranymi z serwera (np. „Powiat” na
+// CRM Lead, zawężony do aktywnego filtra „Województwo”) -- rozpoznane po
+// `filter.volteo_wartosci`, dołożonym przez
+// `crm.api.doc._dolacz_wartosci_serwera_lead` do `get_quick_filters`.
+// `konfiguracjaWartosciSerwera` idzie wprost do QuickFilterCheckList jako
+// prop `serverValues`, który WYMUSZA tam tryb wartości z serwera
+// niezależnie od `typCheckList`/`opcjeCheckList` powyżej (zbudowanych z
+// myślą o Select/Link/tagach/Etapie -- żaden z nich nie pasuje do pola bez
+// własnego statycznego słownika).
+const jestWartosciSerwera = computed(() => Boolean(filter.volteo_wartosci))
+
+const konfiguracjaWartosciSerwera = computed(() =>
+  jestWartosciSerwera.value
+    ? {
+        url: filter.volteo_wartosci.url,
+        parametr: filter.volteo_wartosci.parametr,
+        zaleznaWartosc: zaleznaWartoscFiltraSerwera(filter, props.activeFilters),
+      }
+    : null,
 )
 
 const emit = defineEmits(['applyQuickFilter'])

@@ -385,6 +385,62 @@ def powiaty(wojewodztwo: str | list[str] | None = None) -> list[str]:
 	)
 
 
+@frappe.whitelist()
+def powiaty_filtra(wojewodztwa: str | list[str] | None = None) -> list[str]:
+	"""Lista unikalnych powiatów WIDOCZNYCH WOŁAJĄCEMU leadów, opcjonalnie
+	zawężona do jednego lub kilku województw naraz, posortowana rosnąco --
+	zasila pole "Powiat" z wielokrotnym wyborem na pasku szybkich filtrów
+	leadów i w popoverze "Filtr" (issue #218, konfiguracja w
+	`crm.volteo_lista_szans.POLA_WARTOSCI_LEAD`), NIE kaskadę panelu
+	przydziału (`powiaty` powyżej -- ten sam kształt parametru, inny model
+	uprawnień, patrz niżej, i celowo osobna funkcja: `powiaty` zostaje
+	admin-only i każda zmiana jej gatingu pod issue #216 nie ma wpływu na
+	pasek filtrów widoczny handlowcom/CC).
+
+	Model uprawnień, w odróżnieniu od `powiaty` (`DOPUSZCZONE_ROLE_WOLAJACEGO`,
+	admin-only): dostępna dla KAŻDEGO zalogowanego z prawem odczytu `CRM
+	Lead` (pasek filtrów widzą też handlowcy D2D i CC z flagą
+	`custom_linia_leady` -- patrz "Model uprawnień" w docstringu modułu).
+	Jak `mapa()` powyżej, MUSI wołać `frappe.get_list`, NIGDY `get_all`:
+	`get_list` przepuszcza wynik przez permission query conditions
+	(`crm/permissions/org_hierarchy.py`, już podpięte w `hooks.py` dla `CRM
+	Lead`), które same w sobie już stosują bramkę `_ma_linie_leady` (przez
+	`get_lead_permission_query_conditions` -- `1=0` dla D2D bez flagi,
+	patrz jej docstring) -- więc, dokładnie jak w `mapa`, nie trzeba
+	wołać `_ma_linie_leady` tutaj jeszcze raz wprost. Rep dostaje więc
+	powiaty WYŁĄCZNIE swoich/mu przypisanych leadów, CC powiaty leadów ze
+	swoim `custom_cc`, admin/backend (bypass) wszystkie. Jawny
+	`frappe.has_permission` poniżej jest dodatkowym, czytelnym bezpiecznikiem
+	wejścia (odrzuca użytkownika bez JAKIEGOKOLWIEK prawa odczytu `CRM
+	Lead` z czytelnym błędem zamiast pustej listy) -- `mapa` nie ma takiej
+	jawnej bramki i polega wyłącznie na niejawnym wymuszeniu `get_list`
+	(patrz jej docstring "mapa jest dla każdego zalogowanego z prawem
+	odczytu CRM Lead").
+
+	`wojewodztwa` przyjmuje pojedynczy string, JSON-string listy albo listę
+	-- patrz `_normalizuj_liste_lub_string`. Pusty/brakujący `wojewodztwa`
+	zwraca WSZYSTKIE powiaty widoczne wołającemu (front wtedy pokazuje
+	niezawężoną pulę, zgodnie z brzmieniem issue #218: "Bez województwa:
+	wszystkie widoczne powiaty")."""
+	if not frappe.has_permission("CRM Lead", "read"):
+		frappe.throw(_("Brak uprawnień do odczytu leadów."), frappe.PermissionError)
+
+	wojewodztwa_lista = _normalizuj_liste_lub_string(wojewodztwa)
+
+	filters: dict = {"custom_powiat": ["is", "set"]}
+	if wojewodztwa_lista:
+		filters["custom_voivodeship"] = ["in", wojewodztwa_lista]
+
+	return frappe.get_list(
+		"CRM Lead",
+		filters=filters,
+		pluck="custom_powiat",
+		distinct=True,
+		order_by="custom_powiat asc",
+		limit_page_length=0,
+	)
+
+
 def _waliduj_handlowca(handlowiec: str) -> None:
 	"""Waliduje, że `handlowiec` to istniejące, włączone konto z rolą `Volteo D2D
 	Sales` i dostępem do modułu Leady (`custom_linia_leady`). Wydzielone z `przydziel`

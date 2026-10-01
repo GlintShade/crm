@@ -336,9 +336,11 @@ import { etykietaMoje } from '@/utils/etykietaMoje'
 import { opcjeEtapu } from '@/utils/etapFiltr'
 import {
   czyWielokrotnyWybor,
+  domyslnaWartoscFiltra,
   domyslnyOperatorWielokrotny,
   parsujWartoscWielokrotna,
 } from '@/utils/filtrWielokrotny'
+import { zaleznaWartoscFiltraSerwera } from '@/utils/filtrSzybki'
 import {
   OPERATOR_TAGOW,
   czyPoleTagow,
@@ -765,6 +767,28 @@ function getValueControl(f) {
       modelValue: parsujWartoscWielokrotna(f.value),
       'onUpdate:modelValue': (v) => updateValue(v, f),
     })
+  } else if (field.volteo_wartosci && ['in', 'not in'].includes(operator)) {
+    // Issue #218: pole z opcjami pobieranymi z serwera, zawężonymi do
+    // aktywnego filtra zależnego (np. Powiat zawężony do Województwa) --
+    // ten sam QuickFilterCheckList co pasek szybki (QuickFilterField.vue),
+    // w trybie "wartości z serwera" (prop serverValues) zamiast statycznej
+    // listy opcji -- analogicznie do branży "Etap" wyżej, tylko katalog
+    // opcji nie jest znany z góry, front dociąga go sam z endpointu w
+    // konfiguracji.
+    return h(QuickFilterCheckList, {
+      label: field.label,
+      fieldtype: 'Select',
+      serverValues: {
+        url: field.volteo_wartosci.url,
+        parametr: field.volteo_wartosci.parametr,
+        zaleznaWartosc: zaleznaWartoscFiltraSerwera(
+          field,
+          list.value?.params?.filters,
+        ),
+      },
+      modelValue: parsujWartoscWielokrotna(f.value),
+      'onUpdate:modelValue': (v) => updateValue(v, f),
+    })
   } else if (
     czyWielokrotnyWybor(f.field, operator) &&
     (typeSelect.includes(fieldtype) || czyPoleTagow(f.field))
@@ -877,23 +901,24 @@ function getValueControl(f) {
   }
 }
 
-function getDefaultValue(field) {
-  // Issue #215 (decyzja właściciela 2026-10-01): każde pole, dla którego
-  // wielokrotny wybór ma zastosowanie (Select, Link poza Dynamic Link, pola
-  // tagów -- domyslnyOperatorWielokrotny/czyWielokrotnyWybor w
-  // utils/filtrWielokrotny.js), startuje z pustą tablicą zamiast skalarnej
-  // wartości domyślnej (np. pierwszej opcji Select) -- zgodnie z operatorem
-  // "in", w który startuje (patrz getDefaultOperator niżej).
-  if (domyslnyOperatorWielokrotny(field)) {
-    return []
-  }
-  if (typeCheck.includes(field.fieldtype)) {
-    return 'Yes'
-  }
-  if (typeDate.includes(field.fieldtype)) {
-    return null
-  }
-  return ''
+function getDefaultValue(field, operator = getDefaultOperator(field)) {
+  // Fix regresji po #215 (zgłoszone przy #218): wartość domyślna MUSI
+  // zależeć od `operator`, nie tylko od `field` -- `domyslnaWartoscFiltra`
+  // w utils/filtrWielokrotny.js jest teraz jedynym źródłem tej drabiny
+  // (Select: pierwsza opcja, Check: 'Yes', Date/Datetime: null, reszta: '',
+  // chyba że `czyWielokrotnyWybor(field, operator)` każe zwrócić `[]`).
+  // Drugi parametr domyślnie `getDefaultOperator(field)` -- DOKŁADNIE
+  // zachowanie sprzed tej poprawki dla wywołań bez jawnego operatora
+  // (setfilter/updateFilter/zbudujWarunek niżej, gdzie operator PRZYPISANY
+  // obok wartości to zawsze `getDefaultOperator(data)`). `updateOperator`
+  // niżej woła z JAWNYM, nowo wybranym `filter.operator` -- to tam leżał
+  // błąd: przy przełączeniu z "in" na np. "equals"/"like" wartość zostawała
+  // pustą tablicą zamiast wracać do skalara.
+  const pierwszaOpcja =
+    field.fieldtype === 'Select' && field.options
+      ? getSelectOptions(field.options)[0]
+      : undefined
+  return domyslnaWartoscFiltra(field, operator, pierwszaOpcja)
 }
 
 function getDefaultOperator(field) {
@@ -921,15 +946,31 @@ function getSelectOptions(options) {
   return options.split('\n')
 }
 
+// Issue #218: wydzielone z setfilter/updateFilter/zbudujWarunek (dotychczas
+// trzy identyczne literały), żeby dodanie `volteo_wartosci` (konfiguracja
+// pola z wartościami z serwera, patrz crm.api.doc._dolacz_wartosci_serwera_
+// lead) nie wymagało powtórzenia w trzech miejscach. Bez tego pole takie
+// jak „Powiat” straciłoby tę flagę w chwili dodania/zmiany filtra (ten
+// literał budował `field` od zera, tylko z czterech wymienionych kluczy) i
+// getValueControl pokazałby na chwilę zwykłe pole tekstowe zamiast
+// checkboxów -- dokładnie do następnego odtworzenia stanu z
+// `list.value.params.filters` przez convertFilters, które DALEJ bierze
+// pełny wpis z `filterableFields.data` (patrz jej komentarz), nie z tego
+// obiektu.
+function budujPoleFiltra(data) {
+  return {
+    label: data.label,
+    fieldname: data.fieldname,
+    fieldtype: data.fieldtype,
+    options: data.options,
+    ...(data.volteo_wartosci ? { volteo_wartosci: data.volteo_wartosci } : {}),
+  }
+}
+
 function setfilter(data) {
   if (!data) return
   filters.value.add({
-    field: {
-      label: data.label,
-      fieldname: data.fieldname,
-      fieldtype: data.fieldtype,
-      options: data.options,
-    },
+    field: budujPoleFiltra(data),
     fieldname: data.fieldname,
     operator: getDefaultOperator(data),
     value: getDefaultValue(data),
@@ -945,12 +986,7 @@ function updateFilter(data, index) {
     fieldname: data.fieldname,
     operator: getDefaultOperator(data),
     value: getDefaultValue(data),
-    field: {
-      label: data.label,
-      fieldname: data.fieldname,
-      fieldtype: data.fieldtype,
-      options: data.options,
-    },
+    field: budujPoleFiltra(data),
   })
   apply()
 }
@@ -967,12 +1003,7 @@ function removeFilter(index) {
 // wspólnych wyżej.
 function zbudujWarunek(data) {
   return {
-    field: {
-      label: data.label,
-      fieldname: data.fieldname,
-      fieldtype: data.fieldtype,
-      options: data.options,
-    },
+    field: budujPoleFiltra(data),
     fieldname: data.fieldname,
     operator: getDefaultOperator(data),
     value: getDefaultValue(data),
@@ -1105,7 +1136,12 @@ function updateOperator(filter) {
   } else if (filter.operator === 'is' || filter.operator === 'is not') {
     filter.value = 'set'
   } else {
-    filter.value = getDefaultValue(filter.field)
+    // Fix regresji po #215: operator JAWNY (ten, na który użytkownik
+    // właśnie przełączył), nie domyślny dla pola -- inaczej pole z
+    // wielokrotnym wyborem (Select/Link/tagi/wartości z serwera)
+    // przełączone na "equals"/"like" dostawałoby `[]` zamiast skalara,
+    // patrz JSDoc domyslnaWartoscFiltra w utils/filtrWielokrotny.js.
+    filter.value = getDefaultValue(filter.field, filter.operator)
   }
   apply()
 }
