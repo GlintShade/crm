@@ -333,20 +333,19 @@ def _normalizuj_liste_lub_string(wartosc: str | list | tuple | None) -> list[str
 	(frappe-free, z realnym unittestem -- patrz `crm/test_volteo_przydzial.py`
 	i docstring modułu dla pełnego wytłumaczenia podziału odpowiedzialności).
 
-	Dekoduje ewentualny JSON-string listy (`'["mazowieckie","slaskie"]'`,
-	kształt, w jakim `LeadyPrzydzial.vue` wysyła wielokrotny wybór przez
-	`JSON.stringify` w `makeParams`) przez `frappe.parse_json` -- ten sam
-	wzorzec co `leady = frappe.parse_json(leady)` w `przydziel_cc` niżej.
-	`frappe.parse_json` na gołym stringu bez `[`/`{` na początku (zwykła
-	nazwa województwa/powiatu, zgodność wsteczna z API sprzed wielokrotnego
-	wyboru, issue #216) zwraca go BEZ ZMIAN, więc jedna ścieżka obsługuje
-	oba kształty bez osobnej gałęzi "czy to JSON". Zamienia `ValueError` z
-	modułu frappe-free na polski `frappe.throw`, żeby ten plik (który i tak
-	importuje frappe) został jedynym miejscem, gdzie
+	NIE używa `frappe.parse_json` -- znaleziona w QA pułapka (2026-10-01):
+	`frappe.parse_json` w Frappe 15 to zwykłe `json.loads(val)` na KAŻDYM
+	stringu, więc `frappe.parse_json("mazowieckie")` rzuca
+	`JSONDecodeError` zamiast zwrócić goły string bez zmian. Dekodowanie
+	ewentualnego JSON-stringa listy (`'["mazowieckie","slaskie"]'`, kształt,
+	w jakim `LeadyPrzydzial.vue` wysyła wielokrotny wybór przez
+	`JSON.stringify` w `makeParams`) dzieje się więc wyłącznie wewnątrz
+	`normalizuj_wartosci_geo` (rozpoznanie po `"["` na początku, patrz jej
+	docstring), a ten adapter przekazuje `wartosc` do niej BEZ ŻADNEGO
+	wstępnego przetwarzania. Jedyna rola tego adaptera: zamienić
+	`ValueError` z modułu frappe-free na polski `frappe.throw`, żeby ten
+	plik (który i tak importuje frappe) został jedynym miejscem, gdzie
 	`crm.volteo_przydzial` styka się z frameworkiem."""
-	if isinstance(wartosc, str):
-		wartosc = frappe.parse_json(wartosc)
-
 	try:
 		return normalizuj_wartosci_geo(wartosc)
 	except ValueError as exc:

@@ -75,6 +75,53 @@ class TestNormalizujWartosciGeo(unittest.TestCase):
 		normalizuj_wartosci_geo(wejscie)
 		self.assertEqual(wejscie, kopia)
 
+	def test_m_json_string_listy_jest_dekodowany(
+		self: "TestNormalizujWartosciGeo",
+	) -> None:
+		self.assertEqual(
+			normalizuj_wartosci_geo('["mazowieckie", "slaskie"]'),
+			["mazowieckie", "slaskie"],
+		)
+
+	def test_n_json_string_listy_z_bialymi_znakami_wokol(
+		self: "TestNormalizujWartosciGeo",
+	) -> None:
+		self.assertEqual(
+			normalizuj_wartosci_geo('  ["mazowieckie", "slaskie"]  '),
+			["mazowieckie", "slaskie"],
+		)
+
+	def test_o_json_string_pustej_listy_daje_puste(
+		self: "TestNormalizujWartosciGeo",
+	) -> None:
+		self.assertEqual(normalizuj_wartosci_geo("[]"), [])
+
+	def test_p_niepoprawny_json_rzuca_value_error(
+		self: "TestNormalizujWartosciGeo",
+	) -> None:
+		with self.assertRaises(ValueError):
+			normalizuj_wartosci_geo("[abc")
+
+	def test_q_json_string_z_nie_stringiem_w_srodku_rzuca_value_error(
+		self: "TestNormalizujWartosciGeo",
+	) -> None:
+		with self.assertRaises(ValueError):
+			normalizuj_wartosci_geo('["mazowieckie", 42]')
+
+	def test_r_goly_string_bez_nawiasu_nie_jest_traktowany_jako_json(
+		self: "TestNormalizujWartosciGeo",
+	) -> None:
+		# Pułapka naprawiona w QA (2026-10-01): frappe.parse_json na gołym
+		# stringu RZUCA JSONDecodeError (to zwykłe json.loads na każdym
+		# stringu, nie tylko na kształcie JSON) -- ta funkcja nie używa
+		# frappe.parse_json w ogóle i rozpoznaje JSON wyłącznie po "["
+		# na początku, więc zwykła nazwa województwa/powiatu (zgodność
+		# wsteczna) nigdy nie trafia do json.loads i nigdy nie rzuca.
+		self.assertEqual(normalizuj_wartosci_geo("mazowieckie"), ["mazowieckie"])
+		self.assertEqual(normalizuj_wartosci_geo("powiat warszawski zachodni"), [
+			"powiat warszawski zachodni",
+		])
+
 
 if __name__ == "__main__":
 	unittest.main()

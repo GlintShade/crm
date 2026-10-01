@@ -86,6 +86,7 @@
           :disabled="aktywnyAssignResource.loading"
         />
       </div>
+      <ErrorMessage class="max-w-2xl" :message="powiatyError" />
       <ErrorMessage class="max-w-2xl" :message="assignError" />
       <div>
         <Button
@@ -285,9 +286,13 @@ const wojewodztwoOptions = computed(() => liczbaOpcji(state.pula.wojewodztwa))
 // nazwie powiatu, bez przypisania do województwa) - zostawione bez zmian,
 // dokładnie jak w pojedynczym wyborze sprzed tej zmiany.
 const powiatyDlaWojewodztw = ref([])
+const powiatyError = ref('')
 const powiatyResource = createResource({
   url: 'crm.api.volteo_leady.powiaty',
   auto: false,
+  onError: (err) => {
+    powiatyError.value = err?.messages?.[0] || __('Nie udało się wczytać listy powiatów')
+  },
 })
 
 // `dostepnePowiaty`: płaska lista nazw powiatów dozwolonych w AKTUALNYM
@@ -315,17 +320,46 @@ function zachowajTylkoDostepnePowiaty(dostepne) {
   }
 }
 
+// Licznik żądań (issue #216, poprawka QA): kliknięcie kilku województw pod
+// rząd odpala kilka równoległych `powiatyResource.submit(...)` naraz, a
+// odpowiedzi mogą wrócić w INNEJ kolejności niż wysłane zapytania (zwykły
+// wyścig sieciowy). Każde wywołanie watchera zapamiętuje swój numer PRZED
+// `await`; po powrocie z serwera porównuje go z aktualnym - jeśli w
+// międzyczasie wystartowało kolejne (nowsze) żądanie, odpowiedź jest
+// przestarzała i zostaje po cichu zignorowana, żeby nie nadpisać stanu
+// nowszym-ale-już-nieaktualnym rezultatem starszego zapytania.
+let numerZapytaniaPowiaty = 0
+
 watch(
   () => [...form.wojewodztwa],
   async (wojewodztwa) => {
+    const tenNumer = ++numerZapytaniaPowiaty
+    powiatyError.value = ''
+
     if (!wojewodztwa.length) {
       powiatyDlaWojewodztw.value = []
       zachowajTylkoDostepnePowiaty(Object.keys(state.pula.powiaty || {}))
       return
     }
-    const dane = await powiatyResource.submit({ wojewodztwo: JSON.stringify(wojewodztwa) })
-    powiatyDlaWojewodztw.value = dane || []
-    zachowajTylkoDostepnePowiaty(powiatyDlaWojewodztw.value)
+
+    try {
+      const dane = await powiatyResource.submit({ wojewodztwo: JSON.stringify(wojewodztwa) })
+      // Odpowiedź na przestarzałe zapytanie (wyścig przy szybkim klikaniu
+      // kilku województw) - zignoruj, nowsze zapytanie już jest w locie
+      // albo już odpowiedziało.
+      if (tenNumer !== numerZapytaniaPowiaty) return
+      powiatyDlaWojewodztw.value = dane || []
+      zachowajTylkoDostepnePowiaty(powiatyDlaWojewodztw.value)
+    } catch (err) {
+      // `createResource.submit()` rzuca po `onError` (frappe-ui
+      // `handleError` zawsze robi `throw error` na końcu, niezależnie od
+      // tego, czy `onError` jest zdefiniowany) - bez tego `catch` nieudane
+      // zapytanie zostawiałoby niezłapany reject w konsoli i żadnej
+      // informacji dla użytkownika. `onError` wyżej już ustawił
+      // `powiatyError`; tu tylko pilnujemy, żeby odpowiedź na przestarzałe
+      // zapytanie nie nadpisała stanu po błędzie nowszego.
+      if (tenNumer !== numerZapytaniaPowiaty) return
+    }
   },
 )
 
