@@ -128,6 +128,7 @@ from crm.api.doc import (
 )
 from crm.permissions.org_hierarchy import BYPASS_ROLES, _ma_linie_leady, czy_autor_ma_role_cc
 from crm.volteo_aktywnosc import maskuj_autora_cc, tekst_sladu, zapisz_slad
+from crm.volteo_przydzial import normalizuj_wartosci_geo
 
 DOPUSZCZONE_ROLE_WOLAJACEGO = ("System Manager", "Volteo Core Admin")
 ROLA_D2D = "Volteo D2D Sales"
@@ -327,26 +328,57 @@ def statystyki() -> dict:
 	}
 
 
-@frappe.whitelist()
-def powiaty(wojewodztwo: str) -> list[str]:
-	"""Lista unikalnych powiatów występujących wśród leadów danego województwa,
-	posortowana rosnąco -- kaskada selecta Powiat w `LeadyPrzydzial.vue` (issue
-	#104), niezależna od globalnej agregacji `statystyki().pula.powiaty` (patrz
-	docstring modułu "Statystyki per CC i kaskada powiatu"). Admin-only, jak
-	pozostałe funkcje w tym module poza `mapa`/`przekaz_handlowcowi`/`handlowcy`.
+def _normalizuj_liste_lub_string(wartosc: str | list | tuple | None) -> list[str]:
+	"""Cienki adapter nad `crm.volteo_przydzial.normalizuj_wartosci_geo`
+	(frappe-free, z realnym unittestem -- patrz `crm/test_volteo_przydzial.py`
+	i docstring modułu dla pełnego wytłumaczenia podziału odpowiedzialności).
 
-	Pusty `wojewodztwo` zwraca pustą listę -- front wtedy pokazuje niezawężoną
-	pulę powiatów zamiast pustego selecta (patrz `powiatOptions` w
-	`LeadyPrzydzial.vue`)."""
+	Dekoduje ewentualny JSON-string listy (`'["mazowieckie","slaskie"]'`,
+	kształt, w jakim `LeadyPrzydzial.vue` wysyła wielokrotny wybór przez
+	`JSON.stringify` w `makeParams`) przez `frappe.parse_json` -- ten sam
+	wzorzec co `leady = frappe.parse_json(leady)` w `przydziel_cc` niżej.
+	`frappe.parse_json` na gołym stringu bez `[`/`{` na początku (zwykła
+	nazwa województwa/powiatu, zgodność wsteczna z API sprzed wielokrotnego
+	wyboru, issue #216) zwraca go BEZ ZMIAN, więc jedna ścieżka obsługuje
+	oba kształty bez osobnej gałęzi "czy to JSON". Zamienia `ValueError` z
+	modułu frappe-free na polski `frappe.throw`, żeby ten plik (który i tak
+	importuje frappe) został jedynym miejscem, gdzie
+	`crm.volteo_przydzial` styka się z frameworkiem."""
+	if isinstance(wartosc, str):
+		wartosc = frappe.parse_json(wartosc)
+
+	try:
+		return normalizuj_wartosci_geo(wartosc)
+	except ValueError as exc:
+		frappe.throw(_(str(exc)))
+
+
+@frappe.whitelist()
+def powiaty(wojewodztwo: str | list[str] | None = None) -> list[str]:
+	"""Lista unikalnych powiatów występujących wśród leadów jednego lub kilku
+	województw naraz, posortowana rosnąco -- kaskada selecta Powiat w
+	`LeadyPrzydzial.vue` (issue #104, rozszerzone na wiele województw naraz
+	w issue #216), niezależna od globalnej agregacji
+	`statystyki().pula.powiaty` (patrz docstring modułu "Statystyki per CC i
+	kaskada powiatu"). Admin-only, jak pozostałe funkcje w tym module poza
+	`mapa`/`przekaz_handlowcowi`/`handlowcy`.
+
+	`wojewodztwo` przyjmuje pojedynczy string (zgodność wsteczna -- tak woła
+	dziś panel przy jednym zaznaczeniu, i tak prawdopodobnie zawoła
+	przyszły pasek szybkich filtrów leadów, patrz issue "Powiat z listy
+	wartości"), JSON-string listy albo listę -- patrz
+	`_normalizuj_liste_lub_string` powyżej. Pusty/brakujący `wojewodztwo`
+	zwraca pustą listę -- front wtedy pokazuje niezawężoną pulę powiatów
+	zamiast pustego selecta (patrz `dostepnePowiaty` w `LeadyPrzydzial.vue`)."""
 	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
 
-	wojewodztwo = (wojewodztwo or "").strip()
-	if not wojewodztwo:
+	wojewodztwa = _normalizuj_liste_lub_string(wojewodztwo)
+	if not wojewodztwa:
 		return []
 
 	return frappe.get_list(
 		"CRM Lead",
-		filters={"custom_voivodeship": wojewodztwo, "custom_powiat": ["is", "set"]},
+		filters={"custom_voivodeship": ["in", wojewodztwa], "custom_powiat": ["is", "set"]},
 		pluck="custom_powiat",
 		distinct=True,
 		order_by="custom_powiat asc",
@@ -409,8 +441,8 @@ def _waliduj_cc(cc: str) -> None:
 def przydziel(
 	handlowiec: str,
 	ilosc: int = ILOSC_DOMYSLNA,
-	wojewodztwo: str | None = None,
-	powiat: str | None = None,
+	wojewodztwo: str | list[str] | None = None,
+	powiat: str | list[str] | None = None,
 	miasto: str | None = None,
 ) -> dict:
 	"""Przydziela paczkę geograficznie zwartych, nietkniętych leadów jednemu
@@ -419,7 +451,15 @@ def przydziel(
 	`doc.save(ignore_permissions=True)` na każdym leadzie z osobna, żeby
 	kontroler (`crm/fcrm/doctype/crm_lead/crm_lead.py:86-96`) odpalił
 	`assign_agent`/`share_with_agent`, to jedyny sposób, żeby rep dostał
-	widoczność (ToDo + share) bez pisania nowego kodu uprawnień tutaj."""
+	widoczność (ToDo + share) bez pisania nowego kodu uprawnień tutaj.
+
+	`wojewodztwo`/`powiat` (issue #216): każdy przyjmuje pojedynczy string
+	(zgodność wsteczna), JSON-string listy albo listę -- patrz
+	`_normalizuj_liste_lub_string`. Warunek SQL dla każdego idzie jako
+	`IN %(...)s` z listą jako wartość parametru (ten sam wzorzec, jakim
+	ten sam warunek niżej już buduje `status in %(statuses)s`), NIGDY
+	sklejanie wartości w string -- dopisywany tylko, gdy lista jest
+	niepusta, więc pusty `IN ()` nigdy nie trafia do zapytania."""
 	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
 
 	handlowiec = (handlowiec or "").strip()
@@ -441,15 +481,15 @@ def przydziel(
 	warunki = ["status in %(statuses)s", "converted = 0", "ifnull(lead_owner, '') = ''"]
 	wartosci = {"statuses": open_status_names}
 
-	wojewodztwo = (wojewodztwo or "").strip()
-	if wojewodztwo:
-		warunki.append("custom_voivodeship = %(wojewodztwo)s")
-		wartosci["wojewodztwo"] = wojewodztwo
+	wojewodztwa = _normalizuj_liste_lub_string(wojewodztwo)
+	if wojewodztwa:
+		warunki.append("custom_voivodeship in %(wojewodztwa)s")
+		wartosci["wojewodztwa"] = wojewodztwa
 
-	powiat = (powiat or "").strip()
-	if powiat:
-		warunki.append("custom_powiat = %(powiat)s")
-		wartosci["powiat"] = powiat
+	powiaty_lista = _normalizuj_liste_lub_string(powiat)
+	if powiaty_lista:
+		warunki.append("custom_powiat in %(powiaty)s")
+		wartosci["powiaty"] = powiaty_lista
 
 	miasto = (miasto or "").strip()
 	if miasto:

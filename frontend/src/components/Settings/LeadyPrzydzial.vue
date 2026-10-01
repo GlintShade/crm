@@ -8,7 +8,7 @@
       <p class="text-p-base text-ink-gray-6">
         {{
           __(
-            'Ręczny przydział paczki nietkniętych leadów D2D jednemu handlowcowi albo osobie CC, opcjonalnie zawężony do województwa, powiatu lub miasta. Liczniki poniżej informują, nie blokują przydziału.',
+            'Ręczny przydział paczki nietkniętych leadów D2D jednemu handlowcowi albo osobie CC, opcjonalnie zawężony do jednego lub kilku województw, powiatów albo miasta. Liczniki poniżej informują, nie blokują przydziału.',
           )
         }}
       </p>
@@ -59,26 +59,24 @@
           :placeholder="String(ILOSC_DOMYSLNA)"
           :disabled="aktywnyAssignResource.loading"
         />
-        <FormControl
-          v-model="form.wojewodztwo"
-          type="select"
+        <MultiSelect
+          v-model="form.wojewodztwa"
           :label="__('Województwo')"
           :options="wojewodztwoOptions"
           :disabled="aktywnyAssignResource.loading"
-          :placeholder="__('Wybierz opcję')"
+          :placeholder="__('Wszystkie województwa')"
         />
-        <FormControl
-          v-model="form.powiat"
-          type="select"
+        <MultiSelect
+          v-model="form.powiaty"
           :label="__('Powiat')"
           :description="
-            form.wojewodztwo
-              ? __('Zawężone do powiatów występujących w wybranym województwie.')
-              : __('Wybierz województwo, aby zawęzić listę powiatów.')
+            form.wojewodztwa.length
+              ? __('Zawężone do powiatów występujących w wybranych województwach.')
+              : __('Wybierz województwo, aby zawęzić listę powiatów (bez wyboru pokazane są wszystkie).')
           "
           :options="powiatOptions"
           :disabled="aktywnyAssignResource.loading || powiatyResource.loading"
-          :placeholder="__('Wybierz opcję')"
+          :placeholder="__('Wszystkie powiaty')"
         />
         <FormControl
           v-model="form.miasto"
@@ -186,7 +184,15 @@
 
 <script setup>
 import { reactive, ref, computed, watch } from 'vue'
-import { createResource, toast, FormControl, Button, ErrorMessage, TabButtons } from 'frappe-ui'
+import {
+  createResource,
+  toast,
+  FormControl,
+  MultiSelect,
+  Button,
+  ErrorMessage,
+  TabButtons,
+} from 'frappe-ui'
 
 // Reactive state declares every key up front and is always replaced with a
 // fresh value on update, never gated on key presence (see CLAUDE.md:
@@ -234,8 +240,11 @@ function emptyForm() {
   return {
     handlowiec: '',
     cc: '',
-    wojewodztwo: '',
-    powiat: '',
+    // Issue #216: wielokrotny wybór, tablice zamiast pojedynczego stringa.
+    // Puste tablice = "wszystkie" (bez zawężenia), tak jak puste stringi
+    // znaczyły "wszystkie" przed tą zmianą.
+    wojewodztwa: [],
+    powiaty: [],
     miasto: '',
     ilosc: ILOSC_DOMYSLNA,
   }
@@ -262,49 +271,69 @@ function liczbaOpcji(dict) {
     .map(([klucz, ile]) => ({ label: `${klucz} (${ile})`, value: klucz }))
 }
 
-const wojewodztwoOptions = computed(() => [
-  { label: __('Wszystkie województwa'), value: '' },
-  ...liczbaOpcji(state.pula.wojewodztwa),
-])
+const wojewodztwoOptions = computed(() => liczbaOpcji(state.pula.wojewodztwa))
 
-// Kaskada powiatu od województwa (issue #104): gdy województwo jest wybrane,
-// lista powiatów pochodzi z `crm.api.volteo_leady.powiaty` (zawężona do tego
-// województwa, bez liczników). Bez wybranego województwa wraca stara,
-// niezawężona pula agregowana globalnie (`state.pula.powiaty`, z licznikami)
-// - poprzedni jedyny widok tego selecta.
-const powiatyDlaWojewodztwa = ref([])
+// Kaskada powiatu od województwa (issue #104, rozszerzona na wiele
+// województw naraz w issue #216): gdy co najmniej jedno województwo jest
+// zaznaczone, lista powiatów pochodzi z `crm.api.volteo_leady.powiaty`
+// (zawężona do WSZYSTKICH zaznaczonych województw naraz, scalona lista bez
+// liczników). Bez zaznaczonego województwa wraca stara, niezawężona pula
+// agregowana globalnie (`state.pula.powiaty`, z licznikami) - decyzja
+// właściciela z issue #216: "wszystkie" zamiast pustej listy, bo dodanie
+// nazwy województwa obok każdego powiatu w tym widoku wymagałoby nowego,
+// bogatszego agregatu (dzisiejsze `state.pula.powiaty` zlicza WYŁĄCZNIE po
+// nazwie powiatu, bez przypisania do województwa) - zostawione bez zmian,
+// dokładnie jak w pojedynczym wyborze sprzed tej zmiany.
+const powiatyDlaWojewodztw = ref([])
 const powiatyResource = createResource({
   url: 'crm.api.volteo_leady.powiaty',
   auto: false,
-  onSuccess: (data) => {
-    powiatyDlaWojewodztwa.value = data || []
-  },
 })
 
+// `dostepnePowiaty`: płaska lista nazw powiatów dozwolonych w AKTUALNYM
+// stanie selecta Województwo - scalona lista z `powiaty()` gdy coś jest
+// zaznaczone, albo cała pula gdy nic nie jest zaznaczone. Jedno źródło
+// prawdy, z którego korzystają i opcje selecta (z licznikami, gdy to
+// pula), i filtrujWedlugDostepnych poniżej (bez liczników, tylko nazwy).
+const dostepnePowiaty = computed(() =>
+  form.wojewodztwa.length
+    ? powiatyDlaWojewodztw.value
+    : Object.keys(state.pula.powiaty || {}),
+)
+
+// Usuwa z zaznaczenia powiaty spoza `dostepne` - jedna funkcja obsługuje
+// zarówno "odznaczenie województwa usuwa z wyboru jego powiaty" (gdy
+// zawężona lista się kurczy), jak i powrót do "wszystkie" po odznaczeniu
+// OSTATNIEGO województwa (gdy `dostepne` to cała pula, a wybrany wcześniej
+// powiat prawie zawsze w niej jest, więc zostaje zaznaczony - naturalny,
+// niewymuszony efekt tej samej reguły "trzymaj tylko to, co dostępne").
+function zachowajTylkoDostepnePowiaty(dostepne) {
+  const dozwolone = new Set(dostepne)
+  const przefiltrowane = form.powiaty.filter((p) => dozwolone.has(p))
+  if (przefiltrowane.length !== form.powiaty.length) {
+    form.powiaty = przefiltrowane
+  }
+}
+
 watch(
-  () => form.wojewodztwo,
-  (wojewodztwo) => {
-    // Poprzednio wybrany powiat może nie istnieć w nowym województwie -
-    // reset, żeby przydział nigdy nie poszedł z cichym, niepasującym filtrem.
-    form.powiat = ''
-    powiatyDlaWojewodztwa.value = []
-    if (wojewodztwo) {
-      powiatyResource.submit({ wojewodztwo })
+  () => [...form.wojewodztwa],
+  async (wojewodztwa) => {
+    if (!wojewodztwa.length) {
+      powiatyDlaWojewodztw.value = []
+      zachowajTylkoDostepnePowiaty(Object.keys(state.pula.powiaty || {}))
+      return
     }
+    const dane = await powiatyResource.submit({ wojewodztwo: JSON.stringify(wojewodztwa) })
+    powiatyDlaWojewodztw.value = dane || []
+    zachowajTylkoDostepnePowiaty(powiatyDlaWojewodztw.value)
   },
 )
 
 const powiatOptions = computed(() => {
-  if (form.wojewodztwo) {
-    return [
-      { label: __('Wszystkie powiaty'), value: '' },
-      ...powiatyDlaWojewodztwa.value.map((powiat) => ({ label: powiat, value: powiat })),
-    ]
+  if (form.wojewodztwa.length) {
+    return dostepnePowiaty.value.map((powiat) => ({ label: powiat, value: powiat }))
   }
-  return [
-    { label: __('Wszystkie powiaty'), value: '' },
-    ...liczbaOpcji(state.pula.powiaty),
-  ]
+  return liczbaOpcji(state.pula.powiaty)
 })
 
 const assignResource = createResource({
@@ -312,8 +341,12 @@ const assignResource = createResource({
   makeParams: () => ({
     handlowiec: form.handlowiec,
     ilosc: form.ilosc || ILOSC_DOMYSLNA,
-    wojewodztwo: form.wojewodztwo,
-    powiat: form.powiat,
+    // Issue #216: zawsze JSON-string listy (nawet dla jednego/zera
+    // zaznaczeń) - `crm.api.volteo_leady._normalizuj_liste_lub_string`
+    // czyta to przez `frappe.parse_json`, zgodnie z tym samym wzorcem co
+    // `filters`/`leady` niżej w `przydziel_cc`.
+    wojewodztwo: JSON.stringify(form.wojewodztwa),
+    powiat: JSON.stringify(form.powiaty),
     miasto: form.miasto.trim(),
   }),
   onSuccess: (data) => {
@@ -339,13 +372,18 @@ const assignResource = createResource({
 // ops/crm-leady-call-center.py) i custom_cc puste (operator "is"/"not set",
 // ten sam wzorzec co gdzie indziej w forku, np. crm/api/contact.py), żeby nie
 // przydzielać CC leadów już obsłużonych albo już przypisanych innej osobie.
+//
+// Issue #216: `custom_voivodeship`/`custom_powiat` to teraz operator "in" z
+// tablicą zamiast równości na pojedynczym stringu - `frappe.get_list`
+// (wołane w `przydziel_cc` po `_sprawdz_filtry`) obsługuje ten kształt
+// natywnie, bez żadnej zmiany po stronie backendu dla tej ścieżki.
 function zbudujFiltryCc() {
   const filters = {
     status: 'Nowy',
     custom_cc: ['is', 'not set'],
   }
-  if (form.wojewodztwo) filters.custom_voivodeship = form.wojewodztwo
-  if (form.powiat) filters.custom_powiat = form.powiat
+  if (form.wojewodztwa.length) filters.custom_voivodeship = ['in', form.wojewodztwa]
+  if (form.powiaty.length) filters.custom_powiat = ['in', form.powiaty]
   if (form.miasto.trim()) filters.custom_install_city = form.miasto.trim()
   return filters
 }
