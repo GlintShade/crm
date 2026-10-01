@@ -132,3 +132,61 @@ export function czyWielokrotnyWybor(field, operator) {
 export function domyslnyOperatorWielokrotny(field) {
   return czyWielokrotnyWybor(field, 'in') ? 'in' : null
 }
+
+/**
+ * Wartość domyślna filtra, ZALEŻNA OD OPERATORA (naprawa regresji po
+ * #215, zgłoszona w #218): `czyWielokrotnyWybor(field, operator)` zwraca
+ * prawdę WYŁĄCZNIE dla operatorów "in"/"not in" -- dla każdego innego
+ * operatora (np. "equals" na Select, "like" na Link/polu z wartościami z
+ * serwera) wartość domyślna musi wrócić do skalarnych wartości sprzed
+ * #215, a nie zostać przy pustej tablicy.
+ *
+ * `Filter.vue::updateOperator` wołał dotychczas `getDefaultValue(field)`
+ * (bez operatora) w gałęzi "każdy inny operator", a `getDefaultValue`
+ * sama w sobie sprawdzała WYŁĄCZNIE `domyslnyOperatorWielokrotny(field)`
+ * (operator na sztywno `'in'`, patrz jej JSDoc) -- więc pole z
+ * wielokrotnym wyborem (Select/Link/tagi/wartości z serwera) dostawało
+ * `[]` przy PRZEŁĄCZENIU na "equals"/"like" zamiast właściwej skalarnej
+ * wartości (pierwsza opcja Select, pusty string dla reszty), a
+ * `transformIn`/kontrolka tekstowa dostawały tablicę zamiast stringa.
+ *
+ * Reguła (ta sama drabina co `Filter.vue::getDefaultValue` sprzed #215):
+ *   - `czyWielokrotnyWybor(field, operator)` prawda -> `[]`;
+ *   - fieldtype `'Select'` -> `pierwszaOpcja` (pierwszy element
+ *     `field.options.split('\n')`, policzony przez wołającego -- ten
+ *     moduł nie zna żadnej logiki UI rozbijania opcji, tylko przyjmuje
+ *     gotową wartość) albo `''`, gdy `pierwszaOpcja` nie podano;
+ *   - fieldtype `'Check'` -> `'Yes'`;
+ *   - fieldtype `'Date'`/`'Datetime'` -> `null`;
+ *   - każdy inny fieldtype (Link, Data, Int, Currency...) -> `''`
+ *     (dotychczasowe pole tekstowe z wartością po przecinku).
+ *
+ * Pola tagów (`czyPoleTagow`) z operatorem `OPERATOR_TAGOW`
+ * (`"volteo_tagi"`, kształt złożony `{ma, nie_ma}`) są świadomie POZA
+ * zakresem tej funkcji -- `Filter.vue::updateOperator` ma dla nich
+ * własną, wcześniejszą gałąź (zamiana kształtu wartości między
+ * in/not in/volteo_tagi), niezmienioną tą poprawką.
+ *
+ * Frappe-free, ten sam kształt `field` co `czyWielokrotnyWybor`.
+ *
+ * @param {{fieldtype: string, options?: string}|null|undefined} field
+ * @param {string} operator
+ * @param {string} [pierwszaOpcja] pierwsza opcja Select (`field.options.split('\n')[0]`), policzona przez wołającego
+ * @returns {string[]|string|null}
+ */
+export function domyslnaWartoscFiltra(field, operator, pierwszaOpcja) {
+  if (!field) return ''
+  if (czyWielokrotnyWybor(field, operator)) {
+    return []
+  }
+  if (field.fieldtype === 'Select') {
+    return pierwszaOpcja ?? ''
+  }
+  if (field.fieldtype === 'Check') {
+    return 'Yes'
+  }
+  if (['Date', 'Datetime'].includes(field.fieldtype)) {
+    return null
+  }
+  return ''
+}

@@ -336,6 +336,7 @@ import { etykietaMoje } from '@/utils/etykietaMoje'
 import { opcjeEtapu } from '@/utils/etapFiltr'
 import {
   czyWielokrotnyWybor,
+  domyslnaWartoscFiltra,
   domyslnyOperatorWielokrotny,
   parsujWartoscWielokrotna,
 } from '@/utils/filtrWielokrotny'
@@ -900,23 +901,24 @@ function getValueControl(f) {
   }
 }
 
-function getDefaultValue(field) {
-  // Issue #215 (decyzja właściciela 2026-10-01): każde pole, dla którego
-  // wielokrotny wybór ma zastosowanie (Select, Link poza Dynamic Link, pola
-  // tagów -- domyslnyOperatorWielokrotny/czyWielokrotnyWybor w
-  // utils/filtrWielokrotny.js), startuje z pustą tablicą zamiast skalarnej
-  // wartości domyślnej (np. pierwszej opcji Select) -- zgodnie z operatorem
-  // "in", w który startuje (patrz getDefaultOperator niżej).
-  if (domyslnyOperatorWielokrotny(field)) {
-    return []
-  }
-  if (typeCheck.includes(field.fieldtype)) {
-    return 'Yes'
-  }
-  if (typeDate.includes(field.fieldtype)) {
-    return null
-  }
-  return ''
+function getDefaultValue(field, operator = getDefaultOperator(field)) {
+  // Fix regresji po #215 (zgłoszone przy #218): wartość domyślna MUSI
+  // zależeć od `operator`, nie tylko od `field` -- `domyslnaWartoscFiltra`
+  // w utils/filtrWielokrotny.js jest teraz jedynym źródłem tej drabiny
+  // (Select: pierwsza opcja, Check: 'Yes', Date/Datetime: null, reszta: '',
+  // chyba że `czyWielokrotnyWybor(field, operator)` każe zwrócić `[]`).
+  // Drugi parametr domyślnie `getDefaultOperator(field)` -- DOKŁADNIE
+  // zachowanie sprzed tej poprawki dla wywołań bez jawnego operatora
+  // (setfilter/updateFilter/zbudujWarunek niżej, gdzie operator PRZYPISANY
+  // obok wartości to zawsze `getDefaultOperator(data)`). `updateOperator`
+  // niżej woła z JAWNYM, nowo wybranym `filter.operator` -- to tam leżał
+  // błąd: przy przełączeniu z "in" na np. "equals"/"like" wartość zostawała
+  // pustą tablicą zamiast wracać do skalara.
+  const pierwszaOpcja =
+    field.fieldtype === 'Select' && field.options
+      ? getSelectOptions(field.options)[0]
+      : undefined
+  return domyslnaWartoscFiltra(field, operator, pierwszaOpcja)
 }
 
 function getDefaultOperator(field) {
@@ -1134,7 +1136,12 @@ function updateOperator(filter) {
   } else if (filter.operator === 'is' || filter.operator === 'is not') {
     filter.value = 'set'
   } else {
-    filter.value = getDefaultValue(filter.field)
+    // Fix regresji po #215: operator JAWNY (ten, na który użytkownik
+    // właśnie przełączył), nie domyślny dla pola -- inaczej pole z
+    // wielokrotnym wyborem (Select/Link/tagi/wartości z serwera)
+    // przełączone na "equals"/"like" dostawałoby `[]` zamiast skalara,
+    // patrz JSDoc domyslnaWartoscFiltra w utils/filtrWielokrotny.js.
+    filter.value = getDefaultValue(filter.field, filter.operator)
   }
   apply()
 }
