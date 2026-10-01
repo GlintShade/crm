@@ -25,10 +25,17 @@
   `konfig.zdjecia === true` (tylko MONTAZ, ops#191) montuje nad kartą
   "Dodaj wpis" galerię MontazZdjecia.vue, "Zdjęcia z realizacji" - jedna
   wspólna galeria dla całej szansy, niezależna od wpisów tego strumienia.
+
+  `konfig.prywatneNotatki === true` (tylko MONTAZ, issue #213) montuje nad
+  kartą "Dodaj wpis" (nad galerią zdjęć, gdy obie są obecne) strumień
+  notatek prywatnych administracji (NotatkiPrywatne.vue, doctype
+  `Volteo Notatka Prywatna`, zupełnie osobny od `konfig.doctype` powyżej) -
+  bramka widoczności żyje wewnątrz tamtego komponentu, nie tutaj.
 -->
 <template>
   <div class="flex flex-1 flex-col overflow-y-auto p-5">
     <div class="mx-auto flex w-full max-w-3xl flex-col gap-5">
+      <NotatkiPrywatne v-if="konfig.prywatneNotatki" :deal-id="dealId" />
       <MontazZdjecia v-if="konfig.zdjecia" :deal-id="dealId" />
 
       <!-- Dodaj wpis -->
@@ -107,6 +114,7 @@
 import { Badge, Button, FormControl, TextEditor, call, createResource, toast } from 'frappe-ui'
 import { reactive, ref, computed } from 'vue'
 import MontazZdjecia from '@/components/deal/MontazZdjecia.vue'
+import NotatkiPrywatne from '@/components/deal/NotatkiPrywatne.vue'
 import { usersStore } from '@/stores/users.js'
 import { sanitizeHTML } from '@/utils'
 import { tekstPusty } from '@/utils/aktualizacje'

@@ -78,7 +78,18 @@
           </div>
         </div>
       </div>
-      <span class="shrink-0 whitespace-nowrap text-xs tabular-nums text-ink-gray-5">{{ dataTekst }}</span>
+      <div class="flex shrink-0 items-start gap-1">
+        <span class="whitespace-nowrap text-xs tabular-nums text-ink-gray-5">{{ dataTekst }}</span>
+        <Button
+          v-if="pokazUsun"
+          variant="ghost"
+          size="sm"
+          theme="red"
+          icon="lucide-trash-2"
+          :tooltip="__('Usuń')"
+          @click="$emit('usun', wpis.name)"
+        />
+      </div>
     </div>
 
     <div class="prose-f max-w-[64ch] text-[15px] text-ink-gray-9" v-html="sanitizeHTML(wpis.tekst)" />
@@ -174,9 +185,15 @@ const props = defineProps({
   ikonaZakladki: { type: [Object, Function], default: null },
   etykietaZakladkiOverride: { type: String, default: '' },
   tylkoGodzina: { type: Boolean, default: false },
+  // Pokazuje przycisk kosza w nagłówku karty, obok daty - WYŁĄCZNIE dla
+  // strumieni, które pozwalają na usuwanie (np. NotatkiPrywatne.vue, issue
+  // #213). Domyślnie false, żeby nie naruszać decyzji właściciela "BEZ
+  // edycji i BEZ kosza" udokumentowanej w nagłówku pliku dla ośmiu zwykłych
+  // zakładek Volteo Notatka - żadne z ich ośmiu wywołań tego nie ustawia.
+  pokazUsun: { type: Boolean, default: false },
 })
 
-defineEmits(['otworz-zakladke'])
+defineEmits(['otworz-zakladke', 'usun'])
 
 const { getUser } = usersStore()
 

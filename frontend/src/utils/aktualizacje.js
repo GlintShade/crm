@@ -10,6 +10,16 @@
 // "Dodaj wpis". TRIFY nie ma tego klucza wcale (nie samo `false`) - galeria
 // jest jedna, wspólna dla całej szansy, nie per strumień.
 //
+// `prywatneNotatki: true` (tylko MONTAZ, issue #213) włącza w
+// AktualizacjeTab.vue strumień notatek prywatnych administracji
+// (NotatkiPrywatne.vue, doctype `Volteo Notatka Prywatna`, calkowicie
+// osobny od `konfig.doctype` tego pliku) nad kartą "Dodaj wpis" - ten sam
+// miejsce, gdzie MontazTabOze.vue (wersja OZE tej zakładki) go montuje, dla
+// spójności obu wariantów produktowych. TRIFY nie ma tego klucza wcale (nie
+// samo `false`) - decyzja właściciela #213 dotyczy wyłącznie zakładki
+// Montaż (OZE i CP), nie Trify.
+
+//
 // PUŁAPKA (patrz CLAUDE.md → "Eager chunk a __()"): __() wolno wywoływać
 // tylko w script setup / funkcjach komponentu, NIGDY na poziomie modułu —
 // dlatego napisy poniżej są surowym polskim tekstem, a tłumaczenie przez
@@ -37,6 +47,7 @@ export const MONTAZ = {
   doctype: 'Volteo Montaz Update',
   html: false,
   zdjecia: true,
+  prywatneNotatki: true,
   typy: ['Notatka', 'Telefon', 'Wizyta', 'Termin montażu', 'Problem'],
   placeholder: 'Np. Umówiono termin montażu na 20.07…',
   pusty: 'Brak aktualizacji montażu.',

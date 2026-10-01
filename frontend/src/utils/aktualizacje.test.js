@@ -49,6 +49,14 @@ describe('konfiguracje strumieni aktualizacji', () => {
   it('TRIFY.zdjecia jest falsy (bez galerii)', () => {
     expect(TRIFY.zdjecia).toBeFalsy()
   })
+
+  it('MONTAZ.prywatneNotatki jest true (notatki prywatne administracji, issue #213)', () => {
+    expect(MONTAZ.prywatneNotatki).toBe(true)
+  })
+
+  it('TRIFY.prywatneNotatki jest falsy (poza zakresem issue #213)', () => {
+    expect(TRIFY.prywatneNotatki).toBeFalsy()
+  })
 })
 
 describe('zdjeciaDoGalerii', () => {
