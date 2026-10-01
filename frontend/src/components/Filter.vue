@@ -328,6 +328,7 @@
 import FilterIcon from '@/components/Icons/FilterIcon.vue'
 import Link from '@/components/Controls/Link.vue'
 import LinkMultiSelect from '@/components/Controls/LinkMultiSelect.vue'
+import QuickFilterCheckList from '@/components/Controls/QuickFilterCheckList.vue'
 import Autocomplete from '@/components/frappe-ui/Autocomplete.vue'
 import DurationInput from '@/components/Controls/DurationInput.vue'
 import RatingInput from '@/components/Controls/RatingInput.vue'
@@ -335,6 +336,7 @@ import { etykietaMoje } from '@/utils/etykietaMoje'
 import { opcjeEtapu } from '@/utils/etapFiltr'
 import {
   czyWielokrotnyWybor,
+  domyslnyOperatorWielokrotny,
   parsujWartoscWielokrotna,
 } from '@/utils/filtrWielokrotny'
 import {
@@ -739,6 +741,31 @@ function getValueControl(f) {
       }),
     ])
   } else if (
+    props.doctype === 'CRM Deal' &&
+    field.fieldname === 'status' &&
+    ['in', 'not in'].includes(operator)
+  ) {
+    // Issue #215: Etap w trybie "jest jednym z"/"nie jest żadnym z" dostaje
+    // te same opcje pogrupowane OZE/Czyste Powietrze/Inne, zawężone do
+    // aktywnego "Rodzaju umowy", co pasek szybkich filtrów
+    // (utils/etapFiltr.js::opcjeEtapu, QuickFilterField.vue) -- zamiast
+    // pełnego katalogu CRM Deal Status przez LinkMultiSelect (branch niżej).
+    // Reużywamy wprost QuickFilterCheckList (ten sam komponent co pasek),
+    // żeby lista grup i ich kolejność nigdy nie mogły się rozjechać między
+    // paskiem a popoverem.
+    return h(QuickFilterCheckList, {
+      label: field.label || __('Etap'),
+      fieldtype: 'Select',
+      options: opcjeEtapu(
+        grupyStatusow.data,
+        list.value?.params?.filters?.custom_rodzaj_umowy,
+        isKnownStatus,
+        dealStatuses.data?.map((s) => s.name),
+      ),
+      modelValue: parsujWartoscWielokrotna(f.value),
+      'onUpdate:modelValue': (v) => updateValue(v, f),
+    })
+  } else if (
     czyWielokrotnyWybor(f.field, operator) &&
     (typeSelect.includes(fieldtype) || czyPoleTagow(f.field))
   ) {
@@ -769,6 +796,10 @@ function getValueControl(f) {
     // (Link.vue), tylko z wielokrotnym wyborem (LinkMultiSelect.vue).
     return h(LinkMultiSelect, {
       doctype: options,
+      // Issue #214: etykieta "@me", uwzględniana przez LinkMultiSelect
+      // wyłącznie gdy `options === 'User'` (np. deal_owner, custom_cc,
+      // custom_opiekun) -- bez znaczenia dla każdego innego Linku.
+      meLabel: etykietaMoje(props.doctype),
       modelValue: parsujWartoscWielokrotna(f.value),
       'onUpdate:modelValue': (v) => updateValue(v, f),
     })
@@ -847,14 +878,14 @@ function getValueControl(f) {
 }
 
 function getDefaultValue(field) {
-  // Issue ops#173: pole tagów startuje zawsze z operatorem "in" (patrz
-  // getDefaultOperator), którego wartość domyślna to pusta tablica -- tak
-  // jak dla in/not in na Select/Link (czyWielokrotnyWybor), nie skalar.
-  if (czyPoleTagow(field)) {
+  // Issue #215 (decyzja właściciela 2026-10-01): każde pole, dla którego
+  // wielokrotny wybór ma zastosowanie (Select, Link poza Dynamic Link, pola
+  // tagów -- domyslnyOperatorWielokrotny/czyWielokrotnyWybor w
+  // utils/filtrWielokrotny.js), startuje z pustą tablicą zamiast skalarnej
+  // wartości domyślnej (np. pierwszej opcji Select) -- zgodnie z operatorem
+  // "in", w który startuje (patrz getDefaultOperator niżej).
+  if (domyslnyOperatorWielokrotny(field)) {
     return []
-  }
-  if (typeSelect.includes(field.fieldtype)) {
-    return getSelectOptions(field.options)[0]
   }
   if (typeCheck.includes(field.fieldtype)) {
     return 'Yes'
@@ -866,28 +897,22 @@ function getDefaultValue(field) {
 }
 
 function getDefaultOperator(field) {
-  // Issue ops#173: pole tagów dostaje domyślnie "Zawiera którykolwiek z"
-  // (in) -- getOperators dla tego pola nie oferuje już "equals", więc
-  // domyślny operator musi być jednym z trzech faktycznie oferowanych.
-  if (czyPoleTagow(field)) {
-    return 'in'
+  // Issue #215 (decyzja właściciela 2026-10-01): każde pole z wielokrotnym
+  // wyborem (Select, Link poza Dynamic Link -- w tym pola User po issue
+  // #214 -- i pola tagów) startuje od razu z operatorem "jest jednym z"
+  // (in) i listą checkboxów, zamiast pojedynczej wartości wymagającej
+  // ręcznej zmiany operatora. Pozostałe operatory (equals/like/...)
+  // zostają dostępne na liście (getOperators), niezmienione.
+  const wymuszony = domyslnyOperatorWielokrotny(field)
+  if (wymuszony) {
+    return wymuszony
   }
   const fieldtype = field.fieldtype
-  if (typeSelect.includes(fieldtype)) {
-    return 'equals'
-  }
   if (typeCheck.includes(fieldtype) || typeNumber.includes(fieldtype)) {
     return 'equals'
   }
   if (typeDate.includes(fieldtype)) {
     return 'between'
-  }
-  // Filtry uzytkownika (Przypisany handlowiec, Przypisany CC, Doradca,
-  // Opiekun) maja od razu otwierac autouzupelnianie Link.vue z
-  // wyszukiwaniem po imieniu i nazwisku, zamiast pola tekstowego na
-  // e-mail. Operator `like` zostaje dostepny na liscie operatorow.
-  if (fieldtype === 'Link' && field.options === 'User') {
-    return 'equals'
   }
   return 'like'
 }
