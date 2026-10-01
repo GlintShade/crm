@@ -147,6 +147,29 @@ describe('czyWielokrotnyWybor', () => {
     }
     expect(czyWielokrotnyWybor(field, 'equals')).toBe(false)
   })
+
+  it('issue #218: pole z wartościami z serwera (Data + volteo_wartosci) + in/not in → true', () => {
+    const field = {
+      fieldtype: 'Data',
+      fieldname: 'custom_powiat',
+      volteo_wartosci: {
+        url: 'crm.api.volteo_leady.powiaty_filtra',
+        zalezy_od: 'custom_voivodeship',
+        parametr: 'wojewodztwa',
+      },
+    }
+    expect(czyWielokrotnyWybor(field, 'in')).toBe(true)
+    expect(czyWielokrotnyWybor(field, 'not in')).toBe(true)
+  })
+
+  it('issue #218: pole z wartościami z serwera na inny operator → false, zostaje bez zmian', () => {
+    const field = {
+      fieldtype: 'Data',
+      fieldname: 'custom_powiat',
+      volteo_wartosci: { url: 'x', zalezy_od: 'y', parametr: 'z' },
+    }
+    expect(czyWielokrotnyWybor(field, 'equals')).toBe(false)
+  })
 })
 
 describe('domyslnyOperatorWielokrotny', () => {
@@ -164,6 +187,16 @@ describe('domyslnyOperatorWielokrotny', () => {
   it('pole tagów (ops#150) → "in"', () => {
     expect(
       domyslnyOperatorWielokrotny({ fieldtype: 'Data', fieldname: 'custom_produkt_procesu' }),
+    ).toBe('in')
+  })
+
+  it('issue #215/#218: pole z wartościami z serwera (ops#150-podobne) → "in"', () => {
+    expect(
+      domyslnyOperatorWielokrotny({
+        fieldtype: 'Data',
+        fieldname: 'custom_powiat',
+        volteo_wartosci: { url: 'x', zalezy_od: 'y', parametr: 'z' },
+      }),
     ).toBe('in')
   })
 

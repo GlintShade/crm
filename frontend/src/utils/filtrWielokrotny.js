@@ -91,6 +91,14 @@ export function scalOpcjeZZaznaczonymi(opcje, zaznaczoneWartosci) {
  * celowo nie zmienia typu pola, więc rozpoznanie idzie przez osobną flagę
  * (`field.volteo_tagi`, dołożoną przez `crm.api.doc.get_filterable_fields`/
  * `get_quick_filters`) zamiast przez fieldtype.
+ *
+ * Issue #218: pole z wartościami pobieranymi z serwera (np. `custom_powiat`
+ * na `CRM Lead`, zawężony do aktywnego filtra województwa) dostaje TĘ SAMĄ
+ * kontrolkę z dokładnie tego samego powodu co pole tagów -- `field.fieldtype`
+ * zostaje `'Data'` bez zmian, rozpoznanie idzie przez osobną flagę
+ * (`field.volteo_wartosci`, ten sam kształt dołożenia co `volteo_tagi`, patrz
+ * `crm.api.doc._dolacz_wartosci_serwera_lead`). Front NIE zna nazwy pola ani
+ * adresu endpointu na sztywno -- rozpoznaje WYŁĄCZNIE obecność tej flagi.
  */
 export function czyWielokrotnyWybor(field, operator) {
   if (!field) return false
@@ -98,6 +106,7 @@ export function czyWielokrotnyWybor(field, operator) {
   if (field.fieldtype === 'Select') return true
   if (field.fieldtype === 'Link') return true
   if (czyPoleTagow(field)) return true
+  if (field.volteo_wartosci) return true
   return false
 }
 

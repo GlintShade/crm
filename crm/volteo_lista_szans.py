@@ -428,6 +428,40 @@ POLA_TAGOW_LEAD_DYNAMICZNE: frozenset[str] = frozenset({"custom_import_source"})
 WSZYSTKIE_POLA_TAGOW_LEAD: frozenset[str] = frozenset(POLA_TAGOW_LEAD) | POLA_TAGOW_LEAD_DYNAMICZNE
 
 
+# Pola leada z wartosciami filtra pobieranymi z SERWERA, zawezonymi do
+# aktywnego filtra ZALEZNEGO (issue #218, decyzja wlasciciela 2026-10-01
+# "wielokrotny wybor we wszystkich filtrach"): w odroznieniu od
+# POLA_TAGOW_LEAD/POLA_TAGOW_LEAD_DYNAMICZNE wyzej (jedno pole, jeden
+# string zlaczony tokenami), kazde pole tutaj to zwykle, pojedyncze pole
+# Data na CRM Lead (`custom_powiat`), ktorego katalog mozliwych wartosci
+# jest zbyt duzy/zmienny, zeby doklejac go calkiem jako `options` przy
+# kazdym odczycie get_quick_filters/get_filterable_fields (306 roznych
+# powiatow na produkcji) -- zamiast tego front dostaje tu konfiguracje
+# (`url`/`zalezy_od`/`parametr`), po ktorej QuickFilterCheckList.vue sam
+# dociaga liste wartosci dopiero przy otwarciu popovera/paska, zawezona do
+# aktualnego zaznaczenia pola `zalezy_od`.
+#
+# Mapa fieldname -> {"url": whitelisted API frontu, "zalezy_od": nazwa pola
+# filtra, od ktorego zalezy zawezenie, "parametr": nazwa parametru tego
+# API, do ktorego front pakuje rozpakowana wartosc filtra `zalezy_od"}.
+# Front NIE zna "custom_powiat" ani URL-a na sztywno -- rozpoznaje pole po
+# samej obecnosci klucza `volteo_wartosci` w odpowiedzi serwera (dolozonym
+# przez `crm.api.doc._dolacz_wartosci_serwera_lead`, lustro
+# `_dolacz_tagi_lead` powyzej), dokladnie tak samo jak `volteo_tagi`.
+POLA_WARTOSCI_LEAD: dict[str, dict[str, str]] = {
+	"custom_powiat": {
+		"url": "crm.api.volteo_leady.powiaty_filtra",
+		"zalezy_od": "custom_voivodeship",
+		"parametr": "wojewodztwa",
+	},
+}
+"""Mapa fieldname -> konfiguracja endpointu wartosci z serwera, dla pol
+`CRM Lead` z wielokrotnym wyborem, ktorych katalog opcji pochodzi z
+zapytania (nie ze statycznego slownika w kodzie). Konsumowana WYLACZNIE
+przez `crm.api.doc._dolacz_wartosci_serwera_lead` -- ten modul sam nic nie
+woła, jest frappe-free (patrz docstring modulu)."""
+
+
 def rozloz_tokeny_dynamicznego_slownika(wartosci: Iterable[str | None]) -> list[str]:
 	"""Rozbija surowe wartosci pola tagow o slowniku DYNAMICZNYM (np.
 	DISTINCT `custom_import_source` z bazy -- jedna wartosc moze byc

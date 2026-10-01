@@ -8,6 +8,7 @@ from crm.volteo_lista_szans import (
 	OPERATOR_TAGOW,
 	POLA_TAGOW_LEAD,
 	POLA_TAGOW_LEAD_DYNAMICZNE,
+	POLA_WARTOSCI_LEAD,
 	POLA_ZAWSZE_DOZWOLONE,
 	SORT_FIELDS_DEAL,
 	SORT_FIELDS_LEAD,
@@ -675,6 +676,46 @@ class TestPolaTagowLeadDynamiczne(unittest.TestCase):
 	def test_d_frozenset(self: "TestPolaTagowLeadDynamiczne") -> None:
 		self.assertIsInstance(POLA_TAGOW_LEAD_DYNAMICZNE, frozenset)
 		self.assertIsInstance(WSZYSTKIE_POLA_TAGOW_LEAD, frozenset)
+
+
+class TestPolaWartosciLead(unittest.TestCase):
+	"""`POLA_WARTOSCI_LEAD` (issue #218) -- pola leada z wartosciami filtra
+	pobieranymi z serwera (zamiast statycznego slownika w kodzie jak
+	POLA_TAGOW_LEAD, albo DISTINCT z bazy jak POLA_TAGOW_LEAD_DYNAMICZNE),
+	zawezonymi do aktywnego filtra zaleznego."""
+
+	def test_a_jest_dict(self: "TestPolaWartosciLead") -> None:
+		self.assertIsInstance(POLA_WARTOSCI_LEAD, dict)
+
+	def test_b_custom_powiat_obecny(self: "TestPolaWartosciLead") -> None:
+		self.assertIn("custom_powiat", POLA_WARTOSCI_LEAD)
+
+	def test_c_konfiguracja_custom_powiat(self: "TestPolaWartosciLead") -> None:
+		self.assertEqual(
+			POLA_WARTOSCI_LEAD["custom_powiat"],
+			{
+				"url": "crm.api.volteo_leady.powiaty_filtra",
+				"zalezy_od": "custom_voivodeship",
+				"parametr": "wojewodztwa",
+			},
+		)
+
+	def test_d_rozlaczne_z_polami_tagow(self: "TestPolaWartosciLead") -> None:
+		# Zadne pole nie moze byc jednoczesnie "tagiem" (POLA_TAGOW_LEAD/
+		# POLA_TAGOW_LEAD_DYNAMICZNE) i "wartosciami z serwera" -- oba
+		# mechanizmy rozpoznawane sa po innej fladze w odpowiedzi
+		# (volteo_tagi kontra volteo_wartosci), kolizja nazwy pola w obu
+		# zbiorach wskazywalaby na blad konfiguracji, nie na zamierzona
+		# funkcje.
+		self.assertEqual(set(POLA_WARTOSCI_LEAD) & WSZYSTKIE_POLA_TAGOW_LEAD, set())
+
+	def test_e_kazda_konfiguracja_ma_trzy_klucze(self: "TestPolaWartosciLead") -> None:
+		for fieldname, konfiguracja in POLA_WARTOSCI_LEAD.items():
+			with self.subTest(fieldname=fieldname):
+				self.assertEqual(set(konfiguracja), {"url", "zalezy_od", "parametr"})
+				for klucz, wartosc in konfiguracja.items():
+					self.assertIsInstance(wartosc, str, klucz)
+					self.assertTrue(wartosc, klucz)
 
 
 class TestRozlozTokenyDynamicznegoSlownika(unittest.TestCase):

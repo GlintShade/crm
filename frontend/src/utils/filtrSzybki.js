@@ -221,3 +221,34 @@ export function ustawWartoscWielokrotna(wybrane, wartosc, zaznaczona) {
   }
   return jestJuz ? lista.filter((w) => w !== wartosc) : lista
 }
+
+/**
+ * Buduje parametry zapytania dla pola z wartościami pobieranymi z serwera
+ * (`field.volteo_wartosci`, issue #218 -- np. „Powiat” na `CRM Lead`
+ * zawężony do aktywnego filtra `custom_voivodeship`): rozpakowuje aktualną
+ * wartość filtra ZALEŻNEGO (`activeFilters[field.volteo_wartosci.zalezy_od]`)
+ * tą samą funkcją co pasek szybki (`rozpakujWartoscFiltraSzybkiego`, więc
+ * rozumie zarówno skalar jak i `["in", [...]]`) i zwraca tablicę jego
+ * aktualnie zaznaczonych wartości -- pustą, gdy `field` nie ma flagi
+ * `volteo_wartosci` albo zależny filtr nie jest ustawiony (front wtedy nie
+ * zawęża zapytania, serwer zwraca pełną widoczną pulę, zgodnie z brzmieniem
+ * issue #218: "Bez województwa: wszystkie widoczne powiaty").
+ *
+ * Współdzielona przez `QuickFilterField.vue` (pasek, `activeFilters` =
+ * `list.params.filters`) i `Filter.vue` (popover, `activeFilters` =
+ * `list.value?.params?.filters`) -- ten sam wzorzec co `opcjeEtapuFiltra`
+ * dla Etapu, tylko zamiast zawężać STATYCZNĄ listę opcji, zwraca parametr,
+ * który front wysyła do serwera (QuickFilterCheckList.vue), żeby TO SERWER
+ * zawęził listę.
+ *
+ * Nie mutuje `activeFilters` (immutability, coding-style.md).
+ *
+ * @param {{volteo_wartosci?: {zalezy_od: string}}|null|undefined} field
+ * @param {Object} activeFilters
+ * @returns {string[]}
+ */
+export function zaleznaWartoscFiltraSerwera(field, activeFilters) {
+  const konfiguracja = field?.volteo_wartosci
+  if (!konfiguracja) return []
+  return rozpakujWartoscFiltraSzybkiego(activeFilters?.[konfiguracja.zalezy_od])
+}

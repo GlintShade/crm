@@ -339,6 +339,7 @@ import {
   domyslnyOperatorWielokrotny,
   parsujWartoscWielokrotna,
 } from '@/utils/filtrWielokrotny'
+import { zaleznaWartoscFiltraSerwera } from '@/utils/filtrSzybki'
 import {
   OPERATOR_TAGOW,
   czyPoleTagow,
@@ -765,6 +766,28 @@ function getValueControl(f) {
       modelValue: parsujWartoscWielokrotna(f.value),
       'onUpdate:modelValue': (v) => updateValue(v, f),
     })
+  } else if (field.volteo_wartosci && ['in', 'not in'].includes(operator)) {
+    // Issue #218: pole z opcjami pobieranymi z serwera, zawężonymi do
+    // aktywnego filtra zależnego (np. Powiat zawężony do Województwa) --
+    // ten sam QuickFilterCheckList co pasek szybki (QuickFilterField.vue),
+    // w trybie "wartości z serwera" (prop serverValues) zamiast statycznej
+    // listy opcji -- analogicznie do branży "Etap" wyżej, tylko katalog
+    // opcji nie jest znany z góry, front dociąga go sam z endpointu w
+    // konfiguracji.
+    return h(QuickFilterCheckList, {
+      label: field.label,
+      fieldtype: 'Select',
+      serverValues: {
+        url: field.volteo_wartosci.url,
+        parametr: field.volteo_wartosci.parametr,
+        zaleznaWartosc: zaleznaWartoscFiltraSerwera(
+          field,
+          list.value?.params?.filters,
+        ),
+      },
+      modelValue: parsujWartoscWielokrotna(f.value),
+      'onUpdate:modelValue': (v) => updateValue(v, f),
+    })
   } else if (
     czyWielokrotnyWybor(f.field, operator) &&
     (typeSelect.includes(fieldtype) || czyPoleTagow(f.field))
@@ -921,15 +944,31 @@ function getSelectOptions(options) {
   return options.split('\n')
 }
 
+// Issue #218: wydzielone z setfilter/updateFilter/zbudujWarunek (dotychczas
+// trzy identyczne literały), żeby dodanie `volteo_wartosci` (konfiguracja
+// pola z wartościami z serwera, patrz crm.api.doc._dolacz_wartosci_serwera_
+// lead) nie wymagało powtórzenia w trzech miejscach. Bez tego pole takie
+// jak „Powiat” straciłoby tę flagę w chwili dodania/zmiany filtra (ten
+// literał budował `field` od zera, tylko z czterech wymienionych kluczy) i
+// getValueControl pokazałby na chwilę zwykłe pole tekstowe zamiast
+// checkboxów -- dokładnie do następnego odtworzenia stanu z
+// `list.value.params.filters` przez convertFilters, które DALEJ bierze
+// pełny wpis z `filterableFields.data` (patrz jej komentarz), nie z tego
+// obiektu.
+function budujPoleFiltra(data) {
+  return {
+    label: data.label,
+    fieldname: data.fieldname,
+    fieldtype: data.fieldtype,
+    options: data.options,
+    ...(data.volteo_wartosci ? { volteo_wartosci: data.volteo_wartosci } : {}),
+  }
+}
+
 function setfilter(data) {
   if (!data) return
   filters.value.add({
-    field: {
-      label: data.label,
-      fieldname: data.fieldname,
-      fieldtype: data.fieldtype,
-      options: data.options,
-    },
+    field: budujPoleFiltra(data),
     fieldname: data.fieldname,
     operator: getDefaultOperator(data),
     value: getDefaultValue(data),
@@ -945,12 +984,7 @@ function updateFilter(data, index) {
     fieldname: data.fieldname,
     operator: getDefaultOperator(data),
     value: getDefaultValue(data),
-    field: {
-      label: data.label,
-      fieldname: data.fieldname,
-      fieldtype: data.fieldtype,
-      options: data.options,
-    },
+    field: budujPoleFiltra(data),
   })
   apply()
 }
@@ -967,12 +1001,7 @@ function removeFilter(index) {
 // wspólnych wyżej.
 function zbudujWarunek(data) {
   return {
-    field: {
-      label: data.label,
-      fieldname: data.fieldname,
-      fieldtype: data.fieldtype,
-      options: data.options,
-    },
+    field: budujPoleFiltra(data),
     fieldname: data.fieldname,
     operator: getDefaultOperator(data),
     value: getDefaultValue(data),
