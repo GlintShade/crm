@@ -1,32 +1,37 @@
 <!--
-  Galeria "Zdjęcia z realizacji" w zakładce Montaż (AktualizacjeTab.vue,
-  konfig.zdjecia === true, ops#191). Jedna galeria per szansa, nie per wpis
-  strumienia Montaż: widoczna dla każdego, kto widzi szansę, edytowalna
-  (dodawanie/usuwanie) przez każdego z prawem zapisu szansy.
+  Galeria "Zdjęcia i filmy z realizacji" w zakładce Montaż (AktualizacjeTab.vue,
+  konfig.zdjecia === true, ops#191; filmy dodane w b66). Jedna galeria per
+  szansa, nie per wpis strumienia Montaż: widoczna dla każdego, kto widzi
+  szansę, edytowalna (dodawanie/usuwanie) przez każdego z prawem zapisu
+  szansy.
 
-  Model danych, zero nowego schematu: zdjęcia to zwykłe wiersze `File`
+  Model danych, zero nowego schematu: pliki to zwykłe wiersze `File`
   podpięte pod `CRM Deal` ze znacznikiem `attached_to_field = "zdjecia_montaz"`
-  (patrz `crm/api/montaz.py`). Do pierwszego zdjęcia sekcja to jeden
-  kompaktowy wiersz; po wgraniu zdjęć rozwija się w siatkę kafelków.
+  (patrz `crm/api/montaz.py`, `crm.volteo_pliki.czy_media_montazu`). Do
+  pierwszego pliku sekcja to jeden kompaktowy wiersz; po wgraniu plików
+  rozwija się w siatkę kafelków. Filmy renderują się jako kafelek z ikoną i
+  nazwą pliku, NIGDY jako `<video>` w siatce (patrz `AudytPhotoSlot.vue`) -
+  odtwarzacz żyje wyłącznie w modalu podglądu.
 
-  Limit 20 zdjęć jest miękki: przy 20 przycisk "Dodaj zdjęcia" znika i
-  licznik pokazuje "20 / 20", ale serwer nie blokuje (upload idzie przez
-  rdzeń `upload_file`, nie przez ten moduł) - `restrictions.maxNumberOfFiles`
-  niżej jest wyłącznie pomocą w UI, nie egzekwowaniem.
+  Limit 20 (zdjęcia i filmy razem) jest miękki: przy 20 przycisk "Dodaj
+  zdjęcia lub filmy" znika i licznik pokazuje "20 / 20", ale serwer nie
+  blokuje (upload idzie przez rdzeń `upload_file`, nie przez ten moduł) -
+  `restrictions.maxNumberOfFiles` niżej jest wyłącznie pomocą w UI, nie
+  egzekwowaniem.
 -->
 <template>
   <div class="rounded-lg border border-outline-gray-2 p-3">
     <div class="flex items-center gap-2">
-      <div class="text-base font-medium text-ink-gray-8">{{ __('Zdjęcia z realizacji') }}</div>
+      <div class="text-base font-medium text-ink-gray-8">{{ __('Zdjęcia i filmy z realizacji') }}</div>
       <Badge v-if="zdjecia.length" :label="licznikEtykieta" />
-      <div v-else class="text-xs text-ink-gray-5">{{ __('Brak zdjęć') }}</div>
+      <div v-else class="text-xs text-ink-gray-5">{{ __('Brak zdjęć i filmów') }}</div>
       <div class="flex-1" />
       <Button
         v-if="mozeDodac"
         size="sm"
         variant="subtle"
         iconLeft="lucide-camera"
-        :label="__('Dodaj zdjęcia')"
+        :label="__('Dodaj zdjęcia lub filmy')"
         @click="showUploader = true"
       />
     </div>
@@ -38,12 +43,21 @@
         class="group relative aspect-square overflow-hidden rounded-md border border-outline-gray-2"
       >
         <img
+          v-if="!jestWideo(z.url)"
           :src="z.url"
           :alt="z.etykieta"
           loading="lazy"
           class="h-full w-full cursor-pointer object-cover"
           @click="otworzPodglad(z.klucz)"
         />
+        <div
+          v-else
+          class="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 px-2"
+          @click="otworzPodglad(z.klucz)"
+        >
+          <FileVideoIcon class="size-8 text-ink-gray-5" />
+          <span class="w-full truncate text-center text-xs text-ink-gray-6">{{ z.etykieta }}</span>
+        </div>
         <div
           v-if="canEdit"
           class="pointer-events-none absolute inset-0 flex items-end justify-end p-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100 [@media(hover:none)]:bg-gradient-to-t [@media(hover:none)]:from-black/50 [@media(hover:none)]:to-transparent"
@@ -77,10 +91,11 @@
 
 <script setup>
 import AudytPodgladZdjec from '@/components/deal/AudytPodgladZdjec.vue'
+import FileVideoIcon from '@/components/Icons/FileVideoIcon.vue'
 import FilesUploader from '@/components/FilesUploader/FilesUploader.vue'
 import { globalStore } from '@/stores/global'
 import { zdjeciaDoGalerii } from '@/utils/aktualizacje'
-import { indeksDlaKlucza, zbudujListePodgladu } from '@/utils/audytPodglad'
+import { TYPY_PLIKOW_WIDEO, indeksDlaKlucza, jestWideo, zbudujListePodgladu } from '@/utils/audytPodglad'
 import { Badge, Button, call, createResource, toast } from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
 
@@ -98,7 +113,7 @@ const zasob = createResource({
   url: 'crm.api.montaz.zdjecia_montazu',
   params: { deal: props.dealId },
   auto: true,
-  onError: (e) => toast.error(e?.messages?.[0] || __('Nie udało się pobrać zdjęć')),
+  onError: (e) => toast.error(e?.messages?.[0] || __('Nie udało się pobrać plików')),
 })
 
 const zdjecia = computed(() => zdjeciaDoGalerii(zasob.data?.zdjecia))
@@ -113,7 +128,18 @@ const opcjeUploadu = computed(() => ({
   allowMultiple: true,
   allowWebLink: false,
   restrictions: {
-    allowedFileTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+    allowedFileTypes: [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'image/gif',
+      '.jpg',
+      '.jpeg',
+      '.png',
+      '.webp',
+      '.gif',
+      ...TYPY_PLIKOW_WIDEO,
+    ],
     maxNumberOfFiles: Math.max(MAX_ZDJEC - zdjecia.value.length, 0),
   },
 }))
@@ -143,8 +169,8 @@ function otworzPodglad(klucz) {
 
 function usun(z) {
   $dialog({
-    title: __('Usuń zdjęcie'),
-    message: __('Czy na pewno usunąć to zdjęcie?'),
+    title: __('Usuń plik'),
+    message: __('Czy na pewno usunąć ten plik?'),
     actions: [
       {
         label: __('Usuń'),
@@ -156,7 +182,7 @@ function usun(z) {
             await zasob.reload()
             close()
           } catch (err) {
-            toast.error(err?.messages?.[0] || err?.message || __('Nie udało się usunąć zdjęcia'))
+            toast.error(err?.messages?.[0] || err?.message || __('Nie udało się usunąć pliku'))
           }
         },
       },

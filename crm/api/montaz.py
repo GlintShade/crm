@@ -3,7 +3,10 @@
 Jedna galeria per szansa (nie per wpis strumienia Montaż), widoczna dla
 każdego z prawem odczytu szansy, edytowalna (dodawanie, usuwanie) przez
 każdego z prawem zapisu szansy - dokładnie te same uprawnienia, jakich szansa
-już wymaga gdzie indziej, decyzja właściciela 2026-09-25.
+już wymaga gdzie indziej, decyzja właściciela 2026-09-25. Od b66 galeria
+przyjmuje też filmy, nie tylko zdjęcia (te same rozszerzenia wideo co sloty
+Audytu z `allowVideo`, b63 ops#190) - klasyfikacja idzie przez
+`crm.volteo_pliki.czy_media_montazu` (frappe-free, obraz albo wideo).
 
 Decyzja modelu danych: "File + znacznik, zero schematu". Zdjęcia to zwykłe
 wiersze `File` podpięte pod `CRM Deal` (`attached_to_doctype`/
@@ -48,19 +51,11 @@ pasujący wiersz - przy dedupie po `content_hash` mógłby trafić w cudzy plik)
 import frappe
 from frappe import _
 
+from crm.volteo_pliki import czy_media_montazu
+
 ZNACZNIK_ZDJEC_MONTAZU = "zdjecia_montaz"
 
-_ROZSZERZENIA_OBRAZOW = frozenset({"jpg", "jpeg", "png", "webp", "gif"})
-
 _POLA = ["name", "file_name", "file_url", "file_size", "creation", "owner"]
-
-
-def czy_obraz(file_name: str | None) -> bool:
-	"""Czy nazwa pliku ma jedno z rozszerzeń obrazów dopuszczonych w galerii."""
-	if not file_name or "." not in file_name:
-		return False
-	rozszerzenie = file_name.rsplit(".", 1)[-1].lower()
-	return rozszerzenie in _ROZSZERZENIA_OBRAZOW
 
 
 @frappe.whitelist()
@@ -84,7 +79,7 @@ def zdjecia_montazu(deal: str) -> dict:
 	)
 
 	return {
-		"zdjecia": [wiersz for wiersz in wiersze if czy_obraz(wiersz.file_name)],
+		"zdjecia": [wiersz for wiersz in wiersze if czy_media_montazu(wiersz.file_name)],
 		"can_edit": bool(frappe.has_permission("CRM Deal", "write", deal)),
 	}
 
@@ -106,6 +101,6 @@ def usun_zdjecie_montazu(deal: str, name: str) -> None:
 		or plik.attached_to_name != deal
 		or plik.attached_to_field != ZNACZNIK_ZDJEC_MONTAZU
 	):
-		frappe.throw(_("Zdjęcie nie istnieje."), frappe.DoesNotExistError)
+		frappe.throw(_("Plik nie istnieje."), frappe.DoesNotExistError)
 
 	frappe.delete_doc("File", name, ignore_permissions=True)
