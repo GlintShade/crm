@@ -442,7 +442,7 @@ const sel = reactive({
   istniejacaPv: 'Nie',
   istniejacaPvMocKwp: null,
   ppozRecznie: 'Nie',
-  ulgaPct: 19,
+  ulgaPct: 12,
   okresLat: 10, // domyślny okres finansowania 10 lat (decyzja właściciela 2026-09-10, było 5)
   wplataWlasna: 0,
   narzut: 0,
