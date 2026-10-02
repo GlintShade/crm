@@ -119,6 +119,7 @@ from frappe import _
 from frappe.utils import cint
 
 from crm.api.doc import (
+	_normalizuj_zakres_dnia,
 	_podstaw_dzis,
 	_podstaw_me,
 	_rozwin_filtry_tagow,
@@ -623,7 +624,12 @@ def mapa(
 	przez `_podstaw_dzis` (ten sam moduł, ten sam `filters`-only zakres, tuż
 	po `@me`), dla dat pól CC (`custom_kolejny_kontakt`, Date) i handlowca
 	(`custom_termin_spotkania`, Datetime) -- patrz widok „Kolejny kontakt do
-	dziś" (`ops/crm-lista-leadow.py` KROK 4). `_sprawdz_filtry` (ten sam
+	dziś" (`ops/crm-lista-leadow.py` KROK 4). Issue ops#220: `_normalizuj_zakres_dnia`
+	(ten sam moduł, wołana TUŻ PO `_podstaw_dzis`) nadaje operatorom "<="/">"
+	na `custom_termin_spotkania` (Datetime) semantykę "cały dzień" -- bez
+	tego granica dnia w filtrze mapy liczyłaby się inaczej niż w liście/
+	panelu „Szybki podgląd", mimo że to ten sam kontrakt filtrów (patrz
+	akapit o issue #100 wyżej). `_sprawdz_filtry` (ten sam
 	strażnik permlevel co `get_data`/`przydziel_cc`) rzuca `PermissionError`,
 	jeśli scalone filtry odwołują się do pola bez uprawnienia odczytu (np.
 	`custom_cc` dla `Volteo D2D Sales`)  -  sprawdzane PO scaleniu, tak jak w
@@ -667,6 +673,7 @@ def mapa(
 
 	filters = _podstaw_me(filters)
 	filters = _podstaw_dzis(filters, "CRM Lead")
+	filters = _normalizuj_zakres_dnia(filters, "CRM Lead")
 	filters = {**filters, **default_filters}
 
 	filters = rozwin_grupy("CRM Lead", filters)

@@ -28,6 +28,7 @@ from crm.volteo_lista_szans import (
 	POLA_ZAWSZE_DOZWOLONE,
 	WSZYSTKIE_POLA_TAGOW_LEAD,
 	niedozwolone_klucze_filtrow,
+	normalizuj_zakres_dnia,
 	podstaw_dzis,
 	podstaw_me,
 	polacz_zbiory_nazw,
@@ -207,33 +208,63 @@ def _podstaw_me(filters: dict) -> dict:
 	return podstaw_me(filters, frappe.session.user)
 
 
-def _podstaw_dzis(filters: dict, doctype: str) -> dict:
-	"""Podstawia literal "@dzis" za dzisiejsza date (issue #128, analogicznie
-	do `_podstaw_me` powyzej dla "@me"). Cienki wrapper: liczy `dzis`
-	(`frappe.utils.nowdate()`, data w strefie site), `jutro` (dzien pozniej,
-	uzywany WYLACZNIE dla operatora "<=" na polu Datetime -- patrz docstring
-	`crm.volteo_lista_szans.podstaw_dzis`) i funkcje `czy_datetime`
-	sprawdzajaca typ pola przez `frappe.get_meta(doctype)`, po czym oddaje
-	cala robote frappe-free rdzeniowi `podstaw_dzis`. Wywolywany w tym samym
-	miejscu co `_podstaw_me`, w `get_data` ponizej i w
-	`crm.api.volteo_leady.mapa`.
+def _czy_pole_datetime(meta, fieldname: str) -> bool:
+	"""Sprawdza, czy `fieldname` jest typu Datetime na doctype'ie opisanym
+	przez `meta` (`frappe.get_meta(doctype)`) -- wydzielone z `_podstaw_dzis`
+	(issue #128), zeby `_normalizuj_zakres_dnia` nizej (issue ops#220) uzywala
+	TEJ SAMEJ logiki sprawdzania typu pola, zamiast duplikowac ja jako druga
+	zagniezdzona funkcje `czy_datetime`.
 
 	`_STANDARDOWE_POLA_DATETIME` (modul, wyzej) to bezpiecznik dla pol
 	standardowych bez wlasnego DocField (np. "modified"/"creation", ktore
 	`FILTER_FIELDS_DEAL`/`FILTER_FIELDS_LEAD` udostepniaja jako filtrowalne,
 	patrz `crm/volteo_lista_szans.py`) -- `meta.get_field` zwraca dla nich
 	`None`, mimo ze SA Datetime w rdzeniu."""
+	if fieldname in _STANDARDOWE_POLA_DATETIME:
+		return True
+	field = meta.get_field(fieldname)
+	return bool(field) and field.fieldtype == "Datetime"
+
+
+def _podstaw_dzis(filters: dict, doctype: str) -> dict:
+	"""Podstawia literal "@dzis" za dzisiejsza date (issue #128, analogicznie
+	do `_podstaw_me` powyzej dla "@me"). Cienki wrapper: liczy `dzis`
+	(`frappe.utils.nowdate()`, data w strefie site), `jutro` (dzien pozniej,
+	uzywany WYLACZNIE dla operatora "<=" na polu Datetime -- patrz docstring
+	`crm.volteo_lista_szans.podstaw_dzis`) i funkcje `czy_datetime`
+	(`_czy_pole_datetime` powyzej, z `meta` juz wstrzyknietym), po czym oddaje
+	cala robote frappe-free rdzeniowi `podstaw_dzis`. Wywolywany w tym samym
+	miejscu co `_podstaw_me`, w `get_data` ponizej i w
+	`crm.api.volteo_leady.mapa`."""
 	dzis = nowdate()
 	jutro = add_days(dzis, 1)
 	meta = frappe.get_meta(doctype)
 
 	def czy_datetime(fieldname: str) -> bool:
-		if fieldname in _STANDARDOWE_POLA_DATETIME:
-			return True
-		field = meta.get_field(fieldname)
-		return bool(field) and field.fieldtype == "Datetime"
+		return _czy_pole_datetime(meta, fieldname)
 
 	return podstaw_dzis(filters, dzis, jutro, czy_datetime)
+
+
+def _normalizuj_zakres_dnia(filters: dict, doctype: str) -> dict:
+	"""Nadaje operatorom "<="/">" na polach Datetime semantyke "caly dzien"
+	(issue ops#220) -- cienki wrapper analogiczny do `_podstaw_dzis` powyzej:
+	liczy `meta`/`czy_datetime` (`_czy_pole_datetime`, DOKLADNIE ta sama
+	funkcja, zadnej drugiej kopii logiki) i oddaje robote frappe-free
+	rdzeniowi `crm.volteo_lista_szans.normalizuj_zakres_dnia`.
+
+	Wolac PO `_podstaw_dzis` (ktora podstawia literal "@dzis" za konkretna
+	date -- ta funkcja juz nie rozumie "@dzis", tylko goly/polnocny
+	znacznik daty, patrz docstring rdzenia). Wywolywana w tych samych
+	miejscach co `_podstaw_dzis`: w `get_data` ponizej, w `rozwin_grupy`
+	(dla warunkow WEWNATRZ grup "volteo_grupy") i w
+	`crm.api.volteo_leady.mapa`."""
+	meta = frappe.get_meta(doctype)
+
+	def czy_datetime(fieldname: str) -> bool:
+		return _czy_pole_datetime(meta, fieldname)
+
+	return normalizuj_zakres_dnia(filters, czy_datetime)
 
 
 def _sprawdz_filtry(doctype: str, filters, parenttype: str | None = None) -> None:
@@ -335,6 +366,12 @@ def rozwin_grupy(doctype: str, filters: dict) -> dict:
 	poziomu (zakaz zagnieżdżenia w `waliduj_grupy`), więc te same funkcje
 	są tu bezpiecznie stosowane ponownie bez żadnej zmiany w nich samych.
 
+	Fix (issue ops#220, tą samą drogą co #129 wyżej): `_normalizuj_zakres_dnia`
+	wołana TUTAJ, PO `_podstaw_dzis`, na każdej grupie z osobna -- z tego
+	samego powodu co #129: operator "<="/">" na polu Datetime WEWNĄTRZ
+	warunku grupy (np. ten sam widok "Do obdzwonienia") inaczej nigdy nie
+	dostałby semantyki "cały dzień", tylko na najwyższym poziomie `filters`.
+
 	Fix (issue ops#173): przed `frappe.get_list` każdej grupy, `{**filtry_bez_grup,
 	**grupa}` przechodzi jeszcze przez `_rozwin_filtry_tagow` (ten sam
 	rozwijacz filtrów tagów co na najwyższym poziomie `filters` w
@@ -351,7 +388,10 @@ def rozwin_grupy(doctype: str, filters: dict) -> dict:
 	except ValueError as e:
 		frappe.throw(str(e))
 
-	grupy = [_podstaw_dzis(_podstaw_me(grupa), doctype) for grupa in grupy]
+	grupy = [
+		_normalizuj_zakres_dnia(_podstaw_dzis(_podstaw_me(grupa), doctype), doctype)
+		for grupa in grupy
+	]
 
 	_sprawdz_filtry(doctype, dict.fromkeys(klucze_z_grup(grupy)))
 
@@ -1178,6 +1218,7 @@ def get_data(
 
 	filters = frappe._dict(_podstaw_me(filters))
 	filters = frappe._dict(_podstaw_dzis(filters, doctype))
+	filters = frappe._dict(_normalizuj_zakres_dnia(filters, doctype))
 
 	if default_filters:
 		default_filters = frappe.parse_json(default_filters)
