@@ -3586,6 +3586,14 @@ msgstr "Zaproszony przez"
 msgid "Is"
 msgstr "Jest"
 
+#: frontend/src/components/Filter.vue:739
+msgid "Is after"
+msgstr "Jest po"
+
+#: frontend/src/components/Filter.vue:738
+msgid "Is before"
+msgstr "Jest przed"
+
 #. Label of the is_default (Check) field in DocType 'CRM View Settings'
 #: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
 msgid "Is Default"
@@ -3602,6 +3610,14 @@ msgstr "Czy ERPNext jest zainstalowany w innej witrynie?"
 #: crm/fcrm/doctype/crm_sales_hierarchy/crm_sales_hierarchy.json crm/fcrm/doctype/crm_territory/crm_territory.json
 msgid "Is Group"
 msgstr "Jest grupą"
+
+#: frontend/src/components/Filter.vue:740
+msgid "Is on or after"
+msgstr "Jest w dniu lub po"
+
+#: frontend/src/components/Filter.vue:741
+msgid "Is on or before"
+msgstr "Jest w dniu lub przed"
 
 #. Label of the is_primary (Check) field in DocType 'CRM Contacts'
 #. Label of the is_primary (Check) field in DocType 'CRM Telephony Phone'
