@@ -14,6 +14,7 @@ from crm.volteo_lista_szans import (
 	SORT_FIELDS_LEAD,
 	WSZYSTKIE_POLA_TAGOW_LEAD,
 	niedozwolone_klucze_filtrow,
+	normalizuj_zakres_dnia,
 	podstaw_dzis,
 	podstaw_me,
 	polacz_zbiory_nazw,
@@ -549,6 +550,178 @@ class TestPodstawDzis(unittest.TestCase):
 
 	def test_n_puste_filtry(self: "TestPodstawDzis") -> None:
 		self.assertEqual(podstaw_dzis({}, self.DZIS, self.JUTRO, self._czy_datetime), {})
+
+
+class TestNormalizujZakresDnia(unittest.TestCase):
+	"""`normalizuj_zakres_dnia` (issue ops#220) -- uruchamiana PO
+	`podstaw_dzis`, nadaje operatorom "<="/">" na polach Datetime semantyke
+	"caly dzien" obiecywana przez ich etykiety UI ("Jest w dniu lub przed"/
+	"Jest po", commit 4408db28), zamiast domyslnego porownania Frappe do
+	PUNKTU w czasie (polnocy). Ten sam wzorzec wstrzykiwania `czy_datetime`
+	co `TestPodstawDzis` wyzej."""
+
+	def _czy_datetime(self: "TestNormalizujZakresDnia", pole: str) -> bool:
+		# Lustrzane odbicie realnych pol leadow: custom_kolejny_kontakt jest
+		# Date, custom_termin_spotkania i "modified" sa Datetime.
+		return pole in {"custom_termin_spotkania", "modified"}
+
+	def test_a_lte_na_datetime_goly_dzien_przesuwa_na_jutro(
+		self: "TestNormalizujZakresDnia",
+	) -> None:
+		filtry = {"custom_termin_spotkania": ["<=", "2026-09-25"]}
+		wynik = normalizuj_zakres_dnia(filtry, self._czy_datetime)
+		self.assertEqual(wynik, {"custom_termin_spotkania": ["<", "2026-09-26"]})
+
+	def test_b_gt_na_datetime_goly_dzien_przesuwa_na_jutro(
+		self: "TestNormalizujZakresDnia",
+	) -> None:
+		filtry = {"custom_termin_spotkania": [">", "2026-10-02"]}
+		wynik = normalizuj_zakres_dnia(filtry, self._czy_datetime)
+		self.assertEqual(wynik, {"custom_termin_spotkania": [">=", "2026-10-03"]})
+
+	def test_c_lte_z_pelnym_znacznikiem_polnocy(self: "TestNormalizujZakresDnia") -> None:
+		filtry = {"custom_termin_spotkania": ["<=", "2026-09-25 00:00:00"]}
+		wynik = normalizuj_zakres_dnia(filtry, self._czy_datetime)
+		self.assertEqual(wynik, {"custom_termin_spotkania": ["<", "2026-09-26"]})
+
+	def test_d_lte_z_polnoca_i_czescia_ulamkowa_samych_zer(
+		self: "TestNormalizujZakresDnia",
+	) -> None:
+		filtry = {"custom_termin_spotkania": ["<=", "2026-09-25 00:00:00.000000"]}
+		wynik = normalizuj_zakres_dnia(filtry, self._czy_datetime)
+		self.assertEqual(wynik, {"custom_termin_spotkania": ["<", "2026-09-26"]})
+
+	def test_e_lte_z_wyrazna_niepolnocna_godzina_bez_zmian(
+		self: "TestNormalizujZakresDnia",
+	) -> None:
+		filtry = {"custom_termin_spotkania": ["<=", "2026-09-25 16:30:00"]}
+		wynik = normalizuj_zakres_dnia(filtry, self._czy_datetime)
+		self.assertEqual(wynik, filtry)
+
+	def test_f_lt_na_datetime_bez_zmian(self: "TestNormalizujZakresDnia") -> None:
+		filtry = {"custom_termin_spotkania": ["<", "2026-09-25"]}
+		wynik = normalizuj_zakres_dnia(filtry, self._czy_datetime)
+		self.assertEqual(wynik, filtry)
+
+	def test_g_gte_na_datetime_bez_zmian(self: "TestNormalizujZakresDnia") -> None:
+		filtry = {"custom_termin_spotkania": [">=", "2026-09-25"]}
+		wynik = normalizuj_zakres_dnia(filtry, self._czy_datetime)
+		self.assertEqual(wynik, filtry)
+
+	def test_h_pole_date_lte_bez_zmian(self: "TestNormalizujZakresDnia") -> None:
+		# custom_kolejny_kontakt to Date, nie Datetime -- operator "<="
+		# zostaje bez zmian, dokladnie jak podstaw_dzis traktuje Date.
+		filtry = {"custom_kolejny_kontakt": ["<=", "2026-09-25"]}
+		wynik = normalizuj_zakres_dnia(filtry, self._czy_datetime)
+		self.assertEqual(wynik, filtry)
+
+	def test_i_pole_date_gt_bez_zmian(self: "TestNormalizujZakresDnia") -> None:
+		filtry = {"custom_kolejny_kontakt": [">", "2026-09-25"]}
+		wynik = normalizuj_zakres_dnia(filtry, self._czy_datetime)
+		self.assertEqual(wynik, filtry)
+
+	def test_j_inne_operatory_na_datetime_bez_zmian(
+		self: "TestNormalizujZakresDnia",
+	) -> None:
+		for operator in ("=", "between", "in", "not in", "like", "timespan"):
+			with self.subTest(operator=operator):
+				filtry = {"custom_termin_spotkania": [operator, "2026-09-25"]}
+				wynik = normalizuj_zakres_dnia(filtry, self._czy_datetime)
+				self.assertEqual(wynik, filtry)
+
+	def test_k_wartosc_nie_string_bez_zmian(self: "TestNormalizujZakresDnia") -> None:
+		for wartosc in (None, 20260925, ["2026-09-25"]):
+			with self.subTest(wartosc=wartosc):
+				filtry = {"custom_termin_spotkania": ["<=", wartosc]}
+				wynik = normalizuj_zakres_dnia(filtry, self._czy_datetime)
+				self.assertEqual(wynik, filtry)
+
+	def test_l_malformed_string_bez_zmian(self: "TestNormalizujZakresDnia") -> None:
+		for wartosc in ("2026-13-45", "nie-data", "2026/09/25", "", "2026-09-25T00:00:00"):
+			with self.subTest(wartosc=wartosc):
+				filtry = {"custom_termin_spotkania": ["<=", wartosc]}
+				wynik = normalizuj_zakres_dnia(filtry, self._czy_datetime)
+				self.assertEqual(wynik, filtry)
+
+	def test_m_przejscie_przez_koniec_roku(self: "TestNormalizujZakresDnia") -> None:
+		filtry = {"custom_termin_spotkania": ["<=", "2026-12-31"]}
+		wynik = normalizuj_zakres_dnia(filtry, self._czy_datetime)
+		self.assertEqual(wynik, {"custom_termin_spotkania": ["<", "2027-01-01"]})
+
+	def test_n_przejscie_przez_koniec_miesiaca(self: "TestNormalizujZakresDnia") -> None:
+		filtry = {"custom_termin_spotkania": [">", "2026-09-30"]}
+		wynik = normalizuj_zakres_dnia(filtry, self._czy_datetime)
+		self.assertEqual(wynik, {"custom_termin_spotkania": [">=", "2026-10-01"]})
+
+	def test_o_skalar_bez_zmian(self: "TestNormalizujZakresDnia") -> None:
+		filtry = {"custom_termin_spotkania": "2026-09-25"}
+		wynik = normalizuj_zakres_dnia(filtry, self._czy_datetime)
+		self.assertEqual(wynik, filtry)
+
+	def test_p_lista_niestandardowej_dlugosci_bez_zmian(
+		self: "TestNormalizujZakresDnia",
+	) -> None:
+		filtry = {"custom_termin_spotkania": ["<=", "2026-09-25", "dodatkowy"]}
+		wynik = normalizuj_zakres_dnia(filtry, self._czy_datetime)
+		self.assertEqual(wynik, filtry)
+
+	def test_q_nie_mutuje_oryginalu(self: "TestNormalizujZakresDnia") -> None:
+		oryginalna_lista = ["<=", "2026-09-25"]
+		filtry = {"custom_termin_spotkania": oryginalna_lista}
+		normalizuj_zakres_dnia(filtry, self._czy_datetime)
+		self.assertEqual(oryginalna_lista, ["<=", "2026-09-25"])
+		self.assertEqual(filtry, {"custom_termin_spotkania": oryginalna_lista})
+
+	def test_r_zwraca_nowy_dict(self: "TestNormalizujZakresDnia") -> None:
+		filtry = {"status": "Odłożony"}
+		wynik = normalizuj_zakres_dnia(filtry, self._czy_datetime)
+		self.assertIsNot(wynik, filtry)
+
+	def test_s_puste_filtry(self: "TestNormalizujZakresDnia") -> None:
+		self.assertEqual(normalizuj_zakres_dnia({}, self._czy_datetime), {})
+
+	def test_t_niepowiazane_filtry_bez_zmian(self: "TestNormalizujZakresDnia") -> None:
+		filtry = {
+			"status": "Odłożony",
+			"deal_owner": "@me",
+			"lead_name": ["like", "%Kowalski%"],
+			"custom_kolejny_kontakt": ["between", ["2026-01-01", "2026-01-31"]],
+		}
+		wynik = normalizuj_zakres_dnia(filtry, self._czy_datetime)
+		self.assertEqual(wynik, filtry)
+
+	def test_u_kombinacja_po_dzis_lte_zostaje_lt_jutro(
+		self: "TestNormalizujZakresDnia",
+	) -> None:
+		# "@dzis" juz podstawione przez podstaw_dzis -- "<=" na Datetime
+		# stalo sie "<" z "jutro" TAM (patrz jej docstring, wyjatek dla
+		# "<="), wiec normalizuj_zakres_dnia zostawia to bez dalszej zmiany
+		# (operator "<" nie jest w jej zakresie).
+		po_dzis = podstaw_dzis(
+			{"custom_termin_spotkania": ["<=", "@dzis"]},
+			"2026-10-02",
+			"2026-10-03",
+			self._czy_datetime,
+		)
+		self.assertEqual(po_dzis, {"custom_termin_spotkania": ["<", "2026-10-03"]})
+		wynik = normalizuj_zakres_dnia(po_dzis, self._czy_datetime)
+		self.assertEqual(wynik, po_dzis)
+
+	def test_v_kombinacja_po_dzis_gt_staje_sie_gte_jutro(
+		self: "TestNormalizujZakresDnia",
+	) -> None:
+		# ">" + "@dzis" NIE dostaje specjalnego traktowania w podstaw_dzis
+		# (tylko "<=" ma tam wyjatek, patrz jej docstring) -- normalizuj_zakres_dnia
+		# dokonczy robote, zamieniajac ">" "dzis" na ">=" "jutro".
+		po_dzis = podstaw_dzis(
+			{"custom_termin_spotkania": [">", "@dzis"]},
+			"2026-10-02",
+			"2026-10-03",
+			self._czy_datetime,
+		)
+		self.assertEqual(po_dzis, {"custom_termin_spotkania": [">", "2026-10-02"]})
+		wynik = normalizuj_zakres_dnia(po_dzis, self._czy_datetime)
+		self.assertEqual(wynik, {"custom_termin_spotkania": [">=", "2026-10-03"]})
 
 
 class TestPodstawMe(unittest.TestCase):

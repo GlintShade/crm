@@ -19,7 +19,9 @@ reszta backendu ma wyłącznie bramkę składniową). Sam zbiór "dozwolonych p�
 i przekazuje tutaj — ten moduł tylko porównuje klucze filtra z tym zbiorem.
 """
 
+import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from datetime import date, timedelta
 
 from crm.volteo_leady_import import KOLEJNOSC_PRODUKTOW, KOLEJNOSC_PRODUKTOW_PROCESU
 
@@ -383,6 +385,127 @@ def _podstaw_wartosc_dzis(
 		return ["<", jutro]
 
 	return [operator, dzis]
+
+
+# Wzorce rozpoznajace "goly dzien" (np. "2026-09-25") albo "dzien o polnocy"
+# (np. "2026-09-25 00:00:00", opcjonalnie z czescia ulamkowa samych zer, np.
+# ".000000") -- uzywane przez `_dzien_z_wartosci_granicznej` nizej, jedyne
+# miejsce, gdzie te wzorce sa stosowane.
+_WZORZEC_DATA_BEZ_CZASU = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_WZORZEC_DATA_O_POLNOCY = re.compile(r"^(\d{4}-\d{2}-\d{2}) 00:00:00(\.0+)?$")
+
+
+def _dzien_z_wartosci_granicznej(wartosc: object) -> str | None:
+	"""Rozpoznaje `wartosc` jako "goly" dzien (``YYYY-MM-DD``) albo pelny
+	znacznik czasu o polnocy TEGO dnia (``YYYY-MM-DD 00:00:00``, opcjonalnie
+	z czescia ulamkowa zlozona wylacznie z zer, np. ``.000000``) -- w obu
+	przypadkach zwraca dzien jako string w formacie ``YYYY-MM-DD``.
+
+	Kazda inna wartosc -- godzina rozna od polnocy (np. "16:30:00"), zly
+	format, wartosc nie bedaca stringiem -- daje `None`. To jest sygnal dla
+	`_normalizuj_wartosc_zakresu_dnia` nizej, zeby zostawic cala wartosc
+	filtra bez zmian: wyraznie podana godzina inna niz polnoc to swiadoma
+	decyzja wywolujacego (np. "Jest przed 16:30"), ktorej ten issue nie
+	dotyka (ops#220, brief: "a value with an explicit non-midnight time:
+	unchanged")."""
+	if not isinstance(wartosc, str):
+		return None
+	if _WZORZEC_DATA_BEZ_CZASU.match(wartosc):
+		return wartosc
+	dopasowanie = _WZORZEC_DATA_O_POLNOCY.match(wartosc)
+	return dopasowanie.group(1) if dopasowanie else None
+
+
+def _dzien_plus_jeden(dzien: str) -> str | None:
+	"""`dzien` (``YYYY-MM-DD``) plus jeden dzien kalendarzowy, z poprawnym
+	przejsciem przez koniec miesiaca/roku (`datetime.date`, stdlib --
+	dokladnie dlatego ten modul jest frappe-free, zamiast `frappe.utils.
+	add_days`, patrz docstring modulu). Niepoprawny dzien (np. "2026-13-45"
+	-- `_WZORZEC_DATA_BEZ_CZASU`/`_WZORZEC_DATA_O_POLNOCY` sprawdzaja tylko
+	KSZTALT cyfr, nie zakresy miesiaca/dnia) daje `None`, traktowane przez
+	wywolujaca tak samo jak kazdy inny malformed string -- filtr zostaje bez
+	zmian."""
+	try:
+		rozlozony = date.fromisoformat(dzien)
+	except ValueError:
+		return None
+	return (rozlozony + timedelta(days=1)).isoformat()
+
+
+def normalizuj_zakres_dnia(filters: Mapping[str, object], czy_datetime: Callable[[str], bool]) -> dict:
+	"""Nadaje operatorom ``"<="``/``">"`` na polach Datetime semantyke "caly
+	dzien" obiecywana przez ich etykiety UI ("Jest w dniu lub przed"/"Jest
+	po", commit `4408db28`), zamiast domyslnego porownania Frappe do
+	PUNKTU w czasie o polnocy (issue ops#220, decyzja wlasciciela: liczyc do
+	konca wybranego dnia).
+
+	Analogiczna do ``podstaw_dzis`` wyzej w tym module (ten sam modul
+	frappe-free, ten sam wzorzec wstrzykiwania ``czy_datetime`` przez
+	wywolujacego -- w produkcji ``crm.api.doc._normalizuj_zakres_dnia``) --
+	w odroznieniu od niej, ``podstaw_dzis`` juz dzis obsluguje WYLACZNIE
+	jeden operator (``"<="`` zamieniany na ``"<"`` + jutro) i WYLACZNIE dla
+	literalu ``"@dzis"``. Ta funkcja dziala PO ``podstaw_dzis`` (wywolujaca
+	odpowiada za kolejnosc) i obejmuje KAZDA wartosc dnia, nie tylko ``"@dzis"``
+	-- goly dzien wpisany przez uzytkownika w filtrze (np. "2026-09-25") albo
+	dzien o polnocy pozostawiony przez ``podstaw_dzis`` dla operatora
+	``">"`` (ktory nie dostaje tam specjalnego traktowania, patrz jej
+	docstring: "Pozostale operatory [...] na polu Datetime zostaja z
+	dzis/jutro bez zmiany operatora").
+
+	Reguly (pole musi byc Datetime wedlug `czy_datetime`, WARTOSC musi byc
+	gola data ``YYYY-MM-DD`` albo pelny znacznik polnocy tego dnia -- patrz
+	`_dzien_z_wartosci_granicznej`):
+	  - ``["<=", D]`` -> ``["<", D+1]`` (do konca dnia D wlacznie);
+	  - ``[">", D]`` -> ``[">=", D+1]`` (od poczatku NASTEPNEGO dnia -- to
+	    samo co "po calym dniu D");
+	  - ``["<", D]`` i ``[">=", D]`` -> bez zmian (juz poprawnie obejmuja
+	    granice dnia od polnocy);
+	  - pole Date (nie Datetime), inny operator (``"="``, ``"between"``,
+	    ``"timespan"``, ``"in"``, ``"not in"``, ``"like"``...), wartosc nie
+	    bedaca stringiem, string z WYRAZNA godzina inna niz polnoc, albo
+	    zle uformowany string daty -- bez zmian.
+
+	Operator rozpoznawany bez wzgledu na wielkosc liter (ten sam wzorzec co
+	`_podstaw_wartosc_dzis` wyzej w tym module). Zwraca zawsze NOWY dict i
+	nie mutuje `filters` ani zagniezdzonych list w jego wartosciach
+	(coding-style.md: immutability) -- wartosci bez zmiany sa zwracane jako
+	ta sama referencja, nowe listy budowane sa WYLACZNIE tam, gdzie reguła
+	faktycznie cos zmienia."""
+	wynik: dict = {}
+	for pole, wartosc in filters.items():
+		wynik[pole] = _normalizuj_wartosc_zakresu_dnia(pole, wartosc, czy_datetime)
+	return wynik
+
+
+def _normalizuj_wartosc_zakresu_dnia(
+	pole: str, wartosc: object, czy_datetime: Callable[[str], bool]
+) -> object:
+	"""Normalizacja dla JEDNEJ wartosci filtra -- wydzielona z
+	`normalizuj_zakres_dnia`, zeby ta funkcja zostala czytelna petla po
+	`filters.items()` (ten sam wzorzec co `_podstaw_wartosc_dzis` wyzej).
+	Patrz docstring `normalizuj_zakres_dnia` dla pelnego opisu regul."""
+	if not isinstance(wartosc, list) or len(wartosc) != 2:
+		return wartosc
+
+	operator, argument = wartosc
+	operator_l = operator.lower() if isinstance(operator, str) else operator
+
+	if operator_l not in ("<=", ">"):
+		return wartosc
+	if not czy_datetime(pole):
+		return wartosc
+
+	dzien = _dzien_z_wartosci_granicznej(argument)
+	if dzien is None:
+		return wartosc
+
+	nastepny_dzien = _dzien_plus_jeden(dzien)
+	if nastepny_dzien is None:
+		return wartosc
+
+	if operator_l == "<=":
+		return ["<", nastepny_dzien]
+	return [">=", nastepny_dzien]
 
 
 # Pola "produktow leada" (issue ops#150, decyzja wlasciciela 2026-09-16,
