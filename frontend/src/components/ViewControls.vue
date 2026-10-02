@@ -122,9 +122,21 @@
     <div class="-ml-2 h-[70%] border-l" />
     <div class="flex gap-1">
       <Button
-        :label="__('Save')"
-        :loading="updateQuickFilters.loading"
-        @click="saveQuickFilters"
+        v-if="maWlasnyUkladPaska.data"
+        :label="__('Przywróć domyślny')"
+        :loading="resetujWlasnyUkladPaska.loading"
+        @click="przywrocDomyslnyPasek"
+      />
+      <Button
+        :label="__('Zapisz')"
+        :loading="zapiszWlasnyUkladPaska.loading"
+        @click="zapiszWlasnyPasek"
+      />
+      <Button
+        v-if="isManager() || isVolteoAdmin()"
+        :label="__('Zapisz jako domyślny dla wszystkich')"
+        :loading="updateQuickFiltersGlobalnie.loading"
+        @click="zapiszGlobalnyPasek"
       />
       <Button icon="lucide-x" @click="customizeQuickFilter = false" />
     </div>
@@ -193,6 +205,15 @@
           :doctype="doctype"
           @update="(isDefault) => updateColumns(isDefault)"
         />
+        <!-- VOLTEO (issue #219): kazdy uzytkownik moze teraz edytowac wlasny
+        uklad paska szybkich filtrow (poprzednio tylko manager, z "..." menu
+        nizej, patrz "Customize Quick Filters" usuniete stamtad). Ta sama
+        akcja (showCustomizeQuickFilter), nowe wejscie. -->
+        <Button
+          :tooltip="__('Edytuj pasek')"
+          :icon="QuickFilterIcon"
+          @click="showCustomizeQuickFilter()"
+        />
         <Dropdown
           v-if="route.params.viewType !== 'kanban' || isManager()"
           placement="right"
@@ -220,12 +241,6 @@
                   condition: () =>
                     !options.hideColumnsButton &&
                     !['kanban', 'mapa'].includes(route.params.viewType),
-                },
-                {
-                  label: __('Customize Quick Filters'),
-                  icon: () => h(QuickFilterIcon, { class: 'h-4 w-4' }),
-                  onClick: () => showCustomizeQuickFilter(),
-                  condition: () => isManager(),
                 },
               ],
             },
@@ -331,6 +346,7 @@ import { isEmoji } from '@/utils'
 import {
   czyFiltrSzybkiZablokowany,
   czyWielokrotnyFiltrSzybki,
+  opcjeDodaniaFiltraSzybkiego,
   rozpakujWartoscFiltraSzybkiego,
   spakujWartoscFiltraSzybkiego,
 } from '@/utils/filtrSzybki'
@@ -377,7 +393,7 @@ const props = defineProps({
 const { brand } = getSettings()
 const { $dialog } = globalStore()
 const { reload: reloadView, getDefaultView, getView } = viewsStore()
-const { isManager } = usersStore()
+const { isManager, isVolteoAdmin } = usersStore()
 
 // Headless G5 (klik-test wlasciciela 2026-09-10): handlowiec (Volteo D2D
 // Sales) widzial w tym rozwijanym przelaczniku (sekcje Saved/Public/
@@ -857,6 +873,7 @@ const customizeQuickFilter = ref(false)
 function showCustomizeQuickFilter() {
   customizeQuickFilter.value = true
   setupNewQuickFilters(quickFilters.data)
+  maWlasnyUkladPaska.reload()
 }
 
 const newQuickFilters = ref([])
@@ -877,31 +894,108 @@ function removeQuickFilter(f) {
   )
 }
 
-const updateQuickFilters = createResource({
-  url: 'crm.api.doc.update_quick_filters',
+// VOLTEO (issue #219): każdy użytkownik ma teraz WŁASNY układ paska, obok
+// globalnego (dla wszystkich) edytowalnego tylko przez managera/admina --
+// dwa osobne zapisy (`zapiszWlasnyUkladPaska`/`updateQuickFiltersGlobalnie`),
+// jeden odczyt wspólny (`quickFilters` niżej, który sam rozstrzyga, który
+// układ wygrywa, patrz `crm.api.doc.get_quick_filters`). Po każdym
+// zapisie/resecie odświeżamy `quickFilters` BEZ cache (serwer mógł teraz
+// zwrócić inny układ) i `maWlasnyUkladPaska` (steruje przyciskiem "Przywróć
+// domyślny").
+
+// Czy biezacy uzytkownik ma zapisany wlasny uklad (niezaleznie od tego, czy
+// jest aktualnie skuteczny -- patrz docstring `crm.api.doc.ma_wlasne_filtry_szybkie`)
+// -- steruje widocznoscia przycisku "Przywroc domyslny" w edycji.
+const maWlasnyUkladPaska = createResource({
+  url: 'crm.api.doc.ma_wlasne_filtry_szybkie',
+  cache: ['MaWlasneFiltrySzybkie', props.doctype],
+  params: { doctype: props.doctype },
+})
+
+if (!maWlasnyUkladPaska.data && !maWlasnyUkladPaska.loading) {
+  maWlasnyUkladPaska.fetch()
+}
+
+const zapiszWlasnyUkladPaska = createResource({
+  url: 'crm.api.doc.zapisz_filtry_szybkie_uzytkownika',
   onSuccess() {
     customizeQuickFilter.value = false
-
     quickFilters.update({ params: { doctype: props.doctype, cached: false } })
     quickFilters.reload()
-    toast.success(__('Quick filters updated successfully'))
+    maWlasnyUkladPaska.reload()
+    toast.success(__('Pasek szybkich filtrów zapisany'))
+  },
+  onError(err) {
+    toast.error(
+      extractErrorMessage(err) || __('Nie udało się zapisać paska szybkich filtrów'),
+    )
   },
 })
 
-function saveQuickFilters() {
-  let new_filters =
-    newQuickFilters.value?.map((filter) => filter.fieldname) || []
-  let old_filters = quickFilters.data?.map((filter) => filter.fieldname) || []
+function zapiszWlasnyPasek() {
+  let pola = newQuickFilters.value?.map((filter) => filter.fieldname) || []
 
-  updateQuickFilters.update({
+  zapiszWlasnyUkladPaska.update({
+    params: { doctype: props.doctype, pola: JSON.stringify(pola) },
+  })
+  zapiszWlasnyUkladPaska.fetch()
+}
+
+const resetujWlasnyUkladPaska = createResource({
+  url: 'crm.api.doc.resetuj_filtry_szybkie_uzytkownika',
+  onSuccess() {
+    customizeQuickFilter.value = false
+    quickFilters.update({ params: { doctype: props.doctype, cached: false } })
+    quickFilters.reload()
+    maWlasnyUkladPaska.reload()
+    toast.success(__('Przywrócono domyślny pasek szybkich filtrów'))
+  },
+  onError(err) {
+    toast.error(
+      extractErrorMessage(err) ||
+        __('Nie udało się przywrócić domyślnego paska szybkich filtrów'),
+    )
+  },
+})
+
+function przywrocDomyslnyPasek() {
+  resetujWlasnyUkladPaska.update({ params: { doctype: props.doctype } })
+  resetujWlasnyUkladPaska.fetch()
+}
+
+// Zapis GLOBALNEGO (dla wszystkich) ukladu -- dotychczasowe
+// `update_quick_filters`, teraz z bramka roli po stronie serwera
+// (Sales Manager/Volteo Core Admin/System Manager) i bez parametru
+// `old_filters` (serwer czyta teraz autorytatywny poprzedni globalny uklad
+// sam, zamiast ufac temu, co ten edytujacy akurat mial w swoim
+// przefiltrowanym widoku -- patrz docstring `crm.api.doc.update_quick_filters`).
+const updateQuickFiltersGlobalnie = createResource({
+  url: 'crm.api.doc.update_quick_filters',
+  onSuccess() {
+    customizeQuickFilter.value = false
+    quickFilters.update({ params: { doctype: props.doctype, cached: false } })
+    quickFilters.reload()
+    maWlasnyUkladPaska.reload()
+    toast.success(__('Domyślny pasek szybkich filtrów zapisany dla wszystkich'))
+  },
+  onError(err) {
+    toast.error(
+      extractErrorMessage(err) ||
+        __('Nie udało się zapisać domyślnego paska szybkich filtrów'),
+    )
+  },
+})
+
+function zapiszGlobalnyPasek() {
+  let pola = newQuickFilters.value?.map((filter) => filter.fieldname) || []
+
+  updateQuickFiltersGlobalnie.update({
     params: {
-      quick_filters: JSON.stringify(new_filters),
-      old_filters: JSON.stringify(old_filters),
+      quick_filters: JSON.stringify(pola),
       doctype: props.doctype,
     },
   })
-
-  updateQuickFilters.fetch()
+  updateQuickFiltersGlobalnie.fetch()
 }
 
 const quickFilterOptions = computed(() => {
@@ -909,16 +1003,22 @@ const quickFilterOptions = computed(() => {
   if (!fields) return []
 
   let existingQuickFilters = newQuickFilters.value.map((f) => f.fieldname)
-  let options = fields
-    .filter((f) => f.label)
-    .filter((f) => !existingQuickFilters.includes(f.fieldname))
-    .map((field) => ({
-      label: field.label,
-      value: field.fieldname,
-      fieldtype: field.fieldtype,
-    }))
+  let options = opcjeDodaniaFiltraSzybkiego(
+    fields,
+    dozwolonePola.data,
+    existingQuickFilters,
+  )
 
-  if (!options.some((f) => f.fieldname === 'name')) {
+  // Pseudo-pole "name" -- `opcjeDodaniaFiltraSzybkiego` jest frappe-free
+  // (nie woła __()), więc etykieta tłumaczona zostaje tutaj. Sprawdzenie
+  // idzie po `value` (kształt opcji Autocomplete), nie po nieistniejącym
+  // `fieldname` -- przed tą zmianą sprawdzenie `f.fieldname` było zawsze
+  // `undefined`, więc "Name" pojawiał się ZAWSZE, nawet gdy był już na
+  // pasku (issue #219).
+  if (
+    !options.some((f) => f.value === 'name') &&
+    !existingQuickFilters.includes('name')
+  ) {
     options.push({
       label: __('Name'),
       value: 'name',

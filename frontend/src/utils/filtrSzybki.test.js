@@ -3,6 +3,7 @@ import {
   czyWielokrotnyFiltrSzybki,
   etykietaChipaFiltraSzybkiego,
   grupyOpcjiFiltraSzybkiego,
+  opcjeDodaniaFiltraSzybkiego,
   przelaczWartoscWielokrotna,
   rozpakujWartoscFiltraSzybkiego,
   spakujWartoscFiltraSzybkiego,
@@ -491,5 +492,75 @@ describe('zaleznaWartoscFiltraSerwera', () => {
         inny_klucz: 'wartosc',
       }),
     ).toEqual(['wartosc'])
+  })
+})
+
+describe('opcjeDodaniaFiltraSzybkiego', () => {
+  const polaDoctype = [
+    { fieldname: 'status', label: 'Etap', fieldtype: 'Link' },
+    { fieldname: 'lead_name', label: 'Klient', fieldtype: 'Data' },
+    { fieldname: 'custom_koszty_zysk_plan', label: 'Zysk (plan)', fieldtype: 'Currency', permlevel: 2 },
+    { fieldname: 'bez_etykiety', label: '', fieldtype: 'Data' },
+  ]
+
+  it('dozwolonePola=null (jeszcze się ładuje) -> ostrożny fallback do pól permlevel 0', () => {
+    const wynik = opcjeDodaniaFiltraSzybkiego(polaDoctype, null, [])
+    expect(wynik.map((o) => o.value)).toEqual(['status', 'lead_name'])
+  })
+
+  it('dozwolonePola=undefined -> ten sam fallback jak null', () => {
+    const wynik = opcjeDodaniaFiltraSzybkiego(polaDoctype, undefined, [])
+    expect(wynik.map((o) => o.value)).toEqual(['status', 'lead_name'])
+  })
+
+  it('dozwolonePola jako tablica -> zwęża do tych nazw, nawet gdy permlevel > 0', () => {
+    const wynik = opcjeDodaniaFiltraSzybkiego(
+      polaDoctype,
+      ['status', 'custom_koszty_zysk_plan'],
+      [],
+    )
+    expect(wynik.map((o) => o.value)).toEqual(['status', 'custom_koszty_zysk_plan'])
+  })
+
+  it('dozwolonePola jako pusta tablica -> brak opcji', () => {
+    expect(opcjeDodaniaFiltraSzybkiego(polaDoctype, [], [])).toEqual([])
+  })
+
+  it('pole bez etykiety jest wykluczone niezależnie od dozwolonePola', () => {
+    const wynik = opcjeDodaniaFiltraSzybkiego(
+      polaDoctype,
+      ['status', 'bez_etykiety'],
+      [],
+    )
+    expect(wynik.map((o) => o.value)).toEqual(['status'])
+  })
+
+  it('pole już na pasku (istniejaceNaPasku) jest wykluczone', () => {
+    const wynik = opcjeDodaniaFiltraSzybkiego(polaDoctype, null, ['lead_name'])
+    expect(wynik.map((o) => o.value)).toEqual(['status'])
+  })
+
+  it('istniejaceNaPasku=undefined traktowane jak pusta tablica', () => {
+    const wynik = opcjeDodaniaFiltraSzybkiego(polaDoctype, null, undefined)
+    expect(wynik.map((o) => o.value)).toEqual(['status', 'lead_name'])
+  })
+
+  it('polaDoctype niepoprawne (nie-tablica) -> pusta tablica opcji', () => {
+    expect(opcjeDodaniaFiltraSzybkiego(null, null, [])).toEqual([])
+    expect(opcjeDodaniaFiltraSzybkiego(undefined, null, [])).toEqual([])
+  })
+
+  it('zwraca kształt {label, value, fieldtype}, nigdy {fieldname}', () => {
+    const wynik = opcjeDodaniaFiltraSzybkiego(polaDoctype, null, [])
+    expect(wynik[0]).toEqual({ label: 'Etap', value: 'status', fieldtype: 'Link' })
+    expect(wynik[0].fieldname).toBeUndefined()
+  })
+
+  it('nie mutuje polaDoctype/istniejaceNaPasku (immutability)', () => {
+    const pola = [...polaDoctype]
+    const istniejace = ['lead_name']
+    opcjeDodaniaFiltraSzybkiego(pola, null, istniejace)
+    expect(pola).toEqual(polaDoctype)
+    expect(istniejace).toEqual(['lead_name'])
   })
 })

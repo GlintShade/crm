@@ -13,6 +13,13 @@ from pypika import Criterion
 from crm.api.views import get_views
 from crm.fcrm.doctype.crm_form_script.crm_form_script import get_form_script
 from crm.utils import is_frappe_version
+from crm.volteo_filtry_szybkie import (
+	klucz_domyslnej_uzytkownika,
+	parsuj_json_listy,
+	scal_globalne,
+	waliduj_liste,
+	wybierz_kolejnosc,
+)
 from crm.volteo_grupy_filtrow import klucze_z_grup, waliduj_grupy, wydziel_grupy
 from crm.volteo_lista_szans import (
 	POLA_TAGOW_LEAD,
@@ -120,6 +127,69 @@ def _pola_dozwolone(doctype: str, parenttype: str | None = None) -> set[str]:
 		dozwolone |= {field.fieldname for field in meta.fields if not field.get("permlevel")}
 
 	return dozwolone
+
+
+def _pola_istniejace_do_paska(meta) -> set[str]:
+	"""Nazwy pol, z ktorych pasek szybkich filtrow faktycznie da sie
+	zbudowac wpis (issue #219): prawdziwe DocFieldy `meta.fields` plus
+	pseudo-pole "name" (obsluzone specjalnie nizej w `get_quick_filters`,
+	nie jest DocFieldem).
+
+	W odroznieniu od `_pola_dozwolone` (uprawnienia odczytu), to jest
+	ISTNIENIE: pole permlevel 0 spoza tego zbioru (np. "owner", "_assign",
+	czesci `_POLA_ZAWSZE_DOZWOLONE`/`POLA_ZAWSZE_DOZWOLONE`) przechodzi
+	`_pola_dozwolone`, ale `get_quick_filters` i tak nie ma z czego zbudowac
+	dla niego etykiety/fieldtype (nie jest zadeklarowane jako DocField tego
+	doctype'u), dotychczasowy kod je wiec cicho pomijal przy odczycie
+	(`next((f for f in meta.fields ...), None)` zwraca `None`). Ten zbior
+	stosuje ten sam warunek WCZESNIEJ, w `wybierz_kolejnosc` (odczyt) i w
+	`zapisz_filtry_szybkie_uzytkownika`/`update_quick_filters` (zapis), zeby
+	taka proba zapisu skoncze sie komunikatem, a nie cichym pominieciem przy
+	kolejnym odczycie.
+	"""
+	return {field.fieldname for field in meta.fields} | {"name"}
+
+
+def _odczytaj_globalny_uklad_paska(doctype: str, meta) -> list[str]:
+	"""Aktualny globalny (dla wszystkich uzytkownikow bez wlasnego ukladu)
+	uklad paska szybkich filtrow, jako lista nazw pol w kolejnosci
+	prezentacji: z `CRM Global Settings` (type="Quick Filters"), a gdy taki
+	dokument jeszcze nie istnieje, fallback do `in_standard_filter=1` na
+	meta doctype'u (dotychczasowe zachowanie `get_quick_filters` sprzed
+	issue #219, patrz ops#79).
+
+	Nie filtruje po uprawnieniach/istnieniu, to robi wolajacy
+	(`_pola_dozwolone`/`_pola_istniejace_do_paska`, zazwyczaj przez
+	`crm.volteo_filtry_szybkie.wybierz_kolejnosc`).
+	"""
+	if global_settings := frappe.db.exists("CRM Global Settings", {"dt": doctype, "type": "Quick Filters"}):
+		raw = frappe.db.get_value("CRM Global Settings", global_settings, "json")
+		lista = json.loads(raw) or []
+		return [pole for pole in lista if isinstance(pole, str)]
+
+	return [field.fieldname for field in meta.fields if field.in_standard_filter]
+
+
+# Role, ktore moga zapisac GLOBALNY (dla wszystkich) uklad paska szybkich
+# filtrow (issue #219), patrz `update_quick_filters` nizej. Kazdy inny
+# uzytkownik moze zapisac wylacznie WLASNY uklad, patrz
+# `zapisz_filtry_szybkie_uzytkownika`. Osobny, wezszy zbior od
+# `crm.permissions.org_hierarchy.BYPASS_ROLES` (ktory dodaje jeszcze Volteo
+# Backend), zgodnie z konwencja tego pliku, zebranej w CLAUDE.md pod
+# "delete_lockdown.py i kalkulator_guard.py... nie zbiegaj", role do zapisu
+# domyslnego paska to wlasna, wezsza lista.
+ROLE_GLOBALNEGO_PASKA_SZYBKICH_FILTROW = frozenset({"System Manager", "Volteo Core Admin", "Sales Manager"})
+
+
+def _wymagaj_prawa_do_globalnego_paska() -> None:
+	if frappe.session.user == "Administrator":
+		return
+	if set(frappe.get_roles(frappe.session.user)) & ROLE_GLOBALNEGO_PASKA_SZYBKICH_FILTROW:
+		return
+	frappe.throw(
+		_("Brak uprawnień do zmiany domyślnego paska szybkich filtrów dla wszystkich."),
+		frappe.PermissionError,
+	)
 
 
 def _podstaw_me(filters: dict) -> dict:
@@ -869,33 +939,26 @@ def get_quick_filters(doctype: str, cached: bool = True):
 	meta = frappe.get_meta(doctype, cached)
 	quick_filters = []
 
-	if global_settings := frappe.db.exists("CRM Global Settings", {"dt": doctype, "type": "Quick Filters"}):
-		_quick_filters = frappe.db.get_value("CRM Global Settings", global_settings, "json")
-		_quick_filters = json.loads(_quick_filters) or []
-
-		fields = []
-
-		for filter in _quick_filters:
-			if filter == "name":
-				fields.append({"label": "Name", "fieldname": "name", "fieldtype": "Data"})
-			else:
-				field = next((f for f in meta.fields if f.fieldname == filter), None)
-				if field:
-					fields.append(field)
-
-	else:
-		fields = [field for field in meta.fields if field.in_standard_filter]
-
-	# VOLTEO (ops#94): przed ta zmiana get_quick_filters nie sprawdzal
-	# permlevel wcale, wiec pole permlevel > 0 (np. "Przypisany CC" na CRM
-	# Lead, bez odczytu dla `Volteo D2D Sales`) wyswietlaloby sie w pasku
-	# kazdemu, tak jak ops#79 juz naprawil dla sort_options/
-	# get_filterable_fields/get_group_by_fields (patrz `_pola_dozwolone`).
-	# Global Settings dalej moze wymienic pole niedozwolone, filtrujemy
-	# dopiero tutaj po stronie odczytu, konfiguracja w bazie zostaje
-	# nietknieta.
+	# VOLTEO (issue #219): kazdy uzytkownik moze teraz miec WLASNY uklad
+	# paska, obok globalnego (dla wszystkich, `CRM Global Settings`).
+	# `wybierz_kolejnosc` (frappe-free, `crm.volteo_filtry_szybkie`)
+	# rozstrzyga, ktory ostatecznie wygrywa: wlasny, jesli po filtrze
+	# uprawnien/istnienia cokolwiek z niego zostaje, inaczej globalny.
 	permitted = _pola_dozwolone(doctype)
-	fields = [field for field in fields if field.get("fieldname") in permitted]
+	istniejace = _pola_istniejace_do_paska(meta)
+	globalny_uklad = _odczytaj_globalny_uklad_paska(doctype, meta)
+	wlasny_uklad = parsuj_json_listy(frappe.defaults.get_user_default(klucz_domyslnej_uzytkownika(doctype)))
+
+	kolejnosc = wybierz_kolejnosc(globalny_uklad, wlasny_uklad, permitted, istniejace)
+
+	fields = []
+	for filter in kolejnosc:
+		if filter == "name":
+			fields.append({"label": "Name", "fieldname": "name", "fieldtype": "Data"})
+		else:
+			field = next((f for f in meta.fields if f.fieldname == filter), None)
+			if field:
+				fields.append(field)
 
 	for field in fields:
 		# VOLTEO (issue ops#150): pola "produktow leada" dostaja tutaj
@@ -939,23 +1002,112 @@ def get_quick_filters(doctype: str, cached: bool = True):
 
 
 @frappe.whitelist()
-def update_quick_filters(quick_filters: str, old_filters: str, doctype: str):
-	quick_filters = json.loads(quick_filters)
-	old_filters = json.loads(old_filters)
+def update_quick_filters(quick_filters: str, doctype: str):
+	"""Zapisuje GLOBALNY (dla wszystkich uzytkownikow bez wlasnego ukladu)
+	uklad paska szybkich filtrow. Tylko Sales Manager, Volteo Core Admin,
+	System Manager (albo Administrator wprost), issue #219, dotychczas bez
+	zadnej bramki roli.
 
-	new_filters = [filter for filter in quick_filters if filter not in old_filters]
-	removed_filters = [filter for filter in old_filters if filter not in quick_filters]
+	`old_filters` (parametr, ktory ta funkcja miala wczesniej) zostal
+	usuniety: liczyl sie na tym, co front WCZYTAL jako `quickFilters.data`,
+	a to jest juz przefiltrowane do pol widocznych EDYTUJACEMU, wiec nie
+	moglo sluzyc jako wiarygodny poprzedni stan globalny. Poprzedni stan
+	czytamy teraz na nowo z bazy (`_odczytaj_globalny_uklad_paska`) i scalamy
+	z nowym przez `scal_globalne` (frappe-free, `crm.volteo_filtry_szybkie`),
+	zeby edytujacy z ograniczonymi uprawnieniami (np. Sales Manager bez
+	permlevel 2) nie usuwal z globalnego ukladu pol, ktorych po prostu nie
+	widzi, tylko tych, ktore widzial i swiadomie usunal.
+	"""
+	if not frappe.has_permission(doctype, "read"):
+		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
+	_wymagaj_prawa_do_globalnego_paska()
 
-	# update or create global quick filter settings
-	create_update_global_settings(doctype, quick_filters)
+	meta = frappe.get_meta(doctype)
+	permitted = _pola_dozwolone(doctype)
+	istniejace = _pola_istniejace_do_paska(meta)
 
-	# remove old filters
-	for filter in removed_filters:
-		update_in_standard_filter(filter, doctype, 0)
+	try:
+		nowe_widoczne = waliduj_liste(frappe.parse_json(quick_filters), permitted & istniejace)
+	except ValueError as e:
+		frappe.throw(str(e))
 
-	# add new filters
-	for filter in new_filters:
-		update_in_standard_filter(filter, doctype, 1)
+	stare_globalne = _odczytaj_globalny_uklad_paska(doctype, meta)
+	scalone = scal_globalne(nowe_widoczne, stare_globalne, permitted)
+
+	create_update_global_settings(doctype, scalone)
+
+	# Przelacznik Property Setter `in_standard_filter` (fallback, gdy
+	# `CRM Global Settings` jeszcze nie istnial) flipuje WYLACZNIE pola,
+	# ktore scalony wynik faktycznie dodal/usunal wzgledem PRAWDZIWEGO
+	# poprzedniego stanu globalnego, nigdy pole, ktore przetrwalo scalenie
+	# tylko dlatego, ze edytujacy go nie widzial (patrz docstring wyzej).
+	for fieldname in stare_globalne:
+		if fieldname not in scalone:
+			update_in_standard_filter(fieldname, doctype, 0)
+	for fieldname in scalone:
+		if fieldname not in stare_globalne:
+			update_in_standard_filter(fieldname, doctype, 1)
+
+
+@frappe.whitelist()
+def zapisz_filtry_szybkie_uzytkownika(doctype: str, pola: str) -> None:
+	"""Zapisuje WLASNY uklad paska szybkich filtrow BIEZACEGO uzytkownika
+	dla `doctype` (issue #219), przechowywany jako User Default
+	(`frappe.defaults`), osobno od globalnego ukladu w `CRM Global
+	Settings`. Dziala dla sesyjnego uzytkownika, nie przyjmuje parametru
+	"dla kogo": kazdy, kto moze czytac `doctype`, moze zapisac swoj wlasny
+	uklad paska dla niego.
+	"""
+	if not frappe.has_permission(doctype, "read"):
+		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
+
+	meta = frappe.get_meta(doctype)
+	dozwolone = _pola_dozwolone(doctype) & _pola_istniejace_do_paska(meta)
+
+	try:
+		lista = waliduj_liste(frappe.parse_json(pola), dozwolone)
+	except ValueError as e:
+		frappe.throw(str(e))
+
+	frappe.defaults.set_user_default(klucz_domyslnej_uzytkownika(doctype), json.dumps(lista))
+
+
+@frappe.whitelist()
+def resetuj_filtry_szybkie_uzytkownika(doctype: str) -> None:
+	"""Usuwa WLASNY uklad paska szybkich filtrow biezacego uzytkownika dla
+	`doctype` (issue #219): po usunieciu pasek wraca do globalnego ukladu
+	(`wybierz_kolejnosc` w `get_quick_filters`, gdy wlasny uklad jest
+	`None`).
+	"""
+	if not frappe.has_permission(doctype, "read"):
+		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
+
+	frappe.defaults.clear_user_default(klucz_domyslnej_uzytkownika(doctype))
+
+
+@frappe.whitelist()
+def ma_wlasne_filtry_szybkie(doctype: str) -> bool:
+	"""Czy biezacy uzytkownik ma zapisany WLASNY uklad paska szybkich
+	filtrow dla `doctype`: steruje widocznoscia przycisku "Przywroc
+	domyslny" we froncie (`ViewControls.vue`).
+
+	Zwraca `True`, gdy pod kluczem uzytkownika zyje POPRAWNA (sparsowalna)
+	lista, niezaleznie od tego, czy jest ona TERAZ skuteczna (patrz
+	`wybierz_kolejnosc`: moze zostac calkowicie odfiltrowana po zmianie
+	uprawnien i wtedy pasek i tak pokazuje globalny uklad). "Przywroc
+	domyslny" ma usunac zapisany wpis niezaleznie od tego, czy jest
+	aktualnie widoczny. Osobny, maly endpoint (nie pole na kazdym wpisie
+	`get_quick_filters`) jest najmniej inwazyjny: `get_quick_filters` zwraca
+	PLASKA liste wpisow paska, nie obiekt, i wiele miejsc frontu juz na tym
+	polega (`quickFilterList`, `setupNewQuickFilters`); zmiana jej na
+	`{filters, wlasny}` byla by zmiana lamiaca kontrakt dla zera realnej
+	korzysci, gdy wystarczy jedno dodatkowe, tanie wywolanie.
+	"""
+	if not frappe.has_permission(doctype, "read"):
+		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
+
+	wlasny = parsuj_json_listy(frappe.defaults.get_user_default(klucz_domyslnej_uzytkownika(doctype)))
+	return wlasny is not None
 
 
 def create_update_global_settings(doctype, quick_filters):
