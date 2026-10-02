@@ -252,3 +252,53 @@ export function zaleznaWartoscFiltraSerwera(field, activeFilters) {
   if (!konfiguracja) return []
   return rozpakujWartoscFiltraSzybkiego(activeFilters?.[konfiguracja.zalezy_od])
 }
+
+/**
+ * Buduje listę opcji "Dodaj filtr" do edycji paska szybkich filtrów
+ * (`ViewControls.vue`, issue #219): zwęża pełną listę pól doctype'u
+ * (`getMeta(doctype).getFields()`) do tych, które mają etykietę, mieszczą
+ * się w `dozwolonePola` (lista nazw pól z uprawnieniem odczytu,
+ * `crm.api.doc.pola_dozwolone` -- `null`/`undefined`, dopóki się ładuje,
+ * oznacza "jeszcze nie wiadomo", stąd ostrożny fallback do
+ * `!pole.permlevel`, ten sam wzorzec co `ColumnSettings.vue`'s `fields`
+ * computed) i nie są już na pasku (`istniejaceNaPasku`, tablica
+ * fieldnames).
+ *
+ * Zanim ten moduł istniał, edytor paska pokazywał WSZYSTKIE pola
+ * doctype'u bez żadnego filtra uprawnień -- bezpieczne, dopóki edycję
+ * widział tylko manager (`isManager()`), ale od issue #219 każdy
+ * użytkownik może otworzyć edytor swojego WŁASNEGO paska, więc pole
+ * permlevel > 0 (np. koszty/prowizje na `CRM Deal`) nie powinno się tam
+ * już pojawiać dla handlowca.
+ *
+ * Zwraca opcje w kształcie `{label, value, fieldtype}` (kształt, jakiego
+ * oczekuje `Autocomplete.vue`) -- etykieta pseudo-pola "name" zostaje po
+ * stronie wołającego (ten moduł jest frappe-free, nie wywołuje `__()`, patrz
+ * nagłówek pliku).
+ *
+ * Nie mutuje `polaDoctype`/`istniejaceNaPasku` (immutability).
+ *
+ * @param {Array<{fieldname:string,label?:string,fieldtype?:string,permlevel?:number}>|null|undefined} polaDoctype
+ * @param {string[]|null|undefined} dozwolonePola
+ * @param {string[]|null|undefined} istniejaceNaPasku
+ * @returns {Array<{label:string,value:string,fieldtype:string}>}
+ */
+export function opcjeDodaniaFiltraSzybkiego(polaDoctype, dozwolonePola, istniejaceNaPasku) {
+  const pola = Array.isArray(polaDoctype) ? polaDoctype : []
+  const istniejace = new Set(
+    Array.isArray(istniejaceNaPasku) ? istniejaceNaPasku : [],
+  )
+
+  const dostepne = Array.isArray(dozwolonePola)
+    ? pola.filter((pole) => dozwolonePola.includes(pole.fieldname))
+    : pola.filter((pole) => !pole.permlevel)
+
+  return dostepne
+    .filter((pole) => pole.label)
+    .filter((pole) => !istniejace.has(pole.fieldname))
+    .map((pole) => ({
+      label: pole.label,
+      value: pole.fieldname,
+      fieldtype: pole.fieldtype,
+    }))
+}

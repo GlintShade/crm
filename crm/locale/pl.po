@@ -9532,3 +9532,43 @@ msgstr "za {0} dni"
 #: frontend/src/utils/dataPolska.js
 msgid "Termin minął {0} dni temu"
 msgstr "Termin minął {0} dni temu"
+
+# Issue #219: kazdy uzytkownik moze teraz edytowac swoj wlasny uklad paska
+# szybkich filtrow (dotychczas tylko manager edytowal jeden, globalny
+# uklad). Klucze juz po polsku (jak reszta wpisow w tej konwencji ogona),
+# wpisy dla spojnosci katalogu.
+#: frontend/src/components/ViewControls.vue
+msgid "Edytuj pasek"
+msgstr "Edytuj pasek"
+
+#: frontend/src/components/ViewControls.vue
+msgid "Przywróć domyślny"
+msgstr "Przywróć domyślny"
+
+#: frontend/src/components/ViewControls.vue
+msgid "Zapisz jako domyślny dla wszystkich"
+msgstr "Zapisz jako domyślny dla wszystkich"
+
+#: frontend/src/components/ViewControls.vue
+msgid "Pasek szybkich filtrów zapisany"
+msgstr "Pasek szybkich filtrów zapisany"
+
+#: frontend/src/components/ViewControls.vue
+msgid "Nie udało się zapisać paska szybkich filtrów"
+msgstr "Nie udało się zapisać paska szybkich filtrów"
+
+#: frontend/src/components/ViewControls.vue
+msgid "Przywrócono domyślny pasek szybkich filtrów"
+msgstr "Przywrócono domyślny pasek szybkich filtrów"
+
+#: frontend/src/components/ViewControls.vue
+msgid "Nie udało się przywrócić domyślnego paska szybkich filtrów"
+msgstr "Nie udało się przywrócić domyślnego paska szybkich filtrów"
+
+#: frontend/src/components/ViewControls.vue
+msgid "Domyślny pasek szybkich filtrów zapisany dla wszystkich"
+msgstr "Domyślny pasek szybkich filtrów zapisany dla wszystkich"
+
+#: frontend/src/components/ViewControls.vue
+msgid "Nie udało się zapisać domyślnego paska szybkich filtrów"
+msgstr "Nie udało się zapisać domyślnego paska szybkich filtrów"
