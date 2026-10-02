@@ -61,7 +61,18 @@ ROZSZERZENIA_WIDEO = frozenset({"mp4", "mov", "webm", "m4v"})
 """Lustro `frontend/src/utils/audytPodglad.js::ROZSZERZENIA_WIDEO`."""
 
 ROZSZERZENIA_OBRAZOW = frozenset({"jpg", "jpeg", "png", "webp", "gif"})
-"""Lustro `crm.api.montaz._ROZSZERZENIA_OBRAZOW`."""
+"""Kanon rozszerzen obrazow -- skladnik `ROZSZERZENIA_MEDIOW_MONTAZU`/
+`czy_media_montazu` nizej, uzywanych przez galerie "Zdjecia z realizacji"
+w `crm.api.montaz` (dawniej lokalna `_ROZSZERZENIA_OBRAZOW` w tamtym
+module, usunieta w b66 na rzecz tego jednego zbioru)."""
+
+ROZSZERZENIA_MEDIOW_MONTAZU = ROZSZERZENIA_OBRAZOW | ROZSZERZENIA_WIDEO
+"""Rozszerzenia dopuszczone w galerii "Zdjęcia z realizacji" (`crm.api.montaz`,
+ops#191 + wideo w montażu): obrazy (`ROZSZERZENIA_OBRAZOW`) plus wideo
+(`ROZSZERZENIA_WIDEO`, ten sam zbior co sloty Audytu z `allowVideo`, b63
+ops#190). Nazwa celowo osobna od `ROZSZERZENIA_OBRAZOW`/`ROZSZERZENIA_WIDEO`,
+zeby `crm.api.montaz` mogl zaimportowac jeden, gotowy zbior bez budowania go
+po swojej stronie."""
 
 ROZSZERZENIA_DOKUMENTOW = frozenset(
 	{"pdf", "doc", "docx", "xls", "xlsx", "csv", "txt", "odt", "ods", "rtf"}
@@ -79,6 +90,14 @@ def _rozszerzenie(file_name: str | None) -> str:
 	if "." not in nazwa:
 		return ""
 	return nazwa.rsplit(".", 1)[-1].lower()
+
+
+def czy_media_montazu(file_name: str | None) -> bool:
+	"""Czy nazwa pliku ma jedno z rozszerzen dopuszczonych w galerii
+	"Zdjecia z realizacji" (obraz albo wideo). Brak nazwy, pusta nazwa albo
+	nazwa bez rozszerzenia -> False, nigdy wyjatek."""
+	rozszerzenie = _rozszerzenie(file_name)
+	return bool(rozszerzenie) and rozszerzenie in ROZSZERZENIA_MEDIOW_MONTAZU
 
 
 def kategoria_pliku(file_name: str | None, file_type: str | None) -> str:

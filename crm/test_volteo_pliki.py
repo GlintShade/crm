@@ -26,6 +26,7 @@ from crm.volteo_pliki import (
 	ZRODLO_ROBOCZE,
 	ZRODLO_UMOWA_PDF,
 	ZRODLO_UMOWA_PODPISANA,
+	czy_media_montazu,
 	czy_widoczne_robocze,
 	etykieta_zakladki_notatki,
 	etykieta_zrodla,
@@ -97,6 +98,36 @@ class TestKategoriaPliku(unittest.TestCase):
 
 	def test_rozszerzenie_docx_to_dokument(self):
 		self.assertEqual(kategoria_pliku("formularz.docx", ""), KAT_DOKUMENT)
+
+
+class TestCzyMediaMontazu(unittest.TestCase):
+	def test_jpg_jest_media(self):
+		self.assertTrue(czy_media_montazu("zdjecie.jpg"))
+
+	def test_gif_jest_media(self):
+		self.assertTrue(czy_media_montazu("animacja.gif"))
+
+	def test_mp4_jest_media(self):
+		self.assertTrue(czy_media_montazu("nagranie.mp4"))
+
+	def test_wielkie_litery_rozszerzenia_wideo(self):
+		self.assertTrue(czy_media_montazu("nagranie.MP4"))
+		self.assertTrue(czy_media_montazu("nagranie.MOV"))
+
+	def test_wielkie_litery_rozszerzenia_obrazu(self):
+		self.assertTrue(czy_media_montazu("zdjecie.JPG"))
+
+	def test_pdf_nie_jest_media(self):
+		self.assertFalse(czy_media_montazu("faktura.pdf"))
+
+	def test_brak_rozszerzenia_nie_jest_media(self):
+		self.assertFalse(czy_media_montazu("plik_bez_rozszerzenia"))
+
+	def test_puste_nie_jest_media(self):
+		self.assertFalse(czy_media_montazu(""))
+
+	def test_none_nie_jest_media(self):
+		self.assertFalse(czy_media_montazu(None))
 
 
 class TestKlasyfikacjaAudytOze(unittest.TestCase):
