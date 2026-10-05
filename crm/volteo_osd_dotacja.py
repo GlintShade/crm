@@ -20,6 +20,17 @@ OZE_RODZAJE`). Schemat i backend są jednak wspólne od razu (pola i uprawnienia
 na `CRM Deal` nie różnicują linii produktowej), żeby Czyste Powietrze w fazie 2
 nie wymagało migracji, tylko odblokowania w `Deal.vue`/`MobileDeal.vue`.
 
+Od paczki "Wielki update kalkulatora OZE" (b68, chunk B3) `OZE_RODZAJE` samo
+rośnie o cztery nowe rodzaje instalacji (Rozbudowa PV/ME, Klimatyzacja, Pompa
+ciepła, Kocioł), ale te dwie zakładki NIE dotyczą ich identycznie. "OSD"
+dotyczy każdej instalacji, która fizycznie łączy się z siecią (PV/PVME/ME
+i Rozbudowa: rozbudowa istniejącego zestawu PV/ME też wymaga zgłoszenia do
+operatora). "Dotacja" (Mój Prąd) dotyczy wyłącznie trzech pierwotnych rodzajów
+PV/PVME/ME, bo żaden z czterech nowych rodzajów nie ma dotacji Mój Prąd
+(decyzja właściciela 2026-10-04: `dotacja = 0` dla nowych rodzajów w rdzeniu
+kalkulatora). Stąd `RODZAJE_OSD` i `RODZAJE_DOTACJA` niżej, per-zakładkowa
+bramka zamiast jednej wspólnej.
+
 Słowniki i kolory są kanonem TUTAJ i lustrzane w dwóch innych miejscach, które
 trzeba synchronizować ręcznie przy każdej zmianie:
   - ``ops/crm-osd-dotacja.py`` (opcje pól Select `custom_status_osd` /
@@ -34,10 +45,15 @@ cofnąć omyłkowy wybór), tylko domyślny (nieustawiony) stan renderuje się
 identycznie.
 """
 
+from crm.volteo_pipeline import OZE_RODZAJE
+
 __all__ = [
 	"ETYKIETY_KART",
 	"KOLORY",
 	"POLE",
+	"RODZAJE",
+	"RODZAJE_DOTACJA",
+	"RODZAJE_OSD",
 	"STATUSY",
 	"ZAKLADKI",
 	"tekst_sladu_statusu",
@@ -51,6 +67,24 @@ POLE: dict[str, str] = {
 	"Dotacja": "custom_status_dotacja",
 }
 """Zakładka -> fieldname pola Select na `CRM Deal` (permlevel 3, `ops/crm-osd-dotacja.py`)."""
+
+RODZAJE_OSD: frozenset[str] = OZE_RODZAJE - {"Klimatyzacja", "Pompa ciepła", "Kocioł"}
+"""Rodzaje umowy, dla których zakładka "OSD" jest dostępna: PV, PV+ME, ME, Rozbudowa PV/ME, czyli
+każda instalacja, która fizycznie łączy się z siecią operatora. Klimatyzacja/Pompa ciepła/Kocioł
+nie łączą się z siecią w sposób wymagający zgłoszenia OSD, więc zostają poza tym zbiorem."""
+
+RODZAJE_DOTACJA: frozenset[str] = frozenset({"Fotowoltaika", "Fotowoltaika + Magazyn", "Magazyn energii"})
+"""Rodzaje umowy, dla których zakładka "Dotacja" (Mój Prąd) jest dostępna: wyłącznie trzy pierwotne
+rodzaje OZE. Żaden z czterech nowych rodzajów (łącznie z Rozbudową) nie ma dotacji Mój Prąd, bo
+`dotacja = 0` dla nich w rdzeniu kalkulatora (decyzja właściciela 2026-10-04)."""
+
+RODZAJE: dict[str, frozenset[str]] = {
+	"OSD": RODZAJE_OSD,
+	"Dotacja": RODZAJE_DOTACJA,
+}
+"""Zakładka -> zbiór rodzajów umowy, dla których ta zakładka jest dostępna. Wołane z
+`crm.api.osd_dotacja._sprawdz_rodzaj_oze` per zakładka: bramka nie jest już wspólna dla obu
+zakładek od paczki b68 (chunk B3), patrz docstring modułu."""
 
 STATUSY: dict[str, tuple[str, ...]] = {
 	"OSD": (

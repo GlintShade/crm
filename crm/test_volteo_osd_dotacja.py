@@ -4,10 +4,14 @@ from crm.volteo_osd_dotacja import (
 	ETYKIETY_KART,
 	KOLORY,
 	POLE,
+	RODZAJE,
+	RODZAJE_DOTACJA,
+	RODZAJE_OSD,
 	STATUSY,
 	ZAKLADKI,
 	tekst_sladu_statusu,
 )
+from crm.volteo_pipeline import OZE_RODZAJE
 
 
 class TestZakladkiIPole(unittest.TestCase):
@@ -20,6 +24,40 @@ class TestZakladkiIPole(unittest.TestCase):
 	def test_c_pole_fieldnames(self: "TestZakladkiIPole") -> None:
 		self.assertEqual(POLE["OSD"], "custom_status_osd")
 		self.assertEqual(POLE["Dotacja"], "custom_status_dotacja")
+
+
+class TestRodzajeB68(unittest.TestCase):
+	# Paczka "Wielki update kalkulatora OZE" (b68, chunk B3): OSD i Dotacja
+	# NIE dotyczą tych samych rodzajów umowy od momentu dodania czterech
+	# nowych rodzajów instalacji, patrz docstring modułu.
+
+	def test_a_rodzaje_ma_wpis_dla_kazdej_zakladki(self: "TestRodzajeB68") -> None:
+		self.assertEqual(set(RODZAJE.keys()), set(ZAKLADKI))
+
+	def test_b_rodzaje_osd_obejmuje_pv_pvme_me_rozbudowe(self: "TestRodzajeB68") -> None:
+		self.assertEqual(
+			RODZAJE_OSD,
+			frozenset({"Fotowoltaika", "Fotowoltaika + Magazyn", "Magazyn energii", "Rozbudowa PV/ME"}),
+		)
+
+	def test_c_rodzaje_dotacja_obejmuje_wylacznie_pierwotne_trzy(self: "TestRodzajeB68") -> None:
+		self.assertEqual(
+			RODZAJE_DOTACJA,
+			frozenset({"Fotowoltaika", "Fotowoltaika + Magazyn", "Magazyn energii"}),
+		)
+
+	def test_d_nowe_rodzaje_grzewczo_klimatyzacyjne_bez_osd_ani_dotacji(self: "TestRodzajeB68") -> None:
+		for rodzaj in ("Klimatyzacja", "Pompa ciepła", "Kocioł"):
+			self.assertNotIn(rodzaj, RODZAJE_OSD)
+			self.assertNotIn(rodzaj, RODZAJE_DOTACJA)
+
+	def test_e_rozbudowa_ma_osd_ale_nie_dotacje(self: "TestRodzajeB68") -> None:
+		self.assertIn("Rozbudowa PV/ME", RODZAJE_OSD)
+		self.assertNotIn("Rozbudowa PV/ME", RODZAJE_DOTACJA)
+
+	def test_f_oba_zbiory_sa_podzbiorem_oze_rodzaje(self: "TestRodzajeB68") -> None:
+		self.assertTrue(RODZAJE_OSD <= OZE_RODZAJE)
+		self.assertTrue(RODZAJE_DOTACJA <= OZE_RODZAJE)
 
 
 class TestStatusy(unittest.TestCase):

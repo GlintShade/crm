@@ -244,10 +244,19 @@ def volteo_pipeline_grupy() -> dict[str, list[str]]:
 	`crm.api.pipeline.volteo_pipeline_grupy` (patrz nagłówek modułu).
 
 	Kolejność wyjścia jest deterministyczna: rodzaje OZE w kolejności opcji
-	pola Select (Fotowoltaika, Fotowoltaika + Magazyn, Magazyn energii), na
-	końcu Czyste Powietrze.
+	pola Select (Fotowoltaika, Fotowoltaika + Magazyn, Magazyn energii,
+	Rozbudowa PV/ME, Klimatyzacja, Pompa ciepła, Kocioł), na końcu Czyste
+	Powietrze.
 	"""
-	kolejnosc_oze = ("Fotowoltaika", "Fotowoltaika + Magazyn", "Magazyn energii")
+	kolejnosc_oze = (
+		"Fotowoltaika",
+		"Fotowoltaika + Magazyn",
+		"Magazyn energii",
+		"Rozbudowa PV/ME",
+		"Klimatyzacja",
+		"Pompa ciepła",
+		"Kocioł",
+	)
 	assert set(kolejnosc_oze) == OZE_RODZAJE, "kolejność OZE w volteo_pipeline_grupy rozjechała się z OZE_RODZAJE"
 	rodzaje = (*kolejnosc_oze, "Czyste Powietrze")
 	return {rodzaj: list(grupa_for(rodzaj) or ()) for rodzaj in rodzaje}

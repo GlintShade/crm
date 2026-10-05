@@ -24,6 +24,11 @@ jawny ślad w Aktywności), nie jedynym miejscem egzekwowania uprawnień.
 Faza 1: dotyczy wyłącznie szans OZE (`crm.volteo_pipeline.OZE_RODZAJE`).
 Czyste Powietrze dostanie te zakładki w fazie 2 bez migracji schematu, bo pola
 i permlevel są już wspólne.
+
+Od paczki b68 (chunk B3) "OZE" samo w sobie nie wystarcza do bramkowania: OSD
+i Dotacja dotyczą różnych podzbiorów rodzajów OZE (patrz
+`crm.volteo_osd_dotacja.RODZAJE`), więc `_sprawdz_rodzaj_oze` sprawdza PER
+ZAKŁADKA, nie wspólnie dla obu.
 """
 
 from typing import Any
@@ -35,21 +40,20 @@ from frappe.rate_limiter import rate_limit
 from crm.api.umowa import _sprawdz_dostep_do_szansy
 from crm.permissions.org_hierarchy import BYPASS_ROLES
 from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad
-from crm.volteo_osd_dotacja import POLE, STATUSY, ZAKLADKI
-from crm.volteo_pipeline import OZE_RODZAJE
+from crm.volteo_osd_dotacja import POLE, RODZAJE, STATUSY, ZAKLADKI
 
 
-def _sprawdz_rodzaj_oze(deal_doc: "frappe.model.document.Document") -> None:
-	"""Zakładki OSD/Dotacja dotyczą wyłącznie linii OZE (Faza 1, patrz docstring
-	modułu): `custom_rodzaj_umowy` szansy musi być jedną z wartości
-	`crm.volteo_pipeline.OZE_RODZAJE`."""
-	if deal_doc.get("custom_rodzaj_umowy") not in OZE_RODZAJE:
+def _sprawdz_rodzaj_oze(deal_doc: "frappe.model.document.Document", zakladka: str) -> None:
+	"""Zakładka `zakladka` jest dostępna wyłącznie dla rodzajów umowy z
+	`crm.volteo_osd_dotacja.RODZAJE[zakladka]`. Od paczki b68 (chunk B3) OSD i
+	Dotacja NIE dotyczą tych samych rodzajów (patrz docstring `volteo_osd_dotacja`):
+	OSD obejmuje PV/PV+ME/ME/Rozbudowa, Dotacja wyłącznie PV/PV+ME/ME."""
+	if deal_doc.get("custom_rodzaj_umowy") not in RODZAJE[zakladka]:
 		frappe.throw(
 			_(
-				"Zakładki OSD/Dotacja dotyczą wyłącznie linii OZE (Fotowoltaika, "
-				"Fotowoltaika + Magazyn, Magazyn energii). Ustaw „Rodzaj umowy” na "
-				"szansie sprzedaży na jedną z tych wartości."
-			),
+				"Zakładka „{0}” nie jest dostępna dla tego rodzaju umowy. Ustaw „Rodzaj umowy” na "
+				"szansie sprzedaży na odpowiednią wartość."
+			).format(zakladka),
 			frappe.ValidationError,
 		)
 
@@ -82,7 +86,7 @@ def ustaw_status(deal: str, zakladka: str, status: str) -> dict[str, Any]:
 	_sprawdz_dostep_do_szansy(deal, "write")
 
 	deal_doc = frappe.get_doc("CRM Deal", deal)
-	_sprawdz_rodzaj_oze(deal_doc)
+	_sprawdz_rodzaj_oze(deal_doc, zakladka)
 
 	if status not in STATUSY[zakladka]:
 		frappe.throw(_("Nieznany status: {0}").format(status), frappe.ValidationError)
