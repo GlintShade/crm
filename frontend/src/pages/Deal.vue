@@ -77,7 +77,7 @@
         <AktualizacjeTab v-else-if="tab.name === 'Montaz'" :deal-id="dealId" :konfig="MONTAZ" />
         <AudytTab v-else-if="tab.name === 'Audyt'" :deal-id="dealId" :rodzaj="doc.custom_rodzaj_umowy || ''" />
         <AudytCPTab v-else-if="tab.name === 'AudytCP'" :deal-id="dealId" />
-        <UmowaTab v-else-if="tab.name === 'Umowa'" :deal-id="dealId" />
+        <UmowaTab v-else-if="tab.name === 'Umowa'" :deal-id="dealId" :rodzaj="doc.custom_rodzaj_umowy || ''" />
         <UmowaCPTab v-else-if="tab.name === 'UmowaCP'" :deal-id="dealId" />
         <KredytTab v-else-if="tab.name === 'Kredyt'" :deal-id="dealId" />
         <NotatkiTab v-else-if="tab.name === 'Notatki'" :deal-id="dealId" />

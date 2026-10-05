@@ -119,7 +119,7 @@
             <Button
               variant="outline"
               :label="__('Generuj PDF umowy')"
-              :disabled="generatingPdf"
+              :disabled="generatingPdf || wzorWPrzygotowaniu"
               :loading="generatingPdf"
               @click="generatePdf"
             />
@@ -131,6 +131,27 @@
               @click="saveForm"
             />
           </div>
+        </div>
+
+        <!-- Wzór w przygotowaniu (b68, chunk F4): cztery nowe rodzaje OZE
+        (Rozbudowa PV/ME, Klimatyzacja, Pompa ciepła, Kocioł) nie mają
+        jeszcze wzoru PDF umowy - prawnik go przygotowuje w osobnej fazie
+        (faza 2, plan b68). Formularz pozostaje w pełni edytowalny i
+        zapisywalny, tylko przycisk "Generuj PDF umowy" jest wyłączony
+        (patrz :disabled wyżej). Komunikat serwera
+        (`_blad_wzor_w_przygotowaniu` w crm/api/umowa.py) zostaje drugą
+        linią obrony, na wypadek gdyby ten baner kiedyś się rozminął z
+        rzeczywistym stanem backendu. -->
+        <div
+          v-if="wzorWPrzygotowaniu"
+          class="rounded-lg border border-outline-blue-2 bg-surface-blue-2 px-4 py-3 text-sm text-ink-blue-8"
+        >
+          {{
+            __(
+              'Wzór umowy w przygotowaniu. Formularz można wypełnić, PDF będzie dostępny po dodaniu wzoru dla rodzaju: {0}',
+              [props.rodzaj],
+            )
+          }}
         </div>
 
         <!-- Drugi Zamawiający: umowa na dwie osoby (ops#171). Lives ONLY
@@ -426,10 +447,23 @@ import { formatPlnAmount } from '@/utils/money'
 import { ppozWymagane } from '@/utils/pvForm'
 import { useAutenti } from '@/composables/useAutenti'
 import { canSend } from '@/utils/autentiStatus'
+import { umowaWPrzygotowaniu } from '@/utils/rodzajUmowy'
 
 const props = defineProps({
   dealId: { type: String, required: true },
+  // `custom_rodzaj_umowy` szansy (Deal.vue) - pusty string, gdy jeszcze nie
+  // ustawiony. b68 (chunk F4): decyduje, czy wzór PDF umowy już istnieje
+  // (trzy stare rodzaje PV/PV+ME/ME + Czyste Powietrze) czy jest dopiero w
+  // przygotowaniu (cztery nowe rodzaje OZE), patrz `wzorWPrzygotowaniu` niżej.
+  rodzaj: { type: String, default: '' },
 })
+
+// Jedyne źródło prawdy: `umowaWPrzygotowaniu` w utils/rodzajUmowy.js (lustro
+// `crm.volteo_umowa.RODZAJE_NOWE` po stronie backendu). `true` wyłącza
+// przycisk "Generuj PDF umowy" i pokazuje baner info wyżej w szablonie;
+// serwer (`crm.api.umowa._blad_wzor_w_przygotowaniu`) odrzuca próbę
+// generowania identycznym komunikatem jako druga linia obrony.
+const wzorWPrzygotowaniu = computed(() => umowaWPrzygotowaniu(props.rodzaj))
 
 // --- Static form definition ---------------------------------------------------
 // Grouped exactly as the brief specifies. Conditional fields carry
