@@ -2,7 +2,7 @@ import copy
 import unittest
 from decimal import Decimal
 
-from crm.koszty.rdzen import scal_snapshot, zbuduj_snapshot_cp
+from crm.koszty.rdzen import scal_snapshot, zbuduj_snapshot_cp, zbuduj_snapshot_oze
 
 WEWNETRZNE = {
 	"koszt_calkowity": Decimal("29500.00"),
@@ -359,6 +359,108 @@ class ScalSnapshotPvKsztaltTest(unittest.TestCase):
 		podsumowanie = nowy["podsumowanie_rzeczywiste"]
 		self.assertEqual(podsumowanie["marza_rzeczywista"], podsumowanie["zysk_rzeczywisty"])
 		self.assertEqual(nowy["linia_produktowa"], "pv")
+
+
+WEWNETRZNE_OZE = {
+	"koszt_calkowity": Decimal("20200.00"),
+	"marza_proenergy": Decimal("11000.00"),
+	"bonus_liderski": Decimal("3000.00"),
+	"narzut": Decimal("0.00"),
+	"marza": Decimal("14000.00"),
+	"zysk": Decimal("14000.00"),
+	"linie": [
+		{"klucz": "pc_rotenso_mono_6:pompa_ciepla", "etykieta": "Pompa ciepła (Rotenso Monoblok 6 kW)",
+			"typ": "Koszt", "kwota": Decimal("6700.00")},
+		{"klucz": "wspolne:bufor", "etykieta": "Bufor", "typ": "Koszt", "kwota": Decimal("2000.00")},
+		{"klucz": "pc_rotenso_mono_6:montaz", "etykieta": "Montaż (Rotenso Monoblok 6 kW)",
+			"typ": "Koszt", "kwota": Decimal("5500.00")},
+		{"klucz": "pc_rotenso_mono_6:materialy_kotlowni", "etykieta": "Materiały kotłowni (Rotenso Monoblok 6 kW)",
+			"typ": "Koszt", "kwota": Decimal("6000.00")},
+		{"klucz": "pc_rotenso_mono_6:marza_proenergy", "etykieta": "Marża Proenergy (Rotenso Monoblok 6 kW)",
+			"typ": "Marża Proenergy", "kwota": Decimal("11000.00")},
+		{"klucz": "pc_rotenso_mono_6:bonus_liderski", "etykieta": "Bonus liderski (Rotenso Monoblok 6 kW)",
+			"typ": "Bonus liderski", "kwota": Decimal("3000.00")},
+	],
+	"pozycje": [
+		{"kod": "pc_rotenso_mono_6", "nazwa": "Rotenso Monoblok 6 kW", "ilosc": 1,
+			"netto": Decimal("34200.00"), "koszt": Decimal("20200.00"),
+			"marza": Decimal("11000.00"), "bonus": Decimal("3000.00")},
+	],
+}
+
+
+class ZbudujSnapshotOzeTest(unittest.TestCase):
+	def test_ksztalt_i_wersja(self):
+		snap = zbuduj_snapshot_oze(copy.deepcopy(WEWNETRZNE_OZE), "2026-10-05 10:00:00")
+		self.assertEqual(snap["wersja"], 1)
+		self.assertEqual(snap["linia_produktowa"], "oze")
+		self.assertEqual(snap["utworzono"], "2026-10-05 10:00:00")
+		self.assertIsNone(snap["zmodyfikowano"])
+		self.assertIsNone(snap["zmodyfikowal"])
+		self.assertIsNone(snap["podsumowanie_rzeczywiste"])
+		self.assertEqual(snap["dodatkowe"], [])
+
+	def test_tylko_linie_typu_koszt_trafiaja_do_linie(self):
+		snap = zbuduj_snapshot_oze(copy.deepcopy(WEWNETRZNE_OZE), "2026-10-05")
+		# 4 linie typu Koszt (pompa, bufor wspólny, montaż, materiały kotłowni) -- marża i
+		# bonus liderski (2 linie typu nie-Koszt) są odfiltrowane, zostają wyłącznie w
+		# skladniki_marzy.
+		self.assertEqual(len(snap["linie"]), 4)
+		for linia in snap["linie"]:
+			self.assertIsNone(linia["ilosc"])
+			self.assertIsNone(linia["jednostka"])
+			self.assertIsNone(linia["netto"])
+			self.assertIsNone(linia["prowizja_plan"])
+			self.assertIsNone(linia["koszt_rzeczywisty"])
+		pompa = next(l for l in snap["linie"] if l["klucz"] == "pc_rotenso_mono_6:pompa_ciepla")
+		self.assertEqual(pompa["koszt_plan"], "6700.00")
+		self.assertEqual(pompa["etykieta"], "Pompa ciepła (Rotenso Monoblok 6 kW)")
+
+	def test_skladniki_marzy(self):
+		snap = zbuduj_snapshot_oze(copy.deepcopy(WEWNETRZNE_OZE), "2026-10-05")
+		po_klucz = {s["klucz"]: s["kwota"] for s in snap["skladniki_marzy"]}
+		self.assertEqual(po_klucz["marza_proenergy"], "11000.00")
+		self.assertEqual(po_klucz["bonus_liderski"], "3000.00")
+		self.assertEqual(po_klucz["narzut"], "0.00")
+
+	def test_podsumowanie(self):
+		snap = zbuduj_snapshot_oze(copy.deepcopy(WEWNETRZNE_OZE), "2026-10-05")
+		podsumowanie = snap["podsumowanie"]
+		# netto = koszt_calkowity(20200) + marza_proenergy(11000) + bonus_liderski(3000)
+		# + narzut(0) = 34200.
+		self.assertEqual(podsumowanie["netto"], "34200.00")
+		self.assertEqual(podsumowanie["koszt_plan"], "20200.00")
+		self.assertEqual(podsumowanie["marza_plan"], "14000.00")
+		self.assertIsNone(podsumowanie["prowizja_plan"])
+		# prowizja_plan is None -- zysk_plan == marza_plan, dokładnie jak w snapshotach PV
+		# (patrz ScalSnapshotPvKsztaltTest powyżej i docstring zbuduj_snapshot_oze).
+		self.assertEqual(podsumowanie["zysk_plan"], podsumowanie["marza_plan"])
+
+	def test_narzut_niezerowy_wchodzi_do_netto_i_marzy_ale_nie_do_zysku_wewnetrznego(self):
+		wewnetrzne = copy.deepcopy(WEWNETRZNE_OZE)
+		wewnetrzne["narzut"] = Decimal("500.00")
+		snap = zbuduj_snapshot_oze(wewnetrzne, "2026-10-05")
+		podsumowanie = snap["podsumowanie"]
+		self.assertEqual(podsumowanie["netto"], "34700.00")
+		self.assertEqual(podsumowanie["marza_plan"], "14500.00")
+		# zysk_plan snapshotu WCIĄŻ równe marza_plan (14500), mimo że wewnetrzne["zysk"]
+		# (podgląd na żywo w kalkulatorze, nigdy nie czytany przez tę funkcję) wykluczałby
+		# narzut -- patrz docstring zbuduj_snapshot_oze.
+		self.assertEqual(podsumowanie["zysk_plan"], "14500.00")
+
+	def test_wejscie_niemutowane(self):
+		wewnetrzne = copy.deepcopy(WEWNETRZNE_OZE)
+		kopia = copy.deepcopy(wewnetrzne)
+		zbuduj_snapshot_oze(wewnetrzne, "2026-10-05")
+		self.assertEqual(wewnetrzne, kopia)
+
+	def test_scal_snapshot_na_snapshocie_oze(self):
+		snap = zbuduj_snapshot_oze(copy.deepcopy(WEWNETRZNE_OZE), "2026-10-05")
+		nowy = scal_snapshot(snap, {}, [{"nazwa": "Dojazd", "kwota": "100"}], "2026-10-05", "admin")
+		self.assertEqual(nowy["linia_produktowa"], "oze")
+		self.assertEqual(nowy["dodatkowe"][0]["nazwa"], "Dojazd")
+		# koszt_rzeczywisty_total = suma koszt_plan 4 linii (6700+2000+5500+6000=20200) + 100 dodatkowe.
+		self.assertEqual(nowy["podsumowanie_rzeczywiste"]["koszt_rzeczywisty"], "20300.00")
 
 
 class ScalSnapshotStabilnoscTest(unittest.TestCase):
