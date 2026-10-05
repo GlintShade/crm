@@ -36,6 +36,7 @@ from crm.volteo_umowa import (
 	brakujace_dane_klienta,
 	brakujace_pola,
 	czy_propagowac_zgody,
+	czy_rodzaj_bez_wzoru_umowy,
 	czy_umowa_podwojna,
 	kod_szablonu,
 	kontakty_do_zgod,
@@ -292,6 +293,13 @@ def _blad_rodzaju_umowy_bez_szablonu(rodzaj: str | None) -> NoReturn:
 	`_volteo_umowa_pdf_cp` (własny szablon, `crm.volteo_umowa_render_cp`) PRZED
 	tym sprawdzeniem, patrz `_czy_cp`. „Czyste Powietrze” przestało więc być
 	jedną z przyczyn tego komunikatu.
+
+	Od b68 (chunk B9) cztery nowe rodzaje OZE (Rozbudowa PV/ME, Klimatyzacja,
+	Pompa ciepła, Kocioł) też nigdy tu nie docierają - `volteo_umowa_pdf`
+	odgałęzia je WCZEŚNIEJ do `_blad_wzor_w_przygotowaniu` niżej, patrz
+	`czy_rodzaj_bez_wzoru_umowy`. Bez tego ten komunikat wyliczałby trzy
+	pierwotne rodzaje jako "poprawne", co dla tych czterech byłoby mylące -
+	rodzaj JEST poprawny, po prostu wzoru jeszcze nie ma.
 	"""
 	frappe.throw(
 		_(
@@ -299,6 +307,25 @@ def _blad_rodzaju_umowy_bez_szablonu(rodzaj: str | None) -> NoReturn:
 			"Fotowoltaika, Fotowoltaika + Magazyn, Magazyn energii — dopiero wtedy "
 			"można wygenerować PDF umowy."
 		)
+	)
+
+
+def _blad_wzor_w_przygotowaniu(rodzaj: str | None) -> NoReturn:
+	"""Rodzaj umowy szansy jest jednym z czterech nowych rodzajów OZE (b68, chunk
+	B3/B9: Rozbudowa PV/ME, Klimatyzacja, Pompa ciepła, Kocioł) - prawnik
+	przygotowuje wzór PDF-u umowy dla nich w osobnej fazie, jeszcze nie istnieje
+	(decyzja właściciela 2026-10-04). To oczekiwany, tymczasowy stan projektu,
+	NIE błąd danych szansy (rodzaj jest poprawny) ani awaria wdrożenia, więc
+	celowo NIE loguje przez `frappe.log_error` - kontrast z
+	`_blad_rodzaju_umowy_bez_szablonu` (rodzaj pusty/nierozpoznany) i
+	`_blad_brakujacego_szablonu` (wdrożenie, plik szablonu nie wczytał się z
+	dysku) wyżej/niżej.
+	"""
+	frappe.throw(
+		_('Wzór umowy dla rodzaju „{0}” jest w przygotowaniu. PDF umowy nie jest jeszcze dostępny.').format(
+			rodzaj
+		),
+		title=_("Wzór umowy w przygotowaniu"),
 	)
 
 
@@ -989,6 +1016,16 @@ def volteo_umowa_pdf(deal: str) -> dict[str, Any]:
 	niewypełniony, poniżej) i od braku/uszkodzenia samego pliku szablonu na
 	dysku (awaria wdrożenia, `_blad_brakujacego_szablonu`) - trzy różne
 	przyczyny, trzy różne, jednoznaczne komunikaty dla użytkownika.
+
+	Od b68 (chunk B9) dochodzi czwarta przyczyna, dla czterech nowych rodzajów
+	OZE (Rozbudowa PV/ME, Klimatyzacja, Pompa ciepła, Kocioł, patrz
+	`crm.volteo_umowa.RODZAJE_NOWE`): rodzaj jest poprawny i rozpoznany, tylko
+	prawnik jeszcze nie dostarczył dla niego wzoru PDF-u - sprawdzane PRZED
+	`kod`/`SZABLONY` niżej (`czy_rodzaj_bez_wzoru_umowy`), żeby nie wpaść do
+	`_blad_rodzaju_umowy_bez_szablonu`, którego komunikat sugerowałby błędnie,
+	że te cztery rodzaje same w sobie są nieprawidłowe. Formularz „Informacje do
+	umowy" (`volteo_umowa_get/create/save` wyżej) te cztery rodzaje przyjmuje bez
+	żadnej zmiany - blokowany jest wyłącznie ten, ostatni krok, generowanie PDF-u.
 	"""
 	_sprawdz_role()
 	_sprawdz_dostep_do_szansy(deal, "write")
@@ -1018,6 +1055,15 @@ def volteo_umowa_pdf(deal: str) -> dict[str, Any]:
 		return _volteo_umowa_pdf_cp(deal, deal_doc, umowa_doc)
 
 	rodzaj_umowy = deal_doc.get("custom_rodzaj_umowy")
+
+	# b68 (chunk B9): cztery nowe rodzaje OZE mają rodzaj POPRAWNY (rozpoznany,
+	# `code_for` zwraca prawdziwy kod ROZ/KL/PC/PP, nie `XX`), tylko brak im
+	# jeszcze wzoru PDF-u - sprawdzane PRZED `code_for`/`SZABLONY` niżej, żeby
+	# nie wpaść do `_blad_rodzaju_umowy_bez_szablonu` i jego mylącej dla tego
+	# przypadku listy trzech pierwotnych rodzajów PV/magazyn.
+	if czy_rodzaj_bez_wzoru_umowy(rodzaj_umowy):
+		_blad_wzor_w_przygotowaniu(rodzaj_umowy)
+
 	kod = code_for(rodzaj_umowy)
 	if kod not in SZABLONY:
 		_blad_rodzaju_umowy_bez_szablonu(rodzaj_umowy)

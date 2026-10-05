@@ -4,9 +4,11 @@ from decimal import Decimal
 from crm.volteo_umowa import (
 	KONSTRUKCJA_MONTAZ,
 	PROG_PPOZ_KW,
+	RODZAJE_NOWE,
 	brakujace_dane_klienta,
 	brakujace_pola,
 	czy_propagowac_zgody,
+	czy_rodzaj_bez_wzoru_umowy,
 	czy_umowa_podwojna,
 	kod_szablonu,
 	kontakty_do_zgod,
@@ -593,6 +595,56 @@ class TestKontaktyDoZgod(unittest.TestCase):
 		kontakty_do_zgod(podstawowy, drugi)
 		self.assertEqual(podstawowy, "CONT-0001")
 		self.assertEqual(drugi, "CONT-0002")
+
+
+class TestCzyRodzajBezWzoruUmowy(unittest.TestCase):
+	"""b68 (chunk B9): cztery nowe rodzaje OZE (Rozbudowa PV/ME, Klimatyzacja,
+	Pompa ciepła, Kocioł) nie mają jeszcze wzoru PDF-u umowy - prawnik dostarczy
+	je w osobnej fazie."""
+
+	def test_a_rozbudowa_pv_me(self: "TestCzyRodzajBezWzoruUmowy") -> None:
+		self.assertTrue(czy_rodzaj_bez_wzoru_umowy("Rozbudowa PV/ME"))
+
+	def test_b_klimatyzacja(self: "TestCzyRodzajBezWzoruUmowy") -> None:
+		self.assertTrue(czy_rodzaj_bez_wzoru_umowy("Klimatyzacja"))
+
+	def test_c_pompa_ciepla(self: "TestCzyRodzajBezWzoruUmowy") -> None:
+		self.assertTrue(czy_rodzaj_bez_wzoru_umowy("Pompa ciepła"))
+
+	def test_d_kociol(self: "TestCzyRodzajBezWzoruUmowy") -> None:
+		self.assertTrue(czy_rodzaj_bez_wzoru_umowy("Kocioł"))
+
+	def test_e_fotowoltaika_ma_wzor(self: "TestCzyRodzajBezWzoruUmowy") -> None:
+		self.assertFalse(czy_rodzaj_bez_wzoru_umowy("Fotowoltaika"))
+
+	def test_f_fotowoltaika_plus_magazyn_ma_wzor(self: "TestCzyRodzajBezWzoruUmowy") -> None:
+		self.assertFalse(czy_rodzaj_bez_wzoru_umowy("Fotowoltaika + Magazyn"))
+
+	def test_g_magazyn_energii_ma_wzor(self: "TestCzyRodzajBezWzoruUmowy") -> None:
+		self.assertFalse(czy_rodzaj_bez_wzoru_umowy("Magazyn energii"))
+
+	def test_h_czyste_powietrze_nie_jest_tutaj_obslugiwany(self: "TestCzyRodzajBezWzoruUmowy") -> None:
+		# Czyste Powietrze ma WŁASNY szablon (ops#212, `_volteo_umowa_pdf_cp`) i
+		# nigdy nie dociera do tej funkcji w `crm/api/umowa.py` - sprawdzone tu
+		# wyłącznie jako dokumentacja granicy: ten rodzaj nie należy do
+		# `RODZAJE_NOWE`, więc ta funkcja zwróciłaby `False`, gdyby ktoś jednak
+		# ją wywołał.
+		self.assertFalse(czy_rodzaj_bez_wzoru_umowy("Czyste Powietrze"))
+
+	def test_i_nieznany_rodzaj(self: "TestCzyRodzajBezWzoruUmowy") -> None:
+		self.assertFalse(czy_rodzaj_bez_wzoru_umowy("cokolwiek nierozpoznanego"))
+
+	def test_j_pusty_rodzaj(self: "TestCzyRodzajBezWzoruUmowy") -> None:
+		self.assertFalse(czy_rodzaj_bez_wzoru_umowy(""))
+
+	def test_k_none(self: "TestCzyRodzajBezWzoruUmowy") -> None:
+		self.assertFalse(czy_rodzaj_bez_wzoru_umowy(None))
+
+	def test_l_rodzaje_nowe_ma_dokladnie_cztery_wpisy(self: "TestCzyRodzajBezWzoruUmowy") -> None:
+		self.assertEqual(
+			RODZAJE_NOWE,
+			frozenset({"Rozbudowa PV/ME", "Klimatyzacja", "Pompa ciepła", "Kocioł"}),
+		)
 
 
 class TestKodSzablonu(unittest.TestCase):
