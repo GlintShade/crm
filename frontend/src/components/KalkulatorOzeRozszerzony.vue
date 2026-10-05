@@ -229,9 +229,12 @@
 
                   <div class="mt-3">
                     <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Moc pompy ciepła (dobrana automatycznie)') }}</div>
-                    <input v-if="!pcBrakDoboruLive" :value="mocPcLiveLabel" type="text" class="kalk-input" disabled />
+                    <input v-if="!pcBrakDoboruLive && !bladDoboruSerwer" :value="mocPcLiveLabel" type="text" class="kalk-input" disabled />
+                    <!-- `bladDoboruSerwer` to druga linia obrony (patrz komentarz przy
+                    `runCalc` w <script>) -- komunikat serwera, gdy ten kiedykolwiek
+                    znajdzie "Brak doboru" mimo ze lokalny `pcBrakDoboruLive` byl `false`. -->
                     <div v-else class="rounded-md border border-outline-amber-3 bg-surface-amber-2 px-2.5 py-2 text-sm text-ink-amber-8">
-                      {{ __('Brak doboru pompy ciepła dla podanego zapotrzebowania. Najpierw ocieplenie budynku.') }}
+                      {{ bladDoboruSerwer || __('Brak doboru pompy ciepła dla podanego zapotrzebowania. Najpierw ocieplenie budynku.') }}
                     </div>
                   </div>
 
@@ -422,8 +425,8 @@
                 @click="runCreateDeal"
               >{{ generating ? __('Generuję ofertę…') : __('Generuj ofertę') }}</Button>
 
-              <div v-if="!contactSelected" class="mt-1 text-center text-xs text-ink-red-6">
-                {{ __('Wybierz klienta, aby wygenerować ofertę.') }}
+              <div v-if="powodBlokadyGeneracji" class="mt-1 text-center text-xs text-ink-red-6">
+                {{ powodBlokadyGeneracji }}
               </div>
 
               <div v-if="hasInternal" class="mt-2.5">
@@ -750,9 +753,29 @@ const wewnetrzneGrupy = computed(() => grupujWewnetrzneOze(result.wewnetrzne))
 
 const c = computed(() => props.contact || {})
 const contactSelected = computed(() => Boolean(c.value.name))
+// Serwer jako druga linia obrony (patrz komentarz przy `runCalc` nizej) --
+// gdy mimo lokalnego wykrycia brak doboru przeszedl przez `runCalc` i
+// serwer i tak zwrocil "Brak doboru", blokuje generowanie tak samo jak
+// `pcBrakDoboruLive`.
+const bladDoboruSerwer = ref('')
+const pcBlokadaDoboru = computed(() => pcBrakDoboruLive.value || Boolean(bladDoboruSerwer.value))
 const canGenerate = computed(
-  () => result.linie.length > 0 && contactSelected.value && narzutValid.value && !pcBrakDoboruLive.value,
+  () => result.linie.length > 0 && contactSelected.value && narzutValid.value && !pcBlokadaDoboru.value,
 )
+
+// Komunikat powodu blokady pod przyciskiem "Generuj ofertę" -- "Brak
+// doboru" ma priorytet przed "Wybierz klienta", bo bez doboru mocy
+// formularz jest i tak niepoliczalny niezaleznie od tego, czy klient jest
+// juz wybrany (klik-test 2026-10-05).
+const powodBlokadyGeneracji = computed(() => {
+  if (form.rodzaj === OZE_POMPA_CIEPLA && pcBlokadaDoboru.value) {
+    return __('Brak doboru pompy ciepła dla podanego zapotrzebowania. Wybierz inne parametry.')
+  }
+  if (!contactSelected.value) {
+    return __('Wybierz klienta, aby wygenerować ofertę.')
+  }
+  return ''
+})
 
 function clearResult() {
   result.netto = 0; result.vat = 0; result.vat_rate = 0; result.brutto = 0; result.narzut = 0
@@ -803,6 +826,7 @@ watch(
   form,
   () => {
     errorMsg.value = ''
+    bladDoboruSerwer.value = ''
     if (calcTimer) clearTimeout(calcTimer)
     calcTimer = setTimeout(runCalc, 350)
   },
@@ -812,6 +836,17 @@ watch(
 async function runCalc() {
   const request = ++calcRequest
   if (!kompletnyFormOze(form) || loading.value) {
+    clearResult()
+    return
+  }
+  // Pompa ciepła: "Brak doboru" jest wykrywalne lokalnie, tym samym
+  // doborem co serwer (`dobierzMocPc`/`brakDoboru` w utils/ozeForm.js) --
+  // nie wysylaj wtedy volteo_oze_calc. Bez tej bramki serwer i tak
+  // zwrocilby `frappe.throw` (HTTP 417) i pokazalby czerwony baner u gory
+  // strony DUBLUJACY to samo ostrzezenie, ktore juz stoi przy polu "Moc
+  // pompy cieplej" (klik-test 2026-10-05,
+  // shots/chromium-d2d-1f-pc-brak-doboru.png).
+  if (form.rodzaj === OZE_POMPA_CIEPLA && pcBrakDoboruLive.value) {
     clearResult()
     return
   }
@@ -839,7 +874,17 @@ async function runCalc() {
   } catch (err) {
     if (request !== calcRequest) return
     clearResult()
-    errorMsg.value = extractErrorMessage(err)
+    const msg = extractErrorMessage(err)
+    // Druga linia obrony: gdyby serwer mimo lokalnej bramki wyzej zwrocil
+    // "Brak doboru" (np. katalog pozycji rozjechal sie z lokalnym mirror'em
+    // `dobierzMocPc`), pokaz go WYLACZNIE przy polu "Moc pompy cieplej"
+    // (szablon, blok `bladDoboruSerwer`), nigdy jako czerwony baner u gory
+    // strony.
+    if (msg.includes('Brak doboru')) {
+      bladDoboruSerwer.value = msg
+    } else {
+      errorMsg.value = msg
+    }
   }
 }
 
