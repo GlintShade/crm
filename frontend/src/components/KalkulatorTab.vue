@@ -241,6 +241,183 @@
                 </div>
               </div>
             </div>
+
+            <!-- Opcje dodatkowe do istniejącego zestawu PV / PV+ME / ME
+                 (ops#225). Stopniowe odsłanianie: każdy wiersz pokazuje
+                 wyłącznie nazwę i włącznik Tak/Nie, a jego szczegółowe
+                 opcje renderują się dopiero po włączeniu. Karta znika
+                 całkowicie, gdy żaden dodatek nie jest dostępny dla
+                 bieżącej konfiguracji. -->
+            <div v-if="anyDodatkiAvailable" class="kalk-part">
+              <div class="kalk-part-heading mb-4 flex items-center gap-2 border-b border-outline-gray-1 pb-2.5 text-lg font-bold text-ink-gray-9">
+                <span class="kalk-part-number">5</span>Opcje dodatkowe
+              </div>
+
+              <div class="flex flex-col gap-3">
+                <div v-if="klimaDostepnaNow">
+                  <div class="flex items-center justify-between gap-2">
+                    <div class="text-sm font-medium text-ink-gray-7">Klimatyzacja</div>
+                    <div class="flex gap-1.5">
+                      <button
+                        type="button"
+                        class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
+                        :class="!dodatkiUi.klimaOn ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base' : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
+                        @click="dodatkiUi.klimaOn = false"
+                      >Nie</button>
+                      <button
+                        type="button"
+                        class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
+                        :class="dodatkiUi.klimaOn ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base' : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
+                        @click="dodatkiUi.klimaOn = true"
+                      >Tak</button>
+                    </div>
+                  </div>
+                  <div v-if="dodatkiUi.klimaOn" class="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-2">
+                    <div>
+                      <div class="mb-0.5 text-sm text-ink-gray-5">Rodzaj</div>
+                      <select v-model="dodatkiUi.klimaRodzaj" class="kalk-select">
+                        <option value="">-- wybierz --</option>
+                        <option v-for="r in RODZAJE_KLIMY_DODATKU" :key="r.value" :value="r.value">{{ r.label }}</option>
+                      </select>
+                    </div>
+                    <div v-if="dodatkiUi.klimaRodzaj">
+                      <div class="mb-0.5 text-sm text-ink-gray-5">Moc</div>
+                      <select v-model="sel.dodatki.klimaKod" class="kalk-select">
+                        <option value="">-- wybierz --</option>
+                        <option v-for="o in moceKlimyOptions" :key="o.kod" :value="o.kod">{{ o.label }}<template v-if="o.cena > 0"> · +{{ formatPln(o.cena) }} netto</template></option>
+                      </select>
+                      <div class="mt-0.5 text-xs text-ink-gray-4">Model: Rotenso {{ modelKlimyLabel }} (dobrany automatycznie)</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-if="paneleDostepneNow">
+                  <div class="flex items-center justify-between gap-2">
+                    <div class="text-sm font-medium text-ink-gray-7">Panele PV</div>
+                    <div class="flex gap-1.5">
+                      <button
+                        type="button"
+                        class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
+                        :class="!dodatkiUi.paneleOn ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base' : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
+                        @click="dodatkiUi.paneleOn = false"
+                      >Nie</button>
+                      <button
+                        type="button"
+                        class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
+                        :class="dodatkiUi.paneleOn ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base' : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
+                        @click="dodatkiUi.paneleOn = true"
+                      >Tak</button>
+                    </div>
+                  </div>
+                  <div v-if="dodatkiUi.paneleOn" class="mt-1.5">
+                    <div class="mb-0.5 text-sm text-ink-gray-5">Ilość</div>
+                    <select v-model.number="sel.dodatki.panele" class="kalk-select">
+                      <option :value="0">-- wybierz --</option>
+                      <option v-for="o in paneleDodatekOptions" :key="o.kod" :value="o.ilosc">{{ o.ilosc }} szt. · +{{ formatPln(o.cena) }} netto</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div v-if="paneleDostepneNow">
+                  <div class="flex items-center justify-between gap-2">
+                    <div class="text-sm font-medium text-ink-gray-7">Panele PV + mikro</div>
+                    <div class="flex gap-1.5">
+                      <button
+                        type="button"
+                        class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
+                        :class="!dodatkiUi.paneleMikroOn ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base' : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
+                        @click="dodatkiUi.paneleMikroOn = false"
+                      >Nie</button>
+                      <button
+                        type="button"
+                        class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
+                        :class="dodatkiUi.paneleMikroOn ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base' : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
+                        @click="dodatkiUi.paneleMikroOn = true"
+                      >Tak</button>
+                    </div>
+                  </div>
+                  <div v-if="dodatkiUi.paneleMikroOn" class="mt-1.5">
+                    <div class="mb-0.5 text-sm text-ink-gray-5">Ilość</div>
+                    <select v-model.number="sel.dodatki.paneleMikro" class="kalk-select">
+                      <option :value="0">-- wybierz --</option>
+                      <option v-for="o in paneleMikroDodatekOptions" :key="o.kod" :value="o.ilosc">{{ o.ilosc }} szt. · +{{ formatPln(o.cena) }} netto</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div v-if="emsDostepnyNow">
+                  <div class="flex items-center justify-between gap-2">
+                    <div class="text-sm font-medium text-ink-gray-7">EMS Breeze<span v-if="emsCena > 0"> · +{{ formatPln(emsCena) }} netto</span></div>
+                    <div class="flex gap-1.5">
+                      <button
+                        type="button"
+                        class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
+                        :class="!dodatkiUi.emsOn ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base' : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
+                        @click="dodatkiUi.emsOn = false"
+                      >Nie</button>
+                      <button
+                        type="button"
+                        class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
+                        :class="dodatkiUi.emsOn ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base' : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
+                        @click="dodatkiUi.emsOn = true"
+                      >Tak</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-if="pstrykDostepnyNow">
+                  <div class="flex items-center justify-between gap-2">
+                    <div class="text-sm font-medium text-ink-gray-7">Licznik Pstryk</div>
+                    <div class="flex gap-1.5">
+                      <button
+                        type="button"
+                        class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
+                        :class="!dodatkiUi.pstrykOn ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base' : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
+                        @click="dodatkiUi.pstrykOn = false"
+                      >Nie</button>
+                      <button
+                        type="button"
+                        class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
+                        :class="dodatkiUi.pstrykOn ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base' : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
+                        @click="dodatkiUi.pstrykOn = true"
+                      >Tak</button>
+                    </div>
+                  </div>
+                  <div class="mt-0.5 text-xs text-ink-gray-4">bez dopłaty, do zamówienia</div>
+                </div>
+
+                <div v-if="evDostepneNow">
+                  <div class="flex items-center justify-between gap-2">
+                    <div class="text-sm font-medium text-ink-gray-7">Ładowarka EV</div>
+                    <div class="flex gap-1.5">
+                      <button
+                        type="button"
+                        class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
+                        :class="!dodatkiUi.evOn ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base' : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
+                        @click="dodatkiUi.evOn = false"
+                      >Nie</button>
+                      <button
+                        type="button"
+                        class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
+                        :class="dodatkiUi.evOn ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base' : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
+                        @click="dodatkiUi.evOn = true"
+                      >Tak</button>
+                    </div>
+                  </div>
+                  <div v-if="dodatkiUi.evOn" class="mt-1.5">
+                    <div class="mb-0.5 text-sm text-ink-gray-5">Typ</div>
+                    <select v-model="sel.dodatki.evKod" class="kalk-select">
+                      <option value="">-- wybierz --</option>
+                      <option v-for="o in evOpcjeList" :key="o.kod" :value="o.kod">{{ o.nazwa }}<template v-if="o.cena > 0"> · +{{ formatPln(o.cena) }} netto</template></option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="summary.dodatki_netto > 0" class="mt-3 flex justify-between border-t border-outline-gray-1 pt-2 text-sm font-medium tabular-nums text-ink-gray-8">
+                <span>Dodatki razem</span><span>+{{ formatPln(summary.dodatki_netto) }} netto</span>
+              </div>
+            </div>
           </div>
 
           <div class="kalk-output border-l border-outline-gray-2 pl-5">
@@ -390,6 +567,16 @@ import {
   pickMounting,
   ppozWymagane,
   ppozWymuszonyProgiem,
+  RODZAJE_KLIMY_DODATKU,
+  klimaDodatekDostepna,
+  dodatekPaneleDostepny,
+  emsDostepny,
+  pstrykDostepny,
+  evDostepne,
+  moceDodatkuKlimy,
+  modelDlaRodzajuKlimy,
+  evOpcje,
+  sanitizujDodatki,
 } from '@/utils/pvForm'
 import { formatPln } from '@/utils/money'
 import { grupujBreakdown } from '@/utils/pvBreakdown'
@@ -450,6 +637,30 @@ const sel = reactive({
   kierunek: '',
   consumption: null,
   zasadyDotacji: 'Nowe zasady',
+  // Opcje dodatkowe (ops#225): payload wysyłany do serwera. Wszystko
+  // wyłączone na starcie (decyzja właściciela 2026-10-05, dotyczy też EMS
+  // Breeze) - sanitizujDodatki poniżej tylko zeruje, nigdy nie włącza.
+  dodatki: {
+    klimaKod: '',
+    panele: 0,
+    paneleMikro: 0,
+    emsBreeze: 'Nie',
+    pstryk: 'Nie',
+    evKod: '',
+  },
+})
+
+// Stan włączników/pośrednich wyborów karty "Opcje dodatkowe" - WYŁĄCZNIE UI,
+// nigdy nie trafia do payloadu. "Rodzaj" klimatyzacji jest pośrednim krokiem
+// (rodzaj -> model -> moc), więc nie ma odpowiednika w sel.dodatki.
+const dodatkiUi = reactive({
+  klimaOn: false,
+  klimaRodzaj: '',
+  paneleOn: false,
+  paneleMikroOn: false,
+  emsOn: false,
+  pstrykOn: false,
+  evOn: false,
 })
 
 const hasPv = computed(() => variantHasPv(sel.variant))
@@ -489,6 +700,11 @@ watch(
 
 // --- Catalog (names + non-secret tags only — no prices ever fetched) -------
 const catMap = reactive({})
+// Katalog dodatków (ops#225): data.dodatki z volteo_quote_components, każda
+// pozycja niesie już gotową klientowi "cena" (patrz komentarz w pvForm.js) -
+// to jedyne miejsce w tym pliku, gdzie ceny przychodzą z serwera dla
+// wyświetlenia, nie są tu liczone.
+const dodatkiCatalog = ref([])
 function byKat(kat) {
   return catMap[kat] || []
 }
@@ -521,6 +737,9 @@ async function loadComponents() {
     // display in the label only. 0 or missing means unknown; the server
     // remains authoritative and computes the actual amount at calc (ops#194).
     ppozCena.value = Number(data && data.ppoz) || 0
+    // dodatki: katalog dodatków PV/PV+ME/ME (ops#225), patrz komentarz przy
+    // deklaracji dodatkiCatalog powyżej.
+    dodatkiCatalog.value = (data && data.dodatki) || []
   } catch (err) {
     errorMsg.value = extractErrorMessage(err)
   }
@@ -533,6 +752,106 @@ const konstrukcjaOptions = computed(() => byKat('Konstrukcja'))
 const operatorOptions = computed(() => byKat('Operator'))
 const kierunekOptions = computed(() => byKat('Kierunek montazu'))
 const panelOptions = computed(() => byKat('Panel PV'))
+
+// --- Opcje dodatkowe (ops#225) -----------------------------------------------
+// Typ falownika Sigenergy ("TP2"/"AIO") - steruje dostępnością ładowarki EV
+// DC (wyłącznie AIO) w evOpcje() poniżej.
+const sigenTyp = computed(() => falownikOptions.value.find((c) => c.name === sel.falownik)?.sigen_typ || '')
+
+const klimaDostepnaNow = computed(() => klimaDodatekDostepna(sel.variant))
+const paneleDostepneNow = computed(() => dodatekPaneleDostepny(sel.variant))
+const emsDostepnyNow = computed(() => emsDostepny({ producent: sel.producent, variant: sel.variant }))
+const pstrykDostepnyNow = computed(() => pstrykDostepny({ producent: sel.producent, variant: sel.variant }))
+const evDostepneNow = computed(() => evDostepne({ producent: sel.producent, variant: sel.variant }))
+const anyDodatkiAvailable = computed(() =>
+  klimaDostepnaNow.value || paneleDostepneNow.value || emsDostepnyNow.value || pstrykDostepnyNow.value || evDostepneNow.value,
+)
+
+const modelKlimyLabel = computed(() => modelDlaRodzajuKlimy(dodatkiUi.klimaRodzaj))
+const moceKlimyOptions = computed(() => moceDodatkuKlimy(dodatkiCatalog.value, dodatkiUi.klimaRodzaj))
+const paneleDodatekOptions = computed(() =>
+  dodatkiCatalog.value.filter((d) => d.grupa === 'dod_panele').sort((a, b) => a.ilosc - b.ilosc),
+)
+const paneleMikroDodatekOptions = computed(() =>
+  dodatkiCatalog.value.filter((d) => d.grupa === 'dod_panele_mikro').sort((a, b) => a.ilosc - b.ilosc),
+)
+const emsCena = computed(() => dodatkiCatalog.value.find((d) => d.kod === 'ems_breeze')?.cena || 0)
+const evOpcjeList = computed(() =>
+  evOpcje(dodatkiCatalog.value, { producent: sel.producent, variant: sel.variant, sigenTyp: sigenTyp.value }),
+)
+
+// Wyłączenie wiersza czyści jego wybory (decyzja z briefu F2); EMS Breeze /
+// Pstryk to proste włączniki bez dalszych pod-wyborów, więc ich sel.dodatki
+// jest bezpośrednio zwierciadłem toggle'a Tak/Nie.
+watch(
+  () => dodatkiUi.klimaOn,
+  (on) => {
+    if (!on) {
+      dodatkiUi.klimaRodzaj = ''
+      sel.dodatki.klimaKod = ''
+    }
+  },
+)
+watch(
+  () => dodatkiUi.klimaRodzaj,
+  () => {
+    // Zmiana rodzaju unieważnia wcześniej wybraną moc - wymusza ponowny wybór.
+    sel.dodatki.klimaKod = ''
+  },
+)
+watch(
+  () => dodatkiUi.paneleOn,
+  (on) => {
+    if (!on) sel.dodatki.panele = 0
+  },
+)
+watch(
+  () => dodatkiUi.paneleMikroOn,
+  (on) => {
+    if (!on) sel.dodatki.paneleMikro = 0
+  },
+)
+watch(
+  () => dodatkiUi.emsOn,
+  (on) => {
+    sel.dodatki.emsBreeze = on ? 'Tak' : 'Nie'
+  },
+)
+watch(
+  () => dodatkiUi.pstrykOn,
+  (on) => {
+    sel.dodatki.pstryk = on ? 'Tak' : 'Nie'
+  },
+)
+watch(
+  () => dodatkiUi.evOn,
+  (on) => {
+    if (!on) sel.dodatki.evKod = ''
+  },
+)
+
+// Sanityzacja dodatków na zmianę wariantu/producenta/falownika (sigenTyp
+// pochodzi z falownika) - sel.dodatki.* jest tylko zerowane, nigdy włączane
+// (sanitizujDodatki w pvForm.js); tu dodatkowo synchronizujemy włączniki UI
+// z tą samą dostępnością, żeby wiersz nie zostawał "włączony" bez wyboru.
+watch(
+  () => [sel.variant, sel.producent, sel.falownik],
+  () => {
+    sel.dodatki = sanitizujDodatki(sel.dodatki, {
+      variant: sel.variant,
+      producent: sel.producent,
+      sigenTyp: sigenTyp.value,
+    })
+    if (!klimaDostepnaNow.value) dodatkiUi.klimaOn = false
+    if (!paneleDostepneNow.value) {
+      dodatkiUi.paneleOn = false
+      dodatkiUi.paneleMikroOn = false
+    }
+    if (!emsDostepnyNow.value) dodatkiUi.emsOn = false
+    if (!pstrykDostepnyNow.value) dodatkiUi.pstrykOn = false
+    if (!evDostepneNow.value) dodatkiUi.evOn = false
+  },
+)
 
 function panelMocWp(panelName) {
   const p = panelOptions.value.find((x) => x.name === panelName)
@@ -678,6 +997,11 @@ const summary = reactive({
   // "" before the first calc response), used to lock sel.ppozRecznie on Tak
   // (ops#194).
   ppoz_prog: '',
+  // ops#225: wybór dodatków echowany z powrotem przez serwer (po
+  // neutralizacji) i ich łączna cena netto. Wyłącznie do wyświetlenia -
+  // sel.dodatki pozostaje źródłem prawdy dla payloadu.
+  dodatki: { klima: '', panele: 0, panele_mikro: 0, ems_breeze: 'Nie', pstryk: 'Nie', ev_ladowarka: '' },
+  dodatki_netto: 0,
 })
 const grupyBreakdown = computed(() => grupujBreakdown(summary.breakdown))
 
@@ -795,6 +1119,15 @@ function buildCalcPayload() {
     wplata_wlasna: Number(sel.wplataWlasna) || 0,
     narzut: Number(sel.narzut) || 0,
     zasady_dotacji: sel.zasadyDotacji,
+    // ops#225: opcje dodatkowe PV/PV+ME/ME - serwer neutralizuje wybory
+    // niedostępne dla bieżącej konfiguracji, front tylko ukrywa je wcześniej
+    // (sanitizujDodatki, watcher [variant, producent, falownik] powyżej).
+    dod_klima: sel.dodatki.klimaKod || '',
+    dod_panele: Number(sel.dodatki.panele) || 0,
+    dod_panele_mikro: Number(sel.dodatki.paneleMikro) || 0,
+    ems_breeze: sel.dodatki.emsBreeze,
+    pstryk: sel.dodatki.pstryk,
+    ev_ladowarka: sel.dodatki.evKod || '',
   }
 }
 
@@ -807,6 +1140,8 @@ function clearSummary() {
   summary.breakdown = null
   summary.ppoz = ''
   summary.ppoz_prog = ''
+  summary.dodatki = { klima: '', panele: 0, panele_mikro: 0, ems_breeze: 'Nie', pstryk: 'Nie', ev_ladowarka: '' }
+  summary.dodatki_netto = 0
 }
 
 // --- Live pricing (server-side; debounced) ----------------------------------
@@ -817,6 +1152,8 @@ watch(
     sel.panel, sel.mocPvKw, sel.konstrukcja, sel.kabelM, sel.spoldzielnia, sel.licznik, sel.ulgaPct,
     sel.okresLat, sel.wplataWlasna, sel.narzut, sel.zasadyDotacji,
     sel.istniejacaPv, sel.istniejacaPvMocKwp, sel.ppozRecznie,
+    sel.dodatki.klimaKod, sel.dodatki.panele, sel.dodatki.paneleMikro,
+    sel.dodatki.emsBreeze, sel.dodatki.pstryk, sel.dodatki.evKod,
   ],
   () => {
     if (calcTimer) clearTimeout(calcTimer)
@@ -848,6 +1185,8 @@ async function runCalc() {
     summary.breakdown = data.is_admin ? data.breakdown || null : null
     summary.ppoz = data.ppoz || ''
     summary.ppoz_prog = data.ppoz_prog || ''
+    summary.dodatki = data.dodatki || { klima: '', panele: 0, panele_mikro: 0, ems_breeze: 'Nie', pstryk: 'Nie', ev_ladowarka: '' }
+    summary.dodatki_netto = data.dodatki_netto || 0
   } catch (err) {
     clearSummary()
     errorMsg.value = extractErrorMessage(err)

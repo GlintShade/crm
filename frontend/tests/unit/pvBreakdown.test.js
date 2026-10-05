@@ -14,43 +14,78 @@ const pelnyBreakdown = {
   k_kabel: 1100,
   k_licznik: 150,
   k_ppoz: 250,
+  // ops#225: koszty + marże opcji dodatkowych PV/PV+ME/ME.
+  k_dod_klima: 2900,
+  m_dod_klima: 2000,
+  k_dod_panele: 2100,
+  m_dod_panele: 1500,
+  k_dod_panele_mikro: 2600,
+  m_dod_panele_mikro: 1500,
+  k_ems_breeze: 1250,
+  m_ems_breeze: 250,
+  k_ev: 2100,
+  m_ev: 1000,
   marza_proenergy: 1200,
   marza_sps: 1300,
   bonus_liderki: 1400,
   net_base: 99999,
 }
 
-const kluczeGrup = ['hurtownia', 'montaz', 'marze']
+const kluczeGrup = ['hurtownia', 'montaz', 'dodatki', 'marze']
 const kluczePozycji = [
   ['k_falownik', 'k_bateria', 'k_panele', 'k_konstrukcja', 'k_sterownik', 'k_spoldzielnia'],
   ['kilometrowka', 'k_montaz_pv', 'k_montaz_mag', 'k_akcesoria', 'k_kabel', 'k_licznik', 'k_ppoz'],
-  ['marza_proenergy', 'marza_sps', 'bonus_liderki'],
+  ['k_dod_klima', 'k_dod_panele', 'k_dod_panele_mikro', 'k_ems_breeze', 'k_ev'],
+  ['marza_proenergy', 'marza_sps', 'bonus_liderki', 'marza_dodatki'],
 ]
+
+// Suma m_dod_* - jedyna pozycja (marza_dodatki) liczona przez grupujBreakdown
+// jako SUMA kilku pól wejścia, nie odczyt jednego klucza wprost.
+const SUMA_MARZA_DODATKI = 2000 + 1500 + 1500 + 250 + 1000
 
 function wszystkiePozycje(grupy) {
   return grupy.flatMap((grupa) => grupa.pozycje)
 }
 
 describe('grupujBreakdown', () => {
-  it('buduje trzy grupy i zachowuje kolejność pozycji oraz sumy', () => {
+  it('buduje cztery grupy i zachowuje kolejność pozycji oraz sumy', () => {
     const grupy = grupujBreakdown(pelnyBreakdown)
 
     expect(grupy.map((grupa) => grupa.klucz)).toEqual(kluczeGrup)
     expect(grupy.map((grupa) => grupa.pozycje.map((pozycja) => pozycja.klucz))).toEqual(kluczePozycji)
-    expect(grupy.map((grupa) => grupa.suma)).toEqual([2100, 4900, 3900])
+    expect(grupy.map((grupa) => grupa.suma)).toEqual([2100, 4900, 10950, 3900 + SUMA_MARZA_DODATKI])
     expect(wszystkiePozycje(grupy).map((pozycja) => pozycja.kwota)).toEqual([
-      100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 150, 250, 1200, 1300, 1400,
+      100, 200, 300, 400, 500, 600,
+      700, 800, 900, 1000, 1100, 150, 250,
+      2900, 2100, 2600, 1250, 2100,
+      1200, 1300, 1400, SUMA_MARZA_DODATKI,
     ])
   })
 
-  it('suma grup obejmuje dokładnie 16 wartości, bez net_base', () => {
+  it('suma grup obejmuje dokładnie 22 pozycje (16 bazowych + 5 dodatków + marza_dodatki), bez net_base', () => {
     const grupy = grupujBreakdown(pelnyBreakdown)
     const sumaWejscia = Object.entries(pelnyBreakdown)
       .filter(([klucz]) => klucz !== 'net_base')
       .reduce((suma, [, kwota]) => suma + kwota, 0)
 
     expect(grupy.reduce((suma, grupa) => suma + grupa.suma, 0)).toBe(sumaWejscia)
-    expect(wszystkiePozycje(grupy)).toHaveLength(16)
+    expect(wszystkiePozycje(grupy)).toHaveLength(22)
+  })
+
+  it('marza_dodatki sumuje m_dod_klima + m_dod_panele + m_dod_panele_mikro + m_ems_breeze + m_ev', () => {
+    const grupy = grupujBreakdown(pelnyBreakdown)
+    const marzaDodatki = grupy[3].pozycje.find((pozycja) => pozycja.klucz === 'marza_dodatki')
+
+    expect(marzaDodatki.kwota).toBe(SUMA_MARZA_DODATKI)
+  })
+
+  it('traktuje brakujące skladowe marzy dodatkow jako zero, bez rzucania bledu', () => {
+    const grupy = grupujBreakdown({ k_dod_klima: 2900 })
+    const marzaDodatki = grupy[3].pozycje.find((pozycja) => pozycja.klucz === 'marza_dodatki')
+    const kDodKlima = grupy[2].pozycje.find((pozycja) => pozycja.klucz === 'k_dod_klima')
+
+    expect(marzaDodatki.kwota).toBe(0)
+    expect(kDodKlima.kwota).toBe(2900)
   })
 
   it('umieszcza kilometrowke w montazu, a spoldzielnie w hurtowni', () => {

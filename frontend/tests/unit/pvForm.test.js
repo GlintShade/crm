@@ -23,6 +23,20 @@ import {
   PROG_PPOZ_KW,
   ppozWymagane,
   ppozWymuszonyProgiem,
+  RODZAJE_KLIMY_DODATKU,
+  RODZAJ_KLIMY_CHLODZENIE,
+  RODZAJ_KLIMY_DOGRZEWANIE,
+  RODZAJ_KLIMY_GRZANIE,
+  POWIERZCHNIA_KLIMY,
+  modelDlaRodzajuKlimy,
+  klimaDodatekDostepna,
+  dodatekPaneleDostepny,
+  emsDostepny,
+  pstrykDostepny,
+  evDostepne,
+  moceDodatkuKlimy,
+  evOpcje,
+  sanitizujDodatki,
 } from '@/utils/pvForm'
 
 describe('PV form logic', () => {
@@ -376,6 +390,283 @@ describe('PV form logic', () => {
 
     it('ignores the existing power when istniejacaPv is "Nie"', () => {
       expect(ppozWymuszonyProgiem({ mocNowaKw: 3, istniejacaPv: 'Nie', mocIstniejacaKwp: 5 })).toBe(false)
+    })
+  })
+
+  // --- Opcje dodatkowe PV / PV+ME / ME (ops#225) ------------------------
+  describe('RODZAJE_KLIMY_DODATKU / modelDlaRodzajuKlimy', () => {
+    it('exports exactly three rodzaje, each with one fixed model', () => {
+      expect(RODZAJE_KLIMY_DODATKU).toHaveLength(3)
+      expect(RODZAJE_KLIMY_DODATKU.map((r) => r.value)).toEqual([
+        RODZAJ_KLIMY_CHLODZENIE,
+        RODZAJ_KLIMY_DOGRZEWANIE,
+        RODZAJ_KLIMY_GRZANIE,
+      ])
+    })
+
+    it('maps each rodzaj to its model', () => {
+      expect(modelDlaRodzajuKlimy(RODZAJ_KLIMY_CHLODZENIE)).toBe('Elis X')
+      expect(modelDlaRodzajuKlimy(RODZAJ_KLIMY_DOGRZEWANIE)).toBe('Teta X')
+      expect(modelDlaRodzajuKlimy(RODZAJ_KLIMY_GRZANIE)).toBe('Mira X')
+    })
+
+    it('returns an empty string for an unknown rodzaj', () => {
+      expect(modelDlaRodzajuKlimy('')).toBe('')
+      expect(modelDlaRodzajuKlimy('nieznany')).toBe('')
+      expect(modelDlaRodzajuKlimy(undefined)).toBe('')
+    })
+  })
+
+  describe('POWIERZCHNIA_KLIMY', () => {
+    it('has an entry for every catalog power', () => {
+      expect(POWIERZCHNIA_KLIMY['2.6']).toBe('do 25 m2')
+      expect(POWIERZCHNIA_KLIMY['3.5']).toBe('25-40 m2')
+      expect(POWIERZCHNIA_KLIMY['5.1']).toBe('40-55 m2')
+      expect(POWIERZCHNIA_KLIMY['6.8']).toBe('55-75 m2')
+    })
+  })
+
+  describe('klimaDodatekDostepna', () => {
+    it('is available for all three variants', () => {
+      expect(klimaDodatekDostepna(VARIANT_PV)).toBe(true)
+      expect(klimaDodatekDostepna(VARIANT_PV_BAT)).toBe(true)
+      expect(klimaDodatekDostepna(VARIANT_BAT)).toBe(true)
+    })
+
+    it('is false for an unknown variant', () => {
+      expect(klimaDodatekDostepna('')).toBe(false)
+      expect(klimaDodatekDostepna('Cos innego')).toBe(false)
+    })
+  })
+
+  describe('dodatekPaneleDostepny', () => {
+    it('is true only for Magazyn energii', () => {
+      expect(dodatekPaneleDostepny(VARIANT_BAT)).toBe(true)
+    })
+
+    it('is false for PV and PV+Magazyn', () => {
+      expect(dodatekPaneleDostepny(VARIANT_PV)).toBe(false)
+      expect(dodatekPaneleDostepny(VARIANT_PV_BAT)).toBe(false)
+    })
+  })
+
+  describe('emsDostepny', () => {
+    it('is true only for Deye with a battery variant', () => {
+      expect(emsDostepny({ producent: 'Deye', variant: VARIANT_PV_BAT })).toBe(true)
+      expect(emsDostepny({ producent: 'Deye', variant: VARIANT_BAT })).toBe(true)
+    })
+
+    it('is false for Deye without a battery variant', () => {
+      expect(emsDostepny({ producent: 'Deye', variant: VARIANT_PV })).toBe(false)
+    })
+
+    it('is false for other producents', () => {
+      expect(emsDostepny({ producent: 'Sigenergy', variant: VARIANT_PV_BAT })).toBe(false)
+      expect(emsDostepny({ producent: 'FoxESS', variant: VARIANT_PV })).toBe(false)
+    })
+
+    it('handles missing arguments', () => {
+      expect(emsDostepny()).toBe(false)
+      expect(emsDostepny({})).toBe(false)
+    })
+  })
+
+  describe('pstrykDostepny', () => {
+    it('is true only for Sigenergy with a battery variant', () => {
+      expect(pstrykDostepny({ producent: 'Sigenergy', variant: VARIANT_PV_BAT })).toBe(true)
+      expect(pstrykDostepny({ producent: 'Sigenergy', variant: VARIANT_BAT })).toBe(true)
+    })
+
+    it('is false for Sigenergy without a battery variant', () => {
+      expect(pstrykDostepny({ producent: 'Sigenergy', variant: VARIANT_PV })).toBe(false)
+    })
+
+    it('is false for other producents', () => {
+      expect(pstrykDostepny({ producent: 'Deye', variant: VARIANT_PV_BAT })).toBe(false)
+    })
+  })
+
+  describe('evDostepne', () => {
+    it('is true only for Sigenergy with a battery variant', () => {
+      expect(evDostepne({ producent: 'Sigenergy', variant: VARIANT_PV_BAT })).toBe(true)
+      expect(evDostepne({ producent: 'Sigenergy', variant: VARIANT_BAT })).toBe(true)
+    })
+
+    it('is false for Sigenergy without a battery variant', () => {
+      expect(evDostepne({ producent: 'Sigenergy', variant: VARIANT_PV })).toBe(false)
+    })
+
+    it('is false for other producents', () => {
+      expect(evDostepne({ producent: 'Deye', variant: VARIANT_PV_BAT })).toBe(false)
+    })
+  })
+
+  describe('moceDodatkuKlimy', () => {
+    const katalog = [
+      { kod: 'dod_klima_elis_x_2_6', grupa: 'dod_klima', model: 'Elis X', moc_kw: 2.6, cena: 4900 },
+      { kod: 'dod_klima_elis_x_3_5', grupa: 'dod_klima', model: 'Elis X', moc_kw: 3.5, cena: 5000 },
+      { kod: 'dod_klima_elis_x_5_1', grupa: 'dod_klima', model: 'Elis X', moc_kw: 5.1, cena: 5600 },
+      { kod: 'dod_klima_elis_x_6_8', grupa: 'dod_klima', model: 'Elis X', moc_kw: 6.8, cena: 6300 },
+      { kod: 'dod_klima_teta_x_3_5', grupa: 'dod_klima', model: 'Teta X', moc_kw: 3.5, cena: 5400 },
+      { kod: 'dod_klima_teta_x_5_1', grupa: 'dod_klima', model: 'Teta X', moc_kw: 5.1, cena: 6200 },
+      { kod: 'dod_klima_mira_x_3_5', grupa: 'dod_klima', model: 'Mira X', moc_kw: 3.5, cena: 6600 },
+      { kod: 'dod_panele_1', grupa: 'dod_panele', model: '', moc_kw: 0, cena: 3600 },
+    ]
+
+    it('filters by rodzaj -> model and sorts ascending by moc_kw', () => {
+      const opcje = moceDodatkuKlimy(katalog, RODZAJ_KLIMY_CHLODZENIE)
+      expect(opcje.map((o) => o.kod)).toEqual([
+        'dod_klima_elis_x_2_6', 'dod_klima_elis_x_3_5', 'dod_klima_elis_x_5_1', 'dod_klima_elis_x_6_8',
+      ])
+      expect(opcje.map((o) => o.moc_kw)).toEqual([2.6, 3.5, 5.1, 6.8])
+    })
+
+    it('builds the label with the comma decimal and the m2 hint', () => {
+      const opcje = moceDodatkuKlimy(katalog, RODZAJ_KLIMY_DOGRZEWANIE)
+      expect(opcje).toEqual([
+        { kod: 'dod_klima_teta_x_3_5', moc_kw: 3.5, label: '3,5 kW (25-40 m2)', cena: 5400 },
+        { kod: 'dod_klima_teta_x_5_1', moc_kw: 5.1, label: '5,1 kW (40-55 m2)', cena: 6200 },
+      ])
+    })
+
+    it('returns a single option for a rodzaj with one power (Mira X)', () => {
+      const opcje = moceDodatkuKlimy(katalog, RODZAJ_KLIMY_GRZANIE)
+      expect(opcje).toEqual([{ kod: 'dod_klima_mira_x_3_5', moc_kw: 3.5, label: '3,5 kW (25-40 m2)', cena: 6600 }])
+    })
+
+    it('never leaks other grupy (dod_panele) into the result', () => {
+      const opcje = moceDodatkuKlimy(katalog, RODZAJ_KLIMY_CHLODZENIE)
+      expect(opcje.every((o) => !o.kod.startsWith('dod_panele'))).toBe(true)
+    })
+
+    it('returns an empty list for an unknown rodzaj or a non-array catalog', () => {
+      expect(moceDodatkuKlimy(katalog, '')).toEqual([])
+      expect(moceDodatkuKlimy(katalog, 'nieznany')).toEqual([])
+      expect(moceDodatkuKlimy(null, RODZAJ_KLIMY_CHLODZENIE)).toEqual([])
+      expect(moceDodatkuKlimy(undefined, RODZAJ_KLIMY_CHLODZENIE)).toEqual([])
+    })
+  })
+
+  describe('evOpcje', () => {
+    const katalog = [
+      { kod: 'ev_ac_7', nazwa: 'Ładowarka EV AC 7 kW', grupa: 'ev_ac', moc_kw: 7, cena: 4100 },
+      { kod: 'ev_ac_11', nazwa: 'Ładowarka EV AC 11 kW', grupa: 'ev_ac', moc_kw: 11, cena: 4300 },
+      { kod: 'ev_ac_22', nazwa: 'Ładowarka EV AC 22 kW', grupa: 'ev_ac', moc_kw: 22, cena: 4500 },
+      { kod: 'ev_dc_12_7_5', nazwa: 'Ładowarka EV DC 12 kW (kabel 7,5m)', grupa: 'ev_dc', moc_kw: 12, cena: 6900 },
+      { kod: 'ev_dc_25_10', nazwa: 'Ładowarka EV DC 25 kW (kabel 10m)', grupa: 'ev_dc', moc_kw: 25, cena: 9100 },
+      { kod: 'dod_panele_1', nazwa: 'Panele PV x 1 (dodatek)', grupa: 'dod_panele', moc_kw: 0, cena: 3600 },
+    ]
+
+    it('returns only AC options for a TP2 falownik', () => {
+      const opcje = evOpcje(katalog, { producent: 'Sigenergy', variant: VARIANT_PV_BAT, sigenTyp: 'TP2' })
+      expect(opcje.map((o) => o.kod)).toEqual(['ev_ac_7', 'ev_ac_11', 'ev_ac_22'])
+    })
+
+    it('returns AC and DC options for an AIO falownik, AC first then by moc', () => {
+      const opcje = evOpcje(katalog, { producent: 'Sigenergy', variant: VARIANT_PV_BAT, sigenTyp: 'AIO' })
+      expect(opcje.map((o) => o.kod)).toEqual(['ev_ac_7', 'ev_ac_11', 'ev_ac_22', 'ev_dc_12_7_5', 'ev_dc_25_10'])
+    })
+
+    it('returns nothing when the ladowarka is not available at all', () => {
+      expect(evOpcje(katalog, { producent: 'Deye', variant: VARIANT_PV_BAT, sigenTyp: 'AIO' })).toEqual([])
+      expect(evOpcje(katalog, { producent: 'Sigenergy', variant: VARIANT_PV, sigenTyp: 'AIO' })).toEqual([])
+    })
+
+    it('never leaks other grupy (dod_panele) into the result', () => {
+      const opcje = evOpcje(katalog, { producent: 'Sigenergy', variant: VARIANT_PV_BAT, sigenTyp: 'AIO' })
+      expect(opcje.every((o) => o.grupa === 'ev_ac' || o.grupa === 'ev_dc')).toBe(true)
+    })
+
+    it('returns an empty list for a non-array catalog', () => {
+      expect(evOpcje(null, { producent: 'Sigenergy', variant: VARIANT_PV_BAT, sigenTyp: 'AIO' })).toEqual([])
+    })
+  })
+
+  describe('sanitizujDodatki', () => {
+    const pelnyWybor = () => ({
+      klimaKod: 'dod_klima_elis_x_2_6',
+      panele: 3,
+      paneleMikro: 2,
+      emsBreeze: 'Tak',
+      pstryk: 'Tak',
+      evKod: 'ev_ac_7',
+    })
+
+    it('keeps every field when everything stays available (PV+Magazyn, Deye, AIO-equivalent)', () => {
+      // EMS/pstryk/EV need Deye or Sigenergy specifically; this case only
+      // exercises klima + panele(which stay 0 for a non-Magazyn variant, see
+      // next test) staying untouched when their own gate is satisfied.
+      const wybor = { klimaKod: 'dod_klima_elis_x_2_6', panele: 0, paneleMikro: 0, emsBreeze: 'Nie', pstryk: 'Nie', evKod: '' }
+      const wynik = sanitizujDodatki(wybor, { variant: VARIANT_PV_BAT, producent: 'Deye', sigenTyp: '' })
+      expect(wynik.klimaKod).toBe('dod_klima_elis_x_2_6')
+    })
+
+    it('clears klimaKod when the variant no longer supports it', () => {
+      const wynik = sanitizujDodatki(pelnyWybor(), { variant: '', producent: 'Sigenergy', sigenTyp: 'AIO' })
+      expect(wynik.klimaKod).toBe('')
+    })
+
+    it('clears panele and paneleMikro outside Magazyn energii', () => {
+      const wynik = sanitizujDodatki(pelnyWybor(), { variant: VARIANT_PV_BAT, producent: 'Sigenergy', sigenTyp: 'AIO' })
+      expect(wynik.panele).toBe(0)
+      expect(wynik.paneleMikro).toBe(0)
+    })
+
+    it('keeps panele and paneleMikro for Magazyn energii', () => {
+      const wynik = sanitizujDodatki(pelnyWybor(), { variant: VARIANT_BAT, producent: 'Sigenergy', sigenTyp: 'AIO' })
+      expect(wynik.panele).toBe(3)
+      expect(wynik.paneleMikro).toBe(2)
+    })
+
+    it('clears emsBreeze when the producent is not Deye', () => {
+      const wynik = sanitizujDodatki(pelnyWybor(), { variant: VARIANT_PV_BAT, producent: 'Sigenergy', sigenTyp: 'AIO' })
+      expect(wynik.emsBreeze).toBe('Nie')
+    })
+
+    it('keeps emsBreeze for Deye with a battery variant', () => {
+      const wynik = sanitizujDodatki(pelnyWybor(), { variant: VARIANT_PV_BAT, producent: 'Deye', sigenTyp: '' })
+      expect(wynik.emsBreeze).toBe('Tak')
+    })
+
+    it('clears pstryk and evKod when the producent is not Sigenergy', () => {
+      const wynik = sanitizujDodatki(pelnyWybor(), { variant: VARIANT_PV_BAT, producent: 'Deye', sigenTyp: '' })
+      expect(wynik.pstryk).toBe('Nie')
+      expect(wynik.evKod).toBe('')
+    })
+
+    it('clears an ev_dc selection when the falownik is not AIO, keeps an ev_ac one', () => {
+      const wyborDc = { ...pelnyWybor(), evKod: 'ev_dc_12_7_5' }
+      const wynikDc = sanitizujDodatki(wyborDc, { variant: VARIANT_PV_BAT, producent: 'Sigenergy', sigenTyp: 'TP2' })
+      expect(wynikDc.evKod).toBe('')
+
+      const wyborAc = { ...pelnyWybor(), evKod: 'ev_ac_7' }
+      const wynikAc = sanitizujDodatki(wyborAc, { variant: VARIANT_PV_BAT, producent: 'Sigenergy', sigenTyp: 'TP2' })
+      expect(wynikAc.evKod).toBe('ev_ac_7')
+    })
+
+    it('keeps an ev_dc selection when the falownik is AIO', () => {
+      const wybor = { ...pelnyWybor(), evKod: 'ev_dc_12_7_5' }
+      const wynik = sanitizujDodatki(wybor, { variant: VARIANT_PV_BAT, producent: 'Sigenergy', sigenTyp: 'AIO' })
+      expect(wynik.evKod).toBe('ev_dc_12_7_5')
+    })
+
+    it('never enables a field that started cleared', () => {
+      const wybor = { klimaKod: '', panele: 0, paneleMikro: 0, emsBreeze: 'Nie', pstryk: 'Nie', evKod: '' }
+      const wynik = sanitizujDodatki(wybor, { variant: VARIANT_BAT, producent: 'Sigenergy', sigenTyp: 'AIO' })
+      expect(wynik).toEqual(wybor)
+    })
+
+    it('does not mutate the input object and returns a new one', () => {
+      const wybor = pelnyWybor()
+      const przed = { ...wybor }
+      const wynik = sanitizujDodatki(wybor, { variant: '', producent: '', sigenTyp: '' })
+      expect(wybor).toEqual(przed)
+      expect(wynik).not.toBe(wybor)
+    })
+
+    it('handles a missing kontekst as "nothing available"', () => {
+      const wynik = sanitizujDodatki(pelnyWybor())
+      expect(wynik).toEqual({ klimaKod: '', panele: 0, paneleMikro: 0, emsBreeze: 'Nie', pstryk: 'Nie', evKod: '' })
     })
   })
 })
