@@ -5,10 +5,14 @@
 Standing daily guard for the Kalkulator pricing-secrecy doctypes.
 
 `Volteo Komponent` (component costs), `Volteo Kalkulator Stale` (margin
-constants), `Volteo CP Pozycja` (priced catalogue costs), and `Volteo CP Stale`
-(calculator constants) must NEVER carry a `Volteo D2D Sales` or `Volteo Backend`
-permission — those roles must stay limited to System Manager + Volteo Core
-Admin only (see the Kalkulator commission-secrecy plan, Part 1b / Part 5 #2).
+constants), `Volteo CP Pozycja` (priced catalogue costs), `Volteo CP Stale`
+(calculator constants), and, since b68 (issue #221), `Volteo Cennik Pozycja`
+/ `Volteo Cennik Skladowa` / `Volteo Dobor Mocy PC` (the OZE catalogue for
+Rozbudowa/Klimatyzacja/Pompa ciepla/Kociol, seeded by
+`ops/crm-cennik-oze.py`) must NEVER carry a `Volteo D2D Sales` or
+`Volteo Backend` permission: those roles must stay limited to System
+Manager + Volteo Core Admin only (see the Kalkulator commission-secrecy
+plan, Part 1b / Part 5 #2).
 
 `Volteo Oferta` is different: D2D and Backend legitimately hold permlevel-0
 read (the client-facing quote fields) and that must stay untouched. But its
@@ -28,7 +32,7 @@ that reconciles away any such stray grant automatically, so the leak window
 is never open longer than a day regardless of deploy cadence.
 
 Deliberately narrow and defensive:
-  * Only ever touches the six doctypes named above.
+  * Only ever touches the doctypes named above (GUARDED_DOCTYPES + OFERTA_DOCTYPES).
   * Only ever deletes rows granting the two named roles — nothing else — and
     for the Oferta doctypes only at permlevel >= 1.
   * Never raises into the scheduler: any failure is caught and logged via
@@ -43,6 +47,17 @@ GUARDED_DOCTYPES = (
 	"Volteo Kalkulator Stale",
 	"Volteo CP Pozycja",
 	"Volteo CP Stale",
+	# b68 (issue #221, cennik OZE nowych rodzajow instalacji): dane
+	# pozycji/skladowych/doboru mocy pompy ciepla sa tak samo tajne jak
+	# istniejace cztery doctype'y wyzej (ops/crm-cennik-oze.py ogranicza
+	# je do System Manager + Volteo Core Admin przy tworzeniu). "Volteo
+	# Cennik Skladowa" jest tabela potomna (istable) "Volteo Cennik
+	# Pozycja", wiec normalnie nie ma wlasnej listy "permissions" w
+	# meta - dolaczona tu defensywnie na wypadek zabladzonego
+	# Custom DocPerm wpisanego recznie na doctype potomny.
+	"Volteo Cennik Pozycja",
+	"Volteo Cennik Skladowa",
+	"Volteo Dobor Mocy PC",
 )
 
 # Oferta keeps legitimate permlevel-0 D2D/Backend read; only permlevel >= 1
