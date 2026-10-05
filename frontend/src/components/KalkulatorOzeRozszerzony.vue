@@ -270,7 +270,7 @@
                           <option v-for="n in opcjeIlosciGrzejnika(form.pompa.grzejniki, rozmiar.rozmiar)" :key="n" :value="n">{{ n }}</option>
                         </select>
                       </div>
-                      <div class="col-span-5 text-xs text-ink-gray-5">
+                      <div class="kalk-grzejniki-razem col-span-5 text-xs text-ink-gray-5">
                         {{ __('Razem: {0} / {1}', [sumaGrzejnikow(form.pompa.grzejniki), GRZEJNIKI_MAX]) }}
                       </div>
                     </div>
@@ -297,7 +297,7 @@
                     <select v-model="form.kociol.kod" class="kalk-select">
                       <option value="">{{ __('-- wybierz --') }}</option>
                       <option v-for="o in modeleKociolList" :key="o.kod" :value="o.kod">
-                        {{ o.nazwa }}<template v-if="o.moc_kw"> — {{ formatMoc(o.moc_kw) }} kW</template>
+                        {{ o.nazwa }}<template v-if="o.moc_kw"> ({{ formatMoc(o.moc_kw) }} kW)</template>
                       </option>
                     </select>
                   </div>
@@ -581,6 +581,32 @@ function przelaczRozbudowa(klucz) {
   form.rozbudowa[klucz] = form.rozbudowa[klucz] > 0 ? 0 : 1
 }
 
+// Stan wyniku kalkulacji (serwer) -- zadeklarowany TUTAJ, przed
+// `ppozProgLive` nizej, bo ten computed jest odczytywany synchronicznie w
+// chwili tworzenia (`watch(ppozProgLive, ...)` ewaluuje swoje zrodlo raz
+// przy starcie, zeby ustalic wartosc poczatkowa do porownania, niezaleznie
+// od opcji `immediate`). `const result` zadeklarowany nizej w pliku trafilby
+// w strefe martwa (temporal dead zone) tego computed -- dokladnie to
+// powodowalo `ReferenceError: Cannot access 'v' before initialization` przy
+// kazdym kliknieciu jednego z czterech nowych kafelkow rodzaju.
+const result = reactive({
+  netto: 0, vat: 0, vat_rate: 0, brutto: 0, narzut: 0,
+  cena_po_uldze: 0, ulga: 0,
+  raty: { brutto: 0, po_dotacji: 0, po_uldze: 0 },
+  linie: [],
+  pompa: null,
+  // Tri-state: `null` = brak jeszcze odpowiedzi serwera (podgląd lokalny
+  // obowiązuje), `true`/`false` = autorytatywna odpowiedź serwera. NIGDY
+  // `delete` -- `reactive()` + `hasOwnProperty` jest martwa pulapka Proxy
+  // (patrz komentarz w KalkulatorCPTab.vue przy `hasInternal`), stad klucz
+  // zawsze istnieje, czytany wylacznie jako wlasciwosc.
+  ppoz: null,
+  ppoz_prog: null,
+  // `= null`, nigdy `delete` -- jak wyzej: bramka panelu admina
+  // (`hasInternal`) czyta ta wlasciwosc wprost, nigdy przez `hasOwnProperty`.
+  wewnetrzne: null,
+})
+
 // Podgląd PPOŻ -- WYŁĄCZNIE prezentacja, serwer (`result.ppoz_prog`) jest
 // autorytatywny, gdy juz dostepny; lustro tej samej blokady/odblokowania co
 // KalkulatorTab.vue (ppozRecznieSprzedLock).
@@ -701,7 +727,7 @@ const narzutValid = computed(() => {
 })
 const narzutErrorMsg = computed(() =>
   narzutMax.value > 0
-    ? `Narzut musi być w zakresie 0–${narzutMax.value} zł.`
+    ? `Narzut musi być od 0 do ${narzutMax.value} zł.`
     : 'Narzut nie może być ujemny.',
 )
 
@@ -712,24 +738,6 @@ const errorMsg = ref('')
 const showAdminBreakdown = ref(false)
 const successSummary = ref('')
 const dealHref = ref('#')
-
-const result = reactive({
-  netto: 0, vat: 0, vat_rate: 0, brutto: 0, narzut: 0,
-  cena_po_uldze: 0, ulga: 0,
-  raty: { brutto: 0, po_dotacji: 0, po_uldze: 0 },
-  linie: [],
-  pompa: null,
-  // Tri-state: `null` = brak jeszcze odpowiedzi serwera (podgląd lokalny
-  // obowiązuje), `true`/`false` = autorytatywna odpowiedź serwera. NIGDY
-  // `delete` -- `reactive()` + `hasOwnProperty` jest martwa pulapka Proxy
-  // (patrz komentarz w KalkulatorCPTab.vue przy `hasInternal`), stad klucz
-  // zawsze istnieje, czytany wylacznie jako wlasciwosc.
-  ppoz: null,
-  ppoz_prog: null,
-  // `= null`, nigdy `delete` -- jak wyzej: bramka panelu admina
-  // (`hasInternal`) czyta ta wlasciwosc wprost, nigdy przez `hasOwnProperty`.
-  wewnetrzne: null,
-})
 
 // Czytane jako wlasciwosc reaktywnego `result`, NIGDY przez
 // `Object.prototype.hasOwnProperty` -- `MutableReactiveHandler` Vue nie
@@ -973,7 +981,15 @@ onBeforeUnmount(() => {
   .kalk-output { border-left: 0 !important; padding-left: 0 !important; margin-top: 0.75rem; }
   .sticky { position: static; }
   .kalk-part { padding: 1rem; }
-  /* Grid 5 selectow grzejnikow na jedna kolumne pod 880px (plan b68, F3). */
+  /* Grid 5 selectow grzejnikow na jedna kolumne pod 880px (plan b68, F3).
+     `grid-template-columns: 1fr` samo nie wystarcza: wiersz podsumowania
+     "Razem" niesie Tailwindowe `col-span-5` (bez wariantu mobilnego), a
+     CSS Grid DOGENERUJE niejawne kolumny, zeby pomiescic span-5, nawet gdy
+     jawna definicja ma tylko 1 kolumne -- stad bez tej drugiej reguly siatka
+     i tak renderowala 5 kolumn (znalezione headless, PW viewport 375px:
+     `getComputedStyle(grid).gridTemplateColumns` dalej zwracal 5 torow mimo
+     `!important` powyzej). */
   .kalk-grzejniki-grid { grid-template-columns: 1fr !important; }
+  .kalk-grzejniki-razem { grid-column: span 1 !important; }
 }
 </style>
