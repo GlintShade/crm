@@ -282,6 +282,36 @@ def _stala(stale: dict[str, Any], klucz: str) -> Any:
 	return stale[klucz]
 
 
+# Bez `True`/`False` w tych dwóch zbiorach: `1 == True` i `0 == False` w Pythonie, więc
+# trzymanie obu par naraz w literałach zestawu jest zduplikowanym elementem (ruff B033).
+# `_flaga_tak_nie` rozstrzyga prawdziwy `bool` osobnym `isinstance` PRZED sięgnięciem do
+# tych zbiorów, więc nic się nie traci - `int`/`str` warianty 1/0 zostają tu jawnie.
+_FLAGA_TAK: frozenset[Any] = frozenset({1, "1", "Tak", "tak", "true"})
+_FLAGA_NIE: frozenset[Any] = frozenset({0, "0", "Nie", "nie", "false", "", None})
+
+
+def _flaga_tak_nie(wartosc: Any, pole: str) -> bool:
+	"""Parsuje pole Tak/Nie z danych klienta tolerancyjnie na typ (``bool``/``int``/``str``),
+	ale nigdy po cichu (ops#222): wbudowane ``bool(...)`` traktuje KAŻDY niepusty string,
+	także literalny ``"Nie"``, jako prawdę (``bool("Nie") is True``), więc gdyby którykolwiek
+	klient API (stary front, inny konsument) wysłał string zamiast prawdziwego ``bool``-a,
+	flaga zostałaby cicho ustawiona na Tak. Brakujący klucz zachowuje się tak jak dotychczasowe
+	``bool(dict.get(klucz, False))`` - traktowany jak `Nie`. Każda inna wartość (w tym
+	nieoczekiwany typ, np. lista/dict) jest błędem danych klienta (`OZEDaneNiekompletne`),
+	nigdy cichym przyjęciem."""
+	if isinstance(wartosc, bool):
+		return wartosc
+	try:
+		if wartosc in _FLAGA_TAK:
+			return True
+		if wartosc in _FLAGA_NIE:
+			return False
+	except TypeError:
+		pass
+	_blad(f"Nieprawidłowa wartość pola {pole}: oczekiwano Tak/Nie.")
+	return False
+
+
 # --- Mapery: wiersze Frappe -> kształty konsumowane przez resztę modułu -------------------
 
 
@@ -841,7 +871,7 @@ def oblicz_oferte(
 		istniejaca = _decimal(rozbudowa.get("istniejaca_pv_moc_kwp", 0), "rozbudowa.istniejaca_pv_moc_kwp")
 		if istniejaca < _ZERO:
 			_blad("Istniejąca moc PV nie może być ujemna.")
-		ppoz_recznie = bool(rozbudowa.get("ppoz_recznie", False))
+		ppoz_recznie = _flaga_tak_nie(rozbudowa.get("ppoz_recznie", False), "rozbudowa.ppoz_recznie")
 
 		panel_moc_wp = _stala(stale, "panel_moc_wp")
 		moc_dodana = Decimal(panele + panele_mikro) * panel_moc_wp / _TYSIAC

@@ -361,6 +361,50 @@ class OblozOferteRozbudowaTest(unittest.TestCase):
 		self.assertFalse(wynik["ppoz_prog"])
 		self.assertEqual(wynik["netto"], Decimal("9900.00"))
 
+	def test_ppoz_recznie_string_nie_ponizej_progu_nie_dolicza(self) -> None:
+		# ops#222: `bool("Nie")` w Pythonie jest `True`, więc string "Nie" musi tu dać
+		# `ppoz=False`, nie cichą zmianę na Tak, jak dałoby wbudowane `bool(...)`.
+		wynik = oblicz_oferte(
+			self._wejscie(panele=2, istniejaca_pv_moc_kwp="5.5", ppoz_recznie="Nie"),
+			CENNIK, DOBOR, STALE,
+		)
+		self.assertFalse(wynik["ppoz"])
+		self.assertFalse(wynik["ppoz_prog"])
+		self.assertEqual(wynik["netto"], Decimal("9900.00"))
+
+	def test_ppoz_recznie_string_tak_ponizej_progu_dolicza(self) -> None:
+		wynik = oblicz_oferte(
+			self._wejscie(panele=2, istniejaca_pv_moc_kwp="5.5", ppoz_recznie="Tak"),
+			CENNIK, DOBOR, STALE,
+		)
+		self.assertTrue(wynik["ppoz"])
+		self.assertFalse(wynik["ppoz_prog"])
+		self.assertEqual(wynik["netto"], Decimal("10900.00"))
+
+	def test_ppoz_recznie_bool_true_ponizej_progu_dolicza(self) -> None:
+		wynik = oblicz_oferte(
+			self._wejscie(panele=2, istniejaca_pv_moc_kwp="5.5", ppoz_recznie=True),
+			CENNIK, DOBOR, STALE,
+		)
+		self.assertTrue(wynik["ppoz"])
+		self.assertFalse(wynik["ppoz_prog"])
+
+	def test_ppoz_recznie_bool_false_ponizej_progu_nie_dolicza(self) -> None:
+		wynik = oblicz_oferte(
+			self._wejscie(panele=2, istniejaca_pv_moc_kwp="5.5", ppoz_recznie=False),
+			CENNIK, DOBOR, STALE,
+		)
+		self.assertFalse(wynik["ppoz"])
+		self.assertFalse(wynik["ppoz_prog"])
+
+	def test_ppoz_recznie_nieznana_wartosc_jest_bledem(self) -> None:
+		with self.assertRaises(OZEDaneNiekompletne) as kontekst:
+			oblicz_oferte(
+				self._wejscie(panele=2, istniejaca_pv_moc_kwp="5.5", ppoz_recznie="abc"),
+				CENNIK, DOBOR, STALE,
+			)
+		self.assertIn("ppoz_recznie", str(kontekst.exception))
+
 	def test_zestaw_bez_producenta_modelu(self) -> None:
 		wynik = oblicz_oferte(self._wejscie(panele=2, bateria=1), CENNIK, DOBOR, STALE)
 		nazwy = {l["nazwa"] for l in wynik["linie"]}
