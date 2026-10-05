@@ -61,15 +61,12 @@
   </div>
   <div
     v-else-if="customizeQuickFilter"
-    class="flex items-center justify-between gap-2 p-5"
+    class="flex items-start justify-between gap-2 p-5"
   >
-    <div class="flex flex-1 items-center overflow-hidden pl-1 gap-2">
-      <FadedScrollableDiv
-        class="flex overflow-x-auto -ml-1"
-        orientation="horizontal"
-      >
+    <div class="flex flex-1 items-center flex-wrap pl-1 gap-2">
+      <FadedScrollableDiv class="flex -ml-1" orientation="horizontal">
         <Draggable
-          class="flex w-full gap-2 items-center"
+          class="flex w-full gap-2 items-center flex-wrap"
           :list="newQuickFilters"
           group="filters"
           item-key="fieldname"
@@ -141,28 +138,40 @@
       <Button icon="lucide-x" @click="customizeQuickFilter = false" />
     </div>
   </div>
-  <div v-else class="flex items-center justify-between gap-2 px-5 py-4">
-    <FadedScrollableDiv
-      class="flex flex-1 items-center overflow-x-auto -ml-1 h-9"
-      orientation="horizontal"
+  <div
+    v-else
+    class="flex items-start justify-between gap-2 px-5 py-4"
+    :style="dwaWierszeAktywne ? gridStyleDwaWiersze : null"
+  >
+    <div
+      class="flex flex-1 flex-wrap items-center -ml-1 min-h-9"
+      :style="dwaWierszeAktywne ? { display: 'contents' } : null"
     >
       <div
         v-for="filter in quickFilterList"
         :key="filter.fieldname"
-        class="m-1 min-w-36"
+        :class="dwaWierszeAktywne ? 'min-w-0 overflow-hidden' : 'm-1 min-w-36'"
       >
         <QuickFilterField
+          class="w-full"
           :filter="filter"
           :doctype="doctype"
           :activeFilters="list.params?.filters"
           @applyQuickFilter="(f, v) => applyQuickFilter(f, v)"
         />
       </div>
-    </FadedScrollableDiv>
-    <div class="-ml-2 h-[70%] border-l" />
-    <div class="flex items-center gap-2">
+    </div>
+    <div v-if="!dwaWierszeAktywne" class="-ml-2 h-7 mt-2 border-l" />
+    <div
+      :class="
+        dwaWierszeAktywne
+          ? 'flex items-center gap-2 border-l pl-2'
+          : 'flex items-center gap-2 self-start mt-1'
+      "
+      :style="dwaWierszeAktywne ? przyciskiStyleDwaWiersze : null"
+    >
       <div
-        v-if="viewUpdated && route.query.view && (!view.public || isManager())"
+        v-if="pokazZmianyWidoku"
         class="flex items-center gap-2 border-r pr-2"
       >
         <Button :label="__('Cancel')" @click="cancelChanges" />
@@ -386,6 +395,10 @@ const props = defineProps({
       hideColumnsButton: false,
       defaultViewName: '',
       allowedViews: ['list'],
+      // VOLTEO (owner feedback 2026-10-05): true wymusza dwuwierszowy grid
+      // dla paska szybkich filtrów zamiast flex-wrap (patrz
+      // dwaWierszeAktywne/gridStyleDwaWiersze niżej) -- obecnie tylko Leads.vue.
+      filtryDwaWiersze: false,
     }),
   },
 })
@@ -1067,6 +1080,64 @@ const quickFilterList = computed(() => {
 
   return filters
 })
+
+// VOLTEO (owner feedback 2026-10-05, po pierwszej poprawce zawijania paska
+// na Leadach): flex-wrap dawał 3-4 nierówne wiersze przy 14 filtrach, bo
+// liczba wierszy zależała od szerokości okna. Właściciel chce ZAWSZE
+// dokładnie dwa wiersze -- rozwiązanie to grid o K kolumnach (zależnych
+// wyłącznie od LICZBY filtrów, nie od szerokości), z grupą przycisków
+// (Odśwież/Filtr/sortuj/kolumny/Edytuj pasek/więcej, plus Cancel/Zapisz
+// zmiany widoku gdy widoczne) jako jednym elementem gridu przypiętym do
+// wiersza 1, ostatnich S kolumn. Włączone WYŁĄCZNIE przez
+// `options.filtryDwaWiersze` (patrz Leads.vue) -- inne listy (Szanse,
+// Klienci...) mają mało filtrów i zostają przy flex-wrap z poprzedniej
+// poprawki, jeden wiersz.
+const dwaWierszeAktywne = computed(() => Boolean(props.options?.filtryDwaWiersze))
+
+// Ten sam warunek co widoczność bloku Cancel/Zapisz zmiany w szablonie
+// (`v-if` na "Cancel"/"Save Changes" niżej) -- wydzielony do computed, żeby
+// policzyć S (ile kolumn od prawej zajmuje grupa przycisków w trybie
+// gridu) tym samym jednym źródłem prawdy, którego używa też szablon.
+const pokazZmianyWidoku = computed(() =>
+  Boolean(viewUpdated.value && route.query.view && (!view.value.public || isManager())),
+)
+
+// S: liczba kolumn od prawej zarezerwowana w wierszu 1 dla grupy
+// przycisków -- 6, gdy widoczny jest dodatkowy blok Cancel/Zapisz zmiany,
+// inaczej 2. Zmierzone headless (grid-leads-dirty-view, 2026-10-05): sama
+// grupa ikon (Odśwież/Filtr/sortuj/kolumny/Edytuj pasek/więcej) potrzebuje
+// ok. 278px przy K=8 (S=2 starcza z zapasem), ale po dodaniu Anuluj/Zapisz
+// zmiany cała grupa rośnie do ok. 526px -- S=3 (próba pierwsza, zgodnie z
+// pierwotną sugestią) dawało tylko ok. 372-401px przy K=9, więc grupa
+// przycisków fizycznie nachodziła na sąsiednią komórkę filtra (widoczne na
+// zrzucie jako ucięty przycisk "zmiany" zachodzący na "Województwo"). S=6
+// (z K rosnącym do 10) daje ok. 688px dostępnej szerokości, z wyraźnym
+// zapasem.
+const przyciskiSpanDwaWiersze = computed(() => (pokazZmianyWidoku.value ? 6 : 2))
+
+// K: liczba kolumn gridu, dobrana tak, żeby n filtrów ZAWSZE zmieściło się
+// w pozostałych komórkach dwóch wierszy: (K - S) wolnych w wierszu 1 +
+// K w wierszu 2 (pusty, bo grupa przycisków zajmuje tylko wiersz 1) musi
+// pomieścić n, czyli 2K - S >= n -> K >= ceil((n + S) / 2). Math.max(S, ...)
+// to zabezpieczenie na wypadek n == 0 (np. `quickFilters` jeszcze się
+// ładuje): grupa przycisków sama potrzebuje co najmniej S kolumn.
+const liczbaKolumnDwaWiersze = computed(() => {
+  const n = quickFilterList.value.length
+  const s = przyciskiSpanDwaWiersze.value
+  return Math.max(s, Math.ceil((n + s) / 2))
+})
+
+const gridStyleDwaWiersze = computed(() => ({
+  display: 'grid',
+  gridTemplateColumns: `repeat(${liczbaKolumnDwaWiersze.value}, minmax(0, 1fr))`,
+  gridAutoFlow: 'row dense',
+}))
+
+const przyciskiStyleDwaWiersze = computed(() => ({
+  gridRow: '1',
+  gridColumn: `span ${przyciskiSpanDwaWiersze.value} / -1`,
+  justifySelf: 'end',
+}))
 
 const quickFilters = createResource({
   url: 'crm.api.doc.get_quick_filters',

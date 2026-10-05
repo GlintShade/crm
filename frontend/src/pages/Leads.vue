@@ -28,6 +28,12 @@
     :filters="{ converted: 0 }"
     :options="{
       allowedViews: ['list', 'mapa', 'group_by', 'kanban'],
+      // VOLTEO (owner feedback 2026-10-05): pasek szybkich filtrów Leadów ma
+      // zawsze dokładnie dwa wiersze (grid, patrz ViewControls.vue), bo 14
+      // filtrów w jednym flex-wrap dawało 3-4 nierówne wiersze. Inne listy
+      // (Szanse, Klienci...) nie ustawiają tej flagi i zostają przy
+      // flex-wrap, jeden wiersz.
+      filtryDwaWiersze: true,
     }"
   />
   <KanbanView
