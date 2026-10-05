@@ -214,11 +214,15 @@ describe('nazwaAutora', () => {
 })
 
 describe('OZE_RODZAJE / czyOze', () => {
-  it('rozpoznaje dokładnie trzy rodzaje OZE', () => {
-    expect(OZE_RODZAJE.size).toBe(3)
+  it('rozpoznaje dokładnie siedem rodzajów OZE (trzy stare plus cztery nowe od b68)', () => {
+    expect(OZE_RODZAJE.size).toBe(7)
     expect(czyOze('Fotowoltaika')).toBe(true)
     expect(czyOze('Fotowoltaika + Magazyn')).toBe(true)
     expect(czyOze('Magazyn energii')).toBe(true)
+    expect(czyOze('Rozbudowa PV/ME')).toBe(true)
+    expect(czyOze('Klimatyzacja')).toBe(true)
+    expect(czyOze('Pompa ciepła')).toBe(true)
+    expect(czyOze('Kocioł')).toBe(true)
   })
 
   it('odrzuca Czyste Powietrze i wartości puste/nieznane', () => {

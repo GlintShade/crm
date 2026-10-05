@@ -261,6 +261,96 @@
           <div v-if="Number(wycenaFields.custom_ulga_pct) > 0" class="flex justify-between py-0.5 text-ink-gray-7">
             <span>{{ __('Rata po uldze') }}</span><span>{{ formatPln(wycenaFields.custom_rata_po_uldze) }} /mies.</span>
           </div>
+
+          <!--
+            Opcje dodatkowe (b68, "Wielki update kalkulatora OZE"): klimatyzacja,
+            panele/panele+mikro dodatkowe, EMS Breeze, licznik Pstryk, ladowarka
+            EV - dostepne tylko na PV/PV+ME/ME (ta sama trojka co caly boks
+            Wycena powyzej). Caly podblok jest gated na `hasDodatki`, zeby nie
+            dokladac szesciu pustych wierszy do kazdej starszej szansy, ktora
+            nigdy nie uzywala dodatkow.
+          -->
+          <template v-if="hasDodatki">
+            <div class="mb-1 mt-1 border-t border-outline-gray-2 pt-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Opcje dodatkowe') }}</div>
+            <div v-if="wycenaFields.custom_dod_klima" class="flex justify-between py-0.5 text-ink-gray-7">
+              <span>{{ __('Klimatyzacja (dodatek)') }}</span><span>{{ wycenaFields.custom_dod_klima }}</span>
+            </div>
+            <div v-if="Number(wycenaFields.custom_dod_panele) > 0" class="flex justify-between py-0.5 text-ink-gray-7">
+              <span>{{ __('Panele PV (dodatek)') }}</span><span>{{ wycenaFields.custom_dod_panele }} szt.</span>
+            </div>
+            <div v-if="Number(wycenaFields.custom_dod_panele_mikro) > 0" class="flex justify-between py-0.5 text-ink-gray-7">
+              <span>{{ __('Panele PV + mikrofalownik (dodatek)') }}</span><span>{{ wycenaFields.custom_dod_panele_mikro }} szt.</span>
+            </div>
+            <div v-if="wycenaFields.custom_ems_breeze === 'Tak'" class="flex justify-between py-0.5 text-ink-gray-7">
+              <span>{{ __('EMS Breeze') }}</span><span>{{ __('Tak') }}</span>
+            </div>
+            <div v-if="wycenaFields.custom_pstryk === 'Tak'" class="flex justify-between py-0.5 text-ink-gray-7">
+              <span>{{ __('Licznik Pstryk') }}</span><span>{{ __('Tak') }}</span>
+            </div>
+            <div v-if="wycenaFields.custom_ev_ladowarka" class="flex justify-between py-0.5 text-ink-gray-7">
+              <span>{{ __('Ładowarka EV') }}</span><span>{{ wycenaFields.custom_ev_ladowarka }}</span>
+            </div>
+            <div v-if="Number(wycenaFields.custom_dodatki_netto) > 0" class="flex justify-between border-t border-outline-gray-2 py-0.5 pt-1 font-medium text-ink-gray-8">
+              <span>{{ __('Dodatki razem') }}</span><span>{{ formatPln(wycenaFields.custom_dodatki_netto) }}</span>
+            </div>
+          </template>
+        </div>
+
+        <!--
+          Boks "Wycena" dla czterech nowych rodzajow OZE (b68, "Wielki update
+          kalkulatora OZE") - Rozbudowa PV/ME, Klimatyzacja, Pompa ciepła,
+          Kocioł. Mirror strukturalny boksu PV powyzej (sekcje Konfiguracja /
+          Cena / Finansowanie), ale BEZ sekcji Dotacja: dotacja Moj Prad jest
+          zawsze 0 dla tych czterech rodzajow (zakladkiSzansy().dotacja ==
+          false), wiec pokazywanie "Dotacja: 0 zl" byloby szumem, nie
+          informacja. `showWycena` (PV, powyzej) i `showWycenaOze` sa wzajemnie
+          wykluczajace sie (kazda szansa ma dokladnie jeden `custom_rodzaj_umowy`),
+          wiec to v-if, nie v-else-if - prostszy, niezalezny warunek, ten sam
+          wzorzec co boksy CP/PV powyzej.
+        -->
+        <div v-if="showWycenaOze" class="mt-3 w-full rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-2.5 text-sm">
+          <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Wycena') }}</div>
+
+          <template v-if="konfiguracjaOzeNowe.length">
+            <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Konfiguracja') }}</div>
+            <div v-for="wiersz in konfiguracjaOzeNowe" :key="wiersz.etykieta" class="flex justify-between py-0.5 text-ink-gray-7">
+              <span>{{ wiersz.etykieta }}</span><span>{{ wiersz.wartosc }}</span>
+            </div>
+          </template>
+
+          <div class="mb-1 mt-1 border-t border-outline-gray-2 pt-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Cena') }}</div>
+          <div v-if="wycenaFields.custom_typ_klienta" class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Typ klienta') }}</span><span>{{ wycenaFields.custom_typ_klienta }}</span>
+          </div>
+          <div class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Cena netto') }}</span><span>{{ formatPln(wycenaFields.custom_netto) }}</span>
+          </div>
+          <div class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('VAT') }}</span><span>{{ Number(wycenaFields.custom_vat_pct) }}%</span>
+          </div>
+          <div class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Cena brutto') }}</span><span class="font-medium text-ink-gray-8">{{ formatPln(wycenaFields.deal_value) }}</span>
+          </div>
+          <div v-if="Number(wycenaFields.custom_ulga_pct) > 0" class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Ulga termomodernizacyjna') }}</span><span>{{ wycenaFields.custom_ulga_pct }}% · {{ formatPln(wycenaFields.custom_ulga_kwota) }}</span>
+          </div>
+          <div v-if="Number(wycenaFields.custom_ulga_pct) > 0" class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Cena po uldze') }}</span><span>{{ formatPln(wycenaFields.custom_cena_po_uldze) }}</span>
+          </div>
+
+          <div class="mb-1 mt-1 border-t border-outline-gray-2 pt-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Finansowanie') }}</div>
+          <div class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Wpłata własna') }}</span><span>{{ formatPln(wycenaFields.custom_wplata_wlasna) }}</span>
+          </div>
+          <div v-if="Number(wycenaFields.custom_okres_lat) > 0" class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Okres kredytowania') }}</span><span>{{ wycenaFields.custom_okres_lat }} lat</span>
+          </div>
+          <div class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Rata brutto') }}</span><span>{{ formatPln(wycenaFields.custom_rata_brutto) }} /mies.</span>
+          </div>
+          <div v-if="Number(wycenaFields.custom_ulga_pct) > 0" class="flex justify-between py-0.5 text-ink-gray-7">
+            <span>{{ __('Rata po uldze') }}</span><span>{{ formatPln(wycenaFields.custom_rata_po_uldze) }} /mies.</span>
+          </div>
         </div>
 
         <!--
@@ -366,6 +456,7 @@ import MontazKosztyPanel from '@/components/deal/MontazKosztyPanel.vue'
 import NotatkiStrumien from '@/components/deal/NotatkiStrumien.vue'
 import { computed, ref } from 'vue'
 import { formatPln, roundPln } from '@/utils/money'
+import { czyOzeNowy, czyOzePv } from '@/utils/rodzajUmowy'
 
 const props = defineProps({
   dealId: { type: String, required: true },
@@ -507,6 +598,34 @@ const dealWycena = createResource({
       'custom_rata_brutto',
       'custom_rata_po_dotacji',
       'custom_rata_po_uldze',
+      // "Opcje dodatkowe" na PV/PV+ME/ME (b68, chunk F2 silnik/F1 wyswietlanie).
+      'custom_dod_klima',
+      'custom_dod_panele',
+      'custom_dod_panele_mikro',
+      'custom_ems_breeze',
+      'custom_pstryk',
+      'custom_ev_ladowarka',
+      'custom_dodatki_netto',
+      // Konfiguracja czterech nowych rodzajow OZE (b68, chunk B6 schemat).
+      // Pola nie istnieja jeszcze w lokalnej bazie do czasu wdrozenia B6 -
+      // get_value po prostu nie zwraca ich kluczy, wiec defaulty w
+      // `wycenaFields` nizej trzymaja widok sensownym.
+      'custom_oze_rozbudowa_panele',
+      'custom_oze_rozbudowa_panele_mikro',
+      'custom_oze_rozbudowa_bateria',
+      'custom_oze_klima_rodzaj',
+      'custom_oze_klima_model',
+      'custom_oze_klima_moc_kw',
+      'custom_oze_pc_zapotrzebowanie',
+      'custom_oze_pc_producent',
+      'custom_oze_pc_typ',
+      'custom_oze_pc_ogrzewanie',
+      'custom_oze_pc_moc_kw',
+      'custom_oze_kociol_rodzaj',
+      'custom_oze_kociol_model',
+      'custom_oze_kociol_moc_kw',
+      'custom_oze_cwu',
+      'custom_oze_grzejniki_szt',
     ],
   },
   auto: true,
@@ -713,28 +832,118 @@ const wycenaFields = computed(() => ({
   custom_rata_brutto: 0,
   custom_rata_po_dotacji: 0,
   custom_rata_po_uldze: 0,
+  // "Opcje dodatkowe" (b68) na PV/PV+ME/ME.
+  custom_dod_klima: '',
+  custom_dod_panele: 0,
+  custom_dod_panele_mikro: 0,
+  custom_ems_breeze: 'Nie',
+  custom_pstryk: 'Nie',
+  custom_ev_ladowarka: '',
+  custom_dodatki_netto: 0,
+  // Konfiguracja czterech nowych rodzajow OZE (b68).
+  custom_oze_rozbudowa_panele: 0,
+  custom_oze_rozbudowa_panele_mikro: 0,
+  custom_oze_rozbudowa_bateria: 0,
+  custom_oze_klima_rodzaj: '',
+  custom_oze_klima_model: '',
+  custom_oze_klima_moc_kw: 0,
+  custom_oze_pc_zapotrzebowanie: '',
+  custom_oze_pc_producent: '',
+  custom_oze_pc_typ: '',
+  custom_oze_pc_ogrzewanie: '',
+  custom_oze_pc_moc_kw: 0,
+  custom_oze_kociol_rodzaj: '',
+  custom_oze_kociol_model: '',
+  custom_oze_kociol_moc_kw: 0,
+  custom_oze_cwu: '',
+  custom_oze_grzejniki_szt: 0,
   ...(dealWycena.data || {}),
 }))
 
 // PV-line product interest values only -- CP deals never populate
 // custom_rodzaj_umowy with one of these, so the box below stays hidden for
-// them. See "Product-line switch" in CLAUDE.md.
-const PV_RODZAJE = new Set(['Fotowoltaika', 'Fotowoltaika + Magazyn', 'Magazyn energii'])
+// them. See "Product-line switch" in CLAUDE.md. `czyOzePv` (from
+// `@/utils/rodzajUmowy`) replaces the local `PV_RODZAJE` Set since b68 -
+// same three rodzajs, now the single canonical source shared with every
+// other file that needs this exact three-rodzaj check.
 // Gated on rodzaj + a real priced amount, not just rodzaj: a PV deal that was
 // switched to that rodzaj before ever running the calculator has no netto/
 // deal_value yet and must render nothing rather than a box full of zeros.
 const showWycena = computed(() =>
-  PV_RODZAJE.has(wycenaFields.value.custom_rodzaj_umowy) &&
+  czyOzePv(wycenaFields.value.custom_rodzaj_umowy) &&
+  (Number(wycenaFields.value.custom_netto) > 0 || Number(wycenaFields.value.deal_value) > 0),
+)
+
+// "Opcje dodatkowe" (b68, PV/PV+ME/ME) - Klimatyzacja/Panele/Panele+mikro/
+// EMS Breeze/Pstryk/Ladowarka EV. Caly podblok w szablonie jest gated na tym
+// jednym flagu, zeby nie dokladac szesciu pustych wierszy do kazdej starszej
+// szansy PV, ktora nigdy nie uzywala dodatkow.
+const hasDodatki = computed(() =>
+  Boolean(wycenaFields.value.custom_dod_klima) ||
+  Number(wycenaFields.value.custom_dod_panele) > 0 ||
+  Number(wycenaFields.value.custom_dod_panele_mikro) > 0 ||
+  wycenaFields.value.custom_ems_breeze === 'Tak' ||
+  wycenaFields.value.custom_pstryk === 'Tak' ||
+  Boolean(wycenaFields.value.custom_ev_ladowarka),
+)
+
+// Nowy boks "Wycena" (b68) dla czterech nowych rodzajow OZE - ten sam gate
+// "rodzaj + realna wyceniona kwota" co PV powyzej (szansa przelaczona na
+// nowy rodzaj przed uruchomieniem kalkulatora nie ma jeszcze netto/
+// deal_value, wiec boks nie renderuje sie w pustym stanie).
+const showWycenaOze = computed(() =>
+  czyOzeNowy(wycenaFields.value.custom_rodzaj_umowy) &&
   (Number(wycenaFields.value.custom_netto) > 0 || Number(wycenaFields.value.deal_value) > 0),
 )
 
 // "Tak · 5 kWp" when the client already has a PV installation with a known
 // power, "Tak" alone when the power is not set, "Nie" otherwise (ops#194).
+// Reused as-is for Rozbudowa PV/ME (b68) - ten sam mechanizm PPOŻ co PV.
 const istniejacaPvLabel = computed(() => {
   const moc = Number(wycenaFields.value.custom_istniejaca_pv_moc_kwp) || 0
   if (wycenaFields.value.custom_istniejaca_pv === 'Tak') {
     return moc > 0 ? `Tak · ${moc} kWp` : 'Tak'
   }
   return wycenaFields.value.custom_istniejaca_pv
+})
+
+// Sekcja "Konfiguracja" boksu Wycena per nowy rodzaj (b68) - pola z
+// kontraktu `custom_oze_*` (plus dwa reuzywane pola PPOZ dla Rozbudowy).
+// Liczby pokazuja sie tylko gdy > 0, teksty tylko gdy niepuste - dokladnie
+// ta sama konwencja "0/puste nie renderuje sie" co reszta tego pliku.
+// `wartosc` jest funkcja wołana leniwie (nie computed), zeby czytac zawsze
+// aktualny `wycenaFields.value`.
+const KONFIGURACJA_OZE_NOWE = {
+  'Rozbudowa PV/ME': [
+    { etykieta: __('Istniejąca instalacja PV'), wartosc: () => (wycenaFields.value.custom_istniejaca_pv ? istniejacaPvLabel.value : '') },
+    { etykieta: __('Uzgodnienia PPOŻ'), wartosc: () => wycenaFields.value.custom_ppoz || '' },
+  ],
+  Klimatyzacja: [
+    { etykieta: __('Rodzaj'), wartosc: () => wycenaFields.value.custom_oze_klima_rodzaj || '' },
+    { etykieta: __('Model'), wartosc: () => wycenaFields.value.custom_oze_klima_model || '' },
+    { etykieta: __('Moc'), wartosc: () => (Number(wycenaFields.value.custom_oze_klima_moc_kw) > 0 ? `${wycenaFields.value.custom_oze_klima_moc_kw} kW` : '') },
+  ],
+  'Pompa ciepła': [
+    { etykieta: __('Zapotrzebowanie cieplne'), wartosc: () => wycenaFields.value.custom_oze_pc_zapotrzebowanie || '' },
+    { etykieta: __('Producent'), wartosc: () => wycenaFields.value.custom_oze_pc_producent || '' },
+    { etykieta: __('Typ'), wartosc: () => wycenaFields.value.custom_oze_pc_typ || '' },
+    { etykieta: __('Ogrzewanie'), wartosc: () => wycenaFields.value.custom_oze_pc_ogrzewanie || '' },
+    { etykieta: __('Moc pompy ciepła'), wartosc: () => (Number(wycenaFields.value.custom_oze_pc_moc_kw) > 0 ? `${wycenaFields.value.custom_oze_pc_moc_kw} kW` : '') },
+    { etykieta: __('CWU'), wartosc: () => wycenaFields.value.custom_oze_cwu || '' },
+    { etykieta: __('Grzejniki'), wartosc: () => (Number(wycenaFields.value.custom_oze_grzejniki_szt) > 0 ? `${wycenaFields.value.custom_oze_grzejniki_szt} szt.` : '') },
+  ],
+  Kocioł: [
+    { etykieta: __('Rodzaj'), wartosc: () => wycenaFields.value.custom_oze_kociol_rodzaj || '' },
+    { etykieta: __('Model'), wartosc: () => wycenaFields.value.custom_oze_kociol_model || '' },
+    { etykieta: __('Moc'), wartosc: () => (Number(wycenaFields.value.custom_oze_kociol_moc_kw) > 0 ? `${wycenaFields.value.custom_oze_kociol_moc_kw} kW` : '') },
+    { etykieta: __('CWU'), wartosc: () => wycenaFields.value.custom_oze_cwu || '' },
+  ],
+}
+
+const konfiguracjaOzeNowe = computed(() => {
+  const definicje = KONFIGURACJA_OZE_NOWE[wycenaFields.value.custom_rodzaj_umowy] || []
+  return definicje
+    .map((def) => ({ etykieta: def.etykieta, wartosc: def.wartosc() }))
+    .filter((wiersz) => wiersz.wartosc !== '' && wiersz.wartosc != null)
 })
 </script>

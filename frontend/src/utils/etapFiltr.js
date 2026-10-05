@@ -18,12 +18,8 @@
 // pogrupowany normalizuje grupyOpcjiFiltraSzybkiego w utils/filtrSzybki.js).
 
 import { filterKnown } from './dealPipeline'
+import { RODZAJE_OZE } from './rodzajUmowy'
 
-const RODZAJE_UMOWY_OZE = new Set([
-  'Fotowoltaika',
-  'Fotowoltaika + Magazyn',
-  'Magazyn energii',
-])
 const RODZAJ_UMOWY_CP = 'Czyste Powietrze'
 
 /**
@@ -35,7 +31,7 @@ const RODZAJ_UMOWY_CP = 'Czyste Powietrze'
  * @returns {'OZE'|'CP'|null}
  */
 function procesKluczDlaRodzaju(rodzaj) {
-  if (RODZAJE_UMOWY_OZE.has(rodzaj)) return 'OZE'
+  if (RODZAJE_OZE.has(rodzaj)) return 'OZE'
   if (rodzaj === RODZAJ_UMOWY_CP) return 'CP'
   return null
 }
@@ -96,22 +92,24 @@ export function procesDlaFiltraRodzaju(grupy, rodzajFilter) {
 }
 
 /**
- * Jedna z trzech (identycznych w danych z backendu — `crm.volteo_pipeline`
- * gwarantuje ten sam `PIPELINE_OZE` + terminale dla każdego wariantu OZE)
- * grup OZE w `grupy` — którakolwiek jest obecna, w kolejności preferencji
- * pierwszej opcji Select (`Fotowoltaika`).
+ * Jedna z siedmiu (identycznych w danych z backendu, `crm.volteo_pipeline`
+ * gwarantuje ten sam `PIPELINE_OZE` + terminale dla każdego z siedmiu
+ * rodzajów OZE, trzech starych plus czterech nowych od b68, patrz
+ * RODZAJE_OZE w rodzajUmowy.js) grup OZE w `grupy`, którakolwiek jest
+ * obecna, w kolejności iteracji RODZAJE_OZE (stare trzy, potem nowe
+ * cztery; pierwsza opcja Select, `Fotowoltaika`, zostaje preferowana jak
+ * dotychczas, bo RODZAJE_OZE_PV idzie przed RODZAJE_OZE_NOWE w konstrukcji
+ * zbioru).
  *
  * @param {Object<string, string[]>|null|undefined} grupy
  * @returns {string[]}
  */
 function grupaOze(grupy) {
   if (!grupy) return []
-  return (
-    grupy['Fotowoltaika'] ||
-    grupy['Fotowoltaika + Magazyn'] ||
-    grupy['Magazyn energii'] ||
-    []
-  )
+  for (const rodzaj of RODZAJE_OZE) {
+    if (grupy[rodzaj]) return grupy[rodzaj]
+  }
+  return []
 }
 
 /**

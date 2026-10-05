@@ -73,7 +73,7 @@
         />
         <ZestawTab v-else-if="tab.name === 'Zestaw'" :deal-id="dealId" />
         <FakturyTab v-else-if="tab.name === 'Faktury'" :deal-id="dealId" />
-        <MontazTabOze v-else-if="tab.name === 'Montaz' && OZE_RODZAJE.has(doc.custom_rodzaj_umowy)" :deal-id="dealId" />
+        <MontazTabOze v-else-if="tab.name === 'Montaz' && czyOze(doc.custom_rodzaj_umowy)" :deal-id="dealId" />
         <AktualizacjeTab v-else-if="tab.name === 'Montaz'" :deal-id="dealId" :konfig="MONTAZ" />
         <AudytTab v-else-if="tab.name === 'Audyt'" :deal-id="dealId" :rodzaj="doc.custom_rodzaj_umowy || ''" />
         <AudytCPTab v-else-if="tab.name === 'AudytCP'" :deal-id="dealId" />
@@ -383,6 +383,7 @@ import { getSettings } from '@/stores/settings'
 import { globalStore } from '@/stores/global'
 import { statusesStore } from '@/stores/statuses'
 import { grupaForRodzaj, filterKnown } from '@/utils/dealPipeline'
+import { czyOze, zakladkiSzansy } from '@/utils/rodzajUmowy'
 import { statusButtonClass } from '@/utils/statusColors'
 import { getMeta } from '@/stores/meta'
 import { useDocument } from '@/data/document'
@@ -615,10 +616,11 @@ const NATIVE_TABS = [
 // Aktywność; Czyste Powietrze is Zestaw, Umowa, Trify, Audyt, Montaż,
 // Faktury, Pliki, Aktywność (a single tabOptions order below yields both,
 // since each conditional entry simply drops out of the filtered list).
-// Mirrors OZE_RODZAJE in crm/volteo_pipeline.py — the Kredyt tab (credit
-// application for the bank/leasing partner) only makes sense for the PV/
-// storage product lines, never for Czyste Powietrze (subsidy, not credit).
-const OZE_RODZAJE = new Set(['Fotowoltaika', 'Fotowoltaika + Magazyn', 'Magazyn energii'])
+// `OZE_RODZAJE`/`czyOze`/`zakladkiSzansy` (lustro crm/volteo_pipeline.py)
+// żyją od b68 wyłącznie w `@/utils/rodzajUmowy` - ten plik nie trzyma już
+// własnej kopii. Kredyt/Notatki/Montaż OZE/Pliki są dostępne na wszystkich
+// siedmiu rodzajach OZE (trzy stare plus cztery nowe od b68), nigdy dla
+// Czyste Powietrze (subsidy, not credit).
 
 // Attachments is "native" (rendered by <Activities>) everywhere EXCEPT on
 // OZE deals, where <PlikiTab> (issue ops#203, faza 1) takes over instead -
@@ -628,11 +630,17 @@ const OZE_RODZAJE = new Set(['Fotowoltaika', 'Fotowoltaika + Magazyn', 'Magazyn 
 function jestNatywna(tab) {
   return (
     NATIVE_TABS.includes(tab.name) &&
-    !(tab.name === 'Attachments' && OZE_RODZAJE.has(doc.value?.custom_rodzaj_umowy))
+    !(tab.name === 'Attachments' && czyOze(doc.value?.custom_rodzaj_umowy))
   )
 }
 
 const tabs = computed(() => {
+  // Jedno wyliczenie zakladkiSzansy() per przebudowa listy zakladek - zamiast
+  // powtarzania `czyOze(doc.value?.custom_rodzaj_umowy)`/osobnych Setów
+  // w kazdym warunku nizej (patrz rodzajUmowy.js dla pelnej tabeli, ktore
+  // zakladki widac dla ktorego rodzaju).
+  const zakladki = zakladkiSzansy(doc.value?.custom_rodzaj_umowy)
+
   // First use of the tabs `condition` hook (see the filter below): a tab
   // entry may carry `condition: () => boolean` to appear only for some
   // deals. useActiveTabManager restores the active tab by NAME (it looks up
@@ -647,10 +655,10 @@ const tabs = computed(() => {
       name: 'Umowa',
       label: __('Umowa'),
       icon: UmowaIcon,
-      // Negated on CP (not `OZE_RODZAJE.has(...)`) so deals with an
-      // unset/unrecognised custom_rodzaj_umowy keep seeing this tab, same
-      // as the Audyt/AudytCP pair below.
-      condition: () => doc.value?.custom_rodzaj_umowy !== 'Czyste Powietrze',
+      // zakladki.umowaOze jest fail-open dla rodzaju pustego/nierozpoznanego
+      // (tylko Czyste Powietrze daje false) - ten sam warunek co Audyt/
+      // AudytCP poniżej, patrz rodzajUmowy.js::zakladkiSzansy.
+      condition: () => zakladki.umowaOze,
     },
     {
       // CP's own small "Umowa o świadczenie usług obsługi dofinansowania"
@@ -666,7 +674,7 @@ const tabs = computed(() => {
       name: 'Kredyt',
       label: __('Kredyt'),
       icon: KredytIcon,
-      condition: () => OZE_RODZAJE.has(doc.value?.custom_rodzaj_umowy),
+      condition: () => zakladki.kredyt,
     },
     {
       // Strumień wpisów o finansowaniu Trify, tylko Czyste Powietrze (pozytywna
@@ -678,10 +686,9 @@ const tabs = computed(() => {
       name: 'Audyt',
       label: __('Audyt'),
       icon: AudytIcon,
-      // Negated on CP (not `OZE_RODZAJE.has(...)`) so deals with an
-      // unset/unrecognised custom_rodzaj_umowy keep seeing this tab, same
-      // as before AudytCP existed — only CP deals lose it.
-      condition: () => doc.value?.custom_rodzaj_umowy !== 'Czyste Powietrze',
+      // zakladki.audytOze jest fail-open tak jak Umowa powyżej - tylko
+      // Czyste Powietrze daje false (AudytCP wtedy przejmuje tę pozycję).
+      condition: () => zakladki.audytOze,
     },
     {
       // CP's own special audit form (AudytCPTab, not AudytTab) — mutually
@@ -694,24 +701,29 @@ const tabs = computed(() => {
     },
     { name: 'Montaz', label: __('Montaż'), icon: MontazIcon },
     {
-      // OSD/Dotacja (ops#202): status ręczny + notatki, tylko OZE (Faza 1) -
-      // ten sam OZE_RODZAJE co zakładka Kredyt powyżej.
+      // OSD/Dotacja (ops#202): status ręczny + notatki. Od b68 OSD widoczne
+      // na PV/PV+ME/ME ORAZ na Rozbudowa PV/ME (nie na Klimatyzacja/Pompa
+      // ciepła/Kocioł) - zakladki.osd niesie dokładnie ten podział.
       name: 'OSD', label: __('OSD'), icon: OsdIcon,
-      condition: () => OZE_RODZAJE.has(doc.value?.custom_rodzaj_umowy),
+      condition: () => zakladki.osd,
     },
     {
+      // Dotacja Mój Prąd istnieje wyłącznie dla trzech starych rodzajów OZE
+      // (zakladki.dotacja) - żaden z czterech nowych rodzajów od b68 (w tym
+      // Rozbudowa, mimo że dzieli zakładkę OSD z PV/PV+ME/ME powyżej) nie ma
+      // tej dotacji.
       name: 'Dotacja', label: __('Dotacja'), icon: DotacjaIcon,
-      condition: () => OZE_RODZAJE.has(doc.value?.custom_rodzaj_umowy),
+      condition: () => zakladki.dotacja,
     },
     { name: 'Faktury', label: __('Faktury'), icon: FakturyIcon },
     {
       // Feed "Notatki" (issue ops#201, uwaga 40): strumień łączący notatki
-      // z każdej zakładki z komentarzami wątku Audytu. Faza 1 = tylko OZE,
-      // ten sam warunek co zakładka Kredyt powyżej.
+      // z każdej zakładki z komentarzami wątku Audytu - wszystkie siedem
+      // rodzajów OZE, ten sam warunek co zakładka Kredyt powyżej.
       name: 'Notatki',
       label: __('Notatki'),
       icon: NoteIcon,
-      condition: () => OZE_RODZAJE.has(doc.value?.custom_rodzaj_umowy),
+      condition: () => zakladki.notatki,
     },
     { name: 'Attachments', label: __('Pliki'), icon: AttachmentIcon },
     { name: 'Activity', label: __('Aktywność'), icon: ActivityIcon },

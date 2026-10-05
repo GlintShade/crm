@@ -26,14 +26,19 @@ const PROCES_CP = [
   'Przegrana',
 ]
 
-// Kształt `crm.api.pipeline.volteo_pipeline_grupy` — wszystkie trzy warianty
-// OZE mapują się na IDENTYCZNĄ tablicę (gwarancja backendu, patrz
-// `crm/volteo_pipeline.py::grupa_for` + `PIPELINE_OZE`/`TERMINALE["OZE"]`
-// współdzielone przez cały `OZE_RODZAJE`).
+// Kształt `crm.api.pipeline.volteo_pipeline_grupy`, wszystkie siedem
+// wariantów OZE (trzy stare plus cztery nowe od b68, patrz RODZAJE_OZE w
+// rodzajUmowy.js) mapują się na IDENTYCZNĄ tablicę (gwarancja backendu,
+// patrz `crm/volteo_pipeline.py::grupa_for` + `PIPELINE_OZE`/
+// `TERMINALE["OZE"]` współdzielone przez cały `OZE_RODZAJE`).
 const grupy = {
   Fotowoltaika: PROCES_OZE,
   'Fotowoltaika + Magazyn': PROCES_OZE,
   'Magazyn energii': PROCES_OZE,
+  'Rozbudowa PV/ME': PROCES_OZE,
+  Klimatyzacja: PROCES_OZE,
+  'Pompa ciepła': PROCES_OZE,
+  Kocioł: PROCES_OZE,
   'Czyste Powietrze': PROCES_CP,
 }
 
@@ -52,6 +57,18 @@ describe('procesDlaFiltraRodzaju', () => {
     expect(procesDlaFiltraRodzaju(grupy, ['equals', 'Magazyn energii'])).toEqual(
       PROCES_OZE,
     )
+  })
+
+  it('kazdy z czterech nowych rodzajow OZE (b68) jako goly string → grupa procesu OZE', () => {
+    for (const rodzaj of ['Rozbudowa PV/ME', 'Klimatyzacja', 'Pompa ciepła', 'Kocioł']) {
+      expect(procesDlaFiltraRodzaju(grupy, rodzaj), rodzaj).toEqual(PROCES_OZE)
+    }
+  })
+
+  it('operator "in" miedzy starym i nowym rodzajem OZE (jeden proces) → grupa tego procesu', () => {
+    expect(
+      procesDlaFiltraRodzaju(grupy, ['in', ['Fotowoltaika', 'Pompa ciepła']]),
+    ).toEqual(PROCES_OZE)
   })
 
   it('operator "in" z wartościami jednego procesu (OZE) → grupa tego procesu', () => {
@@ -155,6 +172,21 @@ describe('opcjeEtapu', () => {
   it('bez wszystkieStatusy (parametr pominięty) nigdy nie dokłada "Inne"', () => {
     const wynik = opcjeEtapu(grupy, undefined, isKnown)
     expect(wynik.map((g) => g.group)).toEqual(['OZE', 'Czyste Powietrze'])
+  })
+
+  it('bez rodzaju: grupa OZE spada na ktorykolwiek z czterech nowych rodzajow (b68), gdy "Fotowoltaika" nie jest w grupy', () => {
+    const grupyBezStarychKluczy = { 'Pompa ciepła': PROCES_OZE, 'Czyste Powietrze': PROCES_CP }
+    const wynik = opcjeEtapu(grupyBezStarychKluczy, null, isKnown)
+    expect(wynik).toEqual([
+      { group: 'OZE', items: PROCES_OZE.map((name) => ({ label: name, value: name })) },
+      { group: 'Czyste Powietrze', items: PROCES_CP.map((name) => ({ label: name, value: name })) },
+    ])
+  })
+
+  it('z rodzajem (jeden z czterech nowych, b68): płaska lista w kolejności procesu', () => {
+    expect(opcjeEtapu(grupy, 'Kocioł', isKnown)).toEqual(
+      PROCES_OZE.map((name) => ({ label: name, value: name })),
+    )
   })
 
   it('rodzaj mieszany (in z dwóch procesów) traktowany jak brak rodzaju: pogrupowana lista', () => {
