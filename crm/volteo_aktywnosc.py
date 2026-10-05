@@ -272,6 +272,19 @@ def tekst_sladu(rodzaj: str, **dane: object) -> str:
 	if rodzaj == "kalkulator_oze":
 		return f"utworzono szansę z kalkulatora OZE: {dane['moc_kw']} kW, {dane['pozycje']} pozycji zestawu"
 
+	if rodzaj == "kalkulator_oze_nowy":
+		# Gałąź dla czterech nowych rodzajów instalacji OZE (Rozbudowa PV/ME, Klimatyzacja,
+		# Pompa ciepła, Kocioł: crm/volteo_kalkulator_oze.py), odrębna od "kalkulator_oze"
+		# powyżej (silnik PV/PV+ME/ME, moc w kW): nowe rodzaje nie mają jednej wspólnej
+		# "mocy" do pokazania, więc tekst nazywa rodzaj instalacji po nazwie, nie po kW.
+		# Klucz danych to "rodzaj_instalacji", NIE "rodzaj": ten drugi jest już parametrem
+		# funkcji (selektorem gałęzi) i jego powtórzenie w **dane wywołałoby TypeError
+		# ("multiple values for argument 'rodzaj'") u każdego wołającego.
+		return (
+			f"utworzono szansę z kalkulatora OZE ({dane['rodzaj_instalacji']}): "
+			f"{dane['pozycje']} pozycji zestawu"
+		)
+
 	if rodzaj == "kalkulator_cp":
 		return f"utworzono szansę z kalkulatora Czyste Powietrze: {dane['pozycje']} pozycji zestawu"
 

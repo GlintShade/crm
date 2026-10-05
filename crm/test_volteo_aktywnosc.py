@@ -662,6 +662,12 @@ class TestTekstSladu(unittest.TestCase):
 			"utworzono szansę z kalkulatora OZE: 6.5 kW, 12 pozycji zestawu",
 		)
 
+	def test_n2_kalkulator_oze_nowy(self: "TestTekstSladu") -> None:
+		self.assertEqual(
+			tekst_sladu("kalkulator_oze_nowy", rodzaj_instalacji="Pompa ciepła", pozycje=3),
+			"utworzono szansę z kalkulatora OZE (Pompa ciepła): 3 pozycji zestawu",
+		)
+
 	def test_o_kalkulator_cp(self: "TestTekstSladu") -> None:
 		self.assertEqual(
 			tekst_sladu("kalkulator_cp", pozycje=4),

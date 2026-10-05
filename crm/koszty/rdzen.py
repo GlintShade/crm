@@ -161,6 +161,81 @@ def zbuduj_snapshot_cp(wewnetrzne: dict[str, Any], nazwy: dict[str, str], utworz
 	}
 
 
+def zbuduj_snapshot_oze(wewnetrzne: dict[str, Any], utworzono: str) -> dict[str, Any]:
+	"""Buduje snapshot v1 (`linia_produktowa="oze"`) z `wynik["wewnetrzne"]` wyniku
+	`crm.volteo_kalkulator_oze.oblicz_oferte` (jeden z czterech nowych rodzajów instalacji:
+	Rozbudowa PV/ME, Klimatyzacja, Pompa ciepła, Kocioł; b68, issue ops#222) -- kształt
+	dokumentowany w `crm/volteo_kalkulator_oze.py`: `{koszt_calkowity, marza_proenergy,
+	bonus_liderski, narzut, marza, zysk, linie: [{klucz, etykieta, typ, kwota}], pozycje: [...]}`.
+
+	Tylko linie typu `"Koszt"` trafiają do `snapshot["linie"]` -- linie typu `"Marża
+	Proenergy"`/`"Bonus liderski"` już mają swoją agregatową reprezentację w
+	`skladniki_marzy` (plus `"narzut"`, który NIE jest linią `wewnetrzne["linie"]` wcale,
+	bo to pole wejściowe handlowca, nie pozycja katalogowa) -- identyczna konwencja co
+	`ops/crm-kalkulator-bom.py`'s `koszty_linie`/`skladniki_marzy` dla silnika PV: `ilosc`,
+	`jednostka`, `netto` i `prowizja_plan` są tu zawsze `None` (te linie nie mają własnej
+	ceny klienta rozbitej per pozycja na poziomie snapshotu -- tylko koszt).
+
+	`podsumowanie.zysk_plan` jest tu RÓWNE `marza_plan` (nie wewnętrznemu `wewnetrzne["zysk"]`,
+	które w kalkulatorze OZE świadomie WYKLUCZA narzut handlowca z zysku firmy -- patrz
+	docstring `crm/volteo_kalkulator_oze.py::oblicz_oferte`) -- to jest ŚWIADOMA decyzja
+	zgodności z istniejącym precedensem: `podsumowanie.prowizja_plan` jest `None` (tak jak w
+	snapshotach PV), a `scal_snapshot`/`_oblicz_podsumowanie_rzeczywiste` niżej liczy
+	`zysk = marza - prowizja` z `prowizja` domyślnie `0`, gdy `prowizja_plan` jest `None` --
+	więc `zysk_plan` RÓWNE `marza_plan` tutaj jest jedyną wartością zgodną z tym, jak reszta
+	modułu (i Zestaw tab) interpretuje snapshot z `prowizja_plan=None` gdziekolwiek indziej.
+	Rozbieżność między tym a `wewnetrzne["zysk"]` (który jest wyłącznie podglądem na żywo w
+	panelu admina kalkulatora, nigdy nie trafia do żadnego snapshotu) jest opisana w raporcie
+	agenta, który dodał tę funkcję -- do potwierdzenia, czy to właściwa interpretacja.
+
+	Żaden argument nie jest mutowany.
+	"""
+	linie = [
+		{
+			"klucz": linia["klucz"],
+			"etykieta": linia["etykieta"],
+			"ilosc": None,
+			"jednostka": None,
+			"netto": None,
+			"prowizja_plan": None,
+			"koszt_plan": _str_kwota(linia["kwota"]),
+			"koszt_rzeczywisty": None,
+		}
+		for linia in wewnetrzne.get("linie", [])
+		if linia["typ"] == "Koszt"
+	]
+
+	koszt_plan = _kwota(wewnetrzne["koszt_calkowity"])
+	marza_proenergy = _kwota(wewnetrzne["marza_proenergy"])
+	bonus_liderski = _kwota(wewnetrzne["bonus_liderski"])
+	narzut = _kwota(wewnetrzne["narzut"])
+	netto = _kwota(koszt_plan + marza_proenergy + bonus_liderski + narzut)
+	marza_plan = _kwota(netto - koszt_plan)
+
+	return {
+		"wersja": WERSJA,
+		"linia_produktowa": "oze",
+		"utworzono": utworzono,
+		"zmodyfikowano": None,
+		"zmodyfikowal": None,
+		"linie": linie,
+		"skladniki_marzy": [
+			{"klucz": "marza_proenergy", "etykieta": "Marża ProEnergy", "kwota": _str_kwota(marza_proenergy)},
+			{"klucz": "bonus_liderski", "etykieta": "Bonus liderski", "kwota": _str_kwota(bonus_liderski)},
+			{"klucz": "narzut", "etykieta": "Narzut handlowca", "kwota": _str_kwota(narzut)},
+		],
+		"dodatkowe": [],
+		"podsumowanie": {
+			"netto": _str_kwota(netto),
+			"koszt_plan": _str_kwota(koszt_plan),
+			"marza_plan": _str_kwota(marza_plan),
+			"prowizja_plan": None,
+			"zysk_plan": _str_kwota(marza_plan),
+		},
+		"podsumowanie_rzeczywiste": None,
+	}
+
+
 def _scal_dodatkowe(
 	stare: list[dict[str, Any]],
 	nowe: list[dict[str, Any]],
