@@ -11,6 +11,28 @@
         <button class="ml-2 text-base font-bold leading-none" @click="errorMsg = ''">×</button>
       </div>
 
+      <!-- Cztery nowe rodzaje OZE (Rozbudowa PV/ME, Klimatyzacja, Pompa
+           ciepła, Kocioł; b68, chunk F3) mają własny kalkulator z własną
+           kartą "Rodzaj instalacji" i własnym blokiem "Szansa utworzona" --
+           całe poniższe (grid .kalk-split ORAZ blok done) jest zastąpione
+           jednym komponentem. Watcher(y) kalkulacji/sanitizacji dodatków
+           PV poniżej (runCalc, [variant, producent, falownik]) są
+           nieszkodliwe dla nowych rodzajów (zerują/czyszczą lokalny stan),
+           ale `runCalc` samo jest jawnie zagrodzone przed wysłaniem
+           `volteo_quote_calc` dla nich (patrz guard na początku funkcji) --
+           inaczej stare `sel.producent`/`sel.falownik` pozostałe po
+           przełączeniu z wariantu PV mogłyby wciąż spełniać `isComplete`. -->
+      <KalkulatorOzeRozszerzony
+        v-if="czyNowyRodzaj(sel.variant)"
+        :contact="props.contact"
+        v-model:rodzaj="sel.variant"
+      >
+        <template #client-picker>
+          <slot name="client-picker" />
+        </template>
+      </KalkulatorOzeRozszerzony>
+
+      <template v-else>
       <template v-if="flow !== 'done'">
         <div class="kalk-split grid items-start gap-x-5" style="grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr)">
 
@@ -24,7 +46,7 @@
                 <div class="mb-0.5 text-sm text-ink-gray-5">Rodzaj instalacji</div>
                 <div class="flex flex-wrap gap-1.5">
                   <button
-                    v-for="v in VARIANTS" :key="v"
+                    v-for="v in RODZAJE_KAFELKI" :key="v"
                     class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
                     :class="sel.variant === v
                       ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base'
@@ -541,6 +563,7 @@
           <Button variant="ghost" @click="resetFlow">Nowa oferta</Button>
         </div>
       </div>
+      </template>
     </div>
   </div>
 </template>
@@ -580,12 +603,23 @@ import {
 } from '@/utils/pvForm'
 import { formatPln } from '@/utils/money'
 import { grupujBreakdown } from '@/utils/pvBreakdown'
+import { czyNowyRodzaj, kafelkiRodzaju } from '@/utils/ozeForm'
+import KalkulatorOzeRozszerzony from './KalkulatorOzeRozszerzony.vue'
 
 const props = defineProps({
   contact: { type: Object, default: () => ({}) },
 })
 
 const router = useRouter()
+
+// Siedem kafelków "Rodzaj instalacji" (b68, "Wielki update kalkulatora
+// OZE", chunk F3): trzy stare warianty PV/magazynu (VARIANTS) plus cztery
+// nowe rodzaje OZE (RODZAJE_NOWE), w tej kolejności, zawsze. Wybranie
+// jednego z czterech nowych rodzajów przełącza cały widok na
+// KalkulatorOzeRozszerzony.vue (patrz szablon niżej); ta karta i jej
+// kafelki zostają widoczne tylko, gdy bieżący wybór jest jednym z trzech
+// starych wariantów.
+const RODZAJE_KAFELKI = kafelkiRodzaju()
 
 const VOIVODESHIPS = [
   'dolnośląskie', 'kujawsko-pomorskie', 'lubelskie', 'lubuskie', 'łódzkie',
@@ -1162,6 +1196,14 @@ watch(
 )
 
 async function runCalc() {
+  // Cztery nowe rodzaje OZE mają własny kalkulator (KalkulatorOzeRozszerzony.vue,
+  // v-if w szablonie) -- jawny guard tutaj, bo stale sel.producent/sel.falownik
+  // pozostałe po przełączeniu z wariantu PV mogłyby po cichu spełnić
+  // `isComplete` i wysłać `volteo_quote_calc` z nieaktualnym payloadem PV.
+  if (czyNowyRodzaj(sel.variant)) {
+    clearSummary()
+    return
+  }
   if (!isComplete.value) {
     clearSummary()
     return
@@ -1195,6 +1237,10 @@ async function runCalc() {
 
 // --- Generate ----------------------------------------------------------------
 async function runGenerate() {
+  // Nieosiągalne z UI (przycisk żyje wyłącznie w gridzie poniżej, który
+  // zamienia się na KalkulatorOzeRozszerzony.vue dla nowych rodzajów), ale
+  // ta sama zasada fail-closed jak w runCalc powyżej.
+  if (czyNowyRodzaj(sel.variant)) return
   errorMsg.value = ''
   generating.value = true
   try {
