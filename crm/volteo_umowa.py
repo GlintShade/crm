@@ -306,6 +306,40 @@ def czy_propagowac_zgody(autenti_status: str | None) -> bool:
 	return autenti_status not in SEND_BLOCKED_STATUSES
 
 
+RODZAJE_NOWE: frozenset[str] = frozenset(
+	{"Rozbudowa PV/ME", "Klimatyzacja", "Pompa ciepła", "Kocioł"}
+)
+"""Cztery nowe rodzaje umowy wprowadzone razem z kalkulatorem OZE (b68, chunk B3),
+celowo zdefiniowane TUTAJ (moduł umowy), nie w `crm.volteo_pipeline` (ten moduł
+opisuje WYŁĄCZNIE kroki procesu - te cztery rodzaje idą dokładnie tym samym
+procesem OZE co PV/PVME/ME, zero różnicy, więc nie mają tam własnego zbioru) ani
+w `crm.volteo_naming` (ten moduł tylko mapuje rodzaj na kod `PRO/<KOD>/<RR>/<NNNN>`
+- `PC`/`KL`/`PP`/`ROZ` są tam prawdziwymi, przypisanymi kodami, nie placeholderem
+`XX`, więc ten moduł sam nie wie, że akurat te cztery rodzaje nie mają jeszcze
+wzoru PDF). Wzory PDF umowy dla tych czterech rodzajów przygotowuje prawnik w
+osobnej fazie (decyzja właściciela 2026-10-04) - do tego czasu
+`crm.api.umowa.volteo_umowa_pdf` odmawia generowania PDF-u komunikatem "w
+przygotowaniu" (`czy_rodzaj_bez_wzoru_umowy` niżej), PRZED odczytem
+`crm.volteo_umowa_render.SZABLONY`, żeby komunikat nie wypisywał listy trzech
+pierwotnych rodzajów PV/magazyn, jakby te cztery nowe były błędem danych szansy.
+
+Formularz „Informacje do umowy" (`volteo_umowa_get/create/save`) NIE sprawdza
+tego zbioru - te trzy endpointy już przyjmują dowolny rodzaj spoza Czystego
+Powietrza (`_czy_cp` w `crm/api/umowa.py` jest jedyną bramką rodzaju w tamtym
+module), więc formularz da się wypełnić i zapisać dla tych czterech rodzajów od
+razu; blokowany jest wyłącznie krok generowania PDF-u."""
+
+
+def czy_rodzaj_bez_wzoru_umowy(rodzaj_umowy: str | None) -> bool:
+	"""Czy rodzaj umowy szansy jest jednym z czterech nowych rodzajów (b68, chunk
+	B3: Rozbudowa PV/ME, Klimatyzacja, Pompa ciepła, Kocioł) bez wbudowanego wzoru
+	PDF-u umowy, patrz `RODZAJE_NOWE` wyżej. `None`/pusty/nierozpoznany rodzaj daje
+	`False` - to inny, wcześniejszy błąd (rodzaj nieustawiony albo literalnie
+	nierozpoznany), zgłaszany przez `crm.api.umowa._blad_rodzaju_umowy_bez_szablonu`,
+	nie przez tę funkcję."""
+	return rodzaj_umowy in RODZAJE_NOWE
+
+
 def kod_szablonu(rodzaj_umowy: str | None, podwojna: bool) -> str:
 	"""Zwraca kod wbudowanego szablonu PDF-u umowy (klucz w
 	`crm.volteo_umowa_render.SZABLONY`) dla danego rodzaju umowy i obecności
