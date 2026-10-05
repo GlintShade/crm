@@ -10,6 +10,15 @@ class TestVolteoNaming(unittest.TestCase):
 		self.assertEqual(code_for("Magazyn energii"), "ME")
 		self.assertEqual(code_for("Czyste Powietrze"), "CP")
 
+	def test_a2_kody_nowych_rodzajow_b68(self: "TestVolteoNaming") -> None:
+		# Paczka "Wielki update kalkulatora OZE" (b68, chunk B3): "Kocioł" mapuje
+		# się na kod PP, nie KO (decyzja właściciela 2026-10-04), patrz docstring
+		# UMOWA_CODES.
+		self.assertEqual(code_for("Rozbudowa PV/ME"), "ROZ")
+		self.assertEqual(code_for("Klimatyzacja"), "KL")
+		self.assertEqual(code_for("Pompa ciepła"), "PC")
+		self.assertEqual(code_for("Kocioł"), "PP")
+
 	def test_b_brak_rodzaju_daje_fallback(self: "TestVolteoNaming") -> None:
 		self.assertEqual(code_for(None), FALLBACK_CODE)
 		self.assertEqual(code_for(""), FALLBACK_CODE)

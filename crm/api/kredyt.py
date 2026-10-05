@@ -255,9 +255,8 @@ def _sprawdz_rodzaj_oze(deal_doc: "frappe.model.document.Document") -> None:
 	if deal_doc.get("custom_rodzaj_umowy") not in OZE_RODZAJE:
 		frappe.throw(
 			_(
-				"Formularz kredytowy dotyczy wyłącznie linii OZE (Fotowoltaika, "
-				"Fotowoltaika + Magazyn, Magazyn energii) — ustaw „Rodzaj umowy” na "
-				"szansie sprzedaży na jedną z tych wartości."
+				"Formularz kredytowy dotyczy wyłącznie linii OZE. Ustaw „Rodzaj umowy” na "
+				"szansie sprzedaży na jedną z wartości linii OZE."
 			)
 		)
 

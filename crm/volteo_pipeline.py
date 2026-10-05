@@ -36,8 +36,24 @@ statusy terminalne, w tej kolejności.
 
 import json
 
-OZE_RODZAJE: frozenset[str] = frozenset({"Fotowoltaika", "Fotowoltaika + Magazyn", "Magazyn energii"})
-"""Wartości pola `custom_rodzaj_umowy`, które mapują się na proces OZE."""
+OZE_RODZAJE: frozenset[str] = frozenset(
+	{
+		"Fotowoltaika",
+		"Fotowoltaika + Magazyn",
+		"Magazyn energii",
+		"Rozbudowa PV/ME",
+		"Klimatyzacja",
+		"Pompa ciepła",
+		"Kocioł",
+	}
+)
+"""Wartości pola `custom_rodzaj_umowy`, które mapują się na proces OZE.
+
+Od paczki "Wielki update kalkulatora OZE" (b68, chunk B3) dochodzą cztery nowe rodzaje instalacji
+(Rozbudowa PV/ME, Klimatyzacja, Pompa ciepła, Kocioł). Idą DOKŁADNIE tym samym procesem OZE co
+Fotowoltaika/Fotowoltaika + Magazyn/Magazyn energii (decyzja właściciela 2026-10-04): te same kroki,
+te same statusy terminalne, bez przesunięcia. Dostęp do kalkulatora/szansy tych rodzajów nadal bramkuje
+wyłącznie `custom_linia_oze`, bez nowej flagi per nowy rodzaj."""
 
 PIPELINE_OZE: tuple[str, ...] = (
 	"Lead",

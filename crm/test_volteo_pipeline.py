@@ -33,6 +33,16 @@ class TestVolteoPipeline(unittest.TestCase):
 		self.assertEqual(pipeline_key_for("Czyste Powietrze"), "CP")
 		self.assertEqual(pipeline_for("Czyste Powietrze"), PIPELINE_CP)
 
+	def test_b2_nowe_rodzaje_b68_dają_proces_oze(self: "TestVolteoPipeline") -> None:
+		# Paczka "Wielki update kalkulatora OZE" (b68, chunk B3): cztery nowe
+		# rodzaje idą DOKŁADNIE tym samym procesem OZE (decyzja właściciela
+		# 2026-10-04), te same kroki, ten sam offset, bez wyjątków.
+		for rodzaj in ("Rozbudowa PV/ME", "Klimatyzacja", "Pompa ciepła", "Kocioł"):
+			self.assertEqual(pipeline_key_for(rodzaj), "OZE")
+			self.assertEqual(pipeline_for(rodzaj), PIPELINE_OZE)
+		self.assertEqual(pipeline_key_for("Kocioł"), "OZE")
+		self.assertEqual(etap_nr("Pompa ciepła", "Lead"), 1)
+
 	def test_c_brak_pusty_nieznany_rodzaj_dają_wartości_puste(self: "TestVolteoPipeline") -> None:
 		for rodzaj in (None, "", "Nieznany"):
 			self.assertIsNone(pipeline_key_for(rodzaj))

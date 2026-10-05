@@ -14,9 +14,19 @@ UMOWA_CODES: dict[str, str] = {
 	"Fotowoltaika": "PV",
 	"Fotowoltaika + Magazyn": "PVME",
 	"Magazyn energii": "ME",
+	"Rozbudowa PV/ME": "ROZ",
+	"Klimatyzacja": "KL",
+	"Pompa ciepła": "PC",
+	"Kocioł": "PP",
 	"Czyste Powietrze": "CP",
 }
-"""Mapowanie rodzaju umowy (wartość pola `custom_rodzaj_umowy`) na kod używany w nazwie dokumentu."""
+"""Mapowanie rodzaju umowy (wartość pola `custom_rodzaj_umowy`) na kod używany w nazwie dokumentu.
+
+"Kocioł" mapuje się na kod `PP`, nie `KO` (decyzja właściciela 2026-10-04, paczka "Wielki update
+kalkulatora OZE", chunk B3), zgodnie z istniejącym tokenem produktowym leada `PP` równym "Piec"
+(`crm.volteo_powiadomienia.ETYKIETY_PRODUKTOW`, osobna, niezwiązana przestrzeń nazw: kod nazwy
+dokumentu szansy i token produktowy leada nie są tym samym słownikiem, zbieżność liter jest celowa,
+nie przypadkowa)."""
 
 FALLBACK_CODE = "XX"
 """Kod używany dla nieznanego, pustego albo brakującego rodzaju umowy."""
