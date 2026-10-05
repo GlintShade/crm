@@ -231,11 +231,17 @@ _POLA_DOBORU_WYMAGANE: tuple[str, ...] = (
 _POLA_STALYCH_WYMAGANE: tuple[str, ...] = (
 	"vat_indyw",
 	"vat_biznes",
-	"narzut_max",
 	"pmt_oprocentowanie_mies",
 	"ppoz",
 	"panel_moc_wp",
 )
+"""`narzut_max` celowo NIE jest tutaj: w odróżnieniu od pozostałych pięciu stałych, silnik PV
+(`ops/crm-kalkulator-bom.py`) czyta je przez `frappe.utils.flt(consts.get("narzut_max", 0.0))`,
+więc brak wiersza w `tabSingles` jest dla PV równoznaczny z `0` ("brak limitu"), nigdy błędem.
+Na lokalnej bazie `get_singles_dict("Volteo Kalkulator Stale")["narzut_max"]` faktycznie bywa
+`None` (pole nigdy jawnie nie zapisane), a klucz może też w ogóle nie wystąpić w słowniku:
+wymaganie go tutaj wywaliłoby KAŻDĄ wycenę przez `OZEBladMapowania`, mimo że PV radzi sobie z
+dokładnie tym samym stanem danych bez żadnego błędu. Patrz `_narzut_max` niżej."""
 
 
 def _blad(komunikat: str) -> None:
@@ -365,6 +371,21 @@ def dobor_z_wierszy(wiersze: list[dict[str, Any]]) -> list[dict[str, Any]]:
 	return wynik
 
 
+def _narzut_max(dokument: dict[str, Any]) -> Decimal | None:
+	"""`narzut_max`: brak klucza w `dokument`, `None` i `""` wszystkie znaczą to samo co
+	Frappe `flt()` na PV, "brak limitu", więc mapują na `None`, tak jak jawne `0`. Każda
+	inna wartość (w tym śmieciowa, nie dająca się sparsować) idzie przez `_decimal` jak
+	każde inne pole: śmieciowa wartość JEST błędem formularza, w odróżnieniu od samego
+	braku wiersza w `tabSingles`, co jest normalnym, oczekiwanym stanem danych."""
+	if "narzut_max" not in dokument:
+		return None
+	wartosc = dokument["narzut_max"]
+	if wartosc is None or wartosc == "":
+		return None
+	narzut_max = _decimal(wartosc, "narzut_max")
+	return None if narzut_max == _ZERO else narzut_max
+
+
 def stale_z_singla(dokument: dict[str, Any]) -> dict[str, Any]:
 	"""Mapuje `frappe.db.get_singles_dict("Volteo Kalkulator Stale")` (stringi albo liczby,
 	wszystkie pola opcjonalne na poziomie Frappe) na kształt z Decimal-ami, który reszta
@@ -372,12 +393,8 @@ def stale_z_singla(dokument: dict[str, Any]) -> dict[str, Any]:
 	`dokument` to głośny `OZEBladMapowania`: nigdy cichy fallback na wartość domyślną
 	(patrz pułapka `get_singles_dict` kontra `get_single_value` w CLAUDE.md/WORKSHOP.md:
 	`get_singles_dict` zwraca TYLKO pola faktycznie zapisane w `tabSingles`, więc brakujący
-	klucz oznacza "nikt nigdy tego nie ustawił", nie "wartość to 0").
-
-	`narzut_max` równe `0` mapuje na `None` ("brak limitu"): konwencja z WORKSHOP.md
-	("Never use a Float/Currency 0.0 as an empty marker" nie dotyczy TEGO pola: tu `0` to
-	jawnie udokumentowana wartość-znacznik "bez limitu", ustalona już przy wprowadzeniu
-	`narzut_max` w b54, nie coś wymyślonego przez ten moduł).
+	klucz oznacza "nikt nigdy tego nie ustawił", nie "wartość to 0"). `narzut_max` jest
+	WYJĄTKIEM od tej reguły: patrz `_narzut_max` i komentarz przy `_POLA_STALYCH_WYMAGANE`.
 	"""
 	if not isinstance(dokument, dict):
 		raise OZEBladMapowania("Nieprawidłowy format stałych kalkulatora.")
@@ -385,11 +402,10 @@ def stale_z_singla(dokument: dict[str, Any]) -> dict[str, Any]:
 		if pole not in dokument:
 			raise OZEBladMapowania(f"Brak stałej {pole} w konfiguracji kalkulatora.")
 
-	narzut_max = _decimal(dokument["narzut_max"], "narzut_max")
 	return {
 		"vat_indyw": _decimal(dokument["vat_indyw"], "vat_indyw"),
 		"vat_biznes": _decimal(dokument["vat_biznes"], "vat_biznes"),
-		"narzut_max": None if narzut_max == _ZERO else narzut_max,
+		"narzut_max": _narzut_max(dokument),
 		"pmt_oprocentowanie_mies": _decimal(dokument["pmt_oprocentowanie_mies"], "pmt_oprocentowanie_mies"),
 		"ppoz": _decimal(dokument["ppoz"], "ppoz"),
 		"panel_moc_wp": _decimal(dokument["panel_moc_wp"], "panel_moc_wp"),

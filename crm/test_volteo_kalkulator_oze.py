@@ -532,6 +532,36 @@ class MaperyTest(unittest.TestCase):
 		stale = stale_z_singla(STALE_DOKUMENT)
 		self.assertIsNone(stale["narzut_max"])
 
+	def test_stale_z_singla_narzut_max_brak_klucza_daje_none(self) -> None:
+		# Lokalna/produkcyjna rzeczywistość: get_singles_dict() może w ogóle nie nieść tego
+		# klucza, gdy pole nigdy nie zostało jawnie zapisane -- to NIE jest OZEBladMapowania,
+		# tylko to samo "brak limitu", co silnik PV dostaje z frappe.utils.flt(consts.get(...)).
+		dokument = dict(STALE_DOKUMENT)
+		del dokument["narzut_max"]
+		stale = stale_z_singla(dokument)
+		self.assertIsNone(stale["narzut_max"])
+
+	def test_stale_z_singla_narzut_max_none_daje_none(self) -> None:
+		stale = stale_z_singla({**STALE_DOKUMENT, "narzut_max": None})
+		self.assertIsNone(stale["narzut_max"])
+
+	def test_stale_z_singla_narzut_max_pusty_string_daje_none(self) -> None:
+		stale = stale_z_singla({**STALE_DOKUMENT, "narzut_max": ""})
+		self.assertIsNone(stale["narzut_max"])
+
+	def test_stale_z_singla_narzut_max_5000_dziala_jako_limit(self) -> None:
+		stale = stale_z_singla({**STALE_DOKUMENT, "narzut_max": "5000"})
+		self.assertEqual(stale["narzut_max"], Decimal("5000"))
+		wejscie = {
+			"rodzaj": KLIMATYZACJA,
+			"typ_klienta": "indywidualny",
+			"narzut": 6000,
+			"ulga_pct": 0,
+			"klimatyzacja": {"kod": "klima_elis_x_2_6"},
+		}
+		with self.assertRaises(OZEDaneNiekompletne):
+			oblicz_oferte(wejscie, CENNIK, DOBOR, stale)
+
 	def test_stale_z_singla_brak_pola_jest_bledem_mapowania(self) -> None:
 		niekompletny = dict(STALE_DOKUMENT)
 		del niekompletny["ppoz"]
