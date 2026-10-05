@@ -319,3 +319,229 @@ export function pickMocForTarget(targetKwp, wp) {
     options[options.length - 1]
   ).value
 }
+
+// --- Opcje dodatkowe do istniejacych zestawow PV / PV+ME / ME (ops#225) ----
+// Katalog ("Volteo Cennik Pozycja", rodzaj="Dodatek OZE") przychodzi z
+// volteo_quote_components jako data.dodatki[] = {kod, nazwa, grupa,
+// producent, model, kolor, moc_kw, ilosc, parametr, opis, cena}. "cena" to
+// juz gotowa cena klienta netto calego dodatku (suma skladowych) - ten plik
+// wylacznie prezentuje/filtruje te pozycje, zero wlasnej matematyki cenowej.
+//
+// Stopniowe odslanianie (decyzja wlasciciela 2026-10-05): wszystkie dodatki
+// startuja WYLACZONE, wlacznie z EMS Breeze (mimo wczesniejszego zapisu CEO
+// "TAK domyslna" - do potwierdzenia, patrz raport chunku F2).
+// sanitizujDodatki ponizej TYLKO zeruje wybory, ktore przestaly byc dostepne
+// dla biezacej konfiguracji (wariant/producent/typ falownika) - nigdy niczego
+// nie wlacza samoistnie.
+
+// Trzy rodzaje dodatku "Klimatyzacja", kazdy z jednym, stale przypisanym
+// modelem (decyzja Jana 2026-10-05: katalog zna takze Roni X/Teta Mirror X
+// jako warianty kolorystyczne tych samych rodzajow, ale ten formularz
+// oferuje jeden ustalony model na rodzaj, zeby nie mnozyc wyborow w kroku
+// "stopniowego odslaniania" - do potwierdzenia u CEO). Trzymane w jednej
+// stalej, zeby zmiana wyboru modelu przez CEO byla jednym miejscem do
+// poprawy.
+export const RODZAJ_KLIMY_CHLODZENIE = 'chlodzenie'
+export const RODZAJ_KLIMY_DOGRZEWANIE = 'dogrzewanie'
+export const RODZAJ_KLIMY_GRZANIE = 'grzanie'
+export const RODZAJE_KLIMY_DODATKU = [
+  { value: RODZAJ_KLIMY_CHLODZENIE, label: 'Chłodzenie', model: 'Elis X' },
+  { value: RODZAJ_KLIMY_DOGRZEWANIE, label: 'Chłodzenie + dogrzewanie', model: 'Teta X' },
+  { value: RODZAJ_KLIMY_GRZANIE, label: 'Chłodzenie + grzanie', model: 'Mira X' },
+]
+
+// Opisowa powierzchnia pokoju per moc jednostki klimatyzacji (prezentacja
+// wylacznie), kluczowana stringiem mocy z jedna cyfra po przecinku (zgodnie
+// z katalogiem: 2.6/3.5/5.1/6.8 kW).
+export const POWIERZCHNIA_KLIMY = {
+  '2.6': 'do 25 m2',
+  '3.5': '25-40 m2',
+  '5.1': '40-55 m2',
+  '6.8': '55-75 m2',
+}
+
+/**
+ * Zwraca model przypisany do rodzaju dodatku klimatyzacji (RODZAJE_KLIMY_DODATKU).
+ *
+ * @param {string} rodzajKlimy - wartość rodzaju (np. "chlodzenie")
+ * @returns {string} nazwa modelu lub pusty string, gdy rodzaj nieznany
+ */
+export function modelDlaRodzajuKlimy(rodzajKlimy) {
+  const wpis = RODZAJE_KLIMY_DODATKU.find((r) => r.value === rodzajKlimy)
+  return wpis ? wpis.model : ''
+}
+
+/**
+ * Sprawdza, czy dodatek "Klimatyzacja" jest dostępny dla danego wariantu.
+ * Dostępny dla każdego z trzech wariantów (PV / PV+ME / ME), niezależnie od
+ * producenta.
+ *
+ * @param {string} variant - wybrany wariant instalacji
+ * @returns {boolean} czy dodatek jest dostępny do wyboru
+ */
+export function klimaDodatekDostepna(variant) {
+  return VARIANTS.includes(variant)
+}
+
+/**
+ * Sprawdza, czy dodatki "Panele PV" / "Panele PV + mikro" są dostępne.
+ * Wyłącznie w wariancie "Magazyn energii" (zestaw bez własnej PV).
+ *
+ * @param {string} variant - wybrany wariant instalacji
+ * @returns {boolean} czy dodatek jest dostępny do wyboru
+ */
+export function dodatekPaneleDostepny(variant) {
+  return variant === VARIANT_BAT
+}
+
+/**
+ * Sprawdza, czy dodatek "EMS Breeze" jest dostępny: wyłącznie producent Deye
+ * z magazynem energii (PV+ME lub ME).
+ *
+ * @param {object} params
+ * @param {string} params.producent - wybrany producent falownika
+ * @param {string} params.variant - wybrany wariant instalacji
+ * @returns {boolean} czy dodatek jest dostępny do wyboru
+ */
+export function emsDostepny({ producent, variant } = {}) {
+  return producent === 'Deye' && variantHasBattery(variant)
+}
+
+/**
+ * Sprawdza, czy dodatek "Licznik Pstryk" jest dostępny: wyłącznie producent
+ * Sigenergy z magazynem energii (PV+ME lub ME).
+ *
+ * @param {object} params
+ * @param {string} params.producent - wybrany producent falownika
+ * @param {string} params.variant - wybrany wariant instalacji
+ * @returns {boolean} czy dodatek jest dostępny do wyboru
+ */
+export function pstrykDostepny({ producent, variant } = {}) {
+  return producent === 'Sigenergy' && variantHasBattery(variant)
+}
+
+/**
+ * Sprawdza, czy dodatek "Ładowarka EV" jest dostępny: wyłącznie producent
+ * Sigenergy z magazynem energii (PV+ME lub ME). Rodzaj ładowarki (AC/DC)
+ * jest dalej ograniczany przez evOpcje() poniżej (DC tylko z falownikiem
+ * Sigenergy AIO).
+ *
+ * @param {object} params
+ * @param {string} params.producent - wybrany producent falownika
+ * @param {string} params.variant - wybrany wariant instalacji
+ * @returns {boolean} czy dodatek jest dostępny do wyboru
+ */
+export function evDostepne({ producent, variant } = {}) {
+  return producent === 'Sigenergy' && variantHasBattery(variant)
+}
+
+/**
+ * Buduje listę opcji mocy dla dodatku "Klimatyzacja" na podstawie wybranego
+ * rodzaju (chłodzenie/dogrzewanie/grzanie -> model), posortowaną rosnąco po
+ * mocy. Wyłącznie prezentacja: "cena" przychodzi gotowa z katalogu
+ * (data.dodatki), żadnej matematyki tutaj.
+ *
+ * @param {object[]} dodatki - katalog dodatków z volteo_quote_components (data.dodatki)
+ * @param {string} rodzajKlimy - wybrany rodzaj (RODZAJE_KLIMY_DODATKU[].value)
+ * @returns {{kod: string, moc_kw: number, label: string, cena: number}[]} opcje mocy
+ */
+export function moceDodatkuKlimy(dodatki, rodzajKlimy) {
+  const model = modelDlaRodzajuKlimy(rodzajKlimy)
+  if (!model || !Array.isArray(dodatki)) return []
+
+  return dodatki
+    .filter((d) => d && d.grupa === 'dod_klima' && d.model === model)
+    .map((d) => {
+      const mocKw = Number(d.moc_kw) || 0
+      const klucz = mocKw.toFixed(1)
+      const opis = POWIERZCHNIA_KLIMY[klucz]
+      const mocLabel = String(mocKw).replace('.', ',')
+      return {
+        kod: d.kod,
+        moc_kw: mocKw,
+        label: opis ? `${mocLabel} kW (${opis})` : `${mocLabel} kW`,
+        cena: Number(d.cena) || 0,
+      }
+    })
+    .sort((a, b) => a.moc_kw - b.moc_kw)
+}
+
+/**
+ * Buduje listę opcji ładowarki EV (AC zawsze, DC wyłącznie z falownikiem
+ * Sigenergy AIO), posortowaną AC przed DC i rosnąco po mocy w każdej grupie.
+ *
+ * @param {object[]} dodatki - katalog dodatków z volteo_quote_components (data.dodatki)
+ * @param {object} kontekst
+ * @param {string} kontekst.producent - wybrany producent falownika
+ * @param {string} kontekst.variant - wybrany wariant instalacji
+ * @param {string} [kontekst.sigenTyp] - typ falownika Sigenergy ("TP2"/"AIO"), gdy dotyczy
+ * @returns {{kod: string, nazwa: string, moc_kw: number, cena: number, grupa: string}[]} opcje ładowarki
+ */
+export function evOpcje(dodatki, { producent, variant, sigenTyp } = {}) {
+  if (!evDostepne({ producent, variant }) || !Array.isArray(dodatki)) return []
+
+  return dodatki
+    .filter((d) => {
+      if (!d) return false
+      if (d.grupa === 'ev_ac') return true
+      if (d.grupa === 'ev_dc') return sigenTyp === 'AIO'
+      return false
+    })
+    .map((d) => ({
+      kod: d.kod,
+      nazwa: d.nazwa,
+      moc_kw: Number(d.moc_kw) || 0,
+      cena: Number(d.cena) || 0,
+      grupa: d.grupa,
+    }))
+    .sort((a, b) => {
+      if (a.grupa !== b.grupa) return a.grupa === 'ev_ac' ? -1 : 1
+      return a.moc_kw - b.moc_kw
+    })
+}
+
+/**
+ * Zeruje wyłącznie te wybory dodatków, które przestały być dostępne dla
+ * bieżącej konfiguracji (wariant/producent/typ falownika Sigenergy).
+ * Nigdy niczego nie włącza ani nie zmienia na wartość inną niż "wyłączone" -
+ * zwraca NOWY obiekt (niemutujące), nie modyfikuje przekazanego `wybor`.
+ *
+ * Specjalny przypadek: ładowarka DC wybrana wcześniej z falownikiem AIO,
+ * gdy falownik zmienia się na coś innego niż AIO, jest tu czyszczona z
+ * selecta (żeby nie zostawiać martwego wyboru w zamkniętym dropdownie) -
+ * serwer i tak odrzuca taką kombinację rzucając błąd, nigdy nie zeruje jej
+ * po cichu (ops#225); to czyszczenie po stronie frontu jest wyłącznie
+ * higieną UI, nie próbą obejścia tej reguły.
+ *
+ * @param {object} wybor - bieżący sel.dodatki ({klimaKod, panele, paneleMikro, emsBreeze, pstryk, evKod})
+ * @param {object} kontekst
+ * @param {string} kontekst.variant - wybrany wariant instalacji
+ * @param {string} kontekst.producent - wybrany producent falownika
+ * @param {string} [kontekst.sigenTyp] - typ falownika Sigenergy ("TP2"/"AIO"), gdy dotyczy
+ * @returns {object} nowy obiekt wyboru dodatków, z niedostępnymi polami wyzerowanymi
+ */
+export function sanitizujDodatki(wybor, kontekst = {}) {
+  const { variant, producent, sigenTyp } = kontekst
+  const next = { ...(wybor || {}) }
+
+  if (!klimaDodatekDostepna(variant)) {
+    next.klimaKod = ''
+  }
+  if (!dodatekPaneleDostepny(variant)) {
+    next.panele = 0
+    next.paneleMikro = 0
+  }
+  if (!emsDostepny({ producent, variant })) {
+    next.emsBreeze = 'Nie'
+  }
+  if (!pstrykDostepny({ producent, variant })) {
+    next.pstryk = 'Nie'
+  }
+  if (!evDostepne({ producent, variant })) {
+    next.evKod = ''
+  } else if (sigenTyp !== 'AIO' && typeof next.evKod === 'string' && next.evKod.startsWith('ev_dc')) {
+    next.evKod = ''
+  }
+
+  return next
+}
