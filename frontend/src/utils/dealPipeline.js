@@ -5,18 +5,20 @@
 // autentiStatus.js / cpForm.js / cpMarza.js / money.js.
 //
 // The backend (`crm.volteo_pipeline`, via `crm.api.pipeline.volteo_pipeline_get`)
-// is the single source of truth for the pipeline SHAPE per `rodzaj` — which
+// is the single source of truth for the pipeline SHAPE per `rodzaj` ,  which
 // steps exist, their order, their labels, and the "what's next" note per
 // status (`payload.steps`, `payload.notes`). It is deliberately NOT the
 // source of truth for the CURRENT step: `payload.current_index` (and the
 // other status-derived fields on the payload) are a snapshot taken at fetch
 // time, and the component only re-fetches the payload when `rodzaj` changes,
-// not on every status change — reloading on every status change is exactly
+// not on every status change ,  reloading on every status change is exactly
 // what raced the in-flight status SAVE and caused the pipeline band to lag
 // one step behind. Current step, mode, note and badge are derived HERE, at
 // call time, from the caller's own `status` (client truth, e.g. `props.status`
 // straight from the dropdown) and `statusType` (from the statuses store),
 // never from `payload.current_index` / `payload.off_pipeline*` / `payload.status`.
+
+import { RODZAJE_OZE } from './rodzajUmowy'
 
 /**
  * Payload kształtu (dostarczanego przez backend):
@@ -24,7 +26,7 @@
  *   rodzaj, status,
  *   steps: [{ status, index }, ...],
  *   notes: { [status]: noteText, ... },
- *   current_index, off_pipeline, off_pipeline_type, note, // migawka — patrz wyżej, NIEUŻYWANE tutaj
+ *   current_index, off_pipeline, off_pipeline_type, note, // migawka ,  patrz wyżej, NIEUŻYWANE tutaj
  * }
  */
 
@@ -46,18 +48,18 @@ export function currentIndexFor(steps, status) {
  * Wyznacza tryb renderowania całego paska etapów na podstawie payloadu
  * (kształt), statusu (prawda kliencka) i typu tego statusu (ze store'u statusów).
  *
- * - 'hidden' — brak payloadu, albo `steps` puste/nieobecne (deal bez
- *   rodzaju albo z nierozpoznanym rodzajem — pasek się nie renderuje).
- * - 'progress' — `status` jest jednym z kroków procesu, a `statusType`
+ * - 'hidden' ,  brak payloadu, albo `steps` puste/nieobecne (deal bez
+ *   rodzaju albo z nierozpoznanym rodzajem ,  pasek się nie renderuje).
+ * - 'progress' ,  `status` jest jednym z kroków procesu, a `statusType`
  *   nie jest `'Won'` (niezależnie od tego, co mówi migawkowe
- *   `payload.current_index` — ono jest nieużywane).
- * - 'won' — albo status POZA procesem ze `statusType === 'Won'` (np. OZE
- *   „Wygrana – montaż"), albo status W procesie ze `statusType === 'Won'`
+ *   `payload.current_index` ,  ono jest nieużywane).
+ * - 'won' ,  albo status POZA procesem ze `statusType === 'Won'` (np. OZE
+ *   „Wygrana - montaż"), albo status W procesie ze `statusType === 'Won'`
  *   (np. CP „Projekt rozliczony", ostatni krok procesu, który jest
- *   jednocześnie statusem typu Won — cały pasek renderuje się wtedy na
+ *   jednocześnie statusem typu Won ,  cały pasek renderuje się wtedy na
  *   zielono zamiast jako zwykły krok „current").
- * - 'lost' — status POZA procesem, `statusType === 'Lost'`.
- * - 'unknown' — status POZA procesem, a `statusType` inny/nieznany
+ * - 'lost' ,  status POZA procesem, `statusType === 'Lost'`.
+ * - 'unknown' ,  status POZA procesem, a `statusType` inny/nieznany
  *   (obcy status spoza Lost/Won, albo store statusów jeszcze nie załadowany).
  *
  * @param {{steps?: Array, notes?: Object}|null|undefined} payload
@@ -94,10 +96,10 @@ export function nodeState(index, currentIndex) {
 
 /**
  * Stan węzła z uwzględnieniem trybu całego paska:
- * - 'won' — wszystkie węzły renderują się jako ukończone.
- * - 'lost' / 'unknown' — wszystkie węzły wyciszone (szare), niezależnie od indeksu.
- * - 'progress' — deleguje do {@link nodeState}.
- * - 'hidden' — nieużywane (pasek się nie renderuje), ale dla bezpieczeństwa
+ * - 'won' ,  wszystkie węzły renderują się jako ukończone.
+ * - 'lost' / 'unknown' ,  wszystkie węzły wyciszone (szare), niezależnie od indeksu.
+ * - 'progress' ,  deleguje do {@link nodeState}.
+ * - 'hidden' ,  nieużywane (pasek się nie renderuje), ale dla bezpieczeństwa
  *   traktowane jak 'muted'.
  *
  * @param {'hidden'|'progress'|'won'|'lost'|'unknown'} mode
@@ -123,7 +125,7 @@ export function stepNumber(index) {
 }
 
 /**
- * Notatka o następnym kroku — pokazywana tylko w trybie 'progress'; pusty
+ * Notatka o następnym kroku ,  pokazywana tylko w trybie 'progress'; pusty
  * lub sam biały znak traktowany jak brak notatki. Czyta `payload.notes[status]`
  * (kształt, per proces), NIE migawkowe `payload.note`.
  *
@@ -146,9 +148,9 @@ export function nextStepNote(payload, status, statusType) {
  *
  * Status W procesie (`steps`) nigdy nie dostaje odznaki, nawet gdy jego
  * `statusType === 'Won'` sprawia, że `bandMode` zwraca 'won' (np. CP
- * „Projekt rozliczony" — 12. krok procesu, jednocześnie status typu Won).
+ * „Projekt rozliczony" ,  12. krok procesu, jednocześnie status typu Won).
  * Bez tego guarda cały zielony pasek miałby obok zdublowaną odznakę z tym
- * samym statusem — guard sprawdzony PRZED odczytaniem `mode`, żeby ten
+ * samym statusem ,  guard sprawdzony PRZED odczytaniem `mode`, żeby ten
  * przypadek nie musiał przechodzić przez gałąź 'won' poniżej.
  *
  * @param {{steps?: Array, notes?: Object}|null|undefined} payload
@@ -170,7 +172,7 @@ export function offPipelineBadge(payload, status, statusType) {
  * Grupa statusów (proces plus statusy terminalne) dla danego rodzaju umowy,
  * wyciągnięta z konfiguracji zwróconej przez `crm.api.pipeline.volteo_pipeline_grupy`
  * (`{ [rodzaj]: [nazwy statusów w kolejności] }`). Null-safe względem obu
- * argumentów — brak configu (zasób jeszcze nie załadowany / błąd fetchu) albo
+ * argumentów ,  brak configu (zasób jeszcze nie załadowany / błąd fetchu) albo
  * nieustawiony/nierozpoznany rodzaj dają pustą tablicę, którą wołający ma
  * traktować jak sygnał "brak zawężenia" (pełna lista statusów).
  *
@@ -185,12 +187,12 @@ export function grupaForRodzaj(config, rodzaj) {
 
 /**
  * Filtruje nazwy statusów do tych, które faktycznie istnieją w załadowanym
- * store statusów — bez tego sprawdzenia nazwa nieobecna w store (np. przez
+ * store statusów ,  bez tego sprawdzenia nazwa nieobecna w store (np. przez
  * wyścig zimnego ładowania: grupa doszła zanim `CRM Deal Status` się załadował)
  * dałaby zepsutą opcję `undefined` w rozwijanej liście (patrz `statusOptions`
- * w `stores/statuses.js` — brak tam takiej walidacji, bo zakłada gotowy store).
+ * w `stores/statuses.js` ,  brak tam takiej walidacji, bo zakłada gotowy store).
  * Celowo bezstanowe i bez importu store'u (`isKnown` jako callback), żeby ten
- * moduł został frappe-free/testowalny — patrz nagłówek pliku.
+ * moduł został frappe-free/testowalny ,  patrz nagłówek pliku.
  *
  * @param {string[]|null|undefined} names
  * @param {(name: string) => boolean} isKnown
@@ -202,23 +204,22 @@ export function filterKnown(names, isKnown) {
 }
 
 // VOLTEO (issue #16): per-user product-line access switch. `custom_rodzaj_umowy`
-// (CRM Deal, Select) carries three OZE variants and one Czyste Powietrze variant;
+// (CRM Deal, Select) carries seven OZE variants (three original plus four
+// added in b68, "Wielki update kalkulatora OZE", see RODZAJE_OZE in
+// rodzajUmowy.js, the canonical module) and one Czyste Powietrze variant;
 // the deal-creation modal (DealModal.vue) filters its options down to the lines
 // the current user is switched on for, mirroring the server-side gate in
 // crm.api.volteo_ma_linie. Bypass-role users get both flags `true` from boot
 // (crm/www/crm.py::get_boot), so no separate admin branch is needed here.
-const RODZAJE_UMOWY_OZE = new Set([
-  'Fotowoltaika',
-  'Fotowoltaika + Magazyn',
-  'Magazyn energii',
-])
+// All seven OZE variants share one flag (`custom_linia_oze`), no new flag
+// was introduced for the four b68 rodzajs (owner decision, 2026-10-04).
 const RODZAJ_UMOWY_CP = 'Czyste Powietrze'
 
 /**
  * Filtruje "\n"-łączony string opcji pola Select `custom_rodzaj_umowy` do
  * wariantów dozwolonych przez flagi linii produktowych. Pusta opcja (pierwszy,
  * niewybrany wpis Select) zawsze zostaje. Fail-open: `undefined`/`null`
- * (nieustawiona flaga — np. stary bundle) traktowane jak `true`, tylko
+ * (nieustawiona flaga ,  np. stary bundle) traktowane jak `true`, tylko
  * jawne `false` usuwa warianty danej linii. Non-string input (np. już
  * podmienione pole "status" gdzieś indziej w layoucie) zwracany bez zmian.
  *
@@ -232,7 +233,7 @@ export function filtrujOpcjeRodzajuUmowy(options, { oze, cp } = {}) {
     .split('\n')
     .filter((opcja) => {
       if (!opcja) return true
-      if (RODZAJE_UMOWY_OZE.has(opcja)) return oze !== false
+      if (RODZAJE_OZE.has(opcja)) return oze !== false
       if (opcja === RODZAJ_UMOWY_CP) return cp !== false
       return true
     })

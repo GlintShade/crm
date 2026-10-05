@@ -175,16 +175,15 @@ export function nazwaAutora(wpis, getUser) {
   return wpis.owner || ''
 }
 
-// Rodzaje umowy OZE (lustro `crm/volteo_pipeline.py` i
-// `frontend/src/pages/Deal.vue` OZE_RODZAJE, ok. linii 602) - Faza 1 tego
-// strumienia notatek pokazuje się WYŁĄCZNIE na szansach tych trzech
-// rodzajów, nigdy na Czyste Powietrze (dostanie schemat w fazie 2, ale nie
-// UI tego issue).
-export const OZE_RODZAJE = new Set(['Fotowoltaika', 'Fotowoltaika + Magazyn', 'Magazyn energii'])
-
-export function czyOze(rodzaj) {
-  return OZE_RODZAJE.has(rodzaj)
-}
+// Rodzaje umowy OZE - od b68 ("Wielki update kalkulatora OZE") re-eksport z
+// `rodzajUmowy.js`, jedynego źródła prawdy po stronie frontu (lustro
+// `crm/volteo_pipeline.py::OZE_RODZAJE`). Nazwy eksportów (`OZE_RODZAJE`,
+// `czyOze`) zachowane bez zmian - wiele plików importuje je stąd
+// (`NotatkiStrumien.vue`, `StatusZakladki.vue`, `MobileDeal.vue`), a strumień
+// notatek pokazuje się na WSZYSTKICH siedmiu rodzajach OZE (trzy stare plus
+// cztery nowe od b68), nigdy na Czyste Powietrze (dostanie schemat w fazie
+// 2, ale nie UI tego issue).
+export { RODZAJE_OZE as OZE_RODZAJE, czyOze } from './rodzajUmowy'
 
 // ---------------------------------------------------------------------
 // Feed "Notatki" (issue ops#201, uwaga 40) - strumień łączący notatki z

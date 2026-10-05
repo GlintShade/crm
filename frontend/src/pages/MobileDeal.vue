@@ -308,6 +308,7 @@ import OsdDotacjaTab from '@/components/deal/OsdDotacjaTab.vue'
 import PlikiTab from '@/components/deal/PlikiTab.vue'
 import { MONTAZ, TRIFY } from '@/utils/aktualizacje'
 import { czyOze } from '@/utils/notatki'
+import { zakladkiSzansy } from '@/utils/rodzajUmowy'
 import DealPipelineBar from '@/components/deal/DealPipelineBar.vue'
 import DealNextStepNote from '@/components/deal/DealNextStepNote.vue'
 import OrganizationModal from '@/components/Modals/OrganizationModal.vue'
@@ -501,6 +502,11 @@ usePageMeta(() => {
 // both, since each conditional entry simply drops out of the filtered
 // list).
 const tabs = computed(() => {
+  // Jedno wyliczenie zakladkiSzansy() per przebudowa listy zakladek, tak
+  // samo jak Deal.vue - OSD i Dotacja nizej roznia sie od siebie od b68
+  // (patrz rodzajUmowy.js dla pelnej tabeli).
+  const zakladki = zakladkiSzansy(doc.value?.custom_rodzaj_umowy)
+
   let tabOptions = [
     {
       name: 'Details',
@@ -536,14 +542,20 @@ const tabs = computed(() => {
     },
     { name: 'Montaz', label: __('Montaż'), icon: MontazIcon },
     {
-      // OSD/Dotacja (ops#202): status ręczny + notatki, tylko OZE (Faza 1),
-      // `czyOze` jak zakładka Notatki poniżej (ten sam import z @/utils/notatki).
+      // OSD/Dotacja (ops#202): status ręczny + notatki. Od b68 OSD widoczne
+      // na PV/PV+ME/ME ORAZ na Rozbudowa PV/ME (nie na Klimatyzacja/Pompa
+      // ciepła/Kocioł) - zakladki.osd niesie dokładnie ten podział, patrz
+      // rodzajUmowy.js::zakladkiSzansy (ten sam import jak Deal.vue).
       name: 'OSD', label: __('OSD'), icon: OsdIcon,
-      condition: () => czyOze(doc.value?.custom_rodzaj_umowy),
+      condition: () => zakladki.osd,
     },
     {
+      // Dotacja Mój Prąd istnieje wyłącznie dla trzech starych rodzajów OZE
+      // (zakladki.dotacja) - żaden z czterech nowych rodzajów od b68 (w tym
+      // Rozbudowa, mimo że dzieli zakładkę OSD z PV/PV+ME/ME powyżej) nie ma
+      // tej dotacji.
       name: 'Dotacja', label: __('Dotacja'), icon: DotacjaIcon,
-      condition: () => czyOze(doc.value?.custom_rodzaj_umowy),
+      condition: () => zakladki.dotacja,
     },
     { name: 'Faktury', label: __('Faktury'), icon: FakturyIcon },
     {

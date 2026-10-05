@@ -127,8 +127,8 @@
         <Button variant="outline" size="sm" :label="__('Dodaj pozycję')" :disabled="saving" @click="dodajDodatkowa" />
       </div>
 
-      <!-- PV-only: read-only planned margin components -->
-      <div v-if="snapshot.linia_produktowa === 'pv' && skladnikiMarzy.length" class="mk-section">
+      <!-- PV and OZE (b68, nowe rodzaje): read-only planned margin components -->
+      <div v-if="['pv', 'oze'].includes(snapshot.linia_produktowa) && skladnikiMarzy.length" class="mk-section">
         <div class="mk-section-title">{{ __('Składniki marży planowej') }}</div>
         <div v-for="skl in skladnikiMarzy" :key="skl.klucz" class="mk-skladnik-row">
           <span>{{ skl.etykieta }}</span>

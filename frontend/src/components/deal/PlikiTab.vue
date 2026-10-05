@@ -149,6 +149,7 @@ import {
   zapiszUstawienia,
 } from '@/utils/pliki'
 import { podzielNazwe } from '@/utils/zalaczniki'
+import { czyOze } from '@/utils/rodzajUmowy'
 import {
   Button,
   Dialog,
@@ -171,12 +172,13 @@ const route = useRoute()
 const router = useRouter()
 const { $dialog } = globalStore()
 
-// Lustro `NotatkiStrumien.vue`/`Deal.vue` (OZE_RODZAJE, crm/volteo_pipeline.py) -
-// patrz komentarz w bloku <template> powyżej dla uzasadnienia "dodatkowej"
-// bramki tutaj, obok tej w Deal.vue/MobileDeal.vue.
-const OZE_RODZAJE = new Set(['Fotowoltaika', 'Fotowoltaika + Magazyn', 'Magazyn energii'])
+// `czyOze` (lustro `@/utils/rodzajUmowy`, ktore samo jest lustrem
+// `crm/volteo_pipeline.py::OZE_RODZAJE`) - patrz komentarz w bloku
+// <template> powyżej dla uzasadnienia "dodatkowej" bramki tutaj, obok tej w
+// Deal.vue/MobileDeal.vue. Od b68 obejmuje wszystkie siedem rodzajów OZE
+// (trzy stare plus cztery nowe), nie tylko trzy stare.
 const dealDoc = computed(() => getCachedDocumentResource('CRM Deal', props.dealId))
-const ozeWidoczne = computed(() => OZE_RODZAJE.has(dealDoc.value?.doc?.custom_rodzaj_umowy))
+const ozeWidoczne = computed(() => czyOze(dealDoc.value?.doc?.custom_rodzaj_umowy))
 
 const feed = createResource({
   url: 'crm.api.pliki.feed',
