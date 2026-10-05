@@ -51,26 +51,42 @@
       </div>
 
       <!-- Empty state — no umowa yet -->
-      <div
-        v-else-if="!umowa"
-        class="flex flex-col items-center justify-center gap-3 py-16 text-center"
-      >
-        <UmowaIcon class="h-10 w-10 text-ink-gray-4" />
-        <div class="text-lg font-medium text-ink-gray-7">{{ __('Brak formularza umowy') }}</div>
-        <div class="max-w-md text-sm text-ink-gray-5">
+      <div v-else-if="!umowa" class="flex flex-col gap-6">
+        <!-- Wzór w przygotowaniu (b68, chunk F4), stan pusty: ten sam baner
+        co w formularzu nizej (patrz komentarz tam) - handlowiec musi wiedziec
+        o braku wzoru PDF PRZED zalozeniem formularza, nie tylko po. Przycisk
+        "Wygeneruj umowę" zostaje aktywny: zaklada tylko formularz (dane),
+        nigdy PDF. -->
+        <div
+          v-if="wzorWPrzygotowaniu"
+          class="rounded-lg border border-outline-blue-2 bg-surface-blue-2 px-4 py-3 text-sm text-ink-blue-8"
+        >
           {{
             __(
-              'Wygeneruj formularz informacji do umowy, aby zebrać dane potrzebne do przygotowania umowy fotowoltaicznej.',
+              'Wzór umowy w przygotowaniu. Formularz można wypełnić, PDF będzie dostępny po dodaniu wzoru dla rodzaju: {0}',
+              [props.rodzaj],
             )
           }}
         </div>
-        <Button
-          variant="solid"
-          :label="__('Wygeneruj umowę')"
-          :disabled="creating"
-          :loading="creating"
-          @click="createUmowa"
-        />
+
+        <div class="flex flex-col items-center justify-center gap-3 py-16 text-center">
+          <UmowaIcon class="h-10 w-10 text-ink-gray-4" />
+          <div class="text-lg font-medium text-ink-gray-7">{{ __('Brak formularza umowy') }}</div>
+          <div class="max-w-md text-sm text-ink-gray-5">
+            {{
+              __(
+                'Wygeneruj formularz informacji do umowy, aby zebrać dane potrzebne do przygotowania umowy fotowoltaicznej.',
+              )
+            }}
+          </div>
+          <Button
+            variant="solid"
+            :label="__('Wygeneruj umowę')"
+            :disabled="creating"
+            :loading="creating"
+            @click="createUmowa"
+          />
+        </div>
       </div>
 
       <!-- Form -->
@@ -133,15 +149,17 @@
           </div>
         </div>
 
-        <!-- Wzór w przygotowaniu (b68, chunk F4): cztery nowe rodzaje OZE
-        (Rozbudowa PV/ME, Klimatyzacja, Pompa ciepła, Kocioł) nie mają
-        jeszcze wzoru PDF umowy - prawnik go przygotowuje w osobnej fazie
-        (faza 2, plan b68). Formularz pozostaje w pełni edytowalny i
-        zapisywalny, tylko przycisk "Generuj PDF umowy" jest wyłączony
-        (patrz :disabled wyżej). Komunikat serwera
-        (`_blad_wzor_w_przygotowaniu` w crm/api/umowa.py) zostaje drugą
-        linią obrony, na wypadek gdyby ten baner kiedyś się rozminął z
-        rzeczywistym stanem backendu. -->
+        <!-- Wzór w przygotowaniu (b68, chunk F4), stan formularza: ten sam
+        baner co w stanie pustym wyżej (klik-test 2026-10-05 - wcześniej
+        widoczny tylko tutaj, co pozwalało handlowcowi założyć formularz bez
+        żadnego ostrzeżenia). Cztery nowe rodzaje OZE (Rozbudowa PV/ME,
+        Klimatyzacja, Pompa ciepła, Kocioł) nie mają jeszcze wzoru PDF umowy
+        - prawnik go przygotowuje w osobnej fazie (faza 2, plan b68).
+        Formularz pozostaje w pełni edytowalny i zapisywalny, tylko przycisk
+        "Generuj PDF umowy" jest wyłączony (patrz :disabled wyżej). Komunikat
+        serwera (`_blad_wzor_w_przygotowaniu` w crm/api/umowa.py) zostaje
+        trzecią linią obrony, na wypadek gdyby oba banery kiedyś się
+        rozminęły z rzeczywistym stanem backendu. -->
         <div
           v-if="wzorWPrzygotowaniu"
           class="rounded-lg border border-outline-blue-2 bg-surface-blue-2 px-4 py-3 text-sm text-ink-blue-8"
