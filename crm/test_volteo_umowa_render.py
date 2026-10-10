@@ -650,8 +650,8 @@ class TestZlozUmowePelnyPipeline(unittest.TestCase):
 						tekst_wg_strony[1].replace("\xa0", " "),
 					)
 					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[16])
-				elif kod == "PC":
-					# Pompa ciepla (12 str., bez pelnomocnictwa): komparycja, §2, RODO.
+				elif kod in ("PC", "PP"):
+					# Pompa ciepla / kociol (12 str., bez pelnomocnictwa): komparycja i §2 (netto/brutto).
 					self.assertEqual(len(strony), 12)
 					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[0])
 					self.assertIn(
