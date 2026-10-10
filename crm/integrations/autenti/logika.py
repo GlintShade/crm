@@ -99,16 +99,26 @@ def czy_wlaczone(wartosc: object) -> bool:
 	return bool(wartosc)
 
 
-def tytul_dokumentu(signer_name: str | None) -> str:
+WARIANT_TYTULU_MAX_ZNAKOW = 80
+
+
+def tytul_dokumentu(signer_name: str | None, wariant: str = "") -> str:
 	"""Tytuł procesu dokumentu Autenti i nazwa pliku widoczna klientowi.
 
 	Czytelny jako sprzedająca marka (ProEnergy), nie jako gołe id wewnętrzne.
-	Puste/`None` imię i nazwisko podpisującego daje tytuł bez myślnika — nie
-	"Umowa ProEnergy - " z pustym ogonem.
+	Puste/`None` imię i nazwisko podpisującego daje tytuł bez myślnika, nie
+	"Umowa ProEnergy - " z pustym ogonem. Niepusty `wariant` (opis konfiguracji
+	wzoru umowy, ops#251) wchodzi w nawiasie: "Umowa ProEnergy (wariant) - Jan
+	Kowalski". Pusty wariant daje dokładnie dotychczasowy tytuł. Wariant jest
+	przycinany do `WARIANT_TYTULU_MAX_ZNAKOW` znaków (zabezpieczenie długości).
 	"""
+	wariant = (wariant or "").strip()
+	if len(wariant) > WARIANT_TYTULU_MAX_ZNAKOW:
+		wariant = wariant[: WARIANT_TYTULU_MAX_ZNAKOW].rstrip()
+	baza = f"Umowa ProEnergy ({wariant})" if wariant else "Umowa ProEnergy"
 	if not signer_name:
-		return "Umowa ProEnergy"
-	return f"Umowa ProEnergy - {signer_name}"
+		return baza
+	return f"{baza} - {signer_name}"
 
 
 def _zrodlo_klienta(indeks: int) -> str:
