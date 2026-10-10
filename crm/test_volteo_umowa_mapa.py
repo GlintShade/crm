@@ -37,8 +37,8 @@ from crm.volteo_umowa_render import SZABLONY
 # `_ZAKAZANE_STRONY_PROTOKOLOW`, `_ZALACZNIK_2_3_IDX`, `_STRONY_*_OCZEKIWANE`,
 # `_KLIENT_IMIE_NAZWISKO_STRONY`, `_RODO_STRONA_IDX`), inaczej test czerwienieje.
 #
-# `MAPY_STAREGO_WZORU`: PVME/ME mają NOWE sumy SHA, ale mapy nadal ze starego
-# wzoru (U2c/U2g je przepiszą i usuną klucz z tej stałej). Są pomijane
+# `MAPY_STAREGO_WZORU`: PVME ma NOWĄ sumę SHA, ale mapę nadal ze starego
+# wzoru (U2c ją przepisze i usuną klucz z tej stałej). Są pomijane
 # WYŁĄCZNIE w teście kontraktu cech (`TestKontraktCech`).
 # ---------------------------------------------------------------------------
 
@@ -46,7 +46,7 @@ MAPY_W_POMIARZE: frozenset[str] = frozenset(
 	{"PVME_K_EV", "ME_K", "ME_EV", "ME_K_EV", "ROZ"}
 )
 
-MAPY_STAREGO_WZORU: frozenset[str] = frozenset({"ME"})
+MAPY_STAREGO_WZORU: frozenset[str] = frozenset()
 
 _ZMIERZONE: dict[str, Any] = {
 	kod: szablon for kod, szablon in SZABLONY.items() if kod not in MAPY_W_POMIARZE
@@ -168,7 +168,7 @@ WYJATKI_ME: frozenset[str] = frozenset(
 		"kabel_mb",
 		"kabel_nie",
 	}
-) | KLUCZE_DRUGIEGO_ZAMAWIAJACEGO | KLUCZE_NOWYCH_DODATKOW
+) | KLUCZE_DRUGIEGO_ZAMAWIAJACEGO | (KLUCZE_NOWYCH_DODATKOW - GRUPY_CECH_KLUCZE["dod_panele"])
 """Szablon ME (`umowa_me.pdf`) opisuje sprzedaż/montaż magazynu energii BEZ
 fotowoltaiki — nie ma sekcji paneli/inwertera-do-PV/montażu dachowego/instalacji
 odgromowej/ppoż/przekopu/dodatkowego kabla (te elementy montażowe dotyczą
@@ -243,7 +243,7 @@ WYJATKI_BRAK_POZYCJI_WG_SZABLONU: dict[str, frozenset[str]] = {
 	# są wyjątkiem.
 	"PV_2": WYJATKI_PV - KLUCZE_DRUGIEGO_ZAMAWIAJACEGO,
 	"PVME_2": WYJATKI_PVME - KLUCZE_DRUGIEGO_ZAMAWIAJACEGO,
-	"ME_2": WYJATKI_ME - KLUCZE_DRUGIEGO_ZAMAWIAJACEGO,
+	"ME_2": (WYJATKI_ME - KLUCZE_DRUGIEGO_ZAMAWIAJACEGO) | GRUPY_CECH_KLUCZE["dod_panele"],
 }
 
 # ---------------------------------------------------------------------------
@@ -255,7 +255,7 @@ WYJATKI_BRAK_POZYCJI_WG_SZABLONU: dict[str, frozenset[str]] = {
 _PELNOMOCNICTWO_IDX: dict[str, int] = {
 	"PVME": 17,
 	"PV": 13,
-	"ME": 13,
+	"ME": 14,
 	"PV_K": 16,
 	"PVME_K": 21,
 	"PVME_EV": 21,
@@ -277,11 +277,12 @@ _ZAKAZANE_STRONY_PROTOKOLOW: dict[str, frozenset[int]] = {
 	# szkoleniowe/pomiarowe (idx11-16): wypełnia je instalator/klient po
 	# montażu, nigdy generator z góry.
 	"PVME": frozenset(range(9, 17)),
-	# PV i ME: formularz odstąpienia (idx9) + JEDEN protokół odbioru + listy
-	# szkoleniowe/pomiarowe (idx10-12) — o cztery strony krócej niż PVME, bo
-	# oba szablony mają tylko jeden produkt do odebrania.
+	# PV: formularz odstąpienia (idx9) + JEDEN protokół odbioru + listy
+	# szkoleniowe/pomiarowe (idx10-12), bo szablon ma tylko jeden produkt.
 	"PV": frozenset(range(9, 13)),
-	"ME": frozenset(range(9, 13)),
+	# ME (wzór 06.10.2026, 16 stron): formularz odstąpienia (idx9) + protokół
+	# odbioru magazynu na trzech stronach (idx10-12) + protokół pomiarów (idx13).
+	"ME": frozenset(range(9, 14)),
 	# PV_K: pouczenie (idx9), formularz odstapienia (idx10), protokol odbioru PV,
 	# protokol pomiarow, protokol odbioru klimatyzacji (idx11-15).
 	"PV_K": frozenset(range(9, 16)),
@@ -304,6 +305,8 @@ jeszcze nie wydarzyło (decyzja produktowa, zob. docstringi map)."""
 _ZALACZNIK_2_3_IDX: dict[str, int] = {
 	"PVME": 6,
 	"PV": 5,
+	# ME: kratki i podpis Zal. 2 oraz kratka Zal. 3 leżą na idx5, ale podpis
+	# Zal. 3 przechodzi na idx6 (zob. `_ZALACZNIK_3_PODPIS_NA_NASTEPNEJ_STRONIE`).
 	"ME": 5,
 	"PV_K": 6,
 	"PVME_K": 8,
@@ -318,10 +321,15 @@ linię podpisu Zamawiającego (bez Wykonawcy), stąd dwie różne pozycje tego
 samego klucza na jednej stronie (w wariantach podwójnych: cztery, po dwie
 na osobę)."""
 
+_ZALACZNIK_3_PODPIS_NA_NASTEPNEJ_STRONIE: frozenset[str] = frozenset({"ME"})
+"""Wzory, w których tekst Załącznika nr 3 przechodzi na kolejną stronę, więc
+jego linia podpisu Zamawiającego leży o jedną stronę za stroną Zał. 2/3
+(`_ZALACZNIK_2_3_IDX`), a nie razem z podpisem Zał. 2."""
+
 _STRONY_ZAMAWIAJACY_OCZEKIWANE: dict[str, frozenset[int]] = {
 	"PVME": frozenset({3, 4, 5, 6, 17}),
 	"PV": frozenset({3, 4, 5, 13}),
-	"ME": frozenset({3, 4, 5, 13}),
+	"ME": frozenset({3, 4, 5, 6, 14}),
 	"PV_K": frozenset({3, 4, 5, 6, 16}),
 	"PVME_K": frozenset({3, 5, 6, 7, 8, 21}),
 	"PVME_EV": frozenset({3, 5, 6, 7, 8, 21}),
@@ -353,7 +361,7 @@ klienta) ani Pełnomocnictwo (jednostronne wobec ProEnergy)."""
 _KLIENT_IMIE_NAZWISKO_STRONY: dict[str, frozenset[int]] = {
 	"PVME": frozenset({0, 17}),
 	"PV": frozenset({0, 13}),
-	"ME": frozenset({0, 13}),
+	"ME": frozenset({0, 14}),
 	"PV_K": frozenset({0, 16}),
 	"PVME_K": frozenset({0, 21}),
 	"PVME_EV": frozenset({0, 21}),
@@ -766,6 +774,15 @@ class TestPodpisy(unittest.TestCase):
 				pozycje_strony = [
 					pole for pole in _pozycje(szablon, "podpis_zamawiajacy") if pole.strona == strona_idx
 				]
+				if kod in _ZALACZNIK_3_PODPIS_NA_NASTEPNEJ_STRONIE:
+					nastepna = [
+						pole
+						for pole in _pozycje(szablon, "podpis_zamawiajacy")
+						if pole.strona == strona_idx + 1
+					]
+					self.assertEqual(len(pozycje_strony), 1)
+					self.assertEqual(len(nastepna), 1)
+					continue
 				self.assertEqual(len(pozycje_strony), 2)
 				self.assertNotEqual(pozycje_strony[0].y, pozycje_strony[1].y)
 
@@ -805,6 +822,7 @@ _LICZBA_POZYCJI_OCZEKIWANA: dict[str, int] = {
 	"ME2": 68,
 	"PVME2": 90,
 	"PV": 66,
+	"ME": 55,
 	"PV_K": 70,
 	# PVME (jednoosobowy, pomiar od zera 2026-10-10, b69 U2c, ops#241).
 	"PVME": 74,
@@ -1015,6 +1033,19 @@ class TestRubrykiCech(unittest.TestCase):
 					self.assertEqual([p.strona for p in pozycje], strony)
 
 
+class TestMapaMeZmierzona(unittest.TestCase):
+	"""Pin liczby pozycji mapy jednoosobowego wzoru ME, 16 stron (b69, U2g, pomiar od zera)."""
+
+	def test_liczba_pozycji_me(self: "TestMapaMeZmierzona") -> None:
+		self.assertEqual(len(SZABLONY["ME"].mapa), _LICZBA_POZYCJI_OCZEKIWANA["ME"])
+		self.assertEqual(SZABLONY["ME"].liczba_stron, 16)
+
+	def test_me_drukuje_dodatkowe_moduly_na_zalaczniku_1(self: "TestMapaMeZmierzona") -> None:
+		for klucz in ("dod_panele_szt", "dod_panele_mikro_szt"):
+			pozycje = _pozycje(SZABLONY["ME"], klucz)
+			self.assertEqual([p.strona for p in pozycje], [4], klucz)
+
+
 class TestKontraktCech(unittest.TestCase):
 	"""Cechy z `Szablon.obsluguje` muszą mieć pozycje w mapie; cechy nieobsługiwane
 	muszą być jawnie wyłączone w `WYJATKI_BRAK_POZYCJI_WG_SZABLONU`."""
@@ -1045,6 +1076,6 @@ class TestKontraktCech(unittest.TestCase):
 						self.assertTrue(klucze <= wyjatki, f"[{kod}] cecha {cecha!r} nieobsługiwana, brak wyjątków")
 
 	def test_stare_wzory_maja_nowe_klucze_w_wyjatkach(self: "TestKontraktCech") -> None:
-		for kod in ("PV", "PVME", "ME", "PV_2", "PVME_2", "ME_2"):
+		for kod in ("PV", "PVME", "PV_2", "PVME_2", "ME_2"):
 			with self.subTest(kod=kod):
 				self.assertTrue(KLUCZE_NOWYCH_DODATKOW <= WYJATKI_BRAK_POZYCJI_WG_SZABLONU[kod])

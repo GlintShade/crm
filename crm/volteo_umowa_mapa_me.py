@@ -1,163 +1,117 @@
 # Copyright (c) 2026, ProEnergy and contributors
 # For license information, please see license.txt
 
-"""Mapa współrzędnych do nakładania danych umowy na oryginalny plik PDF —
-wariant „ME" (magazyn energii, sprzedaż i montaż bez fotowoltaiki).
+"""Mapa wspolrzednych do nakladania danych umowy na oryginalny plik PDF, wariant
+magazyn energii, jedna osoba, z rubryka dodatkowych modulow PV,
+`crm/szablony/umowa_me.pdf` (zrodlo: "Umowa ME ProEnergy - 06.10.2026-2.pdf",
+16 stron, A4 596x842 pt).
 
-Ten moduł jest odpowiednikiem `crm/volteo_umowa_mapa.py` (mapa dla szablonu
-PV+ME) dla NOWEGO, osobnego szablonu jednoproduktowego. Reużywa stamtąd samą
-klasę `Pole` (identyczny kontrakt danych — patrz jej docstring), ale definiuje
-WŁASNĄ krotkę `MAPA_ME`, własną sumę kontrolną i własną liczbę stron: te dwa
-szablony PDF nie mają ze sobą nic wspólnego pod względem układu strony (mimo
-że jeden dokument bywa podzbiorem tekstu drugiego), więc mapy nie da się i nie
-wolno mieszać.
+POMIAR: 2026-10-10 (b69, issue ops#245, chunk U2g), OD ZERA na tym pliku
+narzedziem `ops/narzedzia/umowa-mapa-pomiar.py` w repo `proenergy-crm-ops` z
+deklaracja `ops/narzedzia/deklaracje/umowa_me.py` (kotwice tekstowe i podpisowe
+rozwiazywane z `pdftotext -bbox-layout`, pionowe kreski tabeli komparycji z
+`pdfminer.six` `LTLine`). Zadna wartosc nie jest przepisana z poprzedniej
+(14-stronicowej) wersji wzoru ani z map siostrzanych; poprzednia zawartosc tego
+modulu zostala w calosci zastapiona.
 
-POMIAR: 2026-08-12, `pdftotext -bbox crm/szablony/umowa_me.pdf` (surowe
-`xMin`/`xMax`/`yMin`/`yMax` liczone OD GÓRY strony) plus, tam gdzie słowo w
-bbox sklejało kreskę podkreślenia z sąsiadującym znakiem interpunkcyjnym bez
-spacji (Załącznik nr 7: „_________________," i „_________________​,"),
-dodatkowo `pdfplumber` na poziomie pojedynczych znaków (`page.chars`), żeby
-wyciąć dokładną granicę samej kreski bez doklejonego przecinka. WSZYSTKIE
-wartości poniżej są wyjściem skryptu (`compute.py` w scratchpadzie zadania),
-nie arytmetyką „w pamięci" — zgodnie z tą samą zasadą, którą ustanowił
-`crm/volteo_umowa_mapa.py` po incydencie z sześcioma błędami z ręcznego
-liczenia (patrz jego docstring).
+UKLAD WSPOLRZEDNYCH: `pdftotext -bbox` liczy y OD GORY, reportlab OD DOLU:
+`y = 842 - y_od_gory`. Tekst na kresce: x = xMin(kreski) + 3, y = 842 -
+yMax(kreski) + 2.5, maks_szerokosc = szerokosc(kreski) - 6. Kratka: x = srodek
+glifu, y = 842 - yMax(glifu) + 3.0; mala kratka (10x10 pt, Zal. 2/3): offset
++2.0 i rozmiar 8.0. Komorka tabeli: x = kreska dzielaca kolumny + 6, y = 842 -
+yMax(etykiety), maks_szerokosc = (prawa krawedz - 3) - x. Szczegoly konwencji:
+naglowek `crm/volteo_umowa_mapa.py` i docstring narzedzia.
 
-UKŁAD WSPÓŁRZĘDNYCH — identyczny jak w `crm/volteo_umowa_mapa.py`, nie
-powtarzany tu w pełni; kluczowe punkty:
-- `y_reportlab = 842 - y_od_gory` (pdftotext liczy od góry, reportlab od dołu).
-- Podkreślenia („______"): `x = xMin + 3`, `y = 842 - yMax + 2.5`,
-  `maks_szerokosc = szerokość_kreski - 6`.
-- Kratki (`rodzaj="kratka"`, `wyrownanie="srodek"`): `x` = środek glifu w
-  poziomie, `y = 842 - yMax_glifu + offset`. Offset `3.0 pt` dla kratek
-  standardowych (15x15 pt — cała ta mapa poza Załącznikiem nr 2/3), `2.0 pt` i
-  `rozmiar=8.0` dla mniejszych kratek 10x10 pt na stronie zgód (Załącznik
-  nr 2/3) — DOKŁADNIE jak w PVME. Inaczej niż w PVME (gdzie `pdftotext`
-  wymagał sięgnięcia po strumień treści PDF dla tych glifów — offset
-  (+5.00, +0.59) opisany przy `_STRONA_7` tamtej mapy), w tym szablonie
-  `pdftotext -bbox` poprawnie zwrócił bounding boxy „☐" o rozmiarze 10x10 pt
-  jako zwykłe słowa — nie było potrzeby sięgać po strumień treści.
-- Pola w tabeli (dane klienta w komparycji): `x` = zmierzony pikselowo środek
-  pionowej kreski dzielącej kolumnę etykiet od kolumny wartości + 6 pt
-  wcięcia (kreska zmierzona przez `pdfplumber` — `page.lines`, bo `pdftotext`
-  nie raportuje grafiki wektorowej); `y = 842 - yMax(etykiety)`, bez korekty.
-- Domyślny `rozmiar` 10.0 (nie nadpisywany poza kratkami zgód).
+POLITYKA PL (czego NIE drukujemy): Zalacznik nr 5 (pouczenie, str. 9) i wzor
+formularza odstapienia (str. 10) wypelnia klient tylko przy faktycznym
+odstapieniu; Zalacznik nr 6 (protokol odbioru, str. 11-13) i protokol pomiarow
+(str. 14) wypelnia instalator po montazu. Podpis Wykonawcy drukuje sie w umowie
+glownej (str. 4) i Zalaczniku 1 (str. 5); w Zal. 2/3, RODO i pelnomocnictwie
+jest tylko linia Zamawiajacego.
 
-BEZPIECZNIK ZMIANY SZABLONU: `MAPA_ME` obowiązuje WYŁĄCZNIE dla dokładnie
-tej wersji `crm/szablony/umowa_me.pdf`, której suma SHA-256 jest zapisana w
-`SHA256_SZABLONU_ME`. Generator PDF-u (analogicznie do `zloz_umowe()` w
-`crm/volteo_umowa_render.py` dla PVME) MA sprawdzić tę sumę przed użyciem tej
-mapy i przerwać z czytelnym komunikatem przy niezgodności.
+STRONY BEZ POZYCJI (indeksy 0-based): 8 (pouczenie o odstapieniu), 9 (formularz
+odstapienia), 10 do 13 (protokol odbioru i protokol pomiarow), 15 (pusta strona,
+tylko stopka). Strony 2 i 6 maja po jednej grupie pozycji (powierzchnia; podpis
+Zal. 3), reszta ich tresci to statyczne klauzule.
 
-CROSS-CHECK wobec PVME (`crm/volteo_umowa_mapa.py`), zanotowany podczas
-kalibracji, dla przyszłych czytelników: Załącznik nr 4 (RODO, linia podpisu)
-i Załącznik nr 7 (Pełnomocnictwo OSD) mają w obu szablonach IDENTYCZNĄ
-geometrię co do 0,01 pt (`xMin`/`xMax`/`yMax` linii identyczne) — to ten sam
-tekst prawniczy wklejony w oba dokumenty bez zmian. Załącznik nr 2/3 (zgody)
-zgadza się co do pierwszych dwóch kratek (Załącznik 2) niemal idealnie, ale
-kratka Załącznika nr 3 różni się o ok. 10,6 pt w `y` względem PVME — obie
-wartości zmierzone tu niezależnie skryptem, różnica ma oczywistą przyczynę
-(różna długość akapitów nad nią w każdym szablonie), nie jest błędem pomiaru.
-Strona komparycji (dane klienta) i §2/§3 NIE są współdzielone między
-szablonami (inne nagłówki, inna treść) — tam `x`/`y` różnią się od PVME
-zauważalnie (do ok. 4 pt na `x` w `umowa_nr`, kilkanaście pt na `y` wszędzie)
-i jest to oczekiwane, nie błąd.
+OSOBLIWOSCI WZORU: jedna osoba (brak kluczy klient2_* i podpis_zamawiajacy_2);
+wzor nie ma rubryk paneli PV, montazu dachowego, odgromowej, PPOZ, przekopu ani
+kabla, wiec ich klucze kontekstu nie maja pozycji (patrz wyjatki w testach);
+nie obsluguje klimy, ladowarki EV ani rozbudowy. Obsluguje WYLACZNIE cechy
+`dod_panele`: Zal. 1 ma rubryki "Dodatkowe moduly (ilosc)" i "Dodatkowe moduly
+wraz z mikrofalownikiem (ilosc)" (klucze dod_panele_szt, dod_panele_mikro_szt).
+Wynagrodzenie netto/brutto stoi na str. 2 (nie 1), opcje finansowania tez na
+str. 2 ("Kredyt 100%" / "Kredyt z wkladem" / "Przelew"). Tekst Zalacznika nr 3
+przechodzi ze str. 6 na 7, wiec jego podpis lezy na str. 7 (indeks 6), a nie na
+tej samej stronie co kratka. Zalacznik nr 4 (RODO) konczy sie na str. 8. Na
+str. 5 dwie etykiety "Moc inwertera (kW)" (nowy inwerter i istniejaca instalacja
+PV) rozroznione kolejnoscia, nie etykieta.
 
-Stała sumy kontrolnej zaktualizowana 2026-10-10 do ostatecznego wzoru z 06.10.2026 (b69, chunk U1); WSPÓŁRZĘDNE PONIŻEJ SĄ ZE STAREGO WZORU i są nieważne do czasu ponownego pomiaru od zera (chunk U2); reeksport z Google Docs przesuwa nawet niezmienione strony, więc żadna z nich nie może być skopiowana do nowej mapy."""
+BEZPIECZNIK: mapa obowiazuje WYLACZNIE dla pliku o SHA-256 `SHA256_SZABLONU_ME`;
+generator odmawia renderu przy niezgodnosci.
+"""
 
 from crm.volteo_umowa_mapa import Pole
 
 SHA256_SZABLONU_ME: str = "de2d526db3ea8a9f08daf1ecc94198d245c1c4530bb457a9ddbf2346b8ee3cf7"
-"""SHA-256 pliku `crm/szablony/umowa_me.pdf` (A4, 596x842 pt, 14 stron, Producer
-"Skia/PDF m153 Google Docs Renderer"), zweryfikowane `shasum -a 256` na pliku
-dostarczonym do tego zadania (2026-08-12). `MAPA_ME` poniżej jest skalibrowana
-WYŁĄCZNIE dla dokładnie tego pliku — każda zmiana szablonu (nawet kosmetyczna,
-np. przesunięcie akapitu) unieważnia wszystkie współrzędne poniżej."""
+"""SHA-256 pliku `crm/szablony/umowa_me.pdf` (`shasum -a 256`, 2026-10-10)."""
 
 LICZBA_STRON_ME: int = 16
-"""Liczba stron `crm/szablony/umowa_me.pdf`, zweryfikowana `pdfinfo`."""
+"""Liczba stron oryginalu, zgodna z `pdfinfo`."""
 
-# ---------------------------------------------------------------------------
-# Strona 1 (indeks 0): komparycja, §1 Przedmiot umowy
-#
-# Tabela danych klienta: pionowa kreska dzieląca kolumny (zmierzona
-# `pdfplumber`, `page.lines`) leży na x=171.500004, prawa krawędź tabeli na
-# x=522.5000175 — stąd `x` pól = 171.500004 + 6 = 177.5, `maks_szerokosc` =
-# (522.5000175 - 3) - 177.5 = 342.0 (3 pt zapasu od prawej krawędzi tabeli,
-# symetrycznie do 3 pt wcięcia od lewej kreski).
-# ---------------------------------------------------------------------------
+# Strona 1 (indeks 0): komparycja (numer umowy, data zawarcia, tabela danych
+# klienta 5 wierszy x 2 kolumny), §1 ust. 1 adres miejsca montazu (kreska) i
+# ust. 2 typ budynku. Komorki tabeli: x = pionowa kreska dzielaca kolumny
+# (pdfminer LTLine) + 6 pt, y = dol etykiety wiersza, maks_szerokosc = prawa
+# krawedz tabeli - 3 pt - x. Wynagrodzenie stoi dopiero na str. 2.
 _STRONA_1: tuple[Pole, ...] = (
-	Pole("umowa_nr", 0, 210.11, 735.42, "tekst", maks_szerokosc=194.21),
-	Pole("data_zawarcia", 0, 135.56, 701.49, "tekst", maks_szerokosc=88.51),
 	Pole("klient_imie_nazwisko", 0, 177.5, 666.55, "tekst", maks_szerokosc=342.0),
 	Pole("klient_adres", 0, 177.5, 642.07, "tekst", maks_szerokosc=342.0),
 	Pole("klient_pesel", 0, 177.5, 617.6, "tekst", maks_szerokosc=342.0),
 	Pole("klient_telefon", 0, 177.5, 593.12, "tekst", maks_szerokosc=342.0),
 	Pole("klient_email", 0, 177.5, 568.65, "tekst", maks_szerokosc=342.0),
-	Pole("adres_montazu", 0, 111.0, 353.57, "tekst", maks_szerokosc=383.16),
-	Pole("budynek_wielorodzinny", 0, 115.5, 309.72, "kratka", wyrownanie="srodek"),
-	Pole("budynek_jednorodzinny", 0, 115.5, 289.88, "kratka", wyrownanie="srodek"),
+	Pole("umowa_nr", 0, 210.11, 735.42, "tekst", maks_szerokosc=194.21),
+	Pole("data_zawarcia", 0, 135.56, 701.49, "tekst", maks_szerokosc=88.51),
+	Pole("adres_montazu", 0, 111.0, 340.34, "tekst", maks_szerokosc=383.16),
+	Pole("budynek_wielorodzinny", 0, 115.5, 296.49, "kratka", wyrownanie="srodek"),
+	Pole("budynek_jednorodzinny", 0, 115.5, 276.66, "kratka", wyrownanie="srodek"),
 )
 
-# ---------------------------------------------------------------------------
-# Strona 2 (indeks 1): §2 Wynagrodzenie
-# ---------------------------------------------------------------------------
+# Strona 2 (indeks 1): §2 ust. 1 wynagrodzenie netto i brutto (dwie kreski) oraz
+# ust. 2 opcje finansowania "Kredyt 100%" / "Kredyt z wkladem wlasnym" (z
+# kreskami wklad wlasny / kredyt) / "Przelew". Kratki mapuja 1:1:
+# fin_kredyt_100, fin_kredyt_wklad, fin_gotowka (zdanie ust. 3 "gotowka/przelew"
+# zostaje we wzorze).
 _STRONA_2: tuple[Pole, ...] = (
-	Pole("wynagrodzenie_netto", 1, 113.78, 708.11, "tekst", maks_szerokosc=155.22),
-	Pole("wynagrodzenie_brutto", 1, 113.78, 681.66, "tekst", maks_szerokosc=155.22),
-	Pole("fin_kredyt_100", 1, 115.5, 611.36, "kratka", wyrownanie="srodek"),
-	Pole("fin_kredyt_wklad", 1, 115.5, 591.52, "kratka", wyrownanie="srodek"),
-	Pole("wklad_wlasny", 1, 175.44, 549.42, "tekst", maks_szerokosc=280.31),
-	Pole("kwota_kredytu", 1, 143.78, 522.97, "tekst", maks_szerokosc=310.89),
-	Pole("fin_gotowka", 1, 115.5, 505.57, "kratka", wyrownanie="srodek"),
+	Pole("wynagrodzenie_netto", 1, 113.78, 694.88, "tekst", maks_szerokosc=155.22),
+	Pole("wynagrodzenie_brutto", 1, 113.78, 668.43, "tekst", maks_szerokosc=155.22),
+	Pole("fin_kredyt_100", 1, 115.5, 598.13, "kratka", wyrownanie="srodek"),
+	Pole("fin_kredyt_wklad", 1, 115.5, 578.3, "kratka", wyrownanie="srodek"),
+	Pole("wklad_wlasny", 1, 175.44, 536.2, "tekst", maks_szerokosc=280.31),
+	Pole("kwota_kredytu", 1, 143.78, 509.75, "tekst", maks_szerokosc=310.89),
+	Pole("fin_gotowka", 1, 115.5, 492.34, "kratka", wyrownanie="srodek"),
 )
 
-# ---------------------------------------------------------------------------
-# Strona 3 (indeks 2): §3 ust. 1 lit. g — powierzchnia budynku
-#
-# `x`/`maks_szerokosc` tego bloku zgadzają się z PVME (`_STRONA_3` tamtej
-# mapy) co do ok. 0,01 pt — identyczny akapit, po prostu inaczej położony w
-# pionie (inna treść nad nim w każdym szablonie).
-# ---------------------------------------------------------------------------
+# Strona 3 (indeks 2): §3 ust. 1 lit. g, powierzchnia uzytkowa budynku (dwie
+# kratki w jednej linii i kreska m2).
 _STRONA_3: tuple[Pole, ...] = (
-	Pole("pow_do_300", 2, 115.5, 703.93, "kratka", wyrownanie="srodek"),
-	Pole("pow_ponad_300", 2, 242.73, 703.93, "kratka", wyrownanie="srodek"),
-	Pole("powierzchnia_m2", 2, 379.34, 703.42, "tekst", maks_szerokosc=66.27),
+	Pole("pow_do_300", 2, 115.5, 690.7, "kratka", wyrownanie="srodek"),
+	Pole("pow_ponad_300", 2, 242.73, 690.7, "kratka", wyrownanie="srodek"),
+	Pole("powierzchnia_m2", 2, 379.34, 690.19, "tekst", maks_szerokosc=66.27),
 )
 
-# ---------------------------------------------------------------------------
-# Strona 4 (indeks 3): §7 Postanowienia końcowe — blok podpisów umowy głównej
-#
-# Jak w PVME (zob. uzasadnienie przy `_STRONA_4` w `crm/volteo_umowa_mapa.py`):
-# Autenti dokleja jedno zbiorcze poświadczenie na końcu pliku, więc te pozycje
-# wypełniają miejsce na podpis DRUKOWANYMI literami jako oznaczenie strony, nie
-# jako podpis w rozumieniu prawa. Kreska podpisu (pdftotext -bbox): Zamawiający
-# xMin=72.0/xMax=235.999663, Wykonawca xMin=360.0/xMax=521.223511, oba
-# yMax=480.215334 — `xMin`/`xMax` identyczne co do 0,000001 pt z PVME (ten sam
-# blok podpisów wklejony w oba szablony), `yMax` różni się (inna treść nad
-# blokiem w każdym szablonie).
-# ---------------------------------------------------------------------------
+# Strona 4 (indeks 3): podpisy umowy glownej, jedna linia Zamawiajacego i jedna
+# Wykonawcy (osobne kolumny po wspolrzednej x).
 _STRONA_4: tuple[Pole, ...] = (
 	Pole("podpis_zamawiajacy", 3, 75.0, 364.28, "tekst", maks_szerokosc=158.0),
 	Pole("podpis_wykonawca", 3, 363.0, 364.28, "tekst", maks_szerokosc=155.22),
 )
 
-# ---------------------------------------------------------------------------
-# Strona 5 (indeks 4): Załącznik nr 1 — Arkusz ustaleń montażowych
-#
-# W tym szablonie (inaczej niż w PVME, gdzie Załącznik 1a/1b są DWIEMA
-# osobnymi stronami — panele+falownik / bateria) wszystkie dane techniczne
-# mieszczą się na JEDNEJ stronie: falownik, bateria, internet/moc
-# przyłączeniowa/fazy, a potem sekcja „W PRZYPADKU POSIADANIA INSTALACJI
-# FOTOWOLTAICZNEJ" (existing-PV). Świadomie BRAK pozycji `inwerter_szt` —
-# ten szablon nie ma pola „Ilość inwerterów" (magazyn energii montowany jest
-# zawsze z jednym falownikiem/hybrydą, więc pole jest zbędne i faktycznie
-# nieobecne w treści). Etykieta „Moc inwertera (kW)" i „Producent inwertera"
-# WYSTĘPUJĄ NA TEJ STRONIE DWUKROTNIE — raz dla nowego falownika magazynu
-# (góra strony, `inwerter_moc_kw`), raz w sekcji existing-PV (dół strony,
-# `ist_pv_moc_inwertera_kw`/`ist_pv_producent_inwertera`) — rozróżnione tu po
-# pozycji pionowej (yMax 153.6 vs. 417.5), zgodnie z etykietą sekcji.
-# ---------------------------------------------------------------------------
+# Strona 5 (indeks 4): Zalacznik nr 1, arkusz ustalen montazowych ME: inwerter,
+# bateria (moc, pojemnosci, liczba, gwarancja), internet, moc przylaczeniowa,
+# fazy, sekcja istniejacej instalacji PV (dwie etykiety "Moc inwertera (kW)"
+# rozroznione kolejnoscia n=0/n=1), OPCJE DODATKOWE (dodatkowe moduly, moduly z
+# mikrofalownikiem) oraz podpisy Zamawiajacego i Wykonawcy.
 _STRONA_5: tuple[Pole, ...] = (
 	Pole("inwerter_producent_model", 4, 205.01, 708.11, "tekst", maks_szerokosc=244.17),
 	Pole("inwerter_moc_kw", 4, 167.2, 690.86, "tekst", maks_szerokosc=57.93),
@@ -174,82 +128,48 @@ _STRONA_5: tuple[Pole, ...] = (
 	Pole("moc_przylaczeniowa_kw", 4, 229.43, 509.75, "tekst", maks_szerokosc=85.73),
 	Pole("fazy_1", 4, 121.72, 488.32, "kratka", wyrownanie="srodek"),
 	Pole("fazy_3", 4, 157.83, 488.32, "kratka", wyrownanie="srodek"),
-	# Sekcja "W PRZYPADKU POSIADANIA INSTALACJI FOTOWOLTAICZNEJ" (existing-PV) —
-	# druga instancja etykiet "Moc inwertera (kW)" / "Producent inwertera".
 	Pole("ist_pv_moc_inwertera_kw", 4, 167.2, 426.95, "tekst", maks_szerokosc=57.93),
 	Pole("ist_pv_moc_kwp", 4, 232.76, 409.71, "tekst", maks_szerokosc=55.16),
 	Pole("ist_pv_producent_inwertera", 4, 170.01, 392.46, "tekst", maks_szerokosc=155.22),
-	# Blok podpisów Załącznika 1 — patrz uzasadnienie przy `_STRONA_4` powyżej.
-	# Kreska podpisu (pdftotext -bbox): Zamawiający xMin=72.0/xMax=235.999663,
-	# Wykonawca xMin=360.0/xMax=521.223511, oba yMax=574.507324.
-	Pole("podpis_zamawiajacy", 4, 75.0, 269.99, "tekst", maks_szerokosc=158.0),
-	Pole("podpis_wykonawca", 4, 363.0, 269.99, "tekst", maks_szerokosc=155.22),
+	Pole("dod_panele_szt", 4, 195.0, 331.51, "tekst", maks_szerokosc=57.93),
+	Pole("dod_panele_mikro_szt", 4, 306.09, 314.26, "tekst", maks_szerokosc=55.16),
+	Pole("podpis_zamawiajacy", 4, 75.0, 191.8, "tekst", maks_szerokosc=158.0),
+	Pole("podpis_wykonawca", 4, 363.0, 191.8, "tekst", maks_szerokosc=155.22),
 )
 
-# ---------------------------------------------------------------------------
-# Strona 6 (indeks 5): Załącznik nr 2 (zgody) i Załącznik nr 3 (oświadczenie
-# o realizacji przed terminem odstąpienia) — oba na TEJ SAMEJ stronie, tak
-# jak w PVME.
-#
-# Kratki na tej stronie są mniejsze (10x10 pt, nie 15x15 jak gdzie indziej w
-# tej mapie), stąd inny offset (2,0 pt) i mniejszy `rozmiar` (8 pt), zgodnie
-# z konwencją PVME. Inaczej niż tam, `pdftotext -bbox` zwrócił tu poprawne
-# bounding boxy glifu „☐" wprost jako słowa (xMin/xMax/yMin/yMax, rozmiar
-# dokładnie 10x10 pt) — NIE trzeba było sięgać po strumień treści PDF.
-# `zgoda_telefon`/`zgoda_promocja` (Załącznik 2, `y`=721,54/681,87) zgadzają
-# się z PVME (`_STRONA_7` tamtej mapy: 721,54/681,87) co do 0,01 pt — ten sam
-# akapit wklejony w oba szablony. `zgoda_wczesniejsza_realizacja` (Załącznik
-# 3) różni się od PVME o ok. 10,6 pt w `y` (271,93 tu vs. 261,35 tam) —
-# oczywista przyczyna: inna długość treści między Załącznikiem 2 a 3 w każdym
-# szablonie (tu obie kratki bliżej siebie), zmierzone tu niezależnie, nie
-# błąd pomiaru.
-# ---------------------------------------------------------------------------
+# Strona 6 (indeks 5): Zalacznik nr 2 (zgoda telefon, zgoda promocja) z linia
+# Zamawiajacego oraz kratka Zalacznika nr 3 (realizacja przed terminem
+# odstapienia). Kratki 10x10 pt (offset +2.0, rozmiar 8). Zal. 3 przechodzi na
+# str. 7, gdzie stoi jego podpis.
 _STRONA_6: tuple[Pole, ...] = (
-	Pole("zgoda_telefon", 5, 77.0, 721.54, "kratka", wyrownanie="srodek", rozmiar=8.0),
-	Pole("zgoda_promocja", 5, 77.0, 681.87, "kratka", wyrownanie="srodek", rozmiar=8.0),
-	# Blok podpisów Załącznika 2 — WYŁĄCZNIE linia Zamawiającego, bez
-	# Wykonawcy (zgodnie z renderem strony — oba oświadczenia jednostronne).
-	# Kreska (pdftotext -bbox): xMin=72.0/xMax=233.223511/yMax=242.185544.
-	Pole("podpis_zamawiajacy", 5, 75.0, 602.31, "tekst", maks_szerokosc=155.22),
-	Pole("zgoda_wczesniejsza_realizacja", 5, 77.0, 271.93, "kratka", wyrownanie="srodek", rozmiar=8.0),
-	# Blok podpisów Załącznika 3 (osobno, niżej na tej samej stronie).
-	# Kreska (pdftotext -bbox): xMin=72.0/xMax=233.223511/yMax=718.245114.
-	Pole("podpis_zamawiajacy", 5, 75.0, 126.25, "tekst", maks_szerokosc=155.22),
+	Pole("zgoda_telefon", 5, 77.0, 642.2, "kratka", wyrownanie="srodek", rozmiar=8.0),
+	Pole("zgoda_promocja", 5, 77.0, 602.53, "kratka", wyrownanie="srodek", rozmiar=8.0),
+	Pole("zgoda_wczesniejsza_realizacja", 5, 77.0, 192.59, "kratka", wyrownanie="srodek", rozmiar=8.0),
+	Pole("podpis_zamawiajacy", 5, 75.0, 522.97, "tekst", maks_szerokosc=155.22),
 )
 
-# ---------------------------------------------------------------------------
-# Strona 8 (indeks 7): Załącznik nr 4 — klauzula RODO, linia podpisu klienta
-# ("Zamawiający" nad kreską, "data i podpis" pod nią). Kreska (pdftotext
-# -bbox): xMin=72.0/xMax=233.223511/yMax=268.633304 — IDENTYCZNA co do
-# 0,000001 pt z odpowiadającą pozycją w PVME (`_STRONA_9` tamtej mapy,
-# indeks 8): ten sam blok RODO wklejony bez zmian w oba szablony, więc
-# `rodo_data_imie_nazwisko` ma tu dokładnie te same `x`/`y`/`maks_szerokosc`.
-# ---------------------------------------------------------------------------
+# Strona 7 (indeks 6): linia podpisu Zamawiajacego pod Zalacznikiem nr 3 (u gory
+# strony, ciag dalszy Zal. 3 ze str. 6). Dalej zaczyna sie Zal. 4 (RODO) bez
+# pozycji.
+_STRONA_7: tuple[Pole, ...] = (
+	Pole("podpis_zamawiajacy", 6, 75.0, 734.55, "tekst", maks_szerokosc=155.22),
+)
+
+# Strona 8 (indeks 7): koniec Zalacznika nr 4 (klauzula RODO), linia "data i
+# podpis" klienta (klucz rodo_data_imie_nazwisko).
 _STRONA_8: tuple[Pole, ...] = (
-	Pole("rodo_data_imie_nazwisko", 7, 75.0, 575.87, "tekst", maks_szerokosc=155.22),
+	Pole("rodo_data_imie_nazwisko", 7, 75.0, 496.52, "tekst", maks_szerokosc=155.22),
 )
 
-# ---------------------------------------------------------------------------
-# Strona 14 (indeks 13): Załącznik nr 7 — Pełnomocnictwo OSD
-#
-# Cały ten blok (dane klienta + linia podpisu Mocodawcy) jest w PVME
-# (`_STRONA_18` tamtej mapy, indeks 17) IDENTYCZNY co do 0,01 pt na każdym
-# polu — ten sam tekst pełnomocnictwa wklejony bez zmian w oba szablony.
-# ---------------------------------------------------------------------------
-_STRONA_14: tuple[Pole, ...] = (
-	# "udzielone w dniu ___" — jak w PVME, brak osobnego klucza w kontekście
-	# na datę udzielenia pełnomocnictwa (podpisywane tego samego dnia co
-	# umowa); świadomie reużyty `data_zawarcia`.
-	Pole("data_zawarcia", 13, 292.01, 708.11, "tekst", maks_szerokosc=88.51),
-	Pole("klient_imie_nazwisko", 13, 171.13, 681.66, "tekst", maks_szerokosc=88.52),
-	Pole("klient_adres", 13, 336.75, 681.66, "tekst", maks_szerokosc=171.9),
-	Pole("klient_pesel", 13, 110.01, 668.43, "tekst", maks_szerokosc=116.3),
-	# Jedna linia podpisu — "Mocodawcy" (klient), BEZ Wykonawcy, jak w PVME.
-	# Kreska podpisu (pdftotext -bbox, poprawiona o doklejony bez spacji
-	# przecinek innych linii tej strony zmierzonych `pdfplumber` na poziomie
-	# znaków — ta linia sama nie miała takiego problemu): xMin=362.054235/
-	# xMax=523.277746/yMax=665.349614.
-	Pole("podpis_zamawiajacy", 13, 365.05, 179.15, "tekst", maks_szerokosc=155.23),
+# Strona 15 (indeks 14): Zalacznik nr 7, pelnomocnictwo OSD. "udzielone w dniu"
+# reuzywa data_zawarcia; podpis Mocodawcy stoi w prawej kolumnie (klucz
+# Zamawiajacego), bez Wykonawcy.
+_STRONA_15: tuple[Pole, ...] = (
+	Pole("data_zawarcia", 14, 292.01, 628.76, "tekst", maks_szerokosc=88.51),
+	Pole("klient_imie_nazwisko", 14, 171.13, 602.31, "tekst", maks_szerokosc=88.51),
+	Pole("klient_adres", 14, 336.75, 602.31, "tekst", maks_szerokosc=171.9),
+	Pole("klient_pesel", 14, 110.01, 589.09, "tekst", maks_szerokosc=116.31),
+	Pole("podpis_zamawiajacy", 14, 365.05, 99.81, "tekst", maks_szerokosc=155.22),
 )
 
 MAPA_ME: tuple[Pole, ...] = (
@@ -259,37 +179,9 @@ MAPA_ME: tuple[Pole, ...] = (
 	+ _STRONA_4
 	+ _STRONA_5
 	+ _STRONA_6
+	+ _STRONA_7
 	+ _STRONA_8
-	+ _STRONA_14
+	+ _STRONA_15
 )
-"""Pełna mapa dla szablonu ME: krotka wszystkich `Pole` na wszystkich stronach.
-Jeden klucz kontekstu może wystąpić wielokrotnie (raz na każdej stronie, gdzie
-faktycznie jest drukowany) — generator ma narysować wartość we WSZYSTKICH
-pozycjach danego klucza, nie tylko w pierwszej."""
-
-# Strony bez pozycji (indeksy 6, 8, 9, 10, 11, 12) — a konkretnie: strona 7 (indeks 6,
-# Załącznik 4 RODO, PIERWSZA strona tego załącznika — administrator danych,
-# cele przetwarzania), strona 9 (indeks 8, Załącznik 5 — pouczenie o prawie do
-# odstąpienia), strona 10 (indeks 9, Załącznik 5 — formularz odstąpienia,
-# pusty formularz do ewentualnego wypełnienia przez klienta w przyszłości —
-# świadomie bez żadnego pola z kontekstu, tak jak w PVME), strona 11 (indeks
-# 10, Załącznik 6 — Protokół odbioru magazynu energii, str. 1: dane
-# klienta/instalatora/techniczne magazynu — decyzja produktowa 2026-08-12,
-# spójna z PVME b44: protokół odbioru ma być CAŁKOWICIE pusty, wypełnia go
-# ręcznie instalator dopiero po montażu), strona 12 (indeks 11, Załącznik 6 —
-# protokół odbioru str. 2: listy szkoleniowe/zdjęć + linie podpisu
-# klienta/instalatora — również ręcznie wypełniane przy montażu, świadomie
-# bez podpisu wydrukowanego z naszej strony, z tego samego powodu co
-# protokoły odbioru w PVME), strona 13 (indeks 12, protokół pomiarów
-# magazynu energii — wypełniany przez instalatora) — NIE zawierają żadnej
-# pozycji z kontekstu `zbuduj_kontekst`.
-
-
-def pozycje_dla_me(klucz: str) -> tuple[Pole, ...]:
-	"""Zwraca wszystkie pozycje `Pole` w `MAPA_ME` dla danego klucza kontekstu, w kolejności mapy."""
-	return tuple(pole for pole in MAPA_ME if pole.klucz == klucz)
-
-
-def klucze_w_mapie_me() -> frozenset[str]:
-	"""Zbiór unikalnych kluczy kontekstu obecnych w `MAPA_ME` (bez duplikatów, bez kolejności)."""
-	return frozenset(pole.klucz for pole in MAPA_ME)
+"""Pelna mapa dla `crm/szablony/umowa_me.pdf`. Jeden klucz kontekstu moze wystapic
+na kilku stronach albo kilka razy na jednej (podpisy, data_zawarcia)."""

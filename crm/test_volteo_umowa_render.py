@@ -576,8 +576,9 @@ class TestZlozUmowePelnyPipeline(unittest.TestCase):
 						kontekst["wynagrodzenie_brutto"].replace("\xa0", " "),
 						tekst_wg_strony[1].replace("\xa0", " "),
 					)
+					self.assertEqual(len(strony), 16)
 					self.assertIn(kontekst["bateria_producent_model"], tekst_wg_strony[4])
-					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[13])
+					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[14])
 					# Szablon ME nie ma sekcji fotowoltaicznej — wartość panelu
 					# nie ma gdzie się wydrukować, nigdzie na żadnej stronie.
 					self.assertNotIn(kontekst["panel_producent_model"], pelny_tekst)
