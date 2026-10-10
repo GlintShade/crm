@@ -389,22 +389,21 @@ export function modeleDodatkuKlimy(dodatki, pozycjeKlimy, rodzajKlimy) {
 }
 
 /**
- * Domyślny stan przełącznika EMS Breeze: "Tak", gdy dodatek jest dostępny
- * i użytkownik nie zmienił go ręcznie; "Nie", gdy niedostępny. Ręczny wybór
- * (emsRecznie, ustawiany przez UI przy kliknięciu Tak/Nie) wygrywa nad
- * domyślnym, więc zmiana producenta w obrębie dostępnych nie włącza EMS
- * z powrotem po wyłączeniu przez użytkownika.
+ * Domyślny stan przełącznika EMS Breeze: "Nie", gdy dodatek niedostępny;
+ * w przeciwnym razie zapamiętany wybór użytkownika (wyborReczny true/false),
+ * a bez wyboru "Tak". Wybór ręczny jest trwały przez całe życie formularza
+ * (decyzja właściciela 2026-10-10): niedostępność go nie kasuje, więc po
+ * powrocie do konfiguracji z EMS przełącznik wraca do wyboru użytkownika.
  *
  * @param {object} params
  * @param {string} params.producent
  * @param {string} params.variant
- * @param {boolean} params.emsRecznie - czy użytkownik sam ustawił przełącznik
- * @param {boolean} params.aktualnie - bieżący stan przełącznika
+ * @param {boolean|null} params.wyborReczny - null: brak wyboru; true/false: wybór użytkownika
  * @returns {boolean} docelowy stan przełącznika
  */
-export function domyslnyStanEms({ producent, variant, emsRecznie = false, aktualnie = false } = {}) {
+export function domyslnyStanEms({ producent, variant, wyborReczny = null } = {}) {
   if (!emsDostepny({ producent, variant })) return false
-  return emsRecznie ? Boolean(aktualnie) : true
+  return wyborReczny === null ? true : Boolean(wyborReczny)
 }
 
 /**

@@ -828,21 +828,20 @@ const modeleKlimyOptions = computed(() =>
 )
 const moceKlimyOptions = computed(() => moceDodatkuKlimy(dodatkiCatalog.value, dodatkiUi.klimaModel))
 
-// EMS Breeze: domyślnie Tak, gdy dostępny (#237). emsRecznie odróżnia wybór
-// użytkownika od domyślnego: po ręcznym wyłączeniu zmiana producenta go nie
-// włącza z powrotem; gdy EMS przestaje być dostępny, flaga się zeruje.
-const emsRecznie = ref(false)
+// EMS Breeze: domyślnie Tak, gdy dostępny (#237). emsRecznie przechowuje
+// WARTOŚĆ wyboru użytkownika (null = brak wyboru). Decyzja właściciela
+// 2026-10-10: ręczny wybór jest trwały przez całe życie formularza, także
+// gdy EMS na chwilę przestaje być dostępny (zmiana producenta/wariantu).
+const emsRecznie = ref(null)
 function ustawEms(on) {
-  emsRecznie.value = true
+  emsRecznie.value = on
   dodatkiUi.emsOn = on
 }
 function zastosujDomyslnyEms() {
-  if (!emsDostepnyNow.value) emsRecznie.value = false
   dodatkiUi.emsOn = domyslnyStanEms({
     producent: sel.producent,
     variant: sel.variant,
-    emsRecznie: emsRecznie.value,
-    aktualnie: dodatkiUi.emsOn,
+    wyborReczny: emsRecznie.value,
   })
 }
 const paneleDodatekOptions = computed(() =>

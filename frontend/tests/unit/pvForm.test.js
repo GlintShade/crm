@@ -743,14 +743,23 @@ describe('EMS Breeze domyslnie Tak', () => {
     expect(domyslnyStanEms({ producent: 'Sigenergy', variant: 'Fotowoltaika + Magazyn' })).toBe(false)
     expect(domyslnyStanEms({ producent: 'Deye', variant: 'Fotowoltaika' })).toBe(false)
   })
-  it('reczne wylaczenie jest szanowane', () => {
-    expect(domyslnyStanEms({ ...dost, emsRecznie: true, aktualnie: false })).toBe(false)
+  it('reczne Nie + dostepny: Nie', () => {
+    expect(domyslnyStanEms({ ...dost, wyborReczny: false })).toBe(false)
   })
-  it('reczne wlaczenie jest zachowane', () => {
-    expect(domyslnyStanEms({ ...dost, emsRecznie: true, aktualnie: true })).toBe(true)
+  it('reczne Nie + niedostepny: Nie', () => {
+    expect(domyslnyStanEms({ producent: 'Sigenergy', variant: 'Fotowoltaika + Magazyn', wyborReczny: false })).toBe(false)
+  })
+  it('reczne Nie + z powrotem dostepny: Nie', () => {
+    expect(domyslnyStanEms({ ...dost, wyborReczny: false })).toBe(false)
+  })
+  it('reczne Tak + z powrotem dostepny: Tak', () => {
+    expect(domyslnyStanEms({ ...dost, wyborReczny: true })).toBe(true)
   })
   it('niedostepny wygrywa nad recznym Tak', () => {
-    expect(domyslnyStanEms({ producent: 'Deye', variant: 'Fotowoltaika', emsRecznie: true, aktualnie: true })).toBe(false)
+    expect(domyslnyStanEms({ producent: 'Deye', variant: 'Fotowoltaika', wyborReczny: true })).toBe(false)
+  })
+  it('brak wyboru + dostepny: Tak', () => {
+    expect(domyslnyStanEms({ ...dost, wyborReczny: null })).toBe(true)
   })
   it('sanitizujDodatki nigdy nie wlacza EMS, tylko wylacza', () => {
     expect(sanitizujDodatki({ emsBreeze: 'Nie' }, { ...dost }).emsBreeze).toBe('Nie')
