@@ -44,11 +44,16 @@ tej wersji oryginału. Generator PDF-u ma sprawdzić sumę SHA-256 pliku wejści
 względem ``SHA256_SZABLONU`` przed użyciem tej mapy i przerwać z czytelnym
 komunikatem przy niezgodności — nigdy nie wpisywać danych w oparciu o
 niepewne współrzędne.
+
+Stała sumy kontrolnej zaktualizowana 2026-10-10 do ostatecznego wzoru z 06.10.2026 (b69, chunk U1); WSPÓŁRZĘDNE PONIŻEJ SĄ ZE STAREGO WZORU i są nieważne do czasu ponownego pomiaru od zera (chunk U2); reeksport z Google Docs przesuwa nawet niezmienione strony, więc żadna z nich nie może być skopiowana do nowej mapy.
 """
 
 from dataclasses import dataclass
 
-SHA256_SZABLONU: str = "2d05fe9e4f153b47fd84247b9c08e7e807d7684396ab7e1a57719640d7f6ffec"
+LICZBA_STRON_PVME: int = 18
+"""Liczba stron `crm/szablony/umowa_pv_me.pdf`, zweryfikowana `pdfinfo` (b69, chunk U1)."""
+
+SHA256_SZABLONU: str = "e2fcd4503cc44575f6a4bf2321fbd9cc17513633bc2cc272db64e689b0046a21"
 """SHA-256 pliku `Umowa PV + ME ProEnergy - 28.07.2026.pdf` z biblioteki dokumentów
 `Volteo Dokument` (kategoria Wzory umów), podmiana 2026-09-28 (issue ops#196), Skia/PDF
 m156 Google Docs Renderer, A4 596x842 pt, 18 stron, bez pól formularza. Zmiana względem
