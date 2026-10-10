@@ -19,6 +19,8 @@ import {
   kompletnyKociol,
   kompletnyPompa,
   kompletnyRozbudowa,
+  przelaczElementRozbudowy,
+  elementRozbudowyZablokowany,
   modeleKlimy,
   moceKlimy,
   odmianaPaneli,
@@ -489,5 +491,55 @@ describe('grupujWewnetrzneOze', () => {
       pozycje: [],
     })
     expect(wynik.grupy.map((g) => g.klucz)).toEqual(['Marża Proenergy'])
+  })
+})
+
+describe('Rozbudowa: wykluczanie paneli i paneli z mikrofalownikiem', () => {
+  const baza = { panele: 0, paneleMikro: 0, bateria: 0 }
+
+  it('wlaczenie paneli zeruje mikro', () => {
+    const r = przelaczElementRozbudowy({ ...baza, paneleMikro: 3 }, 'panele')
+    expect(r.panele).toBe(1)
+    expect(r.paneleMikro).toBe(0)
+  })
+
+  it('wlaczenie mikro zeruje panele', () => {
+    const r = przelaczElementRozbudowy({ ...baza, panele: 2 }, 'paneleMikro')
+    expect(r.paneleMikro).toBe(1)
+    expect(r.panele).toBe(0)
+  })
+
+  it('wylaczenie paneli nie rusza mikro ani baterii', () => {
+    const r = przelaczElementRozbudowy({ panele: 2, paneleMikro: 0, bateria: 2 }, 'panele')
+    expect(r).toEqual({ panele: 0, paneleMikro: 0, bateria: 2 })
+  })
+
+  it('bateria jest niezalezna od paneli', () => {
+    const r = przelaczElementRozbudowy({ panele: 2, paneleMikro: 0, bateria: 0 }, 'bateria')
+    expect(r).toEqual({ panele: 2, paneleMikro: 0, bateria: 1 })
+  })
+
+  it('nie mutuje wejscia', () => {
+    const wejscie = Object.freeze({ ...baza, paneleMikro: 2 })
+    const r = przelaczElementRozbudowy(wejscie, 'panele')
+    expect(r).not.toBe(wejscie)
+    expect(wejscie.paneleMikro).toBe(2)
+  })
+
+  it('kompletnyRozbudowa odrzuca oba typy paneli naraz', () => {
+    expect(kompletnyRozbudowa({ panele: 1, paneleMikro: 1, bateria: 1 })).toBe(false)
+    expect(kompletnyRozbudowa({ panele: 0, paneleMikro: 2, bateria: 1 })).toBe(true)
+    expect(kompletnyRozbudowa({ panele: 2, paneleMikro: 0, bateria: 1 })).toBe(true)
+  })
+
+  it('elementRozbudowyZablokowany blokuje drugi typ paneli, nie baterie', () => {
+    expect(elementRozbudowyZablokowany({ ...baza, panele: 1 }, 'paneleMikro')).toBe(true)
+    expect(elementRozbudowyZablokowany({ ...baza, paneleMikro: 1 }, 'panele')).toBe(true)
+    expect(elementRozbudowyZablokowany({ ...baza, panele: 1 }, 'panele')).toBe(false)
+    expect(elementRozbudowyZablokowany({ ...baza, panele: 1 }, 'bateria')).toBe(false)
+    expect(elementRozbudowyZablokowany(baza, 'panele')).toBe(false)
+    // stan konfliktowy: oba da sie wylaczyc
+    expect(elementRozbudowyZablokowany({ ...baza, panele: 1, paneleMikro: 1 }, 'panele')).toBe(false)
+    expect(przelaczElementRozbudowy({ panele: 1, paneleMikro: 1, bateria: 0 }, 'panele')).toEqual({ panele: 0, paneleMikro: 1, bateria: 0 })
   })
 })

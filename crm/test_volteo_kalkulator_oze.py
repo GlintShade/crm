@@ -337,9 +337,29 @@ class OblozOferteRozbudowaTest(unittest.TestCase):
 		self.assertEqual(po_klucz["wspolne:papiery_osd"], Decimal("300.00"))
 		self.assertEqual(po_klucz["wspolne:bonus_liderski"], Decimal("1500.00"))
 
-	def test_1_panel_1_mikro_1_bateria(self) -> None:
-		wynik = oblicz_oferte(self._wejscie(panele=1, panele_mikro=1, bateria=1), CENNIK, DOBOR, STALE)
-		self.assertEqual(wynik["netto"], Decimal("23900.00"))
+	def test_panele_i_mikro_naraz_sa_odrzucone(self) -> None:
+		with self.assertRaises(OZENiedozwolonaKombinacja) as ctx:
+			oblicz_oferte(self._wejscie(panele=1, panele_mikro=1, bateria=1), CENNIK, DOBOR, STALE)
+		self.assertEqual(
+			str(ctx.exception),
+			"Rozbudowa PV: wybierz albo panele PV, albo panele PV z mikrofalownikiem, nie oba naraz.",
+		)
+
+	def test_panele_i_mikro_naraz_bez_baterii_sa_odrzucone(self) -> None:
+		with self.assertRaises(OZENiedozwolonaKombinacja):
+			oblicz_oferte(self._wejscie(panele=2, panele_mikro=3), CENNIK, DOBOR, STALE)
+
+	def test_same_mikro_dziala(self) -> None:
+		wynik = oblicz_oferte(self._wejscie(panele_mikro=1), CENNIK, DOBOR, STALE)
+		self.assertGreater(wynik["netto"], Decimal("0"))
+
+	def test_mikro_plus_bateria_dziala(self) -> None:
+		wynik = oblicz_oferte(self._wejscie(panele_mikro=1, bateria=1), CENNIK, DOBOR, STALE)
+		self.assertGreater(wynik["netto"], Decimal("0"))
+
+	def test_sama_bateria_dziala(self) -> None:
+		wynik = oblicz_oferte(self._wejscie(bateria=1), CENNIK, DOBOR, STALE)
+		self.assertGreater(wynik["netto"], Decimal("0"))
 
 	def test_3_panele_samodzielnie(self) -> None:
 		wynik = oblicz_oferte(self._wejscie(panele=3), CENNIK, DOBOR, STALE)

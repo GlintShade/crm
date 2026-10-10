@@ -519,6 +519,10 @@ def _pozycje_rozbudowa(dane: Any, cennik: dict[str, dict[str, Any]]) -> list[tup
 		_blad("Liczba paneli PV z mikrofalownikiem musi być z zakresu 0-5.")
 	if not (0 <= bateria <= ROZBUDOWA_MAX["bateria"]):
 		_blad("Liczba modułów baterii musi być z zakresu 0-4.")
+	if panele > 0 and panele_mikro > 0:
+		raise OZENiedozwolonaKombinacja(
+			"Rozbudowa PV: wybierz albo panele PV, albo panele PV z mikrofalownikiem, nie oba naraz."
+		)
 	if panele == 0 and panele_mikro == 0 and bateria == 0:
 		_blad("Rozbudowa wymaga wyboru przynajmniej jednego elementu (panele, panele z "
 			"mikrofalownikiem albo moduły baterii).")
