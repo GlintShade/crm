@@ -9,9 +9,9 @@ w miejscach opisanych przez odpowiednią mapę współrzędnych. Dzięki temu tr
 prawna, logo, stopka, fonty i podział stron są dokładnie takie jak w
 oryginale — bo to fizycznie ten sam plik, tylko z naniesioną warstwą.
 
-Rejestr `SZABLONY` ma 14 kluczy (b69, #236): jedenaście wzorów JEDNOOSOBOWYCH
+Rejestr `SZABLONY` ma 17 kluczy (b69, #236 i dogrywka U9): czternaście wzorów JEDNOOSOBOWYCH
 (`PV`, `PV_K`, `PVME`, `PVME_K`, `PVME_EV`, `PVME_K_EV`, `ME`, `ME_K`, `ME_EV`,
-`ME_K_EV`, `ROZ`) i trzy PODWÓJNE (`PV_2`, `PVME_2`, `ME_2`, ops#165/#166/#167,
+`ME_K_EV`, `ROZ`, `KL`, `PC`, `PP`) i trzy PODWÓJNE (`PV_2`, `PVME_2`, `ME_2`, ops#165/#166/#167,
 zmierzone od zera). Klucz wybiera `crm.volteo_umowa.kod_szablonu(rodzaj,
 podwojna, cechy)`: kod bazowy + `_K` (klimatyzacja) + `_EV` (ładowarka EV) +
 `_2` (drugi Zamawiający); klucze `*_2` z cechą nie istnieją celowo. Każdy wzór
@@ -55,11 +55,14 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen.canvas import Canvas
 
 from crm.volteo_umowa_mapa import LICZBA_STRON_PVME, MAPA, SHA256_SZABLONU, Pole
+from crm.volteo_umowa_mapa_kl import LICZBA_STRON_KL, MAPA_KL, SHA256_SZABLONU_KL
 from crm.volteo_umowa_mapa_me import LICZBA_STRON_ME, MAPA_ME, SHA256_SZABLONU_ME
 from crm.volteo_umowa_mapa_me2 import LICZBA_STRON_ME2, MAPA_ME2, SHA256_SZABLONU_ME2
 from crm.volteo_umowa_mapa_meev import LICZBA_STRON_MEEV, MAPA_MEEV, SHA256_SZABLONU_MEEV
 from crm.volteo_umowa_mapa_mek import LICZBA_STRON_MEK, MAPA_MEK, SHA256_SZABLONU_MEK
 from crm.volteo_umowa_mapa_mekev import LICZBA_STRON_MEKEV, MAPA_MEKEV, SHA256_SZABLONU_MEKEV
+from crm.volteo_umowa_mapa_pc import LICZBA_STRON_PC, MAPA_PC, SHA256_SZABLONU_PC
+from crm.volteo_umowa_mapa_pp import LICZBA_STRON_PP, MAPA_PP, SHA256_SZABLONU_PP
 from crm.volteo_umowa_mapa_pv import LICZBA_STRON_PV, MAPA_PV, SHA256_SZABLONU_PV
 from crm.volteo_umowa_mapa_pv2 import LICZBA_STRON_PV2, MAPA_PV2, SHA256_SZABLONU_PV2
 from crm.volteo_umowa_mapa_pvk import LICZBA_STRON_PVK, MAPA_PVK, SHA256_SZABLONU_PVK
@@ -122,6 +125,15 @@ SZABLONY: dict[str, Szablon] = {
 		MAPA_ROZ,
 		frozenset({"rozbudowa"}),
 	),
+	# Klimatyzacja / Pompa ciepła / Kocioł (dogrywka b69, U9). Kod `CP` (Czyste
+	# Powietrze) CELOWO nie ma wpisu; nie mylić z `PC` (Pompa ciepła).
+	"KL": Szablon(
+		"umowa_klimatyzacja.pdf", SHA256_SZABLONU_KL, LICZBA_STRON_KL, MAPA_KL, frozenset({"kl"})
+	),
+	"PC": Szablon(
+		"umowa_pompa_ciepla.pdf", SHA256_SZABLONU_PC, LICZBA_STRON_PC, MAPA_PC, frozenset({"pc"})
+	),
+	"PP": Szablon("umowa_kociol.pdf", SHA256_SZABLONU_PP, LICZBA_STRON_PP, MAPA_PP, frozenset({"pp"})),
 	# Warianty PODWÓJNE (dwóch Zamawiających, ops#165/#166/#167): klucz to
 	# kod bazowy z doklejonym `"_2"`, dokładnie to, co zwraca
 	# `crm.volteo_umowa.kod_szablonu(rodzaj, podwojna=True)`. Każdy ma WŁASNY

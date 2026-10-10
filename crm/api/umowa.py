@@ -18,6 +18,7 @@ czterech endpointów rozgałęzia się na `_czy_cp(deal_doc)` DOPIERO PO
 `_wyliczenia`, `_zapisz_dane_cp`/`_zapisz_dane_oze`, `_volteo_umowa_pdf_cp`.
 """
 
+import json
 from decimal import Decimal
 from typing import Any, NoReturn
 
@@ -33,6 +34,9 @@ from crm.permissions.file_nazwy_systemowe import plik_systemowy
 from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad
 from crm.volteo_naming import code_for
 from crm.volteo_umowa import (
+	KLIMATYZACJA,
+	KOCIOL,
+	POMPA_CIEPLA,
 	ROZBUDOWA,
 	brakujace_dane_klienta,
 	brakujace_pola,
@@ -110,6 +114,18 @@ _DEAL_POLA_PREFILL = [
 	"custom_oze_rozbudowa_panele",
 	"custom_oze_rozbudowa_panele_mikro",
 	"custom_oze_rozbudowa_bateria",
+	# b69 (U9): dane urządzenia z kalkulatora dla Klimatyzacji, Pompy ciepła i Kotła.
+	"custom_oze_klima_rodzaj",
+	"custom_oze_klima_model",
+	"custom_oze_klima_moc_kw",
+	"custom_oze_pc_producent",
+	"custom_oze_pc_typ",
+	"custom_oze_pc_moc_kw",
+	"custom_oze_cwu",
+	"custom_oze_grzejniki_json",
+	"custom_oze_kociol_rodzaj",
+	"custom_oze_kociol_model",
+	"custom_oze_kociol_moc_kw",
 ]
 """Pola `CRM Deal` kopiowane bez zmian do bloku `prefill`."""
 
@@ -633,6 +649,9 @@ _NAZWY_WZOROW: dict[str, str] = {
 	"ME_EV": "Umowa ME + Ł (06.10.2026)",
 	"ME_K_EV": "Umowa ME + K + Ł (06.10.2026)",
 	"ROZ": "Umowa Rozbudowa PV/ME (06.10.2026)",
+	"KL": "Umowa Klimatyzacja (09.10.2026)",
+	"PC": "Umowa Pompa ciepła (09.10.2026)",
+	"PP": "Umowa Kocioł (09.10.2026)",
 	"PV_2": "Umowa PV, dwóch Zamawiających",
 	"PVME_2": "Umowa PV + ME, dwóch Zamawiających",
 	"ME_2": "Umowa ME, dwóch Zamawiających",
@@ -660,7 +679,8 @@ RODZAJE_PV_ME = frozenset({"Fotowoltaika", "Fotowoltaika + Magazyn", "Magazyn en
 def _komunikat_rodzaju_bez_szablonu() -> str:
 	return _(
 		"Ustaw „Rodzaj umowy” na szansie sprzedaży na jedną z wartości: "
-		"Fotowoltaika, Fotowoltaika + Magazyn, Magazyn energii, Rozbudowa PV/ME. Dopiero wtedy "
+		"Fotowoltaika, Fotowoltaika + Magazyn, Magazyn energii, Rozbudowa PV/ME, Klimatyzacja, "
+		"Pompa ciepła, Kocioł. Dopiero wtedy "
 		"można wygenerować PDF umowy."
 	)
 
@@ -809,6 +829,47 @@ def _dodatki_dla_pdf(deal_doc: "frappe.model.document.Document") -> dict[str, An
 		"ev": ev,
 		"panele": cint(deal_doc.get("custom_dod_panele")),
 		"panele_mikro": cint(deal_doc.get("custom_dod_panele_mikro")),
+	}
+
+
+RODZAJE_URZADZEN = frozenset({KLIMATYZACJA, POMPA_CIEPLA, KOCIOL})
+"""Rodzaje z własnym wzorem urządzenia (KL/PC/PP), dane z pól `custom_oze_*` szansy."""
+
+_KOD_URZADZENIA = {KLIMATYZACJA: "KL", POMPA_CIEPLA: "PC", KOCIOL: "PP"}
+
+
+def _grzejniki_z_json(surowe: Any) -> dict[str, int]:
+	"""Słownik rozmiar -> ilość z `custom_oze_grzejniki_json`; pusty/niepoprawny daje {}."""
+	if not surowe:
+		return {}
+	try:
+		dane = json.loads(surowe) if isinstance(surowe, str) else surowe
+	except (TypeError, ValueError):
+		return {}
+	if not isinstance(dane, dict):
+		return {}
+	return {str(rozmiar): cint(ilosc) for rozmiar, ilosc in dane.items()}
+
+
+def _urzadzenie_dla_pdf(deal_doc: "frappe.model.document.Document") -> dict[str, Any] | None:
+	"""Dane urządzenia z kalkulatora do `zbuduj_kontekst(urzadzenie=...)` dla
+	Klimatyzacji, Pompy ciepła i Kotła (pola `custom_oze_*` szansy, bez kwot).
+	`None` dla pozostałych rodzajów."""
+	rodzaj = deal_doc.get("custom_rodzaj_umowy")
+	if rodzaj not in RODZAJE_URZADZEN:
+		return None
+	return {
+		"rodzaj": _KOD_URZADZENIA[rodzaj],
+		"klima_rodzaj": deal_doc.get("custom_oze_klima_rodzaj"),
+		"klima_moc_kw": deal_doc.get("custom_oze_klima_moc_kw"),
+		"pc_producent": deal_doc.get("custom_oze_pc_producent"),
+		"pc_typ": deal_doc.get("custom_oze_pc_typ"),
+		"pc_moc_kw": deal_doc.get("custom_oze_pc_moc_kw"),
+		"cwu": deal_doc.get("custom_oze_cwu"),
+		"grzejniki": _grzejniki_z_json(deal_doc.get("custom_oze_grzejniki_json")),
+		"kociol_rodzaj": deal_doc.get("custom_oze_kociol_rodzaj"),
+		"kociol_model": deal_doc.get("custom_oze_kociol_model"),
+		"kociol_moc_kw": deal_doc.get("custom_oze_kociol_moc_kw"),
 	}
 
 
@@ -1310,7 +1371,7 @@ def volteo_umowa_pdf(deal: str) -> dict[str, Any]:
 
 	rodzaj_umowy = deal_doc.get("custom_rodzaj_umowy")
 
-	# b68 (chunk B9): rodzaje bez wzoru (Klimatyzacja, Pompa ciepła, Kocioł) mają
+	# b68 (chunk B9): rodzaje bez wzoru (`RODZAJE_BEZ_WZORU`, od U9 pusty) mają
 	# rodzaj POPRAWNY, tylko brak im wzoru PDF-u - sprawdzane PRZED wyborem wzoru,
 	# żeby nie wpaść do `_blad_rodzaju_umowy_bez_szablonu`. Od b69 Rozbudowa PV/ME
 	# ma wzór i nie jest już odrzucana.
@@ -1350,6 +1411,8 @@ def volteo_umowa_pdf(deal: str) -> dict[str, Any]:
 	dodatki = _dodatki_dla_pdf(deal_doc)
 	rozbudowa = _rozbudowa_dla_pdf(deal_doc, umowa_doc) if rodzaj_umowy == ROZBUDOWA else None
 
+	urzadzenie = _urzadzenie_dla_pdf(deal_doc)
+
 	kontakt = _podstawowy_kontakt(deal_doc)
 
 	try:
@@ -1369,6 +1432,7 @@ def volteo_umowa_pdf(deal: str) -> dict[str, Any]:
 			kontakt2=kontakt2,
 			dodatki=dodatki,
 			rozbudowa=rozbudowa,
+			urzadzenie=urzadzenie,
 		)
 		pdf_bytes = zloz_umowe(kontekst, szablon_pdf, kod)
 	except Exception:

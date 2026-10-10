@@ -384,6 +384,17 @@
             </div>
           </div>
 
+          <!-- Urzadzenie (Klimatyzacja, Pompa ciepla, Kociol): read-only z szansy -->
+          <div
+            v-if="sec.key === 'urzadzenie'"
+            class="mb-4 grid grid-cols-1 gap-3 rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-4 sm:grid-cols-3"
+          >
+            <div v-for="u in urzadzenie" :key="u.key" class="min-w-0">
+              <div class="text-xs text-ink-gray-5">{{ __(u.label) }}</div>
+              <div class="text-sm text-ink-gray-8">{{ u.value }}</div>
+            </div>
+          </div>
+
           <!-- Read-only derived fields, positioned per-section -->
           <div v-if="sec.key === 'finansowanie' && showKwotaKredytu" class="mt-4 max-w-xs">
             <FormControl
@@ -489,6 +500,7 @@ import {
   dodatkiDoPokazania,
   opisWzoru,
   sekcjeFormularza,
+  urzadzenieDoPokazania,
   wszystkiePola as wszystkiePolaFormularza,
   zakresRozbudowy,
 } from '@/utils/umowaForm'
@@ -535,6 +547,7 @@ const checkboxFieldnames = new Set(
 const formSections = computed(() => sekcjeFormularza(props.rodzaj, prefill.value))
 const dodatki = computed(() => (czyOzePv(props.rodzaj) ? dodatkiDoPokazania(prefill.value) : []))
 const zakres = computed(() => zakresRozbudowy(prefill.value))
+const urzadzenie = computed(() => urzadzenieDoPokazania(props.rodzaj, prefill.value))
 
 // Vue 3: `v-if` on the same node as `v-for` is evaluated BEFORE the loop
 // variable exists, so it would throw at runtime with no build-time warning.

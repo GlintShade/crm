@@ -108,6 +108,7 @@ def zbuduj_kontekst(
 	*,
 	dodatki: dict[str, Any] | None = None,
 	rozbudowa: dict[str, Any] | None = None,
+	urzadzenie: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
 	"""Buduje kontekst do wstawienia w szablon PDF-u umowy (§1-§7, Zał. 1a/1b/2).
 
@@ -153,6 +154,17 @@ def zbuduj_kontekst(
 	Dla Rozbudowy (`rozbudowa` podane) `ppoz_tak`/`ppoz_nie` liczą się z
 	`ppoz_wymagane()` na danych rozbudowy i są obie False, gdy rozbudowa PV
 	(panele + mikro) wynosi 0 (jawny wybór wygrywa z resztką, ops#145).
+	`urzadzenie` (b69, dogrywka U9; kw-only) dla wzorów KL/PC/PP:
+	`{"rodzaj": "KL"|"PC"|"PP", "klima_rodzaj", "klima_moc_kw", "pc_producent",
+	"pc_typ", "pc_moc_kw", "cwu" ("" | "200 l" | "300 l"), "grzejniki"
+	({rozmiar: ilość}), "kociol_rodzaj", "kociol_model", "kociol_moc_kw"}`
+	(klucze nieobecne = puste). Klucze kontekstu ZAWSZE obecne: `pc_producent`,
+	`pc_typ`, `pc_moc_kw`, `cwu_nie`, `cwu_200`, `cwu_300` (bool; wszystkie False
+	poza rodzajem PC/PP, dla PC/PP dokładnie jedna True, puste "cwu" daje
+	`cwu_nie`), `grzejnik_600x600_szt`, `grzejnik_600x800_szt`,
+	`grzejnik_600x1000_szt`, `grzejnik_600x1200_szt`, `grzejnik_600x1600_szt`
+	(0 daje ""), `kociol_rodzaj`, `kociol_model_moc` (model + " " + moc + " kW").
+	Dla rodzaju KL `urzadzenie` nadpisuje `klima_rodzaj` i `klima_moc_kw`.
 	Literały finansowania bez zmian.
 	"""
 	falownik_nazwa = deal.get("custom_falownik")
@@ -247,6 +259,25 @@ def zbuduj_kontekst(
 	klima = dodatki_.get("klima") or {}
 	ev = dodatki_.get("ev") or {}
 	roz = rozbudowa or {}
+	urz = urzadzenie or {}
+	urz_rodzaj = urz.get("rodzaj")
+	if urz_rodzaj == "KL":
+		klima = {
+			**klima,
+			"rodzaj": urz.get("klima_rodzaj"),
+			"moc_kw": urz.get("klima_moc_kw"),
+		}
+	urz_cwu = _tekst(urz.get("cwu"))
+	urz_ma_cwu = urz_rodzaj in ("PC", "PP")
+	urz_grzejniki = urz.get("grzejniki") or {}
+	urz_kociol_model = _tekst(urz.get("kociol_model"))
+	urz_kociol_moc = _liczba(urz.get("kociol_moc_kw"))
+	if urz_kociol_model:
+		urz_kociol_model_moc = (
+			f"{urz_kociol_model} {urz_kociol_moc} kW" if urz_kociol_moc else urz_kociol_model
+		)
+	else:
+		urz_kociol_model_moc = ""
 	roz_pv_szt = _sparsuj_decimal(roz.get("panele")) or Decimal(0)
 	roz_mikro_szt = _sparsuj_decimal(roz.get("panele_mikro")) or Decimal(0)
 	roz_pv_lacznie = roz_pv_szt + roz_mikro_szt
@@ -415,6 +446,20 @@ def zbuduj_kontekst(
 		"roz_ist_pv_moc_kwp": _liczba(roz.get("ist_pv_moc_kwp")),
 		"roz_bateria_szt": _liczba_calkowita(roz.get("bateria")),
 		"roz_ist_me_kwh": _liczba(roz.get("ist_me_kwh")),
+		# Klimatyzacja / Pompa ciepła / Kocioł (b69, dogrywka U9).
+		"pc_producent": _tekst(urz.get("pc_producent")),
+		"pc_typ": _tekst(urz.get("pc_typ")),
+		"pc_moc_kw": _liczba(urz.get("pc_moc_kw")),
+		"cwu_nie": urz_ma_cwu and urz_cwu not in ("200 l", "300 l"),
+		"cwu_200": urz_ma_cwu and urz_cwu == "200 l",
+		"cwu_300": urz_ma_cwu and urz_cwu == "300 l",
+		"grzejnik_600x600_szt": _liczba_calkowita(urz_grzejniki.get("600x600")),
+		"grzejnik_600x800_szt": _liczba_calkowita(urz_grzejniki.get("600x800")),
+		"grzejnik_600x1000_szt": _liczba_calkowita(urz_grzejniki.get("600x1000")),
+		"grzejnik_600x1200_szt": _liczba_calkowita(urz_grzejniki.get("600x1200")),
+		"grzejnik_600x1600_szt": _liczba_calkowita(urz_grzejniki.get("600x1600")),
+		"kociol_rodzaj": _tekst(urz.get("kociol_rodzaj")),
+		"kociol_model_moc": urz_kociol_model_moc,
 	}
 	if rozbudowa is not None:
 		# Rozbudowa: PPOŻ liczony z danych rozbudowy, nie z formularza PV.

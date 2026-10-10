@@ -611,13 +611,14 @@ class TestCzyRodzajBezWzoruUmowy(unittest.TestCase):
 		self.assertFalse(czy_rodzaj_bez_wzoru_umowy("Rozbudowa PV/ME"))
 
 	def test_b_klimatyzacja(self: "TestCzyRodzajBezWzoruUmowy") -> None:
-		self.assertTrue(czy_rodzaj_bez_wzoru_umowy("Klimatyzacja"))
+		# Dogrywka b69 (U9): Klimatyzacja ma wzór (`KL`).
+		self.assertFalse(czy_rodzaj_bez_wzoru_umowy("Klimatyzacja"))
 
 	def test_c_pompa_ciepla(self: "TestCzyRodzajBezWzoruUmowy") -> None:
-		self.assertTrue(czy_rodzaj_bez_wzoru_umowy("Pompa ciepła"))
+		self.assertFalse(czy_rodzaj_bez_wzoru_umowy("Pompa ciepła"))
 
 	def test_d_kociol(self: "TestCzyRodzajBezWzoruUmowy") -> None:
-		self.assertTrue(czy_rodzaj_bez_wzoru_umowy("Kocioł"))
+		self.assertFalse(czy_rodzaj_bez_wzoru_umowy("Kocioł"))
 
 	def test_e_fotowoltaika_ma_wzor(self: "TestCzyRodzajBezWzoruUmowy") -> None:
 		self.assertFalse(czy_rodzaj_bez_wzoru_umowy("Fotowoltaika"))
@@ -723,11 +724,11 @@ if __name__ == "__main__":
 
 
 class TestRodzajeBezWzoru(unittest.TestCase):
-	def test_dokladnie_trzy_rodzaje(self: "TestRodzajeBezWzoru") -> None:
-		self.assertEqual(RODZAJE_BEZ_WZORU, frozenset({"Klimatyzacja", "Pompa ciepła", "Kocioł"}))
+	def test_od_u9_zbior_pusty(self: "TestRodzajeBezWzoru") -> None:
+		self.assertEqual(RODZAJE_BEZ_WZORU, frozenset())
 
-	def test_podzbior_rodzajow_nowych_bez_rozbudowy(self: "TestRodzajeBezWzoru") -> None:
-		self.assertTrue(RODZAJE_BEZ_WZORU < RODZAJE_NOWE)
+	def test_podzbior_rodzajow_nowych(self: "TestRodzajeBezWzoru") -> None:
+		self.assertTrue(RODZAJE_BEZ_WZORU <= RODZAJE_NOWE)
 		self.assertNotIn("Rozbudowa PV/ME", RODZAJE_BEZ_WZORU)
 
 
@@ -762,10 +763,12 @@ class TestCechyUmowy(unittest.TestCase):
 		deal = {"custom_rodzaj_umowy": "Rozbudowa PV/ME", "custom_dod_klima": "K", "custom_dod_panele": 2}
 		self.assertEqual(cechy_umowy(deal), frozenset({"rozbudowa"}))
 
-	def test_i_rodzaje_bez_wzoru_pusty_zbior(self: "TestCechyUmowy") -> None:
-		for rodzaj in ("Klimatyzacja", "Pompa ciepła", "Kocioł"):
-			deal = {"custom_rodzaj_umowy": rodzaj, "custom_dod_klima": "K"}
-			self.assertEqual(cechy_umowy(deal), frozenset(), rodzaj)
+	def test_i_klimatyzacja_pompa_kociol_maja_swoja_ceche(self: "TestCechyUmowy") -> None:
+		# U9: cecha rodzaju, bez dodatków (dodatki z szansy są ignorowane).
+		oczekiwane = {"Klimatyzacja": "kl", "Pompa ciepła": "pc", "Kocioł": "pp"}
+		for rodzaj, cecha in oczekiwane.items():
+			deal = {"custom_rodzaj_umowy": rodzaj, "custom_dod_klima": "K", "custom_dod_panele": 2}
+			self.assertEqual(cechy_umowy(deal), frozenset({cecha}), rodzaj)
 
 	def test_j_nie_mutuje(self: "TestCechyUmowy") -> None:
 		deal = {"custom_dod_klima": "K"}
@@ -883,3 +886,48 @@ class TestOpisKonfiguracji(unittest.TestCase):
 
 	def test_d_nieznany_rodzaj(self: "TestOpisKonfiguracji") -> None:
 		self.assertEqual(opis_konfiguracji(None, frozenset(), False), "nierozpoznany rodzaj")
+
+
+class TestWzoryUrzadzen(unittest.TestCase):
+	"""Dogrywka b69 (U9): Klimatyzacja, Pompa ciepła i Kocioł mają wzory KL/PC/PP."""
+
+	_RODZAJE = (("Klimatyzacja", "KL", "kl"), ("Pompa ciepła", "PC", "pc"), ("Kocioł", "PP", "pp"))
+
+	def test_kod_szablonu_bez_sufiksow_cech(self: "TestWzoryUrzadzen") -> None:
+		for rodzaj, kod, cecha in self._RODZAJE:
+			with self.subTest(rodzaj=rodzaj):
+				cechy = frozenset({cecha})
+				self.assertEqual(kod_szablonu(rodzaj, False, cechy), kod)
+				# Nawet z cechami dodatków kod nie dostaje `_K`/`_EV`.
+				self.assertEqual(kod_szablonu(rodzaj, False, cechy | {"klima", "ev"}), kod)
+
+	def test_kod_szablonu_podwojny_nieistniejacy(self: "TestWzoryUrzadzen") -> None:
+		from crm.volteo_umowa_render import SZABLONY
+
+		for rodzaj, kod, cecha in self._RODZAJE:
+			with self.subTest(rodzaj=rodzaj):
+				self.assertEqual(kod_szablonu(rodzaj, True, frozenset({cecha})), f"{kod}_2")
+				self.assertNotIn(f"{kod}_2", SZABLONY)
+
+	def test_wymagane_pola_wspolne_bez_warunkow(self: "TestWzoryUrzadzen") -> None:
+		oczekiwane = ("adres_zam_jak_montaz", "typ_budynku", "powierzchnia_prog", "finansowanie")
+		for rodzaj, _kod, _cecha in self._RODZAJE:
+			with self.subTest(rodzaj=rodzaj):
+				self.assertEqual(wymagane_pola(rodzaj), oczekiwane)
+				self.assertEqual(wymagane_pola(rodzaj, {"roz_bateria_szt": 3}), oczekiwane)
+
+	def test_brakujace_pola_nie_wymagaja_pol_pv(self: "TestWzoryUrzadzen") -> None:
+		for rodzaj, _kod, _cecha in self._RODZAJE:
+			with self.subTest(rodzaj=rodzaj):
+				braki = brakujace_pola({}, rodzaj)
+				self.assertEqual(
+					braki, ["adres_zam_jak_montaz", "typ_budynku", "powierzchnia_prog", "finansowanie"]
+				)
+
+	def test_opis_konfiguracji_to_sam_rodzaj(self: "TestWzoryUrzadzen") -> None:
+		for rodzaj, _kod, cecha in self._RODZAJE:
+			self.assertEqual(opis_konfiguracji(rodzaj, frozenset({cecha}), False), rodzaj)
+
+	def test_zadny_rodzaj_nie_jest_bez_wzoru(self: "TestWzoryUrzadzen") -> None:
+		for rodzaj, _kod, _cecha in self._RODZAJE:
+			self.assertFalse(czy_rodzaj_bez_wzoru_umowy(rodzaj))

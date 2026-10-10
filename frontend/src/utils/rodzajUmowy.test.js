@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   KODY_RODZAJU_UMOWY,
   KOD_NIEZNANY,
+  RODZAJE_BEZ_WZORU,
   RODZAJE_OZE,
   RODZAJE_OZE_NOWE,
   RODZAJE_OZE_PV,
@@ -191,16 +192,12 @@ describe('zakladkiSzansy', () => {
 })
 
 describe('umowaWPrzygotowaniu', () => {
-  it('prawda wylacznie dla trzech rodzajow bez wzoru (Rozbudowa ma juz wzor)', () => {
-    expect(umowaWPrzygotowaniu('Rozbudowa PV/ME')).toBe(false)
-    expect(umowaTylkoBaner('Rozbudowa PV/ME')).toBe(false)
-    expect(umowaTylkoBaner('Klimatyzacja')).toBe(true)
-    expect(umowaTylkoBaner('Pompa ciepła')).toBe(true)
-    expect(umowaTylkoBaner('Kocioł')).toBe(true)
-    expect(umowaTylkoBaner('Fotowoltaika')).toBe(false)
-    expect(umowaWPrzygotowaniu('Klimatyzacja')).toBe(true)
-    expect(umowaWPrzygotowaniu('Pompa ciepła')).toBe(true)
-    expect(umowaWPrzygotowaniu('Kocioł')).toBe(true)
+  it('od U9 falsz dla wszystkich czterech nowych rodzajow (zbior pusty)', () => {
+    expect(RODZAJE_BEZ_WZORU.size).toBe(0)
+    for (const r of ['Rozbudowa PV/ME', 'Klimatyzacja', 'Pompa ciepła', 'Kocioł', 'Fotowoltaika']) {
+      expect(umowaWPrzygotowaniu(r)).toBe(false)
+      expect(umowaTylkoBaner(r)).toBe(false)
+    }
   })
 
   it('falsz dla starych rodzajow OZE, Czyste Powietrze i rodzaju pustego/nieznanego', () => {

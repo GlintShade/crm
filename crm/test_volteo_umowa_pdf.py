@@ -1508,3 +1508,96 @@ class TestDodatkiIRozbudowaKontekst(unittest.TestCase):
 		)
 		for klucz, wartosc in k.items():
 			self.assertIsInstance(wartosc, (str, bool), klucz)
+
+
+class TestUrzadzenieKlPcPp(unittest.TestCase):
+	"""Dogrywka b69 (U9): `zbuduj_kontekst(urzadzenie=...)` dla wzorów KL/PC/PP."""
+
+	_KLUCZE = (
+		"pc_producent", "pc_typ", "pc_moc_kw", "cwu_nie", "cwu_200", "cwu_300",
+		"grzejnik_600x600_szt", "grzejnik_600x800_szt", "grzejnik_600x1000_szt",
+		"grzejnik_600x1200_szt", "grzejnik_600x1600_szt", "kociol_rodzaj", "kociol_model_moc",
+	)  # fmt: skip
+
+	def _ctx(self: "TestUrzadzenieKlPcPp", urzadzenie: dict[str, Any] | None = None, **kw: Any) -> dict[str, Any]:
+		return zbuduj_kontekst(
+			_umowa(), _deal(), _kontakt(), _zestaw(), _komponenty(), _stale(), _DZIS,
+			urzadzenie=urzadzenie, **kw,
+		)  # fmt: skip
+
+	def test_klucze_zawsze_obecne_bez_urzadzenia(self: "TestUrzadzenieKlPcPp") -> None:
+		kontekst = self._ctx()
+		for klucz in self._KLUCZE:
+			self.assertIn(klucz, kontekst)
+		self.assertFalse(kontekst["cwu_nie"] or kontekst["cwu_200"] or kontekst["cwu_300"])
+		for klucz in self._KLUCZE:
+			if klucz not in ("cwu_nie", "cwu_200", "cwu_300"):
+				self.assertEqual(kontekst[klucz], "", klucz)
+
+	def test_pompa_ciepla_pelna(self: "TestUrzadzenieKlPcPp") -> None:
+		kontekst = self._ctx(
+			{
+				"rodzaj": "PC",
+				"pc_producent": "Panasonic",
+				"pc_typ": "monoblok",
+				"pc_moc_kw": 9.0,
+				"cwu": "200 l",
+				"grzejniki": {"600x600": 3, "600x800": 0, "600x1200": 2},
+			}
+		)
+		self.assertEqual(kontekst["pc_producent"], "Panasonic")
+		self.assertEqual(kontekst["pc_typ"], "monoblok")
+		self.assertEqual(kontekst["pc_moc_kw"], "9")
+		self.assertTrue(kontekst["cwu_200"])
+		self.assertFalse(kontekst["cwu_nie"])
+		self.assertFalse(kontekst["cwu_300"])
+		self.assertEqual(kontekst["grzejnik_600x600_szt"], "3")
+		self.assertEqual(kontekst["grzejnik_600x800_szt"], "")
+		self.assertEqual(kontekst["grzejnik_600x1000_szt"], "")
+		self.assertEqual(kontekst["grzejnik_600x1200_szt"], "2")
+		self.assertEqual(kontekst["grzejnik_600x1600_szt"], "")
+
+	def test_cwu_300_dla_pc(self: "TestUrzadzenieKlPcPp") -> None:
+		kontekst = self._ctx({"rodzaj": "PC", "cwu": "300 l"})
+		self.assertTrue(kontekst["cwu_300"])
+		self.assertFalse(kontekst["cwu_nie"] or kontekst["cwu_200"])
+
+	def test_kociol_bez_cwu_to_cwu_nie(self: "TestUrzadzenieKlPcPp") -> None:
+		kontekst = self._ctx(
+			{
+				"rodzaj": "PP",
+				"kociol_rodzaj": "pelletowy",
+				"kociol_model": "Defro Alfa",
+				"kociol_moc_kw": 20,
+				"cwu": "",
+			}
+		)
+		self.assertEqual(kontekst["kociol_rodzaj"], "pelletowy")
+		self.assertEqual(kontekst["kociol_model_moc"], "Defro Alfa 20 kW")
+		self.assertTrue(kontekst["cwu_nie"])
+		self.assertFalse(kontekst["cwu_200"] or kontekst["cwu_300"])
+
+	def test_kociol_bez_modelu_ma_pusty_model_moc(self: "TestUrzadzenieKlPcPp") -> None:
+		kontekst = self._ctx({"rodzaj": "PP", "kociol_moc_kw": 20})
+		self.assertEqual(kontekst["kociol_model_moc"], "")
+
+	def test_klimatyzacja_nadpisuje_klima_z_dodatkow(self: "TestUrzadzenieKlPcPp") -> None:
+		kontekst = self._ctx(
+			{"rodzaj": "KL", "klima_rodzaj": "chłodzenie i grzanie", "klima_moc_kw": 3.5},
+			dodatki={"klima": {"rodzaj": "chłodzenie", "moc_kw": 9, "model": "X"}},
+		)
+		self.assertEqual(kontekst["klima_rodzaj"], "chłodzenie i grzanie")
+		self.assertEqual(kontekst["klima_moc_kw"], "3,5")
+		# CWU dotyczy tylko PC/PP.
+		self.assertFalse(kontekst["cwu_nie"] or kontekst["cwu_200"] or kontekst["cwu_300"])
+
+	def test_nie_mutuje_wejscia(self: "TestUrzadzenieKlPcPp") -> None:
+		urzadzenie = {"rodzaj": "PC", "grzejniki": {"600x600": 1}, "cwu": "200 l"}
+		kopia = copy.deepcopy(urzadzenie)
+		self._ctx(urzadzenie)
+		self.assertEqual(urzadzenie, kopia)
+
+	def test_typy_wartosci_str_lub_bool(self: "TestUrzadzenieKlPcPp") -> None:
+		kontekst = self._ctx({"rodzaj": "PC", "pc_moc_kw": 9, "cwu": "200 l", "grzejniki": {"600x600": 2}})
+		for klucz, wartosc in kontekst.items():
+			self.assertIsInstance(wartosc, (str, bool), klucz)

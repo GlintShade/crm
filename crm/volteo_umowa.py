@@ -170,13 +170,16 @@ def kwota_kredytu(brutto: Any, wklad_wlasny: Any, finansowanie: Any) -> Decimal:
 	return roznica.quantize(_KWOTA_KWANT, rounding=ROUND_HALF_UP)
 
 
-_WYMAGANE_ROZBUDOWA: tuple[str, ...] = (
+_WYMAGANE_BEZ_WARUNKOW: tuple[str, ...] = (
 	"adres_zam_jak_montaz",
 	"typ_budynku",
 	"powierzchnia_prog",
 	"finansowanie",
 )
-"""Pola wymagane dla Rozbudowy PV/ME (lista zgodna z rubrykami wzoru ROZ, pomiar U2k 2026-10-10)."""
+"""Pola wymagane dla Rozbudowy PV/ME, Klimatyzacji, Pompy ciepła i Kotła (lista zgodna
+z rubrykami wzorów ROZ/KL/PC/PP, pomiar U2k 2026-10-10)."""
+
+_WYMAGANE_ROZBUDOWA: tuple[str, ...] = _WYMAGANE_BEZ_WARUNKOW
 
 _WYMAGANE_ROZBUDOWA_BATERIA: tuple[str, ...] = ("istniejacy_me_pojemnosc_kwh",)
 """Wymagane dla Rozbudowy tylko wtedy, gdy rozbudowa obejmuje baterię (`roz_bateria_szt` > 0)."""
@@ -190,6 +193,8 @@ def wymagane_pola(rodzaj_umowy: str | None, dane: dict[str, Any] | None = None) 
 	`dane["roz_bateria_szt"]` > 0 (pojemność istniejącego magazynu ma sens tylko
 	przy rozbudowie o baterię). Nie mutuje `dane`.
 	"""
+	if rodzaj_umowy in (KLIMATYZACJA, POMPA_CIEPLA, KOCIOL):
+		return _WYMAGANE_BEZ_WARUNKOW
 	if rodzaj_umowy != ROZBUDOWA:
 		return _ZAWSZE_WYMAGANE
 	wynik = _WYMAGANE_ROZBUDOWA
@@ -370,15 +375,18 @@ def czy_propagowac_zgody(autenti_status: str | None) -> bool:
 # razu; blokowany jest wyłącznie krok generowania PDF-u.
 
 
-RODZAJE_BEZ_WZORU: frozenset[str] = frozenset({KLIMATYZACJA, POMPA_CIEPLA, KOCIOL})
-"""Rodzaje z `RODZAJE_NOWE`, dla których nadal nie ma wzoru PDF umowy (b69, #236):
-Rozbudowa PV/ME ma już wzór (`ROZ`), pozostałe trzy nie. `RODZAJE_NOWE` zostaje
-whitelistą kalkulatora i nie jest tu zmieniane."""
+RODZAJE_BEZ_WZORU: frozenset[str] = frozenset()
+"""Rodzaje z `RODZAJE_NOWE`, dla których nie ma wzoru PDF umowy. Od dogrywki b69 (U9)
+pusty: Rozbudowa, Klimatyzacja, Pompa ciepła i Kocioł mają wzory. Mechanizm
+zostaje na przyszłe rodzaje. `RODZAJE_NOWE` zostaje whitelistą kalkulatora."""
 
 CECHA_KLIMA = "klima"
 CECHA_EV = "ev"
 CECHA_DOD_PANELE = "dod_panele"
 CECHA_ROZBUDOWA = "rozbudowa"
+CECHA_KL = "kl"
+CECHA_PC = "pc"
+CECHA_PP = "pp"
 
 
 def czy_rodzaj_bez_wzoru_umowy(rodzaj_umowy: str | None) -> bool:
@@ -399,12 +407,18 @@ def cechy_umowy(deal: dict[str, Any]) -> frozenset[str]:
 
 	`klima` (niepuste `custom_dod_klima`), `ev` (niepuste `custom_ev_ladowarka`),
 	`dod_panele` (`custom_dod_panele` lub `custom_dod_panele_mikro` > 0; wartości
-	mogą być stringami). Rozbudowa PV/ME zwraca zawsze `{"rozbudowa"}` (nie ma
-	dodatków), rodzaje bez wzoru pusty zbiór. Nie mutuje `deal`.
+	mogą być stringami). Rozbudowa PV/ME zwraca zawsze `{"rozbudowa"}`, Klimatyzacja `{"kl"}`,
+	Pompa ciepła `{"pc"}`, Kocioł `{"pp"}` (nie mają dodatków), rodzaje bez wzoru pusty zbiór. Nie mutuje `deal`.
 	"""
 	rodzaj = deal.get("custom_rodzaj_umowy")
 	if rodzaj == ROZBUDOWA:
 		return frozenset({CECHA_ROZBUDOWA})
+	if rodzaj == KLIMATYZACJA:
+		return frozenset({CECHA_KL})
+	if rodzaj == POMPA_CIEPLA:
+		return frozenset({CECHA_PC})
+	if rodzaj == KOCIOL:
+		return frozenset({CECHA_PP})
 	if rodzaj in RODZAJE_BEZ_WZORU:
 		return frozenset()
 	cechy: set[str] = set()
@@ -439,7 +453,7 @@ def kod_szablonu(
 	bez zmian.
 	"""
 	kod = code_for(rodzaj_umowy)
-	if kod != "ROZ":
+	if kod not in ("ROZ", "KL", "PC", "PP"):
 		if CECHA_KLIMA in cechy:
 			kod += "_K"
 		if CECHA_EV in cechy:

@@ -254,6 +254,12 @@ const SEKCJA_ZAKRES_ROZBUDOWY = {
   fields: [],
 }
 
+const SEKCJA_URZADZENIE = {
+  key: 'urzadzenie',
+  label: 'Urządzenie (z kalkulatora, drukowane w umowie)',
+  fields: [],
+}
+
 export const SEKCJE_DOMYSLNE = [
   SEKCJA_ADRES,
   SEKCJA_BUDYNEK,
@@ -273,6 +279,11 @@ export const SEKCJE_WG_RODZAJU = {
     SEKCJA_ZAKRES_ROZBUDOWY,
     SEKCJA_ZGODY,
   ],
+  // Klimatyzacja, Pompa ciepla i Kociol (U9): bez warunkow, OSD i istniejacej
+  // PV; blok "Urzadzenie" jest read-only z szansy (urzadzenieDoPokazania).
+  Klimatyzacja: [SEKCJA_ADRES, SEKCJA_BUDYNEK, SEKCJA_FINANSOWANIE, SEKCJA_URZADZENIE, SEKCJA_ZGODY],
+  'Pompa ciepła': [SEKCJA_ADRES, SEKCJA_BUDYNEK, SEKCJA_FINANSOWANIE, SEKCJA_URZADZENIE, SEKCJA_ZGODY],
+  Kocioł: [SEKCJA_ADRES, SEKCJA_BUDYNEK, SEKCJA_FINANSOWANIE, SEKCJA_URZADZENIE, SEKCJA_ZGODY],
 }
 
 function liczba(v) {
@@ -401,4 +412,66 @@ export function zakresRozbudowy(prefill) {
     { key: 'bateria', label: 'Moduły baterii', value: fmt(p.custom_oze_rozbudowa_bateria, 'szt.') },
     { key: 'istniejaca_pv', label: 'Istniejąca PV', value: fmt(p.custom_istniejaca_pv_moc_kwp, 'kWp') },
   ]
+}
+
+const ROZMIARY_GRZEJNIKOW = ['600x600', '600x800', '600x1000', '600x1200', '600x1600']
+
+function liczbaPl(v) {
+  return String(liczba(v)).replace('.', ',')
+}
+
+function wierszLiczby(key, label, v, jednostka) {
+  return { key, label, value: liczba(v) > 0 ? `${liczbaPl(v)} ${jednostka}` : '-' }
+}
+
+function grzejnikiZJson(surowe) {
+  if (!niepusty(surowe)) return {}
+  try {
+    const dane = typeof surowe === 'string' ? JSON.parse(surowe) : surowe
+    return dane && typeof dane === 'object' && !Array.isArray(dane) ? dane : {}
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * Wiersze read-only bloku "Urzadzenie (z kalkulatora, drukowane w umowie)"
+ * dla Klimatyzacji, Pompy ciepla i Kotla. Pusta lista dla innych rodzajow.
+ *
+ * @param {string|null|undefined} rodzaj
+ * @param {object} prefill
+ * @returns {Array<{key: string, label: string, value: string}>}
+ */
+export function urzadzenieDoPokazania(rodzaj, prefill) {
+  const p = prefill || {}
+  const tekst = (v) => (niepusty(v) ? String(v) : '-')
+  if (rodzaj === 'Klimatyzacja') {
+    return [
+      { key: 'rodzaj', label: 'Rodzaj klimatyzacji', value: tekst(p.custom_oze_klima_rodzaj) },
+      { key: 'model', label: 'Model', value: tekst(p.custom_oze_klima_model) },
+      wierszLiczby('moc', 'Moc (kW)', p.custom_oze_klima_moc_kw, 'kW'),
+    ]
+  }
+  if (rodzaj === 'Pompa ciepła') {
+    const grzejniki = grzejnikiZJson(p.custom_oze_grzejniki_json)
+    const lista = ROZMIARY_GRZEJNIKOW.filter((r) => liczba(grzejniki[r]) > 0).map(
+      (r) => `${r.replace('x', ' × ')}: ${liczba(grzejniki[r])} szt.`,
+    )
+    return [
+      { key: 'producent', label: 'Producent', value: tekst(p.custom_oze_pc_producent) },
+      { key: 'typ', label: 'Typ', value: tekst(p.custom_oze_pc_typ) },
+      wierszLiczby('moc', 'Moc (kW)', p.custom_oze_pc_moc_kw, 'kW'),
+      { key: 'cwu', label: 'Zasobnik CWU', value: niepusty(p.custom_oze_cwu) ? String(p.custom_oze_cwu) : 'brak' },
+      { key: 'grzejniki', label: 'Grzejniki', value: lista.length ? lista.join(', ') : 'brak' },
+    ]
+  }
+  if (rodzaj === 'Kocioł') {
+    return [
+      { key: 'rodzaj', label: 'Rodzaj kotła', value: tekst(p.custom_oze_kociol_rodzaj) },
+      { key: 'model', label: 'Model', value: tekst(p.custom_oze_kociol_model) },
+      wierszLiczby('moc', 'Moc (kW)', p.custom_oze_kociol_moc_kw, 'kW'),
+      { key: 'cwu', label: 'Zasobnik CWU', value: niepusty(p.custom_oze_cwu) ? String(p.custom_oze_cwu) : 'brak' },
+    ]
+  }
+  return []
 }
