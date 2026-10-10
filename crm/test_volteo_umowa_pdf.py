@@ -1465,6 +1465,15 @@ class TestDodatkiIRozbudowaKontekst(unittest.TestCase):
 		k = _kontekst_z(rozbudowa={"panele": 2, "ist_pv_moc_kwp": 1, "ppoz": "Tak"})
 		self.assertTrue(k["ppoz_tak"])
 
+	def test_k2_rozbudowa_moc_nowa_kwp_wygrywa_z_deal(self: "TestDodatkiIRozbudowaKontekst") -> None:
+		# `moc_nowa_kwp` z API ma pierwszeństwo przed `custom_pv_power_kwp` szansy
+		# (szansa Rozbudowy go nie niesie). 2 + 3 = 5 kW <= 6,5: nie. 4 + 3 = 7 kW: tak.
+		k = _kontekst_z(rozbudowa={"panele": 2, "ist_pv_moc_kwp": 3, "ppoz": "Nie", "moc_nowa_kwp": 2})
+		self.assertFalse(k["ppoz_tak"])
+		self.assertTrue(k["ppoz_nie"])
+		k = _kontekst_z(rozbudowa={"panele": 2, "ist_pv_moc_kwp": 3, "ppoz": "Nie", "moc_nowa_kwp": 4})
+		self.assertTrue(k["ppoz_tak"])
+
 	def test_l_formaty_liczb(self: "TestDodatkiIRozbudowaKontekst") -> None:
 		k = _kontekst_z(
 			rozbudowa={"panele": 1, "ist_pv_moc_kwp": 3.5, "ist_me_kwh": 11},

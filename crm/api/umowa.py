@@ -33,8 +33,10 @@ from crm.permissions.file_nazwy_systemowe import plik_systemowy
 from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad
 from crm.volteo_naming import code_for
 from crm.volteo_umowa import (
+	ROZBUDOWA,
 	brakujace_dane_klienta,
 	brakujace_pola,
+	cechy_umowy,
 	czy_propagowac_zgody,
 	czy_rodzaj_bez_wzoru_umowy,
 	czy_umowa_podwojna,
@@ -42,6 +44,7 @@ from crm.volteo_umowa import (
 	kontakty_do_zgod,
 	kwota_kredytu,
 	miejsce_i_pokrycie,
+	opis_konfiguracji,
 	ppoz_wymagane,
 )
 from crm.volteo_umowa_cp import (
@@ -52,7 +55,12 @@ from crm.volteo_umowa_cp import (
 )
 from crm.volteo_umowa_pdf import POLA_KOMPONENTU, zbuduj_kontekst
 from crm.volteo_umowa_pdf_cp import klient_do_wyswietlenia, zbuduj_kontekst_cp
-from crm.volteo_umowa_render import SZABLONY, sciezka_wbudowanego_szablonu, zloz_umowe
+from crm.volteo_umowa_render import (
+	SZABLONY,
+	brakujace_cechy,
+	sciezka_wbudowanego_szablonu,
+	zloz_umowe,
+)
 from crm.volteo_umowa_render_cp import sciezka_szablonu_cp, zloz_umowe_cp
 
 DOCTYPE = "Volteo Umowa"
@@ -92,6 +100,16 @@ _DEAL_POLA_PREFILL = [
 	"custom_istniejaca_pv",
 	"custom_istniejaca_pv_moc_kwp",
 	"custom_ppoz",
+	# b69 (#250): dodatki z kalkulatora i dane Rozbudowy, podgląd read-only w formularzu.
+	"custom_dod_klima",
+	"custom_dod_panele",
+	"custom_dod_panele_mikro",
+	"custom_ev_ladowarka",
+	"custom_ems_breeze",
+	"custom_pstryk",
+	"custom_oze_rozbudowa_panele",
+	"custom_oze_rozbudowa_panele_mikro",
+	"custom_oze_rozbudowa_bateria",
 ]
 """Pola `CRM Deal` kopiowane bez zmian do bloku `prefill`."""
 
@@ -179,6 +197,7 @@ _DANE_POLA_DOZWOLONE = [
 	"zgoda_dzialania_promocyjne",
 	"zgoda_realizacja_przed_odstapieniem",
 	"drugi_zamawiajacy",
+	"istniejacy_me_pojemnosc_kwh",
 ]
 """Jedyne pola `Volteo Umowa`, jakie `volteo_umowa_save` przyjmuje od klienta.
 
@@ -204,6 +223,10 @@ przy tej walidacji niżej.
 
 _POLA_KWOTOWE = frozenset({"wklad_wlasny_pln"})
 """Pola kwotowe wymagające konwersji przez `Decimal` zamiast surowego przypisania."""
+
+_POLA_LICZBOWE = frozenset({"istniejacy_me_pojemnosc_kwh"})
+"""Pola Float przyjmowane od klienta jako liczba albo string (także z przecinkiem
+dziesiętnym, "12,5"); puste wejście daje `None`, śmieci czytelny błąd (b69, #250)."""
 
 _POLA_CHECKBOX = frozenset(
 	{"zgoda_kontakt_telefoniczny", "zgoda_dzialania_promocyjne", "zgoda_realizacja_przed_odstapieniem"}
@@ -301,13 +324,7 @@ def _blad_rodzaju_umowy_bez_szablonu(rodzaj: str | None) -> NoReturn:
 	pierwotne rodzaje jako "poprawne", co dla tych czterech byłoby mylące -
 	rodzaj JEST poprawny, po prostu wzoru jeszcze nie ma.
 	"""
-	frappe.throw(
-		_(
-			"Ustaw „Rodzaj umowy” na szansie sprzedaży na jedną z wartości: "
-			"Fotowoltaika, Fotowoltaika + Magazyn, Magazyn energii — dopiero wtedy "
-			"można wygenerować PDF umowy."
-		)
-	)
+	frappe.throw(_komunikat_rodzaju_bez_szablonu())
 
 
 def _blad_wzor_w_przygotowaniu(rodzaj: str | None) -> NoReturn:
@@ -321,12 +338,7 @@ def _blad_wzor_w_przygotowaniu(rodzaj: str | None) -> NoReturn:
 	`_blad_brakujacego_szablonu` (wdrożenie, plik szablonu nie wczytał się z
 	dysku) wyżej/niżej.
 	"""
-	frappe.throw(
-		_('Wzór umowy dla rodzaju „{0}” jest w przygotowaniu. PDF umowy nie jest jeszcze dostępny.').format(
-			rodzaj
-		),
-		title=_("Wzór umowy w przygotowaniu"),
-	)
+	frappe.throw(_komunikat_wzor_w_przygotowaniu(rodzaj), title=_("Wzór umowy w przygotowaniu"))
 
 
 def _blad_brakujacego_szablonu() -> NoReturn:
@@ -488,6 +500,9 @@ def _wyliczenia_oze(
 	wklad = umowa_doc.get("wklad_wlasny_pln") if umowa_doc else None
 	finansowanie = umowa_doc.get("finansowanie") if umowa_doc else None
 	dane_do_walidacji = {pole: umowa_doc.get(pole) for pole in _DANE_POLA_DOZWOLONE} if umowa_doc else {}
+	# Rozbudowa: pojemność istniejącego magazynu jest wymagana tylko przy rozbudowie
+	# o baterię (`wymagane_pola`), a ilość baterii żyje na szansie, nie na umowie.
+	dane_do_walidacji["roz_bateria_szt"] = deal_doc.get("custom_oze_rozbudowa_bateria")
 	kontakt_dane = _dane_kontaktu(_podstawowy_kontakt(deal_doc))
 	drugi_kontakt = umowa_doc.get("drugi_zamawiajacy") if umowa_doc else None
 
@@ -501,7 +516,7 @@ def _wyliczenia_oze(
 			deal_doc.get("custom_pv_power_kwp"), moc_istniejaca, istniejaca_pv, deal_doc.get("custom_ppoz")
 		),
 		"kwota_kredytu_pln": kwota_kredytu(deal_doc.get("deal_value"), wklad, finansowanie),
-		"brakujace_pola": brakujace_pola(dane_do_walidacji),
+		"brakujace_pola": brakujace_pola(dane_do_walidacji, deal_doc.get("custom_rodzaj_umowy")),
 		"brakujace_dane_klienta": brakujace_dane_klienta(kontakt_dane),
 		# Brak drugiego Zamawiającego to normalny stan (umowa pojedyncza), pusta
 		# lista, NIE lista czterech braków wyliczona z pustego kontaktu; stąd jawny
@@ -527,6 +542,20 @@ def _decimal_lub_none(wartosc: Any) -> Decimal | None:
 		return Decimal(str(wartosc))
 	except (ArithmeticError, ValueError, TypeError):
 		frappe.throw(_("Nieprawidłowa wartość kwoty."))
+
+
+def _liczba_lub_none(wartosc: Any) -> float | None:
+	"""Liczba z formularza (int/float/string, także "12,5") jako `float`; puste
+	wejście daje `None`. Nieczytelna wartość to czytelny błąd, nie ciche zero."""
+	if wartosc is None or (isinstance(wartosc, str) and not wartosc.strip()):
+		return None
+	try:
+		liczba = float(str(wartosc).strip().replace(",", "."))
+	except (ValueError, TypeError):
+		frappe.throw(_("Nieprawidłowa wartość liczbowa."))
+	if liczba != liczba or liczba in (float("inf"), float("-inf")):
+		frappe.throw(_("Nieprawidłowa wartość liczbowa."))
+	return liczba
 
 
 def _propaguj_zgody(
@@ -592,6 +621,224 @@ def _propaguj_zgody(
 			frappe.log_error(frappe.get_traceback(), "Volteo Umowa: propagacja zgód do Contact")
 
 
+_NAZWY_WZOROW: dict[str, str] = {
+	"PV": "Umowa PV (28.07.2026)",
+	"PV_K": "Umowa PV + K (06.10.2026)",
+	"PVME": "Umowa PV + ME (28.07.2026)",
+	"PVME_K": "Umowa PV + ME + K (06.10.2026)",
+	"PVME_EV": "Umowa PV + ME + Ł (06.10.2026)",
+	"PVME_K_EV": "Umowa PV + ME + K + Ł (06.10.2026)",
+	"ME": "Umowa ME (06.10.2026)",
+	"ME_K": "Umowa ME + K (06.10.2026)",
+	"ME_EV": "Umowa ME + Ł (06.10.2026)",
+	"ME_K_EV": "Umowa ME + K + Ł (06.10.2026)",
+	"ROZ": "Umowa Rozbudowa (06.10.2026)",
+	"PV_2": "Umowa PV, dwóch Zamawiających",
+	"PVME_2": "Umowa PV + ME, dwóch Zamawiających",
+	"ME_2": "Umowa ME, dwóch Zamawiających",
+}
+"""Czytelne nazwy wzorów do podglądu `wzor.nazwa` (skróty: K klimatyzacja, Ł
+ładowarka EV, ME magazyn energii) wraz z datą wzoru z pliku od prawnika. Klucze
+jak w `SZABLONY`; wzór spoza tej mapy dostaje samą wartość klucza."""
+
+_KLIMA_GRUPY_RODZAJ: dict[str, str] = {
+	"klima_chlodzenie": "chłodzenie",
+	"klima_dogrzewanie": "chłodzenie i dogrzewanie",
+	"klima_grzanie": "chłodzenie i grzanie",
+}
+"""Grupa pozycji samodzielnej klimatyzatora w cenniku na rodzaj drukowany w umowie."""
+
+_POLA_POZYCJI_CENNIKA = ["name", "nazwa", "model", "producent", "moc_kw", "kod", "grupa"]
+"""Pola `Volteo Cennik Pozycja` czytane dla PDF-u umowy. Celowo bez składowych i
+kwot (`Volteo Cennik Skladowa.kwota` ma permlevel 1): `frappe.get_all` ignoruje
+uprawnienia, więc do umowy trafia wyłącznie to, co bezpieczne dla klienta."""
+
+RODZAJE_PV_ME = frozenset({"Fotowoltaika", "Fotowoltaika + Magazyn", "Magazyn energii"})
+"""Rodzaje z dodatkami z kalkulatora PV (silnik `ops/crm-kalkulator-bom.py`)."""
+
+
+def _komunikat_rodzaju_bez_szablonu() -> str:
+	return _(
+		"Ustaw „Rodzaj umowy” na szansie sprzedaży na jedną z wartości: "
+		"Fotowoltaika, Fotowoltaika + Magazyn, Magazyn energii, Rozbudowa PV/ME. Dopiero wtedy "
+		"można wygenerować PDF umowy."
+	)
+
+
+def _komunikat_wzor_w_przygotowaniu(rodzaj: str | None) -> str:
+	return _("Wzór umowy dla rodzaju „{0}” jest w przygotowaniu. PDF umowy nie jest jeszcze dostępny.").format(
+		rodzaj
+	)
+
+
+def _komunikat_brak_wzoru_konfiguracji(opis: str, podwojna: bool, ma_cechy: bool) -> str:
+	"""Odmowa dla konfiguracji bez wzoru. Dla umowy PODWÓJNEJ z cechą (dodatek,
+	Rozbudowa) komunikat wskazuje, na co wzór dwuosobowy istnieje."""
+	if podwojna and ma_cechy:
+		return _(
+			"Brak wzoru dwuosobowego dla konfiguracji: {0}. Umowę na dwie osoby można dziś "
+			"wygenerować tylko dla Fotowoltaiki, Fotowoltaiki z magazynem i magazynu energii bez dodatków."
+		).format(opis)
+	return _("Brak wzoru umowy dla konfiguracji: {0}.").format(opis)
+
+
+def _komunikat_wzor_w_pomiarze(opis: str) -> str:
+	return _(
+		"Wzór umowy dla konfiguracji {0} jest w przygotowaniu (mapa współrzędnych w pomiarze)."
+	).format(opis)
+
+
+def _ocen_wzor(deal_doc: "frappe.model.document.Document", podwojna: bool) -> dict[str, Any]:
+	"""Wybiera wzór PDF-u po cechach szansy (rodzaj, dodatki, drugi Zamawiający) BEZ
+	rzucania wyjątków: wspólne źródło dla `volteo_umowa_pdf` (rzuca `powod` jako
+	czytelny błąd) i podglądu `wzor` w odpowiedziach (`_opis_wzoru`). Zwraca
+	`{"kod", "nazwa", "dostepny", "powod"}`; `dostepny` jest prawdą tylko, gdy
+	wzór istnieje w rejestrze, pokrywa wszystkie cechy konfiguracji i ma zmierzoną
+	mapę. Nie dotyczy Czystego Powietrza (własna ścieżka, patrz `_czy_cp`).
+	"""
+	rodzaj = deal_doc.get("custom_rodzaj_umowy")
+	if czy_rodzaj_bez_wzoru_umowy(rodzaj):
+		return {
+			"kod": code_for(rodzaj),
+			"nazwa": "",
+			"dostepny": False,
+			"powod": _komunikat_wzor_w_przygotowaniu(rodzaj),
+		}
+	if code_for(rodzaj) not in SZABLONY:
+		return {"kod": code_for(rodzaj), "nazwa": "", "dostepny": False, "powod": _komunikat_rodzaju_bez_szablonu()}
+
+	cechy = cechy_umowy(deal_doc.as_dict())
+	kod = kod_szablonu(rodzaj, podwojna, cechy)
+	opis = opis_konfiguracji(rodzaj, cechy, podwojna)
+	nazwa = _NAZWY_WZOROW.get(kod, kod)
+	if kod not in SZABLONY or brakujace_cechy(kod, cechy):
+		return {
+			"kod": kod,
+			"nazwa": "",
+			"dostepny": False,
+			"powod": _komunikat_brak_wzoru_konfiguracji(opis, podwojna, bool(cechy)),
+		}
+	if not SZABLONY[kod].gotowy:
+		return {"kod": kod, "nazwa": nazwa, "dostepny": False, "powod": _komunikat_wzor_w_pomiarze(opis)}
+	return {"kod": kod, "nazwa": nazwa, "dostepny": True, "powod": ""}
+
+
+def _opis_wzoru(
+	deal_doc: "frappe.model.document.Document",
+	umowa_doc: "frappe.model.document.Document | None",
+) -> dict[str, Any]:
+	"""Podgląd wybranego wzoru dla formularza (`wzor` w odpowiedziach get/create/save),
+	zanim ktokolwiek kliknie „Generuj”. Nie rzuca wyjątków. Szansa Czyste Powietrze
+	ma własną ścieżkę i jeden wzór (`kod` "CP", zawsze dostępny)."""
+	if _czy_cp(deal_doc):
+		return {"kod": "CP", "nazwa": "Umowa obsługi dotacji", "dostepny": True, "powod": ""}
+	podwojna = czy_umowa_podwojna(umowa_doc.as_dict()) if umowa_doc else False
+	return _ocen_wzor(deal_doc, podwojna)
+
+
+def _pozycja_dodatku(
+	wartosc: str, grupy: list[str], co: str
+) -> dict[str, Any]:
+	"""Aktywna pozycja cennika o `nazwa` ALBO `kod` równym `wartosc`, w jednej z grup.
+	Szansa trzyma nazwę pozycji (`custom_dod_klima`), a payload kalkulatora kod, więc
+	obsługiwane są oba. Brak pozycji (zmieniona nazwa, nieaktywna) to czytelny błąd,
+	nigdy pusty PDF."""
+	pozycje = frappe.get_all(
+		"Volteo Cennik Pozycja",
+		filters={"grupa": ["in", grupy], "aktywny": 1},
+		or_filters=[["nazwa", "=", wartosc], ["kod", "=", wartosc]],
+		fields=_POLA_POZYCJI_CENNIKA,
+		limit_page_length=1,
+	)
+	if not pozycje:
+		frappe.throw(
+			_(
+				"Pozycja cennika „{0}” ({1}) nie istnieje albo jest nieaktywna. "
+				"Przelicz ofertę w kalkulatorze i spróbuj ponownie."
+			).format(wartosc, co)
+		)
+	return pozycje[0]
+
+
+def _dodatki_dla_pdf(deal_doc: "frappe.model.document.Document") -> dict[str, Any] | None:
+	"""Dane dodatków z kalkulatora do `zbuduj_kontekst(dodatki=...)`: klimatyzacja
+	(model, moc, rodzaj z grupy pozycji samodzielnej tego modelu), ładowarka EV
+	(nazwa, moc) i liczba paneli dodatkowych. Tylko pola bez kwot. `None` dla
+	rodzajów bez dodatków (Rozbudowa, CP, nowe rodzaje). Rzuca czytelny błąd, gdy
+	pozycji wskazanej na szansie nie ma w cenniku.
+	"""
+	if deal_doc.get("custom_rodzaj_umowy") not in RODZAJE_PV_ME:
+		return None
+
+	klima = None
+	nazwa_klimy = (deal_doc.get("custom_dod_klima") or "").strip()
+	if nazwa_klimy:
+		dodatek = _pozycja_dodatku(nazwa_klimy, ["dod_klima"], "klimatyzacja")
+		samodzielne = frappe.get_all(
+			"Volteo Cennik Pozycja",
+			filters={
+				"grupa": ["in", list(_KLIMA_GRUPY_RODZAJ)],
+				"model": dodatek.get("model"),
+				"producent": dodatek.get("producent"),
+				"aktywny": 1,
+			},
+			fields=_POLA_POZYCJI_CENNIKA,
+			limit_page_length=1,
+		)
+		if not samodzielne:
+			frappe.throw(
+				_(
+					"Nie można ustalić rodzaju klimatyzatora „{0}” (brak modelu w cenniku klimatyzacji). "
+					"Przelicz ofertę w kalkulatorze i spróbuj ponownie."
+				).format(nazwa_klimy)
+			)
+		klima = {
+			"model": " ".join(filter(None, [dodatek.get("producent"), dodatek.get("model")])),
+			"moc_kw": dodatek.get("moc_kw"),
+			"rodzaj": _KLIMA_GRUPY_RODZAJ[samodzielne[0]["grupa"]],
+		}
+
+	ev = None
+	nazwa_ev = (deal_doc.get("custom_ev_ladowarka") or "").strip()
+	if nazwa_ev:
+		pozycja = _pozycja_dodatku(nazwa_ev, ["ev_ac", "ev_dc"], "ładowarka EV")
+		ev = {"nazwa": pozycja.get("nazwa"), "moc_kw": pozycja.get("moc_kw")}
+
+	return {
+		"klima": klima,
+		"ev": ev,
+		"panele": cint(deal_doc.get("custom_dod_panele")),
+		"panele_mikro": cint(deal_doc.get("custom_dod_panele_mikro")),
+	}
+
+
+def _rozbudowa_dla_pdf(
+	deal_doc: "frappe.model.document.Document",
+	umowa_doc: "frappe.model.document.Document",
+) -> dict[str, Any]:
+	"""Dane Rozbudowy PV/ME do `zbuduj_kontekst(rozbudowa=...)`. `moc_nowa_kwp` to moc
+	dokładana, (panele + panele z mikro) * moc panelu z `Volteo Kalkulator Stale`:
+	szansa Rozbudowy NIE niesie `custom_pv_power_kwp` (`volteo_oze_create_deal`
+	go nie zapisuje), a bez tego PPOŻ liczyłby się z zerem."""
+	panele = cint(deal_doc.get("custom_oze_rozbudowa_panele"))
+	panele_mikro = cint(deal_doc.get("custom_oze_rozbudowa_panele_mikro"))
+	stale = frappe.db.get_singles_dict("Volteo Kalkulator Stale") or {}
+	try:
+		moc_panelu_wp = Decimal(str(stale.get("panel_moc_wp") or 0))
+	except ArithmeticError:
+		moc_panelu_wp = Decimal(0)
+	moc_nowa = (Decimal(panele + panele_mikro) * moc_panelu_wp / Decimal(1000)).quantize(Decimal("0.001"))
+	return {
+		"panele": panele,
+		"panele_mikro": panele_mikro,
+		"bateria": cint(deal_doc.get("custom_oze_rozbudowa_bateria")),
+		"ist_pv_moc_kwp": deal_doc.get("custom_istniejaca_pv_moc_kwp"),
+		"ppoz": deal_doc.get("custom_ppoz"),
+		"ist_me_kwh": umowa_doc.get("istniejacy_me_pojemnosc_kwh"),
+		"moc_nowa_kwp": moc_nowa,
+	}
+
+
 @frappe.whitelist()
 @rate_limit(limit=60, seconds=60)
 def volteo_umowa_get(deal: str) -> dict[str, Any]:
@@ -610,6 +857,7 @@ def volteo_umowa_get(deal: str) -> dict[str, Any]:
 		"prefill": _prefill(deal_doc),
 		"prefill_drugi": _prefill_drugi(umowa_doc),
 		"wyliczenia": _wyliczenia(deal_doc, umowa_doc),
+		"wzor": _opis_wzoru(deal_doc, umowa_doc),
 	}
 
 
@@ -677,6 +925,7 @@ def volteo_umowa_create(deal: str) -> dict[str, Any]:
 		"prefill": _prefill(deal_doc),
 		"prefill_drugi": _prefill_drugi(umowa_doc),
 		"wyliczenia": _wyliczenia(deal_doc, umowa_doc),
+		"wzor": _opis_wzoru(deal_doc, umowa_doc),
 	}
 
 
@@ -758,6 +1007,7 @@ def volteo_umowa_save(deal: str, dane: dict[str, Any]) -> dict[str, Any]:
 		"prefill": _prefill(deal_doc),
 		"prefill_drugi": _prefill_drugi(umowa_doc),
 		"wyliczenia": _wyliczenia(deal_doc, umowa_doc),
+		"wzor": _opis_wzoru(deal_doc, umowa_doc),
 	}
 
 
@@ -846,6 +1096,8 @@ def _zapisz_dane_oze(
 		wartosc = dane[pole]
 		if pole in _POLA_KWOTOWE:
 			wartosc = _decimal_lub_none(wartosc)
+		elif pole in _POLA_LICZBOWE:
+			wartosc = _liczba_lub_none(wartosc)
 		elif pole in _POLA_CHECKBOX:
 			# Jawna koercja przez cint — NIGDY bool(), bo bool("0") == True w Pythonie.
 			wartosc = cint(wartosc)
@@ -856,7 +1108,9 @@ def _zapisz_dane_oze(
 	# nieprawidłowym wyborze, zanim cokolwiek trafi do bazy.
 	_zwaliduj_i_dopnij_drugiego_zamawiajacego(deal_doc, umowa_doc)
 
-	braki = brakujace_pola({pole: umowa_doc.get(pole) for pole in _DANE_POLA_DOZWOLONE})
+	dane_do_brakow = {pole: umowa_doc.get(pole) for pole in _DANE_POLA_DOZWOLONE}
+	dane_do_brakow["roz_bateria_szt"] = deal_doc.get("custom_oze_rozbudowa_bateria")
+	braki = brakujace_pola(dane_do_brakow, deal_doc.get("custom_rodzaj_umowy"))
 	# Status "Kompletny" wymaga TAKŻE kompletu danych osobowych klienta z karty
 	# kontaktu (ops#146 Z4). Bez tej bramki dokument prawny mógł wyjść ze
 	# statusem "Kompletny" mimo pustego PESEL-u/telefonu/e-maila w komparycji.
@@ -1056,26 +1310,30 @@ def volteo_umowa_pdf(deal: str) -> dict[str, Any]:
 
 	rodzaj_umowy = deal_doc.get("custom_rodzaj_umowy")
 
-	# b68 (chunk B9): cztery nowe rodzaje OZE mają rodzaj POPRAWNY (rozpoznany,
-	# `code_for` zwraca prawdziwy kod ROZ/KL/PC/PP, nie `XX`), tylko brak im
-	# jeszcze wzoru PDF-u - sprawdzane PRZED `code_for`/`SZABLONY` niżej, żeby
-	# nie wpaść do `_blad_rodzaju_umowy_bez_szablonu` i jego mylącej dla tego
-	# przypadku listy trzech pierwotnych rodzajów PV/magazyn.
+	# b68 (chunk B9): rodzaje bez wzoru (Klimatyzacja, Pompa ciepła, Kocioł) mają
+	# rodzaj POPRAWNY, tylko brak im wzoru PDF-u - sprawdzane PRZED wyborem wzoru,
+	# żeby nie wpaść do `_blad_rodzaju_umowy_bez_szablonu`. Od b69 Rozbudowa PV/ME
+	# ma wzór i nie jest już odrzucana.
 	if czy_rodzaj_bez_wzoru_umowy(rodzaj_umowy):
 		_blad_wzor_w_przygotowaniu(rodzaj_umowy)
 
-	kod = code_for(rodzaj_umowy)
-	if kod not in SZABLONY:
+	if code_for(rodzaj_umowy) not in SZABLONY:
 		_blad_rodzaju_umowy_bez_szablonu(rodzaj_umowy)
 
-	# Umowa PODWÓJNA (ops#167): przełącza `kod` na wariant `<KOD>_2` i wymaga
-	# kompletnych danych drugiego Zamawiającego przed generowaniem. TA CAŁA
-	# GAŁĄŹ jest no-op dla umowy pojedynczej (`czy_umowa_podwojna` fałsz), więc
-	# `kod`/`kontakt2` niżej zostają dokładnie takie, jak przed tym zadaniem:
-	# ŚCIEŻKA JEDNOOSOBOWA JEST NIEZMIENIONA.
+	# Umowa PODWÓJNA (ops#167): wymaga kompletnych danych drugiego Zamawiającego
+	# przed generowaniem. Dla umowy pojedynczej ta gałąź jest no-op.
+	podwojna = czy_umowa_podwojna(umowa_doc.as_dict())
+
+	# Wybór wzoru po cechach szansy (b69, #250): rodzaj + dodatki + drugi Zamawiający.
+	# Fail-closed: brak wzoru dla konfiguracji albo niezmierzona mapa to czytelna
+	# odmowa (bez Error Log, stan oczekiwany), nigdy ciche użycie wzoru bez pól.
+	wzor = _ocen_wzor(deal_doc, podwojna)
+	if not wzor["dostepny"]:
+		frappe.throw(wzor["powod"], title=_("Wzór umowy niedostępny"))
+	kod = wzor["kod"]
+
 	kontakt2: dict[str, Any] | None = None
-	if czy_umowa_podwojna(umowa_doc.as_dict()):
-		kod = kod_szablonu(rodzaj_umowy, True)
+	if podwojna:
 		kontakt2 = _dane_kontaktu(umowa_doc.get("drugi_zamawiajacy"))
 		braki_drugiego = brakujace_dane_klienta(kontakt2)
 		if braki_drugiego:
@@ -1085,6 +1343,12 @@ def volteo_umowa_pdf(deal: str) -> dict[str, Any]:
 					"umowy: {0}."
 				).format(", ".join(braki_drugiego))
 			)
+
+	# Dane dodatków i Rozbudowy z cennika czytane PRZED blokiem `try` niżej: ich
+	# czytelne błędy (brak pozycji cennika) nie mogą zostać zamienione przez
+	# `_blad_generowania_pdf` w ogólną awarię z wpisem do Error Log.
+	dodatki = _dodatki_dla_pdf(deal_doc)
+	rozbudowa = _rozbudowa_dla_pdf(deal_doc, umowa_doc) if rodzaj_umowy == ROZBUDOWA else None
 
 	kontakt = _podstawowy_kontakt(deal_doc)
 
@@ -1103,6 +1367,8 @@ def volteo_umowa_pdf(deal: str) -> dict[str, Any]:
 			stale=dict(frappe.db.get_singles_dict("Volteo Kalkulator Stale") or {}),
 			dzis=getdate(),
 			kontakt2=kontakt2,
+			dodatki=dodatki,
+			rozbudowa=rozbudowa,
 		)
 		pdf_bytes = zloz_umowe(kontekst, szablon_pdf, kod)
 	except Exception:

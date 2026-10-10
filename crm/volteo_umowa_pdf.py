@@ -144,7 +144,7 @@ def zbuduj_kontekst(
 	`dodatki = {"klima": {"model", "moc_kw", "rodzaj"} | None,
 	"ev": {"nazwa", "moc_kw"} | None, "panele": int, "panele_mikro": int}`;
 	`rozbudowa = {"panele", "panele_mikro", "bateria", "ist_pv_moc_kwp", "ppoz",
-	"ist_me_kwh"}`. Dwanaście nowych kluczy jest ZAWSZE obecnych (puste, gdy nie
+	"ist_me_kwh", "moc_nowa_kwp" (opcjonalny, moc dokładana w kWp)}`. Dwanaście nowych kluczy jest ZAWSZE obecnych (puste, gdy nie
 	dotyczą): `klima_rodzaj`, `klima_model`, `klima_moc_kw`, `ev_nazwa`,
 	`ev_moc_kw`, `dod_panele_szt`, `dod_panele_mikro_szt`, `roz_panele_szt`,
 	`roz_mikro_tak`, `roz_mikro_nie`, `roz_ist_pv_moc_kwp`, `roz_bateria_szt`,
@@ -250,9 +250,15 @@ def zbuduj_kontekst(
 	roz_pv_szt = _sparsuj_decimal(roz.get("panele")) or Decimal(0)
 	roz_mikro_szt = _sparsuj_decimal(roz.get("panele_mikro")) or Decimal(0)
 	roz_pv_lacznie = roz_pv_szt + roz_mikro_szt
+	# Moc dokładana przez Rozbudowę: `rozbudowa["moc_nowa_kwp"]` (liczona przez API
+	# z paneli i mocy panelu), bo szansa Rozbudowy nie niesie `custom_pv_power_kwp`.
+	# Bez tego klucza (stare wywołania, testy) jak dawniej z `deal`.
+	roz_moc_nowa = roz.get("moc_nowa_kwp")
+	if roz_moc_nowa is None:
+		roz_moc_nowa = deal.get("custom_pv_power_kwp")
 	roz_ppoz_stan = (
 		ppoz_wymagane(
-			deal.get("custom_pv_power_kwp"),
+			roz_moc_nowa,
 			roz.get("ist_pv_moc_kwp"),
 			"Tak",
 			roz.get("ppoz"),
