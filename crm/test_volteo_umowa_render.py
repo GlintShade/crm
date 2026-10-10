@@ -581,6 +581,12 @@ class TestZlozUmowePelnyPipeline(unittest.TestCase):
 					# Szablon ME nie ma sekcji fotowoltaicznej — wartość panelu
 					# nie ma gdzie się wydrukować, nigdzie na żadnej stronie.
 					self.assertNotIn(kontekst["panel_producent_model"], pelny_tekst)
+				elif kod == "PVME_EV":
+					self.assertEqual(len(strony), 22)
+					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[0])
+					self.assertIn(kontekst["panel_producent_model"], tekst_wg_strony[5])
+					self.assertIn(kontekst["bateria_producent_model"], tekst_wg_strony[6])
+					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[21])
 				elif kod == "PV_2":
 					# Warianty PODWÓJNE (ops#167): ten wspólny `kontekst` nie ma
 					# `kontakt2` (klient2_* puste), więc te asercje sprawdzają
