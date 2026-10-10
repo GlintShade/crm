@@ -303,12 +303,18 @@
                       </select>
                     </div>
                     <div v-if="dodatkiUi.klimaRodzaj">
+                      <div class="mb-0.5 text-sm text-ink-gray-5">Model</div>
+                      <select v-model="dodatkiUi.klimaModel" class="kalk-select">
+                        <option value="">-- wybierz --</option>
+                        <option v-for="m in modeleKlimyOptions" :key="m.model" :value="m.model">Rotenso {{ m.label }}</option>
+                      </select>
+                    </div>
+                    <div v-if="dodatkiUi.klimaRodzaj && dodatkiUi.klimaModel">
                       <div class="mb-0.5 text-sm text-ink-gray-5">Moc</div>
                       <select v-model="sel.dodatki.klimaKod" class="kalk-select">
                         <option value="">-- wybierz --</option>
                         <option v-for="o in moceKlimyOptions" :key="o.kod" :value="o.kod">{{ o.label }}<template v-if="o.cena > 0"> · +{{ formatPln(o.cena) }} netto</template></option>
                       </select>
-                      <div class="mt-0.5 text-xs text-ink-gray-4">Model: Rotenso {{ modelKlimyLabel }} (dobrany automatycznie)</div>
                     </div>
                   </div>
                 </div>
@@ -375,13 +381,13 @@
                         type="button"
                         class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
                         :class="!dodatkiUi.emsOn ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base' : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
-                        @click="dodatkiUi.emsOn = false"
+                        @click="ustawEms(false)"
                       >Nie</button>
                       <button
                         type="button"
                         class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
                         :class="dodatkiUi.emsOn ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base' : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
-                        @click="dodatkiUi.emsOn = true"
+                        @click="ustawEms(true)"
                       >Tak</button>
                     </div>
                   </div>
@@ -597,7 +603,8 @@ import {
   pstrykDostepny,
   evDostepne,
   moceDodatkuKlimy,
-  modelDlaRodzajuKlimy,
+  modeleDodatkuKlimy,
+  domyslnyStanEms,
   evOpcje,
   sanitizujDodatki,
 } from '@/utils/pvForm'
@@ -690,6 +697,7 @@ const sel = reactive({
 const dodatkiUi = reactive({
   klimaOn: false,
   klimaRodzaj: '',
+  klimaModel: '',
   paneleOn: false,
   paneleMikroOn: false,
   emsOn: false,
@@ -739,6 +747,10 @@ const catMap = reactive({})
 // to jedyne miejsce w tym pliku, gdzie ceny przychodzą z serwera dla
 // wyświetlenia, nie są tu liczone.
 const dodatkiCatalog = ref([])
+// Pozycje klimatyzacji samodzielnej (volteo_oze_pozycje, grupy klima_*):
+// jedyne źródło przypisania modelu do rodzaju (dod_klima rodzaju nie niesie).
+// Pobierane osobno i miękko: błąd = brak modeli w dodatku, kalkulator działa.
+const pozycjeKlimy = ref([])
 function byKat(kat) {
   return catMap[kat] || []
 }
@@ -780,6 +792,16 @@ async function loadComponents() {
 }
 loadComponents()
 
+async function loadPozycjeKlimy() {
+  try {
+    const data = await call('crm.api.kalkulator_oze.volteo_oze_pozycje')
+    pozycjeKlimy.value = ((data && data.pozycje) || []).filter((p) => String(p.grupa || '').startsWith('klima_'))
+  } catch (err) {
+    pozycjeKlimy.value = []
+  }
+}
+loadPozycjeKlimy()
+
 const falownikOptions = computed(() => byKat('Falownik').filter((x) => x.producent === sel.producent))
 const bateriaOptions = computed(() => byKat('Magazyn energii').filter((x) => x.producent === sel.producent))
 const konstrukcjaOptions = computed(() => byKat('Konstrukcja'))
@@ -801,8 +823,28 @@ const anyDodatkiAvailable = computed(() =>
   klimaDostepnaNow.value || paneleDostepneNow.value || emsDostepnyNow.value || pstrykDostepnyNow.value || evDostepneNow.value,
 )
 
-const modelKlimyLabel = computed(() => modelDlaRodzajuKlimy(dodatkiUi.klimaRodzaj))
-const moceKlimyOptions = computed(() => moceDodatkuKlimy(dodatkiCatalog.value, dodatkiUi.klimaRodzaj))
+const modeleKlimyOptions = computed(() =>
+  modeleDodatkuKlimy(dodatkiCatalog.value, pozycjeKlimy.value, dodatkiUi.klimaRodzaj),
+)
+const moceKlimyOptions = computed(() => moceDodatkuKlimy(dodatkiCatalog.value, dodatkiUi.klimaModel))
+
+// EMS Breeze: domyślnie Tak, gdy dostępny (#237). emsRecznie odróżnia wybór
+// użytkownika od domyślnego: po ręcznym wyłączeniu zmiana producenta go nie
+// włącza z powrotem; gdy EMS przestaje być dostępny, flaga się zeruje.
+const emsRecznie = ref(false)
+function ustawEms(on) {
+  emsRecznie.value = true
+  dodatkiUi.emsOn = on
+}
+function zastosujDomyslnyEms() {
+  if (!emsDostepnyNow.value) emsRecznie.value = false
+  dodatkiUi.emsOn = domyslnyStanEms({
+    producent: sel.producent,
+    variant: sel.variant,
+    emsRecznie: emsRecznie.value,
+    aktualnie: dodatkiUi.emsOn,
+  })
+}
 const paneleDodatekOptions = computed(() =>
   dodatkiCatalog.value.filter((d) => d.grupa === 'dod_panele').sort((a, b) => a.ilosc - b.ilosc),
 )
@@ -822,6 +864,7 @@ watch(
   (on) => {
     if (!on) {
       dodatkiUi.klimaRodzaj = ''
+      dodatkiUi.klimaModel = ''
       sel.dodatki.klimaKod = ''
     }
   },
@@ -829,7 +872,15 @@ watch(
 watch(
   () => dodatkiUi.klimaRodzaj,
   () => {
-    // Zmiana rodzaju unieważnia wcześniej wybraną moc - wymusza ponowny wybór.
+    // Zmiana rodzaju unieważnia model i moc - wymusza ponowny wybór.
+    dodatkiUi.klimaModel = ''
+    sel.dodatki.klimaKod = ''
+  },
+)
+watch(
+  () => dodatkiUi.klimaModel,
+  () => {
+    // Zmiana modelu unieważnia moc.
     sel.dodatki.klimaKod = ''
   },
 )
@@ -881,11 +932,14 @@ watch(
       dodatkiUi.paneleOn = false
       dodatkiUi.paneleMikroOn = false
     }
-    if (!emsDostepnyNow.value) dodatkiUi.emsOn = false
+    zastosujDomyslnyEms()
     if (!pstrykDostepnyNow.value) dodatkiUi.pstrykOn = false
     if (!evDostepneNow.value) dodatkiUi.evOn = false
   },
 )
+
+// Stan startowy: producent/wariant bywają już ustawione przy montowaniu.
+zastosujDomyslnyEms()
 
 function panelMocWp(panelName) {
   const p = panelOptions.value.find((x) => x.name === panelName)

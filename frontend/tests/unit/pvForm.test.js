@@ -28,7 +28,8 @@ import {
   RODZAJ_KLIMY_DOGRZEWANIE,
   RODZAJ_KLIMY_GRZANIE,
   POWIERZCHNIA_KLIMY,
-  modelDlaRodzajuKlimy,
+  modeleDodatkuKlimy,
+  domyslnyStanEms,
   klimaDodatekDostepna,
   dodatekPaneleDostepny,
   emsDostepny,
@@ -394,8 +395,8 @@ describe('PV form logic', () => {
   })
 
   // --- Opcje dodatkowe PV / PV+ME / ME (ops#225) ------------------------
-  describe('RODZAJE_KLIMY_DODATKU / modelDlaRodzajuKlimy', () => {
-    it('exports exactly three rodzaje, each with one fixed model', () => {
+  describe('RODZAJE_KLIMY_DODATKU', () => {
+    it('exports exactly three rodzaje, each with a grupa', () => {
       expect(RODZAJE_KLIMY_DODATKU).toHaveLength(3)
       expect(RODZAJE_KLIMY_DODATKU.map((r) => r.value)).toEqual([
         RODZAJ_KLIMY_CHLODZENIE,
@@ -404,16 +405,9 @@ describe('PV form logic', () => {
       ])
     })
 
-    it('maps each rodzaj to its model', () => {
-      expect(modelDlaRodzajuKlimy(RODZAJ_KLIMY_CHLODZENIE)).toBe('Elis X')
-      expect(modelDlaRodzajuKlimy(RODZAJ_KLIMY_DOGRZEWANIE)).toBe('Teta X')
-      expect(modelDlaRodzajuKlimy(RODZAJ_KLIMY_GRZANIE)).toBe('Mira X')
-    })
-
-    it('returns an empty string for an unknown rodzaj', () => {
-      expect(modelDlaRodzajuKlimy('')).toBe('')
-      expect(modelDlaRodzajuKlimy('nieznany')).toBe('')
-      expect(modelDlaRodzajuKlimy(undefined)).toBe('')
+    it('maps each rodzaj to a standalone klima grupa (no fixed model)', () => {
+      expect(RODZAJE_KLIMY_DODATKU.map((r) => r.grupa)).toEqual(['klima_chlodzenie', 'klima_dogrzewanie', 'klima_grzanie'])
+      expect(RODZAJE_KLIMY_DODATKU.every((r) => r.model === undefined)).toBe(true)
     })
   })
 
@@ -513,8 +507,8 @@ describe('PV form logic', () => {
       { kod: 'dod_panele_1', grupa: 'dod_panele', model: '', moc_kw: 0, cena: 3600 },
     ]
 
-    it('filters by rodzaj -> model and sorts ascending by moc_kw', () => {
-      const opcje = moceDodatkuKlimy(katalog, RODZAJ_KLIMY_CHLODZENIE)
+    it('filters by model and sorts ascending by moc_kw', () => {
+      const opcje = moceDodatkuKlimy(katalog, 'Elis X')
       expect(opcje.map((o) => o.kod)).toEqual([
         'dod_klima_elis_x_2_6', 'dod_klima_elis_x_3_5', 'dod_klima_elis_x_5_1', 'dod_klima_elis_x_6_8',
       ])
@@ -522,7 +516,7 @@ describe('PV form logic', () => {
     })
 
     it('builds the label with the comma decimal and the m2 hint', () => {
-      const opcje = moceDodatkuKlimy(katalog, RODZAJ_KLIMY_DOGRZEWANIE)
+      const opcje = moceDodatkuKlimy(katalog, 'Teta X')
       expect(opcje).toEqual([
         { kod: 'dod_klima_teta_x_3_5', moc_kw: 3.5, label: '3,5 kW (25-40 m2)', cena: 5400 },
         { kod: 'dod_klima_teta_x_5_1', moc_kw: 5.1, label: '5,1 kW (40-55 m2)', cena: 6200 },
@@ -530,20 +524,20 @@ describe('PV form logic', () => {
     })
 
     it('returns a single option for a rodzaj with one power (Mira X)', () => {
-      const opcje = moceDodatkuKlimy(katalog, RODZAJ_KLIMY_GRZANIE)
+      const opcje = moceDodatkuKlimy(katalog, 'Mira X')
       expect(opcje).toEqual([{ kod: 'dod_klima_mira_x_3_5', moc_kw: 3.5, label: '3,5 kW (25-40 m2)', cena: 6600 }])
     })
 
     it('never leaks other grupy (dod_panele) into the result', () => {
-      const opcje = moceDodatkuKlimy(katalog, RODZAJ_KLIMY_CHLODZENIE)
+      const opcje = moceDodatkuKlimy(katalog, 'Elis X')
       expect(opcje.every((o) => !o.kod.startsWith('dod_panele'))).toBe(true)
     })
 
-    it('returns an empty list for an unknown rodzaj or a non-array catalog', () => {
+    it('returns an empty list for an unknown model or a non-array catalog', () => {
       expect(moceDodatkuKlimy(katalog, '')).toEqual([])
       expect(moceDodatkuKlimy(katalog, 'nieznany')).toEqual([])
-      expect(moceDodatkuKlimy(null, RODZAJ_KLIMY_CHLODZENIE)).toEqual([])
-      expect(moceDodatkuKlimy(undefined, RODZAJ_KLIMY_CHLODZENIE)).toEqual([])
+      expect(moceDodatkuKlimy(null, 'Elis X')).toEqual([])
+      expect(moceDodatkuKlimy(undefined, 'Elis X')).toEqual([])
     })
   })
 
@@ -668,5 +662,98 @@ describe('PV form logic', () => {
       const wynik = sanitizujDodatki(pelnyWybor())
       expect(wynik).toEqual({ klimaKod: '', panele: 0, paneleMikro: 0, emsBreeze: 'Nie', pstryk: 'Nie', evKod: '' })
     })
+  })
+})
+
+// --- b69 (#237): model klimatyzacji w dodatku, EMS domyslnie Tak ---
+const dod = (model, kolor, moc, kod) => ({ kod, grupa: 'dod_klima', model, kolor, moc_kw: moc, cena: 5000 })
+const DODATKI = [
+  dod('Elis X', 'Czarny', 3.5, 'dod_klima_elis_x_3_5'),
+  dod('Elis X', 'Czarny', 2.6, 'dod_klima_elis_x_2_6'),
+  dod('Roni X', 'Biały', 3.5, 'dod_klima_roni_x_3_5'),
+  dod('Teta Mirror X', 'Czarny', 3.5, 'dod_klima_teta_mirror_x_3_5'),
+  dod('Teta X', 'Biały', 3.5, 'dod_klima_teta_x_3_5'),
+  dod('Mira X', 'Biały', 3.5, 'dod_klima_mira_x_3_5'),
+  { kod: 'ems_breeze', grupa: 'dod_ems', cena: 1 },
+]
+const SAMODZIELNE = [
+  { grupa: 'klima_chlodzenie', model: 'Elis X' },
+  { grupa: 'klima_chlodzenie', model: 'Roni X' },
+  { grupa: 'klima_dogrzewanie', model: 'Teta X' },
+  { grupa: 'klima_dogrzewanie', model: 'Teta Mirror X' },
+  { grupa: 'klima_grzanie', model: 'Mira X' },
+]
+
+describe('modeleDodatkuKlimy', () => {
+  it('chlodzenie: Elis X i Roni X z kolorem', () => {
+    const m = modeleDodatkuKlimy(DODATKI, SAMODZIELNE, 'chlodzenie')
+    expect(m.map((x) => x.model)).toEqual(['Elis X', 'Roni X'])
+    expect(m[0].label).toBe('Elis X (Czarny)')
+  })
+  it('dogrzewanie: Teta Mirror X i Teta X', () => {
+    const m = modeleDodatkuKlimy(DODATKI, SAMODZIELNE, 'dogrzewanie')
+    expect(m.map((x) => x.model).sort()).toEqual(['Teta Mirror X', 'Teta X'])
+  })
+  it('grzanie: Mira X', () => {
+    expect(modeleDodatkuKlimy(DODATKI, SAMODZIELNE, 'grzanie').map((x) => x.model)).toEqual(['Mira X'])
+  })
+  it('model bez pozycji dod_klima jest pomijany', () => {
+    const bezRoni = DODATKI.filter((d) => d.model !== 'Roni X')
+    expect(modeleDodatkuKlimy(bezRoni, SAMODZIELNE, 'chlodzenie').map((x) => x.model)).toEqual(['Elis X'])
+  })
+  it('model dod_klima bez pozycji samodzielnej nie trafia do rodzaju', () => {
+    const bezMira = SAMODZIELNE.filter((p) => p.model !== 'Mira X')
+    expect(modeleDodatkuKlimy(DODATKI, bezMira, 'grzanie')).toEqual([])
+  })
+  it('kazdy model tylko raz mimo wielu mocy', () => {
+    expect(modeleDodatkuKlimy(DODATKI, SAMODZIELNE, 'chlodzenie').filter((x) => x.model === 'Elis X')).toHaveLength(1)
+  })
+  it('nieznany rodzaj lub brak danych daje pusta liste', () => {
+    expect(modeleDodatkuKlimy(DODATKI, SAMODZIELNE, 'x')).toEqual([])
+    expect(modeleDodatkuKlimy(DODATKI, null, 'chlodzenie')).toEqual([])
+    expect(modeleDodatkuKlimy(null, SAMODZIELNE, 'chlodzenie')).toEqual([])
+  })
+  it('trzy rodzaje zdefiniowane z grupami', () => {
+    expect(RODZAJE_KLIMY_DODATKU.map((r) => r.grupa)).toEqual(['klima_chlodzenie', 'klima_dogrzewanie', 'klima_grzanie'])
+  })
+})
+
+describe('moceDodatkuKlimy', () => {
+  it('zwraca moce wybranego modelu rosnaco z kodem pozycji', () => {
+    const o = moceDodatkuKlimy(DODATKI, 'Elis X')
+    expect(o.map((x) => x.moc_kw)).toEqual([2.6, 3.5])
+    expect(o[1].kod).toBe('dod_klima_elis_x_3_5')
+  })
+  it('pusty model lub nieznany daje pusta liste', () => {
+    expect(moceDodatkuKlimy(DODATKI, '')).toEqual([])
+    expect(moceDodatkuKlimy(DODATKI, 'Nieznany')).toEqual([])
+  })
+  it('nie myli modeli Teta X i Teta Mirror X', () => {
+    expect(moceDodatkuKlimy(DODATKI, 'Teta X')).toHaveLength(1)
+  })
+})
+
+describe('EMS Breeze domyslnie Tak', () => {
+  const dost = { producent: 'Deye', variant: 'Fotowoltaika + Magazyn' }
+  it('dostepny i bez recznego wyboru: Tak', () => {
+    expect(emsDostepny(dost)).toBe(true)
+    expect(domyslnyStanEms({ ...dost })).toBe(true)
+  })
+  it('niedostepny (producent lub wariant): Nie', () => {
+    expect(domyslnyStanEms({ producent: 'Sigenergy', variant: 'Fotowoltaika + Magazyn' })).toBe(false)
+    expect(domyslnyStanEms({ producent: 'Deye', variant: 'Fotowoltaika' })).toBe(false)
+  })
+  it('reczne wylaczenie jest szanowane', () => {
+    expect(domyslnyStanEms({ ...dost, emsRecznie: true, aktualnie: false })).toBe(false)
+  })
+  it('reczne wlaczenie jest zachowane', () => {
+    expect(domyslnyStanEms({ ...dost, emsRecznie: true, aktualnie: true })).toBe(true)
+  })
+  it('niedostepny wygrywa nad recznym Tak', () => {
+    expect(domyslnyStanEms({ producent: 'Deye', variant: 'Fotowoltaika', emsRecznie: true, aktualnie: true })).toBe(false)
+  })
+  it('sanitizujDodatki nigdy nie wlacza EMS, tylko wylacza', () => {
+    expect(sanitizujDodatki({ emsBreeze: 'Nie' }, { ...dost }).emsBreeze).toBe('Nie')
+    expect(sanitizujDodatki({ emsBreeze: 'Tak' }, { producent: 'Sigenergy', variant: 'Fotowoltaika' }).emsBreeze).toBe('Nie')
   })
 })
