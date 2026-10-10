@@ -43,7 +43,7 @@ from crm.volteo_umowa_render import SZABLONY
 # ---------------------------------------------------------------------------
 
 MAPY_W_POMIARZE: frozenset[str] = frozenset(
-	{"PV_K", "PVME_K", "PVME_EV", "PVME_K_EV", "ME_K", "ME_EV", "ME_K_EV", "ROZ"}
+	{"PVME_K", "PVME_EV", "PVME_K_EV", "ME_K", "ME_EV", "ME_K_EV", "ROZ"}
 )
 
 MAPY_STAREGO_WZORU: frozenset[str] = frozenset({"PV", "PVME", "ME"})
@@ -177,7 +177,27 @@ wydrukować (zob. docstring `MAPA_ME` w `crm/volteo_umowa_mapa_me.py`), plus
 sześć kluczy drugiego Zamawiającego, bo ten szablon jest JEDNOosobowy (`ME_2`
 istnieje osobno)."""
 
+WYJATKI_PV_K: frozenset[str] = (
+	frozenset(
+		{
+			"bateria_producent_model",
+			"bateria_moc_kw",
+			"bateria_pojemnosc_jedn_kwh",
+			"bateria_szt",
+			"bateria_pojemnosc_lacznie_kwh",
+			"bateria_gwarancja_lat",
+		}
+	)
+	| KLUCZE_DRUGIEGO_ZAMAWIAJACEGO
+	| (KLUCZE_NOWYCH_DODATKOW - frozenset({"klima_rodzaj", "klima_moc_kw"}))
+)
+"""Wzor PV_K (`umowa_pv_k.pdf`, b69, U2b): fotowoltaika + klimatyzacja. Ma Zalacznik 2
+(klimatyzacja) z rubrykami "Rodzaj" i "Moc" (klima_rodzaj, klima_moc_kw), ale BEZ
+rubryki modelu (klima_model), bez magazynu (bateria_*), bez Zalacznikow 1a/1b
+(dod_panele_*, roz_*), bez ladowarki EV (ev_*) i bez drugiego Zamawiajacego."""
+
 WYJATKI_BRAK_POZYCJI_WG_SZABLONU: dict[str, frozenset[str]] = {
+	"PV_K": WYJATKI_PV_K,
 	"PVME": WYJATKI_PVME,
 	"PV": WYJATKI_PV,
 	"ME": WYJATKI_ME,
@@ -203,6 +223,7 @@ _PELNOMOCNICTWO_IDX: dict[str, int] = {
 	"PVME": 17,
 	"PV": 13,
 	"ME": 13,
+	"PV_K": 16,
 	# Warianty PODWÓJNE (ops#167): to jest PIERWSZE Pełnomocnictwo (klient 1,
 	# `klient_*`/`podpis_zamawiajacy` bez `_2`), DRUGIE Pełnomocnictwo (klient
 	# 2) leży o jedną stronę dalej, ostatnia strona każdego wariantu
@@ -225,6 +246,9 @@ _ZAKAZANE_STRONY_PROTOKOLOW: dict[str, frozenset[int]] = {
 	# oba szablony mają tylko jeden produkt do odebrania.
 	"PV": frozenset(range(9, 13)),
 	"ME": frozenset(range(9, 13)),
+	# PV_K: pouczenie (idx9), formularz odstapienia (idx10), protokol odbioru PV,
+	# protokol pomiarow, protokol odbioru klimatyzacji (idx11-15).
+	"PV_K": frozenset(range(9, 16)),
 	# Warianty PODWÓJNE (ops#167): drugi blok komparycji na stronie 1 przesuwa
 	# treść w dół, więc te same sekcje (pouczenie o odstąpieniu, formularz,
 	# protokoły) wypadają o jedną stronę dalej niż w wariancie jednoosobowym
@@ -241,6 +265,7 @@ _ZALACZNIK_2_3_IDX: dict[str, int] = {
 	"PVME": 6,
 	"PV": 5,
 	"ME": 5,
+	"PV_K": 6,
 	"PV_2": 5,
 	"ME_2": 5,
 	"PVME_2": 7,
@@ -255,6 +280,7 @@ _STRONY_ZAMAWIAJACY_OCZEKIWANE: dict[str, frozenset[int]] = {
 	"PVME": frozenset({3, 4, 5, 6, 17}),
 	"PV": frozenset({3, 4, 5, 13}),
 	"ME": frozenset({3, 4, 5, 13}),
+	"PV_K": frozenset({3, 4, 5, 6, 16}),
 	# Warianty PODWÓJNE (ops#167): strony `podpis_zamawiajacy` (osoba 1, BEZ
 	# `_2`); zob. `_STRONY_ZAMAWIAJACY_2_OCZEKIWANE` (`TestMapyPodwojne`) dla
 	# osoby 2.
@@ -269,6 +295,7 @@ _STRONY_WYKONAWCA_OCZEKIWANE: dict[str, frozenset[int]] = {
 	"PVME": frozenset({3, 4, 5}),
 	"PV": frozenset({3, 4}),
 	"ME": frozenset({3, 4}),
+	"PV_K": frozenset({3, 4, 5}),
 	"PV_2": frozenset({3, 4}),
 	"ME_2": frozenset({3, 4}),
 	"PVME_2": frozenset({3, 5, 6}),
@@ -281,6 +308,7 @@ _KLIENT_IMIE_NAZWISKO_STRONY: dict[str, frozenset[int]] = {
 	"PVME": frozenset({0, 17}),
 	"PV": frozenset({0, 13}),
 	"ME": frozenset({0, 13}),
+	"PV_K": frozenset({0, 16}),
 	"PV_2": frozenset({0, 13}),
 	"ME_2": frozenset({0, 13}),
 	"PVME_2": frozenset({0, 18}),
@@ -296,6 +324,7 @@ _RODO_STRONA_IDX: dict[str, int] = {
 	"PVME": 8,
 	"PV": 7,
 	"ME": 7,
+	"PV_K": 8,
 	"PV_2": 7,
 	"ME_2": 7,
 	"PVME_2": 9,
@@ -722,6 +751,7 @@ mapy jednoosobowej (zob. brief issue #166) - każdy klucz mapy podwójnej, któr
 nie jest w tym zbiorze, MUSI też istnieć w kluczach mapy jednoosobowej."""
 
 _LICZBA_POZYCJI_OCZEKIWANA: dict[str, int] = {"PV2": 81, "ME2": 68, "PVME2": 90}
+_LICZBA_POZYCJI_OCZEKIWANA["PV_K"] = 70
 """Dokładna liczba pozycji w każdej mapie podwójnej, potwierdzona przy
 pomiarze (issue #166) - regresja tego testu = ktoś przypadkiem dodał/usunął
 pozycję przy przyszłej edycji mapy, bez zauważenia zmiany w liczbie."""
@@ -893,6 +923,18 @@ class TestMapyWPomiarze(unittest.TestCase):
 		for kod in MAPY_STAREGO_WZORU:
 			with self.subTest(kod=kod):
 				self.assertTrue(SZABLONY[kod].gotowy)
+
+
+class TestMapaPvK(unittest.TestCase):
+	"""Pin liczby pozycji i rubryk klimatyzacji wzoru PV_K (b69, U2b)."""
+
+	def test_liczba_pozycji(self: "TestMapaPvK") -> None:
+		self.assertEqual(len(SZABLONY["PV_K"].mapa), _LICZBA_POZYCJI_OCZEKIWANA["PV_K"])
+
+	def test_rubryki_klimatyzacji_na_zalaczniku_2(self: "TestMapaPvK") -> None:
+		for klucz in ("klima_rodzaj", "klima_moc_kw"):
+			pozycje = _pozycje(SZABLONY["PV_K"], klucz)
+			self.assertEqual([p.strona for p in pozycje], [5], klucz)
 
 
 class TestKontraktCech(unittest.TestCase):
