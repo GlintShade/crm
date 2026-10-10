@@ -93,8 +93,12 @@
                         type="button" role="switch"
                         :aria-checked="form.rozbudowa[blok.klucz] > 0"
                         :aria-label="blok.etykieta"
+                        :disabled="elementRozbudowyZablokowany(form.rozbudowa, blok.klucz)"
                         class="kalk-switch shrink-0"
-                        :class="form.rozbudowa[blok.klucz] > 0 ? 'kalk-switch-on' : 'kalk-switch-off'"
+                        :class="[
+                          form.rozbudowa[blok.klucz] > 0 ? 'kalk-switch-on' : 'kalk-switch-off',
+                          elementRozbudowyZablokowany(form.rozbudowa, blok.klucz) ? 'opacity-50 cursor-not-allowed' : '',
+                        ]"
                         @click="przelaczRozbudowa(blok.klucz)"
                       ><span class="kalk-switch-knob" /></button>
                       <select
@@ -105,6 +109,7 @@
                         <option v-for="n in blok.max" :key="n" :value="n">{{ n }} {{ odmianaPaneli(n) }}</option>
                       </select>
                     </div>
+                    <p v-if="opisBlokady(blok.klucz)" class="mt-1 text-xs text-ink-gray-5">{{ opisBlokady(blok.klucz) }}</p>
                   </div>
 
                   <div class="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 kalk-row2">
@@ -500,6 +505,8 @@ import {
   typyPcDostepne,
   ulgaDotyczy,
   zbudujPayloadOze,
+  przelaczElementRozbudowy,
+  elementRozbudowyZablokowany,
 } from '@/utils/ozeForm'
 
 const props = defineProps({
@@ -581,7 +588,13 @@ const blokiRozbudowy = [
 ]
 
 function przelaczRozbudowa(klucz) {
-  form.rozbudowa[klucz] = form.rozbudowa[klucz] > 0 ? 0 : 1
+  if (elementRozbudowyZablokowany(form.rozbudowa, klucz)) return
+  form.rozbudowa = przelaczElementRozbudowy(form.rozbudowa, klucz)
+}
+
+function opisBlokady(klucz) {
+  if (!elementRozbudowyZablokowany(form.rozbudowa, klucz)) return ''
+  return klucz === 'panele' ? 'Niedostępne razem z panelami PV + mikrofalownik' : 'Niedostępne razem z panelami PV'
 }
 
 // Stan wyniku kalkulacji (serwer) -- zadeklarowany TUTAJ, przed

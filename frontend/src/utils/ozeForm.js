@@ -442,8 +442,8 @@ export function opcjeIlosciGrzejnika(grzejniki, rozmiar, max = GRZEJNIKI_MAX) {
 
 /**
  * Czy sekcja Rozbudowy ma wybrany co najmniej jeden element (panele,
- * panele z mikrofalownikiem, moduly baterii -- dowolna kombinacja, lustro
- * walidacji `_pozycje_rozbudowa` w backendzie).
+ * panele z mikrofalownikiem, moduly baterii) ORAZ nie wybrano naraz obu
+ * typow paneli (lustro walidacji `_pozycje_rozbudowa` w backendzie).
  *
  * @param {{panele: number, paneleMikro: number, bateria: number}} rozbudowa
  * @returns {boolean}
@@ -452,7 +452,40 @@ export function kompletnyRozbudowa(rozbudowa) {
   const panele = Number(rozbudowa?.panele) || 0
   const paneleMikro = Number(rozbudowa?.paneleMikro) || 0
   const bateria = Number(rozbudowa?.bateria) || 0
+  if (panele > 0 && paneleMikro > 0) return false
   return panele > 0 || paneleMikro > 0 || bateria > 0
+}
+
+/**
+ * Przelacza element Rozbudowy (1 po wlaczeniu, 0 po wylaczeniu) z
+ * wykluczeniem: wlaczenie "panele" zeruje "paneleMikro" i odwrotnie.
+ * Bateria jest niezalezna. Zwraca NOWY obiekt, nie mutuje wejscia.
+ *
+ * @param {object} rozbudowa
+ * @param {'panele'|'paneleMikro'|'bateria'} klucz
+ * @returns {object}
+ */
+export function przelaczElementRozbudowy(rozbudowa, klucz) {
+  const wlaczony = (Number(rozbudowa?.[klucz]) || 0) > 0
+  const nowy = { ...rozbudowa, [klucz]: wlaczony ? 0 : 1 }
+  if (!wlaczony && klucz === 'panele') nowy.paneleMikro = 0
+  if (!wlaczony && klucz === 'paneleMikro') nowy.panele = 0
+  return nowy
+}
+
+/**
+ * Czy dany element Rozbudowy jest zablokowany przez wybor drugiego typu paneli
+ * (tylko gdy sam jest wylaczony; w stanie konfliktowym oba da sie wylaczyc).
+ *
+ * @param {object} rozbudowa
+ * @param {string} klucz
+ * @returns {boolean}
+ */
+export function elementRozbudowyZablokowany(rozbudowa, klucz) {
+  if ((Number(rozbudowa?.[klucz]) || 0) > 0) return false
+  if (klucz === 'panele') return (Number(rozbudowa?.paneleMikro) || 0) > 0
+  if (klucz === 'paneleMikro') return (Number(rozbudowa?.panele) || 0) > 0
+  return false
 }
 
 /**
