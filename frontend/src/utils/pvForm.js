@@ -329,25 +329,23 @@ export function pickMocForTarget(targetKwp, wp) {
 //
 // Stopniowe odslanianie (decyzja wlasciciela 2026-10-05): wszystkie dodatki
 // startuja WYLACZONE, wlacznie z EMS Breeze (mimo wczesniejszego zapisu CEO
-// "TAK domyslna" - do potwierdzenia, patrz raport chunku F2).
-// sanitizujDodatki ponizej TYLKO zeruje wybory, ktore przestaly byc dostepne
-// dla biezacej konfiguracji (wariant/producent/typ falownika) - nigdy niczego
-// nie wlacza samoistnie.
+// "TAK domyslna"). Decyzja Jana 2026-10-09 (b69, #237): EMS Breeze startuje
+// na "Tak", gdy jest dostepny (domyslnyStanEms nizej, stosowany przez
+// KalkulatorTab). sanitizujDodatki ponizej TYLKO zeruje wybory, ktore
+// przestaly byc dostepne dla biezacej konfiguracji (wariant/producent/typ
+// falownika) - nigdy niczego nie wlacza samoistnie.
 
-// Trzy rodzaje dodatku "Klimatyzacja", kazdy z jednym, stale przypisanym
-// modelem (decyzja Jana 2026-10-05: katalog zna takze Roni X/Teta Mirror X
-// jako warianty kolorystyczne tych samych rodzajow, ale ten formularz
-// oferuje jeden ustalony model na rodzaj, zeby nie mnozyc wyborow w kroku
-// "stopniowego odslaniania" - do potwierdzenia u CEO). Trzymane w jednej
-// stalej, zeby zmiana wyboru modelu przez CEO byla jednym miejscem do
-// poprawy.
+// Trzy rodzaje dodatku "Klimatyzacja". Od b69 (#237) rodzaj NIE ma stalego
+// modelu: lista modeli rodzaju wynika z danych (modeleDodatkuKlimy nizej),
+// bo rodzaj to grupa pozycji SAMODZIELNEJ klimatyzacji ("klima_*"), a
+// pozycje dodatku ("dod_klima") rodzaju nie niosa.
 export const RODZAJ_KLIMY_CHLODZENIE = 'chlodzenie'
 export const RODZAJ_KLIMY_DOGRZEWANIE = 'dogrzewanie'
 export const RODZAJ_KLIMY_GRZANIE = 'grzanie'
 export const RODZAJE_KLIMY_DODATKU = [
-  { value: RODZAJ_KLIMY_CHLODZENIE, label: 'Chłodzenie', model: 'Elis X' },
-  { value: RODZAJ_KLIMY_DOGRZEWANIE, label: 'Chłodzenie + dogrzewanie', model: 'Teta X' },
-  { value: RODZAJ_KLIMY_GRZANIE, label: 'Chłodzenie + grzanie', model: 'Mira X' },
+  { value: RODZAJ_KLIMY_CHLODZENIE, label: 'Chłodzenie', grupa: 'klima_chlodzenie' },
+  { value: RODZAJ_KLIMY_DOGRZEWANIE, label: 'Chłodzenie + dogrzewanie', grupa: 'klima_dogrzewanie' },
+  { value: RODZAJ_KLIMY_GRZANIE, label: 'Chłodzenie + grzanie', grupa: 'klima_grzanie' },
 ]
 
 // Opisowa powierzchnia pokoju per moc jednostki klimatyzacji (prezentacja
@@ -361,14 +359,52 @@ export const POWIERZCHNIA_KLIMY = {
 }
 
 /**
- * Zwraca model przypisany do rodzaju dodatku klimatyzacji (RODZAJE_KLIMY_DODATKU).
+ * Buduje listę modeli dodatku klimatyzacji dla rodzaju: modele pozycji
+ * samodzielnych grupy rodzaju (np. klima_chlodzenie), które mają też
+ * wyceniane pozycje dodatku ("dod_klima"). Model bez pozycji dodatku nie
+ * jest oferowany (nie da się go wycenić jako dodatek). Wyłącznie
+ * prezentacja, bez matematyki cenowej.
  *
- * @param {string} rodzajKlimy - wartość rodzaju (np. "chlodzenie")
- * @returns {string} nazwa modelu lub pusty string, gdy rodzaj nieznany
+ * @param {object[]} dodatki - katalog dodatków (data.dodatki)
+ * @param {object[]} pozycjeKlimy - pozycje katalogu klimatyzacji samodzielnej (z volteo_oze_pozycje), z polami grupa/model
+ * @param {string} rodzajKlimy - wartość rodzaju (RODZAJE_KLIMY_DODATKU[].value)
+ * @returns {{model: string, kolor: string, label: string}[]} modele w kolejności katalogu
  */
-export function modelDlaRodzajuKlimy(rodzajKlimy) {
-  const wpis = RODZAJE_KLIMY_DODATKU.find((r) => r.value === rodzajKlimy)
-  return wpis ? wpis.model : ''
+export function modeleDodatkuKlimy(dodatki, pozycjeKlimy, rodzajKlimy) {
+  const rodzaj = RODZAJE_KLIMY_DODATKU.find((r) => r.value === rodzajKlimy)
+  if (!rodzaj || !Array.isArray(dodatki) || !Array.isArray(pozycjeKlimy)) return []
+
+  const modeleGrupy = new Set(
+    pozycjeKlimy.filter((p) => p && p.grupa === rodzaj.grupa && p.model).map((p) => p.model),
+  )
+  const wynik = []
+  const widziane = new Set()
+  for (const d of dodatki) {
+    if (!d || d.grupa !== 'dod_klima' || !modeleGrupy.has(d.model) || widziane.has(d.model)) continue
+    widziane.add(d.model)
+    const kolor = d.kolor || ''
+    wynik.push({ model: d.model, kolor, label: kolor ? `${d.model} (${kolor})` : d.model })
+  }
+  return wynik
+}
+
+/**
+ * Domyślny stan przełącznika EMS Breeze: "Tak", gdy dodatek jest dostępny
+ * i użytkownik nie zmienił go ręcznie; "Nie", gdy niedostępny. Ręczny wybór
+ * (emsRecznie, ustawiany przez UI przy kliknięciu Tak/Nie) wygrywa nad
+ * domyślnym, więc zmiana producenta w obrębie dostępnych nie włącza EMS
+ * z powrotem po wyłączeniu przez użytkownika.
+ *
+ * @param {object} params
+ * @param {string} params.producent
+ * @param {string} params.variant
+ * @param {boolean} params.emsRecznie - czy użytkownik sam ustawił przełącznik
+ * @param {boolean} params.aktualnie - bieżący stan przełącznika
+ * @returns {boolean} docelowy stan przełącznika
+ */
+export function domyslnyStanEms({ producent, variant, emsRecznie = false, aktualnie = false } = {}) {
+  if (!emsDostepny({ producent, variant })) return false
+  return emsRecznie ? Boolean(aktualnie) : true
 }
 
 /**
@@ -436,17 +472,16 @@ export function evDostepne({ producent, variant } = {}) {
 }
 
 /**
- * Buduje listę opcji mocy dla dodatku "Klimatyzacja" na podstawie wybranego
- * rodzaju (chłodzenie/dogrzewanie/grzanie -> model), posortowaną rosnąco po
+ * Buduje listę opcji mocy dla dodatku "Klimatyzacja" dla wybranego
+ * modelu (rodzaj -> model -> moc), posortowaną rosnąco po
  * mocy. Wyłącznie prezentacja: "cena" przychodzi gotowa z katalogu
  * (data.dodatki), żadnej matematyki tutaj.
  *
  * @param {object[]} dodatki - katalog dodatków z volteo_quote_components (data.dodatki)
- * @param {string} rodzajKlimy - wybrany rodzaj (RODZAJE_KLIMY_DODATKU[].value)
+ * @param {string} model - wybrany model (z modeleDodatkuKlimy), np. "Elis X"
  * @returns {{kod: string, moc_kw: number, label: string, cena: number}[]} opcje mocy
  */
-export function moceDodatkuKlimy(dodatki, rodzajKlimy) {
-  const model = modelDlaRodzajuKlimy(rodzajKlimy)
+export function moceDodatkuKlimy(dodatki, model) {
   if (!model || !Array.isArray(dodatki)) return []
 
   return dodatki
