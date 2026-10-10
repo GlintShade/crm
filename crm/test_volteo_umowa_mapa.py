@@ -14,7 +14,7 @@ danej mapy liczymy więc lokalnie: `frozenset(pole.klucz for pole in szablon.map
 import unittest
 from datetime import date
 from decimal import Decimal
-from typing import Any
+from typing import Any, ClassVar
 
 from crm.volteo_umowa_mapa import MAPA as MAPA_PVME
 from crm.volteo_umowa_mapa import SZEROKOSC_STRONY_PT, WYSOKOSC_STRONY_PT, Pole
@@ -980,37 +980,39 @@ class TestMapyWPomiarze(unittest.TestCase):
 				)
 				self.assertFalse(SZABLONY[kod].gotowy)
 
-	def test_liczba_pozycji_pvmeev(self: "TestMapyWPomiarze") -> None:
-		self.assertEqual(len(SZABLONY["PVME_EV"].mapa), _LICZBA_POZYCJI_OCZEKIWANA["PVME_EV"])
-
 	def test_stary_wzor_ma_niepusta_mape(self: "TestMapyWPomiarze") -> None:
 		for kod in MAPY_STAREGO_WZORU:
 			with self.subTest(kod=kod):
 				self.assertTrue(SZABLONY[kod].gotowy)
 
 
-class TestMapaPvZmierzona(unittest.TestCase):
-	"""Pin liczby pozycji mapy jednoosobowego wzoru PV (b69, U2a, pomiar od zera)."""
+class TestPinLiczbyPozycji(unittest.TestCase):
+	"""Jeden pin liczby pozycji dla wszystkich zmierzonych map jednoosobowych.
+	Warianty podwójne (`*_2`) pinuje `TestMapyPodwojne`, stary wzór (`MAPY_STAREGO_WZORU`)
+	nie jest jeszcze zmierzony od zera."""
 
-	def test_liczba_pozycji_pv(self: "TestMapaPvZmierzona") -> None:
-		self.assertEqual(len(SZABLONY["PV"].mapa), _LICZBA_POZYCJI_OCZEKIWANA["PV"])
-
-
-class TestMapaPvK(unittest.TestCase):
-	"""Pin liczby pozycji i rubryk klimatyzacji wzoru PV_K (b69, U2b)."""
-
-	def test_liczba_pozycji(self: "TestMapaPvK") -> None:
-		self.assertEqual(len(SZABLONY["PV_K"].mapa), _LICZBA_POZYCJI_OCZEKIWANA["PV_K"])
-
-	def test_rubryki_klimatyzacji_na_zalaczniku_2(self: "TestMapaPvK") -> None:
-		for klucz in ("klima_rodzaj", "klima_moc_kw"):
-			pozycje = _pozycje(SZABLONY["PV_K"], klucz)
-			self.assertEqual([p.strona for p in pozycje], [5], klucz)
+	def test_liczba_pozycji_kazdej_gotowej_mapy(self: "TestPinLiczbyPozycji") -> None:
+		for kod, szablon in SZABLONY.items():
+			if not szablon.gotowy or kod.endswith("_2") or kod in MAPY_STAREGO_WZORU:
+				continue
+			with self.subTest(kod=kod):
+				self.assertIn(kod, _LICZBA_POZYCJI_OCZEKIWANA, f"[{kod}] brak pinu liczby pozycji")
+				self.assertEqual(len(szablon.mapa), _LICZBA_POZYCJI_OCZEKIWANA[kod])
 
 
-class TestPinPozycjiPVME(unittest.TestCase):
-	def test_liczba_pozycji_mapy_pvme(self: "TestPinPozycjiPVME") -> None:
-		self.assertEqual(len(MAPA_PVME), _LICZBA_POZYCJI_OCZEKIWANA["PVME"])
+class TestRubrykiCech(unittest.TestCase):
+	"""Rubryki cech, ktore dany wzor drukuje na konkretnej stronie."""
+
+	_RUBRYKI_NA_STRONIE: ClassVar[dict[str, dict[str, list[int]]]] = {
+		"PV_K": {"klima_rodzaj": [5], "klima_moc_kw": [5]},
+	}
+
+	def test_rubryki_na_oczekiwanej_stronie(self: "TestRubrykiCech") -> None:
+		for kod, rubryki in self._RUBRYKI_NA_STRONIE.items():
+			for klucz, strony in rubryki.items():
+				with self.subTest(kod=kod, klucz=klucz):
+					pozycje = _pozycje(SZABLONY[kod], klucz)
+					self.assertEqual([p.strona for p in pozycje], strony)
 
 
 class TestKontraktCech(unittest.TestCase):
