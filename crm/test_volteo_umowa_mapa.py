@@ -43,7 +43,7 @@ from crm.volteo_umowa_render import SZABLONY
 # ---------------------------------------------------------------------------
 
 MAPY_W_POMIARZE: frozenset[str] = frozenset(
-	{"PVME_K_EV", "ME_K", "ME_EV", "ME_K_EV", "ROZ"}
+	{"PVME_K_EV", "ME_EV", "ME_K_EV", "ROZ"}
 )
 
 MAPY_STAREGO_WZORU: frozenset[str] = frozenset({"ME"})
@@ -227,11 +227,23 @@ WYJATKI_PVME_EV: frozenset[str] = (
 klimy, dodatkowych paneli i rozbudowy (cechy spoza tego wzoru) oraz `ev_moc_kw` (Załącznik 2
 ma tylko rubrykę "Typ ładowarki EV", bez osobnej mocy)."""
 
+WYJATKI_ME_K: frozenset[str] = (
+	WYJATKI_ME
+	- frozenset({"klima_rodzaj", "klima_moc_kw", "dod_panele_szt", "dod_panele_mikro_szt"})
+)
+"""Wzor ME_K (`umowa_me_k.pdf`, b69, U2h): magazyn energii + klimatyzacja. Ma Zal. 1
+(magazyn) z rubrykami dodatkowych modulow (`dod_panele_szt`, `dod_panele_mikro_szt`) i sekcja
+istniejacej PV (`ist_pv_*`) oraz Zal. 2 (klimatyzacja) z rubrykami rodzaju i mocy
+(`klima_rodzaj`, `klima_moc_kw`), BEZ rubryki modelu (`klima_model`). Brak Zal. 1a PV
+(panel_*, inwerter_szt, moc_pv_kwp, montaz_*, odgromowa_*, ppoz_*, przekop_*, kabel_*,
+pokrycie_dachowe), brak ladowarki EV (`ev_*`), rozbudowy (`roz_*`) i drugiego Zamawiajacego."""
+
 WYJATKI_BRAK_POZYCJI_WG_SZABLONU: dict[str, frozenset[str]] = {
 	"PV_K": WYJATKI_PV_K,
 	"PVME": WYJATKI_PVME,
 	"PV": WYJATKI_PV,
 	"ME": WYJATKI_ME,
+	"ME_K": WYJATKI_ME_K,
 	"PVME_K": WYJATKI_PVME_K,
 	"PVME_EV": WYJATKI_PVME_EV,
 	# Warianty PODWÓJNE (ops#167) mają STRUKTURALNIE ten sam zestaw
@@ -256,6 +268,7 @@ _PELNOMOCNICTWO_IDX: dict[str, int] = {
 	"PVME": 17,
 	"PV": 13,
 	"ME": 13,
+	"ME_K": 18,
 	"PV_K": 16,
 	"PVME_K": 21,
 	"PVME_EV": 21,
@@ -282,6 +295,9 @@ _ZAKAZANE_STRONY_PROTOKOLOW: dict[str, frozenset[int]] = {
 	# oba szablony mają tylko jeden produkt do odebrania.
 	"PV": frozenset(range(9, 13)),
 	"ME": frozenset(range(9, 13)),
+	# ME_K: pouczenie (idx10), formularz odstapienia (idx11), protokoly odbioru magazynu,
+	# pomiarow i klimatyzacji z listami instalatora (idx12-17).
+	"ME_K": frozenset(range(10, 18)),
 	# PV_K: pouczenie (idx9), formularz odstapienia (idx10), protokol odbioru PV,
 	# protokol pomiarow, protokol odbioru klimatyzacji (idx11-15).
 	"PV_K": frozenset(range(9, 16)),
@@ -305,6 +321,7 @@ _ZALACZNIK_2_3_IDX: dict[str, int] = {
 	"PVME": 6,
 	"PV": 5,
 	"ME": 5,
+	"ME_K": 7,
 	"PV_K": 6,
 	"PVME_K": 8,
 	"PVME_EV": 8,
@@ -322,6 +339,7 @@ _STRONY_ZAMAWIAJACY_OCZEKIWANE: dict[str, frozenset[int]] = {
 	"PVME": frozenset({3, 4, 5, 6, 17}),
 	"PV": frozenset({3, 4, 5, 13}),
 	"ME": frozenset({3, 4, 5, 13}),
+	"ME_K": frozenset({3, 5, 6, 7, 18}),
 	"PV_K": frozenset({3, 4, 5, 6, 16}),
 	"PVME_K": frozenset({3, 5, 6, 7, 8, 21}),
 	"PVME_EV": frozenset({3, 5, 6, 7, 8, 21}),
@@ -339,6 +357,7 @@ _STRONY_WYKONAWCA_OCZEKIWANE: dict[str, frozenset[int]] = {
 	"PVME": frozenset({3, 4, 5}),
 	"PV": frozenset({3, 4}),
 	"ME": frozenset({3, 4}),
+	"ME_K": frozenset({3, 5, 6}),
 	"PV_K": frozenset({3, 4, 5}),
 	"PVME_K": frozenset({3, 5, 6, 7}),
 	"PVME_EV": frozenset({3, 5, 6, 7}),
@@ -354,6 +373,7 @@ _KLIENT_IMIE_NAZWISKO_STRONY: dict[str, frozenset[int]] = {
 	"PVME": frozenset({0, 17}),
 	"PV": frozenset({0, 13}),
 	"ME": frozenset({0, 13}),
+	"ME_K": frozenset({0, 18}),
 	"PV_K": frozenset({0, 16}),
 	"PVME_K": frozenset({0, 21}),
 	"PVME_EV": frozenset({0, 21}),
@@ -372,6 +392,7 @@ _RODO_STRONA_IDX: dict[str, int] = {
 	"PVME": 8,
 	"PV": 7,
 	"ME": 7,
+	"ME_K": 9,
 	"PV_K": 8,
 	"PVME_K": 10,
 	"PVME_EV": 10,
@@ -812,6 +833,7 @@ _LICZBA_POZYCJI_OCZEKIWANA: dict[str, int] = {
 	"PVME_K": 78,
 	# PVME_EV (b69, U2e).
 	"PVME_EV": 77,
+	"ME_K": 59,
 }
 """Dokładna liczba pozycji w każdej mapie podwójnej, potwierdzona przy
 pomiarze (issue #166) - regresja tego testu = ktoś przypadkiem dodał/usunął
