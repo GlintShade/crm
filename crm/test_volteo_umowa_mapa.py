@@ -1023,7 +1023,15 @@ class TestRubrykiCech(unittest.TestCase):
 
 	_RUBRYKI_NA_STRONIE: ClassVar[dict[str, dict[str, list[int]]]] = {
 		"PV_K": {"klima_rodzaj": [5], "klima_moc_kw": [5]},
+		"ME": {"dod_panele_szt": [4], "dod_panele_mikro_szt": [4]},
 	}
+
+	_LICZBA_STRON: ClassVar[dict[str, int]] = {"ME": 16}
+
+	def test_liczba_stron_zmierzonego_wzoru(self: "TestRubrykiCech") -> None:
+		for kod, liczba in self._LICZBA_STRON.items():
+			with self.subTest(kod=kod):
+				self.assertEqual(SZABLONY[kod].liczba_stron, liczba)
 
 	def test_rubryki_na_oczekiwanej_stronie(self: "TestRubrykiCech") -> None:
 		for kod, rubryki in self._RUBRYKI_NA_STRONIE.items():
@@ -1031,19 +1039,6 @@ class TestRubrykiCech(unittest.TestCase):
 				with self.subTest(kod=kod, klucz=klucz):
 					pozycje = _pozycje(SZABLONY[kod], klucz)
 					self.assertEqual([p.strona for p in pozycje], strony)
-
-
-class TestMapaMeZmierzona(unittest.TestCase):
-	"""Pin liczby pozycji mapy jednoosobowego wzoru ME, 16 stron (b69, U2g, pomiar od zera)."""
-
-	def test_liczba_pozycji_me(self: "TestMapaMeZmierzona") -> None:
-		self.assertEqual(len(SZABLONY["ME"].mapa), _LICZBA_POZYCJI_OCZEKIWANA["ME"])
-		self.assertEqual(SZABLONY["ME"].liczba_stron, 16)
-
-	def test_me_drukuje_dodatkowe_moduly_na_zalaczniku_1(self: "TestMapaMeZmierzona") -> None:
-		for klucz in ("dod_panele_szt", "dod_panele_mikro_szt"):
-			pozycje = _pozycje(SZABLONY["ME"], klucz)
-			self.assertEqual([p.strona for p in pozycje], [4], klucz)
 
 
 class TestKontraktCech(unittest.TestCase):
