@@ -10,6 +10,7 @@ import {
   czyOzePv,
   opisRodzajuUmowy,
   umowaWPrzygotowaniu,
+  umowaTylkoBaner,
   zakladkiSzansy,
 } from '@/utils/rodzajUmowy'
 
@@ -190,8 +191,13 @@ describe('zakladkiSzansy', () => {
 })
 
 describe('umowaWPrzygotowaniu', () => {
-  it('prawda wylacznie dla czterech nowych rodzajow', () => {
-    expect(umowaWPrzygotowaniu('Rozbudowa PV/ME')).toBe(true)
+  it('prawda wylacznie dla trzech rodzajow bez wzoru (Rozbudowa ma juz wzor)', () => {
+    expect(umowaWPrzygotowaniu('Rozbudowa PV/ME')).toBe(false)
+    expect(umowaTylkoBaner('Rozbudowa PV/ME')).toBe(false)
+    expect(umowaTylkoBaner('Klimatyzacja')).toBe(true)
+    expect(umowaTylkoBaner('Pompa ciepła')).toBe(true)
+    expect(umowaTylkoBaner('Kocioł')).toBe(true)
+    expect(umowaTylkoBaner('Fotowoltaika')).toBe(false)
     expect(umowaWPrzygotowaniu('Klimatyzacja')).toBe(true)
     expect(umowaWPrzygotowaniu('Pompa ciepła')).toBe(true)
     expect(umowaWPrzygotowaniu('Kocioł')).toBe(true)

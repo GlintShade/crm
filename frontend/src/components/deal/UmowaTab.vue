@@ -37,8 +37,19 @@
 <template>
   <div class="flex flex-1 flex-col overflow-y-auto p-5">
     <div class="mx-auto w-full max-w-3xl">
+      <!-- Klimatyzacja / Pompa ciepła / Kocioł (b69, ops#252): brak wzoru,
+      sam baner, bez pustego stanu, formularza i wywołań create/save. -->
+      <div
+        v-if="tylkoBaner"
+        class="rounded-lg border border-outline-blue-2 bg-surface-blue-2 px-4 py-3 text-sm text-ink-blue-8"
+      >
+        {{
+          __('Wzór umowy w przygotowaniu dla rodzaju: {0}.', [props.rodzaj])
+        }}
+      </div>
+
       <!-- Loading -->
-      <div v-if="loading" class="py-16 text-center text-base text-ink-gray-5">
+      <div v-else-if="loading" class="py-16 text-center text-base text-ink-gray-5">
         {{ __('Ładowanie…') }}
       </div>
 
@@ -52,30 +63,13 @@
 
       <!-- Empty state — no umowa yet -->
       <div v-else-if="!umowa" class="flex flex-col gap-6">
-        <!-- Wzór w przygotowaniu (b68, chunk F4), stan pusty: ten sam baner
-        co w formularzu nizej (patrz komentarz tam) - handlowiec musi wiedziec
-        o braku wzoru PDF PRZED zalozeniem formularza, nie tylko po. Przycisk
-        "Wygeneruj umowę" zostaje aktywny: zaklada tylko formularz (dane),
-        nigdy PDF. -->
-        <div
-          v-if="wzorWPrzygotowaniu"
-          class="rounded-lg border border-outline-blue-2 bg-surface-blue-2 px-4 py-3 text-sm text-ink-blue-8"
-        >
-          {{
-            __(
-              'Wzór umowy w przygotowaniu. Formularz można wypełnić, PDF będzie dostępny po dodaniu wzoru dla rodzaju: {0}',
-              [props.rodzaj],
-            )
-          }}
-        </div>
-
         <div class="flex flex-col items-center justify-center gap-3 py-16 text-center">
           <UmowaIcon class="h-10 w-10 text-ink-gray-4" />
           <div class="text-lg font-medium text-ink-gray-7">{{ __('Brak formularza umowy') }}</div>
           <div class="max-w-md text-sm text-ink-gray-5">
             {{
               __(
-                'Wygeneruj formularz informacji do umowy, aby zebrać dane potrzebne do przygotowania umowy fotowoltaicznej.',
+                'Wygeneruj formularz informacji do umowy, aby zebrać dane potrzebne do przygotowania umowy.',
               )
             }}
           </div>
@@ -135,7 +129,8 @@
             <Button
               variant="outline"
               :label="__('Generuj PDF umowy')"
-              :disabled="generatingPdf || wzorWPrzygotowaniu"
+              :disabled="generatingPdf || !wzorDostepny"
+              :tooltip="wzorDostepny ? '' : wzorOpis?.powod"
               :loading="generatingPdf"
               @click="generatePdf"
             />
@@ -149,27 +144,25 @@
           </div>
         </div>
 
-        <!-- Wzór w przygotowaniu (b68, chunk F4), stan formularza: ten sam
-        baner co w stanie pustym wyżej (klik-test 2026-10-05 - wcześniej
-        widoczny tylko tutaj, co pozwalało handlowcowi założyć formularz bez
-        żadnego ostrzeżenia). Cztery nowe rodzaje OZE (Rozbudowa PV/ME,
-        Klimatyzacja, Pompa ciepła, Kocioł) nie mają jeszcze wzoru PDF umowy
-        - prawnik go przygotowuje w osobnej fazie (faza 2, plan b68).
-        Formularz pozostaje w pełni edytowalny i zapisywalny, tylko przycisk
-        "Generuj PDF umowy" jest wyłączony (patrz :disabled wyżej). Komunikat
-        serwera (`_blad_wzor_w_przygotowaniu` w crm/api/umowa.py) zostaje
-        trzecią linią obrony, na wypadek gdyby oba banery kiedyś się
-        rozminęły z rzeczywistym stanem backendu. -->
-        <div
-          v-if="wzorWPrzygotowaniu"
-          class="rounded-lg border border-outline-blue-2 bg-surface-blue-2 px-4 py-3 text-sm text-ink-blue-8"
-        >
-          {{
-            __(
-              'Wzór umowy w przygotowaniu. Formularz można wypełnić, PDF będzie dostępny po dodaniu wzoru dla rodzaju: {0}',
-              [props.rodzaj],
-            )
-          }}
+        <!-- Wzór (b69, ops#252): badge z nazwą wzoru albo baner z powodem
+        odmowy (`wzor.powod` z serwera, dosłownie). Odświeżany po każdym
+        zapisie, bo przełączenie "Umowa na dwie osoby" zmienia klucz wzoru.
+        Klasy banera jak dotychczasowy baner "w przygotowaniu" (niebieski),
+        bursztyn zostaje dla ostrzeżeń o brakach danych niżej. -->
+        <div v-if="wzorOpis">
+          <Badge
+            v-if="wzorOpis.dostepny"
+            theme="gray"
+            variant="subtle"
+            size="lg"
+            :label="wzorOpis.tekst"
+          />
+          <div
+            v-else
+            class="rounded-lg border border-outline-blue-2 bg-surface-blue-2 px-4 py-3 text-sm text-ink-blue-8"
+          >
+            {{ wzorOpis.tekst }}
+          </div>
         </div>
 
         <!-- Drugi Zamawiający: umowa na dwie osoby (ops#171). Lives ONLY
@@ -343,9 +336,24 @@
           </div>
         </div>
 
+        <!-- Dodatki z kalkulatora (b69, ops#252), tylko do odczytu -->
+        <section v-if="dodatki.length">
+          <div class="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-gray-5">
+            {{ __('Dodatki z kalkulatora (drukowane w umowie)') }}
+          </div>
+          <div class="grid grid-cols-1 gap-3 rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-4 sm:grid-cols-3">
+            <div v-for="d in dodatki" :key="d.key" class="min-w-0">
+              <div class="text-xs text-ink-gray-5">{{ __(d.label) }}</div>
+              <div :class="['break-words text-sm', d.info ? 'text-ink-gray-5' : 'text-ink-gray-8']">
+                {{ d.value }}
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section v-for="sec in formSections" :key="sec.key">
           <div class="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-gray-5">
-            {{ sec.label }}
+            {{ __(sec.label) }}
           </div>
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div
@@ -355,13 +363,24 @@
             >
               <FormControl
                 :type="f.type"
-                :label="f.label"
+                :label="__(f.label)"
                 :options="f.options"
                 :step="f.step"
                 :required="!!f.required"
                 :disabled="saving"
                 v-model="form[f.fieldname]"
               />
+            </div>
+          </div>
+
+          <!-- Zakres rozbudowy (Rozbudowa PV/ME): read-only z szansy -->
+          <div
+            v-if="sec.key === 'zakres_rozbudowy'"
+            class="mb-4 grid grid-cols-1 gap-3 rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-4 sm:grid-cols-4"
+          >
+            <div v-for="z in zakres" :key="z.key" class="min-w-0">
+              <div class="text-xs text-ink-gray-5">{{ __(z.label) }}</div>
+              <div class="text-sm text-ink-gray-8">{{ z.value }}</div>
             </div>
           </div>
 
@@ -465,7 +484,14 @@ import { formatPlnAmount } from '@/utils/money'
 import { ppozWymagane } from '@/utils/pvForm'
 import { useAutenti } from '@/composables/useAutenti'
 import { canSend } from '@/utils/autentiStatus'
-import { umowaWPrzygotowaniu } from '@/utils/rodzajUmowy'
+import { czyOzePv, umowaTylkoBaner, umowaWPrzygotowaniu } from '@/utils/rodzajUmowy'
+import {
+  dodatkiDoPokazania,
+  opisWzoru,
+  sekcjeFormularza,
+  wszystkiePola as wszystkiePolaFormularza,
+  zakresRozbudowy,
+} from '@/utils/umowaForm'
 
 const props = defineProps({
   dealId: { type: String, required: true },
@@ -482,278 +508,33 @@ const props = defineProps({
 // serwer (`crm.api.umowa._blad_wzor_w_przygotowaniu`) odrzuca próbę
 // generowania identycznym komunikatem jako druga linia obrony.
 const wzorWPrzygotowaniu = computed(() => umowaWPrzygotowaniu(props.rodzaj))
+// Klimatyzacja / Pompa ciepła / Kocioł: zakładka to sam baner (b69, ops#252).
+const tylkoBaner = computed(() => umowaTylkoBaner(props.rodzaj))
 
-// --- Static form definition ---------------------------------------------------
-// Grouped exactly as the brief specifies. Conditional fields carry
-// `depends_on`; an item with no `depends_on` is always visible so an older
-// server payload degrades gracefully instead of hiding the whole form.
-const TAK_NIE = ['', 'Tak', 'Nie']
+// `wzor` z odpowiedzi get/create/save: odświeżany po każdej odpowiedzi.
+const wzor = ref(null)
+const wzorOpis = computed(() => opisWzoru(wzor.value))
+// Brak `wzor` (starszy payload) nie blokuje przycisku, serwer i tak rozstrzyga.
+const wzorDostepny = computed(() => !wzorOpis.value || wzorOpis.value.dostepny)
 
-const formSections = [
-  {
-    key: 'adres',
-    label: __('Adres'),
-    fields: [
-      {
-        fieldname: 'adres_zam_jak_montaz',
-        label: __('Czy adres montażu jest taki sam jak adres zamieszkania?'),
-        type: 'select',
-        options: TAK_NIE,
-        required: true,
-      },
-      {
-        fieldname: 'adres_zam_ulica',
-        label: __('Ulica (adres zamieszkania)'),
-        type: 'text',
-        required: true,
-        depends_on: { fieldname: 'adres_zam_jak_montaz', value: 'Nie' },
-      },
-      {
-        fieldname: 'adres_zam_nr_domu',
-        label: __('Nr domu (adres zamieszkania)'),
-        type: 'text',
-        required: true,
-        depends_on: { fieldname: 'adres_zam_jak_montaz', value: 'Nie' },
-      },
-      {
-        fieldname: 'adres_zam_nr_mieszkania',
-        label: __('Nr mieszkania (adres zamieszkania)'),
-        type: 'text',
-        depends_on: { fieldname: 'adres_zam_jak_montaz', value: 'Nie' },
-      },
-      {
-        fieldname: 'adres_zam_kod',
-        label: __('Kod pocztowy (adres zamieszkania)'),
-        type: 'text',
-        required: true,
-        depends_on: { fieldname: 'adres_zam_jak_montaz', value: 'Nie' },
-      },
-      {
-        fieldname: 'adres_zam_miasto',
-        label: __('Miasto (adres zamieszkania)'),
-        type: 'text',
-        required: true,
-        depends_on: { fieldname: 'adres_zam_jak_montaz', value: 'Nie' },
-      },
-      {
-        fieldname: 'adres_montaz_ulica',
-        label: __('Ulica (adres montażu)'),
-        type: 'text',
-        required: true,
-        depends_on: { fieldname: 'adres_zam_jak_montaz', value: 'Nie' },
-      },
-      {
-        fieldname: 'adres_montaz_nr_domu',
-        label: __('Nr domu (adres montażu)'),
-        type: 'text',
-        required: true,
-        depends_on: { fieldname: 'adres_zam_jak_montaz', value: 'Nie' },
-      },
-      {
-        fieldname: 'adres_montaz_kod',
-        label: __('Kod pocztowy (adres montażu)'),
-        type: 'text',
-        required: true,
-        depends_on: { fieldname: 'adres_zam_jak_montaz', value: 'Nie' },
-      },
-      {
-        fieldname: 'adres_montaz_miasto',
-        label: __('Miasto (adres montażu)'),
-        type: 'text',
-        required: true,
-        depends_on: { fieldname: 'adres_zam_jak_montaz', value: 'Nie' },
-      },
-    ],
-  },
-  {
-    key: 'budynek',
-    label: __('Budynek'),
-    fields: [
-      {
-        fieldname: 'typ_budynku',
-        label: __('Typ budynku'),
-        type: 'select',
-        options: ['', 'Jednorodzinny', 'Wielorodzinny'],
-        required: true,
-      },
-      {
-        fieldname: 'powierzchnia_prog',
-        label: __('Powierzchnia'),
-        type: 'select',
-        options: ['', 'do 300 m²', 'powyżej 300 m²'],
-        required: true,
-      },
-      {
-        fieldname: 'powierzchnia_m2',
-        label: __('Powierzchnia (m²)'),
-        type: 'number',
-        required: true,
-        depends_on: { fieldname: 'powierzchnia_prog', value: 'powyżej 300 m²' },
-      },
-    ],
-  },
-  {
-    key: 'finansowanie',
-    label: __('Finansowanie'),
-    fields: [
-      {
-        fieldname: 'finansowanie',
-        label: __('Sposób finansowania'),
-        type: 'select',
-        options: ['', 'Kredyt 100%', 'Gotówka 100%', 'Kredyt + gotówka'],
-        required: true,
-      },
-      {
-        fieldname: 'wklad_wlasny_pln',
-        label: __('Wkład własny (PLN)'),
-        type: 'number',
-        step: '0.01',
-        required: true,
-        depends_on: { fieldname: 'finansowanie', value: 'Kredyt + gotówka' },
-      },
-    ],
-  },
-  {
-    key: 'warunki',
-    label: __('Warunki instalacyjne'),
-    fields: [
-      {
-        fieldname: 'internet',
-        label: __('Internet'),
-        type: 'select',
-        options: ['', 'Wi-Fi', 'Kablowy', 'Brak'],
-        required: true,
-      },
-      {
-        fieldname: 'instalacja_odgromowa',
-        label: __('Instalacja odgromowa'),
-        type: 'select',
-        options: TAK_NIE,
-        required: true,
-      },
-      {
-        fieldname: 'moc_przylaczeniowa_kw',
-        label: __('Moc przyłączeniowa (kW)'),
-        type: 'number',
-        step: '0.1',
-        required: true,
-      },
-      {
-        fieldname: 'liczba_faz',
-        label: __('Liczba faz'),
-        type: 'select',
-        options: ['', '1', '3'],
-        required: true,
-      },
-      {
-        fieldname: 'osd',
-        label: __('OSD'),
-        type: 'select',
-        options: ['', 'PGE', 'Tauron', 'Enea', 'Energa', 'Stoen (innogy)', 'Inny'],
-        required: true,
-      },
-      {
-        fieldname: 'przekop_gruntowy',
-        label: __('Przekop gruntowy'),
-        type: 'select',
-        options: TAK_NIE,
-        required: true,
-      },
-      {
-        fieldname: 'przekop_mb',
-        label: __('Przekop gruntowy (mb)'),
-        type: 'number',
-        step: '1',
-        depends_on: { fieldname: 'przekop_gruntowy', value: 'Tak' },
-      },
-      {
-        fieldname: 'dodatkowy_kabel',
-        label: __('Dodatkowy kabel'),
-        type: 'select',
-        options: TAK_NIE,
-      },
-      {
-        fieldname: 'dodatkowy_kabel_m',
-        label: __('Dodatkowy kabel (m)'),
-        type: 'number',
-        step: '0.1',
-        depends_on: { fieldname: 'dodatkowy_kabel', value: 'Tak' },
-      },
-    ],
-  },
-  {
-    key: 'istniejaca_pv',
-    label: __('Istniejąca instalacja fotowoltaiczna'),
-    fields: [
-      {
-        fieldname: 'istniejaca_pv',
-        label: __('Czy klient ma już instalację PV?'),
-        type: 'select',
-        options: TAK_NIE,
-        required: true,
-      },
-      {
-        fieldname: 'istniejaca_pv_moc_inwertera_kw',
-        label: __('Moc inwertera (kW)'),
-        type: 'number',
-        step: '0.1',
-        required: true,
-        depends_on: { fieldname: 'istniejaca_pv', value: 'Tak' },
-      },
-      {
-        fieldname: 'istniejaca_pv_moc_kwp',
-        label: __('Moc instalacji (kWp)'),
-        type: 'number',
-        step: '0.1',
-        required: true,
-        depends_on: { fieldname: 'istniejaca_pv', value: 'Tak' },
-      },
-      {
-        fieldname: 'istniejaca_pv_producent_inwertera',
-        label: __('Producent inwertera'),
-        type: 'text',
-        required: true,
-        depends_on: { fieldname: 'istniejaca_pv', value: 'Tak' },
-      },
-    ],
-  },
-  {
-    key: 'zgody',
-    label: __('Zgody'),
-    fields: [
-      {
-        fieldname: 'zgoda_kontakt_telefoniczny',
-        label: __('Zgoda na kontakt telefoniczny'),
-        type: 'checkbox',
-      },
-      {
-        fieldname: 'zgoda_dzialania_promocyjne',
-        label: __('Zgoda na działania promocyjne'),
-        type: 'checkbox',
-      },
-      {
-        fieldname: 'zgoda_realizacja_przed_odstapieniem',
-        label: __(
-          'Wnoszę o realizację Umowy przed upływem terminu na odstąpienie (Załącznik nr 3)',
-        ),
-        type: 'checkbox',
-      },
-    ],
-  },
-]
-
-// Fields that are actually part of the editable payload (excludes the
-// read-only derived values, which are never sent — see buildPayload()).
-const allFieldnames = formSections.flatMap((s) => s.fields.map((f) => f.fieldname))
-const fieldLabelByName = new Map(
-  formSections.flatMap((s) => s.fields.map((f) => [f.fieldname, f.label])),
-)
-// Wyprowadzone z formSections zamiast wpisanego na sztywno literału nazw pól —
+// --- Definicja formularza ------------------------------------------------------
+// Struktura sekcji/pól żyje w utils/umowaForm.js (czyste dane, zależne od
+// rodzaju i konfiguracji szansy). Do `form`/payloadu wchodzi suma pól
+// wszystkich wariantów (pola niewidoczne dla danego rodzaju hydrują się z
+// rekordu i wracają bez zmian), a widoczne są tylko pola z `formSections`.
+const wszystkiePola = wszystkiePolaFormularza()
+const allFieldnames = wszystkiePola.map((f) => f.fieldname)
+const fieldLabelByName = new Map(wszystkiePola.map((f) => [f.fieldname, __(f.label)]))
+// Wyprowadzone z definicji zamiast wpisanego na sztywno literału nazw pól,
 // kolejna kratka dodana do formularza automatycznie trafia do tego zbioru,
 // więc hydrateForm() nie może już po cichu pominąć konwersji na bool.
 const checkboxFieldnames = new Set(
-  formSections.flatMap((s) => s.fields.filter((f) => f.type === 'checkbox').map((f) => f.fieldname)),
+  wszystkiePola.filter((f) => f.type === 'checkbox').map((f) => f.fieldname),
 )
+
+const formSections = computed(() => sekcjeFormularza(props.rodzaj, prefill.value))
+const dodatki = computed(() => (czyOzePv(props.rodzaj) ? dodatkiDoPokazania(prefill.value) : []))
+const zakres = computed(() => zakresRozbudowy(prefill.value))
 
 // Vue 3: `v-if` on the same node as `v-for` is evaluated BEFORE the loop
 // variable exists, so it would throw at runtime with no build-time warning.
@@ -952,9 +733,16 @@ async function wybierzNowegoKlientaJakoDrugiego(doc) {
   await saveForm({ successMessage: __('Klient dodany i wybrany jako drugi Zamawiający') })
 }
 
-onMounted(() => {
+// Klimatyzacja / Pompa ciepła / Kocioł: zero wywołań API (sam baner). Rodzaj
+// potrafi dojść do propsa po montażu, stąd watch zamiast samego onMounted.
+let zaladowano = false
+function zaladujJesliPotrzeba() {
+  if (zaladowano || tylkoBaner.value) return
+  zaladowano = true
   loadUmowa()
-})
+}
+onMounted(zaladujJesliPotrzeba)
+watch(tylkoBaner, zaladujJesliPotrzeba)
 
 // The missing-fields list travels inside `wyliczenia.brakujace_pola` on
 // EVERY endpoint (get/create/save) — there is no top-level `brakujace` key.
@@ -992,6 +780,7 @@ async function loadUmowa() {
     prefill.value = data?.prefill || {}
     prefillDrugi.value = data?.prefill_drugi || {}
     wyliczenia.value = data?.wyliczenia || {}
+    wzor.value = data?.wzor || null
     brakujace.value = extractBrakujace(data)
     brakujaceKlienta.value = extractBrakujaceKlienta(data)
     brakujaceDrugiego.value = extractBrakujaceDrugiego(data)
@@ -1092,6 +881,7 @@ async function createUmowa() {
     prefill.value = data?.prefill || {}
     prefillDrugi.value = data?.prefill_drugi || {}
     wyliczenia.value = data?.wyliczenia || {}
+    wzor.value = data?.wzor || null
     brakujace.value = extractBrakujace(data)
     brakujaceKlienta.value = extractBrakujaceKlienta(data)
     brakujaceDrugiego.value = extractBrakujaceDrugiego(data)
@@ -1139,6 +929,7 @@ async function saveForm(opts = {}) {
     prefill.value = data?.prefill || prefill.value
     prefillDrugi.value = data?.prefill_drugi || prefillDrugi.value
     wyliczenia.value = data?.wyliczenia || wyliczenia.value
+    wzor.value = data?.wzor || wzor.value
     brakujace.value = extractBrakujace(data)
     brakujaceKlienta.value = extractBrakujaceKlienta(data)
     brakujaceDrugiego.value = extractBrakujaceDrugiego(data)

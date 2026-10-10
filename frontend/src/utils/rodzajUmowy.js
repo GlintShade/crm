@@ -143,9 +143,13 @@ export function zakladkiSzansy(rodzaj) {
   }
 }
 
+// Rodzaje bez wzoru umowy (lustro `crm.volteo_umowa.RODZAJE_BEZ_WZORU`):
+// Rozbudowa PV/ME ma juz wzor, wiec tu jej nie ma.
+export const RODZAJE_BEZ_WZORU = new Set(['Klimatyzacja', 'Pompa ciepła', 'Kocioł'])
+
 /**
- * Czy wzor umowy PDF dla `rodzaj` jest jeszcze w przygotowaniu (b68: cztery
- * nowe rodzaje OZE nie maja jeszcze wzoru umowy, faza 2, prawnik). Gdy
+ * Czy wzor umowy PDF dla `rodzaj` jest jeszcze w przygotowaniu (b69: tylko
+ * Klimatyzacja, Pompa ciepla i Kociol; Rozbudowa PV/ME ma juz wzor). Gdy
  * `true`, przycisk generowania PDF na zakladce Umowa jest wylaczony i
  * pokazuje sie baner info (chunk F4, `UmowaTab.vue`); formularz szansy
  * mozna nadal wypelnic.
@@ -154,7 +158,19 @@ export function zakladkiSzansy(rodzaj) {
  * @returns {boolean}
  */
 export function umowaWPrzygotowaniu(rodzaj) {
-  return czyOzeNowy(rodzaj)
+  return RODZAJE_BEZ_WZORU.has(rodzaj)
+}
+
+/**
+ * Czy zakladka Umowa pokazuje WYLACZNIE baner "Wzor umowy w przygotowaniu"
+ * (bez pustego stanu, formularza i wywolan create/save). Ta sama trojka
+ * rodzajow co `RODZAJE_BEZ_WZORU`.
+ *
+ * @param {string|null|undefined} rodzaj
+ * @returns {boolean}
+ */
+export function umowaTylkoBaner(rodzaj) {
+  return RODZAJE_BEZ_WZORU.has(rodzaj)
 }
 
 /**
