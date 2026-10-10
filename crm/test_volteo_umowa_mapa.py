@@ -43,7 +43,7 @@ from crm.volteo_umowa_render import SZABLONY
 # ---------------------------------------------------------------------------
 
 MAPY_W_POMIARZE: frozenset[str] = frozenset(
-	{"PVME_K_EV", "ME_K", "ME_EV", "ME_K_EV", "ROZ"}
+	{"ME_K", "ME_EV", "ME_K_EV", "ROZ"}
 )
 
 MAPY_STAREGO_WZORU: frozenset[str] = frozenset()
@@ -227,11 +227,24 @@ WYJATKI_PVME_EV: frozenset[str] = (
 klimy, dodatkowych paneli i rozbudowy (cechy spoza tego wzoru) oraz `ev_moc_kw` (Załącznik 2
 ma tylko rubrykę "Typ ładowarki EV", bez osobnej mocy)."""
 
+WYJATKI_PVME_K_EV: frozenset[str] = (
+	KLUCZE_DRUGIEGO_ZAMAWIAJACEGO
+	| GRUPY_CECH_KLUCZE["dod_panele"]
+	| GRUPY_CECH_KLUCZE["rozbudowa"]
+	| frozenset({"klima_model", "ev_moc_kw"})
+)
+"""PV+ME+K+EV (`umowa_pv_me_k_ev.pdf`, b69 U2f): ma Załączniki 1a (PV), 1b (magazyn), 2
+(klimatyzacja: rodzaj i moc) i 3 (ładowarka EV: sam typ). Wyjątki: sześć kluczy drugiego
+Zamawiającego (wzór jednoosobowy), klucze dodatkowych paneli i rozbudowy (cechy spoza tego
+wzoru), `klima_model` (Załącznik 2 nie ma rubryki modelu) oraz `ev_moc_kw` (Załącznik 3 ma
+tylko rubrykę "Typ ładowarki EV", bez osobnej mocy)."""
+
 WYJATKI_BRAK_POZYCJI_WG_SZABLONU: dict[str, frozenset[str]] = {
 	"PV_K": WYJATKI_PV_K,
 	"PVME": WYJATKI_PVME,
 	"PV": WYJATKI_PV,
 	"ME": WYJATKI_ME,
+	"PVME_K_EV": WYJATKI_PVME_K_EV,
 	"PVME_K": WYJATKI_PVME_K,
 	"PVME_EV": WYJATKI_PVME_EV,
 	# Warianty PODWÓJNE (ops#167) mają STRUKTURALNIE ten sam zestaw
@@ -256,6 +269,7 @@ _PELNOMOCNICTWO_IDX: dict[str, int] = {
 	"PVME": 17,
 	"PV": 13,
 	"ME": 14,
+	"PVME_K_EV": 24,
 	"PV_K": 16,
 	"PVME_K": 21,
 	"PVME_EV": 21,
@@ -283,6 +297,9 @@ _ZAKAZANE_STRONY_PROTOKOLOW: dict[str, frozenset[int]] = {
 	# ME (wzór 06.10.2026, 16 stron): formularz odstąpienia (idx9) + protokół
 	# odbioru magazynu na trzech stronach (idx10-12) + protokół pomiarów (idx13).
 	"ME": frozenset(range(9, 14)),
+	# PVME_K_EV: pouczenie (idx12), formularz odstąpienia (idx13), protokoły odbioru i pomiarów
+	# PV, magazynu, klimatyzacji i ładowarki EV wraz z listami szkoleń (idx14-23).
+	"PVME_K_EV": frozenset(range(12, 24)),
 	# PV_K: pouczenie (idx9), formularz odstapienia (idx10), protokol odbioru PV,
 	# protokol pomiarow, protokol odbioru klimatyzacji (idx11-15).
 	"PV_K": frozenset(range(9, 16)),
@@ -308,6 +325,7 @@ _ZALACZNIK_2_3_IDX: dict[str, int] = {
 	# ME: kratki i podpis Zal. 2 oraz kratka Zal. 3 leżą na idx5, ale podpis
 	# Zal. 3 przechodzi na idx6 (zob. `_ZALACZNIK_3_PODPIS_NA_NASTEPNEJ_STRONIE`).
 	"ME": 5,
+	"PVME_K_EV": 9,
 	"PV_K": 6,
 	"PVME_K": 8,
 	"PVME_EV": 8,
@@ -330,6 +348,7 @@ _STRONY_ZAMAWIAJACY_OCZEKIWANE: dict[str, frozenset[int]] = {
 	"PVME": frozenset({3, 4, 5, 6, 17}),
 	"PV": frozenset({3, 4, 5, 13}),
 	"ME": frozenset({3, 4, 5, 6, 14}),
+	"PVME_K_EV": frozenset({4, 5, 6, 7, 8, 9, 24}),
 	"PV_K": frozenset({3, 4, 5, 6, 16}),
 	"PVME_K": frozenset({3, 5, 6, 7, 8, 21}),
 	"PVME_EV": frozenset({3, 5, 6, 7, 8, 21}),
@@ -347,6 +366,7 @@ _STRONY_WYKONAWCA_OCZEKIWANE: dict[str, frozenset[int]] = {
 	"PVME": frozenset({3, 4, 5}),
 	"PV": frozenset({3, 4}),
 	"ME": frozenset({3, 4}),
+	"PVME_K_EV": frozenset({4, 5, 6, 7, 8}),
 	"PV_K": frozenset({3, 4, 5}),
 	"PVME_K": frozenset({3, 5, 6, 7}),
 	"PVME_EV": frozenset({3, 5, 6, 7}),
@@ -362,6 +382,7 @@ _KLIENT_IMIE_NAZWISKO_STRONY: dict[str, frozenset[int]] = {
 	"PVME": frozenset({0, 17}),
 	"PV": frozenset({0, 13}),
 	"ME": frozenset({0, 14}),
+	"PVME_K_EV": frozenset({0, 24}),
 	"PV_K": frozenset({0, 16}),
 	"PVME_K": frozenset({0, 21}),
 	"PVME_EV": frozenset({0, 21}),
@@ -380,6 +401,7 @@ _RODO_STRONA_IDX: dict[str, int] = {
 	"PVME": 8,
 	"PV": 7,
 	"ME": 7,
+	"PVME_K_EV": 11,
 	"PV_K": 8,
 	"PVME_K": 10,
 	"PVME_EV": 10,
@@ -823,6 +845,8 @@ _LICZBA_POZYCJI_OCZEKIWANA: dict[str, int] = {
 	"PVME2": 90,
 	"PV": 66,
 	"ME": 55,
+	# PVME_K_EV (b69, U2f).
+	"PVME_K_EV": 81,
 	"PV_K": 70,
 	# PVME (jednoosobowy, pomiar od zera 2026-10-10, b69 U2c, ops#241).
 	"PVME": 74,
