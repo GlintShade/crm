@@ -22,7 +22,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from crm.volteo_umowa import _sparsuj_decimal as _sparsuj_decimal_wspolny
-from crm.volteo_umowa import miejsce_i_pokrycie
+from crm.volteo_umowa import miejsce_i_pokrycie, ppoz_wymagane
 
 # `KONSTRUKCJA_MONTAZ` (mapowanie `custom_konstrukcja` → miejsce/pokrycie) NIE
 # jest tu importowana bezpośrednio: zamiast duplikować logikę odczytu tej mapy,
@@ -105,6 +105,9 @@ def zbuduj_kontekst(
 	stale: dict[str, Any],
 	dzis: date,
 	kontakt2: dict[str, Any] | None = None,
+	*,
+	dodatki: dict[str, Any] | None = None,
+	rozbudowa: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
 	"""Buduje kontekst do wstawienia w szablon PDF-u umowy (§1-§7, Zał. 1a/1b/2).
 
@@ -135,6 +138,22 @@ def zbuduj_kontekst(
 	`rodo_data_imie_nazwisko` (linia podpisu na końcu Załącznika RODO) zostaje
 	WYŁĄCZNIE dla osoby pierwszej: każda mapa podwójna ma na to jeden klucz,
 	nie dwa (zob. `crm/volteo_umowa_mapa_*2.py`).
+
+	`dodatki` i `rozbudowa` (b69, #236; kw-only, słowniki już wyłuskane przez
+	API, ta funkcja zostaje frappe-free):
+	`dodatki = {"klima": {"model", "moc_kw", "rodzaj"} | None,
+	"ev": {"nazwa", "moc_kw"} | None, "panele": int, "panele_mikro": int}`;
+	`rozbudowa = {"panele", "panele_mikro", "bateria", "ist_pv_moc_kwp", "ppoz",
+	"ist_me_kwh"}`. Dwanaście nowych kluczy jest ZAWSZE obecnych (puste, gdy nie
+	dotyczą): `klima_rodzaj`, `klima_model`, `klima_moc_kw`, `ev_nazwa`,
+	`ev_moc_kw`, `dod_panele_szt`, `dod_panele_mikro_szt`, `roz_panele_szt`,
+	`roz_mikro_tak`, `roz_mikro_nie`, `roz_ist_pv_moc_kwp`, `roz_bateria_szt`,
+	`roz_ist_me_kwh`. `klima_rodzaj` to gotowy tekst z API ("chłodzenie",
+	"chłodzenie i dogrzewanie", "chłodzenie i grzanie"), funkcja go nie mapuje.
+	Dla Rozbudowy (`rozbudowa` podane) `ppoz_tak`/`ppoz_nie` liczą się z
+	`ppoz_wymagane()` na danych rozbudowy i są obie False, gdy rozbudowa PV
+	(panele + mikro) wynosi 0 (jawny wybór wygrywa z resztką, ops#145).
+	Literały finansowania bez zmian.
 	"""
 	falownik_nazwa = deal.get("custom_falownik")
 	falownik_komponent = _znajdz_komponent(komponenty, "Falownik", falownik_nazwa)
@@ -223,7 +242,26 @@ def zbuduj_kontekst(
 	kontakt2_ = kontakt2 or {}
 	klient2_imie_nazwisko = _polacz(kontakt2_.get("first_name"), kontakt2_.get("last_name"))
 
-	return {
+	# Dodatki i rozbudowa (b69, #236). Puste bez słownika wejściowego.
+	dodatki_ = dodatki or {}
+	klima = dodatki_.get("klima") or {}
+	ev = dodatki_.get("ev") or {}
+	roz = rozbudowa or {}
+	roz_pv_szt = _sparsuj_decimal(roz.get("panele")) or Decimal(0)
+	roz_mikro_szt = _sparsuj_decimal(roz.get("panele_mikro")) or Decimal(0)
+	roz_pv_lacznie = roz_pv_szt + roz_mikro_szt
+	roz_ppoz_stan = (
+		ppoz_wymagane(
+			deal.get("custom_pv_power_kwp"),
+			roz.get("ist_pv_moc_kwp"),
+			"Tak",
+			roz.get("ppoz"),
+		)
+		if roz_pv_lacznie > 0
+		else None
+	)
+
+	kontekst: dict[str, Any] = {
 		# Strony i nagłówek
 		"umowa_nr": _tekst(deal.get("name")),
 		"data_zawarcia": _data_pl(dzis),
@@ -356,7 +394,27 @@ def zbuduj_kontekst(
 		"rodo_data_imie_nazwisko": ", ".join(
 			c for c in (_data_pl(dzis), klient_imie_nazwisko.upper()) if c
 		),
+		# Dodatki do wzorów `*_K*`/`*_EV*`/ME (b69, #236).
+		"klima_rodzaj": _tekst(klima.get("rodzaj")),
+		"klima_model": _tekst(klima.get("model")),
+		"klima_moc_kw": _liczba(klima.get("moc_kw")),
+		"ev_nazwa": _tekst(ev.get("nazwa")),
+		"ev_moc_kw": _liczba(ev.get("moc_kw")),
+		"dod_panele_szt": _liczba_calkowita(dodatki_.get("panele")),
+		"dod_panele_mikro_szt": _liczba_calkowita(dodatki_.get("panele_mikro")),
+		# Rozbudowa PV/ME (wzór `ROZ`, b69, #236).
+		"roz_panele_szt": _liczba_calkowita(roz_pv_lacznie),
+		"roz_mikro_tak": roz_mikro_szt > 0,
+		"roz_mikro_nie": roz_pv_lacznie > 0 and roz_mikro_szt <= 0,
+		"roz_ist_pv_moc_kwp": _liczba(roz.get("ist_pv_moc_kwp")),
+		"roz_bateria_szt": _liczba_calkowita(roz.get("bateria")),
+		"roz_ist_me_kwh": _liczba(roz.get("ist_me_kwh")),
 	}
+	if rozbudowa is not None:
+		# Rozbudowa: PPOŻ liczony z danych rozbudowy, nie z formularza PV.
+		kontekst["ppoz_tak"] = roz_ppoz_stan is True
+		kontekst["ppoz_nie"] = roz_ppoz_stan is False
+	return kontekst
 
 
 def _pole(wiersz: dict[str, Any] | None, nazwa_pola: str) -> Any:

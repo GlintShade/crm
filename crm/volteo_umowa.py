@@ -14,7 +14,13 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
 from crm.integrations.autenti.logika import SEND_BLOCKED_STATUSES
-from crm.volteo_kalkulator_oze import RODZAJE_NOWE
+from crm.volteo_kalkulator_oze import (
+	KLIMATYZACJA,
+	KOCIOL,
+	POMPA_CIEPLA,
+	RODZAJE_NOWE,
+	ROZBUDOWA,
+)
 from crm.volteo_naming import code_for
 
 KONSTRUKCJA_MONTAZ: dict[str, tuple[str, str | None]] = {
@@ -85,6 +91,7 @@ _ZERO_OZNACZA_PUSTE: frozenset[str] = frozenset(
 		"istniejaca_pv_moc_inwertera_kw",
 		"istniejaca_pv_moc_kwp",
 		"powierzchnia_m2",
+		"istniejacy_me_pojemnosc_kwh",
 	}
 )
 
@@ -163,13 +170,45 @@ def kwota_kredytu(brutto: Any, wklad_wlasny: Any, finansowanie: Any) -> Decimal:
 	return roznica.quantize(_KWOTA_KWANT, rounding=ROUND_HALF_UP)
 
 
-def brakujace_pola(dane: dict[str, Any]) -> list[str]:
+_WYMAGANE_ROZBUDOWA: tuple[str, ...] = (
+	"adres_zam_jak_montaz",
+	"typ_budynku",
+	"powierzchnia_prog",
+	"finansowanie",
+	"osd",
+)
+"""Pola wymagane dla Rozbudowy PV/ME (lista minimalna do czasu pomiaru U2k)."""
+
+_WYMAGANE_ROZBUDOWA_BATERIA: tuple[str, ...] = ("istniejacy_me_pojemnosc_kwh",)
+"""Wymagane dla Rozbudowy tylko wtedy, gdy rozbudowa obejmuje baterię (`roz_bateria_szt` > 0)."""
+
+
+def wymagane_pola(rodzaj_umowy: str | None, dane: dict[str, Any] | None = None) -> tuple[str, ...]:
+	"""Pola wymagane bezwarunkowo (bez gałęzi zależnych od odpowiedzi) dla rodzaju umowy.
+
+	PV/PVME/ME i nieznany rodzaj: `_ZAWSZE_WYMAGANE`. Rozbudowa PV/ME: lista
+	minimalna `_WYMAGANE_ROZBUDOWA`, plus `istniejacy_me_pojemnosc_kwh`, gdy
+	`dane["roz_bateria_szt"]` > 0 (pojemność istniejącego magazynu ma sens tylko
+	przy rozbudowie o baterię). Nie mutuje `dane`.
+	"""
+	if rodzaj_umowy != ROZBUDOWA:
+		return _ZAWSZE_WYMAGANE
+	wynik = _WYMAGANE_ROZBUDOWA
+	if dane is not None and _decimal_lub_zero(dane.get("roz_bateria_szt")) > _ZERO:
+		wynik = wynik + _WYMAGANE_ROZBUDOWA_BATERIA
+	return wynik
+
+
+def brakujace_pola(dane: dict[str, Any], rodzaj_umowy: str | None = None) -> list[str]:
 	"""Zwraca listę nazw pól wymaganych a pustych, w stałej (deklaracyjnej) kolejności.
 
 	Nie mutuje `dane`. Kolejność jest istotna — testy i komunikat błędu dla
 	użytkownika zależą od determinizmu, dlatego zwracana jest lista, nie zbiór.
+	`rodzaj_umowy` jest opcjonalny: bez niego (stare wywołania) zachowanie jest
+	takie jak dla PV/PVME/ME; dla Rozbudowy bierze `wymagane_pola()`.
 	"""
-	wymagane = list(_ZAWSZE_WYMAGANE)
+	podstawa = wymagane_pola(rodzaj_umowy, dane)
+	wymagane = list(podstawa)
 
 	if dane.get("adres_zam_jak_montaz") == "Nie":
 		wymagane.extend(_WYMAGANE_INNY_ADRES)
@@ -180,7 +219,7 @@ def brakujace_pola(dane: dict[str, Any]) -> list[str]:
 	if dane.get("finansowanie") == "Kredyt + gotówka":
 		wymagane.extend(_WYMAGANE_KREDYT_GOTOWKA)
 
-	if dane.get("istniejaca_pv") == "Tak":
+	if "istniejaca_pv" in podstawa and dane.get("istniejaca_pv") == "Tak":
 		wymagane.extend(_WYMAGANE_ISTNIEJACA_PV)
 
 	return [pole for pole in wymagane if _jest_puste(dane.get(pole), pole)]
@@ -332,36 +371,98 @@ def czy_propagowac_zgody(autenti_status: str | None) -> bool:
 # razu; blokowany jest wyłącznie krok generowania PDF-u.
 
 
+RODZAJE_BEZ_WZORU: frozenset[str] = frozenset({KLIMATYZACJA, POMPA_CIEPLA, KOCIOL})
+"""Rodzaje z `RODZAJE_NOWE`, dla których nadal nie ma wzoru PDF umowy (b69, #236):
+Rozbudowa PV/ME ma już wzór (`ROZ`), pozostałe trzy nie. `RODZAJE_NOWE` zostaje
+whitelistą kalkulatora i nie jest tu zmieniane."""
+
+CECHA_KLIMA = "klima"
+CECHA_EV = "ev"
+CECHA_DOD_PANELE = "dod_panele"
+CECHA_ROZBUDOWA = "rozbudowa"
+
+
 def czy_rodzaj_bez_wzoru_umowy(rodzaj_umowy: str | None) -> bool:
-	"""Czy rodzaj umowy szansy jest jednym z czterech nowych rodzajów (b68, chunk
-	B3: Rozbudowa PV/ME, Klimatyzacja, Pompa ciepła, Kocioł) bez wbudowanego wzoru
-	PDF-u umowy, patrz `RODZAJE_NOWE` wyżej. `None`/pusty/nierozpoznany rodzaj daje
-	`False` - to inny, wcześniejszy błąd (rodzaj nieustawiony albo literalnie
-	nierozpoznany), zgłaszany przez `crm.api.umowa._blad_rodzaju_umowy_bez_szablonu`,
-	nie przez tę funkcję."""
-	return rodzaj_umowy in RODZAJE_NOWE
+	"""Czy rodzaj umowy szansy nie ma jeszcze wbudowanego wzoru PDF-u umowy
+	(Klimatyzacja, Pompa ciepła, Kocioł, patrz `RODZAJE_BEZ_WZORU`). Rozbudowa
+	PV/ME ma wzór od b69. `None`/pusty/nierozpoznany rodzaj daje `False` - to
+	inny, wcześniejszy błąd (rodzaj nieustawiony albo nierozpoznany), zgłaszany
+	przez `crm.api.umowa._blad_rodzaju_umowy_bez_szablonu`, nie przez tę funkcję."""
+	return rodzaj_umowy in RODZAJE_BEZ_WZORU
 
 
-def kod_szablonu(rodzaj_umowy: str | None, podwojna: bool) -> str:
+def _niepusty_tekst(wartosc: Any) -> bool:
+	return isinstance(wartosc, str) and bool(wartosc.strip())
+
+
+def cechy_umowy(deal: dict[str, Any]) -> frozenset[str]:
+	"""Zbiór cech konfiguracji szansy, które decydują o wyborze wzoru umowy.
+
+	`klima` (niepuste `custom_dod_klima`), `ev` (niepuste `custom_ev_ladowarka`),
+	`dod_panele` (`custom_dod_panele` lub `custom_dod_panele_mikro` > 0; wartości
+	mogą być stringami). Rozbudowa PV/ME zwraca zawsze `{"rozbudowa"}` (nie ma
+	dodatków), rodzaje bez wzoru pusty zbiór. Nie mutuje `deal`.
+	"""
+	rodzaj = deal.get("custom_rodzaj_umowy")
+	if rodzaj == ROZBUDOWA:
+		return frozenset({CECHA_ROZBUDOWA})
+	if rodzaj in RODZAJE_BEZ_WZORU:
+		return frozenset()
+	cechy: set[str] = set()
+	if _niepusty_tekst(deal.get("custom_dod_klima")):
+		cechy.add(CECHA_KLIMA)
+	if _niepusty_tekst(deal.get("custom_ev_ladowarka")):
+		cechy.add(CECHA_EV)
+	if (
+		_decimal_lub_zero(deal.get("custom_dod_panele")) > _ZERO
+		or _decimal_lub_zero(deal.get("custom_dod_panele_mikro")) > _ZERO
+	):
+		cechy.add(CECHA_DOD_PANELE)
+	return frozenset(cechy)
+
+
+def kod_szablonu(
+	rodzaj_umowy: str | None, podwojna: bool, cechy: frozenset[str] = frozenset()
+) -> str:
 	"""Zwraca kod wbudowanego szablonu PDF-u umowy (klucz w
-	`crm.volteo_umowa_render.SZABLONY`) dla danego rodzaju umowy i obecności
-	drugiego Zamawiającego (ops#167).
+	`crm.volteo_umowa_render.SZABLONY`) dla rodzaju umowy, obecności drugiego
+	Zamawiającego (ops#167) i cech konfiguracji (`cechy_umowy`).
 
-	Kod bazowy (`PV`/`PVME`/`ME`/`CP`/`XX`) jest DOKŁADNIE tym samym, co
-	zwraca `crm.volteo_naming.code_for`. Ta funkcja świadomie go reużywa,
-	zamiast duplikować mapowanie `custom_rodzaj_umowy` na kod, żeby nazewnictwo
-	umowy (`PRO/<KOD>/<RR>/<NNNN>`) i wybór szablonu PDF-u nigdy nie mogły się
-	rozjechać. `podwojna=True` dokleja `"_2"` (np. `"PV"` -> `"PV_2"`), dokładnie
-	te trzy klucze, pod którymi warianty dwuosobowe są zarejestrowane w
-	`SZABLONY` (`PV_2`/`PVME_2`/`ME_2`). `podwojna=False` zwraca kod bazowy bez
-	żadnej zmiany: ŚCIEŻKA JEDNOOSOBOWA JEST NIEZMIENIONA.
-
-	`CP` i `XX` nie mają wpisu w `SZABLONY` (ani w wariancie pojedynczym, ani
-	podwójnym). Ta funkcja tego nie sprawdza, to rola wołającego
-	(`crm/api/umowa.py`), tak jak już dziś sprawdza to dla kodu bazowego.
+	Kod bazowy (`PV`/`PVME`/`ME`/`ROZ`/`CP`/`XX`) jest DOKŁADNIE tym samym, co
+	zwraca `crm.volteo_naming.code_for`; funkcja go reużywa, zamiast duplikować
+	mapowanie. Potem kolejno: `_K` gdy cecha `klima`, `_EV` gdy `ev`, `_2` gdy
+	`podwojna` (np. `ME_K_EV`, `ME_K_2`). Cecha `dod_panele` NIE zmienia klucza
+	(o tym, czy wzór ją drukuje, rozstrzyga `Szablon.obsluguje`). Rozbudowa nie
+	dostaje sufiksów cech; z `podwojna=True` daje `ROZ_2`, klucz celowo
+	nieistniejący w rejestrze (wołający odmawia czytelnie, nie gubi drugiego
+	Zamawiającego). Funkcja tylko buduje klucz, nie sprawdza jego istnienia
+	(to rola wołającego, `crm/api/umowa.py`). Wywołania dwuargumentowe działają
+	bez zmian.
 	"""
 	kod = code_for(rodzaj_umowy)
+	if kod != "ROZ":
+		if CECHA_KLIMA in cechy:
+			kod += "_K"
+		if CECHA_EV in cechy:
+			kod += "_EV"
 	return f"{kod}_2" if podwojna else kod
+
+
+def opis_konfiguracji(rodzaj_umowy: str | None, cechy: frozenset[str], podwojna: bool) -> str:
+	"""Czytelny opis konfiguracji wzoru do komunikatów i tytułu Autenti, np.
+	"Magazyn energii + klimatyzacja + ładowarka EV + dwóch Zamawiających".
+	Kolejność członów: rodzaj, klimatyzacja, ładowarka EV, dodatkowe moduły PV,
+	dwóch Zamawiających."""
+	czlony = [str(rodzaj_umowy).strip() if rodzaj_umowy else "nierozpoznany rodzaj"]
+	if CECHA_KLIMA in cechy:
+		czlony.append("klimatyzacja")
+	if CECHA_EV in cechy:
+		czlony.append("ładowarka EV")
+	if CECHA_DOD_PANELE in cechy:
+		czlony.append("dodatkowe moduły PV")
+	if podwojna:
+		czlony.append("dwóch Zamawiających")
+	return " + ".join(czlony)
 
 
 def czy_umowa_podwojna(umowa: dict[str, Any]) -> bool:

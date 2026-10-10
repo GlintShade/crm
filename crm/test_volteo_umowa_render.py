@@ -48,6 +48,7 @@ from crm.volteo_umowa_render import (
 	_narysuj_warstwe_strony,
 	_przytnij,
 	_zarejestruj_font,
+	brakujace_cechy,
 	sciezka_wbudowanego_szablonu,
 	zloz_umowe,
 )
@@ -536,6 +537,14 @@ class TestZlozUmowePelnyPipeline(unittest.TestCase):
 		for kod, szablon in SZABLONY.items():
 			with self.subTest(kod=kod):
 				szablon_bajty = sciezka_wbudowanego_szablonu(kod).read_bytes()
+				if not szablon.gotowy:
+					# Wzór z niezmierzoną mapą: rdzeń odmawia PRZED jakimkolwiek
+					# renderem (fail-closed), zamiast wypuścić pusty dokument.
+					with self.assertRaises(ValueError) as blad:
+						zloz_umowe(kontekst, szablon_bajty, kod)
+					self.assertIn("nie została jeszcze zmierzona", str(blad.exception))
+					self.assertIn(kod, str(blad.exception))
+					continue
 				wynik_bajty = zloz_umowe(kontekst, szablon_bajty, kod)
 				strony = PdfReader(io.BytesIO(wynik_bajty)).pages
 				self.assertEqual(len(strony), szablon.liczba_stron)
@@ -607,6 +616,110 @@ class TestZlozUmowePelnyPipeline(unittest.TestCase):
 					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[18])
 				else:
 					self.fail(f"Nieoczekiwany kod w rejestrze SZABLONY: {kod!r}")
+
+
+_FONT_REFERENCYJNY = Path("/System/Library/Fonts/Supplemental/Arial.ttf")
+
+_REGRESJA_PODWOJNE: dict[str, tuple[str, str]] = {
+	# kod: (SHA-256[:16] całych bajtów, SHA-256[:16] sklejonych strumieni treści stron),
+	# zmierzone na czystym `volteo/b69-prep` (5a9b84a80) PRZED zmianami chunku U3,
+	# z `_pelny_kontekst_podwojny()` i fontem Arial.ttf z macOS. Wynik reportlaba
+	# jest deterministyczny (dwa przebiegi dały identyczne sumy).
+	"PV_2": ("ec3f7c8156ab5ea7", "12b58aade6b24527"),
+	"PVME_2": ("f29b8186d0ab735c", "98fe17d60576aad1"),
+	"ME_2": ("1a3fd18042a6f344", "6db1be24e72de537"),
+}
+
+
+class TestRegresjaBajtowaPodwojnych(unittest.TestCase):
+	"""Wzory PODWÓJNE nie mogą się zmienić po dodaniu dodatków do kontekstu i
+	rozszerzeniu rejestru: porównujemy zarówno bajty całego PDF-u, jak i
+	sklejone strumienie treści stron (pypdf `page.get_contents().get_data()`)
+	z wartościami zmierzonymi przed zmianą. Test działa tylko z fontem
+	referencyjnym (Arial.ttf z macOS), bo inny font zmienia bajty."""
+
+	def setUp(self: "TestRegresjaBajtowaPodwojnych") -> None:
+		if not _FONT_REFERENCYJNY.is_file():
+			self.skipTest("Brak fontu referencyjnego Arial.ttf, sumy bajtowe nieporównywalne")
+		patch = mock.patch.object(renderer, "_SCIEZKA_LIBERATION", _FONT_REFERENCYJNY)
+		patch.start()
+		self.addCleanup(patch.stop)
+
+	def test_bajty_i_strumienie_tresci_bez_zmian(self: "TestRegresjaBajtowaPodwojnych") -> None:
+		kontekst = _pelny_kontekst_podwojny()
+		for kod, (oczekiwane_bajty, oczekiwane_tresc) in _REGRESJA_PODWOJNE.items():
+			with self.subTest(kod=kod):
+				wynik = zloz_umowe(kontekst, sciezka_wbudowanego_szablonu(kod).read_bytes(), kod)
+				self.assertEqual(hashlib.sha256(wynik).hexdigest()[:16], oczekiwane_bajty)
+				tresc = b"".join(p.get_contents().get_data() for p in PdfReader(io.BytesIO(wynik)).pages)
+				self.assertEqual(hashlib.sha256(tresc).hexdigest()[:16], oczekiwane_tresc)
+
+
+class TestRejestrWzorow(unittest.TestCase):
+	OCZEKIWANE_KLUCZE = frozenset(
+		{
+			"PV", "PV_K", "PVME", "PVME_K", "PVME_EV", "PVME_K_EV",
+			"ME", "ME_K", "ME_EV", "ME_K_EV", "ROZ", "PV_2", "PVME_2", "ME_2",
+		}
+	)  # fmt: skip
+
+	def test_czternascie_kluczy(self: "TestRejestrWzorow") -> None:
+		self.assertEqual(frozenset(SZABLONY), self.OCZEKIWANE_KLUCZE)
+
+	def test_obsluguje_wg_nazwy_klucza(self: "TestRejestrWzorow") -> None:
+		for kod, szablon in SZABLONY.items():
+			with self.subTest(kod=kod):
+				if kod == "ROZ":
+					self.assertEqual(szablon.obsluguje, frozenset({"rozbudowa"}))
+					continue
+				czesci = kod.split("_")
+				oczekiwane = set()
+				if "K" in czesci:
+					oczekiwane.add("klima")
+				if "EV" in czesci:
+					oczekiwane.add("ev")
+				if czesci[0] == "ME" and "2" not in czesci:
+					oczekiwane.add("dod_panele")
+				self.assertEqual(szablon.obsluguje, frozenset(oczekiwane))
+
+	def test_podwojne_nie_obsluguja_zadnych_cech(self: "TestRejestrWzorow") -> None:
+		for kod in ("PV_2", "PVME_2", "ME_2"):
+			self.assertEqual(SZABLONY[kod].obsluguje, frozenset())
+
+	def test_pvme_liczba_stron_z_modulu_mapy(self: "TestRejestrWzorow") -> None:
+		from crm.volteo_umowa_mapa import LICZBA_STRON_PVME
+
+		self.assertEqual(SZABLONY["PVME"].liczba_stron, LICZBA_STRON_PVME)
+
+	def test_liczba_stron_zgodna_z_plikiem(self: "TestRejestrWzorow") -> None:
+		for kod, szablon in SZABLONY.items():
+			with self.subTest(kod=kod):
+				czytnik = PdfReader(io.BytesIO(sciezka_wbudowanego_szablonu(kod).read_bytes()))
+				self.assertEqual(len(czytnik.pages), szablon.liczba_stron)
+
+	def test_brakujace_cechy(self: "TestRejestrWzorow") -> None:
+		self.assertEqual(brakujace_cechy("ME_K", frozenset({"klima", "ev"})), frozenset({"ev"}))
+		self.assertEqual(brakujace_cechy("ME_K_EV", frozenset({"klima", "ev", "dod_panele"})), frozenset())
+		self.assertEqual(brakujace_cechy("PV", frozenset({"klima"})), frozenset({"klima"}))
+		self.assertEqual(brakujace_cechy("ME_2", frozenset({"dod_panele"})), frozenset({"dod_panele"}))
+		# Kod nieznany: wzór niczego nie obsługuje.
+		self.assertEqual(brakujace_cechy("ROZ_2", frozenset({"rozbudowa"})), frozenset({"rozbudowa"}))
+		self.assertEqual(brakujace_cechy("ROZ_2", frozenset()), frozenset())
+
+	def test_gotowy_zalezy_od_niepustej_mapy(self: "TestRejestrWzorow") -> None:
+		for kod, szablon in SZABLONY.items():
+			self.assertEqual(szablon.gotowy, len(szablon.mapa) > 0, kod)
+
+
+class TestFailClosedNiezmierzonej(unittest.TestCase):
+	def test_odmowa_przed_sprawdzeniem_sumy_i_fontu(self: "TestFailClosedNiezmierzonej") -> None:
+		for kod, szablon in SZABLONY.items():
+			if szablon.gotowy:
+				continue
+			with self.subTest(kod=kod):
+				with self.assertRaises(ValueError) as blad:
+					zloz_umowe({}, b"cokolwiek", kod)
+				self.assertIn("nie została jeszcze zmierzona", str(blad.exception))
 
 
 class TestZlozUmowePodwojnaPelnyPipeline(unittest.TestCase):

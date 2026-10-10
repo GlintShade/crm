@@ -27,6 +27,7 @@ import hashlib
 import unittest
 from pathlib import Path
 
+from crm.test_volteo_umowa_mapa import MAPY_W_POMIARZE
 from crm.volteo_umowa_mapa_me2 import LICZBA_STRON_ME2, SHA256_SZABLONU_ME2
 from crm.volteo_umowa_mapa_pv2 import LICZBA_STRON_PV2, SHA256_SZABLONU_PV2
 from crm.volteo_umowa_mapa_pvme2 import LICZBA_STRON_PVME2, SHA256_SZABLONU_PVME2
@@ -117,9 +118,16 @@ class TestWariantyPodwojneJeszczeNieZarejestrowane(unittest.TestCase):
 	danych, czyli po cichu wyprodukować pusty dokument prawny."""
 
 	def test_zadna_zarejestrowana_mapa_nie_jest_pusta(self) -> None:
+		# b69 (#236): rejestr zawiera osiem wzorów z jeszcze niezmierzoną (pustą)
+		# mapą, ale `zloz_umowe` odmawia dla nich fail-closed (`Szablon.gotowy`),
+		# więc pusty dokument nie powstanie. Pusta mapa jest dozwolona WYŁĄCZNIE
+		# dla kluczy z `MAPY_W_POMIARZE`; reszta musi mieć niepustą mapę.
 		for kod, szablon in SZABLONY.items():
 			with self.subTest(kod=kod):
-				self.assertGreater(len(szablon.mapa), 0)
+				if kod in MAPY_W_POMIARZE:
+					self.assertFalse(szablon.gotowy)
+				else:
+					self.assertGreater(len(szablon.mapa), 0)
 
 	def test_klucze_wariantow_podwojnych_nieobecne_w_szablony(self) -> None:
 		for domniemany_klucz in ("PV2", "ME2", "PVME2"):
