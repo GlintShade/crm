@@ -28,9 +28,9 @@ describe('sekcjeFormularza', () => {
 
   it('Rozbudowa ma skrocony formularz bez warunkow instalacyjnych PV', () => {
     const s = sekcjeFormularza('Rozbudowa PV/ME')
-    expect(klucze(s)).toEqual(['adres', 'budynek', 'finansowanie', 'osd', 'zakres_rozbudowy', 'zgody'])
+    expect(klucze(s)).toEqual(['adres', 'budynek', 'finansowanie', 'zakres_rozbudowy', 'zgody'])
     const p = pola(s)
-    expect(p).toContain('osd')
+    expect(p).not.toContain('osd')
     expect(p).not.toContain('internet')
     expect(p).not.toContain('przekop_gruntowy')
     expect(p).not.toContain('liczba_faz')

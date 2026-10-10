@@ -632,7 +632,7 @@ _NAZWY_WZOROW: dict[str, str] = {
 	"ME_K": "Umowa ME + K (06.10.2026)",
 	"ME_EV": "Umowa ME + Ł (06.10.2026)",
 	"ME_K_EV": "Umowa ME + K + Ł (06.10.2026)",
-	"ROZ": "Umowa Rozbudowa (06.10.2026)",
+	"ROZ": "Umowa Rozbudowa PV/ME (06.10.2026)",
 	"PV_2": "Umowa PV, dwóch Zamawiających",
 	"PVME_2": "Umowa PV + ME, dwóch Zamawiających",
 	"ME_2": "Umowa ME, dwóch Zamawiających",

@@ -819,7 +819,7 @@ class TestWymaganePola(unittest.TestCase):
 	def test_b_rozbudowa_podzbior(self: "TestWymaganePola") -> None:
 		self.assertEqual(
 			wymagane_pola("Rozbudowa PV/ME"),
-			("adres_zam_jak_montaz", "typ_budynku", "powierzchnia_prog", "finansowanie", "osd"),
+			("adres_zam_jak_montaz", "typ_budynku", "powierzchnia_prog", "finansowanie"),
 		)
 
 	def test_c_rozbudowa_bateria_dokleja_pojemnosc(self: "TestWymaganePola") -> None:

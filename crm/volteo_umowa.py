@@ -175,9 +175,8 @@ _WYMAGANE_ROZBUDOWA: tuple[str, ...] = (
 	"typ_budynku",
 	"powierzchnia_prog",
 	"finansowanie",
-	"osd",
 )
-"""Pola wymagane dla Rozbudowy PV/ME (lista minimalna do czasu pomiaru U2k)."""
+"""Pola wymagane dla Rozbudowy PV/ME (lista zgodna z rubrykami wzoru ROZ, pomiar U2k 2026-10-10)."""
 
 _WYMAGANE_ROZBUDOWA_BATERIA: tuple[str, ...] = ("istniejacy_me_pojemnosc_kwh",)
 """Wymagane dla Rozbudowy tylko wtedy, gdy rozbudowa obejmuje baterię (`roz_bateria_szt` > 0)."""
@@ -187,7 +186,7 @@ def wymagane_pola(rodzaj_umowy: str | None, dane: dict[str, Any] | None = None) 
 	"""Pola wymagane bezwarunkowo (bez gałęzi zależnych od odpowiedzi) dla rodzaju umowy.
 
 	PV/PVME/ME i nieznany rodzaj: `_ZAWSZE_WYMAGANE`. Rozbudowa PV/ME: lista
-	minimalna `_WYMAGANE_ROZBUDOWA`, plus `istniejacy_me_pojemnosc_kwh`, gdy
+	zgodna z rubrykami wzoru ROZ `_WYMAGANE_ROZBUDOWA`, plus `istniejacy_me_pojemnosc_kwh`, gdy
 	`dane["roz_bateria_szt"]` > 0 (pojemność istniejącego magazynu ma sens tylko
 	przy rozbudowie o baterię). Nie mutuje `dane`.
 	"""

@@ -248,8 +248,6 @@ const POLE_POJEMNOSC_ME = {
   required: true,
 }
 
-const SEKCJA_OSD = { key: 'osd', label: 'OSD', fields: [POLE_OSD] }
-
 const SEKCJA_ZAKRES_ROZBUDOWY = {
   key: 'zakres_rozbudowy',
   label: 'Zakres rozbudowy',
@@ -265,16 +263,13 @@ export const SEKCJE_DOMYSLNE = [
   SEKCJA_ZGODY,
 ]
 
-// Nadpisania per rodzaj. Do uzgodnienia z mapa ROZ (U2k): jesli wzor
-// Rozbudowy drukuje warunki instalacyjne PV (internet, odgromowa, przekop,
-// kabel, moc przylaczeniowa, fazy), wystarczy tu dopisac SEKCJA_WARUNKI
-// (i usunac SEKCJA_OSD, bo OSD jest wtedy w warunkach).
+// Nadpisania per rodzaj. Wzor Rozbudowy nie drukuje warunkow instalacyjnych
+// ani OSD (pomiar U2k, 2026-10-10), wiec nie ma tu sekcji warunkow ani OSD.
 export const SEKCJE_WG_RODZAJU = {
   'Rozbudowa PV/ME': [
     SEKCJA_ADRES,
     SEKCJA_BUDYNEK,
     SEKCJA_FINANSOWANIE,
-    SEKCJA_OSD,
     SEKCJA_ZAKRES_ROZBUDOWY,
     SEKCJA_ZGODY,
   ],
