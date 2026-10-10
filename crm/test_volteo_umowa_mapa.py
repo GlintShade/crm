@@ -348,11 +348,79 @@ dachu/gruntu, odgromowej, przekopu, kabla, bateria_* (ma tylko liczbe modulow i 
 istniejacego), istniejacej PV poza moca (`roz_ist_pv_moc_kwp`), klimatyzacji, EV, dod_panele
 ani drugiego Zamawiajacego (wzor jednoosobowy)."""
 
+WYJATKI_PC: frozenset[str] = frozenset(
+	{
+		"bateria_gwarancja_lat",
+		"bateria_moc_kw",
+		"bateria_pojemnosc_jedn_kwh",
+		"bateria_pojemnosc_lacznie_kwh",
+		"bateria_producent_model",
+		"bateria_szt",
+		"dod_panele_mikro_szt",
+		"dod_panele_szt",
+		"ev_moc_kw",
+		"ev_nazwa",
+		"fazy_1",
+		"fazy_3",
+		"internet_brak",
+		"internet_kablowy",
+		"internet_wifi",
+		"inwerter_gwarancja_lat",
+		"inwerter_moc_kw",
+		"inwerter_producent_model",
+		"inwerter_szt",
+		"ist_pv_moc_inwertera_kw",
+		"ist_pv_moc_kwp",
+		"ist_pv_producent_inwertera",
+		"kabel_mb",
+		"kabel_nie",
+		"kabel_tak",
+		"klient2_adres",
+		"klient2_email",
+		"klient2_imie_nazwisko",
+		"klient2_pesel",
+		"klient2_telefon",
+		"klima_moc_kw",
+		"klima_model",
+		"klima_rodzaj",
+		"moc_przylaczeniowa_kw",
+		"moc_pv_kwp",
+		"montaz_dach",
+		"montaz_grunt",
+		"odgromowa_nie",
+		"odgromowa_tak",
+		"panel_gwarancja_lat",
+		"panel_moc_wp",
+		"panel_producent_model",
+		"panel_szt",
+		"podpis_zamawiajacy_2",
+		"pokrycie_dachowe",
+		"ppoz_nie",
+		"ppoz_tak",
+		"przekop_mb",
+		"przekop_nie",
+		"przekop_tak",
+		"roz_bateria_szt",
+		"roz_ist_me_kwh",
+		"roz_ist_pv_moc_kwp",
+		"roz_mikro_nie",
+		"roz_mikro_tak",
+		"roz_panele_szt",
+	}
+)
+"""PC (`umowa_pompa_ciepla.pdf`, b69 U2m, issue ops#257): Zal. 1 to arkusz pompy ciepla
+(`pc_*`, `cwu_*`, `grzejnik_*`), bez arkusza PV/ME i bez Zal. 1a/1b rozbudowy: nie ma rubryk
+paneli, inwertera, baterii, internetu, faz, mocy przylaczeniowej, dachu/gruntu, odgromowej,
+przekopu, kabla, istniejacej PV, `roz_*`, `ppoz_*`, klimatyzacji, EV, dod_panele ani drugiego
+Zamawiajacego (wzor jednoosobowy). Wzor nie ma pelnomocnictwa. Po scaleniu z U9 do wyjatkow
+dojda jeszcze klucze kotla (`kociol_rodzaj`, `kociol_model_moc`), ktorych wzor PC nie drukuje."""
+
 WYJATKI_BRAK_POZYCJI_WG_SZABLONU: dict[str, frozenset[str]] = {
 	"PV_K": WYJATKI_PV_K,
 	"PVME": WYJATKI_PVME,
 	"PV": WYJATKI_PV,
 	"ME": WYJATKI_ME,
+	"PC": WYJATKI_PC,
 	"PVME_K_EV": WYJATKI_PVME_K_EV,
 	"ME_K": WYJATKI_ME_K,
 	"ME_K_EV": WYJATKI_ME_K_EV,
@@ -378,10 +446,11 @@ WYJATKI_BRAK_POZYCJI_WG_SZABLONU: dict[str, frozenset[str]] = {
 # (`crm/volteo_umowa_mapa*.py`, sekcja „strony bez pozycji”/bloki podpisów).
 # ---------------------------------------------------------------------------
 
-_PELNOMOCNICTWO_IDX: dict[str, int] = {
+_PELNOMOCNICTWO_IDX: dict[str, int | None] = {
 	"PVME": 17,
 	"PV": 13,
 	"ME": 14,
+	"PC": None,  # wzor PC (09.10.2026) nie ma pelnomocnictwa OSD
 	"PVME_K_EV": 24,
 	"ME_K": 18,
 	"ME_K_EV": 21,
@@ -414,6 +483,8 @@ _ZAKAZANE_STRONY_PROTOKOLOW: dict[str, frozenset[int]] = {
 	# ME (wzór 06.10.2026, 16 stron): formularz odstąpienia (idx9) + protokół
 	# odbioru magazynu na trzech stronach (idx10-12) + protokół pomiarów (idx13).
 	"ME": frozenset(range(9, 14)),
+	# PC: pouczenie (idx8), formularz odstapienia (idx9), protokol odbioru pompy ciepla (idx10-11).
+	"PC": frozenset(range(8, 12)),
 	# PVME_K_EV: pouczenie (idx12), formularz odstąpienia (idx13), protokoły odbioru i pomiarów
 	# PV, magazynu, klimatyzacji i ładowarki EV wraz z listami szkoleń (idx14-23).
 	"PVME_K_EV": frozenset(range(12, 24)),
@@ -449,6 +520,7 @@ _ZALACZNIK_2_3_IDX: dict[str, int] = {
 	# ME: kratki i podpis Zal. 2 oraz kratka Zal. 3 leżą na idx5, ale podpis
 	# Zal. 3 przechodzi na idx6 (zob. `_ZALACZNIK_3_PODPIS_NA_NASTEPNEJ_STRONIE`).
 	"ME": 5,
+	"PC": 5,
 	"PVME_K_EV": 9,
 	"ME_K": 7,
 	"ME_K_EV": 8,
@@ -476,6 +548,7 @@ _STRONY_ZAMAWIAJACY_OCZEKIWANE: dict[str, frozenset[int]] = {
 	"PVME": frozenset({3, 4, 5, 6, 17}),
 	"PV": frozenset({3, 4, 5, 13}),
 	"ME": frozenset({3, 4, 5, 6, 14}),
+	"PC": frozenset({3, 4, 5}),
 	"PVME_K_EV": frozenset({4, 5, 6, 7, 8, 9, 24}),
 	"ME_K": frozenset({3, 5, 6, 7, 18}),
 	"ME_K_EV": frozenset({4, 5, 6, 7, 8, 21}),
@@ -498,6 +571,7 @@ _STRONY_WYKONAWCA_OCZEKIWANE: dict[str, frozenset[int]] = {
 	"PVME": frozenset({3, 4, 5}),
 	"PV": frozenset({3, 4}),
 	"ME": frozenset({3, 4}),
+	"PC": frozenset({3, 4}),
 	"PVME_K_EV": frozenset({4, 5, 6, 7, 8}),
 	"ME_K": frozenset({3, 5, 6}),
 	"ME_K_EV": frozenset({4, 5, 6, 7}),
@@ -518,6 +592,7 @@ _KLIENT_IMIE_NAZWISKO_STRONY: dict[str, frozenset[int]] = {
 	"PVME": frozenset({0, 17}),
 	"PV": frozenset({0, 13}),
 	"ME": frozenset({0, 14}),
+	"PC": frozenset({0}),
 	"PVME_K_EV": frozenset({0, 24}),
 	"ME_K": frozenset({0, 18}),
 	"ME_K_EV": frozenset({0, 21}),
@@ -541,6 +616,7 @@ _RODO_STRONA_IDX: dict[str, int] = {
 	"PVME": 8,
 	"PV": 7,
 	"ME": 7,
+	"PC": 7,
 	"PVME_K_EV": 11,
 	"ME_K": 9,
 	"ME_K_EV": 10,
@@ -917,12 +993,16 @@ class TestPodpisy(unittest.TestCase):
 		# to jednostronne oświadczenie, więc ProEnergy się tam nie podpisuje.
 		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
+				if _PELNOMOCNICTWO_IDX[kod] is None:
+					continue  # wzor bez pelnomocnictwa (np. PC)
 				strony_wykonawcy = {pole.strona for pole in _pozycje(szablon, "podpis_wykonawca")}
 				self.assertNotIn(_PELNOMOCNICTWO_IDX[kod], strony_wykonawcy)
 
 	def test_d_zamawiajacy_wystepuje_na_stronie_pelnomocnictwa(self: "TestPodpisy") -> None:
 		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
+				if _PELNOMOCNICTWO_IDX[kod] is None:
+					continue  # wzor bez pelnomocnictwa (np. PC)
 				strony_zamawiajacego = {pole.strona for pole in _pozycje(szablon, "podpis_zamawiajacy")}
 				self.assertIn(_PELNOMOCNICTWO_IDX[kod], strony_zamawiajacego)
 
@@ -1006,6 +1086,8 @@ _LICZBA_POZYCJI_OCZEKIWANA: dict[str, int] = {
 	"ME_K_EV": 62,
 	# ROZ (b69, U2k, issue ops#249).
 	"ROZ": 45,
+	# PC (b69, U2m, issue ops#257).
+	"PC": 41,
 }
 """Dokładna liczba pozycji w każdej mapie podwójnej, potwierdzona przy
 pomiarze (issue #166) - regresja tego testu = ktoś przypadkiem dodał/usunął
