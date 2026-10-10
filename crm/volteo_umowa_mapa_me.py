@@ -61,18 +61,20 @@ wartości zmierzone tu niezależnie skryptem, różnica ma oczywistą przyczynę
 Strona komparycji (dane klienta) i §2/§3 NIE są współdzielone między
 szablonami (inne nagłówki, inna treść) — tam `x`/`y` różnią się od PVME
 zauważalnie (do ok. 4 pt na `x` w `umowa_nr`, kilkanaście pt na `y` wszędzie)
-i jest to oczekiwane, nie błąd."""
+i jest to oczekiwane, nie błąd.
+
+Stała sumy kontrolnej zaktualizowana 2026-10-10 do ostatecznego wzoru z 06.10.2026 (b69, chunk U1); WSPÓŁRZĘDNE PONIŻEJ SĄ ZE STAREGO WZORU i są nieważne do czasu ponownego pomiaru od zera (chunk U2); reeksport z Google Docs przesuwa nawet niezmienione strony, więc żadna z nich nie może być skopiowana do nowej mapy."""
 
 from crm.volteo_umowa_mapa import Pole
 
-SHA256_SZABLONU_ME: str = "75283b8b52b568e545ec73bdd3b64569bab034b296f0e10499d2fa6cc1b458cf"
+SHA256_SZABLONU_ME: str = "de2d526db3ea8a9f08daf1ecc94198d245c1c4530bb457a9ddbf2346b8ee3cf7"
 """SHA-256 pliku `crm/szablony/umowa_me.pdf` (A4, 596x842 pt, 14 stron, Producer
 "Skia/PDF m153 Google Docs Renderer"), zweryfikowane `shasum -a 256` na pliku
 dostarczonym do tego zadania (2026-08-12). `MAPA_ME` poniżej jest skalibrowana
 WYŁĄCZNIE dla dokładnie tego pliku — każda zmiana szablonu (nawet kosmetyczna,
 np. przesunięcie akapitu) unieważnia wszystkie współrzędne poniżej."""
 
-LICZBA_STRON_ME: int = 14
+LICZBA_STRON_ME: int = 16
 """Liczba stron `crm/szablony/umowa_me.pdf`, zweryfikowana `pdfinfo`."""
 
 # ---------------------------------------------------------------------------

@@ -48,11 +48,13 @@ BEZPIECZNIK ZMIANY SZABLONU: mapa poniżej obowiązuje WYŁĄCZNIE dla dokładni
 tej wersji oryginału. Generator PDF-u ma sprawdzić sumę SHA-256 pliku
 wejściowego względem ``SHA256_SZABLONU_PV`` przed użyciem tej mapy i
 przerwać z czytelnym komunikatem przy niezgodności.
+
+Stała sumy kontrolnej zaktualizowana 2026-10-10 do ostatecznego wzoru z 06.10.2026 (b69, chunk U1); WSPÓŁRZĘDNE PONIŻEJ SĄ ZE STAREGO WZORU i są nieważne do czasu ponownego pomiaru od zera (chunk U2); reeksport z Google Docs przesuwa nawet niezmienione strony, więc żadna z nich nie może być skopiowana do nowej mapy.
 """
 
 from crm.volteo_umowa_mapa import Pole
 
-SHA256_SZABLONU_PV: str = "cc2685726d7d7245940e6ae0caec9e3c2e5c7b26140ff1ca313cbb251e8494a3"
+SHA256_SZABLONU_PV: str = "1dd2cf9a810d71a6d190fb1afe0e4b37631bbc3cd7b72d9e6efa0bc8e2100f7b"
 """SHA-256 pliku `Umowa PV ProEnergy - 28.07.2026.pdf` (A4, 596x842 pt, 14 stron,
 bez pól formularza), policzone `shasum -a 256` na oryginale dostarczonym do tego
 zadania (2026-08-12) i zweryfikowane ponownie po skopiowaniu do
