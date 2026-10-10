@@ -37,8 +37,8 @@ from crm.volteo_umowa_render import SZABLONY
 # `_ZAKAZANE_STRONY_PROTOKOLOW`, `_ZALACZNIK_2_3_IDX`, `_STRONY_*_OCZEKIWANE`,
 # `_KLIENT_IMIE_NAZWISKO_STRONY`, `_RODO_STRONA_IDX`), inaczej test czerwienieje.
 #
-# `MAPY_STAREGO_WZORU`: PV/PVME/ME mają NOWE sumy SHA, ale mapy nadal ze starego
-# wzoru (U2a/U2c/U2g je przepiszą i usuną klucz z tej stałej). Są pomijane
+# `MAPY_STAREGO_WZORU`: PVME/ME mają NOWE sumy SHA, ale mapy nadal ze starego
+# wzoru (U2c/U2g je przepiszą i usuną klucz z tej stałej). Są pomijane
 # WYŁĄCZNIE w teście kontraktu cech (`TestKontraktCech`).
 # ---------------------------------------------------------------------------
 
@@ -46,7 +46,7 @@ MAPY_W_POMIARZE: frozenset[str] = frozenset(
 	{"PV_K", "PVME_K", "PVME_EV", "PVME_K_EV", "ME_K", "ME_EV", "ME_K_EV", "ROZ"}
 )
 
-MAPY_STAREGO_WZORU: frozenset[str] = frozenset({"PV", "PVME", "ME"})
+MAPY_STAREGO_WZORU: frozenset[str] = frozenset({"PVME", "ME"})
 
 _ZMIERZONE: dict[str, Any] = {
 	kod: szablon for kod, szablon in SZABLONY.items() if kod not in MAPY_W_POMIARZE
@@ -721,7 +721,12 @@ _KLUCZE_DODATKOWE_PODWOJNE: frozenset[str] = frozenset(
 mapy jednoosobowej (zob. brief issue #166) - każdy klucz mapy podwójnej, który
 nie jest w tym zbiorze, MUSI też istnieć w kluczach mapy jednoosobowej."""
 
-_LICZBA_POZYCJI_OCZEKIWANA: dict[str, int] = {"PV2": 81, "ME2": 68, "PVME2": 90}
+_LICZBA_POZYCJI_OCZEKIWANA: dict[str, int] = {
+	"PV2": 81,
+	"ME2": 68,
+	"PVME2": 90,
+	"PV": 66,
+}
 """Dokładna liczba pozycji w każdej mapie podwójnej, potwierdzona przy
 pomiarze (issue #166) - regresja tego testu = ktoś przypadkiem dodał/usunął
 pozycję przy przyszłej edycji mapy, bez zauważenia zmiany w liczbie."""
@@ -893,6 +898,13 @@ class TestMapyWPomiarze(unittest.TestCase):
 		for kod in MAPY_STAREGO_WZORU:
 			with self.subTest(kod=kod):
 				self.assertTrue(SZABLONY[kod].gotowy)
+
+
+class TestMapaPvZmierzona(unittest.TestCase):
+	"""Pin liczby pozycji mapy jednoosobowego wzoru PV (b69, U2a, pomiar od zera)."""
+
+	def test_liczba_pozycji_pv(self: "TestMapaPvZmierzona") -> None:
+		self.assertEqual(len(SZABLONY["PV"].mapa), _LICZBA_POZYCJI_OCZEKIWANA["PV"])
 
 
 class TestKontraktCech(unittest.TestCase):
