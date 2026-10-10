@@ -642,6 +642,14 @@ class TestZlozUmowePelnyPipeline(unittest.TestCase):
 						tekst_wg_strony[1].replace("\xa0", " "),
 					)
 					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[16])
+				elif kod == "PP":
+					# Kociol (12 str., bez pelnomocnictwa): komparycja i §2 (netto/brutto).
+					self.assertEqual(len(strony), 12)
+					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[0])
+					self.assertIn(
+						kontekst["wynagrodzenie_brutto"].replace("\xa0", " "),
+						tekst_wg_strony[1].replace("\xa0", " "),
+					)
 				elif kod == "PV_2":
 					# Warianty PODWÓJNE (ops#167): ten wspólny `kontekst` nie ma
 					# `kontakt2` (klient2_* puste), więc te asercje sprawdzają

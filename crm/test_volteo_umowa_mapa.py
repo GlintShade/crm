@@ -348,6 +348,31 @@ dachu/gruntu, odgromowej, przekopu, kabla, bateria_* (ma tylko liczbe modulow i 
 istniejacego), istniejacej PV poza moca (`roz_ist_pv_moc_kwp`), klimatyzacji, EV, dod_panele
 ani drugiego Zamawiajacego (wzor jednoosobowy)."""
 
+WYJATKI_PP: frozenset[str] = WYJATKI_ROZ | frozenset(
+	{
+		"roz_panele_szt",
+		"roz_mikro_tak",
+		"roz_mikro_nie",
+		"roz_ist_pv_moc_kwp",
+		"roz_bateria_szt",
+		"roz_ist_me_kwh",
+		"ppoz_tak",
+		"ppoz_nie",
+		"pc_producent",
+		"pc_typ",
+		"pc_moc_kw",
+		"grzejnik_600x600_szt",
+		"grzejnik_600x800_szt",
+		"grzejnik_600x1000_szt",
+		"grzejnik_600x1200_szt",
+		"grzejnik_600x1600_szt",
+	}
+)
+"""PP (`umowa_kociol.pdf`, b69 U2n): Zal. 1 to arkusz kotla (`kociol_*`, kratki `cwu_*`), bez
+pelnomocnictwa OSD. Wyjatki: wszystko spoza Zal. 1 kotla, czyli klucze arkusza PV/ME, dodatkow
+(klima, EV, panele), rozbudowy (`roz_*`, `ppoz_*`), pompy ciepla (`pc_*`, `grzejnik_*`) i drugiego
+Zamawiajacego (wzor jednoosobowy). Klucze `pc_*`/`grzejnik_*` pojawia sie w kontekscie wraz z U9."""
+
 WYJATKI_BRAK_POZYCJI_WG_SZABLONU: dict[str, frozenset[str]] = {
 	"PV_K": WYJATKI_PV_K,
 	"PVME": WYJATKI_PVME,
@@ -357,6 +382,7 @@ WYJATKI_BRAK_POZYCJI_WG_SZABLONU: dict[str, frozenset[str]] = {
 	"ME_K": WYJATKI_ME_K,
 	"ME_K_EV": WYJATKI_ME_K_EV,
 	"ROZ": WYJATKI_ROZ,
+	"PP": WYJATKI_PP,
 	"PVME_K": WYJATKI_PVME_K,
 	"PVME_EV": WYJATKI_PVME_EV,
 	"ME_EV": WYJATKI_ME_EV,
@@ -378,7 +404,7 @@ WYJATKI_BRAK_POZYCJI_WG_SZABLONU: dict[str, frozenset[str]] = {
 # (`crm/volteo_umowa_mapa*.py`, sekcja „strony bez pozycji”/bloki podpisów).
 # ---------------------------------------------------------------------------
 
-_PELNOMOCNICTWO_IDX: dict[str, int] = {
+_PELNOMOCNICTWO_IDX: dict[str, int | None] = {
 	"PVME": 17,
 	"PV": 13,
 	"ME": 14,
@@ -386,6 +412,8 @@ _PELNOMOCNICTWO_IDX: dict[str, int] = {
 	"ME_K": 18,
 	"ME_K_EV": 21,
 	"ROZ": 16,
+	# PP: wzor BEZ pelnomocnictwa OSD (None = brak strony pelnomocnictwa).
+	"PP": None,
 	"PV_K": 16,
 	"PVME_K": 21,
 	"PVME_EV": 21,
@@ -422,6 +450,8 @@ _ZAKAZANE_STRONY_PROTOKOLOW: dict[str, frozenset[int]] = {
 	"ME_K": frozenset(range(10, 18)),
 	"ME_K_EV": frozenset(range(12, 21)),
 	"ROZ": frozenset(range(8, 16)),
+	# PP: pouczenie (idx8), formularz odstapienia (idx9), protokol odbioru kotla (idx10-11).
+	"PP": frozenset(range(8, 12)),
 	# PV_K: pouczenie (idx9), formularz odstapienia (idx10), protokol odbioru PV,
 	# protokol pomiarow, protokol odbioru klimatyzacji (idx11-15).
 	"PV_K": frozenset(range(9, 16)),
@@ -453,6 +483,7 @@ _ZALACZNIK_2_3_IDX: dict[str, int] = {
 	"ME_K": 7,
 	"ME_K_EV": 8,
 	"ROZ": 5,
+	"PP": 5,
 	"PV_K": 6,
 	"PVME_K": 8,
 	"PVME_EV": 8,
@@ -480,6 +511,7 @@ _STRONY_ZAMAWIAJACY_OCZEKIWANE: dict[str, frozenset[int]] = {
 	"ME_K": frozenset({3, 5, 6, 7, 18}),
 	"ME_K_EV": frozenset({4, 5, 6, 7, 8, 21}),
 	"ROZ": frozenset({3, 4, 5, 16}),
+	"PP": frozenset({3, 4, 5, 7}),
 	"PV_K": frozenset({3, 4, 5, 6, 16}),
 	"PVME_K": frozenset({3, 5, 6, 7, 8, 21}),
 	"PVME_EV": frozenset({3, 5, 6, 7, 8, 21}),
@@ -502,6 +534,7 @@ _STRONY_WYKONAWCA_OCZEKIWANE: dict[str, frozenset[int]] = {
 	"ME_K": frozenset({3, 5, 6}),
 	"ME_K_EV": frozenset({4, 5, 6, 7}),
 	"ROZ": frozenset({3, 4}),
+	"PP": frozenset({3, 4}),
 	"PV_K": frozenset({3, 4, 5}),
 	"PVME_K": frozenset({3, 5, 6, 7}),
 	"PVME_EV": frozenset({3, 5, 6, 7}),
@@ -522,6 +555,7 @@ _KLIENT_IMIE_NAZWISKO_STRONY: dict[str, frozenset[int]] = {
 	"ME_K": frozenset({0, 18}),
 	"ME_K_EV": frozenset({0, 21}),
 	"ROZ": frozenset({0, 16}),
+	"PP": frozenset({0}),
 	"PV_K": frozenset({0, 16}),
 	"PVME_K": frozenset({0, 21}),
 	"PVME_EV": frozenset({0, 21}),
@@ -545,6 +579,7 @@ _RODO_STRONA_IDX: dict[str, int] = {
 	"ME_K": 9,
 	"ME_K_EV": 10,
 	"ROZ": 7,
+	"PP": 7,
 	"PV_K": 8,
 	"PVME_K": 10,
 	"PVME_EV": 10,
@@ -883,8 +918,8 @@ class TestPoleDataclass(unittest.TestCase):
 	def test_b_kazda_mapa_nie_jest_pusta(self: "TestPoleDataclass") -> None:
 		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
-				# ROZ (arkusz rozbudowy, bez arkusza PV/ME) jest najmniejsza mapa (45 pozycji), stad prog 40.
-				self.assertGreater(len(szablon.mapa), 40)
+				# ROZ (45) i PP (35, bez pelnomocnictwa) to najmniejsze mapy, stad prog 30.
+				self.assertGreater(len(szablon.mapa), 30)
 
 
 class TestPodpisy(unittest.TestCase):
@@ -924,6 +959,9 @@ class TestPodpisy(unittest.TestCase):
 		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				strony_zamawiajacego = {pole.strona for pole in _pozycje(szablon, "podpis_zamawiajacy")}
+				if _PELNOMOCNICTWO_IDX[kod] is None:
+					# Wzor bez pelnomocnictwa OSD (np. PP, kociol): nic do sprawdzenia.
+					continue
 				self.assertIn(_PELNOMOCNICTWO_IDX[kod], strony_zamawiajacego)
 
 	def test_e_podpisy_na_oczekiwanych_stronach_umowy_i_zalacznikow(self: "TestPodpisy") -> None:
@@ -1006,6 +1044,8 @@ _LICZBA_POZYCJI_OCZEKIWANA: dict[str, int] = {
 	"ME_K_EV": 62,
 	# ROZ (b69, U2k, issue ops#249).
 	"ROZ": 45,
+	# PP (b69, U2n, issue ops#258).
+	"PP": 35,
 }
 """Dokładna liczba pozycji w każdej mapie podwójnej, potwierdzona przy
 pomiarze (issue #166) - regresja tego testu = ktoś przypadkiem dodał/usunął
