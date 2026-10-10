@@ -46,7 +46,7 @@ MAPY_W_POMIARZE: frozenset[str] = frozenset(
 	{"PV_K", "PVME_K", "PVME_EV", "PVME_K_EV", "ME_K", "ME_EV", "ME_K_EV", "ROZ"}
 )
 
-MAPY_STAREGO_WZORU: frozenset[str] = frozenset({"PV", "PVME", "ME"})
+MAPY_STAREGO_WZORU: frozenset[str] = frozenset({"PV", "ME"})
 
 _ZMIERZONE: dict[str, Any] = {
 	kod: szablon for kod, szablon in SZABLONY.items() if kod not in MAPY_W_POMIARZE
@@ -216,8 +216,9 @@ strona (obok jego bliźniaczej pary dla klienta 2 w wariantach podwójnych) z
 linią podpisu WYŁĄCZNIE Zamawiającego (Mocodawcy), bez Wykonawcy."""
 
 _ZAKAZANE_STRONY_PROTOKOLOW: dict[str, frozenset[int]] = {
-	# PVME: formularz odstąpienia (idx9) + oba protokoły odbioru + listy
-	# szkoleniowe/pomiarowe (idx10-16) — wypełnia je instalator/klient po
+	# PVME (wzór 06.10, zweryfikowane z treści): pouczenie o odstąpieniu (idx9),
+	# formularz odstąpienia (idx10), oba protokoły odbioru + listy
+	# szkoleniowe/pomiarowe (idx11-16): wypełnia je instalator/klient po
 	# montażu, nigdy generator z góry.
 	"PVME": frozenset(range(9, 17)),
 	# PV i ME: formularz odstąpienia (idx9) + JEDEN protokół odbioru + listy
@@ -721,7 +722,13 @@ _KLUCZE_DODATKOWE_PODWOJNE: frozenset[str] = frozenset(
 mapy jednoosobowej (zob. brief issue #166) - każdy klucz mapy podwójnej, który
 nie jest w tym zbiorze, MUSI też istnieć w kluczach mapy jednoosobowej."""
 
-_LICZBA_POZYCJI_OCZEKIWANA: dict[str, int] = {"PV2": 81, "ME2": 68, "PVME2": 90}
+_LICZBA_POZYCJI_OCZEKIWANA: dict[str, int] = {
+	"PV2": 81,
+	"ME2": 68,
+	"PVME2": 90,
+	# PVME (jednoosobowy, pomiar od zera 2026-10-10, b69 U2c, ops#241).
+	"PVME": 74,
+}
 """Dokładna liczba pozycji w każdej mapie podwójnej, potwierdzona przy
 pomiarze (issue #166) - regresja tego testu = ktoś przypadkiem dodał/usunął
 pozycję przy przyszłej edycji mapy, bez zauważenia zmiany w liczbie."""
@@ -893,6 +900,11 @@ class TestMapyWPomiarze(unittest.TestCase):
 		for kod in MAPY_STAREGO_WZORU:
 			with self.subTest(kod=kod):
 				self.assertTrue(SZABLONY[kod].gotowy)
+
+
+class TestPinPozycjiPVME(unittest.TestCase):
+	def test_liczba_pozycji_mapy_pvme(self: "TestPinPozycjiPVME") -> None:
+		self.assertEqual(len(MAPA_PVME), _LICZBA_POZYCJI_OCZEKIWANA["PVME"])
 
 
 class TestKontraktCech(unittest.TestCase):
