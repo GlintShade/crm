@@ -59,6 +59,7 @@ from crm.integrations.autenti import logika
 from crm.integrations.autenti.client import AutentiClient
 from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad
 from crm.volteo_kredyt import kontakt_z_wnioskodawcy, pasuje_plik_kredytu
+from crm.volteo_umowa import cechy_umowy, czy_umowa_podwojna, opis_konfiguracji
 
 
 def _autenti_ustawienia() -> dict[str, Any]:
@@ -1238,7 +1239,17 @@ def _autenti_send_job(nazwa: str, wysylajacy: str | None = None, rodzaj: str = "
 		)
 
 		signature_type = ustawienia.get("default_signature_type") or "BASIC"
-		tytul = konfig["tytul"](pierwszy_podpisujacy["full_name"])
+		if konfig["rodzaj"] == "umowa":
+			# ops#251: tytul umowy OZE niesie wariant wzoru (rodzaj, dodatki, dwóch
+			# Zamawiających). Kredyt i umowa CP zostają przy starych tytułach.
+			wariant = opis_konfiguracji(
+				deal_doc.get("custom_rodzaj_umowy"),
+				cechy_umowy(deal_doc.as_dict()),
+				czy_umowa_podwojna(dokument.as_dict()),
+			)
+			tytul = konfig["tytul"](pierwszy_podpisujacy["full_name"], wariant)
+		else:
+			tytul = konfig["tytul"](pierwszy_podpisujacy["full_name"])
 
 		doc_id = client.create_document_process(title=tytul)
 

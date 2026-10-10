@@ -95,6 +95,27 @@ class TestAutentiLogika(unittest.TestCase):
 		self.assertIn("-", tytul_dokumentu("Jan Kowalski"))
 		self.assertNotIn("—", tytul_dokumentu("Jan Kowalski"))
 
+	def test_tytul_z_wariantem(self: "TestAutentiLogika") -> None:
+		self.assertEqual(
+			tytul_dokumentu("Jan Kowalski", "Fotowoltaika"), "Umowa ProEnergy (Fotowoltaika) - Jan Kowalski"
+		)
+
+	def test_tytul_wariant_polskie_znaki(self: "TestAutentiLogika") -> None:
+		w = "Magazyn energii + klimatyzacja + ładowarka EV"
+		self.assertEqual(tytul_dokumentu("Zofia Łęcka", w), f"Umowa ProEnergy ({w}) - Zofia Łęcka")
+
+	def test_tytul_wariant_pusty_to_stary_tytul(self: "TestAutentiLogika") -> None:
+		self.assertEqual(tytul_dokumentu("Jan Kowalski", ""), "Umowa ProEnergy - Jan Kowalski")
+		self.assertEqual(tytul_dokumentu("Jan Kowalski", "   "), "Umowa ProEnergy - Jan Kowalski")
+		self.assertEqual(tytul_dokumentu(None, ""), "Umowa ProEnergy")
+
+	def test_tytul_wariant_bez_imienia(self: "TestAutentiLogika") -> None:
+		self.assertEqual(tytul_dokumentu(None, "Fotowoltaika"), "Umowa ProEnergy (Fotowoltaika)")
+
+	def test_tytul_wariant_przyciety(self: "TestAutentiLogika") -> None:
+		t = tytul_dokumentu("Jan Kowalski", "x" * 200)
+		self.assertEqual(t, "Umowa ProEnergy (" + "x" * 80 + ") - Jan Kowalski")
+
 	def test_g_tytul_dokumentu_puste_imie(self: "TestAutentiLogika") -> None:
 		self.assertEqual(tytul_dokumentu(None), "Umowa ProEnergy")
 		self.assertEqual(tytul_dokumentu(""), "Umowa ProEnergy")
