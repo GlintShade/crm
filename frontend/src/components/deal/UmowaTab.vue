@@ -525,7 +525,7 @@ const wzorDostepny = computed(() => !wzorOpis.value || wzorOpis.value.dostepny)
 const wszystkiePola = wszystkiePolaFormularza()
 const allFieldnames = wszystkiePola.map((f) => f.fieldname)
 const fieldLabelByName = new Map(wszystkiePola.map((f) => [f.fieldname, __(f.label)]))
-// Wyprowadzone z definicji zamiast wpisanego na sztywno literału nazw pól —
+// Wyprowadzone z definicji zamiast wpisanego na sztywno literału nazw pól,
 // kolejna kratka dodana do formularza automatycznie trafia do tego zbioru,
 // więc hydrateForm() nie może już po cichu pominąć konwersji na bool.
 const checkboxFieldnames = new Set(
