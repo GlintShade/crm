@@ -633,6 +633,14 @@ class TestZlozUmowePelnyPipeline(unittest.TestCase):
 					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[0])
 					self.assertIn(kontekst["bateria_producent_model"], tekst_wg_strony[5])
 					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[21])
+				elif kod == "KL":
+					# Klimatyzacja (12 str., bez pelnomocnictwa): komparycja i §2.
+					self.assertEqual(len(strony), 12)
+					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[0])
+					self.assertIn(
+						kontekst["wynagrodzenie_brutto"].replace("\xa0", " "),
+						tekst_wg_strony[1].replace("\xa0", " "),
+					)
 				elif kod == "ROZ":
 					# Rozbudowa (17 str.): komparycja, §2 i pełnomocnictwo (ostatnia strona).
 					self.assertEqual(len(strony), 17)
