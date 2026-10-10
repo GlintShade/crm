@@ -348,11 +348,23 @@ dachu/gruntu, odgromowej, przekopu, kabla, bateria_* (ma tylko liczbe modulow i 
 istniejacego), istniejacej PV poza moca (`roz_ist_pv_moc_kwp`), klimatyzacji, EV, dod_panele
 ani drugiego Zamawiajacego (wzor jednoosobowy)."""
 
+WYJATKI_KL: frozenset[str] = (
+	WYJATKI_ROZ
+	| GRUPY_CECH_KLUCZE["rozbudowa"]
+	| frozenset({"ppoz_tak", "ppoz_nie"})
+) - frozenset({"klima_rodzaj", "klima_moc_kw"})
+"""KL (`umowa_klimatyzacja.pdf`, b69 U2l): klimatyzacja samodzielna. Zal. 1 ma tylko rubryki
+`klima_rodzaj` i `klima_moc_kw` (bez modelu). Wyjatki: wszystkie klucze PV/ME (panele, inwerter,
+bateria, internet, fazy, montaz, pokrycie, odgromowa, ppoz, przekop, kabel, istniejaca PV), `klima_model`,
+`ev_*`, `dod_panele_*`, `roz_*` (cechy spoza tego wzoru) oraz sześć kluczy drugiego Zamawiajacego
+(wzor jednoosobowy)."""
+
 WYJATKI_BRAK_POZYCJI_WG_SZABLONU: dict[str, frozenset[str]] = {
 	"PV_K": WYJATKI_PV_K,
 	"PVME": WYJATKI_PVME,
 	"PV": WYJATKI_PV,
 	"ME": WYJATKI_ME,
+	"KL": WYJATKI_KL,
 	"PVME_K_EV": WYJATKI_PVME_K_EV,
 	"ME_K": WYJATKI_ME_K,
 	"ME_K_EV": WYJATKI_ME_K_EV,
@@ -378,10 +390,11 @@ WYJATKI_BRAK_POZYCJI_WG_SZABLONU: dict[str, frozenset[str]] = {
 # (`crm/volteo_umowa_mapa*.py`, sekcja „strony bez pozycji”/bloki podpisów).
 # ---------------------------------------------------------------------------
 
-_PELNOMOCNICTWO_IDX: dict[str, int] = {
+_PELNOMOCNICTWO_IDX: dict[str, int | None] = {
 	"PVME": 17,
 	"PV": 13,
 	"ME": 14,
+	"KL": None,  # wzor bez pelnomocnictwa OSD (b69, U2l)
 	"PVME_K_EV": 24,
 	"ME_K": 18,
 	"ME_K_EV": 21,
@@ -414,6 +427,7 @@ _ZAKAZANE_STRONY_PROTOKOLOW: dict[str, frozenset[int]] = {
 	# ME (wzór 06.10.2026, 16 stron): formularz odstąpienia (idx9) + protokół
 	# odbioru magazynu na trzech stronach (idx10-12) + protokół pomiarów (idx13).
 	"ME": frozenset(range(9, 14)),
+	"KL": frozenset(range(8, 12)),  # b69, U2l: pouczenie (idx8), formularz (idx9), protokol (idx10-11)
 	# PVME_K_EV: pouczenie (idx12), formularz odstąpienia (idx13), protokoły odbioru i pomiarów
 	# PV, magazynu, klimatyzacji i ładowarki EV wraz z listami szkoleń (idx14-23).
 	"PVME_K_EV": frozenset(range(12, 24)),
@@ -449,6 +463,7 @@ _ZALACZNIK_2_3_IDX: dict[str, int] = {
 	# ME: kratki i podpis Zal. 2 oraz kratka Zal. 3 leżą na idx5, ale podpis
 	# Zal. 3 przechodzi na idx6 (zob. `_ZALACZNIK_3_PODPIS_NA_NASTEPNEJ_STRONIE`).
 	"ME": 5,
+	"KL": 5,
 	"PVME_K_EV": 9,
 	"ME_K": 7,
 	"ME_K_EV": 8,
@@ -476,6 +491,7 @@ _STRONY_ZAMAWIAJACY_OCZEKIWANE: dict[str, frozenset[int]] = {
 	"PVME": frozenset({3, 4, 5, 6, 17}),
 	"PV": frozenset({3, 4, 5, 13}),
 	"ME": frozenset({3, 4, 5, 6, 14}),
+	"KL": frozenset({3, 4, 5}),
 	"PVME_K_EV": frozenset({4, 5, 6, 7, 8, 9, 24}),
 	"ME_K": frozenset({3, 5, 6, 7, 18}),
 	"ME_K_EV": frozenset({4, 5, 6, 7, 8, 21}),
@@ -498,6 +514,7 @@ _STRONY_WYKONAWCA_OCZEKIWANE: dict[str, frozenset[int]] = {
 	"PVME": frozenset({3, 4, 5}),
 	"PV": frozenset({3, 4}),
 	"ME": frozenset({3, 4}),
+	"KL": frozenset({3, 4}),
 	"PVME_K_EV": frozenset({4, 5, 6, 7, 8}),
 	"ME_K": frozenset({3, 5, 6}),
 	"ME_K_EV": frozenset({4, 5, 6, 7}),
@@ -518,6 +535,7 @@ _KLIENT_IMIE_NAZWISKO_STRONY: dict[str, frozenset[int]] = {
 	"PVME": frozenset({0, 17}),
 	"PV": frozenset({0, 13}),
 	"ME": frozenset({0, 14}),
+	"KL": frozenset({0}),
 	"PVME_K_EV": frozenset({0, 24}),
 	"ME_K": frozenset({0, 18}),
 	"ME_K_EV": frozenset({0, 21}),
@@ -541,6 +559,7 @@ _RODO_STRONA_IDX: dict[str, int] = {
 	"PVME": 8,
 	"PV": 7,
 	"ME": 7,
+	"KL": 7,
 	"PVME_K_EV": 11,
 	"ME_K": 9,
 	"ME_K_EV": 10,
@@ -883,8 +902,8 @@ class TestPoleDataclass(unittest.TestCase):
 	def test_b_kazda_mapa_nie_jest_pusta(self: "TestPoleDataclass") -> None:
 		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
-				# ROZ (arkusz rozbudowy, bez arkusza PV/ME) jest najmniejsza mapa (45 pozycji), stad prog 40.
-				self.assertGreater(len(szablon.mapa), 40)
+				# ROZ (45) i KL (32, klimatyzacja bez pelnomocnictwa) to najmniejsze mapy, stad prog 30.
+				self.assertGreater(len(szablon.mapa), 30)
 
 
 class TestPodpisy(unittest.TestCase):
@@ -918,12 +937,16 @@ class TestPodpisy(unittest.TestCase):
 		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				strony_wykonawcy = {pole.strona for pole in _pozycje(szablon, "podpis_wykonawca")}
+				if _PELNOMOCNICTWO_IDX[kod] is None:
+					continue  # wzor bez pelnomocnictwa
 				self.assertNotIn(_PELNOMOCNICTWO_IDX[kod], strony_wykonawcy)
 
 	def test_d_zamawiajacy_wystepuje_na_stronie_pelnomocnictwa(self: "TestPodpisy") -> None:
 		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				strony_zamawiajacego = {pole.strona for pole in _pozycje(szablon, "podpis_zamawiajacy")}
+				if _PELNOMOCNICTWO_IDX[kod] is None:
+					continue  # wzor bez pelnomocnictwa
 				self.assertIn(_PELNOMOCNICTWO_IDX[kod], strony_zamawiajacego)
 
 	def test_e_podpisy_na_oczekiwanych_stronach_umowy_i_zalacznikow(self: "TestPodpisy") -> None:
@@ -990,6 +1013,8 @@ _LICZBA_POZYCJI_OCZEKIWANA: dict[str, int] = {
 	"PVME2": 90,
 	"PV": 66,
 	"ME": 55,
+	# KL (b69, U2l, issue ops#256).
+	"KL": 32,
 	# PVME_K_EV (b69, U2f).
 	"PVME_K_EV": 81,
 	"PV_K": 70,
