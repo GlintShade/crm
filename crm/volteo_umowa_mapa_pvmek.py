@@ -4,16 +4,31 @@
 """Mapa współrzędnych do nakładania danych umowy na oryginalny plik PDF -
 wariant jednoosobowy: PV + ME z klimatyzacją (K), `crm/szablony/umowa_pv_me_k.pdf`.
 
-Plik źródłowy wzoru: `Umowa PV + ME + K ProEnergy - 06.10.2026-2.pdf` (ostateczny wzór z 06.10.2026, b69).
+Plik źródłowy wzoru: `Umowa PV + ME + K ProEnergy - 06.10.2026-2.pdf` (ostateczny
+wzór z 06.10.2026, b69, issue ops#242). SHA-256 pliku: `SHA256_SZABLONU_PVMEK`.
 
-SZKIELET: mapa `MAPA_PVMEK` jest CELOWO PUSTA do czasu pomiaru współrzędnych od
-zera w chunku U2. Pusta mapa jest bezpieczna: rejestr `SZABLONY` i API
-(chunki U3/U4) odmawiają renderu dla pustej mapy, więc nie da się wygenerować
-umowy bez naniesionych danych. Konwencje pomiaru (układ współrzędnych
-`y_reportlab = 842 - y_od_gory`, offsety tekstu na podkreśleniu, kratek i
-komórek tabel) opisano w nagłówku `crm/volteo_umowa_mapa.py`; wzorzec pustego
-szkieletu: `crm/volteo_umowa_mapa_pv2.py` (b61). Generator PDF-u sprawdza sumę
-SHA-256 pliku względem `SHA256_SZABLONU_PVMEK` przed użyciem mapy.
+ORYGINALNOŚĆ POMIARU: wszystkie współrzędne zmierzono OD ZERA z tego jednego pliku
+narzędziem `proenergy-crm-ops/ops/narzedzia/umowa-mapa-pomiar.py` (deklaracja
+pól: `ops/narzedzia/deklaracje/umowa_pv_me_k.py`), dnia 2026-10-10. Żadna wartość
+nie jest przepisana z map siostrzanych ani ze starej wersji wzoru (reeksport z
+Google Docs przesuwa nawet niezmienione strony, lekcja b62). Konwencje (układ
+`y_reportlab = 842 - y_od_gory`, offsety tekstu na kresce, kratek, komórek tabeli)
+opisano w nagłówku `crm/volteo_umowa_mapa.py` i w docstringu narzędzia.
+
+POLITYKA (jak w mapie PV): podpis Wykonawcy drukuje się w umowie głównej i w
+Załącznikach 1a, 1b i 2 (klimatyzacja ma własny blok podpisów obu stron); w
+Załącznikach 3/4 (zgody) i w pełnomocnictwie tylko linia Zamawiającego;
+`data_zawarcia` jest reużywana w "udzielone w dniu" pełnomocnictwa; imię i
+nazwisko klienta drukuje się w komparycji i w pełnomocnictwie.
+
+STRONY BEZ POZYCJI (indeksy 0-based, celowo): 4 (spis załączników), 9 (treść
+klauzuli RODO), 11 (pouczenie o odstąpieniu), 12 (formularz odstąpienia), 13-20
+(protokoły odbioru i pomiarów PV, magazynu i klimatyzacji: wypełnia je instalator
+i klient po montażu, generator nie drukuje nic z góry).
+
+KLUCZE BEZ RUBRYKI W TYM WZORZE (wyjątki w testach): `klima_model` (wzór ma tylko
+rodzaj i moc klimatyzacji), klucze EV, paneli dodatkowych, rozbudowy
+(`roz_*`) oraz drugiego Zamawiającego (wzór jednoosobowy).
 """
 
 from crm.volteo_umowa_mapa import Pole
@@ -24,5 +39,174 @@ SHA256_SZABLONU_PVMEK: str = "750ac43143f042b3b13062f9843959edd4b2751e0e87c2dc56
 LICZBA_STRON_PVMEK: int = 22
 """Liczba stron pliku, zweryfikowana `pdfinfo` i `pypdf`."""
 
-MAPA_PVMEK: tuple[Pole, ...] = ()
-"""Pusta do czasu pomiaru (chunk U2)."""
+# ---------------------------------------------------------------------------
+# Strona 1: komparycja. Tabela danych klienta (jedna, 5 wierszy; komórki: x z
+# pionowej kreski dzielącej kolumny), numer umowy i data zawarcia (kreski przy
+# etykietach), adres miejsca montażu (trzecia kreska strony), rodzaj budynku
+# (dwie kratki).
+# ---------------------------------------------------------------------------
+_STRONA_1: tuple[Pole, ...] = (
+	Pole("klient_imie_nazwisko", 0, 177.5, 658.48, "tekst", maks_szerokosc=342.0),
+	Pole("klient_adres", 0, 177.5, 634.01, "tekst", maks_szerokosc=342.0),
+	Pole("klient_pesel", 0, 177.5, 609.53, "tekst", maks_szerokosc=342.0),
+	Pole("klient_telefon", 0, 177.5, 585.06, "tekst", maks_szerokosc=342.0),
+	Pole("klient_email", 0, 177.5, 560.58, "tekst", maks_szerokosc=342.0),
+	Pole("umowa_nr", 0, 206.36, 721.51, "tekst", maks_szerokosc=194.21),
+	Pole("data_zawarcia", 0, 135.56, 697.43, "tekst", maks_szerokosc=88.51),
+	Pole("adres_montazu", 0, 111.0, 331.4, "tekst", maks_szerokosc=385.93),
+	Pole("budynek_wielorodzinny", 0, 115.5, 287.55, "kratka", wyrownanie="srodek"),
+	Pole("budynek_jednorodzinny", 0, 115.5, 267.72, "kratka", wyrownanie="srodek"),
+)
+
+# ---------------------------------------------------------------------------
+# Strona 2: §2 Wynagrodzenie netto/brutto, trzy kratki płatności (Kredyt 100%
+# / Kredyt z wkładem własnym / Przelew), wkład własny i kwota kredytu. Trzecia
+# kratka "Przelew" niesie klucz `fin_gotowka` (literał bazy `Gotówka 100%`,
+# etykieta wzoru to przelew).
+# ---------------------------------------------------------------------------
+_STRONA_2: tuple[Pole, ...] = (
+	Pole("wynagrodzenie_netto", 1, 113.78, 715.33, "tekst", maks_szerokosc=155.22),
+	Pole("wynagrodzenie_brutto", 1, 113.78, 688.88, "tekst", maks_szerokosc=155.22),
+	Pole("fin_kredyt_100", 1, 115.5, 618.58, "kratka", wyrownanie="srodek"),
+	Pole("fin_kredyt_wklad", 1, 115.5, 598.75, "kratka", wyrownanie="srodek"),
+	Pole("wklad_wlasny", 1, 175.44, 556.64, "tekst", maks_szerokosc=280.31),
+	Pole("kwota_kredytu", 1, 143.78, 530.2, "tekst", maks_szerokosc=310.89),
+	Pole("fin_gotowka", 1, 115.5, 512.79, "kratka", wyrownanie="srodek"),
+)
+
+# ---------------------------------------------------------------------------
+# Strona 3: §3 ust. 1, kratki powierzchni budynku (do 300 m2 / ponad 300 m2) i
+# powierzchnia w m2 na kresce za "wynosi".
+# ---------------------------------------------------------------------------
+_STRONA_3: tuple[Pole, ...] = (
+	Pole("pow_do_300", 2, 115.5, 662.25, "kratka", wyrownanie="srodek"),
+	Pole("pow_ponad_300", 2, 240.5, 662.25, "kratka", wyrownanie="srodek"),
+	Pole("powierzchnia_m2", 2, 377.66, 661.74, "tekst", maks_szerokosc=66.27),
+)
+
+# ---------------------------------------------------------------------------
+# Strona 4: blok podpisów umowy głównej (podpis Zamawiającego po lewej,
+# Wykonawcy po prawej).
+# ---------------------------------------------------------------------------
+_STRONA_4: tuple[Pole, ...] = (
+	Pole("podpis_zamawiajacy", 3, 75.0, 94.25, "tekst", maks_szerokosc=158.0),
+	Pole("podpis_wykonawca", 3, 363.0, 94.25, "tekst", maks_szerokosc=155.22),
+)
+
+# ---------------------------------------------------------------------------
+# Strona 6: Załącznik 1a (arkusz ustaleń montażowych, instalacja
+# fotowoltaiczna): moduły, inwerter, warunki instalacyjne (kratki), opcje
+# dodatkowe (p.poż, przekop, kabel) i podpisy obu stron. Podpisy to ostatnie
+# kreski w swoich kolumnach strony (n=-1).
+# ---------------------------------------------------------------------------
+_STRONA_6: tuple[Pole, ...] = (
+	Pole("panel_moc_wp", 5, 223.9, 715.33, "tekst", maks_szerokosc=55.16),
+	Pole("panel_szt", 5, 381.7, 715.33, "tekst", maks_szerokosc=57.93),
+	Pole("moc_pv_kwp", 5, 186.09, 698.08, "tekst", maks_szerokosc=57.93),
+	Pole("panel_producent_model", 5, 280.02, 680.83, "tekst", maks_szerokosc=227.5),
+	Pole("panel_gwarancja_lat", 5, 249.46, 663.58, "tekst", maks_szerokosc=57.93),
+	Pole("inwerter_moc_kw", 5, 183.31, 629.09, "tekst", maks_szerokosc=57.93),
+	Pole("inwerter_szt", 5, 174.42, 611.84, "tekst", maks_szerokosc=57.93),
+	Pole("inwerter_producent_model", 5, 205.01, 594.59, "tekst", maks_szerokosc=230.27),
+	Pole("inwerter_gwarancja_lat", 5, 250.57, 577.34, "tekst", maks_szerokosc=57.93),
+	Pole("internet_wifi", 5, 118.95, 521.42, "kratka", wyrownanie="srodek"),
+	Pole("internet_kablowy", 5, 173.93, 521.42, "kratka", wyrownanie="srodek"),
+	Pole("internet_brak", 5, 251.14, 521.42, "kratka", wyrownanie="srodek"),
+	Pole("moc_przylaczeniowa_kw", 5, 229.43, 499.72, "tekst", maks_szerokosc=85.73),
+	Pole("fazy_1", 5, 121.72, 478.29, "kratka", wyrownanie="srodek"),
+	Pole("fazy_3", 5, 157.83, 478.29, "kratka", wyrownanie="srodek"),
+	Pole("montaz_dach", 5, 157.28, 452.42, "kratka", wyrownanie="srodek"),
+	Pole("montaz_grunt", 5, 213.37, 452.42, "kratka", wyrownanie="srodek"),
+	Pole("pokrycie_dachowe", 5, 268.9, 430.73, "tekst", maks_szerokosc=85.73),
+	Pole("odgromowa_tak", 5, 182.29, 409.3, "kratka", wyrownanie="srodek"),
+	Pole("odgromowa_nie", 5, 228.76, 409.3, "kratka", wyrownanie="srodek"),
+	Pole("ppoz_tak", 5, 398.41, 348.93, "kratka", wyrownanie="srodek"),
+	Pole("ppoz_nie", 5, 444.89, 348.93, "kratka", wyrownanie="srodek"),
+	Pole("przekop_tak", 5, 165.06, 323.06, "kratka", wyrownanie="srodek"),
+	Pole("przekop_mb", 5, 222.03, 322.55, "tekst", maks_szerokosc=38.48),
+	Pole("przekop_nie", 5, 281.0, 323.06, "kratka", wyrownanie="srodek"),
+	Pole("kabel_tak", 5, 161.18, 297.18, "kratka", wyrownanie="srodek"),
+	Pole("kabel_mb", 5, 218.15, 296.67, "tekst", maks_szerokosc=38.48),
+	Pole("kabel_nie", 5, 277.12, 297.18, "kratka", wyrownanie="srodek"),
+	Pole("podpis_zamawiajacy", 5, 75.0, 170.28, "tekst", maks_szerokosc=158.0),
+	Pole("podpis_wykonawca", 5, 363.0, 170.28, "tekst", maks_szerokosc=155.22),
+)
+
+# ---------------------------------------------------------------------------
+# Strona 7: Załącznik 1b (magazyn energii): bateria oraz, w sekcji "w
+# przypadku posiadania instalacji fotowoltaicznej", dane inwertera i mocy
+# istniejącej PV (klucze ist_pv_*); podpisy obu stron.
+# ---------------------------------------------------------------------------
+_STRONA_7: tuple[Pole, ...] = (
+	Pole("bateria_producent_model", 6, 191.13, 715.33, "tekst", maks_szerokosc=246.95),
+	Pole("bateria_moc_kw", 6, 153.31, 698.08, "tekst", maks_szerokosc=55.16),
+	Pole("bateria_pojemnosc_jedn_kwh", 6, 293.9, 680.83, "tekst", maks_szerokosc=55.16),
+	Pole("bateria_szt", 6, 444.49, 680.83, "tekst", maks_szerokosc=55.16),
+	Pole("bateria_pojemnosc_lacznie_kwh", 6, 272.24, 663.58, "tekst", maks_szerokosc=55.16),
+	Pole("bateria_gwarancja_lat", 6, 236.69, 646.33, "tekst", maks_szerokosc=57.93),
+	Pole("ist_pv_moc_inwertera_kw", 6, 167.2, 572.17, "tekst", maks_szerokosc=57.93),
+	Pole("ist_pv_moc_kwp", 6, 232.76, 554.92, "tekst", maks_szerokosc=55.16),
+	Pole("ist_pv_producent_inwertera", 6, 170.01, 537.67, "tekst", maks_szerokosc=155.22),
+	Pole("podpis_zamawiajacy", 6, 75.0, 446.25, "tekst", maks_szerokosc=158.0),
+	Pole("podpis_wykonawca", 6, 363.0, 446.25, "tekst", maks_szerokosc=155.22),
+)
+
+# ---------------------------------------------------------------------------
+# Strona 8: Załącznik 2 (klimatyzacja): rodzaj i moc klimatyzacji (wzór nie ma
+# rubryki modelu, więc klucz `klima_model` jest wyjątkiem), własny blok
+# podpisów obu stron.
+# ---------------------------------------------------------------------------
+_STRONA_8: tuple[Pole, ...] = (
+	Pole("klima_rodzaj", 7, 165.55, 697.01, "tekst", maks_szerokosc=244.17),
+	Pole("klima_moc_kw", 7, 177.18, 672.86, "tekst", maks_szerokosc=244.17),
+	Pole("podpis_zamawiajacy", 7, 75.0, 611.92, "tekst", maks_szerokosc=158.0),
+	Pole("podpis_wykonawca", 7, 363.0, 611.92, "tekst", maks_szerokosc=155.22),
+)
+
+# ---------------------------------------------------------------------------
+# Strona 9: Załączniki 3 i 4: dwie zgody (kontakt telefoniczny, działania
+# promocyjne) i wniosek o realizację przed upływem terminu odstąpienia (kratki
+# 10x10 pt, rozmiar 8) oraz dwie osobne linie podpisu Zamawiającego (po jednej
+# pod każdym załącznikiem, bez Wykonawcy).
+# ---------------------------------------------------------------------------
+_STRONA_9: tuple[Pole, ...] = (
+	Pole("zgoda_telefon", 8, 77.0, 721.54, "kratka", wyrownanie="srodek", rozmiar=8.0),
+	Pole("zgoda_promocja", 8, 77.0, 681.87, "kratka", wyrownanie="srodek", rozmiar=8.0),
+	Pole("zgoda_wczesniejsza_realizacja", 8, 77.0, 261.35, "kratka", wyrownanie="srodek", rozmiar=8.0),
+	Pole("podpis_zamawiajacy", 8, 75.0, 602.31, "tekst", maks_szerokosc=155.22),
+	Pole("podpis_zamawiajacy", 8, 75.0, 115.68, "tekst", maks_szerokosc=155.22),
+)
+
+# ---------------------------------------------------------------------------
+# Strona 11: koniec Załącznika 5 (RODO): linia "data i podpis" Zamawiającego,
+# klucz `rodo_data_imie_nazwisko`.
+# ---------------------------------------------------------------------------
+_STRONA_11: tuple[Pole, ...] = (
+	Pole("rodo_data_imie_nazwisko", 10, 75.0, 602.31, "tekst", maks_szerokosc=155.22),
+)
+
+# ---------------------------------------------------------------------------
+# Strona 22: Załącznik 10 (pełnomocnictwo OSD): data udzielenia, dane
+# Mocodawcy i jego podpis (prawa kolumna; tylko linia Zamawiającego).
+# ---------------------------------------------------------------------------
+_STRONA_22: tuple[Pole, ...] = (
+	Pole("data_zawarcia", 21, 292.01, 708.11, "tekst", maks_szerokosc=88.51),
+	Pole("klient_imie_nazwisko", 21, 171.13, 681.66, "tekst", maks_szerokosc=88.51),
+	Pole("klient_adres", 21, 336.75, 681.66, "tekst", maks_szerokosc=171.9),
+	Pole("klient_pesel", 21, 110.01, 668.43, "tekst", maks_szerokosc=116.31),
+	Pole("podpis_zamawiajacy", 21, 365.05, 179.15, "tekst", maks_szerokosc=155.22),
+)
+
+MAPA_PVMEK: tuple[Pole, ...] = (
+	*_STRONA_1,
+	*_STRONA_2,
+	*_STRONA_3,
+	*_STRONA_4,
+	*_STRONA_6,
+	*_STRONA_7,
+	*_STRONA_8,
+	*_STRONA_9,
+	*_STRONA_11,
+	*_STRONA_22,
+)
+"""Wszystkie pozycje mapy wzoru PVME_K, strona po stronie."""

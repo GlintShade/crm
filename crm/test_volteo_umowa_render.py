@@ -591,6 +591,13 @@ class TestZlozUmowePelnyPipeline(unittest.TestCase):
 					self.assertIn(kontekst["panel_producent_model"], tekst_wg_strony[4])
 					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[16])
 					self.assertNotIn(kontekst["bateria_producent_model"], pelny_tekst)
+				elif kod == "PVME_K":
+					# Wzór z klimatyzacją (22 str.): dane klienta w komparycji i
+					# pełnomocnictwie (ostatnia strona), PV w Zał. 1a, bateria w 1b.
+					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[0])
+					self.assertIn(kontekst["panel_producent_model"], tekst_wg_strony[5])
+					self.assertIn(kontekst["bateria_producent_model"], tekst_wg_strony[6])
+					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[21])
 				elif kod == "PV_2":
 					# Warianty PODWÓJNE (ops#167): ten wspólny `kontekst` nie ma
 					# `kontakt2` (klient2_* puste), więc te asercje sprawdzają
