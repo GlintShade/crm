@@ -633,6 +633,15 @@ class TestZlozUmowePelnyPipeline(unittest.TestCase):
 					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[0])
 					self.assertIn(kontekst["bateria_producent_model"], tekst_wg_strony[5])
 					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[21])
+				elif kod == "ROZ":
+					# Rozbudowa (17 str.): komparycja, §2 i pełnomocnictwo (ostatnia strona).
+					self.assertEqual(len(strony), 17)
+					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[0])
+					self.assertIn(
+						kontekst["wynagrodzenie_brutto"].replace("\xa0", " "),
+						tekst_wg_strony[1].replace("\xa0", " "),
+					)
+					self.assertIn(kontekst["klient_pesel"], tekst_wg_strony[16])
 				elif kod == "PV_2":
 					# Warianty PODWÓJNE (ops#167): ten wspólny `kontekst` nie ma
 					# `kontakt2` (klient2_* puste), więc te asercje sprawdzają

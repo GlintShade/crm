@@ -42,9 +42,7 @@ from crm.volteo_umowa_render import SZABLONY
 # WYŁĄCZNIE w teście kontraktu cech (`TestKontraktCech`).
 # ---------------------------------------------------------------------------
 
-MAPY_W_POMIARZE: frozenset[str] = frozenset(
-	{"ROZ"}
-)
+MAPY_W_POMIARZE: frozenset[str] = frozenset()
 
 MAPY_STAREGO_WZORU: frozenset[str] = frozenset()
 
@@ -298,6 +296,58 @@ z istniejącą PV i dodatkowymi modułami), 2 (klimatyzacja: rodzaj i moc, bez m
 klucze instalacji PV (wzór nie ma części PV), klucze rozbudowy (cecha spoza tego wzoru) oraz
 sześć kluczy drugiego Zamawiającego (wzór jednoosobowy)."""
 
+WYJATKI_ROZ: frozenset[str] = frozenset(
+	{
+		"bateria_producent_model",
+		"bateria_moc_kw",
+		"bateria_pojemnosc_jedn_kwh",
+		"bateria_szt",
+		"bateria_pojemnosc_lacznie_kwh",
+		"bateria_gwarancja_lat",
+		"panel_moc_wp",
+		"panel_szt",
+		"moc_pv_kwp",
+		"panel_producent_model",
+		"panel_gwarancja_lat",
+		"inwerter_moc_kw",
+		"inwerter_szt",
+		"inwerter_producent_model",
+		"inwerter_gwarancja_lat",
+		"internet_wifi",
+		"internet_kablowy",
+		"internet_brak",
+		"moc_przylaczeniowa_kw",
+		"fazy_1",
+		"fazy_3",
+		"montaz_dach",
+		"montaz_grunt",
+		"pokrycie_dachowe",
+		"odgromowa_tak",
+		"odgromowa_nie",
+		"przekop_tak",
+		"przekop_mb",
+		"przekop_nie",
+		"kabel_tak",
+		"kabel_mb",
+		"kabel_nie",
+		"ist_pv_moc_inwertera_kw",
+		"ist_pv_moc_kwp",
+		"ist_pv_producent_inwertera",
+		"klima_rodzaj",
+		"klima_model",
+		"klima_moc_kw",
+		"ev_nazwa",
+		"ev_moc_kw",
+		"dod_panele_szt",
+		"dod_panele_mikro_szt",
+	}
+) | KLUCZE_DRUGIEGO_ZAMAWIAJACEGO
+"""ROZ (`umowa_rozbudowa.pdf`, b69 U2k): Zal. 1a/1b to arkusze rozbudowy (`roz_*`, `ppoz_*`),
+bez arkusza PV/ME: nie ma rubryk paneli, inwertera, internetu, faz, mocy przylaczeniowej,
+dachu/gruntu, odgromowej, przekopu, kabla, bateria_* (ma tylko liczbe modulow i pojemnosc
+istniejacego), istniejacej PV poza moca (`roz_ist_pv_moc_kwp`), klimatyzacji, EV, dod_panele
+ani drugiego Zamawiajacego (wzor jednoosobowy)."""
+
 WYJATKI_BRAK_POZYCJI_WG_SZABLONU: dict[str, frozenset[str]] = {
 	"PV_K": WYJATKI_PV_K,
 	"PVME": WYJATKI_PVME,
@@ -306,6 +356,7 @@ WYJATKI_BRAK_POZYCJI_WG_SZABLONU: dict[str, frozenset[str]] = {
 	"PVME_K_EV": WYJATKI_PVME_K_EV,
 	"ME_K": WYJATKI_ME_K,
 	"ME_K_EV": WYJATKI_ME_K_EV,
+	"ROZ": WYJATKI_ROZ,
 	"PVME_K": WYJATKI_PVME_K,
 	"PVME_EV": WYJATKI_PVME_EV,
 	"ME_EV": WYJATKI_ME_EV,
@@ -334,6 +385,7 @@ _PELNOMOCNICTWO_IDX: dict[str, int] = {
 	"PVME_K_EV": 24,
 	"ME_K": 18,
 	"ME_K_EV": 21,
+	"ROZ": 16,
 	"PV_K": 16,
 	"PVME_K": 21,
 	"PVME_EV": 21,
@@ -369,6 +421,7 @@ _ZAKAZANE_STRONY_PROTOKOLOW: dict[str, frozenset[int]] = {
 	# pomiarow i klimatyzacji z listami instalatora (idx12-17).
 	"ME_K": frozenset(range(10, 18)),
 	"ME_K_EV": frozenset(range(12, 21)),
+	"ROZ": frozenset(range(8, 16)),
 	# PV_K: pouczenie (idx9), formularz odstapienia (idx10), protokol odbioru PV,
 	# protokol pomiarow, protokol odbioru klimatyzacji (idx11-15).
 	"PV_K": frozenset(range(9, 16)),
@@ -399,6 +452,7 @@ _ZALACZNIK_2_3_IDX: dict[str, int] = {
 	"PVME_K_EV": 9,
 	"ME_K": 7,
 	"ME_K_EV": 8,
+	"ROZ": 5,
 	"PV_K": 6,
 	"PVME_K": 8,
 	"PVME_EV": 8,
@@ -425,6 +479,7 @@ _STRONY_ZAMAWIAJACY_OCZEKIWANE: dict[str, frozenset[int]] = {
 	"PVME_K_EV": frozenset({4, 5, 6, 7, 8, 9, 24}),
 	"ME_K": frozenset({3, 5, 6, 7, 18}),
 	"ME_K_EV": frozenset({4, 5, 6, 7, 8, 21}),
+	"ROZ": frozenset({3, 4, 5, 16}),
 	"PV_K": frozenset({3, 4, 5, 6, 16}),
 	"PVME_K": frozenset({3, 5, 6, 7, 8, 21}),
 	"PVME_EV": frozenset({3, 5, 6, 7, 8, 21}),
@@ -446,6 +501,7 @@ _STRONY_WYKONAWCA_OCZEKIWANE: dict[str, frozenset[int]] = {
 	"PVME_K_EV": frozenset({4, 5, 6, 7, 8}),
 	"ME_K": frozenset({3, 5, 6}),
 	"ME_K_EV": frozenset({4, 5, 6, 7}),
+	"ROZ": frozenset({3, 4}),
 	"PV_K": frozenset({3, 4, 5}),
 	"PVME_K": frozenset({3, 5, 6, 7}),
 	"PVME_EV": frozenset({3, 5, 6, 7}),
@@ -465,6 +521,7 @@ _KLIENT_IMIE_NAZWISKO_STRONY: dict[str, frozenset[int]] = {
 	"PVME_K_EV": frozenset({0, 24}),
 	"ME_K": frozenset({0, 18}),
 	"ME_K_EV": frozenset({0, 21}),
+	"ROZ": frozenset({0, 16}),
 	"PV_K": frozenset({0, 16}),
 	"PVME_K": frozenset({0, 21}),
 	"PVME_EV": frozenset({0, 21}),
@@ -487,6 +544,7 @@ _RODO_STRONA_IDX: dict[str, int] = {
 	"PVME_K_EV": 11,
 	"ME_K": 9,
 	"ME_K_EV": 10,
+	"ROZ": 7,
 	"PV_K": 8,
 	"PVME_K": 10,
 	"PVME_EV": 10,
@@ -825,7 +883,8 @@ class TestPoleDataclass(unittest.TestCase):
 	def test_b_kazda_mapa_nie_jest_pusta(self: "TestPoleDataclass") -> None:
 		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
-				self.assertGreater(len(szablon.mapa), 50)
+				# ROZ (arkusz rozbudowy, bez arkusza PV/ME) jest najmniejsza mapa (45 pozycji), stad prog 40.
+				self.assertGreater(len(szablon.mapa), 40)
 
 
 class TestPodpisy(unittest.TestCase):
@@ -945,6 +1004,8 @@ _LICZBA_POZYCJI_OCZEKIWANA: dict[str, int] = {
 	"ME_EV": 58,
 	# ME_K_EV (b69, U2j).
 	"ME_K_EV": 62,
+	# ROZ (b69, U2k, issue ops#249).
+	"ROZ": 45,
 }
 """Dokładna liczba pozycji w każdej mapie podwójnej, potwierdzona przy
 pomiarze (issue #166) - regresja tego testu = ktoś przypadkiem dodał/usunął
