@@ -27,6 +27,79 @@ from crm.volteo_umowa_pdf import zbuduj_kontekst
 from crm.volteo_umowa_render import SZABLONY
 
 # ---------------------------------------------------------------------------
+# Rejestr 14 wzorów (b69, #236) a stan pomiaru map.
+#
+# `MAPY_W_POMIARZE`: osiem wzorów, których mapa jest jeszcze PUSTYM szkieletem
+# (chunki U2b/U2d/U2e/U2f/U2h/U2i/U2j/U2k). Testy per klucz poniżej pomijają je;
+# dwukierunkowy bezpiecznik `TestMapyWPomiarze` wymusza, żeby agent U2, który
+# wypełnia mapę, USUNĄŁ klucz z tego zbioru i dopisał wpisy do słowników
+# per szablon niżej (`WYJATKI_BRAK_POZYCJI_WG_SZABLONU`, `_PELNOMOCNICTWO_IDX`,
+# `_ZAKAZANE_STRONY_PROTOKOLOW`, `_ZALACZNIK_2_3_IDX`, `_STRONY_*_OCZEKIWANE`,
+# `_KLIENT_IMIE_NAZWISKO_STRONY`, `_RODO_STRONA_IDX`), inaczej test czerwienieje.
+#
+# `MAPY_STAREGO_WZORU`: PV/PVME/ME mają NOWE sumy SHA, ale mapy nadal ze starego
+# wzoru (U2a/U2c/U2g je przepiszą i usuną klucz z tej stałej). Są pomijane
+# WYŁĄCZNIE w teście kontraktu cech (`TestKontraktCech`).
+# ---------------------------------------------------------------------------
+
+MAPY_W_POMIARZE: frozenset[str] = frozenset(
+	{"PV_K", "PVME_K", "PVME_EV", "PVME_K_EV", "ME_K", "ME_EV", "ME_K_EV", "ROZ"}
+)
+
+MAPY_STAREGO_WZORU: frozenset[str] = frozenset({"PV", "PVME", "ME"})
+
+_ZMIERZONE: dict[str, Any] = {
+	kod: szablon for kod, szablon in SZABLONY.items() if kod not in MAPY_W_POMIARZE
+}
+"""Wzory z niepustą mapą: po nich iterują testy per klucz niżej."""
+
+KLUCZE_NOWYCH_DODATKOW: frozenset[str] = frozenset(
+	{
+		"klima_rodzaj",
+		"klima_model",
+		"klima_moc_kw",
+		"ev_nazwa",
+		"ev_moc_kw",
+		"dod_panele_szt",
+		"dod_panele_mikro_szt",
+		"roz_panele_szt",
+		"roz_mikro_tak",
+		"roz_mikro_nie",
+		"roz_ist_pv_moc_kwp",
+		"roz_bateria_szt",
+		"roz_ist_me_kwh",
+	}
+)
+"""Trzynaście kluczy dodatków/rozbudowy (b69, #236), zawsze w kontekście.
+Starych map (PV/PVME/ME i ich warianty `_2`) nie ma gdzie na nich oprzeć, więc
+są wyjątkiem w każdej z nich do czasu przepisania map przez chunki U2."""
+
+GRUPY_CECH_KLUCZE: dict[str, frozenset[str]] = {
+	"klima": frozenset({"klima_rodzaj", "klima_model", "klima_moc_kw"}),
+	"ev": frozenset({"ev_nazwa", "ev_moc_kw"}),
+	"dod_panele": frozenset({"dod_panele_szt", "dod_panele_mikro_szt"}),
+	"rozbudowa": frozenset(
+		{
+			"roz_panele_szt",
+			"roz_mikro_tak",
+			"roz_mikro_nie",
+			"roz_ist_pv_moc_kwp",
+			"roz_bateria_szt",
+			"roz_ist_me_kwh",
+		}
+	),
+}
+"""Klucze kontekstu należące do danej cechy (`Szablon.obsluguje`)."""
+
+_KLUCZE_CECHY_MINIMUM: dict[str, frozenset[str]] = {
+	"klima": frozenset({"klima_rodzaj", "klima_moc_kw"}),
+	"ev": frozenset({"ev_nazwa", "ev_moc_kw"}),
+	"dod_panele": frozenset({"dod_panele_szt"}),
+	"rozbudowa": frozenset({"roz_panele_szt", "roz_bateria_szt"}),
+}
+"""Co najmniej jeden z tych kluczy musi mieć pozycję w mapie wzoru obsługującego cechę."""
+
+# ---------------------------------------------------------------------------
 # Wyjątki kontraktu dwukierunkowego, per szablon.
 #
 # Każdy szablon PDF-u ma inny zestaw załączników — klucz kontekstu, którego
@@ -53,7 +126,7 @@ zestaw jest więc wyjątkiem w KAŻDYM z nich, niezależnie od tego, jakie inne
 klucze dany szablon pomija, stąd osobna stała, unijowana do wszystkich
 trzech `WYJATKI_*` poniżej zamiast powtarzana ręcznie."""
 
-WYJATKI_PVME: frozenset[str] = KLUCZE_DRUGIEGO_ZAMAWIAJACEGO
+WYJATKI_PVME: frozenset[str] = KLUCZE_DRUGIEGO_ZAMAWIAJACEGO | KLUCZE_NOWYCH_DODATKOW
 """PV+ME to superset — ma Załącznik 1a (panele) I Załącznik 1b (bateria), więc
 poza sześcioma kluczami drugiego Zamawiającego (ten szablon jest JEDNO-
 osobowy) żaden klucz kontekstu nie jest tu fizycznie nieobecny."""
@@ -67,7 +140,7 @@ WYJATKI_PV: frozenset[str] = frozenset(
 		"bateria_pojemnosc_lacznie_kwh",
 		"bateria_gwarancja_lat",
 	}
-) | KLUCZE_DRUGIEGO_ZAMAWIAJACEGO
+) | KLUCZE_DRUGIEGO_ZAMAWIAJACEGO | KLUCZE_NOWYCH_DODATKOW
 """Szablon PV (`umowa_pv.pdf`) nie ma Załącznika dotyczącego magazynu energii —
 te sześć kluczy `bateria_*` nie ma więc gdzie się wydrukować (zob. docstring
 `MAPA_PV` w `crm/volteo_umowa_mapa_pv.py`), plus sześć kluczy drugiego
@@ -95,7 +168,7 @@ WYJATKI_ME: frozenset[str] = frozenset(
 		"kabel_mb",
 		"kabel_nie",
 	}
-) | KLUCZE_DRUGIEGO_ZAMAWIAJACEGO
+) | KLUCZE_DRUGIEGO_ZAMAWIAJACEGO | KLUCZE_NOWYCH_DODATKOW
 """Szablon ME (`umowa_me.pdf`) opisuje sprzedaż/montaż magazynu energii BEZ
 fotowoltaiki — nie ma sekcji paneli/inwertera-do-PV/montażu dachowego/instalacji
 odgromowej/ppoż/przekopu/dodatkowego kabla (te elementy montażowe dotyczą
@@ -372,7 +445,7 @@ class TestKlucze(unittest.TestCase):
 	def test_a_kazdy_klucz_mapy_istnieje_w_kontekscie(self: "TestKlucze") -> None:
 		kontekst = _pelny_kontekst()
 		klucze_kontekstu = set(kontekst.keys())
-		for kod, szablon in SZABLONY.items():
+		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				for pole in szablon.mapa:
 					self.assertIn(
@@ -383,7 +456,7 @@ class TestKlucze(unittest.TestCase):
 
 	def test_b_kazdy_klucz_kontekstu_ma_pozycje_albo_jawny_wyjatek(self: "TestKlucze") -> None:
 		kontekst = _pelny_kontekst()
-		for kod, szablon in SZABLONY.items():
+		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				klucze_mapy = _klucze_mapy(szablon)
 				wyjatki = WYJATKI_BRAK_POZYCJI_WG_SZABLONU[kod]
@@ -400,14 +473,14 @@ class TestKlucze(unittest.TestCase):
 	def test_c_wyjatki_i_mapa_sie_nie_pokrywaja(self: "TestKlucze") -> None:
 		# Klucz nie może być jednocześnie "świadomie pominięty" i obecny w mapie —
 		# to by znaczyło, że komentarz uzasadniający wyjątek jest nieaktualny.
-		for kod, szablon in SZABLONY.items():
+		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				wyjatki = WYJATKI_BRAK_POZYCJI_WG_SZABLONU[kod]
 				self.assertEqual(wyjatki & _klucze_mapy(szablon), frozenset())
 
 	def test_d_wszystkie_wyjatki_sa_prawdziwymi_kluczami_kontekstu(self: "TestKlucze") -> None:
 		kontekst = _pelny_kontekst()
-		for kod in SZABLONY:
+		for kod in _ZMIERZONE:
 			with self.subTest(kod=kod):
 				for klucz in WYJATKI_BRAK_POZYCJI_WG_SZABLONU[kod]:
 					self.assertIn(klucz, kontekst)
@@ -415,7 +488,7 @@ class TestKlucze(unittest.TestCase):
 
 class TestGeometria(unittest.TestCase):
 	def test_a_strona_w_zakresie(self: "TestGeometria") -> None:
-		for kod, szablon in SZABLONY.items():
+		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				for pole in szablon.mapa:
 					self.assertGreaterEqual(pole.strona, 0, pole)
@@ -424,21 +497,21 @@ class TestGeometria(unittest.TestCase):
 	def test_b_x_w_granicach_strony(self: "TestGeometria") -> None:
 		# Wszystkie trzy szablony to A4 596x842 pt — stałe importowane z
 		# `crm.volteo_umowa_mapa` są więc wspólne dla wszystkich trzech map.
-		for kod, szablon in SZABLONY.items():
+		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				for pole in szablon.mapa:
 					self.assertGreaterEqual(pole.x, 0.0, pole)
 					self.assertLessEqual(pole.x, SZEROKOSC_STRONY_PT, pole)
 
 	def test_c_y_w_granicach_strony(self: "TestGeometria") -> None:
-		for kod, szablon in SZABLONY.items():
+		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				for pole in szablon.mapa:
 					self.assertGreaterEqual(pole.y, 0.0, pole)
 					self.assertLessEqual(pole.y, WYSOKOSC_STRONY_PT, pole)
 
 	def test_d_maks_szerokosc_nie_wychodzi_poza_strone(self: "TestGeometria") -> None:
-		for kod, szablon in SZABLONY.items():
+		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				for pole in szablon.mapa:
 					if pole.maks_szerokosc is None:
@@ -447,7 +520,7 @@ class TestGeometria(unittest.TestCase):
 					self.assertLessEqual(pole.x + pole.maks_szerokosc, SZEROKOSC_STRONY_PT + 1.0, pole)
 
 	def test_e_rozmiar_fontu_dodatni_i_sensowny(self: "TestGeometria") -> None:
-		for kod, szablon in SZABLONY.items():
+		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				for pole in szablon.mapa:
 					self.assertGreater(pole.rozmiar, 0.0, pole)
@@ -456,13 +529,13 @@ class TestGeometria(unittest.TestCase):
 
 class TestRodzajIWyrownanie(unittest.TestCase):
 	def test_a_rodzaj_dozwolona_wartosc(self: "TestRodzajIWyrownanie") -> None:
-		for kod, szablon in SZABLONY.items():
+		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				for pole in szablon.mapa:
 					self.assertIn(pole.rodzaj, ("tekst", "kratka"), pole)
 
 	def test_b_wyrownanie_dozwolona_wartosc(self: "TestRodzajIWyrownanie") -> None:
-		for kod, szablon in SZABLONY.items():
+		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				for pole in szablon.mapa:
 					self.assertIn(pole.wyrownanie, ("lewo", "srodek", "prawo"), pole)
@@ -470,7 +543,7 @@ class TestRodzajIWyrownanie(unittest.TestCase):
 	def test_c_kratki_sa_wyrownane_do_srodka(self: "TestRodzajIWyrownanie") -> None:
 		# Kratka to pojedynczy znak "X" rysowany w środku kwadratu — mapa
 		# zawsze podaje jego środek, więc wyrównanie musi być "srodek".
-		for kod, szablon in SZABLONY.items():
+		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				for pole in szablon.mapa:
 					if pole.rodzaj == "kratka":
@@ -479,7 +552,7 @@ class TestRodzajIWyrownanie(unittest.TestCase):
 	def test_d_kratki_nie_maja_maks_szerokosci(self: "TestRodzajIWyrownanie") -> None:
 		# maks_szerokosc słuzy do przycinania/zawijania długich wartości tekstowych
 		# — nie ma zastosowania do pojedynczego znaku "X" w kratce.
-		for kod, szablon in SZABLONY.items():
+		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				for pole in szablon.mapa:
 					if pole.rodzaj == "kratka":
@@ -487,7 +560,7 @@ class TestRodzajIWyrownanie(unittest.TestCase):
 
 	def test_e_klucze_logiczne_kontekstu_sa_kratkami_w_mapie(self: "TestRodzajIWyrownanie") -> None:
 		kontekst = _pelny_kontekst()
-		for kod, szablon in SZABLONY.items():
+		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				for klucz, wartosc in kontekst.items():
 					if not isinstance(wartosc, bool):
@@ -502,7 +575,7 @@ class TestRodzajIWyrownanie(unittest.TestCase):
 
 	def test_f_klucze_tekstowe_kontekstu_nie_sa_kratkami_w_mapie(self: "TestRodzajIWyrownanie") -> None:
 		kontekst = _pelny_kontekst()
-		for kod, szablon in SZABLONY.items():
+		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				for klucz, wartosc in kontekst.items():
 					if not isinstance(wartosc, str):
@@ -523,13 +596,13 @@ class TestWielokrotnePozycje(unittest.TestCase):
 		# je instalator po montażu), więc dane klienta się tam już NIE powtarzają,
 		# w żadnym z trzech szablonów. Regresja tego testu = ktoś przypadkiem
 		# usunął/dodał pozycję przy edycji mapy.
-		for kod, szablon in SZABLONY.items():
+		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				strony = {pole.strona for pole in _pozycje(szablon, "klient_imie_nazwisko")}
 				self.assertEqual(strony, _KLIENT_IMIE_NAZWISKO_STRONY[kod])
 
 	def test_b_zero_duplikatow_tej_samej_pozycji(self: "TestWielokrotnePozycje") -> None:
-		for kod, szablon in SZABLONY.items():
+		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				widziane: set[tuple[str, int, float, float]] = set()
 				for pole in szablon.mapa:
@@ -541,7 +614,7 @@ class TestWielokrotnePozycje(unittest.TestCase):
 		# Linia podpisu klienta na końcu Załącznika RODO — jedna pozycja w
 		# każdym szablonie. Regresja tego testu = ktoś przesunął pozycję przy
 		# przyszłej edycji mapy, bez zauważenia że to zmienia stronę wydruku.
-		for kod, szablon in SZABLONY.items():
+		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				pozycje = _pozycje(szablon, "rodo_data_imie_nazwisko")
 				self.assertEqual(len(pozycje), 1)
@@ -555,7 +628,7 @@ class TestPoleDataclass(unittest.TestCase):
 			pole.x = 20.0  # type: ignore[misc]
 
 	def test_b_kazda_mapa_nie_jest_pusta(self: "TestPoleDataclass") -> None:
-		for kod, szablon in SZABLONY.items():
+		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				self.assertGreater(len(szablon.mapa), 50)
 
@@ -565,7 +638,7 @@ class TestPodpisy(unittest.TestCase):
 	wszystkich trzech szablonów PDF-u umowy."""
 
 	def test_a_oba_klucze_maja_przynajmniej_jedna_pozycje(self: "TestPodpisy") -> None:
-		for kod, szablon in SZABLONY.items():
+		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				self.assertGreater(len(_pozycje(szablon, "podpis_zamawiajacy")), 0)
 				self.assertGreater(len(_pozycje(szablon, "podpis_wykonawca")), 0)
@@ -573,7 +646,7 @@ class TestPodpisy(unittest.TestCase):
 	def test_b_zadna_pozycja_podpisu_nie_lezy_na_stronach_protokolow_odbioru(
 		self: "TestPodpisy",
 	) -> None:
-		for kod, szablon in SZABLONY.items():
+		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				zakazane_strony = _ZAKAZANE_STRONY_PROTOKOLOW[kod]
 				for klucz in ("podpis_zamawiajacy", "podpis_wykonawca"):
@@ -588,19 +661,19 @@ class TestPodpisy(unittest.TestCase):
 	def test_c_wykonawca_nie_wystepuje_na_stronie_pelnomocnictwa(self: "TestPodpisy") -> None:
 		# Pełnomocnictwo ma tylko jedną linię podpisu - Mocodawcy (klienta) -
 		# to jednostronne oświadczenie, więc ProEnergy się tam nie podpisuje.
-		for kod, szablon in SZABLONY.items():
+		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				strony_wykonawcy = {pole.strona for pole in _pozycje(szablon, "podpis_wykonawca")}
 				self.assertNotIn(_PELNOMOCNICTWO_IDX[kod], strony_wykonawcy)
 
 	def test_d_zamawiajacy_wystepuje_na_stronie_pelnomocnictwa(self: "TestPodpisy") -> None:
-		for kod, szablon in SZABLONY.items():
+		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				strony_zamawiajacego = {pole.strona for pole in _pozycje(szablon, "podpis_zamawiajacy")}
 				self.assertIn(_PELNOMOCNICTWO_IDX[kod], strony_zamawiajacego)
 
 	def test_e_podpisy_na_oczekiwanych_stronach_umowy_i_zalacznikow(self: "TestPodpisy") -> None:
-		for kod, szablon in SZABLONY.items():
+		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				strony_zamawiajacego = {pole.strona for pole in _pozycje(szablon, "podpis_zamawiajacy")}
 				strony_wykonawcy = {pole.strona for pole in _pozycje(szablon, "podpis_wykonawca")}
@@ -608,7 +681,7 @@ class TestPodpisy(unittest.TestCase):
 				self.assertEqual(strony_wykonawcy, _STRONY_WYKONAWCA_OCZEKIWANE[kod])
 
 	def test_f_zalacznik_2_i_3_maja_po_jednej_odrebnej_pozycji(self: "TestPodpisy") -> None:
-		for kod, szablon in SZABLONY.items():
+		for kod, szablon in _ZMIERZONE.items():
 			with self.subTest(kod=kod):
 				strona_idx = _ZALACZNIK_2_3_IDX[kod]
 				pozycje_strony = [
@@ -792,3 +865,66 @@ class TestMapyPodwojne(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+class TestMapyWPomiarze(unittest.TestCase):
+	"""Dwukierunkowy bezpiecznik stanu pomiaru map (zob. komentarz przy `MAPY_W_POMIARZE`)."""
+
+	def test_pusta_mapa_tylko_dla_kluczy_w_pomiarze(self: "TestMapyWPomiarze") -> None:
+		for kod, szablon in SZABLONY.items():
+			if not szablon.mapa:
+				with self.subTest(kod=kod):
+					self.assertIn(
+						kod, MAPY_W_POMIARZE, f"[{kod}] pusta mapa, a klucza nie ma w MAPY_W_POMIARZE"
+					)
+
+	def test_klucz_w_pomiarze_ma_pusta_mape(self: "TestMapyWPomiarze") -> None:
+		for kod in MAPY_W_POMIARZE:
+			with self.subTest(kod=kod):
+				self.assertIn(kod, SZABLONY)
+				self.assertEqual(
+					len(SZABLONY[kod].mapa),
+					0,
+					f"[{kod}] mapa wypełniona: usuń klucz z MAPY_W_POMIARZE i dopisz wpisy do słowników per szablon",
+				)
+				self.assertFalse(SZABLONY[kod].gotowy)
+
+	def test_stary_wzor_ma_niepusta_mape(self: "TestMapyWPomiarze") -> None:
+		for kod in MAPY_STAREGO_WZORU:
+			with self.subTest(kod=kod):
+				self.assertTrue(SZABLONY[kod].gotowy)
+
+
+class TestKontraktCech(unittest.TestCase):
+	"""Cechy z `Szablon.obsluguje` muszą mieć pozycje w mapie; cechy nieobsługiwane
+	muszą być jawnie wyłączone w `WYJATKI_BRAK_POZYCJI_WG_SZABLONU`."""
+
+	def _kody(self: "TestKontraktCech") -> list[str]:
+		return [
+			kod
+			for kod, szablon in SZABLONY.items()
+			if szablon.gotowy and kod not in MAPY_STAREGO_WZORU
+		]
+
+	def test_obslugiwana_cecha_ma_pozycje_w_mapie(self: "TestKontraktCech") -> None:
+		for kod in self._kody():
+			with self.subTest(kod=kod):
+				klucze_mapy = _klucze_mapy(SZABLONY[kod])
+				for cecha in SZABLONY[kod].obsluguje:
+					self.assertTrue(
+						_KLUCZE_CECHY_MINIMUM[cecha] & klucze_mapy,
+						f"[{kod}] obsługuje cechę {cecha!r}, a mapa nie ma jej kluczy",
+					)
+
+	def test_nieobslugiwana_cecha_jest_w_wyjatkach(self: "TestKontraktCech") -> None:
+		for kod in self._kody():
+			with self.subTest(kod=kod):
+				wyjatki = WYJATKI_BRAK_POZYCJI_WG_SZABLONU[kod]
+				for cecha, klucze in GRUPY_CECH_KLUCZE.items():
+					if cecha not in SZABLONY[kod].obsluguje:
+						self.assertTrue(klucze <= wyjatki, f"[{kod}] cecha {cecha!r} nieobsługiwana, brak wyjątków")
+
+	def test_stare_wzory_maja_nowe_klucze_w_wyjatkach(self: "TestKontraktCech") -> None:
+		for kod in ("PV", "PVME", "ME", "PV_2", "PVME_2", "ME_2"):
+			with self.subTest(kod=kod):
+				self.assertTrue(KLUCZE_NOWYCH_DODATKOW <= WYJATKI_BRAK_POZYCJI_WG_SZABLONU[kod])

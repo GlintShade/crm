@@ -9,20 +9,17 @@ w miejscach opisanych przez odpowiednią mapę współrzędnych. Dzięki temu tr
 prawna, logo, stopka, fonty i podział stron są dokładnie takie jak w
 oryginale — bo to fizycznie ten sam plik, tylko z naniesioną warstwą.
 
-Trzy rodzaje umowy mają TRZY osobne szablony PDF i TRZY osobne mapy
-współrzędnych dla wariantu JEDNOOSOBOWEGO (rejestr `SZABLONY` niżej): `PV`
-(Fotowoltaika), `ME` (Magazyn energii), `PVME` (Fotowoltaika + Magazyn). Od
-ops#167 dochodzą trzy analogiczne warianty PODWÓJNE (`PV_2`, `PVME_2`, `ME_2`)
-dla umów z drugim Zamawiającym: własny plik PDF i własna mapa współrzędnych
-każdy, zmierzone od zera (ops#165/#166), nie skopiowane z wariantu
-jednoosobowego. Wybór szablonu jest jawny, wołający (`crm/api/umowa.py`)
-przekazuje kod rodzaju umowy PLUS informację o drugim Zamawiającym, przez
-`crm.volteo_umowa.kod_szablonu(rodzaj, podwojna)`, do `zloz_umowe()`, tu nie ma
-żadnego domyślnego szablonu. „Czyste Powietrze” (`CP`) i nieznany/pusty rodzaj
-(`XX`) CELOWO nie mają wpisu w `SZABLONY`, w żadnym z dwóch wariantów. Ten PDF
-dotyczy wyłącznie umów PV/magazyn; brak klucza w rejestrze jest właśnie tym, co
-pozwala wołającemu odmówić generowania dla pozostałych rodzajów, zamiast po
-cichu użyć niewłaściwego szablonu.
+Rejestr `SZABLONY` ma 14 kluczy (b69, #236): jedenaście wzorów JEDNOOSOBOWYCH
+(`PV`, `PV_K`, `PVME`, `PVME_K`, `PVME_EV`, `PVME_K_EV`, `ME`, `ME_K`, `ME_EV`,
+`ME_K_EV`, `ROZ`) i trzy PODWÓJNE (`PV_2`, `PVME_2`, `ME_2`, ops#165/#166/#167,
+zmierzone od zera). Klucz wybiera `crm.volteo_umowa.kod_szablonu(rodzaj,
+podwojna, cechy)`: kod bazowy + `_K` (klimatyzacja) + `_EV` (ładowarka EV) +
+`_2` (drugi Zamawiający); klucze `*_2` z cechą nie istnieją celowo. Każdy wzór
+ma własny plik PDF i własną mapę; `Szablon.obsluguje` opisuje cechy, które wzór
+drukuje (`brakujace_cechy`), `Szablon.gotowy` czy mapa została zmierzona
+(`zloz_umowe` odmawia dla pustej mapy). Tu nie ma żadnego domyślnego szablonu.
+„Czyste Powietrze” (`CP`) i nieznany/pusty rodzaj (`XX`) CELOWO nie mają wpisu;
+brak klucza pozwala wołającemu odmówić zamiast po cichu użyć złego szablonu.
 
 BEZPIECZNIK (dokument prawny podpisywany przez klienta): `zloz_umowe()`
 sprawdza sumę SHA-256 przekazanego szablonu względem `SZABLONY[kod].sha256`
@@ -57,12 +54,20 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen.canvas import Canvas
 
-from crm.volteo_umowa_mapa import MAPA, SHA256_SZABLONU, Pole
+from crm.volteo_umowa_mapa import LICZBA_STRON_PVME, MAPA, SHA256_SZABLONU, Pole
 from crm.volteo_umowa_mapa_me import LICZBA_STRON_ME, MAPA_ME, SHA256_SZABLONU_ME
 from crm.volteo_umowa_mapa_me2 import LICZBA_STRON_ME2, MAPA_ME2, SHA256_SZABLONU_ME2
+from crm.volteo_umowa_mapa_meev import LICZBA_STRON_MEEV, MAPA_MEEV, SHA256_SZABLONU_MEEV
+from crm.volteo_umowa_mapa_mek import LICZBA_STRON_MEK, MAPA_MEK, SHA256_SZABLONU_MEK
+from crm.volteo_umowa_mapa_mekev import LICZBA_STRON_MEKEV, MAPA_MEKEV, SHA256_SZABLONU_MEKEV
 from crm.volteo_umowa_mapa_pv import LICZBA_STRON_PV, MAPA_PV, SHA256_SZABLONU_PV
 from crm.volteo_umowa_mapa_pv2 import LICZBA_STRON_PV2, MAPA_PV2, SHA256_SZABLONU_PV2
+from crm.volteo_umowa_mapa_pvk import LICZBA_STRON_PVK, MAPA_PVK, SHA256_SZABLONU_PVK
 from crm.volteo_umowa_mapa_pvme2 import LICZBA_STRON_PVME2, MAPA_PVME2, SHA256_SZABLONU_PVME2
+from crm.volteo_umowa_mapa_pvmeev import LICZBA_STRON_PVMEEV, MAPA_PVMEEV, SHA256_SZABLONU_PVMEEV
+from crm.volteo_umowa_mapa_pvmek import LICZBA_STRON_PVMEK, MAPA_PVMEK, SHA256_SZABLONU_PVMEK
+from crm.volteo_umowa_mapa_pvmekev import LICZBA_STRON_PVMEKEV, MAPA_PVMEKEV, SHA256_SZABLONU_PVMEKEV
+from crm.volteo_umowa_mapa_roz import LICZBA_STRON_ROZ, MAPA_ROZ, SHA256_SZABLONU_ROZ
 
 
 @dataclass(frozen=True)
@@ -80,32 +85,74 @@ class Szablon:
 	sha256: str
 	liczba_stron: int
 	mapa: tuple[Pole, ...]
+	obsluguje: frozenset[str] = frozenset()
+	"""Cechy konfiguracji szansy (`crm.volteo_umowa.cechy_umowy`, plus
+	`"rozbudowa"`), które ten wzór potrafi wydrukować. Wołający (API) odmawia,
+	gdy `cechy - obsluguje` jest niepuste."""
 
+	@property
+	def gotowy(self) -> bool:
+		"""Czy mapa współrzędnych tego wzoru została już zmierzona (niepusta)."""
+		return len(self.mapa) > 0
+
+
+_K = frozenset({"klima"})
+_EV = frozenset({"ev"})
+_P = frozenset({"dod_panele"})
 
 SZABLONY: dict[str, Szablon] = {
 	"PV": Szablon("umowa_pv.pdf", SHA256_SZABLONU_PV, LICZBA_STRON_PV, MAPA_PV),
-	"PVME": Szablon("umowa_pv_me.pdf", SHA256_SZABLONU, 18, MAPA),
-	"ME": Szablon("umowa_me.pdf", SHA256_SZABLONU_ME, LICZBA_STRON_ME, MAPA_ME),
+	"PV_K": Szablon("umowa_pv_k.pdf", SHA256_SZABLONU_PVK, LICZBA_STRON_PVK, MAPA_PVK, _K),
+	"PVME": Szablon("umowa_pv_me.pdf", SHA256_SZABLONU, LICZBA_STRON_PVME, MAPA),
+	"PVME_K": Szablon("umowa_pv_me_k.pdf", SHA256_SZABLONU_PVMEK, LICZBA_STRON_PVMEK, MAPA_PVMEK, _K),
+	"PVME_EV": Szablon("umowa_pv_me_ev.pdf", SHA256_SZABLONU_PVMEEV, LICZBA_STRON_PVMEEV, MAPA_PVMEEV, _EV),
+	"PVME_K_EV": Szablon(
+		"umowa_pv_me_k_ev.pdf", SHA256_SZABLONU_PVMEKEV, LICZBA_STRON_PVMEKEV, MAPA_PVMEKEV, _K | _EV
+	),
+	"ME": Szablon("umowa_me.pdf", SHA256_SZABLONU_ME, LICZBA_STRON_ME, MAPA_ME, _P),
+	"ME_K": Szablon("umowa_me_k.pdf", SHA256_SZABLONU_MEK, LICZBA_STRON_MEK, MAPA_MEK, _K | _P),
+	"ME_EV": Szablon("umowa_me_ev.pdf", SHA256_SZABLONU_MEEV, LICZBA_STRON_MEEV, MAPA_MEEV, _EV | _P),
+	"ME_K_EV": Szablon(
+		"umowa_me_k_ev.pdf", SHA256_SZABLONU_MEKEV, LICZBA_STRON_MEKEV, MAPA_MEKEV, _K | _EV | _P
+	),
+	"ROZ": Szablon(
+		"umowa_rozbudowa.pdf",
+		SHA256_SZABLONU_ROZ,
+		LICZBA_STRON_ROZ,
+		MAPA_ROZ,
+		frozenset({"rozbudowa"}),
+	),
 	# Warianty PODWÓJNE (dwóch Zamawiających, ops#165/#166/#167): klucz to
 	# kod bazowy z doklejonym `"_2"`, dokładnie to, co zwraca
 	# `crm.volteo_umowa.kod_szablonu(rodzaj, podwojna=True)`. Każdy ma WŁASNY
 	# plik PDF (`crm/szablony/umowa_*_podwojna.pdf`), własną sumę SHA-256 i
 	# własną mapę współrzędnych (`crm/volteo_umowa_mapa_*2.py`), zmierzoną
-	# OD ZERA na tym pliku, nie skopiowaną z wariantu jednoosobowego, bo drugi
-	# blok komparycji przesuwa całą resztę treści.
+	# OD ZERA na tym pliku. Nie obsługują żadnych cech (stare wzory, bez
+	# klimy/EV/paneli dodatkowych), klucze `*_2` z cechą nie istnieją celowo.
 	"PV_2": Szablon("umowa_pv_podwojna.pdf", SHA256_SZABLONU_PV2, LICZBA_STRON_PV2, MAPA_PV2),
 	"PVME_2": Szablon("umowa_pv_me_podwojna.pdf", SHA256_SZABLONU_PVME2, LICZBA_STRON_PVME2, MAPA_PVME2),
 	"ME_2": Szablon("umowa_me_podwojna.pdf", SHA256_SZABLONU_ME2, LICZBA_STRON_ME2, MAPA_ME2),
 }
-"""Rejestr szablonów wg kodu rodzaju umowy (te same kody bazowe, co
-`crm.volteo_naming.UMOWA_CODES`: `PV`, `PVME`, `ME`), plus trzy warianty
-PODWÓJNE (`PV_2`, `PVME_2`, `ME_2`, ops#167) dla umów z drugim Zamawiającym
-(`Volteo Umowa.drugi_zamawiajacy`, ops#168): wybór między kodem pojedynczym i
-podwójnym jest jawny, przez `crm.volteo_umowa.kod_szablonu()`, nigdy dorozumiany
-z obecności innych pól. `CP` i `XX` (w żadnym z wariantów) są tu CELOWO
-nieobecne, ten generator PDF-u obsługuje wyłącznie umowy PV/magazyn; nieobecność
-klucza w tym słowniku jest właśnie mechanizmem, którym `crm/api/umowa.py` odmawia
-generowania dla „Czyste Powietrze” i nierozpoznanego/pustego rodzaju umowy."""
+"""Rejestr szablonów wg klucza wzoru (b69, #236). Klucz buduje
+`crm.volteo_umowa.kod_szablonu(rodzaj, podwojna, cechy)`: kod bazowy
+(`PV`/`PVME`/`ME`/`ROZ`, jak `crm.volteo_naming.UMOWA_CODES`) + `_K` (klimatyzacja)
++ `_EV` (ładowarka EV) + `_2` (drugi Zamawiający), w tej kolejności. Jedenaście
+wzorów jednoosobowych plus trzy PODWÓJNE (`PV_2`, `PVME_2`, `ME_2`, ops#167);
+klucze `*_2` z klimą/EV nie istnieją celowo (brak wzorów), a `ROZ_2` też nie.
+`Szablon.obsluguje` mówi, jakie cechy wzór drukuje, `Szablon.gotowy`, czy jego
+mapa została już zmierzona. `CP` i `XX` są tu CELOWO nieobecne, a nieobecność
+klucza jest mechanizmem, którym `crm/api/umowa.py` odmawia generowania PDF-u."""
+
+
+def brakujace_cechy(kod: str, cechy: frozenset[str]) -> frozenset[str]:
+	"""Cechy konfiguracji, których wzór `kod` NIE potrafi wydrukować (pusty zbiór =
+	wzór pokrywa całą konfigurację). Dla kodu spoza `SZABLONY` zwraca pełny zbiór
+	`cechy` ("niczego nie obsługuje")."""
+	szablon = SZABLONY.get(kod)
+	if szablon is None:
+		return frozenset(cechy)
+	return frozenset(cechy) - szablon.obsluguje
+
 
 _KOLOR_TEKSTU = HexColor("#1B1C1F")
 """Czerń dokumentu — zgodna z kolorem tekstu oryginału."""
@@ -188,6 +235,8 @@ def zloz_umowe(kontekst: dict[str, Any], szablon_pdf: bytes, kod: str) -> bytes:
 	Nie mutuje `kontekst` ani `szablon_pdf` — obie wartości są tylko czytane.
 	"""
 	szablon = SZABLONY[kod]
+	if not szablon.gotowy:
+		raise ValueError(f"Mapa współrzędnych wzoru {kod} nie została jeszcze zmierzona")
 	opis = f"umowy rodzaju '{kod}' ({szablon.nazwa_pliku})"
 	return _zloz_dokument(kontekst, szablon_pdf, szablon, opis)
 

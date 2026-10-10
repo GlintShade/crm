@@ -4,9 +4,11 @@ from decimal import Decimal
 from crm.volteo_umowa import (
 	KONSTRUKCJA_MONTAZ,
 	PROG_PPOZ_KW,
+	RODZAJE_BEZ_WZORU,
 	RODZAJE_NOWE,
 	brakujace_dane_klienta,
 	brakujace_pola,
+	cechy_umowy,
 	czy_propagowac_zgody,
 	czy_rodzaj_bez_wzoru_umowy,
 	czy_umowa_podwojna,
@@ -14,7 +16,9 @@ from crm.volteo_umowa import (
 	kontakty_do_zgod,
 	kwota_kredytu,
 	miejsce_i_pokrycie,
+	opis_konfiguracji,
 	ppoz_wymagane,
+	wymagane_pola,
 )
 
 
@@ -603,7 +607,8 @@ class TestCzyRodzajBezWzoruUmowy(unittest.TestCase):
 	je w osobnej fazie."""
 
 	def test_a_rozbudowa_pv_me(self: "TestCzyRodzajBezWzoruUmowy") -> None:
-		self.assertTrue(czy_rodzaj_bez_wzoru_umowy("Rozbudowa PV/ME"))
+		# b69 (#236): Rozbudowa ma już wzór (`ROZ`), nie jest "w przygotowaniu".
+		self.assertFalse(czy_rodzaj_bez_wzoru_umowy("Rozbudowa PV/ME"))
 
 	def test_b_klimatyzacja(self: "TestCzyRodzajBezWzoruUmowy") -> None:
 		self.assertTrue(czy_rodzaj_bez_wzoru_umowy("Klimatyzacja"))
@@ -715,3 +720,166 @@ class TestCzyUmowaPodwojna(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+class TestRodzajeBezWzoru(unittest.TestCase):
+	def test_dokladnie_trzy_rodzaje(self: "TestRodzajeBezWzoru") -> None:
+		self.assertEqual(RODZAJE_BEZ_WZORU, frozenset({"Klimatyzacja", "Pompa ciepła", "Kocioł"}))
+
+	def test_podzbior_rodzajow_nowych_bez_rozbudowy(self: "TestRodzajeBezWzoru") -> None:
+		self.assertTrue(RODZAJE_BEZ_WZORU < RODZAJE_NOWE)
+		self.assertNotIn("Rozbudowa PV/ME", RODZAJE_BEZ_WZORU)
+
+
+class TestCechyUmowy(unittest.TestCase):
+	def test_a_puste_dodatki(self: "TestCechyUmowy") -> None:
+		self.assertEqual(cechy_umowy({"custom_rodzaj_umowy": "Magazyn energii"}), frozenset())
+
+	def test_b_klima(self: "TestCechyUmowy") -> None:
+		deal = {"custom_rodzaj_umowy": "Magazyn energii", "custom_dod_klima": "Klima 3,5 kW"}
+		self.assertEqual(cechy_umowy(deal), frozenset({"klima"}))
+
+	def test_c_klima_same_biale_znaki_to_brak(self: "TestCechyUmowy") -> None:
+		self.assertEqual(cechy_umowy({"custom_dod_klima": "  ", "custom_ev_ladowarka": None}), frozenset())
+
+	def test_d_ev(self: "TestCechyUmowy") -> None:
+		self.assertEqual(cechy_umowy({"custom_ev_ladowarka": "Wallbox AC"}), frozenset({"ev"}))
+
+	def test_e_panele_jako_stringi(self: "TestCechyUmowy") -> None:
+		self.assertEqual(cechy_umowy({"custom_dod_panele": "3"}), frozenset({"dod_panele"}))
+		self.assertEqual(cechy_umowy({"custom_dod_panele_mikro": 2}), frozenset({"dod_panele"}))
+
+	def test_f_panele_zero_to_brak(self: "TestCechyUmowy") -> None:
+		self.assertEqual(
+			cechy_umowy({"custom_dod_panele": "0", "custom_dod_panele_mikro": " "}), frozenset()
+		)
+
+	def test_g_wszystkie_cechy(self: "TestCechyUmowy") -> None:
+		deal = {"custom_dod_klima": "K", "custom_ev_ladowarka": "E", "custom_dod_panele": 1}
+		self.assertEqual(cechy_umowy(deal), frozenset({"klima", "ev", "dod_panele"}))
+
+	def test_h_rozbudowa_zawsze_tylko_rozbudowa(self: "TestCechyUmowy") -> None:
+		deal = {"custom_rodzaj_umowy": "Rozbudowa PV/ME", "custom_dod_klima": "K", "custom_dod_panele": 2}
+		self.assertEqual(cechy_umowy(deal), frozenset({"rozbudowa"}))
+
+	def test_i_rodzaje_bez_wzoru_pusty_zbior(self: "TestCechyUmowy") -> None:
+		for rodzaj in ("Klimatyzacja", "Pompa ciepła", "Kocioł"):
+			deal = {"custom_rodzaj_umowy": rodzaj, "custom_dod_klima": "K"}
+			self.assertEqual(cechy_umowy(deal), frozenset(), rodzaj)
+
+	def test_j_nie_mutuje(self: "TestCechyUmowy") -> None:
+		deal = {"custom_dod_klima": "K"}
+		cechy_umowy(deal)
+		self.assertEqual(deal, {"custom_dod_klima": "K"})
+
+
+class TestKodSzablonuCechy(unittest.TestCase):
+	def test_a_kompatybilnosc_dwuargumentowa(self: "TestKodSzablonuCechy") -> None:
+		self.assertEqual(kod_szablonu("Magazyn energii", False), "ME")
+		self.assertEqual(kod_szablonu("Magazyn energii", False, frozenset()), "ME")
+
+	def test_b_wszystkie_klucze_jednoosobowe(self: "TestKodSzablonuCechy") -> None:
+		k, ev, p = frozenset({"klima"}), frozenset({"ev"}), frozenset({"dod_panele"})
+		oczekiwane = {
+			("Fotowoltaika", frozenset()): "PV",
+			("Fotowoltaika", k): "PV_K",
+			("Fotowoltaika + Magazyn", frozenset()): "PVME",
+			("Fotowoltaika + Magazyn", k): "PVME_K",
+			("Fotowoltaika + Magazyn", ev): "PVME_EV",
+			("Fotowoltaika + Magazyn", k | ev): "PVME_K_EV",
+			("Magazyn energii", frozenset()): "ME",
+			("Magazyn energii", k): "ME_K",
+			("Magazyn energii", ev): "ME_EV",
+			("Magazyn energii", k | ev): "ME_K_EV",
+			("Rozbudowa PV/ME", frozenset({"rozbudowa"})): "ROZ",
+			("Magazyn energii", p): "ME",
+			("Magazyn energii", k | ev | p): "ME_K_EV",
+		}
+		for (rodzaj, cechy), kod in oczekiwane.items():
+			with self.subTest(rodzaj=rodzaj, cechy=sorted(cechy)):
+				self.assertEqual(kod_szablonu(rodzaj, False, cechy), kod)
+
+	def test_c_podwojna_z_cecha(self: "TestKodSzablonuCechy") -> None:
+		self.assertEqual(kod_szablonu("Magazyn energii", True, frozenset({"klima"})), "ME_K_2")
+		self.assertEqual(kod_szablonu("Magazyn energii", True, frozenset({"klima", "ev"})), "ME_K_EV_2")
+
+	def test_d_rozbudowa_podwojna(self: "TestKodSzablonuCechy") -> None:
+		self.assertEqual(kod_szablonu("Rozbudowa PV/ME", True, frozenset({"rozbudowa"})), "ROZ_2")
+
+	def test_e_rozbudowa_bez_sufiksow_cech(self: "TestKodSzablonuCechy") -> None:
+		self.assertEqual(kod_szablonu("Rozbudowa PV/ME", False, frozenset({"klima", "ev"})), "ROZ")
+
+
+class TestWymaganePola(unittest.TestCase):
+	def test_a_pv_i_nieznany_to_zawsze_wymagane(self: "TestWymaganePola") -> None:
+		self.assertEqual(wymagane_pola("Fotowoltaika"), wymagane_pola(None))
+		self.assertIn("istniejaca_pv", wymagane_pola("Fotowoltaika"))
+		self.assertIn("przekop_gruntowy", wymagane_pola("Magazyn energii"))
+
+	def test_b_rozbudowa_podzbior(self: "TestWymaganePola") -> None:
+		self.assertEqual(
+			wymagane_pola("Rozbudowa PV/ME"),
+			("adres_zam_jak_montaz", "typ_budynku", "powierzchnia_prog", "finansowanie", "osd"),
+		)
+
+	def test_c_rozbudowa_bateria_dokleja_pojemnosc(self: "TestWymaganePola") -> None:
+		wynik = wymagane_pola("Rozbudowa PV/ME", {"roz_bateria_szt": "2"})
+		self.assertEqual(wynik[-1], "istniejacy_me_pojemnosc_kwh")
+
+	def test_d_rozbudowa_bateria_zero_nie_dokleja(self: "TestWymaganePola") -> None:
+		self.assertNotIn("istniejacy_me_pojemnosc_kwh", wymagane_pola("Rozbudowa PV/ME", {"roz_bateria_szt": "0"}))
+		self.assertNotIn("istniejacy_me_pojemnosc_kwh", wymagane_pola("Rozbudowa PV/ME", {}))
+
+	def test_e_brakujace_pola_dla_rozbudowy(self: "TestWymaganePola") -> None:
+		dane = {
+			"adres_zam_jak_montaz": "Tak",
+			"typ_budynku": "Jednorodzinny",
+			"powierzchnia_prog": "do 300 m²",
+			"finansowanie": "Gotówka 100%",
+			"osd": "PGE",
+		}
+		self.assertEqual(brakujace_pola(dane, "Rozbudowa PV/ME"), [])
+		# Pola PV (internet, przekop...) NIE są wymagane dla rozbudowy.
+		self.assertNotEqual(brakujace_pola(dane), [])
+
+	def test_f_rozbudowa_bateria_wymaga_pojemnosci_istniejacego_me(self: "TestWymaganePola") -> None:
+		dane = {
+			"adres_zam_jak_montaz": "Tak",
+			"typ_budynku": "Jednorodzinny",
+			"powierzchnia_prog": "do 300 m²",
+			"finansowanie": "Gotówka 100%",
+			"osd": "PGE",
+			"roz_bateria_szt": 1,
+			"istniejacy_me_pojemnosc_kwh": "0",
+		}
+		self.assertEqual(brakujace_pola(dane, "Rozbudowa PV/ME"), ["istniejacy_me_pojemnosc_kwh"])
+		dane["istniejacy_me_pojemnosc_kwh"] = "10"
+		self.assertEqual(brakujace_pola(dane, "Rozbudowa PV/ME"), [])
+
+	def test_g_rozbudowa_nie_wymaga_pol_istniejacej_pv_nawet_przy_tak(self: "TestWymaganePola") -> None:
+		dane = {
+			"adres_zam_jak_montaz": "Tak",
+			"typ_budynku": "Jednorodzinny",
+			"powierzchnia_prog": "do 300 m²",
+			"finansowanie": "Gotówka 100%",
+			"osd": "PGE",
+			"istniejaca_pv": "Tak",
+		}
+		self.assertEqual(brakujace_pola(dane, "Rozbudowa PV/ME"), [])
+
+
+class TestOpisKonfiguracji(unittest.TestCase):
+	def test_a_sam_rodzaj(self: "TestOpisKonfiguracji") -> None:
+		self.assertEqual(opis_konfiguracji("Rozbudowa PV/ME", frozenset({"rozbudowa"}), False), "Rozbudowa PV/ME")
+
+	def test_b_pelna_konfiguracja_w_kolejnosci(self: "TestOpisKonfiguracji") -> None:
+		self.assertEqual(
+			opis_konfiguracji("Magazyn energii", frozenset({"dod_panele", "ev", "klima"}), True),
+			"Magazyn energii + klimatyzacja + ładowarka EV + dodatkowe moduły PV + dwóch Zamawiających",
+		)
+
+	def test_c_pv_magazyn(self: "TestOpisKonfiguracji") -> None:
+		self.assertEqual(opis_konfiguracji("Fotowoltaika + Magazyn", frozenset(), False), "Fotowoltaika + Magazyn")
+
+	def test_d_nieznany_rodzaj(self: "TestOpisKonfiguracji") -> None:
+		self.assertEqual(opis_konfiguracji(None, frozenset(), False), "nierozpoznany rodzaj")

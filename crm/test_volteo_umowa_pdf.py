@@ -1354,3 +1354,148 @@ class TestDrugiZamawiajacy(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+NOWE_KLUCZE = (
+	"klima_rodzaj",
+	"klima_model",
+	"klima_moc_kw",
+	"ev_nazwa",
+	"ev_moc_kw",
+	"dod_panele_szt",
+	"dod_panele_mikro_szt",
+	"roz_panele_szt",
+	"roz_mikro_tak",
+	"roz_mikro_nie",
+	"roz_ist_pv_moc_kwp",
+	"roz_bateria_szt",
+	"roz_ist_me_kwh",
+)
+
+
+def _kontekst_z(**kwargs: Any) -> dict[str, Any]:
+	return zbuduj_kontekst(_umowa(), _deal(), _kontakt(), _zestaw(), _komponenty(), _stale(), _DZIS, **kwargs)
+
+
+class TestDodatkiIRozbudowaKontekst(unittest.TestCase):
+	def test_a_nowe_klucze_zawsze_obecne_i_puste_bez_wejscia(self: "TestDodatkiIRozbudowaKontekst") -> None:
+		k = _kontekst()
+		for klucz in NOWE_KLUCZE:
+			with self.subTest(klucz=klucz):
+				self.assertIn(klucz, k)
+				self.assertIn(k[klucz], ("", False))
+
+	def test_b_bez_rozbudowy_ppoz_jak_dawniej(self: "TestDodatkiIRozbudowaKontekst") -> None:
+		self.assertEqual(
+			{k: _kontekst()[k] for k in ("ppoz_tak", "ppoz_nie")},
+			{k: _kontekst_z(dodatki={})[k] for k in ("ppoz_tak", "ppoz_nie")},
+		)
+
+	def test_c_klima(self: "TestDodatkiIRozbudowaKontekst") -> None:
+		k = _kontekst_z(
+			dodatki={"klima": {"model": "Daikin 3,5", "moc_kw": 3.5, "rodzaj": "chłodzenie i grzanie"}}
+		)
+		self.assertEqual(k["klima_rodzaj"], "chłodzenie i grzanie")
+		self.assertEqual(k["klima_model"], "Daikin 3,5")
+		self.assertEqual(k["klima_moc_kw"], "3,5")
+		self.assertEqual(k["ev_nazwa"], "")
+
+	def test_d_ev(self: "TestDodatkiIRozbudowaKontekst") -> None:
+		k = _kontekst_z(dodatki={"ev": {"nazwa": "Wallbox AC 11", "moc_kw": 11}})
+		self.assertEqual(k["ev_nazwa"], "Wallbox AC 11")
+		self.assertEqual(k["ev_moc_kw"], "11")
+		self.assertEqual(k["klima_rodzaj"], "")
+
+	def test_e_panele_dodatkowe_i_zero_to_pustka(self: "TestDodatkiIRozbudowaKontekst") -> None:
+		k = _kontekst_z(dodatki={"panele": 3, "panele_mikro": 0})
+		self.assertEqual(k["dod_panele_szt"], "3")
+		self.assertEqual(k["dod_panele_mikro_szt"], "")
+		k = _kontekst_z(dodatki={"panele": "0", "panele_mikro": "2"})
+		self.assertEqual((k["dod_panele_szt"], k["dod_panele_mikro_szt"]), ("", "2"))
+
+	def test_f_dodatki_none_wartosci(self: "TestDodatkiIRozbudowaKontekst") -> None:
+		k = _kontekst_z(dodatki={"klima": None, "ev": None, "panele": None, "panele_mikro": None})
+		for klucz in NOWE_KLUCZE:
+			self.assertIn(k[klucz], ("", False))
+
+	def test_g_rozbudowa_sama_bateria(self: "TestDodatkiIRozbudowaKontekst") -> None:
+		k = _kontekst_z(
+			rozbudowa={"panele": 0, "panele_mikro": 0, "bateria": 2, "ist_pv_moc_kwp": 0, "ppoz": "", "ist_me_kwh": 10}
+		)
+		self.assertFalse(k["roz_mikro_tak"])
+		self.assertFalse(k["roz_mikro_nie"])
+		self.assertFalse(k["ppoz_tak"])
+		self.assertFalse(k["ppoz_nie"])
+		self.assertEqual(k["roz_panele_szt"], "")
+		self.assertEqual(k["roz_bateria_szt"], "2")
+		self.assertEqual(k["roz_ist_me_kwh"], "10")
+
+	def test_h_rozbudowa_z_mikro(self: "TestDodatkiIRozbudowaKontekst") -> None:
+		k = _kontekst_z(
+			rozbudowa={"panele": 0, "panele_mikro": 4, "bateria": 0, "ist_pv_moc_kwp": 3, "ppoz": "Nie", "ist_me_kwh": 0}
+		)
+		self.assertTrue(k["roz_mikro_tak"])
+		self.assertFalse(k["roz_mikro_nie"])
+		self.assertEqual(k["roz_panele_szt"], "4")
+		self.assertEqual(k["roz_ist_pv_moc_kwp"], "3")
+		self.assertEqual(k["roz_ist_me_kwh"], "")
+		self.assertEqual(k["roz_bateria_szt"], "")
+
+	def test_i_rozbudowa_zwykle_panele_mikro_nie(self: "TestDodatkiIRozbudowaKontekst") -> None:
+		k = _kontekst_z(
+			rozbudowa={"panele": 5, "panele_mikro": 0, "bateria": 0, "ist_pv_moc_kwp": 0, "ppoz": "", "ist_me_kwh": 0}
+		)
+		self.assertFalse(k["roz_mikro_tak"])
+		self.assertTrue(k["roz_mikro_nie"])
+		self.assertEqual(k["roz_panele_szt"], "5")
+
+	def test_j_rozbudowa_suma_pv_i_mikro(self: "TestDodatkiIRozbudowaKontekst") -> None:
+		k = _kontekst_z(rozbudowa={"panele": 2, "panele_mikro": 3})
+		self.assertEqual(k["roz_panele_szt"], "5")
+
+	def test_k_rozbudowa_ppoz_z_progu_i_z_kalkulatora(self: "TestDodatkiIRozbudowaKontekst") -> None:
+		# Nowa moc 5,0 kW (deal) + istniejąca 3 kW = 8 kW > 6,5 kW.
+		k = _kontekst_z(rozbudowa={"panele": 2, "ist_pv_moc_kwp": 3, "ppoz": "Nie"})
+		self.assertTrue(k["ppoz_tak"])
+		self.assertFalse(k["ppoz_nie"])
+		# 5,0 + 1 = 6 kW <= 6,5: nie, chyba że kalkulator już doliczył PPOŻ.
+		k = _kontekst_z(rozbudowa={"panele": 2, "ist_pv_moc_kwp": 1, "ppoz": "Nie"})
+		self.assertFalse(k["ppoz_tak"])
+		self.assertTrue(k["ppoz_nie"])
+		k = _kontekst_z(rozbudowa={"panele": 2, "ist_pv_moc_kwp": 1, "ppoz": "Tak"})
+		self.assertTrue(k["ppoz_tak"])
+
+	def test_l_formaty_liczb(self: "TestDodatkiIRozbudowaKontekst") -> None:
+		k = _kontekst_z(
+			rozbudowa={"panele": 1, "ist_pv_moc_kwp": 3.5, "ist_me_kwh": 11},
+		)
+		self.assertEqual(k["roz_ist_pv_moc_kwp"], "3,5")
+		self.assertEqual(k["roz_ist_me_kwh"], "11")
+
+	def test_m_finansowanie_literaly_bez_zmian(self: "TestDodatkiIRozbudowaKontekst") -> None:
+		for wybor, klucz in (
+			("Kredyt 100%", "fin_kredyt_100"),
+			("Kredyt + gotówka", "fin_kredyt_wklad"),
+			("Gotówka 100%", "fin_gotowka"),
+		):
+			with self.subTest(wybor=wybor):
+				k = zbuduj_kontekst(
+					_umowa(finansowanie=wybor), _deal(), _kontakt(), _zestaw(), _komponenty(), _stale(), _DZIS,
+					dodatki={"panele": 1}, rozbudowa={"panele": 1},
+				)  # fmt: skip
+				self.assertTrue(k[klucz])
+
+	def test_n_nie_mutuje_slownikow_wejsciowych(self: "TestDodatkiIRozbudowaKontekst") -> None:
+		dodatki = {"klima": {"model": "K", "moc_kw": 2, "rodzaj": "chłodzenie"}, "panele": 1}
+		rozbudowa = {"panele": 1, "bateria": 1}
+		kopia = (copy.deepcopy(dodatki), copy.deepcopy(rozbudowa))
+		_kontekst_z(dodatki=dodatki, rozbudowa=rozbudowa)
+		self.assertEqual((dodatki, rozbudowa), kopia)
+
+	def test_o_wartosci_to_stringi_i_boole(self: "TestDodatkiIRozbudowaKontekst") -> None:
+		k = _kontekst_z(
+			dodatki={"klima": {"model": "K", "moc_kw": 2, "rodzaj": "chłodzenie"}, "ev": {"nazwa": "E", "moc_kw": 7}},
+			rozbudowa={"panele": 1, "panele_mikro": 1, "bateria": 1, "ist_pv_moc_kwp": 2, "ist_me_kwh": 5, "ppoz": "Tak"},
+		)
+		for klucz, wartosc in k.items():
+			self.assertIsInstance(wartosc, (str, bool), klucz)
