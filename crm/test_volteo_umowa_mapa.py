@@ -42,7 +42,7 @@ from crm.volteo_umowa_render import SZABLONY
 # WYŁĄCZNIE w teście kontraktu cech (`TestKontraktCech`).
 # ---------------------------------------------------------------------------
 
-MAPY_W_POMIARZE: frozenset[str] = frozenset()
+MAPY_W_POMIARZE: frozenset[str] = frozenset({"KL", "PC", "PP"})
 
 MAPY_STAREGO_WZORU: frozenset[str] = frozenset()
 
@@ -72,7 +72,31 @@ KLUCZE_NOWYCH_DODATKOW: frozenset[str] = frozenset(
 Starych map (PV/PVME/ME i ich warianty `_2`) nie ma gdzie na nich oprzeć, więc
 są wyjątkiem w każdej z nich do czasu przepisania map przez chunki U2."""
 
+KLUCZE_URZADZEN: frozenset[str] = frozenset(
+	{
+		"pc_producent",
+		"pc_typ",
+		"pc_moc_kw",
+		"cwu_nie",
+		"cwu_200",
+		"cwu_300",
+		"grzejnik_600x600_szt",
+		"grzejnik_600x800_szt",
+		"grzejnik_600x1000_szt",
+		"grzejnik_600x1200_szt",
+		"grzejnik_600x1600_szt",
+		"kociol_rodzaj",
+		"kociol_model_moc",
+	}
+)
+"""Trzynaście kluczy urządzeń (dogrywka b69, U9: wzory KL/PC/PP), zawsze w kontekście.
+Żaden z czternastu wcześniejszych wzorów ich nie drukuje, więc są wyjątkiem w każdym z nich
+(`klima_rodzaj`/`klima_moc_kw` już należą do `KLUCZE_NOWYCH_DODATKOW`)."""
+
 GRUPY_CECH_KLUCZE: dict[str, frozenset[str]] = {
+	"kl": frozenset({"klima_rodzaj", "klima_moc_kw"}),
+	"pc": frozenset({"pc_producent", "pc_typ", "pc_moc_kw"}),
+	"pp": frozenset({"kociol_rodzaj", "kociol_model_moc"}),
 	"klima": frozenset({"klima_rodzaj", "klima_model", "klima_moc_kw"}),
 	"ev": frozenset({"ev_nazwa", "ev_moc_kw"}),
 	"dod_panele": frozenset({"dod_panele_szt", "dod_panele_mikro_szt"}),
@@ -90,6 +114,9 @@ GRUPY_CECH_KLUCZE: dict[str, frozenset[str]] = {
 """Klucze kontekstu należące do danej cechy (`Szablon.obsluguje`)."""
 
 _KLUCZE_CECHY_MINIMUM: dict[str, frozenset[str]] = {
+	"kl": frozenset({"klima_rodzaj", "klima_moc_kw"}),
+	"pc": frozenset({"pc_producent", "pc_typ", "pc_moc_kw"}),
+	"pp": frozenset({"kociol_rodzaj", "kociol_model_moc"}),
 	"klima": frozenset({"klima_rodzaj", "klima_moc_kw"}),
 	"ev": frozenset({"ev_nazwa", "ev_moc_kw"}),
 	"dod_panele": frozenset({"dod_panele_szt"}),
@@ -348,7 +375,7 @@ dachu/gruntu, odgromowej, przekopu, kabla, bateria_* (ma tylko liczbe modulow i 
 istniejacego), istniejacej PV poza moca (`roz_ist_pv_moc_kwp`), klimatyzacji, EV, dod_panele
 ani drugiego Zamawiajacego (wzor jednoosobowy)."""
 
-WYJATKI_BRAK_POZYCJI_WG_SZABLONU: dict[str, frozenset[str]] = {
+_WYJATKI_PRZED_URZADZENIAMI: dict[str, frozenset[str]] = {
 	"PV_K": WYJATKI_PV_K,
 	"PVME": WYJATKI_PVME,
 	"PV": WYJATKI_PV,
@@ -371,6 +398,12 @@ WYJATKI_BRAK_POZYCJI_WG_SZABLONU: dict[str, frozenset[str]] = {
 	"PVME_2": WYJATKI_PVME - KLUCZE_DRUGIEGO_ZAMAWIAJACEGO,
 	"ME_2": (WYJATKI_ME - KLUCZE_DRUGIEGO_ZAMAWIAJACEGO) | GRUPY_CECH_KLUCZE["dod_panele"],
 }
+
+WYJATKI_BRAK_POZYCJI_WG_SZABLONU: dict[str, frozenset[str]] = {
+	kod: wyjatki | KLUCZE_URZADZEN for kod, wyjatki in _WYJATKI_PRZED_URZADZENIAMI.items()
+}
+"""Wyjątki per szablon: dotychczasowe plus klucze urządzeń (U9), których żaden z 14 starszych
+wzorów nie drukuje. Wpisy dla KL/PC/PP dopisze agent mierzący daną mapę."""
 
 # ---------------------------------------------------------------------------
 # Oczekiwane strony (indeksy 0-based) dla reguł specyficznych dla układu
@@ -1242,11 +1275,18 @@ class TestKontraktCech(unittest.TestCase):
 		for kod in self._kody():
 			with self.subTest(kod=kod):
 				wyjatki = WYJATKI_BRAK_POZYCJI_WG_SZABLONU[kod]
+				pokryte = frozenset().union(
+					*(GRUPY_CECH_KLUCZE[c] for c in SZABLONY[kod].obsluguje)
+				)
 				for cecha, klucze in GRUPY_CECH_KLUCZE.items():
 					if cecha not in SZABLONY[kod].obsluguje:
-						self.assertTrue(klucze <= wyjatki, f"[{kod}] cecha {cecha!r} nieobsługiwana, brak wyjątków")
+						self.assertTrue(
+							(klucze - pokryte) <= wyjatki,
+							f"[{kod}] cecha {cecha!r} nieobsługiwana, brak wyjątków",
+						)
 
 	def test_stare_wzory_maja_nowe_klucze_w_wyjatkach(self: "TestKontraktCech") -> None:
 		for kod in ("PV", "PVME", "PV_2", "PVME_2", "ME_2"):
 			with self.subTest(kod=kod):
 				self.assertTrue(KLUCZE_NOWYCH_DODATKOW <= WYJATKI_BRAK_POZYCJI_WG_SZABLONU[kod])
+				self.assertTrue(KLUCZE_URZADZEN <= WYJATKI_BRAK_POZYCJI_WG_SZABLONU[kod])

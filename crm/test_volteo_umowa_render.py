@@ -720,11 +720,11 @@ class TestRejestrWzorow(unittest.TestCase):
 	OCZEKIWANE_KLUCZE = frozenset(
 		{
 			"PV", "PV_K", "PVME", "PVME_K", "PVME_EV", "PVME_K_EV",
-			"ME", "ME_K", "ME_EV", "ME_K_EV", "ROZ", "PV_2", "PVME_2", "ME_2",
+			"ME", "ME_K", "ME_EV", "ME_K_EV", "ROZ", "KL", "PC", "PP", "PV_2", "PVME_2", "ME_2",
 		}
 	)  # fmt: skip
 
-	def test_czternascie_kluczy(self: "TestRejestrWzorow") -> None:
+	def test_siedemnascie_kluczy(self: "TestRejestrWzorow") -> None:
 		self.assertEqual(frozenset(SZABLONY), self.OCZEKIWANE_KLUCZE)
 
 	def test_obsluguje_wg_nazwy_klucza(self: "TestRejestrWzorow") -> None:
@@ -732,6 +732,9 @@ class TestRejestrWzorow(unittest.TestCase):
 			with self.subTest(kod=kod):
 				if kod == "ROZ":
 					self.assertEqual(szablon.obsluguje, frozenset({"rozbudowa"}))
+					continue
+				if kod in ("KL", "PC", "PP"):
+					self.assertEqual(szablon.obsluguje, frozenset({kod.lower()}))
 					continue
 				czesci = kod.split("_")
 				oczekiwane = set()

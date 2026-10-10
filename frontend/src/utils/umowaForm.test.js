@@ -5,6 +5,7 @@ import {
   opisWzoru,
   pokazPojemnoscMe,
   sekcjeFormularza,
+  urzadzenieDoPokazania,
   wszystkiePola,
   zakresRozbudowy,
 } from './umowaForm'
@@ -155,5 +156,79 @@ describe('zakresRozbudowy format dziesietny', () => {
     expect(moc(6)).toBe('6 kWp')
     expect(moc('5.5')).toBe('5,5 kWp')
     expect(moc(0.75)).toBe('0,75 kWp')
+  })
+})
+
+describe('sekcje Klimatyzacja, Pompa ciepla, Kociol (U9)', () => {
+  it('trzy rodzaje: adres, budynek, finansowanie, urzadzenie, zgody, bez OSD i warunkow', () => {
+    for (const r of ['Klimatyzacja', 'Pompa ciepła', 'Kocioł']) {
+      const k = klucze(sekcjeFormularza(r))
+      expect(k).toEqual(['adres', 'budynek', 'finansowanie', 'urzadzenie', 'zgody'])
+      expect(k).not.toContain('warunki')
+      expect(k).not.toContain('istniejaca_pv')
+      expect(pola(sekcjeFormularza(r))).not.toContain('istniejacy_me_pojemnosc_kwh')
+    }
+  })
+
+  it('sekcja urzadzenie nie ma pol edytowalnych', () => {
+    const sek = sekcjeFormularza('Pompa ciepła').find((s) => s.key === 'urzadzenie')
+    expect(sek.fields).toEqual([])
+  })
+})
+
+describe('urzadzenieDoPokazania', () => {
+  it('klimatyzacja: rodzaj, model, moc z przecinkiem', () => {
+    const w = urzadzenieDoPokazania('Klimatyzacja', {
+      custom_oze_klima_rodzaj: 'chłodzenie i grzanie',
+      custom_oze_klima_model: 'Daikin FTXM',
+      custom_oze_klima_moc_kw: 3.5,
+    })
+    expect(w.map((x) => x.value)).toEqual(['chłodzenie i grzanie', 'Daikin FTXM', '3,5 kW'])
+  })
+
+  it('pompa ciepla: grzejniki tylko dla ilosci > 0', () => {
+    const w = urzadzenieDoPokazania('Pompa ciepła', {
+      custom_oze_pc_producent: 'Panasonic',
+      custom_oze_pc_typ: 'monoblok',
+      custom_oze_pc_moc_kw: 9,
+      custom_oze_cwu: '200 l',
+      custom_oze_grzejniki_json: JSON.stringify({ '600x600': 3, '600x800': 0, '600x1200': 2 }),
+    })
+    const g = w.find((x) => x.key === 'grzejniki')
+    expect(g.value).toBe('600 × 600: 3 szt., 600 × 1200: 2 szt.')
+    expect(w.find((x) => x.key === 'cwu').value).toBe('200 l')
+    expect(w.find((x) => x.key === 'moc').value).toBe('9 kW')
+  })
+
+  it('pompa ciepla: brak grzejnikow i CWU daje "brak"', () => {
+    const w = urzadzenieDoPokazania('Pompa ciepła', { custom_oze_grzejniki_json: '{}' })
+    expect(w.find((x) => x.key === 'grzejniki').value).toBe('brak')
+    expect(w.find((x) => x.key === 'cwu').value).toBe('brak')
+  })
+
+  it('niepoprawny JSON grzejnikow nie psuje widoku', () => {
+    const w = urzadzenieDoPokazania('Pompa ciepła', { custom_oze_grzejniki_json: '{zepsute' })
+    expect(w.find((x) => x.key === 'grzejniki').value).toBe('brak')
+  })
+
+  it('kociol: rodzaj, model, moc, CWU', () => {
+    const w = urzadzenieDoPokazania('Kocioł', {
+      custom_oze_kociol_rodzaj: 'pelletowy',
+      custom_oze_kociol_model: 'Defro Alfa',
+      custom_oze_kociol_moc_kw: 20,
+      custom_oze_cwu: '300 l',
+    })
+    expect(w.map((x) => x.value)).toEqual(['pelletowy', 'Defro Alfa', '20 kW', '300 l'])
+  })
+
+  it('kociol bez CWU i mocy: kreska i brak', () => {
+    const w = urzadzenieDoPokazania('Kocioł', {})
+    expect(w.find((x) => x.key === 'moc').value).toBe('-')
+    expect(w.find((x) => x.key === 'cwu').value).toBe('brak')
+  })
+
+  it('inne rodzaje: pusta lista', () => {
+    expect(urzadzenieDoPokazania('Fotowoltaika', {})).toEqual([])
+    expect(urzadzenieDoPokazania('Rozbudowa PV/ME', null)).toEqual([])
   })
 })
