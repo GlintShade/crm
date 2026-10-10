@@ -43,7 +43,7 @@ from crm.volteo_umowa_render import SZABLONY
 # ---------------------------------------------------------------------------
 
 MAPY_W_POMIARZE: frozenset[str] = frozenset(
-	{"ME_K_EV", "ROZ"}
+	{"ROZ"}
 )
 
 MAPY_STAREGO_WZORU: frozenset[str] = frozenset()
@@ -263,6 +263,41 @@ montaż, pokrycie, odgromowa, ppoż, przekop, kabel: wzór nie ma sekcji fotowol
 kluczy drugiego Zamawiającego, klucze klimy i rozbudowy (cechy spoza tego wzoru) oraz `ev_moc_kw`
 (Załącznik 2 ma tylko rubrykę typu ładowarki)."""
 
+WYJATKI_ME_K_EV: frozenset[str] = (
+	KLUCZE_DRUGIEGO_ZAMAWIAJACEGO
+	| GRUPY_CECH_KLUCZE["rozbudowa"]
+	| frozenset(
+		{
+			"klima_model",
+			"ev_moc_kw",
+			"panel_moc_wp",
+			"panel_szt",
+			"moc_pv_kwp",
+			"panel_producent_model",
+			"panel_gwarancja_lat",
+			"inwerter_szt",
+			"montaz_dach",
+			"montaz_grunt",
+			"pokrycie_dachowe",
+			"odgromowa_tak",
+			"odgromowa_nie",
+			"ppoz_tak",
+			"ppoz_nie",
+			"przekop_tak",
+			"przekop_mb",
+			"przekop_nie",
+			"kabel_tak",
+			"kabel_mb",
+			"kabel_nie",
+		}
+	)
+)
+"""ME + klimatyzacja + ładowarka EV (`umowa_me_k_ev.pdf`, b69 U2j): Załączniki 1 (magazyn,
+z istniejącą PV i dodatkowymi modułami), 2 (klimatyzacja: rodzaj i moc, bez modelu) i 3
+(ładowarka EV: tylko typ, bez mocy). Wyjątki: `klima_model` i `ev_moc_kw` (brak rubryk),
+klucze instalacji PV (wzór nie ma części PV), klucze rozbudowy (cecha spoza tego wzoru) oraz
+sześć kluczy drugiego Zamawiającego (wzór jednoosobowy)."""
+
 WYJATKI_BRAK_POZYCJI_WG_SZABLONU: dict[str, frozenset[str]] = {
 	"PV_K": WYJATKI_PV_K,
 	"PVME": WYJATKI_PVME,
@@ -270,6 +305,7 @@ WYJATKI_BRAK_POZYCJI_WG_SZABLONU: dict[str, frozenset[str]] = {
 	"ME": WYJATKI_ME,
 	"PVME_K_EV": WYJATKI_PVME_K_EV,
 	"ME_K": WYJATKI_ME_K,
+	"ME_K_EV": WYJATKI_ME_K_EV,
 	"PVME_K": WYJATKI_PVME_K,
 	"PVME_EV": WYJATKI_PVME_EV,
 	"ME_EV": WYJATKI_ME_EV,
@@ -297,6 +333,7 @@ _PELNOMOCNICTWO_IDX: dict[str, int] = {
 	"ME": 14,
 	"PVME_K_EV": 24,
 	"ME_K": 18,
+	"ME_K_EV": 21,
 	"PV_K": 16,
 	"PVME_K": 21,
 	"PVME_EV": 21,
@@ -331,6 +368,7 @@ _ZAKAZANE_STRONY_PROTOKOLOW: dict[str, frozenset[int]] = {
 	# ME_K: pouczenie (idx10), formularz odstapienia (idx11), protokoly odbioru magazynu,
 	# pomiarow i klimatyzacji z listami instalatora (idx12-17).
 	"ME_K": frozenset(range(10, 18)),
+	"ME_K_EV": frozenset(range(12, 21)),
 	# PV_K: pouczenie (idx9), formularz odstapienia (idx10), protokol odbioru PV,
 	# protokol pomiarow, protokol odbioru klimatyzacji (idx11-15).
 	"PV_K": frozenset(range(9, 16)),
@@ -360,6 +398,7 @@ _ZALACZNIK_2_3_IDX: dict[str, int] = {
 	"ME": 5,
 	"PVME_K_EV": 9,
 	"ME_K": 7,
+	"ME_K_EV": 8,
 	"PV_K": 6,
 	"PVME_K": 8,
 	"PVME_EV": 8,
@@ -385,6 +424,7 @@ _STRONY_ZAMAWIAJACY_OCZEKIWANE: dict[str, frozenset[int]] = {
 	"ME": frozenset({3, 4, 5, 6, 14}),
 	"PVME_K_EV": frozenset({4, 5, 6, 7, 8, 9, 24}),
 	"ME_K": frozenset({3, 5, 6, 7, 18}),
+	"ME_K_EV": frozenset({4, 5, 6, 7, 8, 21}),
 	"PV_K": frozenset({3, 4, 5, 6, 16}),
 	"PVME_K": frozenset({3, 5, 6, 7, 8, 21}),
 	"PVME_EV": frozenset({3, 5, 6, 7, 8, 21}),
@@ -405,6 +445,7 @@ _STRONY_WYKONAWCA_OCZEKIWANE: dict[str, frozenset[int]] = {
 	"ME": frozenset({3, 4}),
 	"PVME_K_EV": frozenset({4, 5, 6, 7, 8}),
 	"ME_K": frozenset({3, 5, 6}),
+	"ME_K_EV": frozenset({4, 5, 6, 7}),
 	"PV_K": frozenset({3, 4, 5}),
 	"PVME_K": frozenset({3, 5, 6, 7}),
 	"PVME_EV": frozenset({3, 5, 6, 7}),
@@ -423,6 +464,7 @@ _KLIENT_IMIE_NAZWISKO_STRONY: dict[str, frozenset[int]] = {
 	"ME": frozenset({0, 14}),
 	"PVME_K_EV": frozenset({0, 24}),
 	"ME_K": frozenset({0, 18}),
+	"ME_K_EV": frozenset({0, 21}),
 	"PV_K": frozenset({0, 16}),
 	"PVME_K": frozenset({0, 21}),
 	"PVME_EV": frozenset({0, 21}),
@@ -444,6 +486,7 @@ _RODO_STRONA_IDX: dict[str, int] = {
 	"ME": 7,
 	"PVME_K_EV": 11,
 	"ME_K": 9,
+	"ME_K_EV": 10,
 	"PV_K": 8,
 	"PVME_K": 10,
 	"PVME_EV": 10,
@@ -900,6 +943,8 @@ _LICZBA_POZYCJI_OCZEKIWANA: dict[str, int] = {
 	"ME_K": 59,
 	# ME_EV (b69, U2i).
 	"ME_EV": 58,
+	# ME_K_EV (b69, U2j).
+	"ME_K_EV": 62,
 }
 """Dokładna liczba pozycji w każdej mapie podwójnej, potwierdzona przy
 pomiarze (issue #166) - regresja tego testu = ktoś przypadkiem dodał/usunął
