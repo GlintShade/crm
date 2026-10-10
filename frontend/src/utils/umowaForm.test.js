@@ -138,11 +138,22 @@ describe('zakresRozbudowy i pokazPojemnoscMe', () => {
     })
     expect(z.find((x) => x.key === 'panele').value).toBe('10 szt.')
     expect(z.find((x) => x.key === 'bateria').value).toBe('2 szt.')
-    expect(z.find((x) => x.key === 'istniejaca_pv').value).toBe('5.5 kWp')
+    expect(z.find((x) => x.key === 'istniejaca_pv').value).toBe('5,5 kWp')
   })
   it('pokazPojemnoscMe', () => {
     expect(pokazPojemnoscMe({ custom_oze_rozbudowa_bateria: '1' })).toBe(true)
     expect(pokazPojemnoscMe({ custom_oze_rozbudowa_bateria: 0 })).toBe(false)
     expect(pokazPojemnoscMe(undefined)).toBe(false)
+  })
+})
+
+describe('zakresRozbudowy format dziesietny', () => {
+  const moc = (v) =>
+    zakresRozbudowy({ custom_istniejaca_pv_moc_kwp: v }).find((w) => w.key === 'istniejaca_pv').value
+  it('uzywa przecinka i bez zbednych zer', () => {
+    expect(moc(5.5)).toBe('5,5 kWp')
+    expect(moc(6)).toBe('6 kWp')
+    expect(moc('5.5')).toBe('5,5 kWp')
+    expect(moc(0.75)).toBe('0,75 kWp')
   })
 })

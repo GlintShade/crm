@@ -389,7 +389,8 @@ export function dodatkiDoPokazania(prefill) {
  */
 export function zakresRozbudowy(prefill) {
   const p = prefill || {}
-  const fmt = (v, jednostka) => (liczba(v) > 0 ? `${liczba(v)} ${jednostka}` : '-')
+  const fmt = (v, jednostka) =>
+    liczba(v) > 0 ? `${String(liczba(v)).replace('.', ',')} ${jednostka}` : '-'
   return [
     { key: 'panele', label: 'Panele PV', value: fmt(p.custom_oze_rozbudowa_panele, 'szt.') },
     {
