@@ -83,6 +83,7 @@ def _czy_cp(deal_doc: "frappe.model.document.Document") -> bool:
 	nigdy przed, żeby gałąź CP nie ominęła bramki uprawnień wspólnej z OZE."""
 	return deal_doc.get("custom_rodzaj_umowy") == RODZAJ_CP
 
+
 _DEAL_POLA_PREFILL = [
 	"name",
 	"deal_value",
@@ -537,7 +538,9 @@ def _wyliczenia_oze(
 		# Brak drugiego Zamawiającego to normalny stan (umowa pojedyncza), pusta
 		# lista, NIE lista czterech braków wyliczona z pustego kontaktu; stąd jawny
 		# warunek zamiast `brakujace_dane_klienta(_dane_kontaktu(drugi_kontakt))`.
-		"brakujace_dane_drugiego": brakujace_dane_klienta(_dane_kontaktu(drugi_kontakt)) if drugi_kontakt else [],
+		"brakujace_dane_drugiego": brakujace_dane_klienta(_dane_kontaktu(drugi_kontakt))
+		if drugi_kontakt
+		else [],
 	}
 
 
@@ -686,9 +689,9 @@ def _komunikat_rodzaju_bez_szablonu() -> str:
 
 
 def _komunikat_wzor_w_przygotowaniu(rodzaj: str | None) -> str:
-	return _("Wzór umowy dla rodzaju „{0}” jest w przygotowaniu. PDF umowy nie jest jeszcze dostępny.").format(
-		rodzaj
-	)
+	return _(
+		"Wzór umowy dla rodzaju „{0}” jest w przygotowaniu. PDF umowy nie jest jeszcze dostępny."
+	).format(rodzaj)
 
 
 def _komunikat_brak_wzoru_konfiguracji(opis: str, podwojna: bool, ma_cechy: bool) -> str:
@@ -703,9 +706,9 @@ def _komunikat_brak_wzoru_konfiguracji(opis: str, podwojna: bool, ma_cechy: bool
 
 
 def _komunikat_wzor_w_pomiarze(opis: str) -> str:
-	return _(
-		"Wzór umowy dla konfiguracji {0} jest w przygotowaniu (mapa współrzędnych w pomiarze)."
-	).format(opis)
+	return _("Wzór umowy dla konfiguracji {0} jest w przygotowaniu (mapa współrzędnych w pomiarze).").format(
+		opis
+	)
 
 
 def _ocen_wzor(deal_doc: "frappe.model.document.Document", podwojna: bool) -> dict[str, Any]:
@@ -725,7 +728,12 @@ def _ocen_wzor(deal_doc: "frappe.model.document.Document", podwojna: bool) -> di
 			"powod": _komunikat_wzor_w_przygotowaniu(rodzaj),
 		}
 	if code_for(rodzaj) not in SZABLONY:
-		return {"kod": code_for(rodzaj), "nazwa": "", "dostepny": False, "powod": _komunikat_rodzaju_bez_szablonu()}
+		return {
+			"kod": code_for(rodzaj),
+			"nazwa": "",
+			"dostepny": False,
+			"powod": _komunikat_rodzaju_bez_szablonu(),
+		}
 
 	cechy = cechy_umowy(deal_doc.as_dict())
 	kod = kod_szablonu(rodzaj, podwojna, cechy)
@@ -756,9 +764,7 @@ def _opis_wzoru(
 	return _ocen_wzor(deal_doc, podwojna)
 
 
-def _pozycja_dodatku(
-	wartosc: str, grupy: list[str], co: str
-) -> dict[str, Any]:
+def _pozycja_dodatku(wartosc: str, grupy: list[str], co: str) -> dict[str, Any]:
 	"""Aktywna pozycja cennika o `nazwa` ALBO `kod` równym `wartosc`, w jednej z grup.
 	Szansa trzyma nazwę pozycji (`custom_dod_klima`), a payload kalkulatora kod, więc
 	obsługiwane są oba. Brak pozycji (zmieniona nazwa, nieaktywna) to czytelny błąd,
@@ -1399,10 +1405,9 @@ def volteo_umowa_pdf(deal: str) -> dict[str, Any]:
 		braki_drugiego = brakujace_dane_klienta(kontakt2)
 		if braki_drugiego:
 			frappe.throw(
-				_(
-					"Uzupełnij dane drugiego Zamawiającego przed wygenerowaniem PDF-u "
-					"umowy: {0}."
-				).format(", ".join(braki_drugiego))
+				_("Uzupełnij dane drugiego Zamawiającego przed wygenerowaniem PDF-u umowy: {0}.").format(
+					", ".join(braki_drugiego)
+				)
 			)
 
 	# Dane dodatków i Rozbudowy z cennika czytane PRZED blokiem `try` niżej: ich
