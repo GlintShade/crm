@@ -9,7 +9,7 @@
         <p class="text-p-base text-ink-gray-6">
           {{
             __(
-              'Katalog kart producenckich paneli PV. Dostępność rotuje się przełącznikiem Aktywna / Nieaktywna. Karta, której nie użyła żadna szansa, może zostać trwale usunięta; karta już użyta — nie.',
+              'Katalog kart producenckich paneli PV. Dostępność rotuje się przełącznikiem Aktywna / Nieaktywna. Karta, której nie użyła żadna szansa, może zostać trwale usunięta; karta już użyta, nie.',
             )
           }}
         </p>
@@ -181,7 +181,7 @@
           <p class="text-p-base text-ink-gray-7">
             {{
               __(
-                'Ta operacja jest nieodwracalna. Karta {0} zostanie trwale usunięta z katalogu. Karty użytej już w jakiejkolwiek szansie nie da się usunąć — w takim wypadku użyj akcji Dezaktywuj.',
+                'Ta operacja jest nieodwracalna. Karta {0} zostanie trwale usunięta z katalogu. Karty użytej już w jakiejkolwiek szansie nie da się usunąć, w takim wypadku użyj akcji Dezaktywuj.',
                 [deleteTarget?.nazwa || ''],
               )
             }}

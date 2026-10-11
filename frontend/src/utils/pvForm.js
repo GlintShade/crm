@@ -267,7 +267,7 @@ export function buildMocOptionsForPanel(wp) {
     const value = (panele * wp) / 1000
     out.push({
       value,
-      label: `${panele} paneli — ${value.toFixed(2)} kWp`,
+      label: `${panele} paneli, ${value.toFixed(2)} kWp`,
       panele,
     })
   }

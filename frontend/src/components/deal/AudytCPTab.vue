@@ -58,7 +58,7 @@
         <div class="text-lg font-medium text-ink-gray-7">{{ __('Brak audytu') }}</div>
         <template v-if="canEditSrv">
           <div class="max-w-md text-sm text-ink-gray-5">
-            {{ __('Audyt specjalny Czyste Powietrze — komplet dokumentów i zdjęć.') }}
+            {{ __('Audyt specjalny Czyste Powietrze: komplet dokumentów i zdjęć.') }}
           </div>
           <Button
             variant="solid"
@@ -153,8 +153,8 @@
         >
           {{
             canReview
-              ? __('Audyt w weryfikacji — możesz edytować dokumenty bezpośrednio, a następnie zatwierdzić.')
-              : __('Audyt oczekuje na weryfikację przez back office — dokumenty są zablokowane do czasu decyzji.')
+              ? __('Audyt w weryfikacji: możesz edytować dokumenty bezpośrednio, a następnie zatwierdzić.')
+              : __('Audyt oczekuje na weryfikację przez back office: dokumenty są zablokowane do czasu decyzji.')
           }}
         </div>
 
@@ -729,7 +729,7 @@ async function loadCommentAttachments(names) {
 
 // --- Helpers -------------------------------------------------------------------
 function fmtDate(dt) {
-  if (!dt) return '—'
+  if (!dt) return '-'
   return String(dt).slice(0, 16).replace('T', ' ')
 }
 

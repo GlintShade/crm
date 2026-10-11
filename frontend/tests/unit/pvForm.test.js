@@ -260,7 +260,7 @@ describe('PV form logic', () => {
       expect(buildMocOptionsForPanel(500)[0]).toEqual({
         panele: 6,
         value: 3,
-        label: '6 paneli — 3.00 kWp',
+        label: '6 paneli, 3.00 kWp',
       })
       expect(buildMocOptionsForPanel(500).at(-1)).toMatchObject({
         panele: 40,
@@ -270,11 +270,11 @@ describe('PV form logic', () => {
 
     it('builds integer panel counts for 450 Wp panels', () => {
       const options = buildMocOptionsForPanel(450)
-      expect(options[0]).toEqual({ panele: 7, value: 3.15, label: '7 paneli — 3.15 kWp' })
+      expect(options[0]).toEqual({ panele: 7, value: 3.15, label: '7 paneli, 3.15 kWp' })
       expect(options.at(-1)).toEqual({
         panele: 44,
         value: 19.8,
-        label: '44 paneli — 19.80 kWp',
+        label: '44 paneli, 19.80 kWp',
       })
     })
 

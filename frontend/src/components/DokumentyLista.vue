@@ -158,7 +158,7 @@
                       size="sm"
                       :label="ostatniaAktualizacjaLabel(doc.zaktualizowano)"
                     />
-                    <span v-else class="text-p-sm text-ink-gray-4">—</span>
+                    <span v-else class="text-p-sm text-ink-gray-4">-</span>
                     <Badge
                       v-if="!doc.plik"
                       theme="gray"

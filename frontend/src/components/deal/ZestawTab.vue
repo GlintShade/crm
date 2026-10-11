@@ -54,21 +54,21 @@
               <tbody>
                 <tr v-for="(row, i) in rows" :key="i" class="border-t border-outline-gray-1">
                   <td class="whitespace-nowrap px-3 py-2.5 text-ink-gray-6">{{ row.typ }}</td>
-                  <td class="whitespace-nowrap px-3 py-2.5 text-ink-gray-8">{{ row.nazwa || '—' }}</td>
+                  <td class="whitespace-nowrap px-3 py-2.5 text-ink-gray-8">{{ row.nazwa || '-' }}</td>
                   <td class="whitespace-nowrap px-3 py-2.5 text-right text-ink-gray-6">{{ iloscLabel(row) }}</td>
                   <td v-if="hasMoney" class="whitespace-nowrap px-3 py-2.5 text-right text-ink-gray-6">
-                    {{ row.netto ? formatPln(row.netto) : '—' }}
+                    {{ row.netto ? formatPln(row.netto) : '-' }}
                   </td>
                   <td v-if="hasMoney" class="whitespace-nowrap px-3 py-2.5 text-right text-ink-gray-6">
-                    {{ row.brutto ? formatPln(row.brutto) : '—' }}
+                    {{ row.brutto ? formatPln(row.brutto) : '-' }}
                   </td>
                 </tr>
               </tbody>
               <tfoot v-if="hasMoney">
                 <tr class="border-t border-outline-gray-2 bg-surface-gray-1 font-medium text-ink-gray-7">
                   <td colspan="3" class="whitespace-nowrap px-3 py-2.5 text-right">{{ __('Razem') }}</td>
-                  <td class="whitespace-nowrap px-3 py-2.5 text-right">{{ totalNetto ? formatPln(totalNetto) : '—' }}</td>
-                  <td class="whitespace-nowrap px-3 py-2.5 text-right">{{ totalBrutto ? formatPln(totalBrutto) : '—' }}</td>
+                  <td class="whitespace-nowrap px-3 py-2.5 text-right">{{ totalNetto ? formatPln(totalNetto) : '-' }}</td>
+                  <td class="whitespace-nowrap px-3 py-2.5 text-right">{{ totalBrutto ? formatPln(totalBrutto) : '-' }}</td>
                 </tr>
               </tfoot>
             </table>
@@ -398,7 +398,7 @@
             class="flex w-full items-center justify-between rounded-md border border-outline-amber-3 bg-surface-amber-2 px-2.5 py-1.5 text-sm font-semibold text-ink-amber-8 transition-colors hover:bg-surface-amber-3"
             @click="showCommission = !showCommission"
           >
-            <span>{{ __('Prowizja — rozkład wg poziomu — widoczne dla opiekuna szansy i administratorów') }}</span>
+            <span>{{ __('Prowizja - rozkład wg poziomu - widoczne dla opiekuna szansy i administratorów') }}</span>
             <FeatherIcon :name="showCommission ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 text-ink-amber-8" />
           </button>
           <div v-show="showCommission" class="mt-1.5 rounded-lg border border-outline-amber-3 bg-surface-amber-2 p-2.5 text-sm">
@@ -686,7 +686,7 @@ const rows = computed(() => (bomRows.value.length ? bomRows.value : ofertaRows.v
 const caption = computed(() =>
   bomRows.value.length
     ? __('Wykaz pozycji zestawu.')
-    : __('Podgląd na podstawie oferty z Kalkulatora OZE. Pełny wykaz komponentów — wkrótce.'),
+    : __('Podgląd na podstawie oferty z Kalkulatora OZE. Pełny wykaz komponentów: wkrótce.'),
 )
 
 // Money columns are Czyste Powietrze-only: the PV path never populates netto/

@@ -44,7 +44,7 @@
         <div class="text-lg font-medium text-ink-gray-7">{{ __('Brak audytu') }}</div>
         <template v-if="rodzajZDeala">
           <div class="max-w-md text-sm text-ink-gray-5">
-            {{ rodzajZDeala }} — {{ __('na podstawie kalkulatora') }}
+            {{ rodzajZDeala }} - {{ __('na podstawie kalkulatora') }}
           </div>
           <Button
             variant="solid"
@@ -163,8 +163,8 @@
         >
           {{
             canReview
-              ? __('Audyt w weryfikacji — możesz edytować pola bezpośrednio, a następnie zatwierdzić.')
-              : __('Audyt oczekuje na weryfikację przez back office — pola są zablokowane do czasu decyzji.')
+              ? __('Audyt w weryfikacji: możesz edytować pola bezpośrednio, a następnie zatwierdzić.')
+              : __('Audyt oczekuje na weryfikację przez back office: pola są zablokowane do czasu decyzji.')
           }}
         </div>
 
@@ -174,7 +174,7 @@
           class="rounded-lg border border-outline-amber-3 bg-surface-amber-2 px-4 py-3 text-sm text-ink-amber-8"
         >
           {{
-            __('Rodzaj instalacji „{0}” nie jest już obsługiwany — wybierz ponownie.', [
+            __('Rodzaj instalacji „{0}” nie jest już obsługiwany, wybierz ponownie.', [
               form.rodzaj_instalacji,
             ])
           }}
@@ -1094,7 +1094,7 @@ async function loadCommentAttachments(names) {
 
 // --- Helpers -------------------------------------------------------------------
 function fmtDate(dt) {
-  if (!dt) return '—'
+  if (!dt) return '-'
   return String(dt).slice(0, 16).replace('T', ' ')
 }
 

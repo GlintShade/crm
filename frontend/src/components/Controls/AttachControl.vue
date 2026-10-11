@@ -17,7 +17,7 @@
 
   <!-- Empty + disabled -->
   <div v-else-if="!value && disabled" :class="containerClasses">
-    <span class="text-ink-gray-4">—</span>
+    <span class="text-ink-gray-4">-</span>
   </div>
 
   <!-- Has value -->

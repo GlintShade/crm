@@ -31,7 +31,7 @@
         verdictRing || 'border-outline-gray-2',
       ]"
     >
-      <span class="text-lg">—</span>
+      <span class="text-lg">-</span>
       <span class="px-2 text-center text-xs">{{ displayLabel }}</span>
     </div>
 

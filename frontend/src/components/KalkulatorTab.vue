@@ -221,7 +221,7 @@
                 <div>
                   <div class="mb-0.5 text-sm text-ink-gray-5">Operator energetyczny</div>
                   <select v-model="sel.operator" class="kalk-select">
-                    <option value="">—</option>
+                    <option value="">-</option>
                     <option v-for="c in operatorOptions" :key="c.name" :value="c.nazwa">{{ c.nazwa }}</option>
                   </select>
                 </div>
@@ -230,7 +230,7 @@
                 <div v-if="hasPv">
                   <div class="mb-0.5 text-sm text-ink-gray-5">Kierunek montażu</div>
                   <select v-model="sel.kierunek" class="kalk-select">
-                    <option value="">—</option>
+                    <option value="">-</option>
                     <option v-for="c in kierunekOptions" :key="c.name" :value="c.nazwa">{{ c.nazwa }}</option>
                   </select>
                 </div>
@@ -1179,7 +1179,7 @@ const narzutValid = computed(() => {
 
 const narzutErrorMsg = computed(() =>
   narzutMax.value > 0
-    ? `Narzut musi być w zakresie 0–${narzutMax.value} zł.`
+    ? `Narzut musi być w zakresie 0-${narzutMax.value} zł.`
     : 'Narzut nie może być ujemny.',
 )
 

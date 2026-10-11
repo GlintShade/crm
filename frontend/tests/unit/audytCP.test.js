@@ -10,7 +10,7 @@ import {
   parsujMape,
 } from '@/utils/audytCP'
 
-describe('Audyt CP — katalog i stałe', () => {
+describe('Audyt CP: katalog i stałe', () => {
   it('ma dokładnie 7 slotów', () => {
     expect(SLOTY).toHaveLength(7)
   })
@@ -231,13 +231,13 @@ describe('brakiDoPrzeslania', () => {
 
   it('0 zdjęć blokuje przesłanie', () => {
     const braki = brakiDoPrzeslania(kompletDokumentow, [])
-    expect(braki).toContain('Brak zdjęć — wymagane co najmniej 1 zdjęcie')
+    expect(braki).toContain('Brak zdjęć: wymagane co najmniej 1 zdjęcie')
   })
 
   it('21 zdjęć blokuje przesłanie (ponad limit)', () => {
     const zdjecia = Array.from({ length: 21 }, (_, i) => `/files/${i}.jpg`)
     const braki = brakiDoPrzeslania(kompletDokumentow, zdjecia)
-    expect(braki).toContain('Zbyt wiele zdjęć — maksymalnie 20')
+    expect(braki).toContain('Zbyt wiele zdjęć: maksymalnie 20')
   })
 
   it('20 zdjęć nie blokuje przesłania', () => {
@@ -247,6 +247,6 @@ describe('brakiDoPrzeslania', () => {
 
   it('toleruje niepoprawny kształt wejścia zamiast rzucać wyjątkiem', () => {
     expect(() => brakiDoPrzeslania(null, null)).not.toThrow()
-    expect(brakiDoPrzeslania(null, null)).toContain('Brak zdjęć — wymagane co najmniej 1 zdjęcie')
+    expect(brakiDoPrzeslania(null, null)).toContain('Brak zdjęć: wymagane co najmniej 1 zdjęcie')
   })
 })

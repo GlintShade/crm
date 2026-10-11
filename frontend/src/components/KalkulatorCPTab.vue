@@ -132,7 +132,7 @@
                 <div>
                   <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Grzejniki') }}</div>
                   <select v-model="form.typGrzejnikow" class="kalk-select">
-                    <option :value="null">{{ __('— wybierz —') }}</option>
+                    <option :value="null">{{ __('(wybierz)') }}</option>
                     <option value="grzejnik" :disabled="!isActive('grzejnik')">{{ __('Grzejniki') }}</option>
                     <option value="grzejnik_co" :disabled="!isActive('grzejnik_co')">{{ __('Grzejniki + rury CO') }}</option>
                   </select>
@@ -182,7 +182,7 @@
                 <div class="text-sm text-ink-gray-5">{{ __('m²') }}</div>
                 <input v-model="form.powierzchnia" type="number" min="0" step="0.01" class="kalk-input mt-1" />
                 <div v-if="brakPowierzchni" class="mt-1 text-xs text-ink-amber-8">
-                  {{ __('Podaj powierzchnię użytkową — bez niej metraże prac wyjdą zerowe.') }}
+                  {{ __('Podaj powierzchnię użytkową: bez niej metraże prac wyjdą zerowe.') }}
                 </div>
               </div>
 
@@ -518,7 +518,7 @@
               {{ __('Modelowanie prowizji dla struktur sprzedażowych (administrator)') }}
             </div>
             <div class="text-xs text-ink-gray-5">
-              {{ __('Zmiany poniżej są wyłącznie poglądowe — nic tutaj nie jest zapisywane ani nie trafia do oferty klienta.') }}
+              {{ __('Zmiany poniżej są wyłącznie poglądowe, nic tutaj nie jest zapisywane ani nie trafia do oferty klienta.') }}
             </div>
           </div>
 
@@ -570,7 +570,7 @@
                           :title="tytulNadpisania(linia.kosztStaly, linia.kosztStalyKatalogowy)"
                           @input="koszty[linia.kod] = { ...koszty[linia.kod], staly: $event.target.value }"
                         />
-                        <span class="text-[10px] leading-none text-ink-gray-5">{{ __('koszt stały — raz na ofertę') }}</span>
+                        <span class="text-[10px] leading-none text-ink-gray-5">{{ __('koszt stały, raz na ofertę') }}</span>
                       </template>
                       <div class="text-xs text-ink-gray-5">
                         {{ formatPlnAmount(linia.kosztJednostkowy) }} × {{ formatQty(linia.iloscRozliczeniowa) }}<template v-if="linia.kosztStalyKatalogowy > 0"> + {{ formatPlnAmount(linia.kosztStaly) }}</template> = {{ formatPln(linia.koszt) }}
@@ -784,7 +784,7 @@ function progDochoduLabel(prog) {
   }
   if (prog === 'sredni') {
     const zakresy = gospodarstwa.map(
-      (g) => `${formatPlnAmount(PROGI_KWOTY[g].niski + 1)}–${formatPlnAmount(PROGI_KWOTY[g].sredni)}`,
+      (g) => `${formatPlnAmount(PROGI_KWOTY[g].niski + 1)}-${formatPlnAmount(PROGI_KWOTY[g].sredni)}`,
     )
     return __('{0} zł', [zakresy.join(' / ')])
   }

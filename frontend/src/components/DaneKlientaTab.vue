@@ -77,7 +77,7 @@
         >
           {{
             __(
-              'Ten kontakt nie ma numeru PESEL. Pole jest wymagane — uzupełnij je, aby zapisywanie zmian zadziałało.',
+              'Ten kontakt nie ma numeru PESEL. Pole jest wymagane: uzupełnij je, aby zapisywanie zmian zadziałało.',
             )
           }}
         </div>

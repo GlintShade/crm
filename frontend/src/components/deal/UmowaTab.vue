@@ -951,7 +951,7 @@ async function saveForm(opts = {}) {
     if (opts.successMessage) {
       toast.success(opts.successMessage)
     } else if (brakujace.value.length) {
-      toast.success(__('Zapisano jako roboczy — część pól nadal brakuje.'))
+      toast.success(__('Zapisano jako roboczy: część pól nadal brakuje.'))
     } else {
       toast.success(__('Zapisano formularz umowy'))
     }

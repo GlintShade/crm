@@ -74,16 +74,16 @@
           </thead>
           <tbody>
             <tr v-for="f in rows" :key="f.name" class="border-t border-outline-gray-1">
-              <td class="px-4 py-2.5 text-ink-gray-8">{{ f.numer || '—' }}</td>
-              <td class="px-4 py-2.5 text-ink-gray-6">{{ f.typ || '—' }}</td>
+              <td class="px-4 py-2.5 text-ink-gray-8">{{ f.numer || '-' }}</td>
+              <td class="px-4 py-2.5 text-ink-gray-6">{{ f.typ || '-' }}</td>
               <td class="px-4 py-2.5">
-                <Badge :theme="statusTheme(f.status)" variant="subtle" size="sm" :label="f.status || '—'" />
+                <Badge :theme="statusTheme(f.status)" variant="subtle" size="sm" :label="f.status || '-'" />
               </td>
               <td class="px-4 py-2.5 text-right text-ink-gray-8">{{ plnFmt(f.kwota_brutto) }}</td>
-              <td class="px-4 py-2.5 text-ink-gray-6">{{ f.data_wystawienia || '—' }}</td>
+              <td class="px-4 py-2.5 text-ink-gray-6">{{ f.data_wystawienia || '-' }}</td>
               <td class="px-4 py-2.5">
                 <a v-if="f.plik" :href="f.plik" target="_blank" rel="noopener" class="text-ink-blue-link underline">{{ __('otwórz') }}</a>
-                <span v-else class="text-ink-gray-4">—</span>
+                <span v-else class="text-ink-gray-4">-</span>
               </td>
             </tr>
           </tbody>
@@ -161,7 +161,7 @@ function statusTheme(status) {
 }
 
 function plnFmt(val) {
-  if (val == null || val === '') return '—'
+  if (val == null || val === '') return '-'
   return formatPln(val)
 }
 </script>

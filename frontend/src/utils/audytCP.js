@@ -127,9 +127,9 @@ export function brakiDoPrzeslania(dokumenty, zdjecia) {
   })
 
   if (zdj.length === 0) {
-    braki.push('Brak zdjęć — wymagane co najmniej 1 zdjęcie')
+    braki.push('Brak zdjęć: wymagane co najmniej 1 zdjęcie')
   } else if (zdj.length > MAX_ZDJEC) {
-    braki.push(`Zbyt wiele zdjęć — maksymalnie ${MAX_ZDJEC}`)
+    braki.push(`Zbyt wiele zdjęć: maksymalnie ${MAX_ZDJEC}`)
   }
 
   return braki

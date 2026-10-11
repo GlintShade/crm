@@ -8,7 +8,7 @@
       <p class="text-p-base text-ink-gray-6">
         {{
           __(
-            'Zakładaj konta i zmieniaj role bez wysyłki zaproszenia e-mail — ta instalacja nie ma skonfigurowanej skrzynki pocztowej.',
+            'Zakładaj konta i zmieniaj role bez wysyłki zaproszenia e-mail, ta instalacja nie ma skonfigurowanej skrzynki pocztowej.',
           )
         }}
       </p>
@@ -107,7 +107,7 @@
       <p class="text-p-sm text-ink-gray-5 max-w-2xl">
         {{
           __(
-            'Wyłączenie linii ukrywa Kalkulator i Dokumenty tej linii dla wskazanego użytkownika i blokuje jej użycie po stronie serwera. Wyłączenie „Leady” ukrywa moduł Leady (listę i mapę) i blokuje przydzielanie temu użytkownikowi. Nie dotyczy kont System Manager / Volteo Core Admin / Volteo Backend — te zawsze mają pełny dostęp.',
+            'Wyłączenie linii ukrywa Kalkulator i Dokumenty tej linii dla wskazanego użytkownika i blokuje jej użycie po stronie serwera. Wyłączenie „Leady” ukrywa moduł Leady (listę i mapę) i blokuje przydzielanie temu użytkownikowi. Nie dotyczy kont System Manager / Volteo Core Admin / Volteo Backend, te zawsze mają pełny dostęp.',
           )
         }}
       </p>
@@ -164,7 +164,7 @@
       <p class="text-p-sm text-ink-gray-5 max-w-2xl">
         {{
           __(
-            'Wyłączenie widoczności ukrywa dane o prowizji w kalkulatorze Czyste Powietrze oraz w okienku prowizji na szansie dla wskazanego użytkownika. Poziom decyduje o tym, która stawka nadprowizji się do niego stosuje. Nie dotyczy kont System Manager / Volteo Core Admin / Volteo Backend — te zawsze widzą prowizje.',
+            'Wyłączenie widoczności ukrywa dane o prowizji w kalkulatorze Czyste Powietrze oraz w okienku prowizji na szansie dla wskazanego użytkownika. Poziom decyduje o tym, która stawka nadprowizji się do niego stosuje. Nie dotyczy kont System Manager / Volteo Core Admin / Volteo Backend, te zawsze widzą prowizje.',
           )
         }}
       </p>
@@ -219,7 +219,7 @@
             <p class="text-p-sm">
               {{
                 __(
-                  'To hasło pokazuje się tylko raz i nie da się go później odzyskać. Przekaż je nowemu użytkownikowi innym kanałem (np. rozmowa, SMS) — nie zostanie zapisane w CRM.',
+                  'To hasło pokazuje się tylko raz i nie da się go później odzyskać. Przekaż je nowemu użytkownikowi innym kanałem (np. rozmowa, SMS), nie zostanie zapisane w CRM.',
                 )
               }}
             </p>
@@ -432,7 +432,7 @@ const linieHint = computed(() => {
   return linieMatchedUser.value
     ? __('Aktualne ustawienia wczytane dla {0}', [email])
     : __(
-        'Nie znaleziono użytkownika o takim adresie — przy zapisie zostaną użyte wartości z formularza.',
+        'Nie znaleziono użytkownika o takim adresie, przy zapisie zostaną użyte wartości z formularza.',
       )
 })
 
@@ -537,7 +537,7 @@ const prowizjeHint = computed(() => {
   return prowizjeMatchedUser.value
     ? __('Aktualne ustawienia wczytane dla {0}', [email])
     : __(
-        'Nie znaleziono użytkownika o takim adresie — przy zapisie zostaną użyte wartości z formularza.',
+        'Nie znaleziono użytkownika o takim adresie, przy zapisie zostaną użyte wartości z formularza.',
       )
 })
 
