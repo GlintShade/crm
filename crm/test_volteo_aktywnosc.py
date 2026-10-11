@@ -1,4 +1,5 @@
 import datetime
+import importlib.util
 import unittest
 from typing import ClassVar
 
@@ -726,6 +727,10 @@ class TestEtykietaWnioskodawcy(unittest.TestCase):
 		self.assertEqual(etykieta_wnioskodawcy("", None), "bez wnioskodawcy")
 
 
+@unittest.skipIf(
+	importlib.util.find_spec("frappe") is not None,
+	"frappe zainstalowane: test sprawdza tylko lokalny import w zapisz_slad bez frappe",
+)
 class TestZapiszSladBezFrappe(unittest.TestCase):
 	def test_a_wywolanie_bez_frappe_rzuca_import_error(self: "TestZapiszSladBezFrappe") -> None:
 		# frappe nie jest zainstalowane lokalnie -- funkcja MUSI robić import lokalny
