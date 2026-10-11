@@ -257,7 +257,7 @@ class TestVolteoPipeline(unittest.TestCase):
 		definicja["label"] = "ZMIENIONE"
 		self.assertEqual(podzadanie_def("Czyste Powietrze", "dok:zdjecia")["label"], "Zdjęcia")
 
-	# --- dozwolone_stany: macierz weryfikacja/odhaczenie × z ND/bez ND ------
+	# --- dozwolone_stany: macierz weryfikacja/odhaczenie x z ND/bez ND ------
 
 	def test_ab_dozwolone_stany_weryfikacja_bez_nd(self: "TestVolteoPipeline") -> None:
 		zadanie = podzadanie_def("Czyste Powietrze", "dok:zdjecia")  # weryfikacja, nd_dozwolone=False
