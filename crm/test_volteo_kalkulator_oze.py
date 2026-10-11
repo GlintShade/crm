@@ -19,6 +19,7 @@ from crm.volteo_kalkulator_oze import (
 	oblicz_oferte,
 	pozycje_dla,
 	stale_z_singla,
+	zloz_adres_montazu,
 	zsumuj_skladowe,
 )
 
@@ -653,3 +654,24 @@ class MaperyTest(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+class ZlozAdresMontazuTest(unittest.TestCase):
+	def test_pelny(self) -> None:
+		self.assertEqual(zloz_adres_montazu("Lipowa", "12", "3"), "Lipowa 12/3")
+
+	def test_bez_mieszkania(self) -> None:
+		self.assertEqual(zloz_adres_montazu("Lipowa", "12", None), "Lipowa 12")
+		self.assertEqual(zloz_adres_montazu("Lipowa", "12", ""), "Lipowa 12")
+
+	def test_bez_numeru_domu(self) -> None:
+		self.assertEqual(zloz_adres_montazu("Zalesie", None, None), "Zalesie")
+
+	def test_same_none(self) -> None:
+		self.assertEqual(zloz_adres_montazu(None, None, None), "")
+
+	def test_mieszkanie_bez_domu_nie_tworzy_adresu(self) -> None:
+		self.assertEqual(zloz_adres_montazu(None, None, "3"), "")
+
+	def test_biale_znaki_i_liczby(self) -> None:
+		self.assertEqual(zloz_adres_montazu(" Lipowa ", 12, 3), "Lipowa 12/3")
