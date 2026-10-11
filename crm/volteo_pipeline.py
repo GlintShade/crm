@@ -381,12 +381,12 @@ def grupa_for(rodzaj: str | None) -> tuple[str, ...] | None:
 	"""Zwraca grupę statusów rozwijanej listy dla rodzaju umowy: proces plus statusy terminalne,
 	w tej kolejności (kolejność rozwijanej listy). Zwraca None, gdy rodzaj nie ma procesu.
 	"""
-	rurociag = pipeline_for(rodzaj)
-	if rurociag is None:
+	proces = pipeline_for(rodzaj)
+	if proces is None:
 		return None
 	klucz = pipeline_key_for(rodzaj)
 	terminale = TERMINALE.get(klucz, ())
-	return rurociag + terminale
+	return proces + terminale
 
 
 def step_index(rodzaj: str | None, status: str | None) -> int:
@@ -396,11 +396,11 @@ def step_index(rodzaj: str | None, status: str | None) -> int:
 	"""
 	if status is None:
 		return -1
-	rurociag = pipeline_for(rodzaj)
-	if rurociag is None:
+	proces = pipeline_for(rodzaj)
+	if proces is None:
 		return -1
 	try:
-		return rurociag.index(status)
+		return proces.index(status)
 	except ValueError:
 		return -1
 
@@ -452,8 +452,8 @@ def is_forward(rodzaj: str | None, current: str | None, target: str) -> bool:
 	Status bieżący spoza procesu (np. "Przegrana", "Wygrana montaż") zawsze daje False —
 	automatyzacja nigdy nie ma przesuwać takiej sprawy dalej. Brak procesu dla rodzaju daje False.
 	"""
-	rurociag = pipeline_for(rodzaj)
-	if rurociag is None:
+	proces = pipeline_for(rodzaj)
+	if proces is None:
 		return False
 	indeks_biezacy = step_index(rodzaj, current)
 	indeks_docelowy = step_index(rodzaj, target)

@@ -113,7 +113,9 @@ def get_deal_activities(name: str):
 	# status change on a deal with many later edits) used to disappear from
 	# this feed. Fetch Version ourselves instead, uncapped up to a generous
 	# 200, newest first.
-	deal_fields_labels = {fieldname: (field.get("label") or fieldname) for fieldname, field in deal_fields.items()}
+	deal_fields_labels = {
+		fieldname: (field.get("label") or fieldname) for fieldname, field in deal_fields.items()
+	}
 	versions = frappe.get_all(
 		"Version",
 		filters={"ref_doctype": "CRM Deal", "docname": name},
@@ -164,7 +166,9 @@ def get_deal_activities(name: str):
 		# unconditionally (no `if not version_data.get("changed"): continue`
 		# guard) because a version with an empty 'changed' can still carry
 		# 'added'/'row_changed' contact lines.
-		for i, linia in enumerate(linie_z_wersji(version_data, etykiety=deal_fields_labels, avoid=avoid_fields)):
+		for i, linia in enumerate(
+			linie_z_wersji(version_data, etykiety=deal_fields_labels, avoid=avoid_fields)
+		):
 			if linia["rodzaj"] == "pole":
 				field = linia["field"]
 				field_option = (deal_fields.get(field) or {}).get("options") or None
@@ -292,7 +296,16 @@ def get_deal_activities(name: str):
 	todos = frappe.get_all(
 		"ToDo",
 		filters={"reference_type": "CRM Deal", "reference_name": name},
-		fields=["name", "owner", "allocated_to", "assigned_by", "status", "creation", "modified", "modified_by"],
+		fields=[
+			"name",
+			"owner",
+			"allocated_to",
+			"assigned_by",
+			"status",
+			"creation",
+			"modified",
+			"modified_by",
+		],
 		order_by="creation asc",
 		limit_page_length=LIMIT_REKORDOW_POWIAZANYCH,
 	)
@@ -691,7 +704,12 @@ VOLTEO_LINKED_SOURCES = [
 	# live meta actually has them) to compose data["text"] (FIX G). Volteo
 	# Audyt has no fixed field name here; its candidates are resolved
 	# dynamically against meta in get_volteo_linked_activities below.
-	{"doctype": "Volteo Faktura", "label": _("Faktura"), "link_field": "deal", "text_fields": ["numer", "status"]},
+	{
+		"doctype": "Volteo Faktura",
+		"label": _("Faktura"),
+		"link_field": "deal",
+		"text_fields": ["numer", "status"],
+	},
 	{
 		"doctype": "Volteo Montaz Update",
 		"label": _("Montaż"),
@@ -704,8 +722,20 @@ VOLTEO_LINKED_SOURCES = [
 		"link_field": "deal",
 		"text_fields": ["typ", "tekst"],
 	},
-	{"doctype": "Volteo Audyt", "label": _("Audyt"), "link_field": "deal", "text_fields": [], "skip_version_fields": {"zdjecia_json", "zdjecia_dodatkowe_json", "weryfikacja_json"}},
-	{"doctype": "Volteo Audyt CP", "label": _("Audyt"), "link_field": "deal", "text_fields": [], "skip_version_fields": {"dokumenty_json", "zdjecia_json", "weryfikacja_json"}},
+	{
+		"doctype": "Volteo Audyt",
+		"label": _("Audyt"),
+		"link_field": "deal",
+		"text_fields": [],
+		"skip_version_fields": {"zdjecia_json", "zdjecia_dodatkowe_json", "weryfikacja_json"},
+	},
+	{
+		"doctype": "Volteo Audyt CP",
+		"label": _("Audyt"),
+		"link_field": "deal",
+		"text_fields": [],
+		"skip_version_fields": {"dokumenty_json", "zdjecia_json", "weryfikacja_json"},
+	},
 	# ops#61 (R4): "skip_creation" -- W3 already writes an Info trace
 	# ("utworzono umowę (formularz roboczy)" / "utworzono formularz
 	# kredytowy") on the DEAL at creation time, so the generic "added" event
@@ -721,8 +751,15 @@ VOLTEO_LINKED_SOURCES = [
 		"text_fields": ["status"],
 		"skip_creation": True,
 		"skip_version_fields": {
-			"autenti_status", "autenti_document_id", "signer_name", "signer_email",
-			"sent_by", "sent_at", "signed_at", "error_message", "signed_pdf_file",
+			"autenti_status",
+			"autenti_document_id",
+			"signer_name",
+			"signer_email",
+			"sent_by",
+			"sent_at",
+			"signed_at",
+			"error_message",
+			"signed_pdf_file",
 		},
 	},
 	{
@@ -732,8 +769,15 @@ VOLTEO_LINKED_SOURCES = [
 		"text_fields": ["status"],
 		"skip_creation": True,
 		"skip_version_fields": {
-			"autenti_status", "autenti_document_id", "signer_name", "signer_email",
-			"sent_by", "sent_at", "signed_at", "error_message", "signed_pdf_file",
+			"autenti_status",
+			"autenti_document_id",
+			"signer_name",
+			"signer_email",
+			"sent_by",
+			"sent_at",
+			"signed_at",
+			"error_message",
+			"signed_pdf_file",
 		},
 	},
 	# Fundament notatek na szansie (issue #198, uwaga 43). Bez "skip_creation":
@@ -848,9 +892,7 @@ def get_volteo_linked_activities(name: str):
 		fields_map = {}
 		if track_changes:
 			try:
-				fields_map = {
-					field.fieldname: (field.label or field.fieldname) for field in meta.fields
-				}
+				fields_map = {field.fieldname: (field.label or field.fieldname) for field in meta.fields}
 			except Exception:
 				fields_map = {}
 
@@ -973,10 +1015,14 @@ def get_volteo_linked_activities(name: str):
 			if frappe.db.exists(audyt_doctype, name):
 				comments = frappe.get_all(
 					"Comment",
-					filters={"reference_doctype": audyt_doctype, "reference_name": name,
-							 "comment_type": ["in", ["Comment", "Info"]]},
+					filters={
+						"reference_doctype": audyt_doctype,
+						"reference_name": name,
+						"comment_type": ["in", ["Comment", "Info"]],
+					},
 					fields=["name", "owner", "creation", "content", "comment_type"],
-					order_by="creation desc", limit_page_length=LIMIT_KOMENTARZY_AUDYTU,  # desc to keep newest rows; caller re-sorts for display
+					order_by="creation desc",
+					limit_page_length=LIMIT_KOMENTARZY_AUDYTU,  # desc to keep newest rows; caller re-sorts for display
 				)
 				for c in comments:
 					raw = frappe.utils.strip_html(c.get("content") or "").strip()
@@ -987,18 +1033,28 @@ def get_volteo_linked_activities(name: str):
 					else:
 						snippet = raw[:80] + "…" if len(raw) > 80 else raw
 						text = _("komentarz do audytu: „{0}”").format(snippet)
-					linked_activities.append({
-						"name": f"{activity_name_prefix}-{c['name']}",
-						"activity_type": "volteo_linked",
-						"creation": c["creation"],
-						"owner": c["owner"],
-						"is_lead": False,
-						"data": {"source": audyt_doctype, "label": _("Audyt"),
-								 "title": None, "action": "comment", "doc_name": name, "text": text},
-					})
+					linked_activities.append(
+						{
+							"name": f"{activity_name_prefix}-{c['name']}",
+							"activity_type": "volteo_linked",
+							"creation": c["creation"],
+							"owner": c["owner"],
+							"is_lead": False,
+							"data": {
+								"source": audyt_doctype,
+								"label": _("Audyt"),
+								"title": None,
+								"action": "comment",
+								"doc_name": name,
+								"text": text,
+							},
+						}
+					)
 		except Exception:
-			frappe.log_error(title="Volteo linked activities: audyt comments failed",
-							 message=f"deal={name} doctype={audyt_doctype}\n{frappe.get_traceback()}")
+			frappe.log_error(
+				title="Volteo linked activities: audyt comments failed",
+				message=f"deal={name} doctype={audyt_doctype}\n{frappe.get_traceback()}",
+			)
 
 	return linked_activities
 
@@ -1279,9 +1335,7 @@ def get_attachments(doctype: str, name: str):
 	return [
 		{
 			**{klucz: wartosc for klucz, wartosc in wiersz.items() if klucz != "attached_to_field"},
-			"mozna_zmienic_nazwe": not (
-				doctype == "CRM Deal" and czy_plik_systemowy(wiersz.file_name, name)
-			),
+			"mozna_zmienic_nazwe": not (doctype == "CRM Deal" and czy_plik_systemowy(wiersz.file_name, name)),
 		}
 		for wiersz in zalaczniki
 		if wiersz.attached_to_field != ZNACZNIK_ZDJEC_MONTAZU

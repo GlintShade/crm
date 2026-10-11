@@ -182,9 +182,7 @@ def make_hierarchy_node(user, reports_to=None, is_group=0):
 
 
 def make_contact(opiekun_email):
-	doc = frappe.get_doc(
-		{"doctype": "Contact", "custom_opiekun": opiekun_email, "first_name": "Test"}
-	)
+	doc = frappe.get_doc({"doctype": "Contact", "custom_opiekun": opiekun_email, "first_name": "Test"})
 	doc.flags.ignore_mandatory = True
 	return doc.insert(ignore_permissions=True)
 
