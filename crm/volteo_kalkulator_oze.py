@@ -956,3 +956,19 @@ def oblicz_oferte(
 			"pozycje": _rozbij_pozycje(pozycje, cennik),
 		},
 	}
+
+
+def zloz_adres_montazu(ulica: Any, nr_domu: Any, nr_mieszkania: Any = None) -> str:
+	"""Składa jedno pole ulicy szansy z trzech pól kontaktu, tą samą regułą co `composeAddress()`
+	w `KalkulatorTab.vue` (kalkulator PV): "Ulica NrDomu", a przy numerze mieszkania
+	"Ulica NrDomu/NrMieszkania". Puste i None są pomijane. Numer mieszkania bez ulicy i domu nie
+	tworzy adresu (zwraca ""), bo sam nic nie opisuje."""
+
+	def _tekst(wartosc: Any) -> str:
+		return "" if wartosc is None else str(wartosc).strip()
+
+	glowna = " ".join(czesc for czesc in (_tekst(ulica), _tekst(nr_domu)) if czesc)
+	mieszkanie = _tekst(nr_mieszkania)
+	if glowna and mieszkanie:
+		return f"{glowna}/{mieszkanie}"
+	return glowna

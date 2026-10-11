@@ -37,6 +37,7 @@ from crm.volteo_kalkulator_oze import (
 	dobor_z_wierszy,
 	oblicz_oferte,
 	stale_z_singla,
+	zloz_adres_montazu,
 )
 
 KALKULATOR_ROLE = {"Volteo D2D Sales", "Volteo Backend", "Volteo Core Admin", "System Manager"}
@@ -243,6 +244,29 @@ def _imie_nazwisko_kontaktu(kontakt: str) -> str:
 	return imie_nazwisko
 
 
+def _adres_montazu_z_kontaktu(kontakt: str) -> dict[str, str]:
+	"""Pola adresowe szansy dziedziczone z kontaktu, jak w kalkulatorze PV (tam składa je
+	przeglądarka, `KalkulatorTab.vue`). Wywoływane PO `_imie_nazwisko_kontaktu`, które sprawdza
+	prawo odczytu kontaktu. Kontakt bez adresu daje puste pola, bez wyjątku. Województwo
+	celowo NIE jest ustawiane: lista województw istnieje wyłącznie we froncie (`VOIVODESHIPS`),
+	a backend nie ma własnego źródła prawdy."""
+	dane = frappe.db.get_value(
+		"Contact",
+		kontakt,
+		["custom_ulica", "custom_nr_domu", "custom_nr_mieszkania", "custom_miasto", "custom_kod_pocztowy"],
+		as_dict=True,
+	)
+	if not dane:
+		return {"custom_install_address": "", "custom_install_city": "", "custom_install_postal_code": ""}
+	return {
+		"custom_install_address": zloz_adres_montazu(
+			dane.get("custom_ulica"), dane.get("custom_nr_domu"), dane.get("custom_nr_mieszkania")
+		),
+		"custom_install_city": (dane.get("custom_miasto") or "").strip(),
+		"custom_install_postal_code": (dane.get("custom_kod_pocztowy") or "").strip(),
+	}
+
+
 def _pola_rodzaju(rodzaj: str, wejscie: dict[str, Any], wynik: dict[str, Any]) -> tuple[dict[str, Any], str]:
 	"""Buduje pola `custom_oze_*` specyficzne dla `rodzaj` (kontrakt, tabela pól `CRM Deal`) i
 	zwraca je razem z "kodem głównym" pozycji (`custom_oze_kod_glowny`) -- pusty string dla
@@ -367,6 +391,7 @@ def volteo_oze_create_deal(wejscie: dict[str, Any], contact: str) -> dict[str, A
 		_blad_ogolny()
 
 	imie_nazwisko = _imie_nazwisko_kontaktu(kontakt)
+	pola_adresu = _adres_montazu_z_kontaktu(kontakt)
 
 	# Pierwszy etap procesu wg pozycji -- identyczny wzorzec co `volteo_cp_create_deal` i
 	# `ops/crm-kalkulator-bom.py`: nowe rodzaje idą dokładnie etapami OZE (decyzja CEO), więc
@@ -413,6 +438,7 @@ def volteo_oze_create_deal(wejscie: dict[str, Any], contact: str) -> dict[str, A
 				# Zapis dosłowny wejścia kalkulatora -- NIE jest źródłem prawdy dla wyceny (zawsze
 				# liczonej od nowa po stronie serwera), tylko gwarancją odtworzenia formularza.
 				"custom_oze_wejscie_json": json.dumps(wejscie, ensure_ascii=False),
+				**pola_adresu,
 				**pola_rodzaju,
 			}
 		)
