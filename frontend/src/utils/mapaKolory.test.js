@@ -169,12 +169,13 @@ describe('trwałość ustawień w localStorage', () => {
   })
 
   it('zapisane ustawienia dymka wracają po odczycie', () => {
-    zapiszUstawieniaDymka({ zrodlo: false, produkty: true, statusZrodla: false, terminSpotkania: true })
+    zapiszUstawieniaDymka({ zrodlo: false, produkty: true, statusZrodla: false, terminSpotkania: true, handlowiec: true })
     expect(wczytajUstawieniaDymka()).toEqual({
       zrodlo: false,
       produkty: true,
       statusZrodla: false,
       terminSpotkania: true,
+      handlowiec: true,
     })
   })
 
@@ -190,7 +191,28 @@ describe('trwałość ustawień w localStorage', () => {
       produkty: true,
       statusZrodla: true,
       terminSpotkania: true,
+      handlowiec: true,
     })
+  })
+
+  it('handlowiec jest domyślnie włączony', () => {
+    expect(domyslneUstawieniaDymka().handlowiec).toBe(true)
+    expect(wczytajUstawieniaDymka().handlowiec).toBe(true)
+  })
+
+  it('stary zapis bez klucza handlowiec daje true', () => {
+    localStorage.setItem(
+      'volteo.mapa.dymek',
+      JSON.stringify({ zrodlo: true, produkty: true, statusZrodla: true, terminSpotkania: false }),
+    )
+    const w = wczytajUstawieniaDymka()
+    expect(w.handlowiec).toBe(true)
+    expect(w.terminSpotkania).toBe(false)
+  })
+
+  it('handlowiec false wraca po zapisie i odczycie', () => {
+    zapiszUstawieniaDymka({ ...domyslneUstawieniaDymka(), handlowiec: false })
+    expect(wczytajUstawieniaDymka().handlowiec).toBe(false)
   })
 
   it('domyślnie klastrowanie jest wyłączone, gdy nic nie zapisano', () => {

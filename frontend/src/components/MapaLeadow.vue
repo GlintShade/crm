@@ -126,6 +126,11 @@
                   type="checkbox"
                   :label="__('Termin spotkania')"
                 />
+                <FormControl
+                  v-model="ustawieniaDymka.handlowiec"
+                  type="checkbox"
+                  :label="__('Handlowiec')"
+                />
               </div>
             </div>
           </div>
@@ -861,6 +866,13 @@ function budujDymek(lead) {
   city.className = 'text-xs text-ink-gray-5'
   city.textContent = lead.custom_install_city || '-'
   container.appendChild(city)
+
+  if (ustawieniaDymka.handlowiec && lead.lead_owner) {
+    const rep = document.createElement('div')
+    rep.className = 'text-xs text-ink-gray-5'
+    rep.textContent = `${__('Handlowiec')}: ${getUser(lead.lead_owner).full_name || lead.lead_owner}`
+    container.appendChild(rep)
+  }
 
   if (ustawieniaDymka.terminSpotkania && lead.custom_termin_spotkania) {
     const box = document.createElement('div')

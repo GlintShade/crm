@@ -146,6 +146,7 @@ export function domyslneUstawieniaDymka() {
     produkty: true,
     statusZrodla: true,
     terminSpotkania: true,
+    handlowiec: true,
   }
 }
 
@@ -186,6 +187,8 @@ export function wczytajUstawieniaDymka() {
         typeof zapisane.terminSpotkania === 'boolean'
           ? zapisane.terminSpotkania
           : domyslne.terminSpotkania,
+      handlowiec:
+        typeof zapisane.handlowiec === 'boolean' ? zapisane.handlowiec : domyslne.handlowiec,
     }
   } catch (e) {
     return domyslne
