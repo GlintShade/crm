@@ -3619,6 +3619,10 @@ msgstr "Jest w dniu lub po"
 msgid "Is on or before"
 msgstr "Jest w dniu lub przed"
 
+#: frontend/src/components/Filter.vue
+msgid "Is on"
+msgstr "Jest w dniu"
+
 #. Label of the is_primary (Check) field in DocType 'CRM Contacts'
 #. Label of the is_primary (Check) field in DocType 'CRM Telephony Phone'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json crm/fcrm/doctype/crm_telephony_phone/crm_telephony_phone.json

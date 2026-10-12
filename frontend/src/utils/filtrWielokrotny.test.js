@@ -338,10 +338,17 @@ describe('czyPustyWarunekWielokrotny', () => {
     expect(czyPustyWarunekWielokrotny('equals', null)).toBe(false)
   })
 
-  it('inny jednowartościowy operator (like, is, between...) → zawsze false', () => {
+  it('inny jednowartościowy operator (like, is...) → zawsze false', () => {
     expect(czyPustyWarunekWielokrotny('like', '')).toBe(false)
     expect(czyPustyWarunekWielokrotny('is', null)).toBe(false)
-    expect(czyPustyWarunekWielokrotny('between', [])).toBe(false)
+  })
+
+  it('ops#268: between bez obu granic i "w dniu" bez daty → true', () => {
+    expect(czyPustyWarunekWielokrotny('between', [])).toBe(true)
+    expect(czyPustyWarunekWielokrotny('between', ['2026-10-03'])).toBe(true)
+    expect(czyPustyWarunekWielokrotny('between', ['2026-10-03', '2026-10-04'])).toBe(false)
+    expect(czyPustyWarunekWielokrotny('w dniu', null)).toBe(true)
+    expect(czyPustyWarunekWielokrotny('w dniu', '2026-10-03')).toBe(false)
   })
 
   describe('OPERATOR_TAGOW ({ma, nie_ma})', () => {

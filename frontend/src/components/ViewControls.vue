@@ -352,6 +352,7 @@ import { viewsStore } from '@/stores/views'
 import { usersStore } from '@/stores/users'
 import { getMeta } from '@/stores/meta'
 import { isEmoji } from '@/utils'
+import { dzienZFiltraSzybkiegoDaty, spakujFiltrSzybkiDaty } from '@/utils/filtrDaty'
 import {
   czyFiltrSzybkiZablokowany,
   czyWielokrotnyFiltrSzybki,
@@ -1061,6 +1062,14 @@ const quickFilterList = computed(() => {
         return
       }
       if (Array.isArray(value)) {
+        // ops#268: pole daty z filtrem ["w dniu", D] pokazuje D w kontrolce.
+        const dzien = ['Date', 'Datetime'].includes(filter.fieldtype)
+          ? dzienZFiltraSzybkiegoDaty(value)
+          : null
+        if (dzien !== null) {
+          filter['value'] = dzien
+          return
+        }
         if (
           (['Check', 'Select', 'Link', 'Date', 'Datetime'].includes(
             filter.fieldtype,
@@ -1192,9 +1201,13 @@ function applyQuickFilter(filter, value) {
     }
     filter['value'] = value
   } else if (value) {
-    if (
-      ['Check', 'Select', 'Link', 'Date', 'Datetime'].includes(filter.fieldtype)
-    ) {
+    if (['Date', 'Datetime'].includes(filter.fieldtype)) {
+      // ops#268: sama data, caly dzien -- "w dniu" (serwer zamienia na
+      // between [D, D]), takze dla Datetime, gdzie rownosc wymagala godziny.
+      const dzienFiltra = spakujFiltrSzybkiDaty(value)
+      if (dzienFiltra === undefined) delete filters[field]
+      else filters[field] = dzienFiltra
+    } else if (['Check', 'Select', 'Link'].includes(filter.fieldtype)) {
       filters[field] = value
     } else {
       filters[field] = ['LIKE', `%${value}%`]

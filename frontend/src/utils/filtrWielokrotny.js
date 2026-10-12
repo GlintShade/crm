@@ -17,6 +17,7 @@
 // etapFiltr.js / etykietaMoje.js: eager chunk wywołuje moduł przed
 // zainicjowaniem i18n), testowalne bezpośrednio przez vitest.
 
+import { czyPustyWarunekDaty } from './filtrDaty'
 import { OPERATOR_TAGOW, czyPoleTagow } from './tagiProduktow'
 
 /**
@@ -233,6 +234,12 @@ export function czyPustyWarunekWielokrotny(operator, value) {
       parsujWartoscWielokrotna(strony.ma).length === 0 &&
       parsujWartoscWielokrotna(strony.nie_ma).length === 0
     )
+  }
+  // ops#268: warunki dat ("Jest w dniu" bez daty, "Pomiedzy" bez obu granic)
+  // tez nie moga isc na serwer -- rdzen Frappe zamienilby brakujace granice na
+  // dzisiaj.
+  if (operator === 'between' || operator === 'w dniu') {
+    return czyPustyWarunekDaty(operator, value)
   }
   if (!['in', 'not in'].includes(operator)) return false
   return parsujWartoscWielokrotna(value).length === 0

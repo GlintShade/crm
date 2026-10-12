@@ -125,6 +125,7 @@ import {
   Rating,
 } from 'frappe-ui'
 import { filterableFields } from './filterableFields'
+import { czesciZakresuDat } from '@/utils/filtrDaty'
 import { reactive, computed, h, ref } from 'vue'
 
 const show = ref(false)
@@ -281,9 +282,10 @@ function getValueControl() {
 }
 
 function updateValue(value) {
-  value = value.target ? value.target.value : value
+  value = value?.target ? value.target.value : value
   if (condition[1] === 'between') {
-    condition[2] = [value.split(',')[0], value.split(',')[1]]
+    // ops#268: DateRangePicker emituje tablice, nie string.
+    condition[2] = czesciZakresuDat(value)
   } else {
     condition[2] = isNaN(value) ? value : Number(value)
   }

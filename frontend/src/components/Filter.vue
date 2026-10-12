@@ -334,6 +334,7 @@ import DurationInput from '@/components/Controls/DurationInput.vue'
 import RatingInput from '@/components/Controls/RatingInput.vue'
 import { etykietaMoje } from '@/utils/etykietaMoje'
 import { opcjeEtapu } from '@/utils/etapFiltr'
+import { OPERATOR_W_DNIU, czesciZakresuDat } from '@/utils/filtrDaty'
 import {
   czyPustyWarunekWielokrotny,
   czyWielokrotnyWybor,
@@ -385,7 +386,15 @@ const typeDate = ['Date', 'Datetime']
 // `is`/`is not` (własne kontrolki, patrz getValueControl) są celowo
 // wykluczone, backend (`crm.volteo_lista_szans.podstaw_dzis`) i tak rozumie
 // literał "@dzis" tylko w kształcie skalar/[operator, wartość].
-const OPERATORY_JEDNOWARTOSCIOWE_DZIS = ['equals', 'not equals', '>', '<', '>=', '<=']
+const OPERATORY_JEDNOWARTOSCIOWE_DZIS = [
+  'equals',
+  'not equals',
+  '>',
+  '<',
+  '>=',
+  '<=',
+  OPERATOR_W_DNIU,
+]
 const typeDuration = ['Duration']
 const typeRating = ['Rating']
 
@@ -739,6 +748,7 @@ function getOperators(fieldtype, fieldname, field) {
         { label: __('Is after'), value: '>' },
         { label: __('Is on or after'), value: '>=' },
         { label: __('Is on or before'), value: '<=' },
+        { label: __('Is on'), value: OPERATOR_W_DNIU },
         { label: __('Between'), value: 'between' },
         { label: __('Timespan'), value: 'timespan' },
       ],
@@ -941,6 +951,13 @@ function getValueControl(f) {
     })
   } else if (typeNumber.includes(fieldtype)) {
     return h(FormControl, { type: 'number' })
+  } else if (typeDate.includes(fieldtype) && operator == OPERATOR_W_DNIU) {
+    // "Jest w dniu": zawsze sama data, takze dla Datetime (ops#268).
+    return h(DatePicker, {
+      value: f.value,
+      iconLeft: '',
+      placeholder: __('Wybierz datę'),
+    })
   } else if (typeDate.includes(fieldtype) && operator == 'between') {
     return h(DateRangePicker, {
       value: f.value,
@@ -1005,7 +1022,10 @@ function getDefaultOperator(field) {
     return 'equals'
   }
   if (typeDate.includes(fieldtype)) {
-    return 'between'
+    // ops#268: "Jest w dniu" zamiast "Pomiedzy" -- jeden dzien to najczestsze
+    // pytanie ("kto ma jutro spotkanie"), a pusty "Pomiedzy" rdzen Frappe
+    // liczyl jako dzisiaj.
+    return OPERATOR_W_DNIU
   }
   return 'like'
 }
@@ -1159,7 +1179,10 @@ function updateValue(value, filter) {
   // chaining zamiast bezposredniego `value.target`.
   value = value?.target ? value.target.value : value
   if (filter.operator === 'between') {
-    filter.value = [value.split(',')[0], value.split(',')[1]]
+    // ops#268: DateRangePicker emituje TABLICE [od, do] (albo []), nie
+    // string -- `value.split` rzucalo TypeError i zakres nie dochodzil do
+    // serwera. Pusty/polowiczny zakres odfiltrowuje apply().
+    filter.value = czesciZakresuDat(value)
   } else {
     filter.value = value
   }
@@ -1379,6 +1402,7 @@ const operatorMap = {
   '<=': '<=',
   between: 'between',
   timespan: 'timespan',
+  [OPERATOR_W_DNIU]: OPERATOR_W_DNIU,
   [OPERATOR_TAGOW]: OPERATOR_TAGOW,
 }
 
@@ -1400,6 +1424,7 @@ const oppositeOperatorMap = {
   '<=': '<=',
   between: 'between',
   timespan: 'timespan',
+  [OPERATOR_W_DNIU]: OPERATOR_W_DNIU,
   [OPERATOR_TAGOW]: OPERATOR_TAGOW,
 }
 
