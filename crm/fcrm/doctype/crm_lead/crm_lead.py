@@ -14,6 +14,7 @@ from crm.fcrm.doctype.crm_status_change_log.crm_status_change_log import (
 	add_status_change_log,
 )
 from crm.fcrm.doctype.utils import add_or_remove_lost_reason_section_in_sidepanel
+from crm.volteo_leady_status import czy_moze_zmienic_status_cc
 from crm.volteo_lista_szans import FILTER_FIELDS_LEAD, SORT_FIELDS_LEAD
 from crm.volteo_powiadomienia import powiadom_o_zmianie_terminu
 
@@ -88,6 +89,13 @@ class CRMLead(Document):
 		if not self.is_new() and self.has_value_changed("lead_owner") and self.lead_owner:
 			self.share_with_agent(self.lead_owner)
 			self.assign_agent(self.lead_owner)
+		if (
+			not self.is_new()
+			and self.has_value_changed("status")
+			and not self.flags.ignore_permissions
+			and not czy_moze_zmienic_status_cc(frappe.session.user, frappe.get_roles())
+		):
+			frappe.throw(_("Handlowiec nie może zmieniać statusu CC."), frappe.PermissionError)
 		if self.has_value_changed("status"):
 			add_status_change_log(self)
 

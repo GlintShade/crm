@@ -3,6 +3,7 @@ import { createResource } from 'frappe-ui'
 import { sessionStore } from './session'
 import { computed, reactive } from 'vue'
 import { useRouter } from 'vue-router'
+import { mozeZmieniacStatusCC as mozeZmieniacStatusCCRole } from '@/utils/statusCC'
 
 export const usersStore = defineStore('crm-users', () => {
   const session = sessionStore()
@@ -168,6 +169,12 @@ export const usersStore = defineStore('crm-users', () => {
     return getUser(email).roles?.includes('Volteo Backend') === true
   }
 
+  // Uwaga 71: czy uzytkownik moze zmieniac status CC leada. Ta sama regula
+  // co serwerowe crm/volteo_leady_status.py.
+  function mozeZmieniacStatusCC(email) {
+    return mozeZmieniacStatusCCRole(getUser(email).roles, isVolteoAdmin())
+  }
+
   function isWebsiteUser(email) {
     return getUser(email).user_type === 'Website User'
   }
@@ -238,6 +245,7 @@ export const usersStore = defineStore('crm-users', () => {
     isAdmin,
     isManager,
     isVolteoAdmin,
+    mozeZmieniacStatusCC,
     isCallCenter,
     isBackend,
     isSalesUser,
