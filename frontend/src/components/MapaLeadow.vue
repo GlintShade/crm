@@ -159,7 +159,7 @@
     </div>
 
     <!-- Mapa -->
-    <div class="relative min-h-0 flex-1">
+    <div class="relative isolate min-h-0 flex-1">
       <div
         v-if="initialLoading"
         class="absolute inset-0 z-[1000] flex items-center justify-center bg-surface-elevation-1/70"
