@@ -13,7 +13,7 @@
           __('Status CC')
         }}</span>
         <Dropdown
-          v-if="doc"
+          v-if="doc && mozeZmieniacStatusCC()"
           :options="
             statusOptions(
               'lead',
@@ -36,6 +36,16 @@
             </Button>
           </template>
         </Dropdown>
+        <Button
+          v-else-if="doc && doc.status"
+          data-testid="status-cc-readonly"
+          class="pointer-events-none"
+          :label="statusLabel(doc.status)"
+        >
+          <template #prefix>
+            <IndicatorIcon :class="getLeadStatus(doc.status).color" />
+          </template>
+        </Button>
       </div>
     </header>
   </LayoutHeader>
@@ -79,7 +89,7 @@
                  wewnetrzny limit 300px, zeby zadna sekcja poza ostatnia nie
                  byla ucinana. -->
             <SidePanelLayout
-              :sections="sections.data"
+              :sections="sectionsPanel"
               doctype="CRM Lead"
               :docname="leadId"
               @reload="sections.reload"
@@ -145,6 +155,8 @@ import { getView } from '@/utils/view'
 import { getSettings } from '@/stores/settings'
 import { globalStore } from '@/stores/global'
 import { statusesStore } from '@/stores/statuses'
+import { usersStore } from '@/stores/users'
+import { sekcjeZeStatusemTylkoDoOdczytu } from '@/utils/statusCC'
 import { getMeta } from '@/stores/meta'
 import { useDocument } from '@/data/document'
 import { isMobileView } from '@/composables/settings'
@@ -165,6 +177,14 @@ import { useRouter, useRoute } from 'vue-router'
 const { brand } = getSettings()
 const { $dialog, $socket } = globalStore()
 const { statusOptions, getLeadStatus } = statusesStore()
+const { mozeZmieniacStatusCC } = usersStore()
+
+// Uwaga 71: dla handlowca pole `status` w panelu jest tylko do odczytu.
+const sectionsPanel = computed(() =>
+  mozeZmieniacStatusCC()
+    ? sections.data
+    : sekcjeZeStatusemTylkoDoOdczytu(sections.data),
+)
 const { doctypeMeta } = getMeta('CRM Lead')
 
 const route = useRoute()

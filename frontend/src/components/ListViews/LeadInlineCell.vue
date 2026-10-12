@@ -52,8 +52,21 @@
 -->
 <template>
   <div class="flex items-center" @click.stop.prevent @dblclick.stop>
+    <Button
+      v-if="column.key === 'status' && !mozeZmieniacStatusCC()"
+      data-testid="status-cc-readonly"
+      variant="ghost"
+      size="sm"
+      class="pointer-events-none !h-7 max-w-full justify-start truncate"
+      :label="wartosc ? statusLabel(wartosc) : ''"
+    >
+      <template #prefix>
+        <IndicatorIcon v-if="wartosc" :class="getLeadStatus(wartosc)?.color" />
+      </template>
+    </Button>
+
     <Dropdown
-      v-if="column.key === 'status'"
+      v-else-if="column.key === 'status'"
       :options="opcjeStatusu"
       placement="bottom-start"
     >
@@ -123,6 +136,7 @@ import LostReasonModal from '@/components/Modals/LostReasonModal.vue'
 import { useDocument } from '@/data/document'
 import { getMeta } from '@/stores/meta'
 import { statusesStore } from '@/stores/statuses'
+import { usersStore } from '@/stores/users'
 import { surowaWartoscKomorki } from '@/utils/leadyInline'
 import { isTranslatable, getFormat } from '@/utils'
 import {
@@ -145,6 +159,7 @@ const props = defineProps({
 const emit = defineEmits(['saved'])
 
 const { getLeadStatus, statusOptions } = statusesStore()
+const { mozeZmieniacStatusCC } = usersStore()
 const meta = getMeta('CRM Lead')
 
 function statusLabel(status) {

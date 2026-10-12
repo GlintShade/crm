@@ -74,7 +74,11 @@
       <span v-if="doc.status" class="text-sm text-ink-gray-5">{{
         __('Status CC')
       }}</span>
-      <Dropdown v-if="doc.status" :options="statuses" placement="bottom-start">
+      <Dropdown
+        v-if="doc.status && mozeZmieniacStatusCC()"
+        :options="statuses"
+        placement="bottom-start"
+      >
         <template #default="{ open }">
           <Button
             :label="statusLabel(doc.status)"
@@ -86,6 +90,16 @@
           </Button>
         </template>
       </Dropdown>
+      <Button
+        v-else-if="doc.status"
+        data-testid="status-cc-readonly"
+        class="pointer-events-none"
+        :label="statusLabel(doc.status)"
+      >
+        <template #prefix>
+          <IndicatorIcon :class="getLeadStatus(doc.status).color" />
+        </template>
+      </Button>
       <PrzekazHandlowcowi
         v-if="isCallCenter() || isVolteoAdmin()"
         :docname="lead.name"
@@ -152,7 +166,7 @@
     >
       <SidePanelLayout
         v-if="sections.data"
-        :sections="sections.data"
+        :sections="sectionsPanel"
         doctype="CRM Lead"
         :docname="lead.name"
         @reload="sections.reload"
@@ -199,6 +213,7 @@ import { statusesStore } from '@/stores/statuses'
 import { callEnabled } from '@/composables/telephony'
 import { rozbijTagi } from '@/utils/tagiProduktow'
 import { isTranslatable } from '@/utils'
+import { sekcjeZeStatusemTylkoDoOdczytu } from '@/utils/statusCC'
 import router from '@/router'
 import { Button, Dropdown, createResource } from 'frappe-ui'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -210,7 +225,7 @@ const props = defineProps({
 const emit = defineEmits(['zamknij', 'zaktualizowano'])
 
 const { makeCall } = globalStore()
-const { isCallCenter, isVolteoAdmin } = usersStore()
+const { isCallCenter, isVolteoAdmin, mozeZmieniacStatusCC } = usersStore()
 const { statusOptions, getLeadStatus } = statusesStore()
 
 const { document, triggerOnChange } = useDocument('CRM Lead', props.lead.name)
@@ -227,6 +242,13 @@ const sections = createResource({
   params: { doctype: 'CRM Lead' },
   auto: true,
 })
+
+// Uwaga 71: dla handlowca pole `status` w panelu jest tylko do odczytu.
+const sectionsPanel = computed(() =>
+  mozeZmieniacStatusCC()
+    ? sections.data
+    : sekcjeZeStatusemTylkoDoOdczytu(sections.data),
+)
 
 // --- Status + "Odrzucony wymaga powodu" (kopia Lead.vue) ----------------
 

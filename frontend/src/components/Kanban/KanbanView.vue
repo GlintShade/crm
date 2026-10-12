@@ -77,6 +77,7 @@
               item-key="name"
               class="flex flex-col gap-3.5 flex-1"
               :delay="isTouchScreenDevice() ? 200 : 0"
+              :disabled="Boolean(options.dragDisabled)"
               :data-column="column.column.name"
               @end="updateColumn"
             >

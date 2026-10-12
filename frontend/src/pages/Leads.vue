@@ -46,6 +46,7 @@
         query: { view: route.query.view, viewType: route.params.viewType },
       }),
       onNewClick: (column) => onNewClick(column),
+      dragDisabled: !mozeZmieniacStatusCC(),
     }"
     @update="(data) => viewControls.updateKanbanSettings(data)"
     @loadMore="(columnName) => viewControls.loadMoreKanban(columnName)"
@@ -318,7 +319,7 @@ import { ref, computed, reactive, h } from 'vue'
 const { getFormattedPercent, getFormattedFloat, getFormattedCurrency } =
   getMeta('CRM Lead')
 const { makeCall } = globalStore()
-const { getUser } = usersStore()
+const { getUser, mozeZmieniacStatusCC } = usersStore()
 const { getLeadStatus } = statusesStore()
 const { on } = useBroadcast()
 const { updateOnboardingStep } = useOnboarding('frappecrm')

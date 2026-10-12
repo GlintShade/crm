@@ -26,7 +26,7 @@
         class="text-sm text-ink-gray-5"
       >{{ __('Status CC') }}</span>
       <Dropdown
-        v-if="doc && document.statuses"
+        v-if="doc && document.statuses && mozeZmieniacStatusCC()"
         :options="statuses"
         placement="right"
       >
@@ -42,6 +42,16 @@
           </Button>
         </template>
       </Dropdown>
+      <Button
+        v-else-if="doc && document.statuses && doc.status"
+        data-testid="status-cc-readonly"
+        class="pointer-events-none"
+        :label="statusLabel(doc.status)"
+      >
+        <template #prefix>
+          <IndicatorIcon :class="getLeadStatus(doc.status).color" />
+        </template>
+      </Button>
     </template>
   </LayoutHeader>
   <div v-if="doc.name" class="flex h-full overflow-hidden">
@@ -74,7 +84,7 @@
                  nadrzednym .sections w SidePanelLayout.vue), wiec brak
                  wewnetrznego limitu nie psuje wygladu. -->
             <SidePanelLayout
-              :sections="sections.data"
+              :sections="sectionsPanel"
               doctype="CRM Lead"
               :docname="leadId"
               @reload="sections.reload"
@@ -349,6 +359,7 @@ import { useDocument } from '@/data/document'
 import { whatsappEnabled } from '@/composables/whatsapp'
 import { callEnabled } from '@/composables/telephony'
 import { telHref, czyTelefon } from '@/utils/telefon'
+import { sekcjeZeStatusemTylkoDoOdczytu } from '@/utils/statusCC'
 import {
   createResource,
   FileUploader,
@@ -368,7 +379,7 @@ import { useStorage } from '@vueuse/core'
 
 const { brand } = getSettings()
 const { $dialog, $socket, makeCall } = globalStore()
-const { isCallCenter, isVolteoAdmin } = usersStore()
+const { isCallCenter, isVolteoAdmin, mozeZmieniacStatusCC } = usersStore()
 const { statusOptions, getLeadStatus } = statusesStore()
 const { doctypeMeta } = getMeta('CRM Lead')
 
@@ -566,9 +577,16 @@ const sections = createResource({
 // spowodowanej mutacja w miejscu wspoldzielonych danych), ale gdyby ten
 // computed mutowal sections.data bezposrednio, zakladka "Szczegoly" (druga
 // instancja tego samego zasobu) stracilaby pole email razem z panelem.
+// Uwaga 71: dla handlowca pole `status` w panelu jest tylko do odczytu.
+const sectionsPanel = computed(() =>
+  mozeZmieniacStatusCC()
+    ? sections.data
+    : sekcjeZeStatusemTylkoDoOdczytu(sections.data),
+)
+
 const sectionsBezEmailaWPrawymPanelu = computed(() => {
-  if (!sections.data?.length) return sections.data
-  return sections.data.map((section) => {
+  if (!sectionsPanel.value?.length) return sectionsPanel.value
+  return sectionsPanel.value.map((section) => {
     if (!section.columns?.length) return section
     return {
       ...section,
