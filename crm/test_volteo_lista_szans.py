@@ -723,6 +723,79 @@ class TestNormalizujZakresDnia(unittest.TestCase):
 		wynik = normalizuj_zakres_dnia(po_dzis, self._czy_datetime)
 		self.assertEqual(wynik, {"custom_termin_spotkania": [">=", "2026-10-03"]})
 
+	# --- ops#268: operator "Jest w dniu" ("w dniu") ---
+
+	def test_w_dniu_na_datetime(self: "TestNormalizujZakresDnia") -> None:
+		filtry = {"custom_termin_spotkania": ["w dniu", "2026-10-03"]}
+		wynik = normalizuj_zakres_dnia(filtry, self._czy_datetime)
+		self.assertEqual(
+			wynik, {"custom_termin_spotkania": ["between", ["2026-10-03", "2026-10-03"]]}
+		)
+
+	def test_w_dniu_na_date(self: "TestNormalizujZakresDnia") -> None:
+		# custom_kolejny_kontakt jest Date: "w dniu" dziala tez bez bramki Datetime.
+		filtry = {"custom_kolejny_kontakt": ["w dniu", "2026-10-03"]}
+		wynik = normalizuj_zakres_dnia(filtry, self._czy_datetime)
+		self.assertEqual(
+			wynik, {"custom_kolejny_kontakt": ["between", ["2026-10-03", "2026-10-03"]]}
+		)
+
+	def test_w_dniu_z_polnoca(self: "TestNormalizujZakresDnia") -> None:
+		filtry = {"custom_termin_spotkania": ["w dniu", "2026-10-03 00:00:00"]}
+		wynik = normalizuj_zakres_dnia(filtry, self._czy_datetime)
+		self.assertEqual(
+			wynik, {"custom_termin_spotkania": ["between", ["2026-10-03", "2026-10-03"]]}
+		)
+
+	def test_w_dniu_wielkosc_liter_operatora(self: "TestNormalizujZakresDnia") -> None:
+		filtry = {"custom_termin_spotkania": ["W Dniu", "2026-10-03"]}
+		wynik = normalizuj_zakres_dnia(filtry, self._czy_datetime)
+		self.assertEqual(
+			wynik, {"custom_termin_spotkania": ["between", ["2026-10-03", "2026-10-03"]]}
+		)
+
+	def test_w_dniu_pusta_lub_zla_wartosc_bez_zmian(self: "TestNormalizujZakresDnia") -> None:
+		for wartosc in (None, "", "2026-10-03 16:30:00", "nie data", 20261003, ["2026-10-03"]):
+			with self.subTest(wartosc=wartosc):
+				filtry = {"custom_termin_spotkania": ["w dniu", wartosc]}
+				self.assertEqual(normalizuj_zakres_dnia(filtry, self._czy_datetime), filtry)
+
+	def test_w_dniu_nie_mutuje_wejscia(self: "TestNormalizujZakresDnia") -> None:
+		wejscie = ["w dniu", "2026-10-03"]
+		filtry = {"custom_termin_spotkania": wejscie}
+		normalizuj_zakres_dnia(filtry, self._czy_datetime)
+		self.assertEqual(wejscie, ["w dniu", "2026-10-03"])
+		self.assertEqual(filtry, {"custom_termin_spotkania": wejscie})
+
+	def test_w_dniu_po_podstaw_dzis(self: "TestNormalizujZakresDnia") -> None:
+		# Kolejnosc z get_data/mapa/rozwin_grupy: podstaw_dzis, potem normalizacja.
+		po_dzis = podstaw_dzis(
+			{"custom_termin_spotkania": ["w dniu", "@dzis"]},
+			"2026-10-02",
+			"2026-10-03",
+			self._czy_datetime,
+		)
+		self.assertEqual(po_dzis, {"custom_termin_spotkania": ["w dniu", "2026-10-02"]})
+		wynik = normalizuj_zakres_dnia(po_dzis, self._czy_datetime)
+		self.assertEqual(
+			wynik, {"custom_termin_spotkania": ["between", ["2026-10-02", "2026-10-02"]]}
+		)
+
+	def test_w_dniu_w_grupie_albo_ten_sam_lancuch(self: "TestNormalizujZakresDnia") -> None:
+		# `rozwin_grupy` (crm.api.doc, wymaga frappe) wola dla kazdej grupy dokladnie
+		# ten lancuch podstaw_dzis -> normalizuj_zakres_dnia; tu odtwarzamy go na
+		# rdzeniach, bez frappe.
+		grupa = {"custom_termin_spotkania": ["w dniu", "@dzis"], "status": "Nowy"}
+		po_dzis = podstaw_dzis(grupa, "2026-10-02", "2026-10-03", self._czy_datetime)
+		wynik = normalizuj_zakres_dnia(po_dzis, self._czy_datetime)
+		self.assertEqual(
+			wynik,
+			{
+				"custom_termin_spotkania": ["between", ["2026-10-02", "2026-10-02"]],
+				"status": "Nowy",
+			},
+		)
+
 
 class TestPodstawMe(unittest.TestCase):
 	"""`podstaw_me` (issue #214) -- rdzen frappe-free wyciagniety z

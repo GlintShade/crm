@@ -25,8 +25,7 @@
     :userScope="true"
     @change="(data) => updateFilter(filter, data)"
   />
-  <component
-    :is="filter.fieldtype === 'Date' ? DatePicker : DateTimePicker"
+  <DatePicker
     v-else-if="['Date', 'Datetime'].includes(filter.fieldtype)"
     class="border-none"
     :value="filter.value"
@@ -44,7 +43,7 @@
 <script setup>
 import Link from '@/components/Controls/Link.vue'
 import QuickFilterCheckList from '@/components/Controls/QuickFilterCheckList.vue'
-import { FormControl, DatePicker, DateTimePicker, createResource } from 'frappe-ui'
+import { FormControl, DatePicker, createResource } from 'frappe-ui'
 import { useDebounceFn } from '@vueuse/core'
 import { etykietaMoje } from '@/utils/etykietaMoje'
 import { opcjeEtapu } from '@/utils/etapFiltr'

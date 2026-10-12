@@ -795,6 +795,11 @@ def przydziel_cc(
 		if not all(isinstance(n, str) and n.strip() for n in nazwy):
 			frappe.throw(_("Lista leadów musi zawierać wyłącznie niepuste nazwy (stringi)."))
 	elif filters:
+		# ops#268: ten sam lancuch @me/@dzis/"Jest w dniu" co lista i mapa,
+		# zeby "Przydziel CC" z filtrem daty bral te same leady co widok.
+		filters = _podstaw_me(filters)
+		filters = _podstaw_dzis(filters, "CRM Lead")
+		filters = _normalizuj_zakres_dnia(filters, "CRM Lead")
 		filters = rozwin_grupy("CRM Lead", filters)
 		# Issue ops#173: rozwija ewentualny filtr po polach "produktow
 		# leada" (custom_posiadane_produkty/custom_produkt_procesu) na

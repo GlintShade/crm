@@ -395,6 +395,12 @@ _WZORZEC_DATA_BEZ_CZASU = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _WZORZEC_DATA_O_POLNOCY = re.compile(r"^(\d{4}-\d{2}-\d{2}) 00:00:00(\.0+)?$")
 
 
+# Operator UI "Jest w dniu" (ops#268): nie istnieje w Frappe, wiec
+# `normalizuj_zakres_dnia` zamienia go na "between" [D, D] ZANIM filtr trafi
+# do `frappe.get_list` (inaczej `make_filter_tuple` odrzuci nieznany operator).
+OPERATOR_W_DNIU = "w dniu"
+
+
 def _dzien_z_wartosci_granicznej(wartosc: object) -> str | None:
 	"""Rozpoznaje `wartosc` jako "goly" dzien (``YYYY-MM-DD``) albo pelny
 	znacznik czasu o polnocy TEGO dnia (``YYYY-MM-DD 00:00:00``, opcjonalnie
@@ -460,6 +466,8 @@ def normalizuj_zakres_dnia(filters: Mapping[str, object], czy_datetime: Callable
 	    samo co "po calym dniu D");
 	  - ``["<", D]`` i ``[">=", D]`` -> bez zmian (juz poprawnie obejmuja
 	    granice dnia od polnocy);
+	  - ``["w dniu", D]`` -> ``["between", [D, D]]`` na polu Date ORAZ Datetime
+	    (ops#268, "Jest w dniu"); pusta/zla wartosc -> bez zmian;
 	  - pole Date (nie Datetime), inny operator (``"="``, ``"between"``,
 	    ``"timespan"``, ``"in"``, ``"not in"``, ``"like"``...), wartosc nie
 	    bedaca stringiem, string z WYRAZNA godzina inna niz polnoc, albo
@@ -489,6 +497,15 @@ def _normalizuj_wartosc_zakresu_dnia(
 
 	operator, argument = wartosc
 	operator_l = operator.lower() if isinstance(operator, str) else operator
+
+	if operator_l == OPERATOR_W_DNIU:
+		# "Jest w dniu" dziala na Date i na Datetime, wiec bez bramki
+		# `czy_datetime`: "between" [D, D] rdzen Frappe rozszerza do calego
+		# dnia (00:00:00 .. 23:59:59.999999 dla Datetime).
+		dzien_dnia = _dzien_z_wartosci_granicznej(argument)
+		if dzien_dnia is None:
+			return wartosc
+		return ["between", [dzien_dnia, dzien_dnia]]
 
 	if operator_l not in ("<=", ">"):
 		return wartosc
