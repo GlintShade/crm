@@ -610,7 +610,7 @@ def volteo_zestaw_zapisz(
 	if umowa["istnieje"]:
 		status_umowy = umowa["autenti_status"] or "niewysłana do Autenti"
 
-	stara_reczna = {w["name"]: w for w in doc.get("custom_zestaw") or [] if w.get("name")}
+	stara_reczna = {w.get("name"): w for w in doc.get("custom_zestaw") or [] if w.get("name")}
 	doc.set("custom_zestaw", [])
 	for w in nowe:
 		wiersz = {
