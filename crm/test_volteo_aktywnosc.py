@@ -10,6 +10,7 @@ from crm.volteo_aktywnosc import (
 	TEKST_ZASTEPCZY_CC_D2D,
 	ZNACZNIK_CC,
 	ZNACZNIK_KOSZTY,
+	ZNACZNIK_ZESTAW,
 	ZNACZNIKI_ADMIN,
 	bez_znacznika,
 	czy_widoczny,
@@ -326,6 +327,24 @@ class TestCzyWidocznyIBezZnacznika(unittest.TestCase):
 
 	def test_f_znaczniki_admin_zawiera_znacznik_kosztow(self: "TestCzyWidocznyIBezZnacznika") -> None:
 		self.assertIn(ZNACZNIK_KOSZTY, ZNACZNIKI_ADMIN)
+
+	def test_g_znacznik_zestawu_w_znacznikach_admin(self: "TestCzyWidocznyIBezZnacznika") -> None:
+		self.assertIn(ZNACZNIK_ZESTAW, ZNACZNIKI_ADMIN)
+		self.assertEqual(ZNACZNIK_ZESTAW, "[volteo:zestaw]")
+
+	def test_h_zestaw_ukryty_przed_rola_bez_admina(self: "TestCzyWidocznyIBezZnacznika") -> None:
+		text = f"{ZNACZNIK_ZESTAW} Edycja zestawu. Dodano: Magazyn energii x 1."
+		self.assertFalse(czy_widoczny(text, ["Volteo D2D Sales"], {"Volteo Core Admin", "System Manager"}))
+		self.assertFalse(czy_widoczny(text, ["Volteo Backend"], {"Volteo Core Admin", "System Manager"}))
+
+	def test_i_zestaw_widoczny_dla_admina(self: "TestCzyWidocznyIBezZnacznika") -> None:
+		text = f"{ZNACZNIK_ZESTAW} Edycja zestawu."
+		self.assertTrue(czy_widoczny(text, ["Volteo Core Admin"], {"Volteo Core Admin", "System Manager"}))
+		self.assertTrue(czy_widoczny(text, ["System Manager"], {"Volteo Core Admin", "System Manager"}))
+
+	def test_j_bez_znacznika_zdejmuje_prefiks_zestawu(self: "TestCzyWidocznyIBezZnacznika") -> None:
+		text = f"{ZNACZNIK_ZESTAW} Edycja zestawu. Cena: netto 1,00 -> 2,00 zł."
+		self.assertEqual(bez_znacznika(text), "Edycja zestawu. Cena: netto 1,00 -> 2,00 zł.")
 
 
 class TestTekstWidocznyDlaCC(unittest.TestCase):
