@@ -45,7 +45,6 @@ def czy_moze_edytowac_zestaw(role: Any) -> bool:
 
 _GROSZ = Decimal("0.01")
 _ZERO = Decimal(0)
-_DASHE = (chr(0x2014), chr(0x2013))  # myslnik em i en (zakazane w tresci)
 
 
 def kwota(x: Any) -> Decimal:
@@ -236,10 +235,6 @@ def waliduj_wiersze(wiersze: Any, linia: str = "oze") -> list[str]:
 				bledy.append(przedrostek + "netto nie może być większe od brutto.")
 		if _tekst(typ) == "Falownik":
 			falowniki += 1
-		for klucz in ("typ", "nazwa", "jednostka"):
-			surowa = _pole(w, klucz)
-			if surowa is not None and any(d in str(surowa) for d in _DASHE):
-				bledy.append(przedrostek + f"pole {klucz} nie może zawierać myślnika długiego ani półpauzy.")
 	if ceny_w_oze:
 		bledy.append(MSG_OZE_BEZ_CEN)
 	if linia == "oze" and falowniki > 1:
