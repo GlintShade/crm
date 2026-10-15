@@ -9660,3 +9660,279 @@ msgstr "Szansa została w międzyczasie zmieniona. Odśwież i wprowadź zmiany 
 #: crm/api/zestaw.py
 msgid "Brak zmian do zapisania."
 msgstr "Brak zmian do zapisania."
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "(wybierz)"
+msgstr "(wybierz)"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "BYŁO"
+msgstr "BYŁO"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Brak pozycji."
+msgstr "Brak pozycji."
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Brak widocznych różnic."
+msgstr "Brak widocznych różnic."
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "BĘDZIE"
+msgstr "BĘDZIE"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Cena"
+msgstr "Cena"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Cena (przed -> po)"
+msgstr "Cena (przed -> po)"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Cena brutto"
+msgstr "Cena brutto"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Cena netto"
+msgstr "Cena netto"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Cena po dotacji"
+msgstr "Cena po dotacji"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Cena po uldze"
+msgstr "Cena po uldze"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Dodaj pozycje"
+msgstr "Dodaj pozycje"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Dodaj pozycję"
+msgstr "Dodaj pozycję"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Dodane"
+msgstr "Dodane"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Dodatkowy kabel (m)"
+msgstr "Dodatkowy kabel (m)"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Dodatkowy licznik"
+msgstr "Dodatkowy licznik"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "EMS Breeze"
+msgstr "EMS Breeze"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Edycja zestawu (administracja)"
+msgstr "Edycja zestawu (administracja)"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Edytuj zestaw"
+msgstr "Edytuj zestaw"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Falownik"
+msgstr "Falownik"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "ILOŚĆ"
+msgstr "ILOŚĆ"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Inny"
+msgstr "Inny"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "JEDNOSTKA"
+msgstr "JEDNOSTKA"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Klimatyzacja (dodatek)"
+msgstr "Klimatyzacja (dodatek)"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Konfiguracja"
+msgstr "Konfiguracja"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Konfiguracja (do umowy)"
+msgstr "Konfiguracja (do umowy)"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Konstrukcja"
+msgstr "Konstrukcja"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Kwota brutto dodatków bez ulgi"
+msgstr "Kwota brutto dodatków bez ulgi"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Kwota ulgi"
+msgstr "Kwota ulgi"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Liczba paneli"
+msgstr "Liczba paneli"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Licznik Pstryk"
+msgstr "Licznik Pstryk"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Magazyn energii"
+msgstr "Magazyn energii"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "NAZWA"
+msgstr "NAZWA"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Nie udało się przeliczyć zestawu."
+msgstr "Nie udało się przeliczyć zestawu."
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Nie udało się zapisać zestawu."
+msgstr "Nie udało się zapisać zestawu."
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Odśwież"
+msgstr "Odśwież"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Okres rat (lata)"
+msgstr "Okres rat (lata)"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Ostatnia edycja ręczna"
+msgstr "Ostatnia edycja ręczna"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "POLE"
+msgstr "POLE"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Panel"
+msgstr "Panel"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Panele PV (dodatek, szt.)"
+msgstr "Panele PV (dodatek, szt.)"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Panele PV + mikrofalownik (dodatek, szt.)"
+msgstr "Panele PV + mikrofalownik (dodatek, szt.)"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Pojemność magazynu (kWh)"
+msgstr "Pojemność magazynu (kWh)"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Pole Falownik w konfiguracji różni się od nazwy pozycji Falownik. Umowa może wtedy pokazać błędną liczbę falowników."
+msgstr "Pole Falownik w konfiguracji różni się od nazwy pozycji Falownik. Umowa może wtedy pokazać błędną liczbę falowników."
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Porzucić niezapisane zmiany zestawu?"
+msgstr "Porzucić niezapisane zmiany zestawu?"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Potwierdź zmiany zestawu"
+msgstr "Potwierdź zmiany zestawu"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Powód zmiany"
+msgstr "Powód zmiany"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Przeliczanie..."
+msgstr "Przeliczanie..."
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Rata brutto"
+msgstr "Rata brutto"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Rata po dotacji"
+msgstr "Rata po dotacji"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Rata po uldze"
+msgstr "Rata po uldze"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Szansa ma wygenerowaną umowę. Po zapisie wygeneruj PDF umowy ponownie w zakładce Umowa."
+msgstr "Szansa ma wygenerowaną umowę. Po zapisie wygeneruj PDF umowy ponownie w zakładce Umowa."
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "TYP"
+msgstr "TYP"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Typ klienta"
+msgstr "Typ klienta"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Ulga %"
+msgstr "Ulga %"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Umowa jest w Autenti lub podpisana (status: {0}). Zmiana zestawu nie zmieni dokumentu. Zapisz zmianę jako aneks i opisz go w powodzie."
+msgstr "Umowa jest w Autenti lub podpisana (status: {0}). Zmiana zestawu nie zmieni dokumentu. Zapisz zmianę jako aneks i opisz go w powodzie."
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Usunięte"
+msgstr "Usunięte"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "VAT %"
+msgstr "VAT %"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "W dół"
+msgstr "W dół"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "W górę"
+msgstr "W górę"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Wpłata własna"
+msgstr "Wpłata własna"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Własny typ"
+msgstr "Własny typ"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Zapisz zmiany"
+msgstr "Zapisz zmiany"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Zasady dotacji"
+msgstr "Zasady dotacji"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Zestaw zapisany."
+msgstr "Zestaw zapisany."
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Zmienione"
+msgstr "Zmienione"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "klimatyzacja i ładowarka EV nie wchodzą do ulgi"
+msgstr "klimatyzacja i ładowarka EV nie wchodzą do ulgi"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "opcjonalnie"
+msgstr "opcjonalnie"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Ładowarka EV"
+msgstr "Ładowarka EV"
