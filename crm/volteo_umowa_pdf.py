@@ -153,7 +153,9 @@ def zbuduj_kontekst(
 	"chłodzenie i dogrzewanie", "chłodzenie i grzanie"), funkcja go nie mapuje.
 	Dla Rozbudowy (`rozbudowa` podane) `ppoz_tak`/`ppoz_nie` liczą się z
 	`ppoz_wymagane()` na danych rozbudowy i są obie False, gdy rozbudowa PV
-	(panele + mikro) wynosi 0 (jawny wybór wygrywa z resztką, ops#145).
+	(panele + mikro) wynosi 0 (jawny wybór wygrywa z resztką, ops#145). Wyjątek:
+	"Tak" z kalkulatora wygrywa także przy Rozbudowie samego magazynu (uwaga 75,
+	ops#277, reguła ops#194).
 	`urzadzenie` (b69, dogrywka U9; kw-only) dla wzorów KL/PC/PP:
 	`{"rodzaj": "KL"|"PC"|"PP", "klima_rodzaj", "klima_moc_kw", "pc_producent",
 	"pc_typ", "pc_moc_kw", "cwu" ("" | "200 l" | "300 l"), "grzejniki"
@@ -287,16 +289,19 @@ def zbuduj_kontekst(
 	roz_moc_nowa = roz.get("moc_nowa_kwp")
 	if roz_moc_nowa is None:
 		roz_moc_nowa = deal.get("custom_pv_power_kwp")
-	roz_ppoz_stan = (
-		ppoz_wymagane(
+	if roz.get("ppoz") == "Tak":
+		# Kalkulator już doliczył PPOŻ: umowa mówi Tak niezależnie od zakresu,
+		# także dla Rozbudowy samego magazynu (uwaga 75, ops#277, reguła ops#194).
+		roz_ppoz_stan = True
+	elif roz_pv_lacznie > 0:
+		roz_ppoz_stan = ppoz_wymagane(
 			roz_moc_nowa,
 			roz.get("ist_pv_moc_kwp"),
 			"Tak",
 			roz.get("ppoz"),
 		)
-		if roz_pv_lacznie > 0
-		else None
-	)
+	else:
+		roz_ppoz_stan = None
 
 	kontekst: dict[str, Any] = {
 		# Strony i nagłówek
@@ -462,7 +467,7 @@ def zbuduj_kontekst(
 		"kociol_model_moc": urz_kociol_model_moc,
 	}
 	if rozbudowa is not None:
-		# Rozbudowa: PPOŻ liczony z danych rozbudowy, nie z formularza PV.
+		# Rozbudowa: PPOŻ z danych rozbudowy ("Tak" z kalkulatora zawsze), nie z formularza PV.
 		kontekst["ppoz_tak"] = roz_ppoz_stan is True
 		kontekst["ppoz_nie"] = roz_ppoz_stan is False
 	return kontekst
