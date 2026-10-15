@@ -19,6 +19,17 @@ export const POLA_CENY_WEJSCIE = [
   'dodatki_bez_ulgi_brutto',
 ]
 
+// Czyste Powietrze (ops#275): jedyne klucze `cena` przyjmowane przez serwer.
+export const POLA_CENY_CP = ['dotacja_zrodlo', 'dotacja_co', 'dotacja_termo', 'okres_lat', 'wplata_gotowka']
+
+export const ETYKIETY_POL_CENY_CP = {
+  dotacja_zrodlo: 'Źródło ciepła',
+  dotacja_co: 'CO i CWU',
+  dotacja_termo: 'Termomodernizacja',
+  okres_lat: 'Okres rat (lata)',
+  wplata_gotowka: 'Wpłata gotówką',
+}
+
 export const POLA_KONFIGURACJI = [
   'custom_falownik',
   'custom_bateria',
@@ -109,17 +120,23 @@ function wierszZApi(w) {
     nazwa: tekst(w.nazwa),
     ilosc: w.ilosc == null ? '' : tekst(w.ilosc),
     jednostka: tekst(w.jednostka),
+    netto: w.netto == null ? '' : tekst(w.netto),
+    brutto: w.brutto == null ? '' : tekst(w.brutto),
   }
 }
 
-export function pustyWiersz(typ = '') {
-  return { klucz: nowyKlucz(), name: null, typ, nazwa: '', ilosc: '1', jednostka: 'szt.' }
+export function czyCp(stan) {
+  return stan?.linia === 'cp'
 }
 
-function cenaDoStanu(cena) {
+export function pustyWiersz(typ = '') {
+  return { klucz: nowyKlucz(), name: null, typ, nazwa: '', ilosc: '1', jednostka: 'szt.', netto: '0', brutto: '0' }
+}
+
+function cenaDoStanu(cena, pola = POLA_CENY_WEJSCIE) {
   const c = cena || {}
   const wynik = {}
-  for (const pole of POLA_CENY_WEJSCIE) {
+  for (const pole of pola) {
     wynik[pole] = c[pole] == null ? '' : tekst(c[pole])
   }
   return wynik
@@ -141,9 +158,11 @@ function konfiguracjaDoStanu(konfiguracja) {
  */
 export function stanZOdpowiedzi(odp) {
   const o = odp || {}
+  const cp = o.linia === 'cp'
   return {
+    linia: cp ? 'cp' : 'oze',
     wiersze: (o.wiersze || []).map(wierszZApi),
-    cena: cenaDoStanu(o.cena),
+    cena: cp ? cenaDoStanu(o.cena_cp, POLA_CENY_CP) : cenaDoStanu(o.cena),
     konfiguracja: konfiguracjaDoStanu(o.konfiguracja),
     reczne: [],
     powod: '',
@@ -202,17 +221,49 @@ export function zastosujPropozycje(stan, propozycja) {
   return { ...stan, konfiguracja }
 }
 
-function wierszDoWywolania(w) {
-  const wynik = { typ: tekst(w.typ).trim(), nazwa: tekst(w.nazwa).trim(), ilosc: liczba(w.ilosc), jednostka: tekst(w.jednostka).trim() }
+function wierszDoWywolania(w, cp) {
+  const baza = { typ: tekst(w.typ).trim(), nazwa: tekst(w.nazwa).trim(), ilosc: liczba(w.ilosc), jednostka: tekst(w.jednostka).trim() }
+  const wynik = cp ? { ...baza, netto: liczba(w.netto), brutto: liczba(w.brutto) } : baza
   return w.name ? { name: w.name, ...wynik } : wynik
 }
 
 export function wierszeDoWywolania(stan) {
-  return stan.wiersze.map(wierszDoWywolania)
+  const cp = czyCp(stan)
+  return stan.wiersze.map((w) => wierszDoWywolania(w, cp))
+}
+
+/**
+ * Błędy formularza CP po stronie klienta (serwer waliduje i tak): jednostka
+ * wymagana, 0 <= netto <= brutto. Pusta tablica = bez uwag; dla OZE zawsze [].
+ */
+export function bledyWierszyCp(stan) {
+  if (!czyCp(stan)) return []
+  const bledy = []
+  stan.wiersze.forEach((w, i) => {
+    if (tekst(w.jednostka).trim() === '') bledy.push({ indeks: i, pole: 'jednostka' })
+    const netto = liczba(w.netto)
+    const brutto = liczba(w.brutto)
+    if (netto < 0 || brutto < netto) bledy.push({ indeks: i, pole: 'brutto' })
+  })
+  return bledy
+}
+
+/** Data (DD.MM.RRRR) z "YYYY-MM-DD[ HH:mm:ss]" dla banera prowizji CP; '' gdy brak. */
+export function dataBaneruProwizji(edycja) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(tekst(edycja?.kiedy))
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : ''
 }
 
 export function cenaDoWywolania(stan) {
   const wynik = {}
+  if (czyCp(stan)) {
+    // Serwer CP przyjmuje wyłącznie te klucze; okres w latach jest całkowity.
+    for (const pole of POLA_CENY_CP) {
+      const v = liczba(stan.cena[pole])
+      wynik[pole] = pole === 'okres_lat' ? Math.max(0, Math.trunc(v)) : v
+    }
+    return wynik
+  }
   for (const pole of POLA_CENY_WEJSCIE) {
     const v = stan.cena[pole]
     // ulga_pct to w bazie pole Data (tekst), reszta to liczby.
@@ -239,7 +290,7 @@ export function doWywolania(stan) {
 export function doZapisu(stan, powod = '') {
   return {
     ...doWywolania(stan),
-    konfiguracja: konfiguracjaDoWywolania(stan),
+    konfiguracja: czyCp(stan) ? {} : konfiguracjaDoWywolania(stan),
     powod: tekst(powod).trim().slice(0, 500),
   }
 }
@@ -276,7 +327,7 @@ function wartoscPola(pole, w) {
  * `{ dodane: [str], usuniete: [str], zmienione: [str], cena: [{etykieta, przed, po}], konfiguracja: [{etykieta, przed, po}] }`.
  * Puste sekcje to puste tablice. Kwoty przez `formatPln`.
  */
-export function roznicaDoOkna(roznice, cenaPrzed, cenaPo, konfiguracjaPrzed, konfiguracjaPo) {
+export function roznicaDoOkna(roznice, cenaPrzed, cenaPo, konfiguracjaPrzed, konfiguracjaPo, cpPrzed, cpPo) {
   const r = roznice || {}
   const dodane = (r.dodane || []).map(opisWiersza)
   const usuniete = (r.usuniete || []).map(opisWiersza)
@@ -303,6 +354,21 @@ export function roznicaDoOkna(roznice, cenaPrzed, cenaPo, konfiguracjaPrzed, kon
     if (przed[pole] == null && po[pole] == null) continue
     if (liczba(przed[pole]) === liczba(po[pole])) continue
     cena.push({ etykieta, przed: formatPln(przed[pole]), po: formatPln(po[pole]) })
+  }
+
+  // Czyste Powietrze: wartość szansy, dotacja łączna i wkład własny (kwoty ze stringów serwera).
+  if (cpPrzed || cpPo) {
+    const a = cpPrzed || {}
+    const b = cpPo || {}
+    for (const [pole, etykieta] of [
+      ['deal_value', 'Wartość szansy'],
+      ['dotacja_laczna', 'Dotacja łączna'],
+      ['wklad_wlasny', 'Wkład własny'],
+    ]) {
+      if (a[pole] == null && b[pole] == null) continue
+      if (liczba(a[pole]) === liczba(b[pole])) continue
+      cena.push({ etykieta, przed: formatPln(a[pole]), po: formatPln(b[pole]) })
+    }
   }
 
   const konfiguracja = []

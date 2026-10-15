@@ -46,6 +46,10 @@
             <th class="px-2 py-2 text-left font-medium">{{ __('NAZWA') }}</th>
             <th class="w-24 px-2 py-2 text-right font-medium">{{ __('ILOŚĆ') }}</th>
             <th class="w-24 px-2 py-2 text-left font-medium">{{ __('JEDNOSTKA') }}</th>
+            <template v-if="jestCp">
+              <th class="w-28 px-2 py-2 text-right font-medium">{{ __('NETTO') }}</th>
+              <th class="w-28 px-2 py-2 text-right font-medium">{{ __('BRUTTO') }}</th>
+            </template>
             <th class="w-44 px-2 py-2"></th>
           </tr>
         </thead>
@@ -95,10 +99,37 @@
               <input
                 class="rounded border border-outline-gray-2 bg-surface-white px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none w-full"
                 type="text"
+                :class="{ 'border-outline-red-3': jestCp && bladPola(i, 'jednostka') }"
                 :value="w.jednostka"
+                data-testid="zestaw-jednostka"
                 @input="stan = zmienPoleWiersza(stan, i, 'jednostka', $event.target.value)"
               />
             </td>
+            <template v-if="jestCp">
+              <td class="px-2 py-1.5 align-top">
+                <input
+                  class="rounded border border-outline-gray-2 bg-surface-white px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none w-full text-right"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  :value="w.netto"
+                  data-testid="zestaw-netto"
+                  @input="stan = zmienPoleWiersza(stan, i, 'netto', $event.target.value)"
+                />
+              </td>
+              <td class="px-2 py-1.5 align-top">
+                <input
+                  class="rounded border border-outline-gray-2 bg-surface-white px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none w-full text-right"
+                  :class="{ 'border-outline-red-3': bladPola(i, 'brutto') }"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  :value="w.brutto"
+                  data-testid="zestaw-brutto"
+                  @input="stan = zmienPoleWiersza(stan, i, 'brutto', $event.target.value)"
+                />
+              </td>
+            </template>
             <td class="whitespace-nowrap px-2 py-1.5 text-right align-top">
               <Button variant="ghost" size="sm" :label="__('W górę')" :disabled="i === 0" @click="stan = przesunWiersz(stan, i, -1)" />
               <Button variant="ghost" size="sm" :label="__('W dół')" :disabled="i === stan.wiersze.length - 1" @click="stan = przesunWiersz(stan, i, 1)" />
@@ -106,7 +137,7 @@
             </td>
           </tr>
           <tr v-if="!stan.wiersze.length">
-            <td colspan="5" class="px-2 py-3 text-center text-ink-gray-5">{{ __('Brak pozycji.') }}</td>
+            <td :colspan="jestCp ? 7 : 5" class="px-2 py-3 text-center text-ink-gray-5">{{ __('Brak pozycji.') }}</td>
           </tr>
         </tbody>
       </table>
@@ -115,7 +146,55 @@
       <Button :label="__('Dodaj pozycję')" variant="outline" size="sm" data-testid="zestaw-dodaj" @click="stan = dodajWiersz(stan)" />
     </div>
 
+    <!-- Dotacja i finansowanie (Czyste Powietrze) -->
+    <template v-if="jestCp">
+      <div class="mt-4 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Dotacja wg grup prac') }}</div>
+      <div class="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <label v-for="pole in poleDotacjiCp" :key="pole.klucz" class="flex flex-col gap-0.5 text-xs text-ink-gray-6">
+          <span>{{ pole.etykieta }}</span>
+          <input
+            class="rounded border border-outline-gray-2 bg-surface-white px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none"
+            type="number"
+            step="0.01"
+            min="0"
+            :value="stan.cena[pole.klucz]"
+            :data-testid="`zestaw-cena-${pole.klucz}`"
+            @input="stan = zmienPoleCeny(stan, pole.klucz, $event.target.value)"
+          />
+        </label>
+        <div class="flex flex-col gap-0.5 text-xs text-ink-gray-6">
+          <span>{{ __('Dotacja łączna') }}</span>
+          <div class="rounded border border-outline-gray-2 bg-surface-gray-1 px-2 py-1 text-sm text-ink-gray-8" data-testid="zestaw-dotacja-laczna">
+            {{ pokazKwote(cenaCp.dotacja_laczna) }}
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-4 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Finansowanie') }}</div>
+      <div class="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <label v-for="pole in poleFinansowaniaCp" :key="pole.klucz" class="flex flex-col gap-0.5 text-xs text-ink-gray-6">
+          <span>{{ pole.etykieta }}</span>
+          <input
+            class="rounded border border-outline-gray-2 bg-surface-white px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none"
+            type="number"
+            :step="pole.krok"
+            min="0"
+            :value="stan.cena[pole.klucz]"
+            :data-testid="`zestaw-cena-${pole.klucz}`"
+            @input="stan = zmienPoleCeny(stan, pole.klucz, $event.target.value)"
+          />
+        </label>
+      </div>
+      <div class="mt-2 rounded-md bg-surface-gray-1 p-2 text-sm" data-testid="zestaw-pochodne">
+        <div v-for="p in pochodneCp" :key="p.klucz" class="flex justify-between py-0.5 text-ink-gray-7">
+          <span>{{ p.etykieta }}</span>
+          <span :data-testid="`zestaw-pochodna-${p.klucz}`">{{ p.wartosc }}</span>
+        </div>
+      </div>
+    </template>
+
     <!-- Cena -->
+    <template v-if="!jestCp">
     <div class="mt-4 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Cena') }}</div>
     <div class="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
       <label v-for="pole in poleCenyWejscie" :key="pole.klucz" class="flex flex-col gap-0.5 text-xs text-ink-gray-6">
@@ -142,6 +221,7 @@
         <span :data-testid="`zestaw-pochodna-${p.klucz}`">{{ p.wartosc }}</span>
       </div>
     </div>
+    </template>
 
     <div v-if="blad" class="mt-2 rounded-md border border-outline-red-3 bg-surface-red-2 p-2 text-sm text-ink-red-8" data-testid="zestaw-blad">
       {{ blad }}
@@ -259,9 +339,11 @@ import { formatPln } from '@/utils/money'
 import {
   ETYKIETY_KONFIGURACJI,
   ETYKIETY_POL_CENY,
+  ETYKIETY_POL_CENY_CP,
   POLA_CENY_WEJSCIE,
   POLA_KONFIGURACJI,
   TYP_INNY,
+  bledyWierszyCp,
   czyBladWersji,
   czyTypInny,
   czyZmieniony,
@@ -301,7 +383,14 @@ const okno = reactive({ otwarte: false, powod: '', zapis: false, blad: '', konfl
 
 const typy = computed(() => props.dostep.typy || [])
 const zmieniony = computed(() => czyZmieniony(poczatkowy, stan.value))
-const mozeZapisac = computed(() => zmieniony.value && !blad.value && !przelicza.value && stan.value.wiersze.length > 0)
+const jestCp = computed(() => stan.value.linia === 'cp')
+const bledyCp = computed(() => bledyWierszyCp(stan.value))
+const mozeZapisac = computed(
+  () => zmieniony.value && !blad.value && !przelicza.value && stan.value.wiersze.length > 0 && bledyCp.value.length === 0,
+)
+function bladPola(indeks, pole) {
+  return bledyCp.value.some((b) => b.indeks === indeks && b.pole === pole)
+}
 
 const polaKonfiguracji = POLA_KONFIGURACJI
 const maKonfiguracje = computed(() => Object.keys(props.dostep.konfiguracja || {}).length > 0)
@@ -311,6 +400,34 @@ const poleCenyWejscie = POLA_CENY_WEJSCIE.map((klucz) => ({
   etykieta: __(ETYKIETY_POL_CENY[klucz]),
   podpowiedz: klucz === 'dodatki_bez_ulgi_brutto' ? __('klimatyzacja i ładowarka EV nie wchodzą do ulgi') : '',
 }))
+
+const poleDotacjiCp = ['dotacja_zrodlo', 'dotacja_co', 'dotacja_termo'].map((klucz) => ({
+  klucz,
+  etykieta: __(ETYKIETY_POL_CENY_CP[klucz]),
+}))
+const poleFinansowaniaCp = [
+  { klucz: 'okres_lat', krok: '1', etykieta: __(ETYKIETY_POL_CENY_CP.okres_lat) },
+  { klucz: 'wplata_gotowka', krok: '0.01', etykieta: __(ETYKIETY_POL_CENY_CP.wplata_gotowka) },
+]
+const cenaCp = computed(() => podglad.value?.cena_cp || props.dostep.cena_cp || {})
+function pokazKwote(v) {
+  return v == null ? '-' : formatPln(v)
+}
+const pochodneCp = computed(() => {
+  const c = cenaCp.value
+  return [
+    ['deal_value', __('Wartość szansy'), c.deal_value],
+    ['wklad_wlasny', __('Wkład własny'), c.wklad_wlasny],
+    ['kwota_kredytu', __('Kwota kredytu'), c.kwota_kredytu],
+    ['rata_wkladu', __('Rata wkładu'), c.rata_wkladu],
+    ['podstawa_trify', __('Podstawa Trify'), c.podstawa_trify],
+    ['rata_trify', __('Rata Trify'), c.rata_trify],
+  ].map(([klucz, etykieta, v]) => ({
+    klucz,
+    etykieta,
+    wartosc: v == null ? '-' : klucz.startsWith('rata') ? `${formatPln(v)} /mies.` : formatPln(v),
+  }))
+})
 
 const cenaPodglad = computed(() => podglad.value?.cena || props.dostep.cena || {})
 const ostrzezenia = computed(() => {
@@ -442,6 +559,8 @@ const rozniceOkna = computed(() =>
     podglad.value?.cena,
     props.dostep.konfiguracja,
     stan.value.konfiguracja,
+    jestCp.value ? props.dostep.cena_cp : undefined,
+    jestCp.value ? podglad.value?.cena_cp : undefined,
   ),
 )
 

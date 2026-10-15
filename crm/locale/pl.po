@@ -9968,3 +9968,67 @@ msgstr "Pola kalkulatora CP (poziom, standard, powierzchnia, źródło ciepła) 
 #: crm/api/zestaw.py
 msgid "Brak stałych finansowania Czystego Powietrza (oprocentowanie raty)."
 msgstr "Brak stałych finansowania Czystego Powietrza (oprocentowanie raty)."
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "NETTO"
+msgstr "NETTO"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "BRUTTO"
+msgstr "BRUTTO"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Dotacja wg grup prac"
+msgstr "Dotacja wg grup prac"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Źródło ciepła"
+msgstr "Źródło ciepła"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "CO i CWU"
+msgstr "CO i CWU"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Termomodernizacja"
+msgstr "Termomodernizacja"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Wpłata gotówką"
+msgstr "Wpłata gotówką"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Dotacja łączna"
+msgstr "Dotacja łączna"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Finansowanie"
+msgstr "Finansowanie"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Wartość szansy"
+msgstr "Wartość szansy"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Wkład własny"
+msgstr "Wkład własny"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Kwota kredytu"
+msgstr "Kwota kredytu"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Rata wkładu"
+msgstr "Rata wkładu"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Podstawa Trify"
+msgstr "Podstawa Trify"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Rata Trify"
+msgstr "Rata Trify"
+
+#: frontend/src/components/deal/ZestawEdycja.vue
+msgid "Zestaw zmieniony ręcznie {0}. Prowizje pochodzą z pierwotnej konfiguracji."
+msgstr "Zestaw zmieniony ręcznie {0}. Prowizje pochodzą z pierwotnej konfiguracji."

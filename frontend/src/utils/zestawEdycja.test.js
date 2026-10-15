@@ -1,7 +1,10 @@
 import {
+  POLA_CENY_CP,
   POLA_CENY_WEJSCIE,
   POLA_KONFIGURACJI,
+  bledyWierszyCp,
   cenaDoWywolania,
+  dataBaneruProwizji,
   czyBladWersji,
   czyTypInny,
   czyZmieniony,
@@ -275,5 +278,91 @@ describe('bledy i opis edycji', () => {
     expect(opisOstatniejEdycji(e)).toBe('15.10.2026 09:05, Jan Kowalski, powód: aneks 1')
     expect(opisOstatniejEdycji({ ...e, powod: '' })).toBe('15.10.2026 09:05, Jan Kowalski')
     expect(opisOstatniejEdycji(null)).toBe('')
+  })
+})
+
+describe('Czyste Powietrze (ops#275)', () => {
+  const ODP = {
+    linia: 'cp',
+    wiersze: [
+      { name: 'a1', idx: 1, typ: 'Pompa ciepła', nazwa: 'PC 9kW', ilosc: '1', jednostka: 'szt.', netto: '40000.00', brutto: '43200.00' },
+    ],
+    cena: {},
+    cena_cp: {
+      deal_value: '43200.00',
+      dotacja_zrodlo: '20000.00',
+      dotacja_co: '1000.00',
+      dotacja_termo: '0.00',
+      dotacja_laczna: '21000.00',
+      wklad_wlasny: '22200.00',
+      okres_lat: 5,
+      wplata_gotowka: '1000.00',
+      kwota_kredytu: '21200.00',
+      rata_wkladu: '400.00',
+      podstawa_trify: null,
+      rata_trify: null,
+      netto_suma: '40000.00',
+    },
+    konfiguracja: {},
+  }
+
+  it('stan z odpowiedzi CP: linia, netto/brutto i klucze ceny CP', () => {
+    const st = stanZOdpowiedzi(ODP)
+    expect(st.linia).toBe('cp')
+    expect(st.wiersze[0].netto).toBe('40000.00')
+    expect(st.wiersze[0].brutto).toBe('43200.00')
+    expect(Object.keys(st.cena)).toEqual(POLA_CENY_CP)
+    expect(st.cena.dotacja_zrodlo).toBe('20000.00')
+    expect(st.cena.okres_lat).toBe('5')
+  })
+
+  it('doWywolania wysyla netto/brutto i tylko klucze ceny CP', () => {
+    const w = doWywolania(stanZOdpowiedzi(ODP))
+    expect(w.wiersze[0]).toEqual({ name: 'a1', typ: 'Pompa ciepła', nazwa: 'PC 9kW', ilosc: 1, jednostka: 'szt.', netto: 40000, brutto: 43200 })
+    expect(w.cena).toEqual({ dotacja_zrodlo: 20000, dotacja_co: 1000, dotacja_termo: 0, okres_lat: 5, wplata_gotowka: 1000 })
+  })
+
+  it('doZapisu CP: konfiguracja zawsze pusta', () => {
+    const z = doZapisu(stanZOdpowiedzi(ODP), 'aneks')
+    expect(z.konfiguracja).toEqual({})
+    expect(z.powod).toBe('aneks')
+  })
+
+  it('nowy wiersz CP z brutto zmienia stan i serializuje sie z netto/brutto', () => {
+    const st0 = stanZOdpowiedzi(ODP)
+    const st = zmienPoleWiersza(dodajWiersz(st0), 1, 'brutto', '1000')
+    expect(czyZmieniony(st0, st)).toBe(true)
+    expect(doWywolania(st).wiersze[1]).toMatchObject({ netto: 0, brutto: 1000, jednostka: 'szt.' })
+  })
+
+  it('OZE nie dostaje netto/brutto w wierszach (regresja)', () => {
+    const st = stanZOdpowiedzi({ linia: 'oze', wiersze: ODP.wiersze, cena: {}, konfiguracja: {} })
+    expect(st.linia).toBe('oze')
+    expect(doWywolania(st).wiersze[0]).not.toHaveProperty('brutto')
+    expect(Object.keys(doWywolania(st).cena)).toEqual(POLA_CENY_WEJSCIE)
+  })
+
+  it('bledyWierszyCp: jednostka wymagana, 0 <= netto <= brutto, OZE bez bledow', () => {
+    const st0 = stanZOdpowiedzi(ODP)
+    expect(bledyWierszyCp(st0)).toEqual([])
+    const bezJednostki = zmienPoleWiersza(st0, 0, 'jednostka', ' ')
+    expect(bledyWierszyCp(bezJednostki)).toEqual([{ indeks: 0, pole: 'jednostka' }])
+    const nettoPowyzej = zmienPoleWiersza(st0, 0, 'netto', '50000')
+    expect(bledyWierszyCp(nettoPowyzej)).toEqual([{ indeks: 0, pole: 'brutto' }])
+    expect(bledyWierszyCp(stanZOdpowiedzi({ wiersze: [], cena: {} }))).toEqual([])
+  })
+
+  it('roznicaDoOkna CP: wartosc szansy, dotacja laczna, wklad wlasny', () => {
+    const przed = ODP.cena_cp
+    const po = { ...przed, deal_value: '44200.00', dotacja_laczna: '22000.00', wklad_wlasny: '22200.00' }
+    const r = roznicaDoOkna({}, {}, {}, {}, {}, przed, po)
+    expect(r.cena.map((c) => c.etykieta)).toEqual(['Wartość szansy', 'Dotacja łączna'])
+    expect(r.cena[0].przed).toContain('43')
+    expect(r.cena[0].po).toContain('44')
+  })
+
+  it('dataBaneruProwizji', () => {
+    expect(dataBaneruProwizji({ kiedy: '2026-10-15 09:05:00' })).toBe('15.10.2026')
+    expect(dataBaneruProwizji(null)).toBe('')
   })
 })
