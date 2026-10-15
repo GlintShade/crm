@@ -27,15 +27,59 @@
         <div class="max-w-md text-sm text-ink-gray-5">
           {{ __('Ta szansa nie ma jeszcze zestawu. Zestaw pojawi się po wygenerowaniu oferty w Kalkulatorze OZE lub Kalkulatorze Czyste Powietrze, lub po dodaniu pozycji do zestawu na szansie.') }}
         </div>
+        <Button
+          v-if="mozeEdytowac && !edycja"
+          :label="__('Dodaj pozycje')"
+          variant="outline"
+          data-testid="zestaw-edytuj-pusty"
+          :loading="dostep.loading"
+          @click="rozpocznijEdycje"
+        />
+        <div v-else-if="pokazPowodBlokady" class="max-w-md text-xs text-ink-gray-4">{{ dostep.data.powod_blokady }}</div>
+        <div class="w-full text-left">
+          <ZestawEdycja
+            v-if="edycja"
+            :key="edycjaKlucz"
+            :deal-id="dealId"
+            :dostep="dostep.data"
+            @saved="poZapisie"
+            @cancel="edycja = false"
+            @refresh="odswiezDostep"
+          />
+        </div>
       </div>
 
       <div v-else>
         <div class="mb-4 flex items-center justify-between">
           <div class="text-lg font-semibold text-ink-gray-8">{{ __('Zestaw') }}</div>
           <Badge v-if="ofertaName" variant="subtle" theme="gray" size="sm" :label="ofertaName" />
+          <Button
+            v-if="mozeEdytowac && !edycja"
+            :label="__('Edytuj zestaw')"
+            variant="outline"
+            size="sm"
+            data-testid="zestaw-edytuj"
+            :loading="dostep.loading"
+            @click="rozpocznijEdycje"
+          />
         </div>
+        <div v-if="pokazPowodBlokady" class="-mt-2 mb-3 text-xs text-ink-gray-4" data-testid="zestaw-powod-blokady">
+          {{ dostep.data.powod_blokady }}
+        </div>
+        <div v-if="opisEdycji" class="-mt-2 mb-3 text-xs text-ink-gray-5" data-testid="zestaw-ostatnia-edycja">
+          {{ __('Ostatnia edycja ręczna') }}: {{ opisEdycji }}
+        </div>
+        <ZestawEdycja
+          v-if="edycja"
+          :key="edycjaKlucz"
+          :deal-id="dealId"
+          :dostep="dostep.data"
+          @saved="poZapisie"
+          @cancel="edycja = false"
+          @refresh="odswiezDostep"
+        />
 
-        <div class="overflow-hidden rounded-lg border border-outline-gray-2">
+        <div v-if="!edycja" class="overflow-hidden rounded-lg border border-outline-gray-2">
           <!-- Horizontal scroll lives on this inner wrapper, not the page body:
                whitespace-nowrap below means the table itself can exceed the
                viewport on narrow screens, and it must scroll inside its own
@@ -75,7 +119,7 @@
           </div>
         </div>
 
-        <p class="mt-3 text-xs text-ink-gray-4">{{ caption }}</p>
+        <p v-if="!edycja" class="mt-3 text-xs text-ink-gray-4">{{ caption }}</p>
 
         <!-- Full width, matching the table above (not max-w-xs like the amber
              box below): this is the customer-facing subsidy breakdown, so it
@@ -451,10 +495,13 @@
 
 <script setup>
 import ZestawIcon from '@/components/Icons/ZestawIcon.vue'
-import { Badge, FeatherIcon, createResource } from 'frappe-ui'
+import { Badge, Button, FeatherIcon, createResource, getCachedDocumentResource, toast } from 'frappe-ui'
 import MontazKosztyPanel from '@/components/deal/MontazKosztyPanel.vue'
+import ZestawEdycja from '@/components/deal/ZestawEdycja.vue'
+import { usersStore } from '@/stores/users'
+import { opisOstatniejEdycji } from '@/utils/zestawEdycja'
 import NotatkiStrumien from '@/components/deal/NotatkiStrumien.vue'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { formatPln, roundPln } from '@/utils/money'
 import { czyOzeNowy, czyOzePv } from '@/utils/rodzajUmowy'
 
@@ -466,6 +513,52 @@ const props = defineProps({
 // screenshares — mirrors KalkulatorTab.vue's showAdminBreakdown and
 // MontazKosztyPanel.vue's own toggle (see the template comment above).
 const showCommission = ref(false)
+
+// Tryb edycji zestawu OZE (ops#272). Sam przycisk to kosmetyka: serwer
+// (crm.api.zestaw) pilnuje roli i dopuszczalności edycji niezależnie.
+const { isVolteoAdmin } = usersStore()
+const jestAdminem = computed(() => isVolteoAdmin())
+const edycja = ref(false)
+const edycjaKlucz = ref(0)
+// Bez `cache`: komponent bywa montowany wiele razy (patrz MobileDeal.vue).
+const dostep = createResource({
+  url: 'crm.api.zestaw.volteo_zestaw_get',
+  params: { deal: props.dealId },
+  auto: false,
+  onError: () => {
+    /* Brak uprawnień lub błąd: przycisk edycji po prostu się nie pojawi. */
+  },
+})
+// Store użytkowników może się doładować po montażu zakładki.
+watch(jestAdminem, (admin) => { if (admin) dostep.fetch() }, { immediate: true })
+const mozeEdytowac = computed(() => jestAdminem.value && dostep.data?.dozwolone === true)
+const pokazPowodBlokady = computed(
+  () => jestAdminem.value && dostep.data && dostep.data.dozwolone === false && Boolean(dostep.data.powod_blokady),
+)
+const opisEdycji = computed(() => (jestAdminem.value ? opisOstatniejEdycji(dostep.data?.ostatnia_edycja) : ''))
+
+async function rozpocznijEdycje() {
+  // Świeże dane (w tym `modified`) przy każdym wejściu w tryb edycji.
+  await dostep.reload()
+  if (dostep.data?.dozwolone !== true) return
+  edycjaKlucz.value += 1
+  edycja.value = true
+}
+
+async function odswiezDostep() {
+  edycja.value = false
+  await rozpocznijEdycje()
+}
+
+function poZapisie(odp) {
+  edycja.value = false
+  bom.reload()
+  dealWycena.reload()
+  dealSubsidy.reload()
+  getCachedDocumentResource('CRM Deal', props.dealId)?.reload()
+  dostep.reload()
+  toast.success(odp?.wskazowka_pdf || __('Zestaw zapisany.'))
+}
 
 // Itemized BOM (preferred), from the deal's custom_zestaw child table.
 const bom = createResource({
