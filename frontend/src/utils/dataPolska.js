@@ -115,6 +115,21 @@ export function formatujTermin(dataCzas) {
 }
 
 /**
+ * Pełna numeryczna data i godzina "DD.MM.RRRR HH:MM" (24h), np. do bannerów
+ * audytowych (ops#273). Dzieli parser `rozbierzDataCzas` (bez `new Date(string)`).
+ *
+ * @param {string|Date} dataCzas surowy Datetime z Frappe albo obiekt Date
+ * @returns {string} np. "05.10.2026 09:07", albo '' gdy wejście puste/niepoprawne
+ */
+export function formatujDataGodzine(dataCzas) {
+  const czesci = rozbierzDataCzas(dataCzas)
+  if (!czesci) return ''
+  const { rok, miesiac, dzien, godzina, minuta } = czesci
+  const d2 = (n) => String(n).padStart(2, '0')
+  return `${d2(dzien)}.${d2(miesiac)}.${rok} ${d2(godzina)}:${d2(minuta)}`
+}
+
+/**
  * Krótki polski zapis daty/czasu, bez dnia tygodnia i bez roku (wiersz
  * zadania w wąskim panelu bocznym, TaskArea.vue, issue
  * GlintShade/proenergy-crm-ops#208, druga runda): dzień bez zera
