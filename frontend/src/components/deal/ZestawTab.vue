@@ -463,6 +463,13 @@
               <span>{{ formatPln(commissionFields.suma) }}</span>
             </div>
           </div>
+          <div
+            v-if="dataEdycjiCp"
+            class="mt-1.5 rounded-md border border-outline-amber-3 bg-surface-amber-2 p-2 text-xs text-ink-amber-8"
+            data-testid="zestaw-baner-prowizji-cp"
+          >
+            {{ __('Zestaw zmieniony ręcznie {0}. Prowizje pochodzą z pierwotnej konfiguracji.', [dataEdycjiCp]) }}
+          </div>
         </div>
       </div>
 
@@ -499,7 +506,7 @@ import { Badge, Button, FeatherIcon, createResource, getCachedDocumentResource, 
 import MontazKosztyPanel from '@/components/deal/MontazKosztyPanel.vue'
 import ZestawEdycja from '@/components/deal/ZestawEdycja.vue'
 import { usersStore } from '@/stores/users'
-import { opisOstatniejEdycji } from '@/utils/zestawEdycja'
+import { dataBaneruProwizji, opisOstatniejEdycji } from '@/utils/zestawEdycja'
 import NotatkiStrumien from '@/components/deal/NotatkiStrumien.vue'
 import { computed, ref, watch } from 'vue'
 import { formatPln, roundPln } from '@/utils/money'
@@ -534,6 +541,10 @@ watch(jestAdminem, (admin) => { if (admin) dostep.fetch() }, { immediate: true }
 const mozeEdytowac = computed(() => jestAdminem.value && dostep.data?.dozwolone === true)
 const pokazPowodBlokady = computed(
   () => jestAdminem.value && dostep.data && dostep.data.dozwolone === false && Boolean(dostep.data.powod_blokady),
+)
+// Baner w boxie prowizji CP: prowizje nie są przeliczane po ręcznej edycji zestawu.
+const dataEdycjiCp = computed(() =>
+  jestAdminem.value && dostep.data?.linia === 'cp' ? dataBaneruProwizji(dostep.data?.ostatnia_edycja) : '',
 )
 const opisEdycji = computed(() => (jestAdminem.value ? opisOstatniejEdycji(dostep.data?.ostatnia_edycja) : ''))
 
