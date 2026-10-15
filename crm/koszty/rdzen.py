@@ -26,6 +26,7 @@ Dwie odpowiedzialności, ostro rozdzielone:
   listę `dodatkowe`.
 """
 
+import copy
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
@@ -423,5 +424,62 @@ def scal_snapshot(
 		"podsumowanie": dict(snapshot["podsumowanie"]),
 		"podsumowanie_rzeczywiste": None,
 	}
+	if snapshot.get("edycja_reczna") is not None:
+		# Ślad ręcznej edycji zestawu (ops#270) przeżywa późniejszą edycję kosztów.
+		nowy["edycja_reczna"] = dict(snapshot["edycja_reczna"])
 	nowy["podsumowanie_rzeczywiste"] = _oblicz_podsumowanie_rzeczywiste(nowy)
+	return nowy
+
+
+def aktualizuj_po_edycji_zestawu(
+	snapshot: dict[str, Any] | None,
+	netto_nowe: Any,
+	kto: str,
+	kiedy: str,
+	powod: str | None = None,
+) -> dict[str, Any] | None:
+	"""Zwraca NOWY snapshot po ręcznej edycji zestawu/ceny przez administrację (ops#270).
+
+	`None` lub pusty snapshot (stare szanse bez snapshotu) daje `None` -- nic do
+	aktualizacji, bez błędu. Nie dotyka `linie`, `dodatkowe` ani `skladniki_marzy`
+	(linie PV to kubełki kosztów, nie wiersze zestawu; nie ma klucza, po którym dałoby się
+	je dopasować). Przelicza `podsumowanie`: `netto` = `netto_nowe`, `marza_plan = netto -
+	koszt_plan`, `zysk_plan = marza_plan - prowizja_plan` (gdy `prowizja_plan` jest `None`,
+	`zysk_plan = marza_plan`, jak dla snapshotów OZE). `podsumowanie_rzeczywiste` liczone
+	tym samym wzorem co po edycji kosztów, ale tylko gdy już istniało (wcześniej `None` =
+	koszty rzeczywiste nigdy nie edytowane, zostaje `None`).
+
+	Dodaje `edycja_reczna: {kiedy, kto, powod, netto_przed, netto_pierwotne}`; nadpisywane
+	przy kolejnej edycji, `netto_pierwotne` (netto sprzed PIERWSZEJ edycji) zostaje
+	zachowane. Wejście nie jest mutowane.
+	"""
+	if not snapshot:
+		return None
+	netto_przed = snapshot["podsumowanie"]["netto"]
+	poprzednia = snapshot.get("edycja_reczna") or {}
+	netto = _kwota(netto_nowe)
+	koszt_plan = _kwota(snapshot["podsumowanie"]["koszt_plan"])
+	marza_plan = _kwota(netto - koszt_plan)
+	prowizja_plan = snapshot["podsumowanie"].get("prowizja_plan")
+	prowizja = _kwota(prowizja_plan) if prowizja_plan is not None else _ZERO
+	zysk_plan = _kwota(marza_plan - prowizja)
+
+	nowy = copy.deepcopy(snapshot)
+	nowy["zmodyfikowano"] = kiedy
+	nowy["zmodyfikowal"] = kto
+	nowy["podsumowanie"] = {
+		**snapshot["podsumowanie"],
+		"netto": str(netto),
+		"marza_plan": str(marza_plan),
+		"zysk_plan": str(zysk_plan),
+	}
+	nowy["edycja_reczna"] = {
+		"kiedy": kiedy,
+		"kto": kto,
+		"powod": (powod or "").strip(),
+		"netto_przed": str(netto_przed),
+		"netto_pierwotne": str(poprzednia.get("netto_pierwotne") or netto_przed),
+	}
+	if snapshot.get("podsumowanie_rzeczywiste") is not None:
+		nowy["podsumowanie_rzeczywiste"] = _oblicz_podsumowanie_rzeczywiste(nowy)
 	return nowy

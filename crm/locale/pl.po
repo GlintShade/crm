@@ -9592,3 +9592,71 @@ msgstr "Domyślny pasek szybkich filtrów zapisany dla wszystkich"
 #: frontend/src/components/ViewControls.vue
 msgid "Nie udało się zapisać domyślnego paska szybkich filtrów"
 msgstr "Nie udało się zapisać domyślnego paska szybkich filtrów"
+
+#: crm/api/zestaw.py
+msgid "Brak uprawnień do edycji zestawu."
+msgstr "Brak uprawnień do edycji zestawu."
+
+#: crm/api/zestaw.py
+msgid "Edycja zestawu Czystego Powietrza jest wyłączona."
+msgstr "Edycja zestawu Czystego Powietrza jest wyłączona."
+
+#: crm/api/zestaw.py
+msgid "Edycja zestawu nie jest dostępna dla tego rodzaju umowy."
+msgstr "Edycja zestawu nie jest dostępna dla tego rodzaju umowy."
+
+#: crm/api/zestaw.py
+msgid "Wygeneruj ponownie PDF umowy w zakładce Umowa."
+msgstr "Wygeneruj ponownie PDF umowy w zakładce Umowa."
+
+#: crm/api/zestaw.py
+msgid "Umowa w Autenti pozostaje bez zmian. Zmianę opisz w aneksie."
+msgstr "Umowa w Autenti pozostaje bez zmian. Zmianę opisz w aneksie."
+
+#: crm/api/zestaw.py
+msgid "Pola urządzenia edytuj w panelu bocznym."
+msgstr "Pola urządzenia edytuj w panelu bocznym."
+
+#: crm/api/zestaw.py
+msgid "Falownik w konfiguracji (\"{0}\") różni się od nazwy pozycji Falownik (\"{1}\"). PDF umowy poda liczbę falowników tylko przy zgodnych nazwach."
+msgstr "Falownik w konfiguracji (\"{0}\") różni się od nazwy pozycji Falownik (\"{1}\"). PDF umowy poda liczbę falowników tylko przy zgodnych nazwach."
+
+#: crm/api/zestaw.py
+msgid "Pozycje zestawu mają nieprawidłowy format."
+msgstr "Pozycje zestawu mają nieprawidłowy format."
+
+#: crm/api/zestaw.py
+msgid "Dane ceny mają nieprawidłowy format."
+msgstr "Dane ceny mają nieprawidłowy format."
+
+#: crm/api/zestaw.py
+msgid "Konfiguracja ma nieprawidłowy format."
+msgstr "Konfiguracja ma nieprawidłowy format."
+
+#: crm/api/zestaw.py
+msgid "Nieznane pola konfiguracji: {0}."
+msgstr "Nieznane pola konfiguracji: {0}."
+
+#: crm/api/zestaw.py
+msgid "Pole konfiguracji {0} musi być liczbą."
+msgstr "Pole konfiguracji {0} musi być liczbą."
+
+#: crm/api/zestaw.py
+msgid "Pole konfiguracji {0} nie może być ujemne."
+msgstr "Pole konfiguracji {0} nie może być ujemne."
+
+#: crm/api/zestaw.py
+msgid "Pole konfiguracji {0} nie może zawierać myślnika długiego ani półpauzy."
+msgstr "Pole konfiguracji {0} nie może zawierać myślnika długiego ani półpauzy."
+
+#: crm/api/zestaw.py
+msgid "Pole konfiguracji {0} jest za długie."
+msgstr "Pole konfiguracji {0} jest za długie."
+
+#: crm/api/zestaw.py
+msgid "Szansa została w międzyczasie zmieniona. Odśwież i wprowadź zmiany ponownie."
+msgstr "Szansa została w międzyczasie zmieniona. Odśwież i wprowadź zmiany ponownie."
+
+#: crm/api/zestaw.py
+msgid "Brak zmian do zapisania."
+msgstr "Brak zmian do zapisania."

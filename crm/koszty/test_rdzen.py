@@ -2,7 +2,12 @@ import copy
 import unittest
 from decimal import Decimal
 
-from crm.koszty.rdzen import scal_snapshot, zbuduj_snapshot_cp, zbuduj_snapshot_oze
+from crm.koszty.rdzen import (
+	aktualizuj_po_edycji_zestawu,
+	scal_snapshot,
+	zbuduj_snapshot_cp,
+	zbuduj_snapshot_oze,
+)
 
 WEWNETRZNE = {
 	"koszt_calkowity": Decimal("29500.00"),
@@ -502,3 +507,93 @@ class ScalSnapshotStabilnoscTest(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+def _snapshot_oze() -> dict:
+	return zbuduj_snapshot_oze(copy.deepcopy(WEWNETRZNE_OZE), "2026-10-05 10:00:00")
+
+
+class AktualizujPoEdycjiZestawuTest(unittest.TestCase):
+	def test_none_i_pusty_snapshot_daja_none(self):
+		self.assertIsNone(aktualizuj_po_edycji_zestawu(None, "1000", "a@x.pl", "2026-10-15 10:00:00", ""))
+		self.assertIsNone(aktualizuj_po_edycji_zestawu({}, "1000", "a@x.pl", "2026-10-15 10:00:00", ""))
+
+	def test_oze_bez_prowizji_zysk_rowny_marzy(self):
+		snap = _snapshot_oze()
+		koszt = Decimal(snap["podsumowanie"]["koszt_plan"])
+		nowy = aktualizuj_po_edycji_zestawu(snap, "50000", "a@x.pl", "2026-10-15 10:00:00", "aneks")
+		self.assertEqual(nowy["podsumowanie"]["netto"], "50000.00")
+		self.assertEqual(nowy["podsumowanie"]["marza_plan"], str(Decimal("50000.00") - koszt))
+		self.assertEqual(nowy["podsumowanie"]["zysk_plan"], nowy["podsumowanie"]["marza_plan"])
+		self.assertIsNone(nowy["podsumowanie"]["prowizja_plan"])
+
+	def test_z_prowizja_zysk_pomniejszony(self):
+		snap = _snapshot()
+		koszt = Decimal(snap["podsumowanie"]["koszt_plan"])
+		prowizja = Decimal(snap["podsumowanie"]["prowizja_plan"])
+		nowy = aktualizuj_po_edycji_zestawu(snap, Decimal("70000"), "a@x.pl", "2026-10-15 10:00:00", "")
+		marza = Decimal("70000.00") - koszt
+		self.assertEqual(nowy["podsumowanie"]["marza_plan"], str(marza))
+		self.assertEqual(nowy["podsumowanie"]["zysk_plan"], str(marza - prowizja))
+
+	def test_zachowuje_linie_dodatkowe_i_skladniki(self):
+		snap = scal_snapshot(
+			_snapshot(), {"pompa_ciepla": "27000"}, [{"nazwa": "Dojazd", "kwota": "250"}], "2026-08-19", "adm"
+		)
+		nowy = aktualizuj_po_edycji_zestawu(snap, "60000", "a@x.pl", "2026-10-15 10:00:00", "x")
+		self.assertEqual(nowy["linie"], snap["linie"])
+		self.assertEqual(nowy["dodatkowe"], snap["dodatkowe"])
+		self.assertEqual(nowy["skladniki_marzy"], snap["skladniki_marzy"])
+		self.assertEqual(nowy["utworzono"], snap["utworzono"])
+
+	def test_przelicza_podsumowanie_rzeczywiste_gdy_istnialo(self):
+		snap = scal_snapshot(_snapshot(), {"pompa_ciepla": "27000"}, [], "2026-08-19", "adm")
+		nowy = aktualizuj_po_edycji_zestawu(snap, "60000", "a@x.pl", "2026-10-15 10:00:00", "")
+		rz = nowy["podsumowanie_rzeczywiste"]
+		koszt = Decimal(rz["koszt_rzeczywisty"])
+		self.assertEqual(rz["marza_rzeczywista"], str(Decimal("60000.00") - koszt))
+
+	def test_podsumowanie_rzeczywiste_none_zostaje_none(self):
+		nowy = aktualizuj_po_edycji_zestawu(_snapshot_oze(), "50000", "a@x.pl", "2026-10-15 10:00:00", "")
+		self.assertIsNone(nowy["podsumowanie_rzeczywiste"])
+
+	def test_edycja_reczna_i_znaczniki(self):
+		snap = _snapshot_oze()
+		przed = snap["podsumowanie"]["netto"]
+		nowy = aktualizuj_po_edycji_zestawu(snap, "50000", "a@x.pl", "2026-10-15 10:00:00", "  aneks 1  ")
+		self.assertEqual(
+			nowy["edycja_reczna"],
+			{
+				"kiedy": "2026-10-15 10:00:00",
+				"kto": "a@x.pl",
+				"powod": "aneks 1",
+				"netto_przed": przed,
+				"netto_pierwotne": przed,
+			},
+		)
+		self.assertEqual(nowy["zmodyfikowano"], "2026-10-15 10:00:00")
+		self.assertEqual(nowy["zmodyfikowal"], "a@x.pl")
+
+	def test_netto_pierwotne_z_pierwszej_edycji_zachowane(self):
+		snap = _snapshot_oze()
+		pierwotne = snap["podsumowanie"]["netto"]
+		p1 = aktualizuj_po_edycji_zestawu(snap, "50000", "a@x.pl", "2026-10-15 10:00:00", "a")
+		p2 = aktualizuj_po_edycji_zestawu(p1, "55000", "b@x.pl", "2026-10-16 10:00:00", "b")
+		self.assertEqual(p2["edycja_reczna"]["netto_przed"], "50000.00")
+		self.assertEqual(p2["edycja_reczna"]["netto_pierwotne"], pierwotne)
+		self.assertEqual(p2["edycja_reczna"]["kto"], "b@x.pl")
+
+	def test_nie_mutuje_wejscia(self):
+		snap = _snapshot_oze()
+		kopia = copy.deepcopy(snap)
+		nowy = aktualizuj_po_edycji_zestawu(snap, "50000", "a@x.pl", "2026-10-15 10:00:00", "")
+		self.assertEqual(snap, kopia)
+		self.assertIsNot(nowy, snap)
+		self.assertIsNot(nowy["linie"], snap["linie"])
+
+	def test_edycja_reczna_przezywa_scal_snapshot(self):
+		edytowany = aktualizuj_po_edycji_zestawu(_snapshot_oze(), "50000", "a@x.pl", "2026-10-15", "p")
+		klucz = edytowany["linie"][0]["klucz"]
+		po_kosztach = scal_snapshot(edytowany, {klucz: "100"}, [], "2026-10-16", "adm")
+		self.assertEqual(po_kosztach["edycja_reczna"], edytowany["edycja_reczna"])
+		self.assertEqual(po_kosztach["podsumowanie"]["netto"], "50000.00")

@@ -28,6 +28,7 @@ import datetime
 from collections.abc import Iterable
 
 from crm.volteo_osd_dotacja import tekst_sladu_statusu
+from crm.volteo_zestaw import ZNACZNIK_ZESTAW as _ZNACZNIK_ZESTAW
 
 POLA_WLASNA_LINIA: tuple[str, ...] = (
 	"status",
@@ -46,7 +47,11 @@ ZNACZNIK_KOSZTY = "[volteo:koszty]"
 """Znacznik wiodący tekstu śladu kosztów rzeczywistych — nigdy nie niesie kwot, ale sama
 linia i tak jest widoczna wyłącznie dla ról administracyjnych (patrz `czy_widoczny`)."""
 
-ZNACZNIKI_ADMIN: frozenset[str] = frozenset({ZNACZNIK_KOSZTY})
+ZNACZNIK_ZESTAW = _ZNACZNIK_ZESTAW
+"""Znacznik wiodący śladu ręcznej edycji zestawu i ceny szansy (ops#270), linia tylko
+dla administracji; literał żyje w `crm/volteo_zestaw.py` (jedno źródło prawdy)."""
+
+ZNACZNIKI_ADMIN: frozenset[str] = frozenset({ZNACZNIK_KOSZTY, ZNACZNIK_ZESTAW})
 """Zbiór znaczników wiodących, których linie feedu są widoczne wyłącznie dla ról
 administracyjnych — patrz `czy_widoczny`/`bez_znacznika`."""
 
