@@ -13,6 +13,7 @@ from crm.fcrm.doctype.utils import add_or_remove_lost_reason_section_in_sidepane
 from crm.permissions.org_hierarchy import BYPASS_ROLES
 from crm.volteo_lista_szans import FILTER_FIELDS_DEAL, SORT_FIELDS_DEAL
 from crm.volteo_pipeline import etap_nr, grupa_for, pipeline_for
+from crm.volteo_zestaw import POLA_CENY, POLE_ZESTAWU, czy_moze_edytowac_zestaw, zmienione_pola_chronione
 
 
 class CRMDeal(Document):
@@ -100,6 +101,7 @@ class CRMDeal(Document):
 		self.set_sla()
 
 	def validate(self):
+		self.guard_zestaw_i_ceny()
 		self.validate_status()
 		self.set_etap_nr()
 		self.set_primary_contact()
@@ -123,6 +125,30 @@ class CRMDeal(Document):
 
 	def before_save(self):
 		self.apply_sla()
+
+	def guard_zestaw_i_ceny(self):
+		"""Zestaw (`custom_zestaw`) i pola ceny zmienia tylko administrator (ops#269).
+
+		Nowa szansa (kalkulatory wstawiaja ja przez `insert`), zapis z
+		`flags.ignore_permissions` (skrypty ops) i brak stanu sprzed zapisu omijaja
+		straznik. `read_only` na polach w UI to tylko Property Setter, wiec to jest
+		jedyna bramka po stronie serwera.
+		"""
+		if self.is_new() or self.flags.ignore_permissions:
+			return
+		if frappe.session.user == "Administrator" or czy_moze_edytowac_zestaw(frappe.get_roles()):
+			return
+		przed = self.get_doc_before_save()
+		if przed is None:
+			return
+		zmienione = zmienione_pola_chronione(
+			{pole: przed.get(pole) for pole in POLA_CENY},
+			{pole: self.get(pole) for pole in POLA_CENY},
+			przed.get(POLE_ZESTAWU),
+			self.get(POLE_ZESTAWU),
+		)
+		if zmienione:
+			frappe.throw(_("Zestaw i cenę szansy może zmieniać tylko administrator."), frappe.PermissionError)
 
 	def validate_status(self):
 		if self.is_new() and not self.status:
