@@ -57,7 +57,7 @@
           <tr v-for="(w, i) in stan.wiersze" :key="w.klucz" class="border-t border-outline-gray-1" data-testid="zestaw-wiersz">
             <td class="px-2 py-1.5 align-top">
               <select
-                class="rounded border border-outline-gray-2 bg-surface-white px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none w-full"
+                class="rounded border border-outline-gray-2 bg-surface-base px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none w-full"
                 :value="wartoscSelectaTypu(w)"
                 data-testid="zestaw-typ"
                 @change="zmienTyp(i, w, $event.target.value)"
@@ -68,7 +68,7 @@
               </select>
               <input
                 v-if="typWlasny(w)"
-                class="rounded border border-outline-gray-2 bg-surface-white px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none mt-1 w-full"
+                class="rounded border border-outline-gray-2 bg-surface-base px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none mt-1 w-full"
                 type="text"
                 :value="w.typ"
                 :placeholder="__('Własny typ')"
@@ -77,7 +77,7 @@
             </td>
             <td class="px-2 py-1.5 align-top">
               <input
-                class="rounded border border-outline-gray-2 bg-surface-white px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none w-full"
+                class="rounded border border-outline-gray-2 bg-surface-base px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none w-full"
                 type="text"
                 :value="w.nazwa"
                 data-testid="zestaw-nazwa"
@@ -86,7 +86,7 @@
             </td>
             <td class="px-2 py-1.5 align-top">
               <input
-                class="rounded border border-outline-gray-2 bg-surface-white px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none w-full text-right"
+                class="rounded border border-outline-gray-2 bg-surface-base px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none w-full text-right"
                 type="number"
                 step="0.01"
                 min="0"
@@ -97,7 +97,7 @@
             </td>
             <td class="px-2 py-1.5 align-top">
               <input
-                class="rounded border border-outline-gray-2 bg-surface-white px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none w-full"
+                class="rounded border border-outline-gray-2 bg-surface-base px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none w-full"
                 type="text"
                 :class="{ 'border-outline-red-3': jestCp && bladPola(i, 'jednostka') }"
                 :value="w.jednostka"
@@ -108,7 +108,7 @@
             <template v-if="jestCp">
               <td class="px-2 py-1.5 align-top">
                 <input
-                  class="rounded border border-outline-gray-2 bg-surface-white px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none w-full text-right"
+                  class="rounded border border-outline-gray-2 bg-surface-base px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none w-full text-right"
                   type="number"
                   step="0.01"
                   min="0"
@@ -119,7 +119,7 @@
               </td>
               <td class="px-2 py-1.5 align-top">
                 <input
-                  class="rounded border border-outline-gray-2 bg-surface-white px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none w-full text-right"
+                  class="rounded border border-outline-gray-2 bg-surface-base px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none w-full text-right"
                   :class="{ 'border-outline-red-3': bladPola(i, 'brutto') }"
                   type="number"
                   step="0.01"
@@ -153,7 +153,7 @@
         <label v-for="pole in poleDotacjiCp" :key="pole.klucz" class="flex flex-col gap-0.5 text-xs text-ink-gray-6">
           <span>{{ pole.etykieta }}</span>
           <input
-            class="rounded border border-outline-gray-2 bg-surface-white px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none"
+            class="rounded border border-outline-gray-2 bg-surface-base px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none"
             type="number"
             step="0.01"
             min="0"
@@ -175,7 +175,7 @@
         <label v-for="pole in poleFinansowaniaCp" :key="pole.klucz" class="flex flex-col gap-0.5 text-xs text-ink-gray-6">
           <span>{{ pole.etykieta }}</span>
           <input
-            class="rounded border border-outline-gray-2 bg-surface-white px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none"
+            class="rounded border border-outline-gray-2 bg-surface-base px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none"
             type="number"
             :step="pole.krok"
             min="0"
@@ -200,7 +200,7 @@
       <label v-for="pole in poleCenyWejscie" :key="pole.klucz" class="flex flex-col gap-0.5 text-xs text-ink-gray-6">
         <span>{{ pole.etykieta }}</span>
         <input
-          class="rounded border border-outline-gray-2 bg-surface-white px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none"
+          class="rounded border border-outline-gray-2 bg-surface-base px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none"
           type="number"
           step="0.01"
           :value="stan.cena[pole.klucz]"
@@ -248,7 +248,7 @@
               <td class="px-2 py-1.5 text-ink-gray-6">{{ pokazBylo(pole) }}</td>
               <td class="px-2 py-1.5">
                 <input
-                  class="rounded border border-outline-gray-2 bg-surface-white px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none w-full"
+                  class="rounded border border-outline-gray-2 bg-surface-base px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none w-full"
                   type="text"
                   :value="stan.konfiguracja[pole]"
                   :data-testid="`zestaw-konf-${pole}`"
@@ -304,7 +304,7 @@
             <span>{{ __('Powód zmiany') }} ({{ __('opcjonalnie') }})</span>
             <textarea
               v-model="okno.powod"
-              class="rounded border border-outline-gray-2 bg-surface-white px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none"
+              class="rounded border border-outline-gray-2 bg-surface-base px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none"
               rows="2"
               maxlength="500"
               data-testid="zestaw-powod"
