@@ -996,6 +996,69 @@ class TestSladCP(unittest.TestCase):
 		self.assertFalse(any(d in t for d in (chr(0x2014), chr(0x2013))))
 
 
+class TestGoldenSzansCPZLokalnejBazy(unittest.TestCase):
+	"""Golden z lokalnych szans CP (odczyt 2026-10-15, stale 1 / 0.65 / 25). Szansa
+	PRO/CP/26/1032 wskazana przez koordynatora nie istnieje w lokalnej bazie (brak szansy
+	z rata Trify 1357.57), wiec dla kredytu uzyto PRO/CP/26/1026 (5 lat)."""
+
+	def policz(self, wiersze, dotacje, fin):
+		return z.przelicz_cene_cp(wiersze, dotacje, fin, STALE_CP)
+
+	def test_szansa_1031_bez_kredytu(self):
+		# PRO/CP/26/1031, utworzona 2026-09-04, okres_lat 0
+		wiersze = [
+			wiersz_cp("Źródło ciepła", "Piec zgazowujący drewno", 1, "szt", "35000", "37800"),
+			wiersz_cp(
+				"Centralne Ogrzewanie i Ciepła Woda Użytkowa",
+				"Pompa ciepła do CWU",
+				1,
+				"szt",
+				"20500",
+				"22140",
+			),
+			wiersz_cp("Termomodernizacja", "Elewacja", 130, "m2", "39000", "42120"),
+			wiersz_cp("Termomodernizacja", "Okna", 13, "m2", "19500", "21060"),
+		]
+		r = self.policz(wiersze, {"zrodlo": "20500", "co": "20500", "termo": "49335"}, {"okres_lat": 0})
+		self.assertEqual(r["deal_value"], D("123120.00"))
+		self.assertEqual(r["netto_suma"], D("114000.00"))
+		self.assertEqual(r["dotacja_laczna"], D("90335.00"))
+		self.assertEqual(r["wklad_wlasny"], D("32785.00"))
+		self.assertIsNone(r["kwota_kredytu"])
+		self.assertIsNone(r["rata_wkladu"])
+		self.assertEqual(r["podstawa_trify"], D("58717.75"))
+		self.assertEqual(r["rata_trify"], D("1467.94"))
+
+	def test_szansa_1026_z_kredytem_5_lat(self):
+		# PRO/CP/26/1026, utworzona 2026-09-04, okres_lat 5, wplata 8000
+		wiersze = [
+			wiersz_cp("Źródło ciepła", "Piec zgazowujący drewno", 1, "szt", "35000", "37800"),
+			wiersz_cp(
+				"Centralne Ogrzewanie i Ciepła Woda Użytkowa",
+				"Pompa ciepła do CWU",
+				1,
+				"szt",
+				"20500",
+				"22140",
+			),
+			wiersz_cp("Termomodernizacja", "Elewacja", 117, "m2", "35100", "37908"),
+			wiersz_cp("Termomodernizacja", "Strop", 81, "m2", "17820", "19245.6"),
+		]
+		r = self.policz(
+			wiersze,
+			{"zrodlo": "20500", "co": "20500", "termo": "46777.5"},
+			{"okres_lat": 5, "wplata_gotowka": "8000"},
+		)
+		self.assertEqual(r["deal_value"], D("117093.60"))
+		self.assertEqual(r["netto_suma"], D("108420.00"))
+		self.assertEqual(r["dotacja_laczna"], D("87777.50"))
+		self.assertEqual(r["wklad_wlasny"], D("29316.10"))
+		self.assertEqual(r["kwota_kredytu"], D("21316.10"))
+		self.assertEqual(r["rata_wkladu"], D("474.16"))
+		self.assertEqual(r["podstawa_trify"], D("57055.38"))
+		self.assertEqual(r["rata_trify"], D("1426.38"))
+
+
 class TestFormatuj(unittest.TestCase):
 	def test_tysiace(self):
 		self.assertEqual(z.formatuj_kwote(48200), "48 200,00")

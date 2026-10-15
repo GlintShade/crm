@@ -9956,3 +9956,15 @@ msgstr "netto przed zmianą"
 #: frontend/src/components/deal/MontazKosztyPanel.vue
 msgid "i mogą być nieaktualne."
 msgstr "i mogą być nieaktualne."
+
+#: crm/api/zestaw.py
+msgid "Konfiguracji Czystego Powietrza nie edytuje się w tym oknie. Użyj panelu bocznego."
+msgstr "Konfiguracji Czystego Powietrza nie edytuje się w tym oknie. Użyj panelu bocznego."
+
+#: crm/api/zestaw.py
+msgid "Pola kalkulatora CP (poziom, standard, powierzchnia, źródło ciepła) edytuj w panelu bocznym."
+msgstr "Pola kalkulatora CP (poziom, standard, powierzchnia, źródło ciepła) edytuj w panelu bocznym."
+
+#: crm/api/zestaw.py
+msgid "Brak stałych finansowania Czystego Powietrza (oprocentowanie raty)."
+msgstr "Brak stałych finansowania Czystego Powietrza (oprocentowanie raty)."
