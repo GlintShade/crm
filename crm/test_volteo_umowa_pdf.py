@@ -1430,6 +1430,24 @@ class TestDodatkiIRozbudowaKontekst(unittest.TestCase):
 		self.assertEqual(k["roz_bateria_szt"], "2")
 		self.assertEqual(k["roz_ist_me_kwh"], "10")
 
+	def test_g2_rozbudowa_sama_bateria_ppoz_z_kalkulatora(self: "TestDodatkiIRozbudowaKontekst") -> None:
+		k = _kontekst_z(
+			rozbudowa={"panele": 0, "panele_mikro": 0, "bateria": 3, "ist_pv_moc_kwp": 10.75, "ppoz": "Tak", "ist_me_kwh": 0}
+		)
+		self.assertTrue(k["ppoz_tak"])
+		self.assertFalse(k["ppoz_nie"])
+		self.assertEqual(k["roz_bateria_szt"], "3")
+		self.assertTrue(k["roz_ist_pv_moc_kwp"])
+
+	def test_g3_rozbudowa_sama_bateria_ppoz_nie_lub_puste_bez_zmian(self: "TestDodatkiIRozbudowaKontekst") -> None:
+		for ppoz in ("Nie", "", None, "tak"):
+			with self.subTest(ppoz=ppoz):
+				k = _kontekst_z(
+					rozbudowa={"panele": 0, "panele_mikro": 0, "bateria": 3, "ist_pv_moc_kwp": 10.75, "ppoz": ppoz, "ist_me_kwh": 0}
+				)
+				self.assertFalse(k["ppoz_tak"])
+				self.assertFalse(k["ppoz_nie"])
+
 	def test_h_rozbudowa_z_mikro(self: "TestDodatkiIRozbudowaKontekst") -> None:
 		k = _kontekst_z(
 			rozbudowa={"panele": 0, "panele_mikro": 4, "bateria": 0, "ist_pv_moc_kwp": 3, "ppoz": "Nie", "ist_me_kwh": 0}
