@@ -51,6 +51,15 @@
     </button>
 
     <div v-show="expanded" class="mt-2 rounded-lg border border-dashed border-outline-amber-3 bg-surface-amber-2 p-3">
+      <!-- Ślad ręcznej edycji zestawu (ops#273) -->
+      <div
+        v-if="edycjaReczna"
+        class="mb-3 rounded-md border border-outline-amber-3 bg-surface-amber-3 px-2.5 py-2 text-xs text-ink-amber-8"
+        data-testid="koszty-edycja-reczna"
+      >
+        {{ edycjaReczna.tekst }}
+      </div>
+
       <!-- Cost lines -->
       <div class="mk-head">
         <div>{{ __('Pozycja') }}</div>
@@ -199,6 +208,8 @@
 import { ref, computed } from 'vue'
 import { Button, FeatherIcon, call, createResource, toast } from 'frappe-ui'
 import { formatPln, formatPlnAmount } from '@/utils/money'
+import { formatujDataGodzine } from '@/utils/dataPolska'
+import { usersStore } from '@/stores/users'
 import { parseSnapshot, przeliczRzeczywiste, zbudujPayload } from '@/utils/montazKoszty'
 
 const props = defineProps({
@@ -259,6 +270,26 @@ function seedFromSnapshot(nowySnapshot) {
 
 // --- Derived / display --------------------------------------------------
 const wynik = computed(() => przeliczRzeczywiste(snapshot.value, edycje.value, dodatkowe.value))
+const { getUser } = usersStore()
+
+// Baner ręcznej edycji zestawu (ops#273): czytany wprost ze snapshotu, jawny
+// null, bez mutacji. Powód pomijany, gdy pusty; osoba: pełne imię albo e-mail.
+const edycjaReczna = computed(() => {
+  const ed = snapshot.value?.edycja_reczna ?? null
+  if (!ed) return null
+  const kiedy = formatujDataGodzine(ed.kiedy)
+  const kto = (ed.kto && getUser(ed.kto)?.full_name) || ed.kto || ''
+  const powod = String(ed.powod ?? '').trim()
+  const nettoPrzed = Number(ed.netto_przed)
+  const szczegoly = [kto, powod ? `${__('powód')}: ${powod}` : ''].filter(Boolean).join(', ')
+  const tekst =
+    `${__('Zestaw zmieniony ręcznie')}${kiedy ? ' ' + kiedy : ''}` +
+    `${szczegoly ? ' (' + szczegoly + ')' : ''}. ` +
+    `${__('Koszty planowane pochodzą z pierwotnej konfiguracji')}` +
+    `${Number.isFinite(nettoPrzed) ? ' (' + __('netto przed zmianą') + ': ' + formatPln(nettoPrzed) + ')' : ''} ` +
+    `${__('i mogą być nieaktualne.')}`
+  return { tekst }
+})
 const skladnikiMarzy = computed(() => snapshot.value?.skladniki_marzy || [])
 
 function jednostkaLabel(jednostka) {

@@ -3,6 +3,7 @@ import {
   DNI_TYGODNIA_SKROT,
   MIESIACE_SKROT,
   formatujTermin,
+  formatujDataGodzine,
   formatujTerminKrotko,
   terminWzgledny,
   relatywnie,
@@ -202,5 +203,22 @@ describe('relatywnie', () => {
 
   it('przyjmuje obiekt Date jako wejście', () => {
     expect(relatywnie(new Date(2026, 8, 28, 23, 59), teraz)).toBe('wczoraj')
+  })
+})
+
+describe('formatujDataGodzine', () => {
+  it('formatuje DD.MM.RRRR HH:MM z zerami wiodącymi', () => {
+    expect(formatujDataGodzine('2026-10-05 09:07:33.123456')).toBe('05.10.2026 09:07')
+    expect(formatujDataGodzine('2026-12-31T23:59:00')).toBe('31.12.2026 23:59')
+  })
+
+  it('przyjmuje obiekt Date', () => {
+    expect(formatujDataGodzine(new Date(2026, 0, 2, 3, 4))).toBe('02.01.2026 03:04')
+  })
+
+  it('zwraca "" dla pustego/niepoprawnego wejścia', () => {
+    expect(formatujDataGodzine('')).toBe('')
+    expect(formatujDataGodzine(null)).toBe('')
+    expect(formatujDataGodzine('abc')).toBe('')
   })
 })

@@ -9936,3 +9936,23 @@ msgstr "opcjonalnie"
 #: frontend/src/components/deal/ZestawEdycja.vue
 msgid "Ładowarka EV"
 msgstr "Ładowarka EV"
+
+#: frontend/src/components/deal/MontazKosztyPanel.vue
+msgid "powód"
+msgstr "powód"
+
+#: frontend/src/components/deal/MontazKosztyPanel.vue
+msgid "Zestaw zmieniony ręcznie"
+msgstr "Zestaw zmieniony ręcznie"
+
+#: frontend/src/components/deal/MontazKosztyPanel.vue
+msgid "Koszty planowane pochodzą z pierwotnej konfiguracji"
+msgstr "Koszty planowane pochodzą z pierwotnej konfiguracji"
+
+#: frontend/src/components/deal/MontazKosztyPanel.vue
+msgid "netto przed zmianą"
+msgstr "netto przed zmianą"
+
+#: frontend/src/components/deal/MontazKosztyPanel.vue
+msgid "i mogą być nieaktualne."
+msgstr "i mogą być nieaktualne."
