@@ -213,11 +213,12 @@ class TestWalidujWiersze(unittest.TestCase):
 		self.assertEqual(z.waliduj_wiersze([wiersz(netto=0, brutto="")]), [])
 
 	def test_cp_z_cenami_ok(self):
-		self.assertEqual(z.waliduj_wiersze([wiersz(netto=10, brutto=12)], linia="cp"), [])
+		self.assertEqual(z.waliduj_wiersze([wiersz(netto=10, brutto=12, jednostka="szt")], linia="cp"), [])
 
 	def test_cp_cena_ujemna(self):
 		self.assertEqual(
-			z.waliduj_wiersze([wiersz(netto=-1)], linia="cp"), ["Pozycja 1: netto nie może być ujemne."]
+			z.waliduj_wiersze([wiersz(netto=-1, jednostka="szt")], linia="cp"),
+			["Pozycja 1: netto nie może być ujemne."],
 		)
 
 	def test_dwa_falowniki(self):
@@ -758,6 +759,304 @@ class TestTekstSladu(unittest.TestCase):
 		)
 		for d in (chr(0x2014), chr(0x2013), chr(0x2192)):
 			self.assertNotIn(d, t)
+
+
+def wiersz_cp(
+	typ="Źródło ciepła", nazwa="Pompa ciepła", ilosc=1, jednostka="szt", netto=0, brutto=0, name=None
+):
+	return wiersz(typ, nazwa, ilosc, jednostka, netto, brutto, name)
+
+
+STALE_CP = {"oprocentowanie_mies": "1", "trify_udzial": "0.65", "trify_stawka_za_1000": "25"}
+
+# Golden: wynik oblicz_oferte (fixture test_obliczenia: pompa ciepla + 10 grzejnikow +
+# elewacja 50 m2, poziom najwyzszy, powyzej140, finansowanie 5 lat, wplata 1000).
+# Lokalna baza nie ma zadnej szansy CP, wiec liczby pochodza z rdzenia, nie z szansy.
+WIERSZE_GOLDEN_CP = [
+	wiersz_cp("Źródło ciepła", "pompa_ciepla", 1, "szt", "35200.00", "38016.00"),
+	wiersz_cp("Centralne Ogrzewanie i Ciepła Woda Użytkowa", "grzejnik", 10, "szt", "18000.00", "19440.00"),
+	wiersz_cp("Termomodernizacja", "elewacja", 50, "m2", "15000.00", "16200.00"),
+]
+DOTACJE_GOLDEN_CP = {"zrodlo": "35200.00", "co": "18000.00", "termo": "12375.00"}
+
+
+class TestWalidacjaWierszyCP(unittest.TestCase):
+	def test_ok(self):
+		self.assertEqual(z.waliduj_wiersze([wiersz_cp(netto=10, brutto=10.8)], "cp"), [])
+
+	def test_netto_wieksze_od_brutto(self):
+		self.assertEqual(
+			z.waliduj_wiersze([wiersz_cp(netto=12, brutto=10)], "cp"),
+			["Pozycja 1: netto nie może być większe od brutto."],
+		)
+
+	def test_netto_rowne_brutto_ok(self):
+		self.assertEqual(z.waliduj_wiersze([wiersz_cp(netto=10, brutto=10)], "cp"), [])
+
+	def test_zera_ok(self):
+		self.assertEqual(z.waliduj_wiersze([wiersz_cp()], "cp"), [])
+
+	def test_brak_jednostki(self):
+		self.assertEqual(
+			z.waliduj_wiersze([wiersz_cp(jednostka="  ")], "cp"), ["Pozycja 1: jednostka jest wymagana."]
+		)
+
+	def test_brutto_ujemne(self):
+		b = z.waliduj_wiersze([wiersz_cp(netto=-5, brutto=-1)], "cp")
+		self.assertIn("Pozycja 1: netto nie może być ujemne.", b)
+		self.assertIn("Pozycja 1: brutto nie może być ujemne.", b)
+
+	def test_cp_nie_zglasza_oze_bez_cen(self):
+		self.assertNotIn(z.MSG_OZE_BEZ_CEN, z.waliduj_wiersze([wiersz_cp(netto=1, brutto=2)], "cp"))
+
+	def test_cp_dwa_falowniki_dozwolone(self):
+		w = [wiersz_cp("Falownik", "A"), wiersz_cp("Falownik", "B")]
+		self.assertEqual(z.waliduj_wiersze(w, "cp"), [])
+
+	def test_typy_cp(self):
+		self.assertEqual(len(z.TYPY_WIERSZY_CP), 3)
+		self.assertIn("Termomodernizacja", z.TYPY_WIERSZY_CP)
+
+	def test_oze_nadal_nie_wymaga_jednostki(self):
+		self.assertEqual(z.waliduj_wiersze([wiersz()], "oze"), [])
+
+
+class TestCenaCP(unittest.TestCase):
+	def policz(self, wiersze=None, dotacje=None, fin=None, stale=STALE_CP):
+		return z.przelicz_cene_cp(
+			WIERSZE_GOLDEN_CP if wiersze is None else wiersze,
+			DOTACJE_GOLDEN_CP if dotacje is None else dotacje,
+			{"okres_lat": 0, "wplata_gotowka": 0} if fin is None else fin,
+			stale,
+		)
+
+	def test_deal_value_to_suma_brutto(self):
+		self.assertEqual(self.policz()["deal_value"], D("73656.00"))
+
+	def test_netto_suma(self):
+		self.assertEqual(self.policz()["netto_suma"], D("68200.00"))
+
+	def test_dotacja_laczna(self):
+		self.assertEqual(self.policz()["dotacja_laczna"], D("65575.00"))
+
+	def test_wklad_wlasny(self):
+		self.assertEqual(self.policz()["wklad_wlasny"], D("8081.00"))
+
+	def test_wklad_nie_ponizej_zera(self):
+		w = [wiersz_cp(netto=100, brutto=108)]
+		r = self.policz(w, {"zrodlo": 108}, None)
+		self.assertEqual(r["wklad_wlasny"], D("0.00"))
+
+	def test_brakujaca_dotacja_to_zero(self):
+		r = self.policz(dotacje={"zrodlo": "1000"})
+		self.assertEqual(r["dotacje"], {"zrodlo": D("1000.00"), "co": D("0.00"), "termo": D("0.00")})
+		self.assertEqual(r["dotacja_laczna"], D("1000.00"))
+
+	def test_dotacja_przecinek(self):
+		self.assertEqual(self.policz(dotacje={"zrodlo": "1000,5"})["dotacja_laczna"], D("1000.50"))
+
+	def test_dotacja_ujemna(self):
+		with self.assertRaises(ValueError):
+			self.policz(dotacje={"zrodlo": -1})
+
+	def test_dotacja_wieksza_od_brutto(self):
+		with self.assertRaises(ValueError) as e:
+			self.policz(dotacje={"zrodlo": "80000"})
+		self.assertIn("większa od sumy brutto", str(e.exception))
+
+	def test_bez_kredytu_pola_kredytu_none(self):
+		r = self.policz()
+		self.assertIsNone(r["kwota_kredytu"])
+		self.assertIsNone(r["rata_wkladu"])
+
+	def test_trify_zawsze_nawet_bez_kredytu(self):
+		r = self.policz()
+		self.assertEqual(r["podstawa_trify"], D("42623.75"))
+		self.assertEqual(r["rata_trify"], D("1065.59"))
+
+	def test_kredyt_5_lat(self):
+		r = self.policz(fin={"okres_lat": 5, "wplata_gotowka": 1000})
+		self.assertEqual(r["kwota_kredytu"], D("7081.00"))
+		self.assertEqual(r["rata_wkladu"], D("157.51"))
+		self.assertEqual(r["okres_lat"], 5)
+		self.assertEqual(r["wplata_gotowka"], D("1000.00"))
+
+	def test_wplata_wieksza_od_wkladu_daje_zero_kredytu(self):
+		r = self.policz(fin={"okres_lat": 5, "wplata_gotowka": 20000})
+		self.assertEqual(r["kwota_kredytu"], D("0.00"))
+		self.assertEqual(r["rata_wkladu"], D("0.00"))
+
+	def test_okres_nie_wplywa_na_trify(self):
+		a = self.policz(fin={"okres_lat": 1, "wplata_gotowka": 0})
+		b = self.policz(fin={"okres_lat": 10, "wplata_gotowka": 0})
+		self.assertEqual(a["rata_trify"], b["rata_trify"])
+
+	def test_okres_poza_zakresem(self):
+		for okres in (-1, 11, "2,5"):
+			with self.assertRaises(ValueError):
+				self.policz(fin={"okres_lat": okres, "wplata_gotowka": 0})
+
+	def test_wplata_ujemna(self):
+		with self.assertRaises(ValueError):
+			self.policz(fin={"okres_lat": 5, "wplata_gotowka": -1})
+
+	def test_stale_none_trify_none(self):
+		r = self.policz(
+			stale={"oprocentowanie_mies": None, "trify_udzial": None, "trify_stawka_za_1000": None}
+		)
+		self.assertIsNone(r["podstawa_trify"])
+		self.assertIsNone(r["rata_trify"])
+
+	def test_stale_puste_trify_none(self):
+		self.assertIsNone(self.policz(stale=None)["rata_trify"])
+
+	def test_stale_none_z_kredytem_blad(self):
+		with self.assertRaises(ValueError) as e:
+			self.policz(fin={"okres_lat": 5, "wplata_gotowka": 0}, stale={"trify_udzial": None})
+		self.assertEqual(str(e.exception), z.MSG_CP_BRAK_STALYCH_KREDYTU)
+
+	def test_brak_oprocentowania_z_kredytem_blad(self):
+		stale = {**STALE_CP, "oprocentowanie_mies": None}
+		with self.assertRaises(ValueError):
+			self.policz(fin={"okres_lat": 5, "wplata_gotowka": 0}, stale=stale)
+
+	def test_wejscia_nie_sa_mutowane(self):
+		wiersze = [dict(w) for w in WIERSZE_GOLDEN_CP]
+		dotacje = dict(DOTACJE_GOLDEN_CP)
+		self.policz(wiersze, dotacje)
+		self.assertEqual(wiersze, WIERSZE_GOLDEN_CP)
+		self.assertEqual(dotacje, DOTACJE_GOLDEN_CP)
+
+	def test_golden_komplet(self):
+		"""Golden co do grosza (patrz komentarz przy WIERSZE_GOLDEN_CP)."""
+		r = self.policz(fin={"okres_lat": 5, "wplata_gotowka": 1000})
+		self.assertEqual(
+			(
+				r["deal_value"],
+				r["dotacja_laczna"],
+				r["wklad_wlasny"],
+				r["kwota_kredytu"],
+				r["rata_wkladu"],
+				r["podstawa_trify"],
+				r["rata_trify"],
+			),
+			(
+				D("73656.00"),
+				D("65575.00"),
+				D("8081.00"),
+				D("7081.00"),
+				D("157.51"),
+				D("42623.75"),
+				D("1065.59"),
+			),
+		)
+
+	def test_zaokraglenie_brutto_wierszy_half_up(self):
+		w = [wiersz_cp(netto="0.004", brutto="0.005")]
+		self.assertEqual(self.policz(w, {}, None)["deal_value"], D("0.01"))
+
+	def test_roznice_cp_wykrywaja_zmiane_ceny(self):
+		stare = [wiersz_cp(netto=10, brutto=12, name="a")]
+		nowe = [wiersz_cp(netto=10, brutto=13, name="a")]
+		r = z.roznice_zestawu(stare, nowe)
+		self.assertEqual(r.zmienione[0][2], ("brutto",))
+
+
+class TestSladCP(unittest.TestCase):
+	CP: ClassVar[dict] = {
+		"przed": {"deal_value": "73656", "dotacja_laczna": "65575", "wklad_wlasny": "8081"},
+		"po": {"deal_value": "74656", "dotacja_laczna": "65575", "wklad_wlasny": "9081"},
+	}
+
+	def roznice(self):
+		return z.roznice_zestawu([], [wiersz_cp("Termomodernizacja", "okna", 4, "m2", 1000, 1080)])
+
+	def test_czlony_cp(self):
+		t = z.tekst_sladu_zestawu(self.roznice(), None, None, [], "korekta", None, cp=self.CP)
+		self.assertIn(
+			"Cena CP: wartość szansy 73 656,00 -> 74 656,00, dotacja łączna 65 575,00 -> 65 575,00, "
+			"wkład własny 8 081,00 -> 9 081,00 zł.",
+			t,
+		)
+		self.assertIn("Prowizje CP bez zmian.", t)
+		self.assertIn("Wejście kalkulatora (custom_cp_wejscie_json) nie odpowiada już zestawowi.", t)
+
+	def test_kwoty_wierszy_cp(self):
+		t = z.tekst_sladu_zestawu(self.roznice(), None, None, [], None, None, cp=self.CP)
+		self.assertIn('Dodano: Termomodernizacja "okna" x 4 m2 (netto 1 000,00, brutto 1 080,00).', t)
+
+	def test_bez_cp_brak_czlonow(self):
+		t = z.tekst_sladu_zestawu(self.roznice(), None, None, [], None, None)
+		self.assertNotIn("Prowizje CP", t)
+		self.assertNotIn("(netto", t)
+
+	def test_znacznik_i_brak_myslnikow(self):
+		t = z.tekst_sladu_zestawu(self.roznice(), None, None, [], "x", None, cp=self.CP)
+		self.assertTrue(t.startswith(z.ZNACZNIK_ZESTAW))
+		self.assertFalse(any(d in t for d in (chr(0x2014), chr(0x2013))))
+
+
+class TestGoldenSzansCPZLokalnejBazy(unittest.TestCase):
+	"""Golden z lokalnych szans CP (odczyt 2026-10-15, stale 1 / 0.65 / 25). Szansa
+	PRO/CP/26/1032 wskazana przez koordynatora nie istnieje w lokalnej bazie (brak szansy
+	z rata Trify 1357.57), wiec dla kredytu uzyto PRO/CP/26/1026 (5 lat)."""
+
+	def policz(self, wiersze, dotacje, fin):
+		return z.przelicz_cene_cp(wiersze, dotacje, fin, STALE_CP)
+
+	def test_szansa_1031_bez_kredytu(self):
+		# PRO/CP/26/1031, utworzona 2026-09-04, okres_lat 0
+		wiersze = [
+			wiersz_cp("Źródło ciepła", "Piec zgazowujący drewno", 1, "szt", "35000", "37800"),
+			wiersz_cp(
+				"Centralne Ogrzewanie i Ciepła Woda Użytkowa",
+				"Pompa ciepła do CWU",
+				1,
+				"szt",
+				"20500",
+				"22140",
+			),
+			wiersz_cp("Termomodernizacja", "Elewacja", 130, "m2", "39000", "42120"),
+			wiersz_cp("Termomodernizacja", "Okna", 13, "m2", "19500", "21060"),
+		]
+		r = self.policz(wiersze, {"zrodlo": "20500", "co": "20500", "termo": "49335"}, {"okres_lat": 0})
+		self.assertEqual(r["deal_value"], D("123120.00"))
+		self.assertEqual(r["netto_suma"], D("114000.00"))
+		self.assertEqual(r["dotacja_laczna"], D("90335.00"))
+		self.assertEqual(r["wklad_wlasny"], D("32785.00"))
+		self.assertIsNone(r["kwota_kredytu"])
+		self.assertIsNone(r["rata_wkladu"])
+		self.assertEqual(r["podstawa_trify"], D("58717.75"))
+		self.assertEqual(r["rata_trify"], D("1467.94"))
+
+	def test_szansa_1026_z_kredytem_5_lat(self):
+		# PRO/CP/26/1026, utworzona 2026-09-04, okres_lat 5, wplata 8000
+		wiersze = [
+			wiersz_cp("Źródło ciepła", "Piec zgazowujący drewno", 1, "szt", "35000", "37800"),
+			wiersz_cp(
+				"Centralne Ogrzewanie i Ciepła Woda Użytkowa",
+				"Pompa ciepła do CWU",
+				1,
+				"szt",
+				"20500",
+				"22140",
+			),
+			wiersz_cp("Termomodernizacja", "Elewacja", 117, "m2", "35100", "37908"),
+			wiersz_cp("Termomodernizacja", "Strop", 81, "m2", "17820", "19245.6"),
+		]
+		r = self.policz(
+			wiersze,
+			{"zrodlo": "20500", "co": "20500", "termo": "46777.5"},
+			{"okres_lat": 5, "wplata_gotowka": "8000"},
+		)
+		self.assertEqual(r["deal_value"], D("117093.60"))
+		self.assertEqual(r["netto_suma"], D("108420.00"))
+		self.assertEqual(r["dotacja_laczna"], D("87777.50"))
+		self.assertEqual(r["wklad_wlasny"], D("29316.10"))
+		self.assertEqual(r["kwota_kredytu"], D("21316.10"))
+		self.assertEqual(r["rata_wkladu"], D("474.16"))
+		self.assertEqual(r["podstawa_trify"], D("57055.38"))
+		self.assertEqual(r["rata_trify"], D("1426.38"))
 
 
 class TestFormatuj(unittest.TestCase):

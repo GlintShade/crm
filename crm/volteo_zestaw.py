@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation, localcontext
 from typing import Any
 
+from crm.czyste_powietrze.obliczenia import CPBlad, _trify, oblicz_finansowanie
 from crm.volteo_kalkulator_oze import RODZAJE_NOWE
 
 # ---------------------------------------------------------------------------
@@ -180,6 +181,15 @@ TYPY_WIERSZY_OZE: tuple[str, ...] = (
 """Znane typy wierszy zestawu OZE. Typ spoza listy jest dozwolony (wolny tekst), UI
 podpowiada te wartosci; typ steruje synchronizacja konfiguracji."""
 
+TYPY_WIERSZY_CP: tuple[str, ...] = (
+	"Źródło ciepła",
+	"Centralne Ogrzewanie i Ciepła Woda Użytkowa",
+	"Termomodernizacja",
+)
+"""Etykiety grup prac Czystego Powietrza (lustro `_KATEGORIA_TYP` w
+`crm/api/czyste_powietrze.py`; `_typ_grupy_dla_linii` zamienia kategorie pozycji na te
+etykiety). Typ spoza listy jest dozwolony (wolny tekst), UI podpowiada te wartosci."""
+
 MSG_BRAK_WIERSZY = "Zestaw musi zawierać co najmniej jedną pozycję."
 MSG_OZE_BEZ_CEN = "Pozycje OZE nie mają cen, cenę zmienia się w bloku Cena."
 MSG_DWA_FALOWNIKI = "Zestaw może zawierać najwyżej jedną pozycję typu Falownik."
@@ -206,17 +216,24 @@ def waliduj_wiersze(wiersze: Any, linia: str = "oze") -> list[str]:
 				bledy.append(przedrostek + "ilość musi być większa od zera.")
 		except ValueError:
 			bledy.append(przedrostek + "ilość nie jest liczbą.")
+		wartosci_cen: dict[str, Decimal] = {}
 		for klucz in ("netto", "brutto"):
 			try:
 				wartosc = kwota(_pole(w, klucz))
 			except ValueError:
 				bledy.append(przedrostek + f"{klucz} nie jest liczbą.")
 				continue
+			wartosci_cen[klucz] = wartosc
 			if linia == "oze":
 				if wartosc != 0:
 					ceny_w_oze = True
 			elif wartosc < 0:
 				bledy.append(przedrostek + f"{klucz} nie może być ujemne.")
+		if linia == "cp":
+			if not _tekst(_pole(w, "jednostka")):
+				bledy.append(przedrostek + "jednostka jest wymagana.")
+			if len(wartosci_cen) == 2 and wartosci_cen["netto"] > wartosci_cen["brutto"]:
+				bledy.append(przedrostek + "netto nie może być większe od brutto.")
 		if _tekst(typ) == "Falownik":
 			falowniki += 1
 		for klucz in ("typ", "nazwa", "jednostka"):
@@ -423,6 +440,124 @@ def odtworz_dodatki_bez_ulgi(cena_po_dotacji: Any, ulga_kwota: Any, ulga_pct: An
 
 
 # ---------------------------------------------------------------------------
+# 5b. Cena Czystego Powietrza (ops#274)
+# ---------------------------------------------------------------------------
+
+KLUCZE_DOTACJI_CP: tuple[str, ...] = ("zrodlo", "co", "termo")
+"""Grupy dotacji CP: pola szansy `custom_cp_dotacja_<grupa>`."""
+
+MSG_CP_BRAK_STALYCH_KREDYTU = "Brak stałych finansowania Czystego Powietrza (oprocentowanie raty)."
+
+
+def waliduj_cene_cp(wiersze: Any, dotacje: dict | None, finansowanie: dict | None) -> list[str]:
+	"""Lista komunikatow bledow ceny CP (pusta = OK).
+
+	`wiersze` musza byc juz poprawne (`waliduj_wiersze(..., "cp")`); tu liczy sie tylko
+	suma brutto. Dotacje: kazda `>= 0`, ich suma `<= deal_value`. `okres_lat` calkowity
+	w zakresie 0 do 10 (0 = bez kredytu), `wplata_gotowka >= 0`.
+	"""
+	bledy: list[str] = []
+	dotacje = dotacje or {}
+	suma_dotacji = _ZERO
+	for grupa in KLUCZE_DOTACJI_CP:
+		try:
+			d = kwota(dotacje.get(grupa))
+		except ValueError:
+			bledy.append(f"Dotacja ({grupa}) nie jest liczbą.")
+			continue
+		if d < 0:
+			bledy.append(f"Dotacja ({grupa}) nie może być ujemna.")
+		else:
+			suma_dotacji += d
+	try:
+		deal_value = sum((_grosze(kwota(_pole(w, "brutto"))) for w in (wiersze or ())), _ZERO)
+	except ValueError:
+		deal_value = None
+	if deal_value is not None and suma_dotacji > deal_value:
+		bledy.append("Dotacja łączna nie może być większa od sumy brutto pozycji.")
+	try:
+		okres = kwota((finansowanie or {}).get("okres_lat"))
+	except ValueError:
+		okres = None
+		bledy.append("Okres rat nie jest liczbą.")
+	if okres is not None and (okres < 0 or okres > 10 or okres != okres.to_integral_value()):
+		bledy.append("Okres rat musi być całkowitą liczbą lat z zakresu 0 do 10.")
+	try:
+		if kwota((finansowanie or {}).get("wplata_gotowka")) < 0:
+			bledy.append("Wpłata gotówką nie może być ujemna.")
+	except ValueError:
+		bledy.append("Wpłata gotówką nie jest liczbą.")
+	return bledy
+
+
+def przelicz_cene_cp(
+	wiersze: Any, dotacje: dict | None, finansowanie: dict | None, stale: dict | None
+) -> dict:
+	"""Cena CP z wierszy i dotacji wpisanych przez admina (bez silnika katalogowego).
+
+	`stale`: `{"oprocentowanie_mies", "trify_udzial", "trify_stawka_za_1000"}`; wartosci
+	moga byc `None` (Single nie zasiany). Wtedy `podstawa_trify`/`rata_trify` = `None`
+	(nigdy 0), a przy `okres_lat > 0` rzucany jest `ValueError`. Finansowanie i Trify
+	licza istniejace funkcje `oblicz_finansowanie` / `_trify` z `obliczenia.py`.
+	Wynik w `Decimal`: `deal_value`, `netto_suma`, `dotacje` (3 grupy), `dotacja_laczna`,
+	`wklad_wlasny`, `okres_lat`, `wplata_gotowka`, `kwota_kredytu`, `rata_wkladu`
+	(`None` przy `okres_lat` 0), `podstawa_trify`, `rata_trify`.
+	"""
+	bledy = waliduj_cene_cp(wiersze, dotacje, finansowanie)
+	if bledy:
+		raise ValueError(" ".join(bledy))
+	lista = list(wiersze or ())
+	deal_value = sum((_grosze(kwota(_pole(w, "brutto"))) for w in lista), _ZERO)
+	netto_suma = sum((_grosze(kwota(_pole(w, "netto"))) for w in lista), _ZERO)
+	dotacje_grup = {g: _grosze(kwota((dotacje or {}).get(g))) for g in KLUCZE_DOTACJI_CP}
+	dotacja_laczna = sum(dotacje_grup.values(), _ZERO)
+	wklad = max(_ZERO, deal_value - dotacja_laczna)
+	okres = int(kwota((finansowanie or {}).get("okres_lat")))
+	wplata = _grosze(kwota((finansowanie or {}).get("wplata_gotowka")))
+	stale = stale or {}
+
+	stale_trify = None
+	if stale.get("trify_udzial") is not None and stale.get("trify_stawka_za_1000") is not None:
+		stale_trify = {
+			"trify_udzial": stale["trify_udzial"],
+			"trify_stawka_za_1000": stale["trify_stawka_za_1000"],
+		}
+	try:
+		trify = _trify(dotacja_laczna, stale_trify)
+	except CPBlad as exc:
+		raise ValueError(str(exc)) from exc
+
+	kwota_kredytu = rata_wkladu = None
+	if okres > 0:
+		if stale.get("oprocentowanie_mies") is None or stale_trify is None:
+			raise ValueError(MSG_CP_BRAK_STALYCH_KREDYTU)
+		try:
+			fin = oblicz_finansowanie(
+				wklad,
+				dotacja_laczna,
+				{"okres_lat": okres, "wplata_gotowka": wplata},
+				{**stale_trify, "oprocentowanie_mies": stale["oprocentowanie_mies"]},
+			)
+		except CPBlad as exc:
+			raise ValueError(str(exc)) from exc
+		kwota_kredytu, rata_wkladu = fin["kwota_kredytu"], fin["rata_wkladu"]
+
+	return {
+		"deal_value": deal_value,
+		"netto_suma": netto_suma,
+		"dotacje": dotacje_grup,
+		"dotacja_laczna": dotacja_laczna,
+		"wklad_wlasny": wklad,
+		"okres_lat": okres,
+		"wplata_gotowka": wplata,
+		"kwota_kredytu": kwota_kredytu,
+		"rata_wkladu": rata_wkladu,
+		"podstawa_trify": trify[0] if trify else None,
+		"rata_trify": trify[1] if trify else None,
+	}
+
+
+# ---------------------------------------------------------------------------
 # 6. Propozycja konfiguracji PV
 # ---------------------------------------------------------------------------
 
@@ -582,6 +717,10 @@ def _opis_wiersza(w: dict[str, Any]) -> str:
 	return opis
 
 
+def _opis_wiersza_z_kwotami(w: dict[str, Any]) -> str:
+	return f"{_opis_wiersza(w)} (netto {formatuj_kwote(w.get('netto'))}, brutto {formatuj_kwote(w.get('brutto'))})"
+
+
 def _opis_zmiany(stary: dict[str, Any], nowy: dict[str, Any], pola: tuple[str, ...]) -> str:
 	etykieta = _tekst(stary.get("typ")) or "Pozycja"
 	nazwa = _tekst(stary.get("nazwa"))
@@ -613,21 +752,26 @@ def tekst_sladu_zestawu(
 	status_umowy: str | None,
 	etykiety: dict | None = None,
 	snapshot: str | None = None,
+	cp: dict | None = None,
 ) -> str:
 	"""Jedna linia sladu `[volteo:zestaw]`; czlony puste sa pomijane.
 
 	`cena_przed`/`cena_po`: slowniki z kluczami `netto`, `brutto`, `dotacja`,
 	`cena_po_uldze` (kwoty). `konfiguracja_zmiany`: lista nazw zmienionych pol
 	konfiguracji, `etykiety`: fieldname -> polska etykieta (z `frappe.get_meta`).
+	`cp` (Czyste Powietrze): slownik `przed`/`po` z kluczami `deal_value`,
+	`dotacja_laczna`, `wklad_wlasny`; wlacza kwoty wierszy oraz czlony "prowizje CP bez
+	zmian" i "wejscie kalkulatora nie odpowiada juz zestawowi".
 	"""
 	etykiety = etykiety or {}
 	powod = _tekst(powod)
 	naglowek = f"Edycja zestawu (powód: {powod})." if powod else "Edycja zestawu."
 	czlony = [naglowek]
+	opis = _opis_wiersza_z_kwotami if cp else _opis_wiersza
 	if roznice.dodane:
-		czlony.append("Dodano: " + "; ".join(_opis_wiersza(w) for w in roznice.dodane) + ".")
+		czlony.append("Dodano: " + "; ".join(opis(w) for w in roznice.dodane) + ".")
 	if roznice.usuniete:
-		czlony.append("Usunięto: " + "; ".join(_opis_wiersza(w) for w in roznice.usuniete) + ".")
+		czlony.append("Usunięto: " + "; ".join(opis(w) for w in roznice.usuniete) + ".")
 	if roznice.zmienione:
 		czlony.append("Zmieniono: " + "; ".join(_opis_zmiany(s, n, p) for s, n, p in roznice.zmienione) + ".")
 	if cena_przed and cena_po:
@@ -640,6 +784,21 @@ def tekst_sladu_zestawu(
 				elementy.append(f"{etykieta} {formatuj_kwote(a)} -> {formatuj_kwote(b)}")
 		if elementy and zmiana:
 			czlony.append("Cena: " + ", ".join(elementy) + " zł.")
+	if cp:
+		przed, po = cp.get("przed") or {}, cp.get("po") or {}
+		elementy = []
+		for klucz, etykieta in (
+			("deal_value", "wartość szansy"),
+			("dotacja_laczna", "dotacja łączna"),
+			("wklad_wlasny", "wkład własny"),
+		):
+			if klucz in przed and klucz in po:
+				a, b = _grosze(kwota(przed[klucz])), _grosze(kwota(po[klucz]))
+				elementy.append(f"{etykieta} {formatuj_kwote(a)} -> {formatuj_kwote(b)}")
+		if elementy:
+			czlony.append("Cena CP: " + ", ".join(elementy) + " zł.")
+		czlony.append("Prowizje CP bez zmian.")
+		czlony.append("Wejście kalkulatora (custom_cp_wejscie_json) nie odpowiada już zestawowi.")
 	pola_konf = [etykiety.get(p, p) for p in (konfiguracja_zmiany or ())]
 	if pola_konf:
 		czlony.append("Konfiguracja: " + ", ".join(pola_konf) + ".")
