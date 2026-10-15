@@ -4,7 +4,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from crm.volteo_umowa_pdf import POLA_KOMPONENTU, zbuduj_kontekst
+from crm.volteo_umowa_pdf import PODPIS_WYKONAWCA, POLA_KOMPONENTU, zbuduj_kontekst
 
 _PLACEHOLDER_PRODUCENT = "PLACEHOLDER — do uzupelnienia (dokumentacja producenta modulu PV)"
 _PLACEHOLDER_MODEL = "PLACEHOLDER — do uzupelnienia (model modulu PV)"
@@ -1223,7 +1223,7 @@ class TestPelnyPrzypadekZSondy(unittest.TestCase):
 
 class TestPodpisy(unittest.TestCase):
 	"""ZADANIE 2: `podpis_zamawiajacy` (imię i nazwisko klienta WIELKIMI
-	literami) i `podpis_wykonawca` (stały tekst "PROENERGY") — oznaczenia
+	literami) i `podpis_wykonawca` (stała `PODPIS_WYKONAWCA`), oznaczenia
 	miejsc podpisu wypełnione przez nas, bo Autenti dokleja jeden zbiorczy
 	podpis elektroniczny na końcu całego pliku."""
 
@@ -1237,14 +1237,14 @@ class TestPodpisy(unittest.TestCase):
 		kontekst = zbuduj_kontekst(_umowa(), _deal(), kontakt, _zestaw(), _komponenty(), _stale(), _DZIS)
 		self.assertEqual(kontekst["podpis_zamawiajacy"], "")
 
-	def test_c_podpis_wykonawca_zawsze_proenergy(self: "TestPodpisy") -> None:
+	def test_c_podpis_wykonawca_zawsze_stala(self: "TestPodpisy") -> None:
 		for kontakt_nadpisania in ({}, {"first_name": "", "last_name": ""}):
 			with self.subTest(kontakt_nadpisania=kontakt_nadpisania):
 				kontakt = _kontakt(**kontakt_nadpisania)
 				kontekst = zbuduj_kontekst(
 					_umowa(), _deal(), kontakt, _zestaw(), _komponenty(), _stale(), _DZIS
 				)
-				self.assertEqual(kontekst["podpis_wykonawca"], "PROENERGY")
+				self.assertEqual(kontekst["podpis_wykonawca"], PODPIS_WYKONAWCA)
 
 
 class TestDrugiZamawiajacy(unittest.TestCase):

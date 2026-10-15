@@ -723,7 +723,10 @@ class TestRegresjaBajtowaPodwojnych(unittest.TestCase):
 		self.addCleanup(patch.stop)
 
 	def test_bajty_i_strumienie_tresci_bez_zmian(self: "TestRegresjaBajtowaPodwojnych") -> None:
-		kontekst = _pelny_kontekst_podwojny()
+		# Sumy zmierzone, gdy podpis Wykonawcy był stałym tekstem "PROENERGY"
+		# (ops#278 zmienił go na `PODPIS_WYKONAWCA`); przypinamy tu stary tekst,
+		# żeby test nadal dowodził niezmienności samych wzorów PODWÓJNYCH.
+		kontekst = {**_pelny_kontekst_podwojny(), "podpis_wykonawca": "PROENERGY"}
 		for kod, (oczekiwane_bajty, oczekiwane_tresc) in _REGRESJA_PODWOJNE.items():
 			with self.subTest(kod=kod):
 				wynik = zloz_umowe(kontekst, sciezka_wbudowanego_szablonu(kod).read_bytes(), kod)

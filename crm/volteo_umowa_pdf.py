@@ -36,6 +36,9 @@ from crm.volteo_umowa import miejsce_i_pokrycie, ppoz_wymagane
 # ruszać w tym zadaniu.
 _sparsuj_decimal = _sparsuj_decimal_wspolny
 
+PODPIS_WYKONAWCA: str = "Leszek Furmann - Prezes Zarządu"
+"""Oznaczenie strony Wykonawcy w blokach podpisu (osoba reprezentująca spółkę). To nie jest podpis prawny, ten dokleja Autenti jako zbiorcze poświadczenie na końcu pliku; wcześniej stały tekst "PROENERGY" (uwaga 76 z klik-testu 2026-10-15, ops#278)."""
+
 POLA_KOMPONENTU: tuple[str, ...] = (
 	"kategoria",
 	"nazwa",
@@ -414,9 +417,10 @@ def zbuduj_kontekst(
 		# końcu pliku (jeden podpis elektroniczny obejmujący całość), więc
 		# miejsca na podpis klienta w środku dokumentu wypełniamy za niego
 		# drukowanymi literami; to oznaczenie strony, nie podpis prawny.
+		# Wykonawca: osoba reprezentująca spółkę (`PODPIS_WYKONAWCA`).
 		# `.upper()` poprawnie zamienia polskie znaki (np. "ł"→"Ł").
 		"podpis_zamawiajacy": klient_imie_nazwisko.upper(),
-		"podpis_wykonawca": "PROENERGY",
+		"podpis_wykonawca": PODPIS_WYKONAWCA,
 		# Drugi Zamawiający (ops#167, umowa PODWÓJNA): te sześć kluczy trafiają
 		# WYŁĄCZNIE do szablonów `PV_2`/`PVME_2`/`ME_2` (mapy jednoosobowe nie
 		# mają dla nich żadnej pozycji), ale są zwracane zawsze, puste gdy
