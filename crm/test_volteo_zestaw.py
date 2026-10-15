@@ -225,15 +225,9 @@ class TestWalidujWiersze(unittest.TestCase):
 		w = [wiersz(typ="Falownik", nazwa="A", ilosc=1), wiersz(typ="Falownik", nazwa="B", ilosc=1)]
 		self.assertEqual(z.waliduj_wiersze(w), [z.MSG_DWA_FALOWNIKI])
 
-	def test_myslnik_em(self):
-		b = z.waliduj_wiersze([wiersz(nazwa="Deye " + chr(0x2014) + " 5K")])
-		self.assertEqual(len(b), 1)
-		self.assertIn("nazwa", b[0])
-
-	def test_myslnik_en_w_typie(self):
-		b = z.waliduj_wiersze([wiersz(typ="Pa" + chr(0x2013) + "nel")])
-		self.assertEqual(len(b), 1)
-		self.assertIn("typ", b[0])
+	def test_myslnik_en_w_nazwie_z_katalogu_przechodzi(self):
+		nazwa = "Elewacja " + chr(0x2013) + " styropian + tynk"
+		self.assertEqual(z.waliduj_wiersze([wiersz(nazwa=nazwa)]), [])
 
 	def test_zwykly_myslnik_ok(self):
 		self.assertEqual(z.waliduj_wiersze([wiersz(nazwa="Dach skośny - blacha")]), [])
@@ -989,6 +983,12 @@ class TestSladCP(unittest.TestCase):
 		t = z.tekst_sladu_zestawu(self.roznice(), None, None, [], None, None)
 		self.assertNotIn("Prowizje CP", t)
 		self.assertNotIn("(netto", t)
+
+	def test_nazwa_z_katalogu_z_pauza_w_slad(self):
+		nazwa = "Dach " + chr(0x2013) + " piana PUR"
+		r = z.Roznice(dodane=(wiersz("Termomodernizacja", nazwa, "4", "m2"),))
+		t = z.tekst_sladu_zestawu(r, None, None, [], None, None)
+		self.assertIn(nazwa, t)
 
 	def test_znacznik_i_brak_myslnikow(self):
 		t = z.tekst_sladu_zestawu(self.roznice(), None, None, [], "x", None, cp=self.CP)

@@ -111,9 +111,6 @@ MSG_INFO_KONFIGURACJI_CP = (
 )
 MSG_INFO_KONFIGURACJI = "Pola urządzenia edytuj w panelu bocznym."
 
-_DASHE = (chr(0x2014), chr(0x2013))
-
-
 # ---------------------------------------------------------------------------
 # Pomocnicze: formatowanie
 # ---------------------------------------------------------------------------
@@ -565,10 +562,6 @@ def _sprawdz_konfiguracje(konfiguracja: Any) -> dict[str, Any]:
 			wynik[pole] = flt(liczba)
 		else:
 			tekst = _tekst(wartosc)
-			if any(d in tekst for d in _DASHE):
-				frappe.throw(
-					_("Pole konfiguracji {0} nie może zawierać myślnika długiego ani półpauzy.").format(pole)
-				)
 			if len(tekst) > MAX_DATA:
 				frappe.throw(_("Pole konfiguracji {0} jest za długie.").format(pole))
 			wynik[pole] = tekst
