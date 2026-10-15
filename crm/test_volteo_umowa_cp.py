@@ -19,7 +19,7 @@ from crm.volteo_umowa_cp import (
 	kwoty_wariantu_cp,
 	warianty_wynagrodzenia_cp,
 )
-from crm.volteo_umowa_pdf_cp import klient_do_wyswietlenia, zbuduj_kontekst_cp
+from crm.volteo_umowa_pdf_cp import PODPIS_WYKONAWCA, klient_do_wyswietlenia, zbuduj_kontekst_cp
 
 _DZIS = date(2026, 9, 29)
 
@@ -364,13 +364,13 @@ class TestKontekstPodpisy(unittest.TestCase):
 		kontekst = zbuduj_kontekst_cp(_umowa(), _deal(), _kontakt(), _stale(), _DZIS)
 		self.assertEqual(kontekst["podpis_zamawiajacy"], "ANNA KOWALSKA")
 
-	def test_b_podpis_wykonawca_stala_proenergy(self: "TestKontekstPodpisy") -> None:
+	def test_b_podpis_wykonawca_stala_prezes(self: "TestKontekstPodpisy") -> None:
 		kontekst = zbuduj_kontekst_cp(_umowa(), _deal(), _kontakt(), _stale(), _DZIS)
-		self.assertEqual(kontekst["podpis_wykonawca"], "PROENERGY")
+		self.assertEqual(kontekst["podpis_wykonawca"], PODPIS_WYKONAWCA)
 
 	def test_c_podpis_wykonawca_niezalezny_od_kontaktu(self: "TestKontekstPodpisy") -> None:
 		kontekst = zbuduj_kontekst_cp(_umowa(), _deal(), {}, _stale(), _DZIS)
-		self.assertEqual(kontekst["podpis_wykonawca"], "PROENERGY")
+		self.assertEqual(kontekst["podpis_wykonawca"], PODPIS_WYKONAWCA)
 
 
 class TestKontekstDataIPodpis(unittest.TestCase):

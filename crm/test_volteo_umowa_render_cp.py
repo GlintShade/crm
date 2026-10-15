@@ -168,7 +168,7 @@ class TestZlozUmoweCpPelnyPipeline(unittest.TestCase):
 		# `zbuduj_kontekst_cp({}, {}, {}, {}, dzis)` zwraca same puste
 		# stringi/`False` — JEDYNE wartości, które mimo to się drukują, to
 		# `data_zawarcia` (liczona zawsze z parametru `dzis`) na str. 1
-		# (indeks 0) oraz `podpis_wykonawca` (stała "PROENERGY", niezależna od
+		# (indeks 0) oraz `podpis_wykonawca` (stała `PODPIS_WYKONAWCA`, niezależna od
 		# rekordu) na str. 4 (indeks 3). Strony 2, 3, 5, 6 (indeksy 1, 2, 4, 5)
 		# nie mają więc żadnej zmiany wobec oryginału — na str. 5 (indeks 4)
 		# `podpis_zamawiajacy` wypada pusty (klient_imie_nazwisko pusty), a na
@@ -200,7 +200,7 @@ class TestZlozUmoweCpPelnyPipeline(unittest.TestCase):
 		self.assertNotEqual(
 			tekst_oryginalu[3], tekst_strona_4, "Strona 4: podpis_wykonawca powinien się narysować"
 		)
-		self.assertIn("PROENERGY", tekst_strona_4)
+		self.assertIn("Leszek Furmann", tekst_strona_4)
 
 		tekst_strona_6 = czytnik_wyniku.pages[5].extract_text()
 		self.assertNotEqual(

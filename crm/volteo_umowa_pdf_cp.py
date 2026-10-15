@@ -26,7 +26,7 @@ from datetime import date
 from typing import Any
 
 from crm.volteo_umowa_cp import kwoty_wariantu_cp
-from crm.volteo_umowa_pdf import _adres, _data_pl, _kwota, _polacz, _stan_bool, _tekst
+from crm.volteo_umowa_pdf import PODPIS_WYKONAWCA, _adres, _data_pl, _kwota, _polacz, _stan_bool, _tekst
 
 
 def klient_do_wyswietlenia(kontakt: dict[str, Any]) -> dict[str, str]:
@@ -75,8 +75,8 @@ def zbuduj_kontekst_cp(
 	CELOWO bez prowizji — zob. `crm.volteo_umowa_cp`, akapit „TAJEMNICA
 	PROWIZJI"). `dzis` — data wygenerowania dokumentu.
 
-	Jedyna wartość podpisu Wykonawcy (`podpis_wykonawca`) jest stałym
-	literałem `"PROENERGY"`, tak samo jak w `crm.volteo_umowa_pdf.zbuduj_kontekst`.
+	Jedyna wartość podpisu Wykonawcy (`podpis_wykonawca`) jest stałą
+	`PODPIS_WYKONAWCA` ("Leszek Furmann - Prezes Zarządu"), tak samo jak w `crm.volteo_umowa_pdf.zbuduj_kontekst`.
 	Nie mutuje żadnego argumentu."""
 	klient = klient_do_wyswietlenia(kontakt)
 	klient_imie_nazwisko = klient["imie_nazwisko"]
@@ -97,7 +97,7 @@ def zbuduj_kontekst_cp(
 		"zgoda_telefon": _stan_bool(umowa.get("zgoda_kontakt_telefoniczny")) is True,
 		"zgoda_promocja": _stan_bool(umowa.get("zgoda_dzialania_promocyjne")) is True,
 		"podpis_zamawiajacy": klient_imie_nazwisko.upper(),
-		"podpis_wykonawca": "PROENERGY",
+		"podpis_wykonawca": PODPIS_WYKONAWCA,
 		"data_i_podpis_zamawiajacy": ", ".join(
 			c for c in (_data_pl(dzis), klient_imie_nazwisko.upper()) if c
 		),
