@@ -104,6 +104,7 @@ class CRMDeal(Document):
 		self.guard_zestaw_i_ceny()
 		self.validate_status()
 		self.set_etap_nr()
+		self.nalicz_rozliczenia_jesli_spelnione()
 		self.set_primary_contact()
 		self.set_primary_email_mobile_no()
 		if not self.is_new() and self.has_value_changed("deal_owner") and self.deal_owner:
@@ -168,6 +169,13 @@ class CRMDeal(Document):
 		# na tej stronie (obraz przed skryptem schematu).
 		if self.meta.has_field("custom_etap_nr"):
 			self.custom_etap_nr = etap_nr(self.get("custom_rodzaj_umowy"), self.status)
+
+	def nalicz_rozliczenia_jesli_spelnione(self):
+		# Rozliczenia prowizji (ops#280): punkt rozszerzenia automatycznego naliczania
+		# odbiorców. Dziś no-op (warunek zawsze False); nigdy nie blokuje zapisu szansy.
+		from crm.rozliczenia import nalicz_jesli_spelnione
+
+		nalicz_jesli_spelnione(self)
 
 	def set_primary_contact(self, contact=None):
 		if not self.contacts:
