@@ -8,7 +8,7 @@
     <div class="w-52">
       <label class="mb-1 block text-xs text-ink-gray-5">{{ __('Okres wg') }}</label>
       <select
-        class="h-7 w-full rounded border border-outline-gray-2 bg-surface-base px-2 text-sm text-ink-gray-8"
+        class="h-8 w-full rounded border border-outline-gray-2 bg-surface-base px-2 py-0 text-sm leading-normal text-ink-gray-8"
         :value="modelValue.wg"
         @change="zmienWg($event.target.value)"
       >
@@ -20,7 +20,7 @@
       <label class="mb-1 block text-xs text-ink-gray-5">{{ __('Okres') }}</label>
       <button
         type="button"
-        class="flex h-7 min-w-44 items-center justify-between gap-2 rounded border border-outline-gray-2 bg-surface-base px-2 text-sm text-ink-gray-8 hover:bg-surface-gray-1"
+        class="flex h-8 min-w-44 items-center justify-between gap-2 rounded border border-outline-gray-2 bg-surface-base px-2 text-sm text-ink-gray-8 hover:bg-surface-gray-1"
         @click="otwarte = !otwarte"
       >
         <span>{{ etykietaPresetu }}</span>
@@ -64,14 +64,14 @@
     </div>
 
     <span
-      class="inline-flex h-7 items-center gap-1.5 rounded-full bg-surface-blue-2 px-3 text-sm text-ink-blue-3"
+      class="inline-flex h-8 items-center gap-1.5 rounded-full border border-outline-blue-2 bg-surface-blue-2 px-3 text-sm text-ink-blue-8"
       data-testid="okres-pigulka"
     >
       {{ etykietaAktywnego }}
       <button
         v-if="!jestDomyslny"
         type="button"
-        class="text-ink-blue-3 hover:text-ink-blue-4"
+        class="text-ink-blue-8 hover:text-ink-blue-9"
         :title="__('Przywróć domyślny okres')"
         @click="reset"
       >

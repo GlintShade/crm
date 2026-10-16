@@ -7,7 +7,7 @@
     <label v-if="label" class="mb-1 block text-xs text-ink-gray-5">{{ label }}</label>
     <button
       type="button"
-      class="flex h-7 w-full min-w-36 items-center justify-between gap-2 rounded border border-outline-gray-2 bg-surface-base px-2 text-sm text-ink-gray-8 hover:bg-surface-gray-1"
+      class="flex h-8 w-full min-w-36 items-center justify-between gap-2 rounded border border-outline-gray-2 bg-surface-base px-2 text-sm text-ink-gray-8 hover:bg-surface-gray-1"
       @click="otwarte = !otwarte"
     >
       <span class="truncate">{{ podsumowanie }}</span>
