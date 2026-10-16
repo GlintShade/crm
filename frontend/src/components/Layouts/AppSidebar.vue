@@ -165,6 +165,7 @@
 <script setup>
 import BrushCleaningIcon from '~icons/lucide/brush-cleaning'
 import LucideLayoutDashboard from '~icons/lucide/layout-dashboard'
+import LucideWallet from '~icons/lucide/wallet'
 import CRMLogo from '@/components/Icons/CRMLogo.vue'
 import InviteIcon from '@/components/Icons/InviteIcon.vue'
 import CommentIcon from '@/components/Icons/CommentIcon.vue'
@@ -252,6 +253,12 @@ const links = [
     label: 'Umowy',
     icon: DealsIcon,
     to: 'Deals',
+  },
+  {
+    label: 'Rozliczenia prowizji', // VOLTEO (ops#283): tylko admin i core admin
+    icon: LucideWallet,
+    to: 'RozliczeniaProwizji',
+    condition: () => usersStore().isVolteoAdmin(),
   },
   {
     label: __('Leads'),

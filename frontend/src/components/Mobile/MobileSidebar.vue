@@ -101,6 +101,7 @@ import {
   DialogOverlay,
 } from '@headlessui/vue'
 import LucideLayoutDashboard from '~icons/lucide/layout-dashboard'
+import LucideWallet from '~icons/lucide/wallet'
 import Section from '@/components/CollapsibleSection.vue'
 import PinIcon from '@/components/Icons/PinIcon.vue'
 import UserDropdown from '@/components/UserDropdown.vue'
@@ -118,6 +119,7 @@ import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
 import NotificationsIcon from '@/components/Icons/NotificationsIcon.vue'
 import SidebarLink from '@/components/SidebarLink.vue'
 import { viewsStore } from '@/stores/views'
+import { usersStore } from '@/stores/users'
 import { unreadNotificationsCount } from '@/stores/notifications'
 import { computed, h } from 'vue'
 import { mobileSidebarOpened as sidebarOpened } from '@/composables/settings'
@@ -145,6 +147,12 @@ const links = [
     label: 'Umowy',
     icon: DealsIcon,
     to: 'Deals',
+  },
+  {
+    label: 'Rozliczenia prowizji', // VOLTEO (ops#283): tylko admin i core admin
+    icon: LucideWallet,
+    to: 'RozliczeniaProwizji',
+    condition: () => usersStore().isVolteoAdmin(),
   },
   {
     label: __('Leads'),

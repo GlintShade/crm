@@ -10033,6 +10033,216 @@ msgstr "Rata Trify"
 msgid "Zestaw zmieniony ręcznie {0}. Prowizje pochodzą z pierwotnej konfiguracji."
 msgstr "Zestaw zmieniony ręcznie {0}. Prowizje pochodzą z pierwotnej konfiguracji."
 
+#: frontend/src/pages/RozliczeniaProwizji.vue
+msgid "Brak pozycji dla wybranych filtrów i okresu."
+msgstr "Brak pozycji dla wybranych filtrów i okresu."
+
+msgid "Data oznaczenia"
+msgstr "Data oznaczenia"
+
+msgid "Data podpisania umowy"
+msgstr "Data podpisania umowy"
+
+msgid "Data utworzenia szansy"
+msgstr "Data utworzenia szansy"
+
+msgid "Data wypłaty"
+msgstr "Data wypłaty"
+
+msgid "Do wypłaty"
+msgstr "Do wypłaty"
+
+msgid "Do wypłaty w okresie"
+msgstr "Do wypłaty w okresie"
+
+msgid "Dodaj wpis do Aktywności każdej szansy"
+msgstr "Dodaj wpis do Aktywności każdej szansy"
+
+msgid "Dzisiaj"
+msgstr "Dzisiaj"
+
+msgid "Eksport CSV"
+msgstr "Eksport CSV"
+
+msgid "Etap procesu"
+msgstr "Etap procesu"
+
+msgid "Handlowiec"
+msgstr "Handlowiec"
+
+msgid "Klient"
+msgstr "Klient"
+
+msgid "Kwota"
+msgstr "Kwota"
+
+msgid "Nie dotyczy"
+msgstr "Nie dotyczy"
+
+msgid "Nie udało się wczytać rejestru."
+msgstr "Nie udało się wczytać rejestru."
+
+msgid "Nie udało się wyeksportować."
+msgstr "Nie udało się wyeksportować."
+
+msgid "Nie udało się zapisać."
+msgstr "Nie udało się zapisać."
+
+msgid "Niepoprawny zakres"
+msgstr "Niepoprawny zakres"
+
+msgid "Np. przelew zbiorczy za wrzesień"
+msgstr "Np. przelew zbiorczy za wrzesień"
+
+msgid "Odbiorca"
+msgstr "Odbiorca"
+
+msgid "Odbiorców do rozliczenia"
+msgstr "Odbiorców do rozliczenia"
+
+msgid "Okres"
+msgstr "Okres"
+
+msgid "Okres wg"
+msgstr "Okres wg"
+
+msgid "Osoba"
+msgstr "Osoba"
+
+msgid "Ostatnie 30 dni"
+msgstr "Ostatnie 30 dni"
+
+msgid "Ostatnie 90 dni"
+msgstr "Ostatnie 90 dni"
+
+msgid "Otwiera zakładkę Rozliczenia tej szansy"
+msgstr "Otwiera zakładkę Rozliczenia tej szansy"
+
+msgid "Oznacz grupę jako wypłaconą"
+msgstr "Oznacz grupę jako wypłaconą"
+
+msgid "Oznacz jako wypłacone"
+msgstr "Oznacz jako wypłacone"
+
+msgid "Oznaczono jako wypłacone"
+msgstr "Oznaczono jako wypłacone"
+
+msgid "Partner"
+msgstr "Partner"
+
+msgid "Per osoba"
+msgstr "Per osoba"
+
+msgid "Per szansa"
+msgstr "Per szansa"
+
+msgid "Podaj datę wypłaty."
+msgstr "Podaj datę wypłaty."
+
+msgid "Podaj obie daty, początkowa nie może być późniejsza niż końcowa."
+msgstr "Podaj obie daty, początkowa nie może być późniejsza niż końcowa."
+
+msgid "Poprzedni kwartał"
+msgstr "Poprzedni kwartał"
+
+msgid "Poprzedni miesiąc"
+msgstr "Poprzedni miesiąc"
+
+msgid "Poprzedni tydzień"
+msgstr "Poprzedni tydzień"
+
+msgid "Przywróć domyślny okres"
+msgstr "Przywróć domyślny okres"
+
+msgid "Rodzaj"
+msgstr "Rodzaj"
+
+msgid "Rodzaj umowy"
+msgstr "Rodzaj umowy"
+
+msgid "Rola"
+msgstr "Rola"
+
+msgid "Rozliczenia prowizji"
+msgstr "Rozliczenia prowizji"
+
+msgid "Szans z otwartym rozliczeniem"
+msgstr "Szans z otwartym rozliczeniem"
+
+msgid "Szansa"
+msgstr "Szansa"
+
+msgid "Szukaj osoby"
+msgstr "Szukaj osoby"
+
+msgid "Szybki wybór"
+msgstr "Szybki wybór"
+
+msgid "Te same dane co w zakładce Rozliczenia każdej szansy. Oznaczenie tutaj jest od razu widoczne na szansie, i odwrotnie."
+msgstr "Te same dane co w zakładce Rozliczenia każdej szansy. Oznaczenie tutaj jest od razu widoczne na szansie, i odwrotnie."
+
+msgid "Ten kwartał"
+msgstr "Ten kwartał"
+
+msgid "Ten miesiąc"
+msgstr "Ten miesiąc"
+
+msgid "Ten rok"
+msgstr "Ten rok"
+
+msgid "Ten tydzień"
+msgstr "Ten tydzień"
+
+msgid "Tylko admin i core admin"
+msgstr "Tylko admin i core admin"
+
+msgid "Uwaga"
+msgstr "Uwaga"
+
+msgid "Wczytywanie…"
+msgstr "Wczytywanie…"
+
+msgid "Wstrzymane"
+msgstr "Wstrzymane"
+
+msgid "Wszystkie"
+msgstr "Wszystkie"
+
+msgid "Wyczyść"
+msgstr "Wyczyść"
+
+msgid "Wypłacone"
+msgstr "Wypłacone"
+
+msgid "Wypłacono w okresie"
+msgstr "Wypłacono w okresie"
+
+msgid "Własny zakres"
+msgstr "Własny zakres"
+
+msgid "Zastosuj"
+msgstr "Zastosuj"
+
+msgid "Zaznaczono"
+msgstr "Zaznaczono"
+
+msgid "pozycje"
+msgstr "pozycje"
+
+msgid "pozycji"
+msgstr "pozycji"
+
+msgid "pozycję"
+msgstr "pozycję"
+
+msgid "szansach"
+msgstr "szansach"
+
+msgid "szansie"
+msgstr "szansie"
+
+msgid "w"
+msgstr "w"
 #: frontend/src/components/deal/RozliczeniaTab.vue
 msgid "Akcje"
 msgstr "Akcje"
@@ -10066,14 +10276,6 @@ msgid "Częściowo rozliczone"
 msgstr "Częściowo rozliczone"
 
 #: frontend/src/components/deal/RozliczeniaTab.vue
-msgid "Data wypłaty"
-msgstr "Data wypłaty"
-
-#: frontend/src/components/deal/RozliczeniaTab.vue
-msgid "Do wypłaty"
-msgstr "Do wypłaty"
-
-#: frontend/src/components/deal/RozliczeniaTab.vue
 msgid "Dodaj odbiorcę"
 msgstr "Dodaj odbiorcę"
 
@@ -10086,14 +10288,6 @@ msgid "Dodano odbiorcę."
 msgstr "Dodano odbiorcę."
 
 #: frontend/src/components/deal/RozliczeniaTab.vue
-msgid "Handlowiec"
-msgstr "Handlowiec"
-
-#: frontend/src/components/deal/RozliczeniaTab.vue
-msgid "Kwota"
-msgstr "Kwota"
-
-#: frontend/src/components/deal/RozliczeniaTab.vue
 msgid "Nalicz ze snapshotu"
 msgstr "Nalicz ze snapshotu"
 
@@ -10102,20 +10296,12 @@ msgid "Naliczono odbiorców."
 msgstr "Naliczono odbiorców."
 
 #: frontend/src/components/deal/RozliczeniaTab.vue
-msgid "Nie dotyczy"
-msgstr "Nie dotyczy"
-
-#: frontend/src/components/deal/RozliczeniaTab.vue
 msgid "Nie udało się wysłać pliku."
 msgstr "Nie udało się wysłać pliku."
 
 #: frontend/src/components/deal/RozliczeniaTab.vue
 msgid "Nierozliczone"
 msgstr "Nierozliczone"
-
-#: frontend/src/components/deal/RozliczeniaTab.vue
-msgid "Odbiorca"
-msgstr "Odbiorca"
 
 #: frontend/src/components/deal/RozliczeniaTab.vue
 msgid "Otwórz w rejestrze prowizji"
@@ -10138,10 +10324,6 @@ msgid "Oznaczył"
 msgstr "Oznaczył"
 
 #: frontend/src/components/deal/RozliczeniaTab.vue
-msgid "Partner"
-msgstr "Partner"
-
-#: frontend/src/components/deal/RozliczeniaTab.vue
 msgid "Plik"
 msgstr "Plik"
 
@@ -10162,20 +10344,12 @@ msgid "Prowizje łącznie"
 msgstr "Prowizje łącznie"
 
 #: frontend/src/components/deal/RozliczeniaTab.vue
-msgid "Rola"
-msgstr "Rola"
-
-#: frontend/src/components/deal/RozliczeniaTab.vue
 msgid "Rozliczenie prowizji"
 msgstr "Rozliczenie prowizji"
 
 #: frontend/src/components/deal/RozliczeniaTab.vue
 msgid "Rozliczone"
 msgstr "Rozliczone"
-
-#: frontend/src/components/deal/RozliczeniaTab.vue
-msgid "Tylko admin i core admin"
-msgstr "Tylko admin i core admin"
 
 #: frontend/src/components/deal/RozliczeniaTab.vue
 msgid "Tylko admin i core admin: zakładka jest niewidoczna dla handlowca i backoffice. Rozliczenie nie zmienia etapu procesu."
@@ -10190,10 +10364,6 @@ msgid "Usunąć odbiorcę?"
 msgstr "Usunąć odbiorcę?"
 
 #: frontend/src/components/deal/RozliczeniaTab.vue
-msgid "Uwaga"
-msgstr "Uwaga"
-
-#: frontend/src/components/deal/RozliczeniaTab.vue
 msgid "Wiersz wróci do statusu Do wypłaty:"
 msgstr "Wiersz wróci do statusu Do wypłaty:"
 
@@ -10204,14 +10374,6 @@ msgstr "Wiersz zostanie usunięty:"
 #: frontend/src/components/deal/RozliczeniaTab.vue
 msgid "Wstrzymaj"
 msgstr "Wstrzymaj"
-
-#: frontend/src/components/deal/RozliczeniaTab.vue
-msgid "Wstrzymane"
-msgstr "Wstrzymane"
-
-#: frontend/src/components/deal/RozliczeniaTab.vue
-msgid "Wypłacone"
-msgstr "Wypłacone"
 
 #: frontend/src/components/deal/RozliczeniaTab.vue
 msgid "Wypłacono"
