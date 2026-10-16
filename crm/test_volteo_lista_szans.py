@@ -259,7 +259,7 @@ class TestAllowlistySzans(unittest.TestCase):
 		self.assertEqual(len(fieldnames), len(set(fieldnames)))
 
 	def test_e_sort_fields_deal_liczba_i_kolejnosc(self: "TestAllowlistySzans") -> None:
-		self.assertEqual(len(SORT_FIELDS_DEAL), 8)
+		self.assertEqual(len(SORT_FIELDS_DEAL), 13)
 		self.assertEqual(
 			[fieldname for fieldname, _ in SORT_FIELDS_DEAL],
 			[
@@ -271,11 +271,16 @@ class TestAllowlistySzans(unittest.TestCase):
 				"deal_value",
 				"custom_rodzaj_umowy",
 				"custom_install_postal_code",
+				"custom_rozliczenie_status",
+				"custom_rozliczenie_ostatnia_wyplata",
+				"custom_rozliczenie_do_wyplaty",
+				"custom_rozliczenie_wyplacono",
+				"custom_rozliczenie_licznik",
 			],
 		)
 
 	def test_f_filter_fields_deal_liczba_i_kolejnosc(self: "TestAllowlistySzans") -> None:
-		self.assertEqual(len(FILTER_FIELDS_DEAL), 14)
+		self.assertEqual(len(FILTER_FIELDS_DEAL), 20)
 		self.assertEqual(
 			[fieldname for fieldname, _ in FILTER_FIELDS_DEAL],
 			[
@@ -293,6 +298,12 @@ class TestAllowlistySzans(unittest.TestCase):
 				"creation",
 				"closed_date",
 				"_assign",
+				"custom_rozliczenie_status",
+				"custom_rozliczenie_ostatnia_wyplata",
+				"custom_rozliczenie_do_wyplaty",
+				"custom_rozliczenie_wyplacono",
+				"custom_rozliczenie_licznik",
+				"custom_rozliczenie_odbiorcy",
 			],
 		)
 
@@ -311,6 +322,30 @@ class TestAllowlistySzans(unittest.TestCase):
 		for fieldname in ("modified", "creation", "_assign"):
 			self.assertIn(fieldname, STANDARDOWE_POLA_DOC_PY)
 			self.assertIn(fieldname, [f for f, _ in FILTER_FIELDS_DEAL])
+
+	def test_h2_pola_rozliczenia_w_allowlistach_i_etykiety_bez_myslnikow(
+		self: "TestAllowlistySzans",
+	) -> None:
+		pola = (
+			"custom_rozliczenie_status",
+			"custom_rozliczenie_ostatnia_wyplata",
+			"custom_rozliczenie_do_wyplaty",
+			"custom_rozliczenie_wyplacono",
+			"custom_rozliczenie_licznik",
+		)
+		sort_by_field = dict(SORT_FIELDS_DEAL)
+		filter_by_field = dict(FILTER_FIELDS_DEAL)
+		for pole in pola:
+			self.assertIn(pole, sort_by_field)
+			self.assertIn(pole, filter_by_field)
+		self.assertIn("custom_rozliczenie_odbiorcy", filter_by_field)
+		self.assertNotIn("custom_rozliczenie_odbiorcy", sort_by_field)
+		for etykieta in list(sort_by_field.values()) + list(filter_by_field.values()):
+			if etykieta:
+				self.assertNotIn("\u2013", etykieta)
+				self.assertNotIn("\u2014", etykieta)
+		self.assertEqual(filter_by_field["custom_rozliczenie_status"], "Rozliczenie")
+		self.assertEqual(filter_by_field["custom_rozliczenie_odbiorcy"], "Rozliczenie: odbiorcy")
 
 	def test_i_etykiety_nadpisane_tam_gdzie_oczekiwane(self: "TestAllowlistySzans") -> None:
 		sort_by_field = dict(SORT_FIELDS_DEAL)

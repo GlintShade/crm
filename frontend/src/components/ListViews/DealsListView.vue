@@ -119,6 +119,57 @@
             {{ item?.kod }}
           </div>
           <div
+            v-else-if="column.key === 'custom_rozliczenie_status'"
+            class="truncate text-base"
+            data-fit="custom_rozliczenie_status"
+          >
+            <Badge
+              v-if="item?.label"
+              variant="subtle"
+              class="w-fit"
+              :theme="item?.theme"
+              size="md"
+              :label="item.label"
+              @click="
+                (event) =>
+                  emit('applyFilter', {
+                    event,
+                    idx,
+                    column,
+                    item: { ...item, label: item.raw },
+                    firstColumn: columns[0],
+                  })
+              "
+            />
+            <span v-else class="text-ink-gray-4">-</span>
+          </div>
+          <div
+            v-else-if="column.key === 'custom_rozliczenie_odbiorcy'"
+            class="flex items-center gap-1.5"
+            :title="item?.opis"
+            data-fit="custom_rozliczenie_odbiorcy"
+          >
+            <template v-if="item?.opis">
+              <span
+                v-for="kropka in kropkiOdbiorcow(item?.raw)"
+                :key="kropka.rola"
+                class="flex items-center gap-0.5 text-xs text-ink-gray-5"
+              >
+                {{ kropka.rola }}
+                <span
+                  v-if="kropka.klasa"
+                  class="inline-block h-2.5 w-2.5 rounded-full border"
+                  :class="kropka.klasa"
+                />
+                <span v-else class="text-ink-gray-4">-</span>
+              </span>
+              <span v-if="item?.licznik" class="text-xs text-ink-gray-6">
+                {{ item.licznik }}
+              </span>
+            </template>
+            <span v-else class="text-ink-gray-4">-</span>
+          </div>
+          <div
             v-else-if="column.key === 'status'"
             class="flex w-full flex-col gap-1 overflow-hidden py-1 leading-tight"
           >
@@ -335,6 +386,7 @@ import ListRows from '@/components/ListViews/ListRows.vue'
 import ListFooterVolteo from '@/components/ListFooterVolteo.vue'
 import { isTranslatable, formatDuration } from '@/utils'
 import { liczbaSegmentow, segmentyWypelnione } from '@/utils/pasekEtapu'
+import { kropkiOdbiorcow } from '@/utils/rozliczenia'
 import {
   Avatar,
   ListView,

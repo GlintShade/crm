@@ -270,6 +270,7 @@ import { callEnabled } from '@/composables/telephony'
 import { formatDate, timeAgo, website, formatTime } from '@/utils'
 import { timestampCell } from '@/composables/useTimelinePreferences'
 import { opisRodzajuUmowy } from '@/utils/rodzajUmowy'
+import { kolorStanu, opisTokenow } from '@/utils/rozliczenia'
 import { relatywnie, formatujTermin } from '@/utils/dataPolska'
 import { useOnboarding, useTelemetry } from 'frappe-ui/frappe'
 import { Tooltip, Avatar, Dropdown } from 'frappe-ui'
@@ -483,6 +484,23 @@ function parseRows(rows, columns = []) {
           kod: opis.kod,
           pelnaNazwa: opis.pelnaNazwa,
           raw: deal.custom_rodzaj_umowy || '',
+        }
+      } else if (row == 'custom_rozliczenie_status') {
+        // VOLTEO (b72, ops#284): kolumna "Rozliczenie" jako Badge; puste = "-".
+        // `label` trzyma sie dla Kanban (generyczny fallback karty).
+        _rows[row] = {
+          label: deal.custom_rozliczenie_status || '',
+          theme: kolorStanu(deal.custom_rozliczenie_status),
+          raw: deal.custom_rozliczenie_status || '',
+        }
+      } else if (row == 'custom_rozliczenie_odbiorcy') {
+        // VOLTEO (b72, ops#284): trzy kropki H M P + licznik, jesli
+        // `custom_rozliczenie_licznik` jest w wierszu (kolumna dodana).
+        _rows[row] = {
+          label: deal.custom_rozliczenie_odbiorcy || '',
+          raw: deal.custom_rozliczenie_odbiorcy || '',
+          licznik: deal.custom_rozliczenie_licznik || '',
+          opis: opisTokenow(deal.custom_rozliczenie_odbiorcy),
         }
       } else if (row == 'lead_name') {
         // VOLTEO (b65, runda 5): kolumna "Klient", z powrotem jedna linia,
