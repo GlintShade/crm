@@ -10032,3 +10032,211 @@ msgstr "Rata Trify"
 #: frontend/src/components/deal/ZestawEdycja.vue
 msgid "Zestaw zmieniony ręcznie {0}. Prowizje pochodzą z pierwotnej konfiguracji."
 msgstr "Zestaw zmieniony ręcznie {0}. Prowizje pochodzą z pierwotnej konfiguracji."
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Akcje"
+msgstr "Akcje"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Brak odbiorców. Kliknij Nalicz ze snapshotu albo Dodaj odbiorcę."
+msgstr "Brak odbiorców. Kliknij Nalicz ze snapshotu albo Dodaj odbiorcę."
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Brak wpisów."
+msgstr "Brak wpisów."
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Cofnij"
+msgstr "Cofnij"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Cofnij wypłatę"
+msgstr "Cofnij wypłatę"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Cofnięto wypłatę."
+msgstr "Cofnięto wypłatę."
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Cofnąć wypłatę?"
+msgstr "Cofnąć wypłatę?"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Częściowo rozliczone"
+msgstr "Częściowo rozliczone"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Data wypłaty"
+msgstr "Data wypłaty"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Do wypłaty"
+msgstr "Do wypłaty"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Dodaj odbiorcę"
+msgstr "Dodaj odbiorcę"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Dodaj potwierdzenie"
+msgstr "Dodaj potwierdzenie"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Dodano odbiorcę."
+msgstr "Dodano odbiorcę."
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Handlowiec"
+msgstr "Handlowiec"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Kwota"
+msgstr "Kwota"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Nalicz ze snapshotu"
+msgstr "Nalicz ze snapshotu"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Naliczono odbiorców."
+msgstr "Naliczono odbiorców."
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Nie dotyczy"
+msgstr "Nie dotyczy"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Nie udało się wysłać pliku."
+msgstr "Nie udało się wysłać pliku."
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Nierozliczone"
+msgstr "Nierozliczone"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Odbiorca"
+msgstr "Odbiorca"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Otwórz w rejestrze prowizji"
+msgstr "Otwórz w rejestrze prowizji"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Oznacz wszystkie jako wypłacone"
+msgstr "Oznacz wszystkie jako wypłacone"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Oznacz wypłacone"
+msgstr "Oznacz wypłacone"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Oznaczono jako wypłacone."
+msgstr "Oznaczono jako wypłacone."
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Oznaczył"
+msgstr "Oznaczył"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Partner"
+msgstr "Partner"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Plik"
+msgstr "Plik"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Potw."
+msgstr "Potw."
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Potwierdzenie (PDF, JPG) dodasz po zapisie, plusem w kolumnie Potw."
+msgstr "Potwierdzenie (PDF, JPG) dodasz po zapisie, plusem w kolumnie Potw."
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Pozostało"
+msgstr "Pozostało"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Prowizje łącznie"
+msgstr "Prowizje łącznie"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Rola"
+msgstr "Rola"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Rozliczenie prowizji"
+msgstr "Rozliczenie prowizji"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Rozliczone"
+msgstr "Rozliczone"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Tylko admin i core admin"
+msgstr "Tylko admin i core admin"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Tylko admin i core admin: zakładka jest niewidoczna dla handlowca i backoffice. Rozliczenie nie zmienia etapu procesu."
+msgstr "Tylko admin i core admin: zakładka jest niewidoczna dla handlowca i backoffice. Rozliczenie nie zmienia etapu procesu."
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Usunięto odbiorcę."
+msgstr "Usunięto odbiorcę."
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Usunąć odbiorcę?"
+msgstr "Usunąć odbiorcę?"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Uwaga"
+msgstr "Uwaga"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Wiersz wróci do statusu Do wypłaty:"
+msgstr "Wiersz wróci do statusu Do wypłaty:"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Wiersz zostanie usunięty:"
+msgstr "Wiersz zostanie usunięty:"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Wstrzymaj"
+msgstr "Wstrzymaj"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Wstrzymane"
+msgstr "Wstrzymane"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Wypłacone"
+msgstr "Wypłacone"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Wypłacono"
+msgstr "Wypłacono"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Wystąpił błąd, spróbuj ponownie"
+msgstr "Wystąpił błąd, spróbuj ponownie"
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Zmieniono kwotę."
+msgstr "Zmieniono kwotę."
+
+#: frontend/src/components/deal/RozliczeniaTab.vue
+msgid "Zmieniono status."
+msgstr "Zmieniono status."
+
+#: frontend/src/pages/Deal.vue
+msgid "Rozliczenie"
+msgstr "Rozliczenie"
+
+#: frontend/src/pages/Deal.vue
+msgid "Rozliczenia"
+msgstr "Rozliczenia"
+
+#: frontend/src/pages/Deal.vue
+msgid "Przejdź do zakładki Rozliczenia"
+msgstr "Przejdź do zakładki Rozliczenia"
