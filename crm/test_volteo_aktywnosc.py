@@ -10,6 +10,7 @@ from crm.volteo_aktywnosc import (
 	TEKST_ZASTEPCZY_CC_D2D,
 	ZNACZNIK_CC,
 	ZNACZNIK_KOSZTY,
+	ZNACZNIK_ROZLICZENIE,
 	ZNACZNIK_ZESTAW,
 	ZNACZNIKI_ADMIN,
 	bez_znacznika,
@@ -331,6 +332,13 @@ class TestCzyWidocznyIBezZnacznika(unittest.TestCase):
 	def test_g_znacznik_zestawu_w_znacznikach_admin(self: "TestCzyWidocznyIBezZnacznika") -> None:
 		self.assertIn(ZNACZNIK_ZESTAW, ZNACZNIKI_ADMIN)
 		self.assertEqual(ZNACZNIK_ZESTAW, "[volteo:zestaw]")
+
+	def test_g2_znacznik_rozliczenia_tylko_dla_admina(self: "TestCzyWidocznyIBezZnacznika") -> None:
+		self.assertIn(ZNACZNIK_ROZLICZENIE, ZNACZNIKI_ADMIN)
+		text = f"{ZNACZNIK_ROZLICZENIE} Jan oznaczył wypłatę dla Handlowca"
+		self.assertFalse(czy_widoczny(text, ["Volteo Backend"], ["System Manager", "Volteo Core Admin"]))
+		self.assertTrue(czy_widoczny(text, ["Volteo Core Admin"], ["System Manager", "Volteo Core Admin"]))
+		self.assertEqual(bez_znacznika(text), "Jan oznaczył wypłatę dla Handlowca")
 
 	def test_h_zestaw_ukryty_przed_rola_bez_admina(self: "TestCzyWidocznyIBezZnacznika") -> None:
 		text = f"{ZNACZNIK_ZESTAW} Edycja zestawu. Dodano: Magazyn energii x 1."

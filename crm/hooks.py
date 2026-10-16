@@ -284,6 +284,13 @@ doc_events = {
 	# "Volteo Audyt CP" wyżej. after_insert, nie on_update: Backend ma prawo
 	# write na ten doctype, więc edycja istniejącego wpisu nie może ponownie
 	# wysłać powiadomienia o wzmiance.
+	# Rozliczenia prowizji (ops#280) -- doctype tworzy ops (issue ops#279).
+	"Volteo Rozliczenie": {
+		"validate": ["crm.rozliczenia.waliduj_wiersz"],
+		"after_insert": ["crm.rozliczenia.po_zmianie_wiersza"],
+		"on_update": ["crm.rozliczenia.po_zmianie_wiersza"],
+		"on_trash": ["crm.rozliczenia.po_zmianie_wiersza"],
+	},
 	"Volteo Trify Update": {
 		"validate": ["crm.api.trify.validate"],
 		"after_insert": ["crm.api.trify.after_insert"],
