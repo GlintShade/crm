@@ -52,6 +52,13 @@ const routes = [
     component: () => import('@/pages/KalkulatorCzystePowietrze.vue'),
   },
   {
+    // VOLTEO (ops#283): rejestr rozliczen prowizji, tylko admin i core admin
+    // (straznik w router.beforeEach; prawdziwe uprawnienia egzekwuje serwer).
+    path: '/rozliczenia-prowizji',
+    name: 'RozliczeniaProwizji',
+    component: () => import('@/pages/RozliczeniaProwizji.vue'),
+  },
+  {
     path: '/dokumenty-oze',
     name: 'DokumentyOze',
     component: () => import('@/pages/DokumentyOze.vue'),
@@ -286,6 +293,12 @@ router.beforeEach(async (to, from, next) => {
   }
   if (isLoggedIn && !window.volteo_wymaga_oswiadczenia && to.name === 'Oswiadczenie') {
     return next({ name: 'Home' })
+  }
+
+  // VOLTEO (ops#283): rejestr rozliczen prowizji tylko dla isVolteoAdmin();
+  // backoffice (isBackend) i handlowiec trafiaja na liste szans.
+  if (isLoggedIn && to.name === 'RozliczeniaProwizji' && !usersStore().isVolteoAdmin()) {
+    return next({ name: 'Deals' })
   }
 
   // VOLTEO: per-user product-line access switch (issue #16). window.volteo_linia_oze /
