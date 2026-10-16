@@ -58,7 +58,7 @@
         <div class="w-40">
           <label class="mb-1 block text-xs text-ink-gray-5">{{ __('Rola') }}</label>
           <select
-            class="h-7 w-full rounded border border-outline-gray-2 bg-surface-base px-2 text-sm text-ink-gray-8"
+            class="h-8 w-full rounded border border-outline-gray-2 bg-surface-base px-2 py-0 text-sm leading-normal text-ink-gray-8"
             :value="filtry.rola"
             @change="filtry = { ...filtry, rola: $event.target.value }"
           >
@@ -81,7 +81,7 @@
         <OkresPicker v-model="wybor" />
       </div>
       <div v-if="filtry.szansa" class="mt-3 flex items-center gap-2 text-sm">
-        <span class="inline-flex items-center gap-1.5 rounded-full bg-surface-blue-2 px-3 py-1 text-ink-blue-3">
+        <span class="inline-flex items-center gap-1.5 rounded-full border border-outline-blue-2 bg-surface-blue-2 px-3 py-1 text-ink-blue-8">
           {{ __('Szansa') }}: {{ filtry.szansa }}
           <button type="button" @click="wyczyscSzanse"><FeatherIcon name="x" class="h-3.5 w-3.5" /></button>
         </span>
