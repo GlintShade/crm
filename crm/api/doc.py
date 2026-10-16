@@ -1652,11 +1652,17 @@ def get_fields(doctype: str, allow_all_fieldtypes: bool = False):
 	if allow_all_fieldtypes:
 		not_allowed_fieldtypes = []
 	fields = frappe.get_meta(doctype).fields
+	# ops#286: pola permlevel > 0 bez odczytu nie sa zwracane (nazwa i etykieta tez sa wyciekiem).
+	dozwolone = _pola_dozwolone(doctype)
 
 	_fields = []
 
 	for field in fields:
-		if field.fieldtype not in not_allowed_fieldtypes and field.fieldname:
+		if (
+			field.fieldtype not in not_allowed_fieldtypes
+			and field.fieldname
+			and field.fieldname in dozwolone
+		):
 			_fields.append(field)
 
 	return _fields
