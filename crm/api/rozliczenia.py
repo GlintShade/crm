@@ -24,6 +24,8 @@ Decyzje projektowe:
 * "Do wypłaty" w sumach grup i kafelkach to wyłącznie status `Do wypłaty`
   (wstrzymane liczy się osobno w `szans_z_otwartym`); `podsumowanie.pozostalo` szansy
   to natomiast `sumy()["do_wyplaty"]` z rdzenia (Do wypłaty + Wstrzymane).
+* Filtry rejestru i CSV: `osoba`, `rola`, `status`, `rodzaj_umowy` oraz `szansa`
+  (alias `deal`), czyli nazwa `CRM Deal`, ograniczająca wynik do jednej szansy.
 * Kwoty w sumach i podsumowaniu to stringi z 2 miejscami (`"2400.00"`), kwoty
   pojedynczych wierszy to liczby z bazy.
 """
@@ -377,6 +379,8 @@ def zmien_kwote(nazwa: str, kwota: str) -> dict[str, Any]:
 	_wymagaj_admina()
 	wartosc = _parsuj_kwote(kwota)
 	w = _wiersz(nazwa)
+	if w.status == STATUS_WYPLACONE:
+		frappe.throw(_("Kwoty wypłaconego wiersza nie można zmienić, najpierw cofnij wypłatę."))
 	stara = w.kwota
 	w.kwota = wartosc
 	w.zrodlo_kwoty = "Ręcznie"
@@ -434,6 +438,9 @@ def _pobierz(filtry: dict | None, okres: dict | None) -> tuple[list[dict], list[
 	filtry = filtry or {}
 	zakres = _zakres(okres)
 	warunki: dict[str, Any] = {}
+	szansa = filtry.get("szansa") or filtry.get("deal")
+	if szansa:
+		warunki["deal"] = szansa
 	if filtry.get("osoba"):
 		warunki["odbiorca"] = filtry["osoba"]
 	role = _lista(filtry.get("rola"))

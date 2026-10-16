@@ -170,7 +170,7 @@
                     type="checkbox"
                     class="rounded border-outline-gray-3"
                     :checked="zaznaczone.has(w.nazwa)"
-                    :disabled="w.status === 'Wypłacone'"
+                    :disabled="!czyWybieralny(w)"
                     @change="przelaczWiersz(w.nazwa, $event.target.checked)"
                   />
                 </td>
@@ -399,7 +399,8 @@ const wszystkieWiersze = computed(() => new Map(grupy.value.flatMap((g) => g.wie
 const sumaZaznaczonych = computed(() =>
   [...zaznaczone.value].reduce((s, n) => s + Number(wszystkieWiersze.value.get(n)?.kwota || 0), 0),
 )
-const wierszeWybieralne = (g) => g.wiersze.filter((w) => w.status !== 'Wypłacone')
+const czyWybieralny = (w) => w.status !== 'Wypłacone' && w.status !== 'Nie dotyczy'
+const wierszeWybieralne = (g) => g.wiersze.filter(czyWybieralny)
 const wierszeDoWyplaty = (g) => g.wiersze.filter((w) => w.status === 'Do wypłaty')
 function grupaZaznaczona(g) {
   const w = wierszeWybieralne(g)
