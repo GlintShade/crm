@@ -77,6 +77,11 @@ SORT_FIELDS_DEAL: tuple[tuple[str, str | None], ...] = (
 	("deal_value", None),
 	("custom_rodzaj_umowy", None),
 	("custom_install_postal_code", None),
+	("custom_rozliczenie_status", "Rozliczenie"),
+	("custom_rozliczenie_ostatnia_wyplata", "Ostatnia wypłata"),
+	("custom_rozliczenie_do_wyplaty", "Do wypłaty (PLN)"),
+	("custom_rozliczenie_wyplacono", "Wypłacono (PLN)"),
+	("custom_rozliczenie_licznik", "Rozliczenie: licznik"),
 )
 
 FILTER_FIELDS_DEAL: tuple[tuple[str, str | None], ...] = (
@@ -94,6 +99,12 @@ FILTER_FIELDS_DEAL: tuple[tuple[str, str | None], ...] = (
 	("creation", "Data utworzenia"),
 	("closed_date", None),
 	("_assign", "Przypisano do"),
+	("custom_rozliczenie_status", "Rozliczenie"),
+	("custom_rozliczenie_ostatnia_wyplata", "Ostatnia wypłata"),
+	("custom_rozliczenie_do_wyplaty", "Do wypłaty (PLN)"),
+	("custom_rozliczenie_wyplacono", "Wypłacono (PLN)"),
+	("custom_rozliczenie_licznik", "Rozliczenie: licznik"),
+	("custom_rozliczenie_odbiorcy", "Rozliczenie: odbiorcy"),
 )
 
 # Allowlisty sortowania i filtrow listy leadow (ops#94), ten sam ksztalt i te
