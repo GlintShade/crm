@@ -44,6 +44,16 @@
           </Button>
         </template>
       </Dropdown>
+      <Button
+        v-if="isVolteoAdmin() && doc.custom_rozliczenie_status"
+        variant="subtle"
+        class="border-outline-amber-3 bg-surface-amber-2 text-ink-amber-8 hover:bg-surface-amber-2"
+        :label="__('Rozliczenie') + ' ' + (doc.custom_rozliczenie_licznik || '')"
+        :title="__('Przejdź do zakładki Rozliczenia')"
+        @click="otworzRozliczenia"
+      >
+        <template #prefix><FeatherIcon name="lock" class="h-4" /></template>
+      </Button>
     </template>
   </LayoutHeader>
   <div v-if="doc.name" class="flex h-full flex-col overflow-hidden">
@@ -73,6 +83,7 @@
         />
         <ZestawTab v-else-if="tab.name === 'Zestaw'" :deal-id="dealId" />
         <FakturyTab v-else-if="tab.name === 'Faktury'" :deal-id="dealId" />
+        <RozliczeniaTab v-else-if="tab.name === 'Rozliczenia'" :deal-id="dealId" />
         <MontazTabOze v-else-if="tab.name === 'Montaz' && czyOze(doc.custom_rodzaj_umowy)" :deal-id="dealId" />
         <AktualizacjeTab v-else-if="tab.name === 'Montaz'" :deal-id="dealId" :konfig="MONTAZ" />
         <AudytTab v-else-if="tab.name === 'Audyt'" :deal-id="dealId" :rodzaj="doc.custom_rodzaj_umowy || ''" />
@@ -347,6 +358,7 @@ import OsdIcon from '@/components/Icons/OsdIcon.vue'
 import DotacjaIcon from '@/components/Icons/DotacjaIcon.vue'
 import ZestawTab from '@/components/deal/ZestawTab.vue'
 import FakturyTab from '@/components/deal/FakturyTab.vue'
+import RozliczeniaTab from '@/components/deal/RozliczeniaTab.vue'
 import AktualizacjeTab from '@/components/deal/AktualizacjeTab.vue'
 import AudytTab from '@/components/deal/AudytTab.vue'
 import AudytCPTab from '@/components/deal/AudytCPTab.vue'
@@ -382,6 +394,7 @@ import { getView } from '@/utils/view'
 import { getSettings } from '@/stores/settings'
 import { globalStore } from '@/stores/global'
 import { statusesStore } from '@/stores/statuses'
+import { usersStore } from '@/stores/users'
 import { grupaForRodzaj, filterKnown } from '@/utils/dealPipeline'
 import { czyOze, zakladkiSzansy } from '@/utils/rodzajUmowy'
 import { statusButtonClass } from '@/utils/statusColors'
@@ -393,6 +406,7 @@ import { useBroadcast } from '@/composables/useBroadcast'
 import {
   createResource,
   Dropdown,
+  FeatherIcon,
   Avatar,
   Tabs,
   Breadcrumbs,
@@ -417,6 +431,7 @@ const { on } = useBroadcast()
 const { brand } = getSettings()
 const { $dialog, $socket, makeCall } = globalStore()
 const { statusOptions, getDealStatus, dealStatuses } = statusesStore()
+const { isVolteoAdmin } = usersStore()
 const { doctypeMeta } = getMeta('CRM Deal')
 
 const { updateOnboardingStep, isOnboardingStepsCompleted } =
@@ -717,6 +732,14 @@ const tabs = computed(() => {
     },
     { name: 'Faktury', label: __('Faktury'), icon: FakturyIcon },
     {
+      // Rozliczenia prowizji (ops#282): wyłącznie System Manager / Volteo Core
+      // Admin (isVolteoAdmin), NIGDY backoffice; serwer i tak odrzuca innych.
+      name: 'Rozliczenia',
+      label: __('Rozliczenia'),
+      icon: FakturyIcon,
+      condition: () => isVolteoAdmin(),
+    },
+    {
       // Feed "Notatki" (issue ops#201, uwaga 40): strumień łączący notatki
       // z każdej zakładki z komentarzami wątku Audytu - wszystkie siedem
       // rodzajów OZE, ten sam warunek co zakładka Kredyt powyżej.
@@ -733,6 +756,13 @@ const tabs = computed(() => {
 
 // VOLTEO: domyślna zakładka Zestaw (decyzja właściciela 2026-09-23).
 const { tabIndex } = useActiveTabManager(tabs, 'lastDealTab', 'zestaw')
+
+// Chip "Rozliczenie n/N" w nagłówku przełącza na zakładkę Rozliczenia (po nazwie,
+// tak jak useActiveTabManager, nie po sztywnym indeksie).
+function otworzRozliczenia() {
+  const i = tabs.value.findIndex((t) => t.name === 'Rozliczenia')
+  if (i >= 0) tabIndex.value = i
+}
 
 const sections = createResource({
   url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_sidepanel_sections',
