@@ -723,6 +723,78 @@ class TestBateriaKatalogDwanascieWierszy(unittest.TestCase):
 		self.assertEqual(kontekst["bateria_pojemnosc_jedn_kwh"], "10,6")
 
 
+class TestBateriaNowePostaciModeli(unittest.TestCase):
+	"""b73, ops#290: NxM, przecinek dziesietny, forma mieszana, brak nawiasu."""
+
+	@staticmethod
+	def _wynik(model: str, pojemnosc: Any, gwarancja: Any = 0) -> tuple[str, str]:
+		komponenty = [
+			{
+				"kategoria": "Magazyn energii",
+				"nazwa": "Solax",
+				"model": model,
+				"pojemnosc_kwh": Decimal(str(pojemnosc)),
+				"gwarancja_lat": gwarancja,
+			}
+		]
+		deal = _deal(custom_bateria=f"Solax {model}")
+		k = zbuduj_kontekst(_umowa(), deal, _kontakt(), _zestaw(), komponenty, _stale(), _DZIS)
+		return k["bateria_szt"], k["bateria_pojemnosc_jedn_kwh"]
+
+	def test_nxm_ulamkowe(self: "TestBateriaNowePostaciModeli") -> None:
+		self.assertEqual(self._wynik("10,6 kWh (2x5,3)", "10.6"), ("2", "5,3"))
+
+	def test_nxm_duze(self: "TestBateriaNowePostaciModeli") -> None:
+		self.assertEqual(self._wynik("96 kWh (6x16)", "96"), ("6", "16"))
+
+	def test_nxm_12(self: "TestBateriaNowePostaciModeli") -> None:
+		self.assertEqual(self._wynik("12 kWh (2x6)", "12"), ("2", "6"))
+
+	def test_solax_28_6(self: "TestBateriaNowePostaciModeli") -> None:
+		self.assertEqual(self._wynik("28,6 kWh (2x14,3)", "28.6"), ("2", "14,3"))
+
+	def test_szesc_rownych_plus(self: "TestBateriaNowePostaciModeli") -> None:
+		self.assertEqual(self._wynik("54 kWh (9+9+9+9+9+9)", "54"), ("6", "9"))
+
+	def test_bez_nawiasu_ulamkowa(self: "TestBateriaNowePostaciModeli") -> None:
+		self.assertEqual(self._wynik("14,3 kWh", "14.3"), ("1", "14,3"))
+
+	def test_bez_nawiasu_calkowita(self: "TestBateriaNowePostaciModeli") -> None:
+		self.assertEqual(self._wynik("15 kWh", "15"), ("1", "15"))
+
+	def test_forma_mieszana_moduly_rozne(self: "TestBateriaNowePostaciModeli") -> None:
+		self.assertEqual(self._wynik("33,14 kWh (6,02 + 3x9,04)", "33.14"), ("4", "6,02;9,04;9,04;9,04"))
+
+	def test_spacje_kropka_i_duze_x(self: "TestBateriaNowePostaciModeli") -> None:
+		self.assertEqual(self._wynik("42,9 kWh (3 X 14.3)", "42.9"), ("3", "14,3"))
+
+	def test_suma_niezgodna_z_pojemnoscia_puste(self: "TestBateriaNowePostaciModeli") -> None:
+		self.assertEqual(self._wynik("12 kWh (2x5)", "12"), ("", ""))
+
+	def test_nierozpoznawalny_nawias_nie_rzuca(self: "TestBateriaNowePostaciModeli") -> None:
+		self.assertEqual(self._wynik("Bateria (abc)", "12"), ("", ""))
+		self.assertEqual(self._wynik("Bateria (0x6)", "12"), ("", ""))
+		self.assertEqual(self._wynik("Bateria", "12"), ("", ""))
+
+	def test_gwarancja_nowych_producentow(self: "TestBateriaNowePostaciModeli") -> None:
+		for nazwa in ("Solax", "Hoymiles"):
+			for gw, oczekiwane in ((0, ""), (10, "10")):
+				komponenty = [
+					{"kategoria": "Falownik", "nazwa": nazwa, "model": "X 5 kW", "moc_kw": 5.0, "gwarancja_lat": gw},
+					{
+						"kategoria": "Magazyn energii",
+						"nazwa": nazwa,
+						"model": "12 kWh (2x6)",
+						"pojemnosc_kwh": 12.0,
+						"gwarancja_lat": gw,
+					},
+				]
+				deal = _deal(custom_falownik=f"{nazwa} X 5 kW", custom_bateria=f"{nazwa} 12 kWh (2x6)")
+				k = zbuduj_kontekst(_umowa(), deal, _kontakt(), _zestaw(), komponenty, _stale(), _DZIS)
+				self.assertEqual(k["inwerter_gwarancja_lat"], oczekiwane)
+				self.assertEqual(k["bateria_gwarancja_lat"], oczekiwane)
+
+
 class TestPparyBooleanRozlaczne(unittest.TestCase):
 	def test_a_internet_trzy_opcje(self: "TestPparyBooleanRozlaczne") -> None:
 		kontekst = _kontekst(internet="Kablowy")

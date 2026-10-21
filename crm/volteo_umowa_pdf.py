@@ -78,12 +78,18 @@ Wywołujący powinien wyprowadzać swoją listę pól z tej stałej (np.
 _KWOTA_KWANT = Decimal("0.01")
 """Precyzja kwotowa (grosze) przy formatowaniu do wydruku."""
 
-_WZORZEC_MODULOW_BATERII = re.compile(r"\(([0-9]+(?:\+[0-9]+)*)\)\s*$")
+_WZORZEC_MODULOW_BATERII = re.compile(r"\(([^()]+)\)\s*$")
 """Wylapuje nawias z modulami na KONCU stringu `model` (np. "(6+6)" w
-"12 kWh (6+6)"). Celowo dopasowuje tylko cyfry i "+" - katalog nie ma dzis
-modulow o pojemnosci niecalkowitej wewnatrz nawiasu; string niepasujacy do
-tego wzorca jest traktowany jak "brak nawiasu" (pojedynczy modul), nie jak
-blad, wiec np. nawias z literami nie zostanie tu w ogole rozpoznany."""
+"12 kWh (6+6)", "(2x5,3)" w "10,6 kWh (2x5,3)"). Zawartosc nawiasu jest tu
+tylko wycinana; sklad czyta `_sparsuj_skladniki_baterii`, a nawias, ktorego
+zawartosc nie jest zapisem modulow, jest traktowany jak "brak nawiasu"
+(pojedynczy modul), nie jak blad."""
+
+_LICZBA_MODULU = r"[0-9]+(?:[.,][0-9]+)?"
+_SKLADNIK_MODULOW = re.compile(
+	rf"^(?:([0-9]+)\s*[xX]\s*)?({_LICZBA_MODULU})$"
+)
+
 
 _NBSP = " "
 """Spacja nierozdzielająca — polski separator tysięcy w kwotach na wydruku."""
@@ -523,6 +529,26 @@ def _ilosc_z_zestawu(zestaw: list[dict[str, Any]], docelowa_nazwa: Any) -> Any:
 	return None
 
 
+def _sparsuj_skladniki_baterii(zawartosc: str) -> list[Decimal] | None:
+	"""Rozbija zawartosc nawiasu na pojemnosci poszczegolnych modulow.
+
+	Skladniki oddziela "+"; kazdy to liczba ("6", "5,3", "5.3") albo "NxM"
+	(N modulow po M kWh, x male/duze, spacje dozwolone). Zwraca liste jedna
+	pozycja na modul albo `None`, gdy zawartosc nie jest zapisem modulow.
+	"""
+	wynik: list[Decimal] = []
+	for czesc in zawartosc.split("+"):
+		dopasowanie = _SKLADNIK_MODULOW.match(czesc.strip())
+		if not dopasowanie:
+			return None
+		ile = int(dopasowanie.group(1)) if dopasowanie.group(1) else 1
+		if ile < 1:
+			return None
+		pojemnosc = Decimal(dopasowanie.group(2).replace(",", "."))
+		wynik.extend([pojemnosc] * ile)
+	return wynik
+
+
 def _bateria_szt_i_pojemnosc_jedn(komponent: dict[str, Any] | None) -> tuple[str, str]:
 	"""Odczytuje liczbe modulow baterii i pojemnosc pojedynczego modulu z `model`.
 
@@ -530,14 +556,19 @@ def _bateria_szt_i_pojemnosc_jedn(komponent: dict[str, Any] | None) -> tuple[str
 	moduly po 6 kWh). Reguly, w kolejnosci sprawdzania:
 
 	1. Brak dopasowanego komponentu albo brak/pusty `model` -> oba klucze puste.
-	2. Nawias obecny (np. "(6+6)", "(6+9+9)"): liczba skladnikow -> sztuki.
+	2. Nawias obecny (np. "(6+6)", "(6+9+9)", "(2x5,3)", "(6x16)",
+	   "(9+9+9+9+9+9)", "(6,02 + 3x9,04)"). Skladniki rozdzielone "+"; skladnik
+	   to liczba albo "NxM" (N modulow po M kWh, x male/duze, spacje wokol,
+	   przecinek i kropka dziesietna rownorzedne). Liczba modulow -> sztuki.
 	   Jesli suma skladnikow NIE zgadza sie z `pojemnosc_kwh` komponentu (np.
 	   literowka w katalogu: "(6+6)" przy zapisanych 15 kWh) -> oba klucze
 	   puste, nigdy nie zgadujemy ktora wartosc jest bledna. Jesli suma sie
 	   zgadza i wszystkie skladniki sa rowne -> pojemnosc jednostkowa to ta
 	   wspolna wartosc; jesli skladniki sa rozne -> pojemnosc jednostkowa to
-	   lista skladnikow po przecinku (np. "6,6,9"), zeby dokument pokazywal
-	   realny sklad zestawu zamiast udawac jedna wspolna wartosc.
+	   lista skladnikow po przecinku (np. "6,6,9"; po sredniku, gdy ktorys
+	   jest ulamkowy, np. "6,02;9,04;9,04;9,04"), zeby dokument pokazywal
+	   realny sklad zestawu zamiast udawac jedna wspolna wartosc. Nawias,
+	   ktorego zawartosc nie jest zapisem modulow, liczy sie jak brak nawiasu.
 	3. Brak nawiasu w ogole (np. "12 kWh", "T-BAT 5.8kWh"): jesli string mimo
 	   to nie wyglada na zapis pojemnosci (nie zawiera "kWh") -> oba klucze
 	   puste (model nierozpoznawalny, nigdy nie zgadujemy). W przeciwnym razie
@@ -545,13 +576,10 @@ def _bateria_szt_i_pojemnosc_jedn(komponent: dict[str, Any] | None) -> tuple[str
 	   calkowita komponentu (albo puste, gdy ta jest sama pusta/zero).
 
 	Zwraca gotowe do wydruku stringi (przez `_liczba`/`_liczba_calkowita`),
-	nigdy surowe liczby. Uwaga do listy przecinkowej w regule 2: `_liczba`
-	renderuje polskie przecinki dziesietne, wiec hipotetyczny modul o
-	niecalkowitej pojemnosci bylby w takiej liscie wizualnie niejednoznaczny
-	("6,5,9" - dwie liczby czy trzy?); dzis wzorzec `_WZORZEC_MODULOW_BATERII`
-	dopasowuje wylacznie liczby calkowite w nawiasie, wiec format
-	przecinkowo-rozdzielany jest tu swiadoma decyzja produktowa (zyczenie
-	uzytkownika, 2026-08-12), nie ogolnym rozwiazaniem na przyszlosc.
+	nigdy surowe liczby. Lista przecinkowa z reguly 2 (zyczenie uzytkownika,
+	2026-08-12) dotyczy modulow calkowitych; przy ulamkowych `_liczba` daje
+	przecinek dziesietny, wiec separatorem jest srednik (b73, ops#290).
+	Funkcja nigdy nie rzuca: nierozpoznawalny zapis daje oba klucze puste.
 	"""
 	if komponent is None:
 		return "", ""
@@ -561,14 +589,18 @@ def _bateria_szt_i_pojemnosc_jedn(komponent: dict[str, Any] | None) -> tuple[str
 	calkowita = _sparsuj_decimal(komponent.get("pojemnosc_kwh"))
 
 	dopasowanie = _WZORZEC_MODULOW_BATERII.search(model)
-	if dopasowanie:
-		skladniki = [Decimal(s) for s in dopasowanie.group(1).split("+")]
+	skladniki = _sparsuj_skladniki_baterii(dopasowanie.group(1)) if dopasowanie else None
+	if skladniki is not None:
 		if calkowita is None or sum(skladniki) != calkowita:
 			return "", ""
 		szt = _liczba_calkowita(len(skladniki))
 		if all(s == skladniki[0] for s in skladniki):
 			return szt, _liczba(skladniki[0])
-		return szt, ",".join(_liczba(s) for s in skladniki)
+		# Separator listy: przecinek, gdy wszystkie moduly calkowite (zachowanie
+		# historyczne, "6,6,9"); srednik, gdy ktorys jest ulamkowy, bo "6,02,9,04"
+		# bylo by nieczytelne.
+		separator = ";" if any(s != s.to_integral_value() for s in skladniki) else ","
+		return szt, separator.join(_liczba(s) for s in skladniki)
 
 	if "kwh" not in model.lower():
 		return "", ""
