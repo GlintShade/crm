@@ -10,6 +10,9 @@ import {
   variantHasPv,
   variantHasBattery,
   producentOptionsFor,
+  ZESTAWY,
+  DOMYSLNY_ZESTAW,
+  zestawProducent,
   licznikDostepny,
   buildMocOptions,
   panelLabel,
@@ -80,9 +83,46 @@ describe('PV form logic', () => {
       expect(producentOptionsFor(VARIANT_PV)).toEqual(['FoxESS'])
     })
 
-    it('offers Sigenergy/Deye for PV+Magazyn and Magazyn-only', () => {
-      expect(producentOptionsFor(VARIANT_PV_BAT)).toEqual(['Sigenergy', 'Deye'])
-      expect(producentOptionsFor(VARIANT_BAT)).toEqual(['Sigenergy', 'Deye'])
+    it('offers only the producer of the chosen zestaw for variants with storage', () => {
+      expect(producentOptionsFor(VARIANT_PV_BAT, 'COMFORT')).toEqual(['Hoymiles'])
+      expect(producentOptionsFor(VARIANT_BAT, 'COMFORT PREMIUM')).toEqual(['Solax'])
+      expect(producentOptionsFor(VARIANT_BAT, 'COMFORT +')).toEqual(['Sigenergy'])
+    })
+
+    it('falls back to the default zestaw producer when zestaw is missing or unknown', () => {
+      expect(producentOptionsFor(VARIANT_PV_BAT)).toEqual(['Sigenergy'])
+      expect(producentOptionsFor(VARIANT_BAT, 'nope')).toEqual(['Sigenergy'])
+    })
+
+    it('ignores the zestaw for PV-only', () => {
+      expect(producentOptionsFor(VARIANT_PV, 'COMFORT')).toEqual(['FoxESS'])
+    })
+  })
+
+  describe('ZESTAWY', () => {
+    it('maps the three zestawy to their producers, default is COMFORT +', () => {
+      expect(ZESTAWY.map((z) => [z.kod, z.producent])).toEqual([
+        ['COMFORT', 'Hoymiles'],
+        ['COMFORT PREMIUM', 'Solax'],
+        ['COMFORT +', 'Sigenergy'],
+      ])
+      expect(DOMYSLNY_ZESTAW).toBe('COMFORT +')
+    })
+
+    it('carries the bill-guarantee note only as text on COMFORT PREMIUM', () => {
+      const premium = ZESTAWY.find((z) => z.kod === 'COMFORT PREMIUM')
+      expect(premium.opis).toBe('Solax, gwarancja rachunku 49 zł/mies.')
+      expect(ZESTAWY.filter((z) => z.opis.includes('49'))).toHaveLength(1)
+    })
+
+    it('contains no em or en dashes', () => {
+      expect(JSON.stringify(ZESTAWY)).not.toMatch(/[\u2013\u2014]/)
+    })
+
+    it('zestawProducent resolves known codes and returns empty for unknown', () => {
+      expect(zestawProducent('COMFORT')).toBe('Hoymiles')
+      expect(zestawProducent('')).toBe('')
+      expect(zestawProducent('x')).toBe('')
     })
   })
 
@@ -96,9 +136,11 @@ describe('PV form logic', () => {
       expect(licznikDostepny(undefined)).toBe(false)
     })
 
-    it('is true for Sigenergy and Deye', () => {
+    it('is true for every hybrid inverter producer', () => {
       expect(licznikDostepny('Sigenergy')).toBe(true)
       expect(licznikDostepny('Deye')).toBe(true)
+      expect(licznikDostepny('Hoymiles')).toBe(true)
+      expect(licznikDostepny('Solax')).toBe(true)
     })
   })
 

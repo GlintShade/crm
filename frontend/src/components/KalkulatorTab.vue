@@ -109,6 +109,23 @@
                 <span class="kalk-part-number">2</span>Konfiguracja
               </div>
 
+              <div v-if="hasBat" class="mb-2" data-testid="zestaw-row">
+                <div class="mb-1 text-sm text-ink-gray-5">Zestaw</div>
+                <div class="flex flex-wrap gap-2">
+                  <div v-for="z in ZESTAWY" :key="z.kod" class="flex flex-col items-start gap-0.5">
+                    <button
+                      class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
+                      :class="sel.zestaw === z.kod
+                        ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base'
+                        : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
+                      :data-testid="'zestaw-' + z.kod"
+                      @click="sel.zestaw = z.kod"
+                    >{{ z.kod }}</button>
+                    <span class="text-xs text-ink-gray-4">{{ z.opis }}</span>
+                  </div>
+                </div>
+              </div>
+
               <div class="mb-2">
                 <div class="mb-1 text-sm text-ink-gray-5">Producent</div>
                 <div class="flex flex-wrap gap-1.5">
@@ -585,6 +602,9 @@ import {
   variantHasPv,
   variantHasBattery,
   producentOptionsFor,
+  ZESTAWY,
+  DOMYSLNY_ZESTAW,
+  zestawProducent,
   licznikDostepny,
   panelLabel,
   buildMocOptionsForPanel,
@@ -658,6 +678,7 @@ const voivodeshipPrefill = computed(() => {
 const sel = reactive({
   typKlienta: 'indywidualny',
   variant: 'Fotowoltaika + Magazyn',
+  zestaw: DOMYSLNY_ZESTAW,
   producent: '',
   falownik: '',
   bateria: '',
@@ -708,11 +729,11 @@ const dodatkiUi = reactive({
 const hasPv = computed(() => variantHasPv(sel.variant))
 const hasBat = computed(() => variantHasBattery(sel.variant))
 
-// Cascade: PV-only forces FoxESS; PV+Magazyn / Magazyn only offer Sigenergy/Deye.
-const producentOptions = computed(() => producentOptionsFor(sel.variant))
+// Cascade: PV-only forces FoxESS; PV+Magazyn / Magazyn take the producer of the chosen zestaw (ops#291).
+const producentOptions = computed(() => producentOptionsFor(sel.variant, sel.zestaw))
 
 watch(
-  () => sel.variant,
+  () => [sel.variant, sel.zestaw],
   () => {
     if (!producentOptions.value.includes(sel.producent)) sel.producent = producentOptions.value[0]
     if (!hasPv.value) { sel.panel = ''; sel.mocPvKw = null; sel.konstrukcja = ''; sel.kierunek = ''; sel.consumption = null }
@@ -1008,7 +1029,7 @@ async function applyFromConsumption() {
     const storage = suggestedStorage.value
     if (!kwp) return
 
-    sel.producent = 'Sigenergy'
+    sel.producent = zestawProducent(sel.zestaw)
     await nextTick()
 
     if (!sel.panel) {
@@ -1017,13 +1038,15 @@ async function applyFromConsumption() {
     }
     sel.mocPvKw = pickMocForTarget(kwp, panelMocWp(sel.panel))
 
-    // Falownik: Sigenergy TP2, smallest moc_kw >= kwp, else largest TP2.
-    const tp2 = byKat('Falownik').filter((c) => c.producent === 'Sigenergy' && c.sigen_typ === 'TP2')
-    const fal = pickBySpec(tp2, 'moc_kw', kwp)
+    // Falownik: producent zestawu (Sigenergy tylko TP2), smallest moc_kw >= kwp, else largest.
+    const inverters = byKat('Falownik').filter(
+      (c) => c.producent === sel.producent && (sel.producent !== 'Sigenergy' || c.sigen_typ === 'TP2'),
+    )
+    const fal = pickBySpec(inverters, 'moc_kw', kwp)
     if (fal) sel.falownik = fal.name
 
-    // Bateria: Sigenergy, smallest pojemnosc_kwh >= storage, else largest.
-    const bats = byKat('Magazyn energii').filter((c) => c.producent === 'Sigenergy')
+    // Bateria: producent zestawu, smallest pojemnosc_kwh >= storage, else largest.
+    const bats = byKat('Magazyn energii').filter((c) => c.producent === sel.producent)
     const bat = pickBySpec(bats, 'pojemnosc_kwh', storage)
     if (bat) sel.bateria = bat.name
 
@@ -1189,6 +1212,7 @@ function buildCalcPayload() {
   return {
     typ_klienta: sel.typKlienta,
     variant: sel.variant,
+    zestaw_typ: hasBat.value ? sel.zestaw : '',
     producent: sel.producent,
     falownik: sel.falownik || '',
     bateria: hasBat.value ? sel.bateria || '' : '',
@@ -1235,7 +1259,7 @@ function clearSummary() {
 let calcTimer = null
 watch(
   () => [
-    sel.typKlienta, sel.variant, sel.producent, sel.falownik, sel.bateria,
+    sel.typKlienta, sel.variant, sel.zestaw, sel.producent, sel.falownik, sel.bateria,
     sel.panel, sel.mocPvKw, sel.konstrukcja, sel.kabelM, sel.spoldzielnia, sel.licznik, sel.ulgaPct,
     sel.okresLat, sel.wplataWlasna, sel.narzut, sel.zasadyDotacji,
     sel.istniejacaPv, sel.istniejacaPvMocKwp, sel.ppozRecznie,
