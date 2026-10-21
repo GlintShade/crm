@@ -372,6 +372,63 @@ export function pickMocForTarget(targetKwp, wp) {
   ).value
 }
 
+// --- Autodobor zestawu COMFORT PREMIUM (ops#295) ---------------------------
+// Decyzja wlasciciela 2026-10-21: dla PV + Magazyn w zestawie COMFORT PREMIUM
+// moc PV = zuzycie x 1,2 x 0,95 / 1000, magazyn = zuzycie x 2,7 x 0,95 / 1000;
+// gdy nie da sie idealnie, pierwsza dostepna opcja POWYZEJ. Wylacznie dobor
+// (prezentacja), ceny licza sie po stronie serwera.
+export const COMFORT_PREMIUM_PV_MNOZNIK = 1.2
+export const COMFORT_PREMIUM_ME_MNOZNIK = 2.7
+export const COMFORT_PREMIUM_SPRAWNOSC = 0.95
+export const ZESTAW_AUTODOBOR = 'COMFORT PREMIUM'
+
+function zaokraglij2(x) {
+  return Math.round((x + 1e-9) * 100) / 100
+}
+
+function celZuzycia(consumption, mnoznik) {
+  const cons = Number(consumption)
+  if (!Number.isFinite(cons) || cons <= 0) return 0
+  return zaokraglij2((cons * mnoznik * COMFORT_PREMIUM_SPRAWNOSC) / 1000)
+}
+
+/** @returns {boolean} czy dla wariantu i zestawu kalkulator sam dobiera moc, magazyn i falownik */
+export function czyAutodobor({ variant, zestaw } = {}) {
+  return variant === VARIANT_PV_BAT && zestaw === ZESTAW_AUTODOBOR
+}
+
+/** Cel mocy PV w kWp (2 miejsca), 0 dla braku zuzycia. */
+export function celKwpComfortPremium(consumption) {
+  return celZuzycia(consumption, COMFORT_PREMIUM_PV_MNOZNIK)
+}
+
+/** Cel pojemnosci magazynu w kWh (2 miejsca), 0 dla braku zuzycia. */
+export function celKwhComfortPremium(consumption) {
+  return celZuzycia(consumption, COMFORT_PREMIUM_ME_MNOZNIK)
+}
+
+/**
+ * Najmniejsza moc z opcji panelu o wartosci >= cel; ponizej minimum pierwsza,
+ * powyzej maksimum ostatnia. null bez zuzycia albo bez opcji.
+ */
+export function dobierzMocComfortPremium(consumption, wp) {
+  const cel = celKwpComfortPremium(consumption)
+  if (cel <= 0) return null
+  const opcje = buildMocOptionsForPanel(wp)
+  if (!opcje.length) return null
+  return (opcje.find((o) => zaokraglij2(o.value) >= cel) || opcje[opcje.length - 1]).value
+}
+
+/**
+ * Magazyn o najmniejszej pojemnosc_kwh >= cel, a gdy zaden, najwiekszy.
+ * Pusta lista albo brak zuzycia: undefined. Nie mutuje listy.
+ */
+export function dobierzMagazynComfortPremium(consumption, magazyny) {
+  const cel = celKwhComfortPremium(consumption)
+  if (cel <= 0 || !magazyny || magazyny.length === 0) return undefined
+  return pickBySpec(magazyny, 'pojemnosc_kwh', cel)
+}
+
 // --- Opcje dodatkowe do istniejacych zestawow PV / PV+ME / ME (ops#225) ----
 // Katalog ("Volteo Cennik Pozycja", rodzaj="Dodatek OZE") przychodzi z
 // volteo_quote_components jako data.dodatki[] = {kod, nazwa, grupa,
