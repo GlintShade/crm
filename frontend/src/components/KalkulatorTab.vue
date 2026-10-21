@@ -567,6 +567,7 @@
                 <div class="mb-1.5 text-xs font-semibold uppercase tracking-wider text-ink-amber-8">Rozbicie kosztów (administrator)</div>
                 <div v-for="grupa in grupyBreakdown" :key="grupa.klucz">
                   <div :class="grupa.klucz === 'hurtownia' ? 'mt-0' : 'mt-2'" class="mb-0.5 text-xs font-semibold uppercase tracking-wider text-ink-amber-8">{{ grupa.etykieta }}</div>
+                  <div v-if="grupa.adnotacja" class="py-0.5 text-sm text-ink-gray-7" data-testid="prog-magazynu">{{ grupa.adnotacja }}</div>
                   <div v-for="p in grupa.pozycje" :key="p.klucz" class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7"><span>{{ p.etykieta }}</span><span>{{ formatPln(p.kwota) }}</span></div>
                   <div class="mt-1 flex justify-between border-t border-outline-amber-2 pt-1 text-sm font-semibold tabular-nums text-ink-gray-9"><span>Razem</span><span>{{ formatPln(grupa.suma) }}</span></div>
                 </div>
