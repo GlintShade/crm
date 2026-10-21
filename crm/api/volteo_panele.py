@@ -86,9 +86,15 @@ _POLA_LISTY = (
 	"moc_wp",
 	"cena_jednostkowa_netto",
 	"gwarancja_tekst",
+	"zestaw_typ",
 	"aktywny",
 	"sort",
 )
+
+# Dozwolone wartosci `zestaw_typ` na karcie panelu (ops#292); pusta = karta
+# uniwersalna. Lustro `ZESTAWY` w frontend/src/utils/pvForm.js i
+# `ZESTAWY_PRODUCENT` w ops/crm-kalkulator-bom.py.
+DOZWOLONE_ZESTAWY = ("COMFORT", "COMFORT PREMIUM", "COMFORT +")
 
 
 def _wiersz_do_dict(doc) -> dict:
@@ -103,6 +109,7 @@ def _wiersz_do_dict(doc) -> dict:
 		"moc_wp": doc.moc_wp,
 		"cena_jednostkowa_netto": doc.cena_jednostkowa_netto,
 		"gwarancja_tekst": doc.gwarancja_tekst,
+		"zestaw_typ": doc.get("zestaw_typ") or "",
 		"aktywny": doc.aktywny,
 		"sort": doc.sort,
 	}
@@ -175,6 +182,7 @@ def volteo_panel_zapisz(
 	docname: str | None = None,
 	gwarancja_tekst: str | None = None,
 	sort: str | int | None = None,
+	zestaw_typ: str = "",
 ) -> dict:
 	"""Tworzy nową kartę panelu PV lub aktualizuje istniejącą.
 
@@ -203,6 +211,10 @@ def volteo_panel_zapisz(
 		frappe.throw(_("Cena jednostkowa netto nie może być ujemna."))
 
 	sort_int = cint(sort) if sort not in (None, "") else 0
+
+	zestaw_typ = (zestaw_typ or "").strip()
+	if zestaw_typ and zestaw_typ not in DOZWOLONE_ZESTAWY:
+		frappe.throw(_("Nieznany zestaw: {0}.").format(zestaw_typ))
 
 	if docname:
 		doc = _pobierz_karte_panelu(docname)
@@ -233,6 +245,7 @@ def volteo_panel_zapisz(
 	doc.moc_wp = moc_wp_int
 	doc.cena_jednostkowa_netto = cena
 	doc.gwarancja_tekst = gwarancja_tekst
+	doc.zestaw_typ = zestaw_typ
 	doc.sort = sort_int
 
 	if docname:
