@@ -44,6 +44,11 @@ import {
   moceDodatkuKlimy,
   evOpcje,
   sanitizujDodatki,
+  celKwpComfortPremium,
+  celKwhComfortPremium,
+  dobierzMocComfortPremium,
+  dobierzMagazynComfortPremium,
+  czyAutodobor,
 } from '@/utils/pvForm'
 
 describe('PV form logic', () => {
@@ -880,5 +885,54 @@ describe('EMS Zeronest domyslnie Tak', () => {
   it('sanitizujDodatki nigdy nie wlacza EMS, tylko wylacza', () => {
     expect(sanitizujDodatki({ emsBreeze: 'Nie' }, { ...dost }).emsBreeze).toBe('Nie')
     expect(sanitizujDodatki({ emsBreeze: 'Tak' }, { producent: 'Sigenergy', variant: 'Fotowoltaika' }).emsBreeze).toBe('Nie')
+  })
+})
+
+describe('autodobor COMFORT PREMIUM (ops#295)', () => {
+  const mag = [
+    { name: 'a', pojemnosc_kwh: 21.2 },
+    { name: 'b', pojemnosc_kwh: 14.3 },
+    { name: 'c', pojemnosc_kwh: 7.2 },
+  ]
+  it('cele dla 5000 i 8000 kWh', () => {
+    expect(celKwpComfortPremium(5000)).toBe(5.7)
+    expect(celKwhComfortPremium(5000)).toBe(12.83)
+    expect(celKwpComfortPremium(8000)).toBe(9.12)
+    expect(celKwhComfortPremium(8000)).toBe(20.52)
+    expect(celKwpComfortPremium(0)).toBe(0)
+    expect(celKwhComfortPremium('abc')).toBe(0)
+  })
+  it('dobor mocy: pierwsza opcja >= cel', () => {
+    expect(dobierzMocComfortPremium(5000, 500)).toBe(6)
+    expect(dobierzMocComfortPremium(8000, 500)).toBe(9.5)
+  })
+  it('moc: cel ponizej minimum daje pierwsza, powyzej maksimum ostatnia, rowny opcji ta opcja', () => {
+    const opcje = buildMocOptionsForPanel(500)
+    expect(dobierzMocComfortPremium(1000, 500)).toBe(opcje[0].value)
+    expect(dobierzMocComfortPremium(1e6, 500)).toBe(opcje[opcje.length - 1].value)
+    // 6.0 kWp / (1.2 * 0.95) = 5263.157..: cel 6,00 dokladnie (po zaokragleniu) to 12 paneli
+    expect(dobierzMocComfortPremium(5264, 500)).toBe(6)
+    expect(dobierzMocComfortPremium(0, 500)).toBeNull()
+  })
+  it('dobor magazynu', () => {
+    expect(dobierzMagazynComfortPremium(5000, mag).name).toBe('b')
+    expect(dobierzMagazynComfortPremium(8000, mag).name).toBe('a')
+    expect(dobierzMagazynComfortPremium(50000, mag).name).toBe('a')
+    expect(dobierzMagazynComfortPremium(5000, [])).toBeUndefined()
+    const kopia = JSON.stringify(mag)
+    dobierzMagazynComfortPremium(5000, mag)
+    expect(JSON.stringify(mag)).toBe(kopia)
+  })
+  it('magazyn: cel rowny pojemnosci wybiera te pojemnosc', () => {
+    // 14.3 / (2.7 * 0.95) * 1000 = 5575.2 -> cel 14.30 przy 5575
+    expect(celKwhComfortPremium(5575)).toBe(14.3)
+    expect(dobierzMagazynComfortPremium(5575, mag).name).toBe('b')
+  })
+  it('czyAutodobor tylko PV+ME i COMFORT PREMIUM', () => {
+    expect(czyAutodobor({ variant: 'Fotowoltaika + Magazyn', zestaw: 'COMFORT PREMIUM' })).toBe(true)
+    expect(czyAutodobor({ variant: 'Fotowoltaika + Magazyn', zestaw: 'COMFORT' })).toBe(false)
+    expect(czyAutodobor({ variant: 'Fotowoltaika', zestaw: 'COMFORT PREMIUM' })).toBe(false)
+    expect(czyAutodobor({ variant: 'Magazyn energii', zestaw: 'COMFORT PREMIUM' })).toBe(false)
+    expect(czyAutodobor()).toBe(false)
   })
 })

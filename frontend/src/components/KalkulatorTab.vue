@@ -79,7 +79,11 @@
                     v-model.number="sel.consumption" type="number" min="0" step="1"
                     class="kalk-input"
                   />
-                  <div v-if="sel.consumption > 0" class="mt-1 text-xs leading-relaxed text-ink-gray-4">
+                  <div v-if="sel.consumption > 0 && autodoborAktywny" class="mt-1 text-xs leading-relaxed text-ink-gray-4" data-testid="autodobor-cel">
+                    Cel: <span class="font-medium text-ink-gray-6">{{ celPvTekst }} kWp</span> i <span class="font-medium text-ink-gray-6">{{ celMeTekst }} kWh</span> (zestaw COMFORT PREMIUM)
+                    <button type="button" class="ml-1 font-medium text-ink-blue-link hover:underline" @click="zastosujAutodobor">Ustaw</button>
+                  </div>
+                  <div v-else-if="sel.consumption > 0" class="mt-1 text-xs leading-relaxed text-ink-gray-4">
                     Sug. moc: <span class="font-medium text-ink-gray-6">{{ suggestedKwp }} kW</span>
                     <template v-if="hasBat">
                        · magazyn: <span class="font-medium text-ink-gray-6">{{ suggestedStorage }} kWh</span>
@@ -619,6 +623,11 @@ import {
   pickMocForTarget,
   suggestedKwp as suggestedKwpFor,
   suggestedStorageKwh,
+  czyAutodobor,
+  celKwpComfortPremium,
+  celKwhComfortPremium,
+  dobierzMocComfortPremium,
+  dobierzMagazynComfortPremium,
   pickBySpec,
   pickMounting,
   ppozWymagane,
@@ -1027,6 +1036,45 @@ const suggestedKwp = computed(() => suggestedKwpFor(sel.consumption, sel.variant
 // production to the grid, not to inflate the battery.
 const suggestedStorage = computed(() =>
   suggestedStorageKwh(sel.consumption, suggestedKwpFor(sel.consumption, VARIANT_PV_BAT)),
+)
+
+// --- Autodobor COMFORT PREMIUM (ops#295) ------------------------------------
+// Dla PV + Magazyn w zestawie COMFORT PREMIUM kalkulator sam podstawia moc PV,
+// magazyn i falownik z rocznego zużycia (tylko dobór, ceny liczy serwer).
+// Podstawienie odpala się wyłącznie przy zmianie zużycia, zestawu lub panelu
+// (watch niżej), więc ręczna zmiana mocy/magazynu/falownika jest trwała do
+// następnej zmiany któregoś z tych trzech (wzorzec emsRecznie, #237).
+const autodoborAktywny = computed(() => czyAutodobor({ variant: sel.variant, zestaw: sel.zestaw }))
+const fmtPl = (n) => n.toFixed(2).replace('.', ',')
+const celPvTekst = computed(() => fmtPl(celKwpComfortPremium(sel.consumption)))
+const celMeTekst = computed(() => fmtPl(celKwhComfortPremium(sel.consumption)))
+
+function zastosujAutodobor() {
+  if (!autodoborAktywny.value || !(sel.consumption > 0)) return
+  const wp = panelMocWp(sel.panel)
+  if (!wp) return
+  const moc = dobierzMocComfortPremium(sel.consumption, wp)
+  if (moc == null) return
+  sel.mocPvKw = moc
+  const prod = zestawProducent(sel.zestaw)
+  const inverters = byKat('Falownik').filter((c) => c.producent === prod)
+  const fal = pickBySpec(inverters, 'moc_kw', moc)
+  if (fal) sel.falownik = fal.name
+  const bat = dobierzMagazynComfortPremium(
+    sel.consumption,
+    byKat('Magazyn energii').filter((c) => c.producent === prod),
+  )
+  if (bat) sel.bateria = bat.name
+  const k = pickMounting(byKat('Konstrukcja'))
+  if (k && !sel.konstrukcja) sel.konstrukcja = k.name
+}
+
+// flush 'post': watchery kaskady (zestaw -> producent -> czyszczenie
+// falownika/baterii, auto-wybór panelu, snap mocy) kończą się przed doborem.
+watch(
+  () => [sel.consumption, sel.zestaw, sel.panel, sel.variant, catMap['Falownik'], catMap['Magazyn energii']],
+  zastosujAutodobor,
+  { flush: 'post' },
 )
 
 // "Ustaw z zużycia" — fills the configuration from the suggestion, respecting
