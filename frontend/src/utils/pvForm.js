@@ -55,27 +55,57 @@ export function variantHasBattery(variant) {
   return variant === VARIANT_PV_BAT || variant === VARIANT_BAT
 }
 
+// Zestawy OZE dla wariantów z magazynem (ops#291). Jedno źródło prawdy po
+// stronie frontu: zestaw wyznacza producenta falownika i magazynu. Lustro w
+// Server Scripcie `ops/crm-kalkulator-bom.py` (literal dict ZESTAWY_PRODUCENT,
+// Server Script nie importuje), w `Volteo Komponent.zestaw_typ` i w
+// `CRM Deal.custom_zestaw_typ`. `opis` to wyłącznie tekst pod przyciskiem:
+// "gwarancja rachunku 49 zł/mies." to gwarancja handlowa, NIE koszt, żadnej
+// stałej ani pozycji kosztowej za nią nie ma. Dodanie czwartego wyboru (np.
+// Deye) to jedna pozycja tutaj plus jedna w literalu serwera.
+export const ZESTAWY = [
+  { kod: 'COMFORT', producent: 'Hoymiles', opis: 'Hoymiles' },
+  { kod: 'COMFORT PREMIUM', producent: 'Solax', opis: 'Solax, gwarancja rachunku 49 zł/mies.' },
+  { kod: 'COMFORT +', producent: 'Sigenergy', opis: 'Sigenergy' },
+]
+export const DOMYSLNY_ZESTAW = 'COMFORT +'
+export const PRODUCENT_PV = 'FoxESS'
+
 /**
- * Zwraca listę dostępnych producentów dla danego wariantu.
- * Sama fotowoltaika wymusza FoxESS; pozostałe warianty oferują Sigenergy/Deye.
+ * Producent przypisany do zestawu; pusty string dla nieznanego zestawu.
+ *
+ * @param {string} zestaw - kod zestawu (COMFORT / COMFORT PREMIUM / COMFORT +)
+ * @returns {string} nazwa producenta albo ''
+ */
+export function zestawProducent(zestaw) {
+  return ZESTAWY.find((z) => z.kod === zestaw)?.producent || ''
+}
+
+/**
+ * Zwraca listę dostępnych producentów dla danego wariantu i zestawu.
+ * Sama fotowoltaika wymusza FoxESS; warianty z magazynem oferują wyłącznie
+ * producenta wybranego zestawu (domyślnie zestawu domyślnego).
  *
  * @param {string} variant - wybrany wariant instalacji
+ * @param {string} [zestaw] - wybrany zestaw (dla wariantów z magazynem)
  * @returns {string[]} dostępni producenci
  */
-export function producentOptionsFor(variant) {
-  return variant === VARIANT_PV ? ['FoxESS'] : ['Sigenergy', 'Deye']
+export function producentOptionsFor(variant, zestaw) {
+  if (variant === VARIANT_PV) return [PRODUCENT_PV]
+  return [zestawProducent(zestaw) || zestawProducent(DOMYSLNY_ZESTAW)]
 }
 
 /**
  * Sprawdza, czy dla danego producenta dostępny jest dodatek "Dodatkowy
  * licznik" (potrzebny przy zachowaniu starego falownika lub mikrofalowników).
- * Dostępny tylko dla Sigenergy i Deye, nigdy dla FoxESS.
+ * Dostępny dla każdego falownika hybrydowego (Sigenergy, Deye, Hoymiles,
+ * Solax), nigdy dla FoxESS. Lustro bramki w `volteo_quote_calc`.
  *
  * @param {string} producent - wybrany producent falownika
  * @returns {boolean} czy dodatek jest dostępny do wyboru
  */
 export function licznikDostepny(producent) {
-  return producent === 'Sigenergy' || producent === 'Deye'
+  return ['Sigenergy', 'Deye', 'Hoymiles', 'Solax'].includes(producent)
 }
 
 // Threshold above which PPOZ (fire-protection utility agreements) become

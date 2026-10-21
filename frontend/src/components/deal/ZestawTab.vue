@@ -224,6 +224,9 @@
           <div v-if="wycenaFields.custom_typ_klienta" class="flex justify-between py-0.5 text-ink-gray-7">
             <span>{{ __('Typ klienta') }}</span><span>{{ wycenaFields.custom_typ_klienta }}</span>
           </div>
+          <div v-if="wycenaFields.custom_zestaw_typ" class="flex justify-between py-0.5 text-ink-gray-7" data-testid="wycena-zestaw">
+            <span>{{ __('Zestaw') }}</span><span>{{ wycenaFields.custom_zestaw_typ }}</span>
+          </div>
           <div v-if="wycenaFields.custom_producent" class="flex justify-between py-0.5 text-ink-gray-7">
             <span>{{ __('Producent') }}</span><span>{{ wycenaFields.custom_producent }}</span>
           </div>
@@ -676,6 +679,7 @@ const dealWycena = createResource({
     fieldname: [
       'custom_rodzaj_umowy',
       'custom_typ_klienta',
+      'custom_zestaw_typ',
       'custom_producent',
       'custom_falownik',
       'custom_bateria',
@@ -910,6 +914,7 @@ const hasNadprowizje = computed(() =>
 const wycenaFields = computed(() => ({
   custom_rodzaj_umowy: '',
   custom_typ_klienta: '',
+  custom_zestaw_typ: '',
   custom_producent: '',
   custom_falownik: '',
   custom_bateria: '',
