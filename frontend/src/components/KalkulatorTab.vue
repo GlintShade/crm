@@ -392,22 +392,27 @@
 
                 <div v-if="emsDostepnyNow">
                   <div class="flex items-center justify-between gap-2">
-                    <div class="text-sm font-medium text-ink-gray-7">EMS Breeze<span v-if="emsCena > 0"> · +{{ formatPln(emsCena) }} netto</span></div>
+                    <div class="text-sm font-medium text-ink-gray-7">EMS Zeronest<span v-if="emsCena > 0"> · +{{ formatPln(emsCena) }} netto</span></div>
                     <div class="flex gap-1.5">
                       <button
                         type="button"
                         class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
                         :class="!dodatkiUi.emsOn ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base' : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
+                        data-testid="ems-nie"
+                        :disabled="emsWymuszonyNow"
                         @click="ustawEms(false)"
                       >Nie</button>
                       <button
                         type="button"
                         class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
                         :class="dodatkiUi.emsOn ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base' : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
+                        data-testid="ems-tak"
+                        :disabled="emsWymuszonyNow"
                         @click="ustawEms(true)"
                       >Tak</button>
                     </div>
                   </div>
+                  <div v-if="emsWymuszonyNow" class="mt-0.5 text-xs text-ink-gray-5" data-testid="ems-wymuszony">w zestawie COMFORT PREMIUM, zawsze</div>
                 </div>
 
                 <div v-if="pstrykDostepnyNow">
@@ -622,6 +627,7 @@ import {
   klimaDodatekDostepna,
   dodatekPaneleDostepny,
   emsDostepny,
+  emsWymuszony,
   pstrykDostepny,
   evDostepne,
   moceDodatkuKlimy,
@@ -703,7 +709,7 @@ const sel = reactive({
   zasadyDotacji: 'Nowe zasady',
   // Opcje dodatkowe (ops#225): payload wysyłany do serwera. Wszystko
   // wyłączone na starcie (decyzja właściciela 2026-10-05, dotyczy też EMS
-  // Breeze) - sanitizujDodatki poniżej tylko zeruje, nigdy nie włącza.
+  // Zeronest) - sanitizujDodatki poniżej tylko zeruje, nigdy nie włącza.
   dodatki: {
     klimaKod: '',
     panele: 0,
@@ -843,6 +849,7 @@ const sigenTyp = computed(() => falownikOptions.value.find((c) => c.name === sel
 const klimaDostepnaNow = computed(() => klimaDodatekDostepna(sel.variant))
 const paneleDostepneNow = computed(() => dodatekPaneleDostepny(sel.variant))
 const emsDostepnyNow = computed(() => emsDostepny({ producent: sel.producent, variant: sel.variant }))
+const emsWymuszonyNow = computed(() => emsWymuszony({ producent: sel.producent, variant: sel.variant }))
 const pstrykDostepnyNow = computed(() => pstrykDostepny({ producent: sel.producent, variant: sel.variant }))
 const evDostepneNow = computed(() => evDostepne({ producent: sel.producent, variant: sel.variant }))
 const anyDodatkiAvailable = computed(() =>
@@ -854,7 +861,7 @@ const modeleKlimyOptions = computed(() =>
 )
 const moceKlimyOptions = computed(() => moceDodatkuKlimy(dodatkiCatalog.value, dodatkiUi.klimaModel))
 
-// EMS Breeze: domyślnie Tak, gdy dostępny (#237). emsRecznie przechowuje
+// EMS Zeronest (kod ems_breeze): domyślnie Tak, gdy dostępny (#237). emsRecznie przechowuje
 // WARTOŚĆ wyboru użytkownika (null = brak wyboru). Decyzja właściciela
 // 2026-10-10: ręczny wybór jest trwały przez całe życie formularza, także
 // gdy EMS na chwilę przestaje być dostępny (zmiana producenta/wariantu).
@@ -881,7 +888,7 @@ const evOpcjeList = computed(() =>
   evOpcje(dodatkiCatalog.value, { producent: sel.producent, variant: sel.variant, sigenTyp: sigenTyp.value }),
 )
 
-// Wyłączenie wiersza czyści jego wybory (decyzja z briefu F2); EMS Breeze /
+// Wyłączenie wiersza czyści jego wybory (decyzja z briefu F2); EMS Zeronest /
 // Pstryk to proste włączniki bez dalszych pod-wyborów, więc ich sel.dodatki
 // jest bezpośrednio zwierciadłem toggle'a Tak/Nie.
 watch(

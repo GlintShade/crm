@@ -547,6 +547,15 @@ class TestZaproponujKonfiguracje(unittest.TestCase):
 		self.assertEqual(k["custom_ev_ladowarka"], "")
 		self.assertEqual(k["_ostrzezenia"], [])
 
+	def test_ems_zeronest_i_historyczny_breeze_daja_tak(self):
+		nowy = [wiersz("EMS Zeronest", "EMS Zeronest", 1)]
+		stary = [wiersz("EMS Breeze", "EMS Breeze", 1)]
+		self.assertEqual(z.zaproponuj_konfiguracje(nowy, KOMPONENTY, {})["custom_ems_breeze"], "Tak")
+		self.assertEqual(z.zaproponuj_konfiguracje(stary, KOMPONENTY, {})["custom_ems_breeze"], "Tak")
+		self.assertEqual(z.zaproponuj_konfiguracje([], KOMPONENTY, {})["custom_ems_breeze"], "Nie")
+		self.assertIn("EMS Zeronest", z.TYPY_WIERSZY_OZE)
+		self.assertIn("EMS Breeze", z.TYPY_WIERSZY_OZE)
+
 	def test_falownik_nazwa_rowna_wierszowi(self):
 		k = z.zaproponuj_konfiguracje(zestaw_pvme(), KOMPONENTY, {})
 		self.assertEqual(k["custom_falownik"], zestaw_pvme()[0]["nazwa"])

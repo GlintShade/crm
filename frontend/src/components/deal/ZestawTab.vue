@@ -311,7 +311,7 @@
 
           <!--
             Opcje dodatkowe (b68, "Wielki update kalkulatora OZE"): klimatyzacja,
-            panele/panele+mikro dodatkowe, EMS Breeze, licznik Pstryk, ladowarka
+            panele/panele+mikro dodatkowe, EMS Zeronest, licznik Pstryk, ladowarka
             EV - dostepne tylko na PV/PV+ME/ME (ta sama trojka co caly boks
             Wycena powyzej). Caly podblok jest gated na `hasDodatki`, zeby nie
             dokladac szesciu pustych wierszy do kazdej starszej szansy, ktora
@@ -329,7 +329,7 @@
               <span>{{ __('Panele PV + mikrofalownik (dodatek)') }}</span><span>{{ wycenaFields.custom_dod_panele_mikro }} szt.</span>
             </div>
             <div v-if="wycenaFields.custom_ems_breeze === 'Tak'" class="flex justify-between py-0.5 text-ink-gray-7">
-              <span>{{ __('EMS Breeze') }}</span><span>{{ __('Tak') }}</span>
+              <span>{{ __('EMS Zeronest') }}</span><span>{{ __('Tak') }}</span>
             </div>
             <div v-if="wycenaFields.custom_pstryk === 'Tak'" class="flex justify-between py-0.5 text-ink-gray-7">
               <span>{{ __('Licznik Pstryk') }}</span><span>{{ __('Tak') }}</span>
@@ -984,7 +984,7 @@ const showWycena = computed(() =>
 )
 
 // "Opcje dodatkowe" (b68, PV/PV+ME/ME) - Klimatyzacja/Panele/Panele+mikro/
-// EMS Breeze/Pstryk/Ladowarka EV. Caly podblok w szablonie jest gated na tym
+// EMS Zeronest/Pstryk/Ladowarka EV. Caly podblok w szablonie jest gated na tym
 // jednym flagu, zeby nie dokladac szesciu pustych wierszy do kazdej starszej
 // szansy PV, ktora nigdy nie uzywala dodatkow.
 const hasDodatki = computed(() =>

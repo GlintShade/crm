@@ -59,7 +59,7 @@ export const ETYKIETY_KONFIGURACJI = {
   custom_dod_klima: 'Klimatyzacja (dodatek)',
   custom_dod_panele: 'Panele PV (dodatek, szt.)',
   custom_dod_panele_mikro: 'Panele PV + mikrofalownik (dodatek, szt.)',
-  custom_ems_breeze: 'EMS Breeze',
+  custom_ems_breeze: 'EMS Zeronest',
   custom_pstryk: 'Licznik Pstryk',
   custom_ev_ladowarka: 'Ładowarka EV',
 }

@@ -359,7 +359,7 @@ export function opisWzoru(wzor) {
 
 /**
  * Wiersze bloku "Dodatki z kalkulatora (drukowane w umowie)". Pusta lista,
- * gdy nic nie ma. EMS Breeze i Pstryk to tylko informacja (nie drukowane).
+ * gdy nic nie ma. EMS Zeronest i Pstryk to tylko informacja (nie drukowane).
  *
  * @param {object} prefill
  * @returns {Array<{key: string, label: string, value: string, info: boolean}>}
@@ -385,7 +385,7 @@ export function dodatkiDoPokazania(prefill) {
     })
   }
   if (p.custom_ems_breeze === 'Tak') {
-    wiersze.push({ key: 'ems', label: 'EMS Breeze', value: 'Tak (nie drukowane w umowie, w cenie)', info: true })
+    wiersze.push({ key: 'ems', label: 'EMS Zeronest', value: 'Tak (nie drukowane w umowie, w cenie)', info: true })
   }
   if (p.custom_pstryk === 'Tak') {
     wiersze.push({ key: 'pstryk', label: 'Licznik Pstryk', value: 'Tak (nie drukowane w umowie, w cenie)', info: true })

@@ -44,7 +44,7 @@ const DEFINICJA_GRUP = [
     ],
   },
   // ops#225: koszty dodatkow PV/PV+ME/ME (klimatyzacja, panele, panele +
-  // mikro, EMS Breeze, ladowarka EV) - tylko koszt (k_dod_*), tak samo jak
+  // mikro, EMS Zeronest, ladowarka EV) - tylko koszt (k_dod_*), tak samo jak
   // hurtownia/montaz powyzej. Marza tych dodatkow (m_dod_*) NIE jest tu
   // osobna pozycja - jest sumowana w jedna pozycje "marza_dodatki" w grupie
   // "marze" ponizej (admin breakdown nie wysyla gotowego pola marza_dodatki,
@@ -59,7 +59,7 @@ const DEFINICJA_GRUP = [
       ['k_dod_klima', 'Dodatek: klimatyzacja'],
       ['k_dod_panele', 'Dodatek: panele PV'],
       ['k_dod_panele_mikro', 'Dodatek: panele PV + mikro'],
-      ['k_ems_breeze', 'EMS Breeze'],
+      ['k_ems_breeze', 'EMS Zeronest'],
       ['k_ev', 'Ładowarka EV'],
     ],
   },
