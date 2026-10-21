@@ -118,9 +118,17 @@ export function grupujBreakdown(breakdown) {
 
     const suma = pozycje.reduce((razem, pozycja) => razem + pozycja.kwota, 0)
 
+    // ops#293: prog duzego magazynu (30/50/70 kWh) jako adnotacja grupy marz;
+    // pusta, gdy magazyn jest ponizej progu lub go nie ma.
+    const prog = Number(breakdown?.prog_mag_kwh)
+    const adnotacja = grupa.klucz === 'marze' && Number.isFinite(prog) && prog > 0
+      ? `Próg magazynu: ${prog} kWh+`
+      : ''
+
     return {
       klucz: grupa.klucz,
       etykieta: grupa.etykieta,
+      adnotacja,
       pozycje,
       suma: Number.isFinite(suma) ? suma : 0,
     }
