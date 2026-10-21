@@ -4,6 +4,8 @@ import {
   VARIANT_BAT,
   VARIANTS,
   MOC_MIN_KW,
+  MIN_PANELI,
+  paneleDlaZestawu,
   MOC_MAX_KW,
   roundHalf,
   clamp,
@@ -310,9 +312,19 @@ describe('PV form logic', () => {
       })
     })
 
+    it('starts at MIN_PANELI panels, also for 475 Wp panels', () => {
+      expect(MIN_PANELI).toBe(6)
+      expect(buildMocOptionsForPanel(475)[0]).toEqual({
+        panele: 6,
+        value: 2.85,
+        label: '6 paneli, 2.85 kWp',
+      })
+      expect(buildMocOptionsForPanel(475).at(-1).value).toBeLessThanOrEqual(MOC_MAX_KW)
+    })
+
     it('builds integer panel counts for 450 Wp panels', () => {
       const options = buildMocOptionsForPanel(450)
-      expect(options[0]).toEqual({ panele: 7, value: 3.15, label: '7 paneli, 3.15 kWp' })
+      expect(options[0]).toEqual({ panele: 6, value: 2.7, label: '6 paneli, 2.70 kWp' })
       expect(options.at(-1)).toEqual({
         panele: 44,
         value: 19.8,
@@ -326,6 +338,31 @@ describe('PV form logic', () => {
         expect(buildMocOptionsForPanel(wp)).toEqual([])
       },
     )
+  })
+
+  describe('paneleDlaZestawu', () => {
+    const aiko = { name: 'a', zestaw_typ: '' }
+    const sun = { name: 's', zestaw_typ: 'COMFORT' }
+    const tcl = { name: 't', zestaw_typ: 'COMFORT PREMIUM' }
+    const karty = [aiko, sun, tcl]
+
+    it('shows only own cards for a zestaw that has them', () => {
+      expect(paneleDlaZestawu(karty, 'COMFORT')).toEqual([sun])
+      expect(paneleDlaZestawu(karty, 'COMFORT PREMIUM')).toEqual([tcl])
+    })
+
+    it('falls back to universal cards for zestaw without own cards', () => {
+      expect(paneleDlaZestawu(karty, 'COMFORT +')).toEqual([aiko])
+    })
+
+    it('shows universal cards for plain PV (empty zestaw)', () => {
+      expect(paneleDlaZestawu(karty, '')).toEqual([aiko])
+    })
+
+    it('treats missing zestaw_typ as universal and tolerates bad input', () => {
+      expect(paneleDlaZestawu([{ name: 'x' }], 'COMFORT')).toEqual([{ name: 'x' }])
+      expect(paneleDlaZestawu(null, 'COMFORT')).toEqual([])
+    })
   })
 
   describe('snapMocToPanel', () => {

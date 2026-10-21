@@ -11,6 +11,9 @@ export const PV_OVERSIZE_RATIO = 1.4 // sama PV: produkcja celowa = 140% zużyci
 export const KWH_PER_KWP = 1000 // przyjęty roczny uzysk z 1 kWp
 export const MOC_MIN_KW = 3
 export const MOC_MAX_KW = 20
+// Minimalna liczba paneli w instalacji (ops#292). Lustro literalu 6 w Server
+// Scripcie `volteo_quote_calc` (`ops/crm-kalkulator-bom.py`).
+export const MIN_PANELI = 6
 export const MOC_STEP_KW = 0.5
 
 /**
@@ -273,8 +276,27 @@ export function panelLabel(row) {
 }
 
 /**
+ * Karty paneli dostępne dla zestawu (ops#292). Zestaw z własnymi kartami
+ * (`zestaw_typ` równe kodowi zestawu) widzi wyłącznie je; zestaw bez własnych
+ * kart oraz sama fotowoltaika (pusty kod) widzą karty uniwersalne
+ * (puste `zestaw_typ`).
+ *
+ * @param {Array<{zestaw_typ?: string}>} karty - aktywne karty Panel PV
+ * @param {string} zestawTyp - kod zestawu albo '' dla samej PV
+ * @returns {Array} karty do wyboru
+ */
+export function paneleDlaZestawu(karty, zestawTyp) {
+  const lista = Array.isArray(karty) ? karty : []
+  const wlasne = zestawTyp
+    ? lista.filter((k) => (k?.zestaw_typ || '') === zestawTyp)
+    : []
+  if (wlasne.length) return wlasne
+  return lista.filter((k) => !(k?.zestaw_typ || ''))
+}
+
+/**
  * Buduje listę mocy instalacji dopasowanych do mocy pojedynczego panelu.
- * Liczbę paneli wyznacza z granic MOC_MIN_KW–MOC_MAX_KW.
+ * Liczbę paneli wyznacza z granic MIN_PANELI (dolna) i MOC_MAX_KW (górna).
  *
  * @param {number} wp - moc pojedynczego panelu w watach
  * @returns {{value: number, label: string, panele: number}[]} opcje mocy PV
@@ -283,7 +305,7 @@ export function buildMocOptionsForPanel(wp) {
   if (!Number.isFinite(wp) || wp <= 0) return []
 
   const out = []
-  const minPanels = Math.ceil((MOC_MIN_KW * 1000) / wp)
+  const minPanels = MIN_PANELI
   const maxPanels = Math.floor((MOC_MAX_KW * 1000) / wp)
   if (
     !Number.isFinite(minPanels) ||

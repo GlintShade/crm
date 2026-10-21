@@ -609,6 +609,7 @@ import {
   licznikDostepny,
   panelLabel,
   buildMocOptionsForPanel,
+  paneleDlaZestawu,
   snapMocToPanel,
   pickMocForTarget,
   suggestedKwp as suggestedKwpFor,
@@ -829,7 +830,10 @@ const bateriaOptions = computed(() => byKat('Magazyn energii').filter((x) => x.p
 const konstrukcjaOptions = computed(() => byKat('Konstrukcja'))
 const operatorOptions = computed(() => byKat('Operator'))
 const kierunekOptions = computed(() => byKat('Kierunek montazu'))
-const panelOptions = computed(() => byKat('Panel PV'))
+// ops#292: karty paneli zależą od zestawu (sama PV: tylko karty uniwersalne).
+const panelOptions = computed(() =>
+  paneleDlaZestawu(byKat('Panel PV'), hasBat.value ? sel.zestaw : ''),
+)
 
 // --- Opcje dodatkowe (ops#225) -----------------------------------------------
 // Typ falownika Sigenergy ("TP2"/"AIO") - steruje dostępnością ładowarki EV
@@ -1034,7 +1038,7 @@ async function applyFromConsumption() {
     await nextTick()
 
     if (!sel.panel) {
-      const firstPanel = byKat('Panel PV')[0]
+      const firstPanel = panelOptions.value[0]
       if (firstPanel) sel.panel = firstPanel.name
     }
     sel.mocPvKw = pickMocForTarget(kwp, panelMocWp(sel.panel))
@@ -1066,7 +1070,7 @@ async function applyFromConsumption() {
     await nextTick()
 
     if (!sel.panel) {
-      const firstPanel = byKat('Panel PV')[0]
+      const firstPanel = panelOptions.value[0]
       if (firstPanel) sel.panel = firstPanel.name
     }
     sel.mocPvKw = pickMocForTarget(kwp, panelMocWp(sel.panel))

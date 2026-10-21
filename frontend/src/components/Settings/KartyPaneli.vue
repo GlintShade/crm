@@ -64,6 +64,7 @@
           <div v-if="karta.gwarancja_tekst">
             {{ __('Gwarancja: {0} lat', [karta.gwarancja_tekst]) }}
           </div>
+          <div>{{ __('Zestaw: {0}', [karta.zestaw_typ || __('wszystkie')]) }}</div>
         </div>
 
         <div class="flex justify-end gap-2 mt-1">
@@ -147,6 +148,13 @@
             :disabled="saveCard.loading"
           />
           <FormControl
+            v-model="form.zestaw_typ"
+            type="select"
+            :label="__('Zestaw')"
+            :options="zestawOptions"
+            :disabled="saveCard.loading"
+          />
+          <FormControl
             v-model="form.sort"
             type="number"
             :label="__('Kolejność sortowania')"
@@ -209,6 +217,7 @@
 import { reactive, ref, computed } from 'vue'
 import { createResource, toast, Dialog, ErrorMessage } from 'frappe-ui'
 import { formatPln } from '@/utils/money'
+import { ZESTAWY } from '@/utils/pvForm'
 
 // Reactive state declares every key up front and is always replaced with a
 // fresh array on update — never gated on key presence (see CLAUDE.md:
@@ -239,9 +248,16 @@ function emptyForm() {
     moc_wp: '',
     cena_jednostkowa_netto: '',
     gwarancja_tekst: '',
+    zestaw_typ: '',
     sort: '',
   }
 }
+
+// Pusty zestaw = karta uniwersalna (ops#292); kody lustrzane do ZESTAWY w pvForm.js.
+const zestawOptions = [
+  { label: __('Wszystkie zestawy'), value: '' },
+  ...ZESTAWY.map((z) => ({ label: z.kod, value: z.kod })),
+]
 
 const form = reactive(emptyForm())
 const formError = ref('')
@@ -265,6 +281,7 @@ function openEditDialog(karta) {
     moc_wp: karta.moc_wp ?? '',
     cena_jednostkowa_netto: karta.cena_jednostkowa_netto ?? '',
     gwarancja_tekst: karta.gwarancja_tekst || '',
+    zestaw_typ: karta.zestaw_typ || '',
     sort: karta.sort ?? '',
   })
   formError.value = ''
@@ -297,6 +314,7 @@ const saveCard = createResource({
     moc_wp: form.moc_wp,
     cena_jednostkowa_netto: form.cena_jednostkowa_netto,
     gwarancja_tekst: form.gwarancja_tekst.trim(),
+    zestaw_typ: form.zestaw_typ || '',
     sort: form.sort,
   }),
   onSuccess: (data) => {
