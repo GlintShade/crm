@@ -167,7 +167,8 @@ TYPY_WIERSZY_OZE: tuple[str, ...] = (
 	"Klimatyzacja",
 	"Panele PV (dodatek)",
 	"Panele PV + mikro (dodatek)",
-	"EMS Breeze",
+	"EMS Breeze",  # literal historyczny (szanse sprzed b73)
+	"EMS Zeronest",
 	"Licznik Pstryk",
 	"Ladowarka EV",
 	# nowe rodzaje (crm/volteo_kalkulator_oze.py, `_linie_zestawu`)
@@ -644,7 +645,7 @@ def zaproponuj_konfiguracje(
 		"custom_dod_klima": nazwa_wiersza("Klimatyzacja"),
 		"custom_dod_panele": sztuki("Panele PV (dodatek)"),
 		"custom_dod_panele_mikro": sztuki("Panele PV + mikro (dodatek)"),
-		"custom_ems_breeze": tak_nie("EMS Breeze"),
+		"custom_ems_breeze": "Tak" if (_wiersze_typu(lista, "EMS Zeronest") or _wiersze_typu(lista, "EMS Breeze")) else "Nie",
 		"custom_pstryk": tak_nie("Licznik Pstryk"),
 		"custom_ev_ladowarka": nazwa_wiersza("Ladowarka EV"),
 		"_ostrzezenia": ostrzezenia,

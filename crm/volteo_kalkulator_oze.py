@@ -175,7 +175,11 @@ DOSTEPNOSC_DODATKOW: dict[str, dict[str, Any]] = {
 	"dod_klima": {"warianty": ("Fotowoltaika", "Fotowoltaika + Magazyn", "Magazyn energii")},
 	"dod_panele": {"warianty": ("Magazyn energii",)},
 	"dod_panele_mikro": {"warianty": ("Magazyn energii",)},
-	"ems_breeze": {"warianty": ("Fotowoltaika + Magazyn", "Magazyn energii"), "producent": "Deye"},
+	# kod historyczny, nazwa handlowa EMS Zeronest od b73 (ops#294); producent to krotka dozwolonych
+	"ems_breeze": {
+		"warianty": ("Fotowoltaika + Magazyn", "Magazyn energii"),
+		"producent": ("Deye", "Hoymiles", "Solax"),
+	},
 	"pstryk": {"warianty": ("Fotowoltaika + Magazyn", "Magazyn energii"), "producent": "Sigenergy"},
 	"ev_ac": {"warianty": ("Fotowoltaika + Magazyn", "Magazyn energii"), "producent": "Sigenergy"},
 	"ev_dc": {

@@ -38,6 +38,7 @@ import {
   klimaDodatekDostepna,
   dodatekPaneleDostepny,
   emsDostepny,
+  emsWymuszony,
   pstrykDostepny,
   evDostepne,
   moceDodatkuKlimy,
@@ -691,6 +692,13 @@ describe('PV form logic', () => {
       expect(wynik.paneleMikro).toBe(2)
     })
 
+    it('clears emsBreeze for Sigenergy, forces Tak for Solax, keeps choice for Hoymiles', () => {
+      const soli = sanitizujDodatki({ ...pelnyWybor(), emsBreeze: 'Nie' }, { variant: VARIANT_PV_BAT, producent: 'Solax', sigenTyp: '' })
+      expect(soli.emsBreeze).toBe('Tak')
+      const hoy = sanitizujDodatki({ ...pelnyWybor(), emsBreeze: 'Nie' }, { variant: VARIANT_PV_BAT, producent: 'Hoymiles', sigenTyp: '' })
+      expect(hoy.emsBreeze).toBe('Nie')
+    })
+
     it('clears emsBreeze when the producent is not Deye', () => {
       const wynik = sanitizujDodatki(pelnyWybor(), { variant: VARIANT_PV_BAT, producent: 'Sigenergy', sigenTyp: 'AIO' })
       expect(wynik.emsBreeze).toBe('Nie')
@@ -812,7 +820,36 @@ describe('moceDodatkuKlimy', () => {
   })
 })
 
-describe('EMS Breeze domyslnie Tak', () => {
+describe('EMS Zeronest: dostepnosc i wymuszenie (ops#294)', () => {
+  const pvme = 'Fotowoltaika + Magazyn'
+  it('dostepny dla Hoymiles, Solax, Deye z magazynem; nie dla Sigenergy ani bez magazynu', () => {
+    for (const producent of ['Hoymiles', 'Solax', 'Deye']) {
+      expect(emsDostepny({ producent, variant: pvme })).toBe(true)
+      expect(emsDostepny({ producent, variant: 'Magazyn energii' })).toBe(true)
+      expect(emsDostepny({ producent, variant: 'Fotowoltaika' })).toBe(false)
+    }
+    expect(emsDostepny({ producent: 'Sigenergy', variant: pvme })).toBe(false)
+  })
+  it('wymuszony tylko dla Solax z magazynem', () => {
+    expect(emsWymuszony({ producent: 'Solax', variant: pvme })).toBe(true)
+    expect(emsWymuszony({ producent: 'Solax', variant: 'Fotowoltaika' })).toBe(false)
+    expect(emsWymuszony({ producent: 'Hoymiles', variant: pvme })).toBe(false)
+    expect(emsWymuszony({ producent: 'Deye', variant: pvme })).toBe(false)
+  })
+  it('Solax: stan Tak, reczne Nie ignorowane', () => {
+    expect(domyslnyStanEms({ producent: 'Solax', variant: pvme, wyborReczny: false })).toBe(true)
+    expect(domyslnyStanEms({ producent: 'Solax', variant: pvme })).toBe(true)
+  })
+  it('Hoymiles: domyslnie Tak, trwaly wybor reczny', () => {
+    expect(domyslnyStanEms({ producent: 'Hoymiles', variant: pvme })).toBe(true)
+    expect(domyslnyStanEms({ producent: 'Hoymiles', variant: pvme, wyborReczny: false })).toBe(false)
+  })
+  it('Sigenergy: zawsze false', () => {
+    expect(domyslnyStanEms({ producent: 'Sigenergy', variant: pvme, wyborReczny: true })).toBe(false)
+  })
+})
+
+describe('EMS Zeronest domyslnie Tak', () => {
   const dost = { producent: 'Deye', variant: 'Fotowoltaika + Magazyn' }
   it('dostepny i bez recznego wyboru: Tak', () => {
     expect(emsDostepny(dost)).toBe(true)

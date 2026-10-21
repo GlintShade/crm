@@ -656,6 +656,16 @@ if __name__ == "__main__":
 	unittest.main()
 
 
+class DostepnoscEmsZeronestTest(unittest.TestCase):
+	def test_producent_to_krotka_z_hoymiles_solax_deye(self) -> None:
+		from crm.volteo_kalkulator_oze import DOSTEPNOSC_DODATKOW
+
+		meta = DOSTEPNOSC_DODATKOW["ems_breeze"]
+		self.assertEqual(set(meta["producent"]), {"Deye", "Hoymiles", "Solax"})
+		self.assertNotIn("Sigenergy", meta["producent"])
+		self.assertEqual(set(meta["warianty"]), {"Fotowoltaika + Magazyn", "Magazyn energii"})
+
+
 class ZlozAdresMontazuTest(unittest.TestCase):
 	def test_pelny(self) -> None:
 		self.assertEqual(zloz_adres_montazu("Lipowa", "12", "3"), "Lipowa 12/3")

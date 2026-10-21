@@ -9729,6 +9729,10 @@ msgstr "Dodatkowy licznik"
 msgid "EMS Breeze"
 msgstr "EMS Breeze"
 
+#: frontend/src/components/deal/ZestawTab.vue
+msgid "EMS Zeronest"
+msgstr "EMS Zeronest"
+
 #: frontend/src/components/deal/ZestawEdycja.vue
 msgid "Edycja zestawu (administracja)"
 msgstr "Edycja zestawu (administracja)"

@@ -380,12 +380,15 @@ export function pickMocForTarget(targetKwp, wp) {
 // wylacznie prezentuje/filtruje te pozycje, zero wlasnej matematyki cenowej.
 //
 // Stopniowe odslanianie (decyzja wlasciciela 2026-10-05): wszystkie dodatki
-// startuja WYLACZONE, wlacznie z EMS Breeze (mimo wczesniejszego zapisu CEO
-// "TAK domyslna"). Decyzja Jana 2026-10-09 (b69, #237): EMS Breeze startuje
+// startuja WYLACZONE, wlacznie z EMS Zeronest (kod ems_breeze, mimo wczesniejszego zapisu CEO
+// "TAK domyslna"). Decyzja Jana 2026-10-09 (b69, #237): EMS startuje
 // na "Tak", gdy jest dostepny (domyslnyStanEms nizej, stosowany przez
 // KalkulatorTab). sanitizujDodatki ponizej TYLKO zeruje wybory, ktore
 // przestaly byc dostepne dla biezacej konfiguracji (wariant/producent/typ
 // falownika) - nigdy niczego nie wlacza samoistnie.
+
+// Producenci, dla których EMS Zeronest jest dostępny (lustro Server Scriptu).
+const PRODUCENCI_EMS = ['Deye', 'Hoymiles', 'Solax']
 
 // Trzy rodzaje dodatku "Klimatyzacja". Od b69 (#237) rodzaj NIE ma stalego
 // modelu: lista modeli rodzaju wynika z danych (modeleDodatkuKlimy nizej),
@@ -441,9 +444,10 @@ export function modeleDodatkuKlimy(dodatki, pozycjeKlimy, rodzajKlimy) {
 }
 
 /**
- * Domyślny stan przełącznika EMS Breeze: "Nie", gdy dodatek niedostępny;
- * w przeciwnym razie zapamiętany wybór użytkownika (wyborReczny true/false),
- * a bez wyboru "Tak". Wybór ręczny jest trwały przez całe życie formularza
+ * Domyślny stan przełącznika EMS Zeronest (kod `ems_breeze`, nazwa handlowa
+ * od b73): "Nie", gdy dodatek niedostępny; "Tak" bezwarunkowo, gdy wymuszony
+ * (Solax z magazynem, wyborReczny ignorowany); w przeciwnym razie zapamiętany
+ * wybór użytkownika (wyborReczny true/false), a bez wyboru "Tak". Wybór ręczny jest trwały przez całe życie formularza
  * (decyzja właściciela 2026-10-10): niedostępność go nie kasuje, więc po
  * powrocie do konfiguracji z EMS przełącznik wraca do wyboru użytkownika.
  *
@@ -455,6 +459,7 @@ export function modeleDodatkuKlimy(dodatki, pozycjeKlimy, rodzajKlimy) {
  */
 export function domyslnyStanEms({ producent, variant, wyborReczny = null } = {}) {
   if (!emsDostepny({ producent, variant })) return false
+  if (emsWymuszony({ producent, variant })) return true
   return wyborReczny === null ? true : Boolean(wyborReczny)
 }
 
@@ -482,8 +487,10 @@ export function dodatekPaneleDostepny(variant) {
 }
 
 /**
- * Sprawdza, czy dodatek "EMS Breeze" jest dostępny: wyłącznie producent Deye
- * z magazynem energii (PV+ME lub ME).
+ * Sprawdza, czy dodatek "EMS Zeronest" (kod `ems_breeze`, nazwa historyczna)
+ * jest dostępny: producent Hoymiles, Solax lub Deye z magazynem energii
+ * (PV+ME lub ME). Deye zostaje dla konfiguracji historycznych; Sigenergy ma
+ * własny EMS, więc nie.
  *
  * @param {object} params
  * @param {string} params.producent - wybrany producent falownika
@@ -491,7 +498,20 @@ export function dodatekPaneleDostepny(variant) {
  * @returns {boolean} czy dodatek jest dostępny do wyboru
  */
 export function emsDostepny({ producent, variant } = {}) {
-  return producent === 'Deye' && variantHasBattery(variant)
+  return PRODUCENCI_EMS.includes(producent) && variantHasBattery(variant)
+}
+
+/**
+ * EMS Zeronest jest na sztywno "Tak" (bez możliwości odkliknięcia) dla
+ * Solax z magazynem (zestaw COMFORT PREMIUM). Lustro reguły serwera.
+ *
+ * @param {object} params
+ * @param {string} params.producent - wybrany producent falownika
+ * @param {string} params.variant - wybrany wariant instalacji
+ * @returns {boolean} czy dodatek jest wymuszony
+ */
+export function emsWymuszony({ producent, variant } = {}) {
+  return producent === 'Solax' && variantHasBattery(variant)
 }
 
 /**
@@ -619,6 +639,8 @@ export function sanitizujDodatki(wybor, kontekst = {}) {
   }
   if (!emsDostepny({ producent, variant })) {
     next.emsBreeze = 'Nie'
+  } else if (emsWymuszony({ producent, variant })) {
+    next.emsBreeze = 'Tak'
   }
   if (!pstrykDostepny({ producent, variant })) {
     next.pstryk = 'Nie'
