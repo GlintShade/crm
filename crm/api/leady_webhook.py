@@ -35,18 +35,44 @@ Idempotencja i odrzucenia
   ponawia).
 - Sukces: `{"status": "utworzony", "lead": <name>}`.
 
+Limit żądań
+------------
+Konto integracji może wywołać endpoint 3 razy na minutę (`LIMIT_ZADAN_NA_MINUTE`).
+Licznik to stałe okno minuty kalendarzowej w Redis (`klucz_limitu`), liczone PO
+bramce roli, więc wywołania niezalogowane nie zużywają budżetu. Czwarte żądanie w
+minucie dostaje HTTP 429, więc Make ponowi je później. Liczy się KAŻDE wywołanie,
+także duplikat i odrzucony. To hamulec przed zalaniem puli leadów przez wyciekły
+klucz, a nie wartość przepustowości.
+
 Cała logika mapowania jest w `crm/volteo_leady_webhook.py` (bez `frappe`).
 """
 
 import json
 
 import frappe
+from frappe import _
 
 from crm.volteo_leady_webhook import (
+	LIMIT_ZADAN_NA_MINUTE,
 	ROLA_INTEGRACJI,
 	LadunekOdrzucony,
+	klucz_limitu,
+	limit_przekroczony,
 	zbuduj_leada_z_webhooka,
 )
+
+KOMUNIKAT_LIMITU = "Przekroczono limit %d żądań na minutę. Spróbuj ponownie za chwilę."
+
+
+def _sprawdz_limit_zadan() -> None:
+	"""Stałe okno minuty w Redis; wołać po `only_for`, by niezalogowani nie zużywali budżetu."""
+	cache = frappe.cache()
+	klucz = klucz_limitu(frappe.session.user, frappe.utils.now_datetime())
+	licznik = cache.incr(klucz)
+	if licznik == 1:
+		cache.expire(klucz, 120)
+	if limit_przekroczony(licznik):
+		frappe.throw(_(KOMUNIKAT_LIMITU) % LIMIT_ZADAN_NA_MINUTE, frappe.RateLimitExceededError)
 
 
 def _wczytaj_ladunek() -> dict:
@@ -95,6 +121,7 @@ def _z_centroidem_kodu(dane: dict) -> dict:
 def przyjmij() -> dict:
 	"""Zakłada `CRM Lead` z ładunku Make.com; patrz docstring modułu."""
 	frappe.only_for(ROLA_INTEGRACJI)
+	_sprawdz_limit_zadan()
 
 	ladunek = {}
 	try:
