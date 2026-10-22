@@ -34,13 +34,9 @@
 
       <template v-else>
       <template v-if="flow !== 'done'">
-        <!-- Pasek nagłówka: status uzupełnienia po lewej, wybór klienta po prawej. -->
-        <div class="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <!-- Pasek nagłówka: status uzupełnienia (wybór klienta jest w prawej kolumnie). -->
+        <div class="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
           <div class="text-sm text-ink-gray-5">{{ statusFormularza }}</div>
-          <div v-if="$slots['client-picker']" class="w-full sm:w-[320px]">
-            <div class="mb-0.5 text-sm text-ink-gray-5">Klient</div>
-            <slot name="client-picker" />
-          </div>
         </div>
 
         <div class="kalk-split grid items-start gap-x-5" style="grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr)">
@@ -443,6 +439,10 @@
 
           <div class="kalk-output border-l border-outline-gray-2 pl-5">
             <div class="sticky top-3">
+              <div v-if="$slots['client-picker']" class="mb-3 w-full min-w-0">
+                <div class="mb-0.5 text-sm text-ink-gray-5">Klient</div>
+                <slot name="client-picker" />
+              </div>
               <div class="mb-2 text-base font-semibold text-ink-gray-9">Wycena</div>
 
               <KalkulatorParagon
@@ -463,21 +463,20 @@
               </Button>
 
               <div v-if="!c.name" class="mt-1 text-center text-xs text-ink-gray-5">
-                Wybierz klienta u góry, aby wygenerować ofertę.
+                Wybierz klienta powyżej, aby wygenerować ofertę.
               </div>
 
-              <div class="mt-3 rounded-lg border border-outline-gray-2 px-2.5 py-1.5">
-                <div class="flex items-center justify-between gap-2 text-sm text-ink-gray-7">
-                  <span>Narzut handlowca: <span class="font-medium tabular-nums text-ink-gray-9">{{ formatPln(Number(sel.narzut) || 0) }}</span></span>
-                  <button
-                    type="button"
-                    class="rounded p-1 text-ink-gray-5 hover:bg-surface-gray-3 hover:text-ink-gray-8"
-                    aria-label="Edytuj narzut"
-                    :aria-expanded="showNarzut"
-                    @click="showNarzut = !showNarzut"
-                  ><FeatherIcon name="edit-2" class="h-3.5 w-3.5" /></button>
-                </div>
-                <div v-if="showNarzut" class="mt-1.5">
+              <div class="mt-3">
+                <button
+                  type="button"
+                  class="flex w-full items-center justify-between rounded-lg border border-outline-gray-2 px-2.5 py-1.5 text-sm text-ink-gray-7 hover:bg-surface-gray-2"
+                  :aria-expanded="showNarzut"
+                  @click="showNarzut = !showNarzut"
+                >
+                  <span>Ustawienia niestandardowe</span>
+                  <FeatherIcon :name="showNarzut ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 text-ink-gray-5" />
+                </button>
+                <div v-if="showNarzut" class="mt-1.5 rounded-lg border border-outline-gray-2 px-2.5 py-1.5">
                   <div class="mb-0.5 text-sm text-ink-gray-5">Wysokość narzutu</div>
                   <input
                     v-model.number="sel.narzut" type="number" min="0" :max="narzutMax > 0 ? narzutMax : undefined" step="0.01"
