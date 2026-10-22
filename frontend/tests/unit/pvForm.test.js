@@ -126,7 +126,7 @@ describe('PV form logic', () => {
 
     it('carries the bill-guarantee note only as text on COMFORT PREMIUM', () => {
       const premium = ZESTAWY.find((z) => z.kod === 'COMFORT PREMIUM')
-      expect(premium.opis).toBe('Solax, gwarancja rachunku 49 zł/mies.')
+      expect(premium.opis).toBe('Solax, Abonament 49 zł/mies.')
       expect(ZESTAWY.filter((z) => z.opis.includes('49'))).toHaveLength(1)
     })
 

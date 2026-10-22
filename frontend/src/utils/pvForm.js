@@ -63,12 +63,12 @@ export function variantHasBattery(variant) {
 // Server Scripcie `ops/crm-kalkulator-bom.py` (literal dict ZESTAWY_PRODUCENT,
 // Server Script nie importuje), w `Volteo Komponent.zestaw_typ` i w
 // `CRM Deal.custom_zestaw_typ`. `opis` to wyłącznie tekst pod przyciskiem:
-// "gwarancja rachunku 49 zł/mies." to gwarancja handlowa, NIE koszt, żadnej
+// "Abonament 49 zł/mies." to stały miesięczny abonament pokazany jako atut, NIE koszt, żadnej
 // stałej ani pozycji kosztowej za nią nie ma. Dodanie czwartego wyboru (np.
 // Deye) to jedna pozycja tutaj plus jedna w literalu serwera.
 export const ZESTAWY = [
   { kod: 'COMFORT', producent: 'Hoymiles', opis: 'Hoymiles' },
-  { kod: 'COMFORT PREMIUM', producent: 'Solax', opis: 'Solax, gwarancja rachunku 49 zł/mies.' },
+  { kod: 'COMFORT PREMIUM', producent: 'Solax', opis: 'Solax, Abonament 49 zł/mies.' },
   { kod: 'COMFORT +', producent: 'Sigenergy', opis: 'Sigenergy' },
 ]
 export const DOMYSLNY_ZESTAW = 'COMFORT +'
