@@ -847,3 +847,21 @@ export function podsumowanieDodatkow({ dostepne = [], wybrane = [], dodatkiNetto
   const kwota = Number(dodatkiNetto) > 0 ? ` · +${fmt(dodatkiNetto)} netto` : ''
   return `Wybrane: ${wybrane.join(', ')}${kwota}`
 }
+
+/**
+ * Opis zestawu pod nazwa producenta na karcie: pusty, gdy opis to tylko
+ * producent (bez wielkosci liter i bialych znakow), a przy prefiksie
+ * "<producent>, " zwraca sama reszte.
+ *
+ * @param {{producent?: string, opis?: string}} z - pozycja ZESTAWY
+ * @returns {string} opis do pokazania albo ''
+ */
+export function opisZestawu(z) {
+  const opis = String(z?.opis || '').trim()
+  const prod = String(z?.producent || '').trim()
+  if (!opis) return ''
+  if (opis.toLowerCase() === prod.toLowerCase()) return ''
+  const prefiks = `${prod.toLowerCase()}, `
+  if (prod && opis.toLowerCase().startsWith(prefiks)) return opis.slice(prefiks.length).trim()
+  return opis
+}

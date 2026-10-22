@@ -70,7 +70,7 @@
                   <WyborSegmentowy v-model="sel.typKlienta" :options="TYP_KLIENTA_OPTIONS" />
                 </div>
 
-                <div v-if="sel.typKlienta === 'indywidualny'">
+                <div v-if="sel.typKlienta === 'indywidualny'" class="col-span-2">
                   <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Zasady dotacji') }}</div>
                   <WyborSegmentowy v-model="sel.zasadyDotacji" :options="zasadyOpcje" />
                 </div>
@@ -136,7 +136,7 @@
                     <span class="min-w-0 pr-4">
                       <span class="block text-sm font-bold text-ink-gray-9">{{ z.kod }}</span>
                       <span class="block text-sm text-ink-gray-7">{{ z.producent }}</span>
-                      <span class="block text-xs text-ink-gray-4">{{ z.opis }}</span>
+                      <span v-if="opisZestawu(z)" class="block text-xs text-ink-gray-4">{{ opisZestawu(z) }}</span>
                     </span>
                     <FeatherIcon v-if="sel.zestaw === z.kod" name="check" class="absolute right-2 top-2 h-4 w-4 text-ink-gray-8" />
                   </button>
@@ -564,6 +564,7 @@ import {
   sanitizujDodatki,
   grupujMocePv,
   grupujMagazyny,
+  opisZestawu,
   PROG_PPOZ_KW,
   podsumowanieMontazu,
   podsumowanieFinansowania,
@@ -1445,6 +1446,8 @@ function extractErrorMessage(err) {
 .kalk-select {
   height: 32px;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   border-radius: 0.375rem;
   border: 1px solid var(--outline-gray-2);
   background: var(--surface-gray-2);
@@ -1463,7 +1466,9 @@ function extractErrorMessage(err) {
   background-repeat: no-repeat;
   background-position: right 9px center;
 }
-.kalk-select-inline { width: auto; min-width: 150px; }
+.kalk-select-inline { width: auto; min-width: 0; max-width: 100%; flex: 0 1 150px; }
+.kalk-split > *,
+.kalk-part .grid > * { min-width: 0; }
 .kalk-select:disabled {
   border-style: dashed;
   color: var(--ink-gray-4);
@@ -1522,9 +1527,9 @@ function extractErrorMessage(err) {
   font-weight: 700;
 }
 @media (max-width: 880px) {
-  .kalk-split { grid-template-columns: 1fr !important; }
-  .kalk-row2 { grid-template-columns: 1fr !important; }
-  .kalk-zestawy { grid-template-columns: 1fr !important; }
+  .kalk-split { grid-template-columns: minmax(0, 1fr) !important; }
+  .kalk-row2 { grid-template-columns: minmax(0, 1fr) !important; }
+  .kalk-zestawy { grid-template-columns: minmax(0, 1fr) !important; }
   .kalk-output { border-left: 0 !important; padding-left: 0 !important; margin-top: 0.75rem; }
   .sticky { position: static; }
   .kalk-part { padding: 1rem; }
