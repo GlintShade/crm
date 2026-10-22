@@ -87,6 +87,7 @@
                       />
                       <span class="kalk-unit">kWh/rok</span>
                     </div>
+                    <div class="mt-1 text-xs leading-snug text-ink-gray-4">Opcjonalne, nie jest wymagane. Po wpisaniu kalkulator sam wyliczy dobór zestawu.</div>
                   </div>
 
                   <div v-if="sel.consumption > 0 && autodoborAktywny" class="rounded-lg border border-dashed border-outline-gray-3 bg-surface-gray-1 p-2.5 text-xs leading-relaxed text-ink-gray-5" data-testid="autodobor-cel">
