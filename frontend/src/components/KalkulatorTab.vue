@@ -64,7 +64,7 @@
                 </div>
               </div>
 
-              <div class="mt-3 grid grid-cols-2 gap-x-3 gap-y-3 kalk-row2">
+              <div class="mt-3 grid items-start grid-cols-2 gap-x-3 gap-y-3 kalk-row2">
                 <div>
                   <div class="mb-0.5 text-sm text-ink-gray-5">Typ klienta</div>
                   <WyborSegmentowy v-model="sel.typKlienta" :options="TYP_KLIENTA_OPTIONS" />
@@ -220,7 +220,7 @@
                 <FeatherIcon :name="otwarte.montaz ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 shrink-0 text-ink-gray-5" />
               </button>
 
-              <div v-if="otwarte.montaz" class="mt-4 grid grid-cols-2 gap-x-3 gap-y-3">
+              <div v-if="otwarte.montaz" class="mt-4 grid items-start grid-cols-2 gap-x-3 gap-y-3">
                 <div class="relative">
                   <div class="mb-0.5 text-sm text-ink-gray-5">Dodatkowy kabel (m)</div>
                   <input v-model.number="sel.kabelM" type="number" min="0" step="1" class="kalk-input kalk-input-unit" />
@@ -289,7 +289,7 @@
                 <FeatherIcon :name="otwarte.finansowanie ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 shrink-0 text-ink-gray-5" />
               </button>
 
-              <div v-if="otwarte.finansowanie" class="mt-4 grid grid-cols-2 gap-x-3 gap-y-3">
+              <div v-if="otwarte.finansowanie" class="mt-4 grid items-start grid-cols-2 gap-x-3 gap-y-3">
                 <div>
                   <div class="mb-0.5 text-sm text-ink-gray-5">Ulga termomodernizacyjna</div>
                   <select v-model.number="sel.ulgaPct" class="kalk-select">
