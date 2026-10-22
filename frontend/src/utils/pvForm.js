@@ -710,3 +710,140 @@ export function sanitizujDodatki(wybor, kontekst = {}) {
 
   return next
 }
+
+// --- Prezentacja kalkulatora OZE (wariant A, kokpit z paragonem) -------------
+// Wylacznie czyste helpery prezentacji: grupowanie list, proporcje paska i
+// podsumowania zwiniętych sekcji. Zadnej matematyki cenowej: kwoty zawsze
+// przychodza z serwera (summary), tu tylko formatowane lub dzielone na procenty
+// do narysowania paska.
+
+/**
+ * Grupuje opcje mocy PV na "do progu PPOŻ" i "powyzej progu". Opcja trafia do
+ * grupy "powyzej", gdy moc nowa + istniejaca > prog (ostro, jak
+ * ppozWymuszonyProgiem). Zwraca tylko niepuste grupy, w kolejnosci wejscia.
+ *
+ * @param {{value: number, label: string}[]} opcje - opcje mocy (buildMocOptionsForPanel)
+ * @param {object} [params]
+ * @param {number} [params.progKw] - prog w kWp (domyslnie PROG_PPOZ_KW)
+ * @param {number} [params.istniejacaKwp] - moc istniejacej instalacji PV w kWp
+ * @param {string} [params.etykietaPowyzej] - naglowek grupy powyzej progu
+ * @returns {{naglowek: string, opcje: object[]}[]} niepuste grupy
+ */
+export function grupujMocePv(opcje, { progKw = PROG_PPOZ_KW, istniejacaKwp = 0, etykietaPowyzej = 'Powyżej 6,5 kW' } = {}) {
+  const lista = Array.isArray(opcje) ? opcje : []
+  const istn = Number(istniejacaKwp) || 0
+  const doProgu = []
+  const powyzej = []
+  for (const o of lista) {
+    if ((Number(o?.value) || 0) + istn > progKw) powyzej.push(o)
+    else doProgu.push(o)
+  }
+  const progTekst = String(progKw).replace('.', ',')
+  const grupy = [
+    { naglowek: `Do ${progTekst} kW`, opcje: doProgu },
+    { naglowek: etykietaPowyzej, opcje: powyzej },
+  ]
+  return grupy.filter((g) => g.opcje.length > 0)
+}
+
+const PROGI_MAGAZYNU = [
+  { max: 30, naglowek: 'Do 30 kWh' },
+  { max: 50, naglowek: '30 do 50 kWh' },
+  { max: 70, naglowek: '50 do 70 kWh' },
+  { max: Infinity, naglowek: '70 kWh i więcej' },
+]
+
+/**
+ * Grupuje magazyny energii po pojemnosc_kwh: <30, 30..<50, 50..<70, >=70.
+ * Brak lub 0 pojemnosci laduje w "Do 30 kWh". Tylko niepuste grupy; naglowki
+ * nie wspominaja o marzach ani kosztach.
+ *
+ * @param {{pojemnosc_kwh?: number}[]} opcje - komponenty magazynu
+ * @returns {{naglowek: string, opcje: object[]}[]} niepuste grupy
+ */
+export function grupujMagazyny(opcje) {
+  const lista = Array.isArray(opcje) ? opcje : []
+  const grupy = PROGI_MAGAZYNU.map((p) => ({ naglowek: p.naglowek, opcje: [] }))
+  for (const o of lista) {
+    const kwh = Number(o?.pojemnosc_kwh) || 0
+    const idx = PROGI_MAGAZYNU.findIndex((p) => kwh < p.max)
+    grupy[idx].opcje.push(o)
+  }
+  return grupy.filter((g) => g.opcje.length > 0)
+}
+
+/**
+ * Procentowe udzialy ceny brutto: klient / dotacja / ulga. WYLACZNIE do
+ * narysowania paska proporcji (wyswietlanie), nie wartosci rozliczeniowe.
+ * Dotacja i ulga zaokraglane do calosci, klient = reszta (>= 0); wszystko 0
+ * przy brutto <= 0.
+ *
+ * @param {{brutto?: number, dotacja?: number, ulga?: number}} summary
+ * @returns {{klient: number, dotacja: number, ulga: number}} procenty calkowite
+ */
+export function udzialyCeny(summary) {
+  const brutto = Number(summary?.brutto) || 0
+  if (brutto <= 0) return { klient: 0, dotacja: 0, ulga: 0 }
+  const proc = (x) => clamp(Math.round(((Number(x) || 0) / brutto) * 100), 0, 100)
+  const dotacja = proc(summary.dotacja)
+  const ulga = Math.min(proc(summary.ulga), 100 - dotacja)
+  return { klient: Math.max(0, 100 - dotacja - ulga), dotacja, ulga }
+}
+
+/**
+ * Jednolinijkowe podsumowanie zwinietej sekcji "Montaz i przylacze".
+ *
+ * @param {object} sel - stan formularza (kabelM, spoldzielnia, licznik, operator, kierunek)
+ * @param {object} ctx
+ * @param {boolean} ctx.licznikDostepny - czy pole licznika jest widoczne dla producenta
+ * @param {boolean} ctx.ppozWymagane - czy PPOŻ jest wymagane
+ * @param {number} [ctx.ppozCena] - cena PPOŻ do wyswietlenia (0 = bez kwoty)
+ * @param {boolean} [ctx.hasPv] - czy wariant ma PV (kierunek montazu tylko wtedy)
+ * @param {(n: number) => string} ctx.formatPln
+ * @returns {string} podsumowanie
+ */
+export function podsumowanieMontazu(sel, { licznikDostepny: licznikOk = false, ppozWymagane: ppoz = false, ppozCena = 0, hasPv = true, formatPln } = {}) {
+  const fmt = typeof formatPln === 'function' ? formatPln : (n) => String(n)
+  const s = sel || {}
+  const kabel = Number(s.kabelM) || 0
+  const czesci = [`Kabel ${kabel} m`, s.spoldzielnia === 'Tak' ? 'spółdzielnia' : 'bez spółdzielni']
+  if (licznikOk) czesci.push(`licznik: ${s.licznik === 'Tak' ? 'tak' : 'nie'}`)
+  czesci.push(ppoz ? `PPOŻ: wymagane${Number(ppozCena) > 0 ? ` (+${fmt(ppozCena)})` : ''}` : 'PPOŻ: niewymagane')
+  czesci.push(`operator: ${s.operator || 'brak'}`)
+  if (hasPv) czesci.push(`kierunek: ${s.kierunek || 'brak'}`)
+  return czesci.join(' · ')
+}
+
+/**
+ * Jednolinijkowe podsumowanie zwinietej sekcji "Finansowanie".
+ *
+ * @param {object} sel - stan formularza (ulgaPct, okresLat, wplataWlasna)
+ * @param {object} ctx
+ * @param {(n: number) => string} ctx.formatPln
+ * @returns {string} podsumowanie
+ */
+export function podsumowanieFinansowania(sel, { formatPln } = {}) {
+  const fmt = typeof formatPln === 'function' ? formatPln : (n) => String(n)
+  const s = sel || {}
+  return `Ulga ${Number(s.ulgaPct) || 0}% · ${Number(s.okresLat) || 0} lat · wpłata własna ${fmt(Number(s.wplataWlasna) || 0)}`
+}
+
+/**
+ * Jednolinijkowe podsumowanie zwinietej sekcji "Opcje dodatkowe". Kwota
+ * (dodatkiNetto) pochodzi z serwera, nigdy nie jest sumowana tutaj.
+ *
+ * @param {object} params
+ * @param {string[]} params.dostepne - nazwy dostepnych dodatkow
+ * @param {string[]} params.wybrane - nazwy wybranych dodatkow
+ * @param {number} params.dodatkiNetto - summary.dodatki_netto
+ * @param {(n: number) => string} params.formatPln
+ * @returns {string} podsumowanie
+ */
+export function podsumowanieDodatkow({ dostepne = [], wybrane = [], dodatkiNetto = 0, formatPln } = {}) {
+  const fmt = typeof formatPln === 'function' ? formatPln : (n) => String(n)
+  if (!wybrane.length) {
+    return dostepne.length ? `Brak wybranych · dostępne: ${dostepne.join(', ')}` : 'Brak wybranych'
+  }
+  const kwota = Number(dodatkiNetto) > 0 ? ` · +${fmt(dodatkiNetto)} netto` : ''
+  return `Wybrane: ${wybrane.join(', ')}${kwota}`
+}
