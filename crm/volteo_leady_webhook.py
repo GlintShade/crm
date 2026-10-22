@@ -19,7 +19,7 @@ rozpoznac, NIE gubi leada: surowa wartosc trafia jako linia do
 
 import re
 from collections.abc import Mapping
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 from crm.volteo_leady_import import (
@@ -42,6 +42,20 @@ ZRODLO_LEADA: str = "Facebook"
 
 IMIE_ZASTEPCZE: str = "Lead Facebook"
 """`first_name`, gdy formularz nie niesie imienia (kontroler wymaga imienia)."""
+
+LIMIT_ZADAN_NA_MINUTE: int = 3
+"""Decyzja wlasciciela 2026-10-22: liczy KAZDE wywolanie endpointu przez konto integracji (utworzony, duplikat i odrzucony tak samo); okno przesuwne celowo pominiete, stale okno minuty kalendarzowej wystarcza jako hamulec."""
+
+
+def klucz_limitu(uzytkownik: str, teraz: datetime) -> str:
+	"""Klucz licznika limitu w Redis: uzytkownik plus minuta kalendarzowa."""
+	return f"volteo:webhook_leady:limit:{uzytkownik}:{teraz.strftime('%Y%m%d%H%M')}"
+
+
+def limit_przekroczony(licznik: int, limit: int = LIMIT_ZADAN_NA_MINUTE) -> bool:
+	"""True, gdy `licznik` (wlacznie z biezacym zadaniem) przekracza `limit`."""
+	return licznik > limit
+
 
 _TAK = frozenset({"tak", "yes", "true", "1"})
 _NIE = frozenset({"nie", "no", "false", "0"})

@@ -3,11 +3,15 @@
 
 import copy
 import unittest
+from datetime import datetime
 
 from crm.volteo_leady_import import SEPARATOR_UWAG
 from crm.volteo_leady_webhook import (
 	IMIE_ZASTEPCZE,
+	LIMIT_ZADAN_NA_MINUTE,
 	LadunekOdrzucony,
+	klucz_limitu,
+	limit_przekroczony,
 	normalizuj_date_zgloszenia,
 	normalizuj_posiada_pv,
 	normalizuj_produkt_reklamy,
@@ -358,6 +362,42 @@ class TestKodPocztowy(unittest.TestCase):
 	def test_brak(self):
 		w = zbuduj_leada_z_webhooka(ladunek(), DZIS)
 		self.assertNotIn("custom_install_postal_code", w)
+
+
+class TestKluczLimitu(unittest.TestCase):
+	def test_format(self):
+		k = klucz_limitu("make@x.pl", datetime(2026, 10, 22, 14, 5, 59))
+		self.assertEqual(k, "volteo:webhook_leady:limit:make@x.pl:202610221405")
+
+	def test_ta_sama_minuta_ten_sam_klucz(self):
+		a = klucz_limitu("u", datetime(2026, 10, 22, 14, 5, 0))
+		b = klucz_limitu("u", datetime(2026, 10, 22, 14, 5, 59))
+		self.assertEqual(a, b)
+
+	def test_granica_minuty_inny_klucz(self):
+		a = klucz_limitu("u", datetime(2026, 10, 22, 14, 5, 30))
+		b = klucz_limitu("u", datetime(2026, 10, 22, 14, 6, 29))
+		self.assertNotEqual(a, b)
+
+	def test_uzytkownik_w_kluczu(self):
+		t = datetime(2026, 10, 22, 14, 5)
+		self.assertNotEqual(klucz_limitu("a", t), klucz_limitu("b", t))
+
+
+class TestLimitPrzekroczony(unittest.TestCase):
+	def test_stala(self):
+		self.assertEqual(LIMIT_ZADAN_NA_MINUTE, 3)
+
+	def test_zero_i_trzy_przechodza(self):
+		self.assertFalse(limit_przekroczony(0))
+		self.assertFalse(limit_przekroczony(3))
+
+	def test_czwarte_odrzucone(self):
+		self.assertTrue(limit_przekroczony(4))
+
+	def test_wlasny_limit(self):
+		self.assertFalse(limit_przekroczony(10, limit=10))
+		self.assertTrue(limit_przekroczony(11, limit=10))
 
 
 if __name__ == "__main__":
