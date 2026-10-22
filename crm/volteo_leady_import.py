@@ -738,6 +738,11 @@ def _wyglada_na_firme(tekst: str) -> bool:
 	return False
 
 
+# Publiczny alias: webhook leadow z Facebooka (`crm/volteo_leady_webhook.py`) uzywa tej samej
+# heurystyki firmy co import arkusza, bez kopiowania logiki.
+wyglada_na_firme = _wyglada_na_firme
+
+
 def rozdziel_imie_nazwisko(imie: str, nazwisko: str) -> tuple[str, str]:
 	"""Rozdziela sklejone imię i nazwisko z kolumny `Imię`, gdy `Nazwisko` jest puste.
 

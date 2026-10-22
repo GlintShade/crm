@@ -65,6 +65,11 @@ _ALLOWLIST = frozenset(
         "crm.api.oswiadczenie.volteo_oswiadczenie_status",
         "crm.api.oswiadczenie.volteo_oswiadczenie_tresc",
         "crm.api.oswiadczenie.volteo_podpisz_oswiadczenie",
+        # Webhook leadow z Facebooka (ops#296): bramka NDA blokuje KAZDE
+        # `/api/method/*` konta zalozonego po cutoffie 2026-08-20 bez podpisanego
+        # oswiadczenia, a konto integracji Make.com nie jest osoba i nigdy go nie
+        # podpisze. Sam endpoint jest i tak bramkowany rola `Volteo Integracja`.
+        "crm.api.leady_webhook.przyjmij",
     }
 )
 """Metody `/api/method/<dotted>` przepuszczane bez sprawdzania bramki NDA.
