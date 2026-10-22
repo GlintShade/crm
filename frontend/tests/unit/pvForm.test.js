@@ -1,4 +1,5 @@
 import {
+  opisZestawu,
   grupujMocePv,
   grupujMagazyny,
   udzialyCeny,
@@ -1019,5 +1020,23 @@ describe('podsumowania sekcji', () => {
     expect(podsumowanieDodatkow({ formatPln: fmt })).toBe('Brak wybranych')
     expect(podsumowanieDodatkow({ wybrane: ['EMS Zeronest'], dodatkiNetto: 1850, formatPln: fmt })).toBe('Wybrane: EMS Zeronest · +1850 zł netto')
     expect(podsumowanieDodatkow({ wybrane: ['EMS Zeronest'], dodatkiNetto: 0, formatPln: fmt })).toBe('Wybrane: EMS Zeronest')
+  })
+})
+
+describe('opisZestawu', () => {
+  it('pusty gdy opis to producent', () => {
+    expect(opisZestawu({ producent: 'Hoymiles', opis: ' hoymiles ' })).toBe('')
+    expect(opisZestawu({ producent: 'Sigenergy', opis: 'Sigenergy' })).toBe('')
+  })
+  it('zdejmuje prefiks producenta', () => {
+    expect(opisZestawu({ producent: 'Solax', opis: 'Solax, gwarancja rachunku 49 zł/mies.' })).toBe('gwarancja rachunku 49 zł/mies.')
+  })
+  it('zostawia inny opis i obsluguje braki', () => {
+    expect(opisZestawu({ producent: 'Solax', opis: 'inny opis' })).toBe('inny opis')
+    expect(opisZestawu({ producent: 'X' })).toBe('')
+    expect(opisZestawu(null)).toBe('')
+  })
+  it('realne ZESTAWY', () => {
+    expect(ZESTAWY.map(opisZestawu)).toEqual(['', 'gwarancja rachunku 49 zł/mies.', ''])
   })
 })

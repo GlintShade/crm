@@ -6,7 +6,7 @@
 <template>
   <div
     role="radiogroup"
-    class="inline-flex flex-wrap gap-0.5 rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-0.5"
+    class="inline-flex max-w-full flex-wrap gap-0.5 rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-0.5"
   >
     <button
       v-for="o in normalized" :key="o.value"
@@ -20,7 +20,7 @@
         ? 'bg-surface-gray-10 font-medium text-ink-base'
         : 'text-ink-gray-5 hover:bg-surface-gray-3 hover:text-ink-gray-8'"
       @click="select(o.value)"
-    >{{ o.label }}<span v-if="o.hint" class="opacity-70"> {{ o.hint }}</span></button>
+    >{{ o.label }}<span v-if="o.hint" class="ml-1 opacity-70">{{ o.hint }}</span></button>
   </div>
 </template>
 
