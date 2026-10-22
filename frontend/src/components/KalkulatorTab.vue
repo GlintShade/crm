@@ -216,7 +216,9 @@
                 <span class="kalk-part-number">3</span>
                 <span class="min-w-0 flex-1 text-left">
                   <span class="block text-lg font-bold text-ink-gray-9">Montaż i przyłącze</span>
-                  <span v-if="!otwarte.montaz" class="block truncate text-sm text-ink-gray-5">{{ montazPodsumowanie }}</span>
+                  <span v-if="!otwarte.montaz" class="mt-1 flex flex-wrap gap-1">
+                    <span v-for="(p, i) in montazPodsumowanie" :key="i" class="rounded-full px-2 py-0.5 text-xs whitespace-nowrap" :class="PIGULKA_KLASY[p.ton] || PIGULKA_KLASY.neutral">{{ p.tekst }}</span>
+                  </span>
                 </span>
                 <FeatherIcon :name="otwarte.montaz ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 shrink-0 text-ink-gray-5" />
               </button>
@@ -285,7 +287,9 @@
                 <span class="kalk-part-number">4</span>
                 <span class="min-w-0 flex-1 text-left">
                   <span class="block text-lg font-bold text-ink-gray-9">Finansowanie</span>
-                  <span v-if="!otwarte.finansowanie" class="block truncate text-sm text-ink-gray-5">{{ finansowaniePodsumowanie }}</span>
+                  <span v-if="!otwarte.finansowanie" class="mt-1 flex flex-wrap gap-1">
+                    <span v-for="(p, i) in finansowaniePodsumowanie" :key="i" class="rounded-full px-2 py-0.5 text-xs whitespace-nowrap" :class="PIGULKA_KLASY[p.ton] || PIGULKA_KLASY.neutral">{{ p.tekst }}</span>
+                  </span>
                 </span>
                 <FeatherIcon :name="otwarte.finansowanie ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 shrink-0 text-ink-gray-5" />
               </button>
@@ -323,7 +327,9 @@
                 <span class="kalk-part-number">5</span>
                 <span class="min-w-0 flex-1 text-left">
                   <span class="block text-lg font-bold text-ink-gray-9">Opcje dodatkowe</span>
-                  <span v-if="!otwarte.dodatki" class="block truncate text-sm text-ink-gray-5">{{ dodatkiPodsumowanie }}</span>
+                  <span v-if="!otwarte.dodatki" class="mt-1 flex flex-wrap gap-1">
+                    <span v-for="(p, i) in dodatkiPodsumowanie" :key="i" class="rounded-full px-2 py-0.5 text-xs whitespace-nowrap" :class="PIGULKA_KLASY[p.ton] || PIGULKA_KLASY.neutral">{{ p.tekst }}</span>
+                  </span>
                 </span>
                 <FeatherIcon :name="otwarte.dodatki ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 shrink-0 text-ink-gray-5" />
               </button>
@@ -1234,6 +1240,11 @@ const mocGrupy = computed(() =>
 )
 const bateriaGrupy = computed(() => grupujMagazyny(bateriaOptions.value))
 
+const PIGULKA_KLASY = {
+  neutral: 'bg-surface-gray-2 text-ink-gray-7',
+  info: 'bg-surface-blue-2 text-ink-blue-6',
+  muted: 'border border-outline-gray-2 text-ink-gray-4',
+}
 const montazPodsumowanie = computed(() =>
   podsumowanieMontazu(sel, {
     licznikDostepny: licznikDostepny(sel.producent),
@@ -1245,12 +1256,9 @@ const montazPodsumowanie = computed(() =>
 )
 const finansowaniePodsumowanie = computed(() => podsumowanieFinansowania(sel, { formatPln }))
 const dodatkiPodsumowanie = computed(() => {
-  const dostepne = []
   const wybrane = []
   const wiersz = (dostepny, nazwa, wlaczony) => {
-    if (!dostepny) return
-    dostepne.push(nazwa)
-    if (wlaczony) wybrane.push(nazwa)
+    if (dostepny && wlaczony) wybrane.push(nazwa)
   }
   wiersz(klimaDostepnaNow.value, 'klimatyzacja', dodatkiUi.klimaOn)
   wiersz(paneleDostepneNow.value, 'panele PV', dodatkiUi.paneleOn)
@@ -1258,7 +1266,7 @@ const dodatkiPodsumowanie = computed(() => {
   wiersz(emsDostepnyNow.value, 'EMS Zeronest', dodatkiUi.emsOn)
   wiersz(pstrykDostepnyNow.value, 'licznik Pstryk', dodatkiUi.pstrykOn)
   wiersz(evDostepneNow.value, 'ładowarka EV', dodatkiUi.evOn)
-  return podsumowanieDodatkow({ dostepne, wybrane, dodatkiNetto: summary.dodatki_netto, formatPln })
+  return podsumowanieDodatkow({ wybrane, dodatkiNetto: summary.dodatki_netto, formatPln })
 })
 
 const canGenerate = computed(() => isComplete.value && !!c.value.name && narzutValid.value)

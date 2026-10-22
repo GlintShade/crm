@@ -791,61 +791,77 @@ export function udzialyCeny(summary) {
 }
 
 /**
- * Jednolinijkowe podsumowanie zwinietej sekcji "Montaz i przylacze".
+ * Pigulki zwinietej sekcji "Montaz i przylacze": tylko wartosci rozne od
+ * domyslnych; gdy nic sie nie rozni, jedna pigulka "Ustawienia domyslne".
  *
- * @param {object} sel - stan formularza (kabelM, spoldzielnia, licznik, operator, kierunek)
+ * @param {object} sel - stan formularza (kabelM, spoldzielnia, licznik, istniejacaPv, istniejacaPvMocKwp, operator, kierunek)
  * @param {object} ctx
  * @param {boolean} ctx.licznikDostepny - czy pole licznika jest widoczne dla producenta
  * @param {boolean} ctx.ppozWymagane - czy PPOŻ jest wymagane
  * @param {number} [ctx.ppozCena] - cena PPOŻ do wyswietlenia (0 = bez kwoty)
  * @param {boolean} [ctx.hasPv] - czy wariant ma PV (kierunek montazu tylko wtedy)
  * @param {(n: number) => string} ctx.formatPln
- * @returns {string} podsumowanie
+ * @returns {{tekst: string, ton: 'neutral'|'info'|'muted'}[]} pigulki
  */
 export function podsumowanieMontazu(sel, { licznikDostepny: licznikOk = false, ppozWymagane: ppoz = false, ppozCena = 0, hasPv = true, formatPln } = {}) {
   const fmt = typeof formatPln === 'function' ? formatPln : (n) => String(n)
   const s = sel || {}
+  const pigulki = []
   const kabel = Number(s.kabelM) || 0
-  const czesci = [`Kabel ${kabel} m`, s.spoldzielnia === 'Tak' ? 'spółdzielnia' : 'bez spółdzielni']
-  if (licznikOk) czesci.push(`licznik: ${s.licznik === 'Tak' ? 'tak' : 'nie'}`)
-  czesci.push(ppoz ? `PPOŻ: wymagane${Number(ppozCena) > 0 ? ` (+${fmt(ppozCena)})` : ''}` : 'PPOŻ: niewymagane')
-  czesci.push(`operator: ${s.operator || 'brak'}`)
-  if (hasPv) czesci.push(`kierunek: ${s.kierunek || 'brak'}`)
-  return czesci.join(' · ')
+  if (kabel > 0) pigulki.push({ tekst: `Kabel ${kabel} m`, ton: 'neutral' })
+  if (s.spoldzielnia === 'Tak') pigulki.push({ tekst: 'Spółdzielnia', ton: 'neutral' })
+  if (licznikOk && s.licznik === 'Tak') pigulki.push({ tekst: 'Dodatkowy licznik', ton: 'neutral' })
+  if (s.istniejacaPv === 'Tak') {
+    const moc = Number(s.istniejacaPvMocKwp) || 0
+    pigulki.push({ tekst: moc > 0 ? `Istniejąca PV ${String(moc).replace('.', ',')} kWp` : 'Istniejąca PV', ton: 'neutral' })
+  }
+  if (ppoz) pigulki.push({ tekst: `PPOŻ wymagane${Number(ppozCena) > 0 ? ` +${fmt(ppozCena)}` : ''}`, ton: 'info' })
+  if (s.operator) pigulki.push({ tekst: String(s.operator), ton: 'neutral' })
+  if (hasPv && s.kierunek) pigulki.push({ tekst: String(s.kierunek), ton: 'neutral' })
+  return pigulki.length ? pigulki : [{ tekst: 'Ustawienia domyślne', ton: 'muted' }]
 }
 
 /**
- * Jednolinijkowe podsumowanie zwinietej sekcji "Finansowanie".
+ * Pigulki zwinietej sekcji "Finansowanie": ulga, okres, wplata wlasna.
  *
  * @param {object} sel - stan formularza (ulgaPct, okresLat, wplataWlasna)
  * @param {object} ctx
  * @param {(n: number) => string} ctx.formatPln
- * @returns {string} podsumowanie
+ * @returns {{tekst: string, ton: 'neutral'|'info'|'muted'}[]} pigulki
  */
 export function podsumowanieFinansowania(sel, { formatPln } = {}) {
   const fmt = typeof formatPln === 'function' ? formatPln : (n) => String(n)
   const s = sel || {}
-  return `Ulga ${Number(s.ulgaPct) || 0}% · ${Number(s.okresLat) || 0} lat · wpłata własna ${fmt(Number(s.wplataWlasna) || 0)}`
+  const lat = Number(s.okresLat) || 0
+  const mod10 = lat % 10
+  const mod100 = lat % 100
+  let jednostka = 'lat'
+  if (lat === 1) jednostka = 'rok'
+  else if (mod10 >= 2 && mod10 <= 4 && !(mod100 >= 12 && mod100 <= 14)) jednostka = 'lata'
+  return [
+    { tekst: `Ulga ${Number(s.ulgaPct) || 0}%`, ton: 'neutral' },
+    { tekst: `${lat} ${jednostka}`, ton: 'neutral' },
+    { tekst: `Wpłata własna ${fmt(Number(s.wplataWlasna) || 0)}`, ton: 'neutral' },
+  ]
 }
 
 /**
- * Jednolinijkowe podsumowanie zwinietej sekcji "Opcje dodatkowe". Kwota
- * (dodatkiNetto) pochodzi z serwera, nigdy nie jest sumowana tutaj.
+ * Pigulki zwinietej sekcji "Opcje dodatkowe": po jednej na wybrany dodatek
+ * plus kwota netto. Kwota (dodatkiNetto) pochodzi z serwera, nigdy nie jest
+ * sumowana tutaj.
  *
  * @param {object} params
- * @param {string[]} params.dostepne - nazwy dostepnych dodatkow
  * @param {string[]} params.wybrane - nazwy wybranych dodatkow
  * @param {number} params.dodatkiNetto - summary.dodatki_netto
  * @param {(n: number) => string} params.formatPln
- * @returns {string} podsumowanie
+ * @returns {{tekst: string, ton: 'neutral'|'info'|'muted'}[]} pigulki
  */
-export function podsumowanieDodatkow({ dostepne = [], wybrane = [], dodatkiNetto = 0, formatPln } = {}) {
+export function podsumowanieDodatkow({ wybrane = [], dodatkiNetto = 0, formatPln } = {}) {
   const fmt = typeof formatPln === 'function' ? formatPln : (n) => String(n)
-  if (!wybrane.length) {
-    return dostepne.length ? `Brak wybranych · dostępne: ${dostepne.join(', ')}` : 'Brak wybranych'
-  }
-  const kwota = Number(dodatkiNetto) > 0 ? ` · +${fmt(dodatkiNetto)} netto` : ''
-  return `Wybrane: ${wybrane.join(', ')}${kwota}`
+  if (!wybrane.length) return [{ tekst: 'Brak dodatków', ton: 'muted' }]
+  const pigulki = wybrane.map((n) => ({ tekst: String(n).charAt(0).toUpperCase() + String(n).slice(1), ton: 'neutral' }))
+  if (Number(dodatkiNetto) > 0) pigulki.push({ tekst: `+${fmt(dodatkiNetto)} netto`, ton: 'info' })
+  return pigulki
 }
 
 /**

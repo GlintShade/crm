@@ -994,49 +994,48 @@ describe('udzialyCeny', () => {
   })
 })
 
-describe('podsumowania sekcji', () => {
+describe('podsumowania sekcji (pigulki)', () => {
   const fmt = (n) => `${n} zł`
-  it('montaz: licznik i PPOŻ zaleza od kontekstu', () => {
-    const sel = { kabelM: 0, spoldzielnia: 'Nie', licznik: 'Nie', operator: '', kierunek: '' }
-    expect(podsumowanieMontazu(sel, { formatPln: fmt, hasPv: false })).toBe(
-      'Kabel 0 m · bez spółdzielni · PPOŻ: niewymagane · operator: brak',
-    )
-    expect(
-      podsumowanieMontazu({ ...sel, kabelM: 5, spoldzielnia: 'Tak', licznik: 'Tak', operator: 'Tauron', kierunek: 'Południe' }, {
-        formatPln: fmt, licznikDostepny: true, ppozWymagane: true, ppozCena: 1000,
-      }),
-    ).toBe('Kabel 5 m · spółdzielnia · licznik: tak · PPOŻ: wymagane (+1000 zł) · operator: Tauron · kierunek: Południe')
-    expect(podsumowanieMontazu(sel, { formatPln: fmt, ppozWymagane: true })).toContain('PPOŻ: wymagane ·')
+  const sel = { kabelM: 0, spoldzielnia: 'Nie', licznik: 'Nie', istniejacaPv: 'Nie', istniejacaPvMocKwp: 0, operator: '', kierunek: '' }
+  const teksty = (r) => r.map((p) => p.tekst)
+  it('montaz: wszystko domyslne daje jedna pigulke muted', () => {
+    expect(podsumowanieMontazu(sel, { formatPln: fmt })).toEqual([{ tekst: 'Ustawienia domyślne', ton: 'muted' }])
   })
-  it('finansowanie', () => {
-    expect(podsumowanieFinansowania({ ulgaPct: 12, okresLat: 10, wplataWlasna: 0 }, { formatPln: fmt })).toBe(
-      'Ulga 12% · 10 lat · wpłata własna 0 zł',
-    )
+  it('montaz: kazda niedomyslna wartosc', () => {
+    expect(teksty(podsumowanieMontazu({ ...sel, kabelM: 5 }, { formatPln: fmt }))).toEqual(['Kabel 5 m'])
+    expect(teksty(podsumowanieMontazu({ ...sel, spoldzielnia: 'Tak' }, { formatPln: fmt }))).toEqual(['Spółdzielnia'])
+    expect(teksty(podsumowanieMontazu({ ...sel, licznik: 'Tak' }, { formatPln: fmt, licznikDostepny: true }))).toEqual(['Dodatkowy licznik'])
+    expect(podsumowanieMontazu({ ...sel, licznik: 'Tak' }, { formatPln: fmt, licznikDostepny: false })).toEqual([
+      { tekst: 'Ustawienia domyślne', ton: 'muted' },
+    ])
+    expect(teksty(podsumowanieMontazu({ ...sel, istniejacaPv: 'Tak', istniejacaPvMocKwp: 4.5 }, { formatPln: fmt }))).toEqual(['Istniejąca PV 4,5 kWp'])
+    expect(teksty(podsumowanieMontazu({ ...sel, istniejacaPv: 'Tak' }, { formatPln: fmt }))).toEqual(['Istniejąca PV'])
+    expect(teksty(podsumowanieMontazu({ ...sel, operator: 'Tauron', kierunek: 'Południe' }, { formatPln: fmt }))).toEqual(['Tauron', 'Południe'])
+    expect(teksty(podsumowanieMontazu({ ...sel, kierunek: 'Południe' }, { formatPln: fmt, hasPv: false }))).toEqual(['Ustawienia domyślne'])
   })
-  it('dodatki: brak, brak dostepnych, wybrane z kwota z serwera', () => {
-    expect(podsumowanieDodatkow({ dostepne: ['klimatyzacja', 'licznik Pstryk'], wybrane: [], formatPln: fmt })).toBe(
-      'Brak wybranych · dostępne: klimatyzacja, licznik Pstryk',
-    )
-    expect(podsumowanieDodatkow({ formatPln: fmt })).toBe('Brak wybranych')
-    expect(podsumowanieDodatkow({ wybrane: ['EMS Zeronest'], dodatkiNetto: 1850, formatPln: fmt })).toBe('Wybrane: EMS Zeronest · +1850 zł netto')
-    expect(podsumowanieDodatkow({ wybrane: ['EMS Zeronest'], dodatkiNetto: 0, formatPln: fmt })).toBe('Wybrane: EMS Zeronest')
+  it('montaz: PPOŻ z cena i bez', () => {
+    expect(podsumowanieMontazu(sel, { formatPln: fmt, ppozWymagane: true, ppozCena: 1000 })).toEqual([
+      { tekst: 'PPOŻ wymagane +1000 zł', ton: 'info' },
+    ])
+    expect(podsumowanieMontazu(sel, { formatPln: fmt, ppozWymagane: true })).toEqual([{ tekst: 'PPOŻ wymagane', ton: 'info' }])
   })
-})
-
-describe('opisZestawu', () => {
-  it('pusty gdy opis to producent', () => {
-    expect(opisZestawu({ producent: 'Hoymiles', opis: ' hoymiles ' })).toBe('')
-    expect(opisZestawu({ producent: 'Sigenergy', opis: 'Sigenergy' })).toBe('')
+  it('finansowanie: trzy pigulki i polska odmiana lat', () => {
+    const r = (lat) => podsumowanieFinansowania({ ulgaPct: 12, okresLat: lat, wplataWlasna: 0 }, { formatPln: fmt })
+    expect(teksty(r(10))).toEqual(['Ulga 12%', '10 lat', 'Wpłata własna 0 zł'])
+    expect(teksty(r(1))[1]).toBe('1 rok')
+    expect(teksty(r(3))[1]).toBe('3 lata')
+    expect(teksty(r(12))[1]).toBe('12 lat')
+    expect(r(10).every((p) => p.ton === 'neutral')).toBe(true)
   })
-  it('zdejmuje prefiks producenta', () => {
-    expect(opisZestawu({ producent: 'Solax', opis: 'Solax, gwarancja rachunku 49 zł/mies.' })).toBe('gwarancja rachunku 49 zł/mies.')
-  })
-  it('zostawia inny opis i obsluguje braki', () => {
-    expect(opisZestawu({ producent: 'Solax', opis: 'inny opis' })).toBe('inny opis')
-    expect(opisZestawu({ producent: 'X' })).toBe('')
-    expect(opisZestawu(null)).toBe('')
-  })
-  it('realne ZESTAWY', () => {
-    expect(ZESTAWY.map(opisZestawu)).toEqual(['', 'gwarancja rachunku 49 zł/mies.', ''])
+  it('dodatki: brak, jeden, kilka z kwota z serwera', () => {
+    expect(podsumowanieDodatkow({ formatPln: fmt })).toEqual([{ tekst: 'Brak dodatków', ton: 'muted' }])
+    expect(podsumowanieDodatkow({ wybrane: ['licznik Pstryk'], dodatkiNetto: 0, formatPln: fmt })).toEqual([
+      { tekst: 'Licznik Pstryk', ton: 'neutral' },
+    ])
+    expect(podsumowanieDodatkow({ wybrane: ['EMS Zeronest', 'ładowarka EV'], dodatkiNetto: 1850, formatPln: fmt })).toEqual([
+      { tekst: 'EMS Zeronest', ton: 'neutral' },
+      { tekst: 'Ładowarka EV', ton: 'neutral' },
+      { tekst: '+1850 zł netto', ton: 'info' },
+    ])
   })
 })
