@@ -1,4 +1,10 @@
 import {
+  grupujMocePv,
+  grupujMagazyny,
+  udzialyCeny,
+  podsumowanieMontazu,
+  podsumowanieFinansowania,
+  podsumowanieDodatkow,
   VARIANT_PV,
   VARIANT_PV_BAT,
   VARIANT_BAT,
@@ -934,5 +940,84 @@ describe('autodobor COMFORT PREMIUM (ops#295)', () => {
     expect(czyAutodobor({ variant: 'Fotowoltaika', zestaw: 'COMFORT PREMIUM' })).toBe(false)
     expect(czyAutodobor({ variant: 'Magazyn energii', zestaw: 'COMFORT PREMIUM' })).toBe(false)
     expect(czyAutodobor()).toBe(false)
+  })
+})
+
+describe('grupujMocePv', () => {
+  const o = (v) => ({ value: v, label: String(v) })
+  it('dzieli na do progu i powyzej, prog 6.5 wlacznie w pierwszej grupie', () => {
+    const g = grupujMocePv([o(6), o(6.5), o(7)], { etykietaPowyzej: 'X' })
+    expect(g.map((x) => x.naglowek)).toEqual(['Do 6,5 kW', 'X'])
+    expect(g[0].opcje.map((x) => x.value)).toEqual([6, 6.5])
+    expect(g[1].opcje.map((x) => x.value)).toEqual([7])
+  })
+  it('istniejaca PV przesuwa opcje powyzej progu', () => {
+    const g = grupujMocePv([o(3), o(4)], { istniejacaKwp: 3 })
+    expect(g).toHaveLength(2)
+    expect(g[0].opcje.map((x) => x.value)).toEqual([3])
+  })
+  it('jedna niepusta grupa i pusta lista', () => {
+    expect(grupujMocePv([o(3), o(4)])).toHaveLength(1)
+    expect(grupujMocePv([])).toEqual([])
+    expect(grupujMocePv(null)).toEqual([])
+  })
+})
+
+describe('grupujMagazyny', () => {
+  const m = (k) => ({ pojemnosc_kwh: k })
+  it('dzieli po progach 30/50/70', () => {
+    const g = grupujMagazyny([m(10), m(29.9), m(30), m(49), m(50), m(70), m(90)])
+    expect(g.map((x) => x.naglowek)).toEqual(['Do 30 kWh', '30 do 50 kWh', '50 do 70 kWh', '70 kWh i więcej'])
+    expect(g.map((x) => x.opcje.length)).toEqual([2, 2, 1, 2])
+  })
+  it('brak pojemnosci laduje w pierwszej grupie, puste grupy pomijane', () => {
+    const g = grupujMagazyny([{}, m(0)])
+    expect(g).toHaveLength(1)
+    expect(g[0].naglowek).toBe('Do 30 kWh')
+    expect(grupujMagazyny([])).toEqual([])
+  })
+})
+
+describe('udzialyCeny', () => {
+  it('liczy procenty z brutto', () => {
+    expect(udzialyCeny({ brutto: 1000, dotacja: 200, ulga: 100 })).toEqual({ klient: 70, dotacja: 20, ulga: 10 })
+  })
+  it('brutto 0 lub brak daje zera', () => {
+    expect(udzialyCeny({ brutto: 0, dotacja: 5, ulga: 5 })).toEqual({ klient: 0, dotacja: 0, ulga: 0 })
+    expect(udzialyCeny(null)).toEqual({ klient: 0, dotacja: 0, ulga: 0 })
+  })
+  it('nie schodzi ponizej zera', () => {
+    const r = udzialyCeny({ brutto: 100, dotacja: 80, ulga: 80 })
+    expect(r.klient).toBe(0)
+    expect(r.dotacja + r.ulga + r.klient).toBe(100)
+  })
+})
+
+describe('podsumowania sekcji', () => {
+  const fmt = (n) => `${n} zł`
+  it('montaz: licznik i PPOŻ zaleza od kontekstu', () => {
+    const sel = { kabelM: 0, spoldzielnia: 'Nie', licznik: 'Nie', operator: '', kierunek: '' }
+    expect(podsumowanieMontazu(sel, { formatPln: fmt, hasPv: false })).toBe(
+      'Kabel 0 m · bez spółdzielni · PPOŻ: niewymagane · operator: brak',
+    )
+    expect(
+      podsumowanieMontazu({ ...sel, kabelM: 5, spoldzielnia: 'Tak', licznik: 'Tak', operator: 'Tauron', kierunek: 'Południe' }, {
+        formatPln: fmt, licznikDostepny: true, ppozWymagane: true, ppozCena: 1000,
+      }),
+    ).toBe('Kabel 5 m · spółdzielnia · licznik: tak · PPOŻ: wymagane (+1000 zł) · operator: Tauron · kierunek: Południe')
+    expect(podsumowanieMontazu(sel, { formatPln: fmt, ppozWymagane: true })).toContain('PPOŻ: wymagane ·')
+  })
+  it('finansowanie', () => {
+    expect(podsumowanieFinansowania({ ulgaPct: 12, okresLat: 10, wplataWlasna: 0 }, { formatPln: fmt })).toBe(
+      'Ulga 12% · 10 lat · wpłata własna 0 zł',
+    )
+  })
+  it('dodatki: brak, brak dostepnych, wybrane z kwota z serwera', () => {
+    expect(podsumowanieDodatkow({ dostepne: ['klimatyzacja', 'licznik Pstryk'], wybrane: [], formatPln: fmt })).toBe(
+      'Brak wybranych · dostępne: klimatyzacja, licznik Pstryk',
+    )
+    expect(podsumowanieDodatkow({ formatPln: fmt })).toBe('Brak wybranych')
+    expect(podsumowanieDodatkow({ wybrane: ['EMS Zeronest'], dodatkiNetto: 1850, formatPln: fmt })).toBe('Wybrane: EMS Zeronest · +1850 zł netto')
+    expect(podsumowanieDodatkow({ wybrane: ['EMS Zeronest'], dodatkiNetto: 0, formatPln: fmt })).toBe('Wybrane: EMS Zeronest')
   })
 })
