@@ -34,10 +34,7 @@
 
       <template v-else>
       <template v-if="flow !== 'done'">
-        <!-- Pasek nagłówka: status uzupełnienia (wybór klienta jest w prawej kolumnie). -->
-        <div class="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-          <div class="text-sm text-ink-gray-5">{{ statusFormularza }}</div>
-        </div>
+        <!-- Tekst stanu formularza ukryty na prośbę właściciela (2026-10-22); można przywrócić, renderując statusFormularza. -->
 
         <div class="kalk-split grid items-start gap-x-5" style="grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr)">
 
@@ -1214,6 +1211,7 @@ const narzutErrorMsg = computed(() =>
 const otwarte = reactive({ montaz: false, finansowanie: false, dodatki: false })
 
 const sekcja1Gotowa = computed(() => !!sel.typKlienta && !!sel.variant && (!hasPv.value || sel.consumption > 0))
+// Obecnie nieużywane w szablonie, zostaje do przywrócenia paska stanu.
 const statusFormularza = computed(() =>
   isComplete.value ? 'Sekcje 1-2 uzupełnione, gotowe do wyceny' : 'Uzupełnij instalację i zestaw',
 )
