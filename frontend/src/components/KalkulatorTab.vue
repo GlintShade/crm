@@ -436,8 +436,8 @@
             </div>
           </div>
 
-          <div class="kalk-output border-l border-outline-gray-2 pl-5">
-            <div class="sticky top-3">
+          <div class="kalk-output self-stretch border-l border-outline-gray-2 pl-5">
+            <div class="kalk-sticky sticky top-3">
               <div v-if="$slots['client-picker']" class="mb-3 w-full min-w-0">
                 <div class="mb-0.5 text-sm text-ink-gray-5">Klient</div>
                 <slot name="client-picker" />
@@ -1533,12 +1533,20 @@ function extractErrorMessage(err) {
   font-size: 0.7rem;
   font-weight: 700;
 }
+/* Paragon przyklejony: wysokosc = okno minus naglowek strony (LayoutHeader) i marginesy */
+.kalk-sticky {
+  max-height: calc(100vh - 7rem);
+  overflow-y: auto;
+  padding-right: 0.5rem;
+  scrollbar-width: thin;
+}
 @media (max-width: 880px) {
   .kalk-split { grid-template-columns: minmax(0, 1fr) !important; }
   .kalk-row2 { grid-template-columns: minmax(0, 1fr) !important; }
   .kalk-zestawy { grid-template-columns: minmax(0, 1fr) !important; }
   .kalk-output { border-left: 0 !important; padding-left: 0 !important; margin-top: 0.75rem; }
   .sticky { position: static; }
+  .kalk-sticky { max-height: none; overflow: visible; padding-right: 0; }
   .kalk-part { padding: 1rem; }
 }
 </style>
