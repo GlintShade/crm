@@ -97,7 +97,6 @@
                     <div class="text-sm font-semibold text-ink-gray-8">
                       {{ plLiczba(suggestedKwp) }} kWp<template v-if="hasBat"> i {{ plLiczba(suggestedStorage) }} kWh</template>
                     </div>
-                    <div>Sug. moc: {{ plLiczba(suggestedKwp) }} kW<template v-if="hasBat"> · magazyn: {{ suggestedStorage }} kWh</template></div>
                     <button type="button" class="mt-1 font-medium text-ink-blue-link hover:underline" @click="applyFromConsumption">Dobierz urządzenia</button>
                   </div>
                 </div>
