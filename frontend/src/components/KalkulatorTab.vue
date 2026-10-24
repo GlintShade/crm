@@ -1015,8 +1015,25 @@ watch(
   { flush: 'post' },
 )
 
+// Zmiana zestawu zmienia producenta, więc poprzedni dobór urządzeń jest
+// nieważny: gdy zużycie jest wpisane, dobór przenosi się automatycznie.
+// COMFORT PREMIUM obsługuje własny autodobór wyżej (bez podwójnego dobierania).
+// flush 'post': kaskada (producent -> czyszczenie falownika/baterii) kończy się
+// przed doborem. Bez immediate, więc nie odpala się przy montowaniu.
+watch(
+  () => sel.zestaw,
+  () => {
+    if (sel.variant !== VARIANT_PV_BAT || !(sel.consumption > 0) || autodoborAktywny.value) return
+    if (!byKat('Falownik').length || !byKat('Magazyn energii').length) return
+    applyFromConsumption()
+  },
+  { flush: 'post' },
+)
+
 // "Ustaw z zużycia" — fills the configuration from the suggestion, respecting
-// the currently selected variant. Never runs automatically; only on click.
+// the currently selected variant. Runs on click, and automatically once after a
+// zestaw change (PV + Magazyn, consumption filled, not COMFORT PREMIUM, which
+// has its own autodobor); never for any other change.
 // Everything stays editable afterwards. Base fields (variant/producent) are
 // set first, then we await a tick so the cascade watchers above finish
 // resetting downstream fields BEFORE we set the dependent picks — otherwise
