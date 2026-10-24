@@ -3,10 +3,11 @@
   Klimatyzacja, Pompa ciepła, Kocioł; b68, "Wielki update kalkulatora OZE",
   chunk F3). Renderowany przez KalkulatorTab.vue (rodzic) w miejsce grida
   `.kalk-split` i bloku `done`, gdy `czyNowyRodzaj(sel.variant)` jest
-  prawdziwe -- ten komponent niesie WŁASNĄ kopię karty 1 "Rodzaj
-  instalacji" (ten sam rząd siedmiu kafelków, `kafelkiRodzaju()`), żeby
-  przełączenie na stary wariant PV/PV+ME/ME nie wymagało znikania i
-  ponownego pokazywania się całej karty na granicy rodzica/dziecka.
+  prawdziwe. Układ i słownik interakcji ("Wariant A, kokpit z paragonem")
+  są te same co w KalkulatorTab.vue: sekcja 1 z kontrolkami segmentowymi
+  (trzy warianty PV obok listy "Inne rodzaje" pokazującej aktywny nowy
+  rodzaj), sekcja 2 z konfiguracją urządzenia, zwijane Finansowanie i
+  prawa kolumna z paragonem (KalkulatorParagon.vue).
 
   ZERO matematyki cenowej w tym pliku (ten sam naglowek-komentarz co
   KalkulatorTab.vue/KalkulatorCPTab.vue) -- wycena jest zawsze liczona od
@@ -25,41 +26,30 @@
       </div>
 
       <template v-if="flow !== 'done'">
-        <div class="kalk-split grid items-start gap-x-5" style="grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr)">
+        <div class="kalk-split grid items-start gap-x-5" style="grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr)">
           <div>
-            <!-- Karta 1: Rodzaj instalacji (wlasna kopia tego samego rzedu
-                 kafelkow co KalkulatorTab.vue, zeby przelaczenie na stary
-                 wariant PV/PV+ME/ME dzialalo bez skoku layoutu). -->
+            <!-- 1. Instalacja i klient (zawsze otwarta) -->
             <div class="kalk-part">
               <div class="kalk-part-heading mb-4 flex items-center gap-2 border-b border-outline-gray-1 pb-2.5 text-lg font-bold text-ink-gray-9">
-                <span class="kalk-part-number">1</span>{{ __('Rodzaj instalacji') }}
-              </div>
-              <div class="flex flex-wrap gap-1.5">
-                <button
-                  v-for="r in kafelki" :key="r"
-                  type="button"
-                  class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
-                  :class="form.rodzaj === r
-                    ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base'
-                    : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
-                  @click="wybierzRodzaj(r)"
-                >{{ r }}</button>
+                <span class="kalk-part-number">1</span>{{ __('Instalacja i klient') }}
+                <FeatherIcon v-if="sekcja1Gotowa" name="check" class="h-4 w-4 text-ink-green-6" />
               </div>
 
-              <div class="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 kalk-row2">
+              <div>
+                <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Rodzaj instalacji') }}</div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <WyborSegmentowy :model-value="''" :options="VARIANTS" @update:model-value="wybierzRodzaj" />
+                  <select class="kalk-select kalk-select-inline" :aria-label="__('Inne rodzaje')" :value="form.rodzaj" @change="wybierzInnyRodzaj($event)">
+                    <option value="">{{ __('Inne rodzaje') }}</option>
+                    <option v-for="r in RODZAJE_NOWE" :key="r" :value="r">{{ r }}</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="mt-3 grid items-start grid-cols-2 gap-x-3 gap-y-3 kalk-row2">
                 <div>
                   <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Typ klienta') }}</div>
-                  <div class="flex flex-wrap gap-1.5">
-                    <button
-                      v-for="opt in TYP_KLIENTA_OPTIONS" :key="opt.value"
-                      type="button"
-                      class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
-                      :class="form.typKlienta === opt.value
-                        ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base'
-                        : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
-                      @click="form.typKlienta = opt.value"
-                    >{{ opt.label }}</button>
-                  </div>
+                  <WyborSegmentowy v-model="form.typKlienta" :options="TYP_KLIENTA_OPTIONS" />
                 </div>
               </div>
             </div>
@@ -72,35 +62,30 @@
             </div>
 
             <template v-else>
-              <!-- Karta 2: konfiguracja specyficzna dla rodzaju -->
+              <!-- 2. Konfiguracja specyficzna dla rodzaju (zawsze otwarta) -->
               <div class="kalk-part">
                 <div class="kalk-part-heading mb-4 flex items-center gap-2 border-b border-outline-gray-1 pb-2.5 text-lg font-bold text-ink-gray-9">
                   <span class="kalk-part-number">2</span>{{ __('Konfiguracja') }}
+                  <FeatherIcon v-if="sekcja2Gotowa" name="check" class="h-4 w-4 text-ink-green-6" />
                 </div>
 
                 <!-- ROZBUDOWA -->
                 <div v-if="form.rodzaj === OZE_ROZBUDOWA">
                   <div
                     v-for="blok in blokiRozbudowy" :key="blok.klucz"
-                    class="border-t border-outline-gray-1 py-2.5 first:border-t-0"
+                    class="border-t border-outline-gray-1 py-2.5 first:border-t-0 first:pt-0"
                   >
-                    <div class="flex items-center gap-2.5">
-                      <span class="w-56 shrink-0 text-sm font-medium text-ink-gray-7">
-                        {{ blok.etykieta }}
-                        <span v-if="blok.opis" class="font-normal text-ink-gray-5"> · {{ blok.opis }}</span>
-                      </span>
-                      <button
-                        type="button" role="switch"
-                        :aria-checked="form.rozbudowa[blok.klucz] > 0"
-                        :aria-label="blok.etykieta"
+                    <div class="mb-0.5 text-sm text-ink-gray-5">
+                      {{ blok.etykieta }}
+                      <span v-if="blok.opis"> · {{ blok.opis }}</span>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <WyborSegmentowy
+                        :model-value="form.rozbudowa[blok.klucz] > 0 ? 'Tak' : 'Nie'"
+                        :options="NIE_TAK"
                         :disabled="elementRozbudowyZablokowany(form.rozbudowa, blok.klucz)"
-                        class="kalk-switch shrink-0"
-                        :class="[
-                          form.rozbudowa[blok.klucz] > 0 ? 'kalk-switch-on' : 'kalk-switch-off',
-                          elementRozbudowyZablokowany(form.rozbudowa, blok.klucz) ? 'opacity-50 cursor-not-allowed' : '',
-                        ]"
-                        @click="przelaczRozbudowa(blok.klucz)"
-                      ><span class="kalk-switch-knob" /></button>
+                        @update:model-value="przelaczRozbudowa(blok.klucz)"
+                      />
                       <select
                         v-if="form.rozbudowa[blok.klucz] > 0"
                         v-model.number="form.rozbudowa[blok.klucz]"
@@ -112,64 +97,52 @@
                     <p v-if="opisBlokady(blok.klucz)" class="mt-1 text-xs text-ink-gray-5">{{ opisBlokady(blok.klucz) }}</p>
                   </div>
 
-                  <div class="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 kalk-row2">
+                  <div class="mt-2 grid items-start grid-cols-2 gap-x-3 gap-y-3 kalk-row2">
                     <div>
                       <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Czy klient ma już instalację PV?') }}</div>
-                      <select v-model="form.rozbudowa.istniejacaPv" class="kalk-select">
-                        <option value="Nie">{{ __('Nie') }}</option>
-                        <option value="Tak">{{ __('Tak') }}</option>
-                      </select>
+                      <WyborSegmentowy v-model="form.rozbudowa.istniejacaPv" :options="NIE_TAK" />
                     </div>
-                    <div v-if="form.rozbudowa.istniejacaPv === 'Tak'">
+                    <div v-if="form.rozbudowa.istniejacaPv === 'Tak'" class="relative">
                       <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Moc istniejącej instalacji (kWp)') }}</div>
-                      <input v-model.number="form.rozbudowa.istniejacaPvMocKwp" type="number" min="0" step="0.1" class="kalk-input" />
+                      <input v-model.number="form.rozbudowa.istniejacaPvMocKwp" type="number" min="0" step="0.1" class="kalk-input kalk-input-unit" />
+                      <span class="kalk-unit">kWp</span>
                     </div>
                     <div class="col-span-2">
                       <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Uzgodnienia PPOŻ') }}</div>
-                      <select v-model="form.rozbudowa.ppozRecznie" class="kalk-select" :disabled="ppozProgLive">
-                        <option value="Nie">{{ __('Nie') }}</option>
-                        <option value="Tak">{{ __('Tak') }}</option>
-                      </select>
-                      <div class="mt-0.5 text-xs text-ink-gray-4">
-                        {{ ppozProgLive
-                          ? __('Wymagane automatycznie: suma mocy nowej i istniejącej instalacji przekracza 6,5 kW.')
-                          : __('Ustaw Tak ręcznie, jeśli aktualna moc PV i dokładana moc PV w sumie przekroczą 6,5 kW.') }}
+                      <div v-if="ppozProgLive" class="flex flex-wrap items-center gap-1.5 text-sm">
+                        <FeatherIcon name="lock" class="h-3.5 w-3.5 text-ink-gray-5" />
+                        <span class="font-semibold text-ink-gray-9">{{ __('Tak') }}</span>
+                        <span class="text-ink-gray-5">{{ __('suma mocy nowej i istniejącej instalacji przekracza 6,5 kW') }}</span>
                       </div>
+                      <template v-else>
+                        <WyborSegmentowy v-model="form.rozbudowa.ppozRecznie" :options="NIE_TAK" />
+                        <div class="mt-0.5 text-xs text-ink-gray-4">
+                          {{ __('Ustaw Tak ręcznie, jeśli aktualna moc PV i dokładana moc PV w sumie przekroczą 6,5 kW.') }}
+                        </div>
+                      </template>
                     </div>
                   </div>
                 </div>
 
                 <!-- KLIMATYZACJA -->
                 <div v-else-if="form.rodzaj === OZE_KLIMATYZACJA">
-                  <div class="mb-1.5 text-sm font-medium text-ink-gray-7">{{ __('Rodzaj klimatyzacji') }}</div>
-                  <div class="flex flex-wrap gap-1.5">
-                    <button
-                      v-for="g in GRUPY_KLIMY" :key="g"
-                      type="button"
-                      class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
-                      :class="form.klimatyzacja.grupa === g
-                        ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base'
-                        : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
-                      @click="wybierzGrupaKlimy(g)"
-                    >{{ ETYKIETA_GRUPY_KLIMY[g] }}</button>
+                  <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Rodzaj klimatyzacji') }}</div>
+                  <WyborSegmentowy
+                    :model-value="form.klimatyzacja.grupa"
+                    :options="opcjeGrupyKlimy"
+                    @update:model-value="wybierzGrupaKlimy"
+                  />
+
+                  <div v-if="form.klimatyzacja.grupa" class="mt-3">
+                    <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Model') }}</div>
+                    <WyborSegmentowy
+                      :model-value="form.klimatyzacja.klucz"
+                      :options="opcjeModeliKlimy"
+                      @update:model-value="wybierzModelKlimy"
+                    />
                   </div>
 
-                  <div v-if="form.klimatyzacja.grupa" class="mt-2.5">
-                    <div class="mb-1.5 text-sm font-medium text-ink-gray-7">{{ __('Model') }}</div>
-                    <div class="flex flex-wrap gap-1.5">
-                      <button
-                        v-for="m in modeleKlimyList" :key="m.klucz"
-                        type="button"
-                        class="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
-                        :class="form.klimatyzacja.klucz === m.klucz
-                          ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base'
-                          : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
-                        @click="wybierzModelKlimy(m.klucz)"
-                      ><span class="kalk-kolor-dot" :style="kolorSwatchStyle(m.kolor)" />{{ m.producent }} {{ m.model }}</button>
-                    </div>
-                  </div>
-
-                  <div v-if="form.klimatyzacja.klucz" class="mt-2.5">
+                  <div v-if="form.klimatyzacja.klucz" class="mt-3">
                     <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Moc') }}</div>
                     <select :value="form.klimatyzacja.kod" class="kalk-select" @change="wybierzMocKlimy($event.target.value)">
                       <option value="">{{ __('-- wybierz --') }}</option>
@@ -182,7 +155,7 @@
 
                 <!-- POMPA CIEPŁA -->
                 <div v-else-if="form.rodzaj === OZE_POMPA_CIEPLA">
-                  <div class="mb-2">
+                  <div class="mb-3">
                     <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Zapotrzebowanie budynku na moc') }}</div>
                     <select v-model="form.pompa.zapotrzebowanie" class="kalk-select">
                       <option value="">{{ __('-- wybierz --') }}</option>
@@ -191,83 +164,55 @@
                     <div class="mt-0.5 text-xs text-ink-gray-4">{{ __('Wartość na podstawie wyniku z ciepło.app.') }}</div>
                   </div>
 
-                  <div class="mb-1.5 text-sm font-medium text-ink-gray-7">{{ __('Producent') }}</div>
-                  <div class="flex flex-wrap gap-1.5">
-                    <button
-                      v-for="p in producenciPcList" :key="p"
-                      type="button"
-                      class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
-                      :class="form.pompa.producent === p
-                        ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base'
-                        : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
-                      @click="wybierzProducentaPc(p)"
-                    >{{ p }}</button>
+                  <div class="mb-3">
+                    <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Producent') }}</div>
+                    <WyborSegmentowy
+                      :model-value="form.pompa.producent"
+                      :options="producenciPcList"
+                      @update:model-value="wybierzProducentaPc"
+                    />
                   </div>
 
-                  <div class="mt-2.5 mb-1.5 text-sm font-medium text-ink-gray-7">{{ __('Typ') }}</div>
-                  <div class="flex flex-wrap gap-1.5">
-                    <button
-                      v-for="t in TYPY_PC_WSZYSTKIE" :key="t"
-                      type="button"
-                      class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-                      :class="form.pompa.typ === t
-                        ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base'
-                        : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
-                      :disabled="!typyPcDostepneList.includes(t)"
-                      :title="typyPcDostepneList.includes(t) ? '' : __('Niedostępne dla tego producenta')"
-                      @click="form.pompa.typ = t"
-                    >{{ t }}</button>
+                  <div class="mb-3">
+                    <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Typ') }}</div>
+                    <WyborSegmentowy v-model="form.pompa.typ" :options="opcjeTypowPc" />
                   </div>
 
-                  <div class="mt-2.5 mb-1.5 text-sm font-medium text-ink-gray-7">{{ __('Ogrzewanie') }}</div>
-                  <div class="flex flex-wrap gap-1.5">
-                    <button
-                      v-for="o in OGRZEWANIE_OPCJE" :key="o"
-                      type="button"
-                      class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
-                      :class="form.pompa.ogrzewanie === o
-                        ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base'
-                        : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
-                      @click="form.pompa.ogrzewanie = o"
-                    >{{ o }}</button>
+                  <div class="mb-3">
+                    <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Ogrzewanie') }}</div>
+                    <WyborSegmentowy v-model="form.pompa.ogrzewanie" :options="OGRZEWANIE_OPCJE" />
                   </div>
 
-                  <div class="mt-3">
+                  <div class="mb-3">
                     <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Moc pompy ciepła (dobrana automatycznie)') }}</div>
-                    <input v-if="!pcBrakDoboruLive && !bladDoboruSerwer" :value="mocPcLiveLabel" type="text" class="kalk-input" disabled />
+                    <div v-if="!pcBrakDoboruLive && !bladDoboruSerwer" class="text-sm font-semibold text-ink-gray-9">
+                      <template v-if="mocPcLiveLabel">{{ mocPcLiveLabel }}</template>
+                      <span v-else class="font-normal text-ink-gray-4">-</span>
+                    </div>
                     <!-- `bladDoboruSerwer` to druga linia obrony (patrz komentarz przy
                     `runCalc` w <script>) -- komunikat serwera, gdy ten kiedykolwiek
-                    znajdzie "Brak doboru" mimo ze lokalny `pcBrakDoboruLive` byl `false`. -->
-                    <div v-else class="rounded-md border border-outline-amber-3 bg-surface-amber-2 px-2.5 py-2 text-sm text-ink-amber-8">
+                    znajdzie "Brak doboru" mimo ze lokalny `pcBrakDoboruLive` byl `false`.
+                    Ostrzezenie dla handlowca: neutralny styl informacyjny, nie bursztyn
+                    (bursztyn zarezerwowany dla paneli administratora). -->
+                    <div v-else class="rounded-md border border-outline-blue-2 bg-surface-blue-2 px-2.5 py-2 text-sm text-ink-blue-6">
                       {{ bladDoboruSerwer || __('Brak doboru pompy ciepła dla podanego zapotrzebowania. Najpierw ocieplenie budynku.') }}
                     </div>
                   </div>
 
-                  <div class="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-2 kalk-row2">
-                    <div>
-                      <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Zasobnik CWU') }}</div>
-                      <select v-model="form.pompa.cwu" class="kalk-select">
-                        <option value="">{{ __('Nie') }}</option>
-                        <option value="200">{{ __('200 l') }}</option>
-                        <option value="300">{{ __('300 l') }}</option>
-                      </select>
-                    </div>
+                  <div class="mb-3">
+                    <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Zasobnik CWU') }}</div>
+                    <WyborSegmentowy v-model="form.pompa.cwu" :options="CWU_OPCJE" />
                   </div>
 
-                  <div class="mt-2.5">
-                    <div class="flex items-center gap-2.5">
-                      <span class="w-56 shrink-0 text-sm font-medium text-ink-gray-7">{{ __('Grzejniki niskotemperaturowe') }}</span>
-                      <button
-                        type="button" role="switch"
-                        :aria-checked="grzejnikiWlaczone"
-                        :aria-label="__('Grzejniki niskotemperaturowe')"
-                        class="kalk-switch shrink-0"
-                        :class="grzejnikiWlaczone ? 'kalk-switch-on' : 'kalk-switch-off'"
-                        @click="przelaczGrzejniki"
-                      ><span class="kalk-switch-knob" /></button>
-                    </div>
+                  <div>
+                    <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Grzejniki niskotemperaturowe') }}</div>
+                    <WyborSegmentowy
+                      :model-value="grzejnikiWlaczone ? 'Tak' : 'Nie'"
+                      :options="NIE_TAK"
+                      @update:model-value="przelaczGrzejniki"
+                    />
 
-                    <div v-if="grzejnikiWlaczone" class="kalk-grzejniki-grid mt-2 grid grid-cols-5 gap-2">
+                    <div v-if="grzejnikiWlaczone" class="kalk-grzejniki-grid mt-2 grid grid-cols-5 items-start gap-2">
                       <div v-for="rozmiar in rozmiaryGrzejnikowList" :key="rozmiar.rozmiar">
                         <div class="mb-0.5 text-xs text-ink-gray-5">{{ rozmiar.nazwa || rozmiar.rozmiar }}</div>
                         <select
@@ -287,20 +232,14 @@
 
                 <!-- KOCIOŁ -->
                 <div v-else-if="form.rodzaj === OZE_KOCIOL">
-                  <div class="mb-1.5 text-sm font-medium text-ink-gray-7">{{ __('Rodzaj kotła') }}</div>
-                  <div class="flex flex-wrap gap-1.5">
-                    <button
-                      v-for="t in KOCIOL_TYPY" :key="t.klucz"
-                      type="button"
-                      class="rounded-md border px-2.5 py-1 text-sm font-medium transition-colors"
-                      :class="form.kociol.typ === t.klucz
-                        ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base'
-                        : 'border-transparent bg-surface-gray-2 text-ink-gray-5 hover:bg-surface-gray-3'"
-                      @click="wybierzTypKociol(t.klucz)"
-                    >{{ t.etykieta }}</button>
-                  </div>
+                  <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Rodzaj kotła') }}</div>
+                  <WyborSegmentowy
+                    :model-value="form.kociol.typ"
+                    :options="opcjeTypowKociol"
+                    @update:model-value="wybierzTypKociol"
+                  />
 
-                  <div v-if="form.kociol.typ" class="mt-2.5">
+                  <div v-if="form.kociol.typ" class="mt-3">
                     <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Model') }}</div>
                     <select v-model="form.kociol.kod" class="kalk-select">
                       <option value="">{{ __('-- wybierz --') }}</option>
@@ -310,23 +249,27 @@
                     </select>
                   </div>
 
-                  <div class="mt-2.5">
+                  <div class="mt-3">
                     <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Zasobnik CWU') }}</div>
-                    <select v-model="form.kociol.cwu" class="kalk-select">
-                      <option value="">{{ __('Nie') }}</option>
-                      <option value="200">{{ __('200 l') }}</option>
-                      <option value="300">{{ __('300 l') }}</option>
-                    </select>
+                    <WyborSegmentowy v-model="form.kociol.cwu" :options="CWU_OPCJE" />
                   </div>
                 </div>
               </div>
 
-              <!-- Karta 3: Finansowanie -->
-              <div class="kalk-part">
-                <div class="kalk-part-heading mb-4 flex items-center gap-2 border-b border-outline-gray-1 pb-2.5 text-lg font-bold text-ink-gray-9">
-                  <span class="kalk-part-number">3</span>{{ __('Finansowanie') }}
-                </div>
-                <div class="grid grid-cols-2 gap-x-3 gap-y-2">
+              <!-- 3. Finansowanie (zwijana) -->
+              <div class="kalk-part kalk-part-zwijana">
+                <button type="button" class="kalk-part-toggle" :aria-expanded="otwarteFinansowanie" @click="otwarteFinansowanie = !otwarteFinansowanie">
+                  <span class="kalk-part-number">3</span>
+                  <span class="min-w-0 flex-1 text-left">
+                    <span class="block text-lg font-bold text-ink-gray-9">{{ __('Finansowanie') }}</span>
+                    <span v-if="!otwarteFinansowanie" class="mt-1 flex flex-wrap gap-1">
+                      <span v-for="(p, i) in finansowaniePodsumowanie" :key="i" class="rounded-full bg-surface-gray-2 px-2 py-0.5 text-xs whitespace-nowrap text-ink-gray-7">{{ p.tekst }}</span>
+                    </span>
+                  </span>
+                  <FeatherIcon :name="otwarteFinansowanie ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 shrink-0 text-ink-gray-5" />
+                </button>
+
+                <div v-if="otwarteFinansowanie" class="mt-4 grid items-start grid-cols-2 gap-x-3 gap-y-3">
                   <div v-if="ulgaDotyczyRodzaju">
                     <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Ulga termomodernizacyjna') }}</div>
                     <select v-model.number="form.ulgaPct" class="kalk-select">
@@ -340,27 +283,59 @@
                       <option v-for="n in 10" :key="n" :value="n">{{ n }}</option>
                     </select>
                   </div>
-                  <div>
+                  <div class="relative">
                     <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Wpłata własna (PLN)') }}</div>
-                    <input v-model.number="form.wplataWlasna" type="number" min="0" step="0.01" class="kalk-input" />
+                    <input v-model.number="form.wplataWlasna" type="number" min="0" step="0.01" class="kalk-input kalk-input-unit" />
+                    <span class="kalk-unit">zł</span>
                   </div>
                 </div>
               </div>
             </template>
           </div>
 
-          <div class="kalk-output border-l border-outline-gray-2 pl-5">
-            <div class="sticky top-3">
-              <div class="mb-2.5">
+          <div class="kalk-output self-stretch border-l border-outline-gray-2 pl-5">
+            <div class="kalk-sticky sticky top-3">
+              <div v-if="$slots['client-picker']" class="mb-3 w-full min-w-0">
+                <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Klient') }}</div>
+                <slot name="client-picker" />
+              </div>
+              <div class="mb-2 text-base font-semibold text-ink-gray-9">{{ __('Wycena') }}</div>
+
+              <KalkulatorParagon
+                :summary="paragonSummary"
+                :typ-klienta="form.typKlienta"
+                :ulga-pct="Number(form.ulgaPct)"
+                :okres-lat="Number(form.okresLat)"
+                :pokaz-dotacje="false"
+                :pokaz-ulge="ulgaDotyczyRodzaju"
+                :pokaz-rate="true"
+              />
+
+              <Button
+                class="mt-3 w-full"
+                variant="solid"
+                :disabled="!canGenerate || generating"
+                @click="runCreateDeal"
+              >{{ generating ? __('Generuję ofertę…') : __('Generuj ofertę') }}</Button>
+
+              <div v-if="powodBrakuDoboru" class="mt-1 text-center text-xs text-ink-red-6">
+                {{ powodBrakuDoboru }}
+              </div>
+              <div v-else-if="!contactSelected" class="mt-1 text-center text-xs text-ink-gray-5">
+                {{ __('Wybierz klienta powyżej, aby wygenerować ofertę.') }}
+              </div>
+
+              <div class="mt-3">
                 <button
                   type="button"
-                  class="flex w-full items-center justify-between rounded-md border border-outline-gray-1 bg-surface-gray-1 px-2.5 py-1.5 text-sm font-medium text-ink-gray-7 transition-colors hover:bg-surface-gray-2"
+                  class="flex w-full items-center justify-between rounded-lg border border-outline-gray-2 px-2.5 py-1.5 text-sm text-ink-gray-7 hover:bg-surface-gray-2"
+                  :aria-expanded="showNarzut"
                   @click="showNarzut = !showNarzut"
                 >
-                  <span>{{ showNarzut ? __('Ukryj ustawienia niestandardowe') : __('Pokaż ustawienia niestandardowe') }}</span>
+                  <span>{{ __('Ustawienia niestandardowe') }}</span>
                   <FeatherIcon :name="showNarzut ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 text-ink-gray-5" />
                 </button>
-                <div v-if="showNarzut" class="mt-1.5">
+                <div v-if="showNarzut" class="mt-1.5 rounded-lg border border-outline-gray-2 px-2.5 py-1.5">
                   <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Wysokość narzutu') }}</div>
                   <input
                     v-model.number="form.narzut" type="number" min="0" :max="narzutMax > 0 ? narzutMax : undefined" step="0.01"
@@ -369,69 +344,6 @@
                   />
                   <div v-if="!narzutValid" class="mt-0.5 text-xs text-ink-red-6">{{ narzutErrorMsg }}</div>
                 </div>
-              </div>
-
-              <div class="mb-2 text-base font-semibold text-ink-gray-9">{{ __('Wycena') }}</div>
-
-              <div v-if="result.linie.length" class="mb-2">
-                <div
-                  v-for="(ln, i) in result.linie" :key="i"
-                  class="flex items-center gap-2 border-t border-outline-gray-1 py-1.5 text-sm first:border-t-0"
-                >
-                  <span class="min-w-[88px] text-ink-gray-5">{{ ln.typ }}</span>
-                  <span class="flex-1 text-ink-gray-8">{{ ln.nazwa }}</span>
-                  <span class="tabular-nums text-ink-gray-7">×{{ formatQty(ln.ilosc) }}</span>
-                </div>
-              </div>
-              <div v-else class="mb-2 text-sm text-ink-gray-5">{{ __('Uzupełnij konfigurację, aby zobaczyć wycenę.') }}</div>
-
-              <template v-if="result.linie.length">
-                <div class="rounded-lg border border-outline-gray-1 bg-surface-gray-1 p-2.5">
-                  <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
-                    <span>{{ __('Suma netto') }}</span><span>{{ formatPln(result.netto) }}</span>
-                  </div>
-                  <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
-                    <span>{{ __('VAT ({0}%)', [result.vat_rate]) }}</span><span>{{ formatPln(result.vat) }}</span>
-                  </div>
-                  <div class="mt-1 flex justify-between border-t border-outline-gray-2 pt-1.5 text-base font-semibold tabular-nums text-ink-gray-9">
-                    <span>{{ __('Suma brutto') }}</span><span>{{ formatPln(result.brutto) }}</span>
-                  </div>
-
-                  <div class="mt-1.5 flex justify-between py-0.5 text-xs tabular-nums text-ink-gray-5">
-                    <span>{{ __('Rata ({0} lat)', [form.okresLat]) }}</span>
-                    <span>{{ formatPln(result.raty.brutto) }} /mies.</span>
-                  </div>
-
-                  <template v-if="ulgaDotyczyRodzaju && form.typKlienta === 'indywidualny'">
-                    <div class="mt-1.5 border-t border-dashed border-outline-gray-2 pt-1.5">
-                      <div class="flex justify-between py-0.5 text-sm tabular-nums text-ink-gray-7">
-                        <span>{{ __('Ulga termo. ({0}%)', [form.ulgaPct]) }}</span><span>− {{ formatPln(result.ulga) }}</span>
-                      </div>
-                      <div class="flex justify-between py-0.5 text-sm font-semibold tabular-nums text-ink-gray-9">
-                        <span>{{ __('Cena po uldze') }}</span><span>{{ formatPln(result.cena_po_uldze) }}</span>
-                      </div>
-                      <div class="flex justify-between py-0.5 text-xs tabular-nums text-ink-gray-5">
-                        <span>{{ __('Rata po uldze') }}</span><span>{{ formatPln(result.raty.po_uldze) }} /mies.</span>
-                      </div>
-                    </div>
-                  </template>
-                </div>
-              </template>
-
-              <div v-if="$slots['client-picker']" class="mb-2 mt-2">
-                <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Klient') }}</div>
-                <slot name="client-picker" />
-              </div>
-
-              <Button
-                class="mt-2 w-full"
-                variant="solid"
-                :disabled="!canGenerate || generating"
-                @click="runCreateDeal"
-              >{{ generating ? __('Generuję ofertę…') : __('Generuj ofertę') }}</Button>
-
-              <div v-if="powodBlokadyGeneracji" class="mt-1 text-center text-xs text-ink-red-6">
-                {{ powodBlokadyGeneracji }}
               </div>
 
               <div v-if="hasInternal" class="mt-2.5">
@@ -476,8 +388,10 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { call, Button, FeatherIcon } from 'frappe-ui'
-import { ppozWymuszonyProgiem } from '@/utils/pvForm'
+import { VARIANTS, podsumowanieFinansowania, ppozWymuszonyProgiem } from '@/utils/pvForm'
 import { formatPln } from '@/utils/money'
+import KalkulatorParagon from './KalkulatorParagon.vue'
+import WyborSegmentowy from './WyborSegmentowy.vue'
 import {
   ETYKIETA_GRUPY_KLIMY,
   GRUPY_KLIMY,
@@ -486,11 +400,11 @@ import {
   OZE_KOCIOL,
   OZE_POMPA_CIEPLA,
   OZE_ROZBUDOWA,
+  RODZAJE_NOWE,
   brakDoboru,
   czyNowyRodzaj,
   dobierzMocPc,
   grupujWewnetrzneOze,
-  kafelkiRodzaju,
   kaskadaKlimy,
   kompletnyFormOze,
   kompletnyPompa,
@@ -521,6 +435,12 @@ const TYP_KLIENTA_OPTIONS = [
   { value: 'indywidualny', label: 'Indywidualny' },
   { value: 'biznesowy', label: 'Biznesowy' },
 ]
+const NIE_TAK = ['Nie', 'Tak']
+const CWU_OPCJE = [
+  { value: '', label: 'Nie' },
+  { value: '200', label: '200 l' },
+  { value: '300', label: '300 l' },
+]
 const TYPY_PC_WSZYSTKIE = ['Monoblok', 'Split']
 const OGRZEWANIE_OPCJE = ['Podłogówka', 'Grzejniki', 'Mieszane']
 const KOCIOL_TYPY = [
@@ -529,7 +449,6 @@ const KOCIOL_TYPY = [
 ]
 
 // --- Stan formularza ---------------------------------------------------------
-const kafelki = kafelkiRodzaju()
 const form = reactive(pustyFormularzOze(czyNowyRodzaj(props.rodzaj) ? props.rodzaj : OZE_ROZBUDOWA))
 
 watch(
@@ -556,6 +475,15 @@ function wybierzRodzaj(r) {
     clearResult()
   }
   emit('update:rodzaj', r)
+}
+
+// Lista "Inne rodzaje" pokazuje aktywny nowy rodzaj jako swoja wartosc; wybor
+// pustej pozycji (placeholder) nic nie zmienia, wiec przywracamy wyswietlana
+// wartosc.
+function wybierzInnyRodzaj(event) {
+  const v = event.target.value
+  if (v) wybierzRodzaj(v)
+  else event.target.value = form.rodzaj
 }
 
 // --- Katalog -------------------------------------------------------------
@@ -662,6 +590,11 @@ watch(
 const modeleKlimyList = computed(() => modeleKlimy(dane.pozycje, form.klimatyzacja.grupa))
 const moceKlimyList = computed(() => moceKlimy(dane.pozycje, form.klimatyzacja.grupa, form.klimatyzacja.klucz))
 
+const opcjeGrupyKlimy = computed(() => GRUPY_KLIMY.map((g) => ({ value: g, label: ETYKIETA_GRUPY_KLIMY[g] })))
+const opcjeModeliKlimy = computed(() =>
+  modeleKlimyList.value.map((m) => ({ value: m.klucz, label: `${m.producent} ${m.model}`, swatch: kolorSwatchStyle(m.kolor) })),
+)
+
 function wybierzGrupaKlimy(grupa) {
   form.klimatyzacja = kaskadaKlimy(dane.pozycje, { ...form.klimatyzacja, grupa })
 }
@@ -689,6 +622,12 @@ function wybierzProducentaPc(producent) {
   if (!typyPcDostepne(producent).includes(form.pompa.typ)) form.pompa.typ = ''
 }
 const typyPcDostepneList = computed(() => typyPcDostepne(form.pompa.producent))
+const opcjeTypowPc = computed(() =>
+  TYPY_PC_WSZYSTKIE.map((t) => {
+    const dostepny = typyPcDostepneList.value.includes(t)
+    return { value: t, label: t, disabled: !dostepny, title: dostepny ? '' : __('Niedostępne dla tego producenta') }
+  }),
+)
 
 const mocPcLive = computed(() =>
   dobierzMocPc(dane.dobor, form.pompa.zapotrzebowanie, form.pompa.producent, form.pompa.typ, form.pompa.ogrzewanie),
@@ -727,6 +666,7 @@ const modeleKociolList = computed(() => {
     .sort((a, b) => (Number(a.sort) || 0) - (Number(b.sort) || 0))
     .map((p) => ({ kod: p.kod, nazwa: p.nazwa, moc_kw: p.moc_kw }))
 })
+const opcjeTypowKociol = KOCIOL_TYPY.map((t) => ({ value: t.klucz, label: t.etykieta }))
 function wybierzTypKociol(typ) {
   form.kociol.typ = typ
   form.kociol.kod = ''
@@ -734,9 +674,16 @@ function wybierzTypKociol(typ) {
 
 // --- Finansowanie / ulga -------------------------------------------------------
 const ulgaDotyczyRodzaju = computed(() => ulgaDotyczy(form.rodzaj))
+const otwarteFinansowanie = ref(false)
+// Pigulka ulgi tylko dla rodzajow, ktorych ulga dotyczy (Klimatyzacja: nie).
+const finansowaniePodsumowanie = computed(() =>
+  podsumowanieFinansowania(form, { formatPln }).filter((p) => ulgaDotyczyRodzaju.value || !p.tekst.startsWith('Ulga')),
+)
+const sekcja1Gotowa = computed(() => !!form.typKlienta && !!form.rodzaj)
+const sekcja2Gotowa = computed(() => kompletnyFormOze(form))
 
 // --- Narzut --------------------------------------------------------------------
-const showNarzut = ref(true)
+const showNarzut = ref(false)
 const narzutValid = computed(() => {
   const n = Number(form.narzut)
   return !isNaN(n) && n >= 0 && (narzutMax.value <= 0 || n <= narzutMax.value)
@@ -776,19 +723,30 @@ const canGenerate = computed(
   () => result.linie.length > 0 && contactSelected.value && narzutValid.value && !pcBlokadaDoboru.value,
 )
 
-// Komunikat powodu blokady pod przyciskiem "Generuj ofertę" -- "Brak
-// doboru" ma priorytet przed "Wybierz klienta", bo bez doboru mocy
-// formularz jest i tak niepoliczalny niezaleznie od tego, czy klient jest
-// juz wybrany (klik-test 2026-10-05).
-const powodBlokadyGeneracji = computed(() => {
-  if (form.rodzaj === OZE_POMPA_CIEPLA && pcBlokadaDoboru.value) {
-    return __('Brak doboru pompy ciepła dla podanego zapotrzebowania. Wybierz inne parametry.')
-  }
-  if (!contactSelected.value) {
-    return __('Wybierz klienta, aby wygenerować ofertę.')
-  }
-  return ''
-})
+// Czerwony komunikat pod przyciskiem "Generuj ofertę" tylko dla "Brak
+// doboru" (formularz niepoliczalny niezaleznie od klienta, klik-test
+// 2026-10-05); sama potrzeba wybrania klienta to neutralna podpowiedz w
+// szablonie.
+const powodBrakuDoboru = computed(() =>
+  form.rodzaj === OZE_POMPA_CIEPLA && pcBlokadaDoboru.value
+    ? __('Brak doboru pompy ciepła dla podanego zapotrzebowania. Wybierz inne parametry.')
+    : '',
+)
+
+// Adapter ksztaltu `result` (serwer) na ksztalt oczekiwany przez
+// KalkulatorParagon.vue; zadnych obliczen, pola serwera bez zmian nazw.
+// Nowe rodzaje nie maja dotacji (zawsze 0, paragon jej nie rysuje).
+const paragonSummary = computed(() => ({
+  lines: result.linie,
+  netto: result.netto,
+  vat: result.vat,
+  vat_rate: result.vat_rate,
+  brutto: result.brutto,
+  dotacja: 0,
+  ulga: result.ulga,
+  cena_po_uldze: result.cena_po_uldze,
+  raty: result.raty,
+}))
 
 function clearResult() {
   result.netto = 0; result.vat = 0; result.vat_rate = 0; result.brutto = 0; result.narzut = 0
@@ -938,10 +896,12 @@ onBeforeUnmount(() => {
 <style scoped>
 .kalk-input,
 .kalk-select {
-  height: 28px;
+  height: 32px;
   width: 100%;
-  border-radius: 0.25rem;
-  border: 1px solid var(--outline-gray-1);
+  max-width: 100%;
+  min-width: 0;
+  border-radius: 0.375rem;
+  border: 1px solid var(--outline-gray-2);
   background: var(--surface-gray-2);
   padding: 0 8px;
   font-size: 14px;
@@ -950,26 +910,55 @@ onBeforeUnmount(() => {
   transition: background-color 0.15s, border-color 0.15s;
   cursor: pointer;
 }
-.kalk-input { cursor: text; }
-.kalk-input:hover,
-.kalk-select:hover {
-  background: var(--surface-gray-3);
+.kalk-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 28px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
 }
-.kalk-input:focus,
-.kalk-select:focus {
-  border-color: var(--outline-gray-4);
-  background: var(--surface-base);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-}
-.kalk-input:disabled,
-.kalk-select:disabled {
-  cursor: not-allowed;
-  opacity: 0.65;
-}
+.kalk-select-inline { width: auto; min-width: 0; max-width: 100%; flex: 0 1 150px; }
 .kalk-select-wariant {
   width: auto;
   flex: 0 0 auto;
 }
+.kalk-split > *,
+.kalk-part .grid > * { min-width: 0; }
+.kalk-select:disabled {
+  border-style: dashed;
+  color: var(--ink-gray-4);
+  cursor: not-allowed;
+}
+.kalk-input { cursor: text; }
+.kalk-input-unit { padding-right: 64px; }
+.kalk-unit {
+  position: absolute;
+  right: 10px;
+  bottom: 7px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--ink-gray-4);
+  pointer-events: none;
+}
+.kalk-input:hover,
+.kalk-select:hover:not(:disabled) {
+  background-color: var(--surface-gray-3);
+}
+.kalk-input:focus,
+.kalk-select:focus {
+  border-color: var(--outline-gray-4);
+  background-color: var(--surface-base);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+.kalk-part-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+.kalk-part-zwijana { padding-top: 0.875rem; padding-bottom: 0.875rem; }
 .kalk-part-heading { letter-spacing: -0.01em; }
 .kalk-part {
   border: 1px solid var(--outline-gray-1);
@@ -991,63 +980,27 @@ onBeforeUnmount(() => {
   font-size: 0.7rem;
   font-weight: 700;
 }
-/* iOS-style TAK/NIE switch -- identyczny wzorzec co KalkulatorTab.vue /
-   KalkulatorCPTab.vue: kolor I pozycja gałki niosą stan, czarne OFF
-   (nigdy szare/czerwone), zielone ON. */
-.kalk-switch {
-  position: relative;
-  display: inline-block;
-  flex-shrink: 0;
-  width: 40px;
-  height: 22px;
-  padding: 0;
-  border: none;
-  border-radius: 9999px;
-  cursor: pointer;
-  vertical-align: middle;
-  transition: background-color 0.15s;
-}
-.kalk-switch-on { background: #16a34a; }
-.kalk-switch-off { background: #111827; }
-[data-theme='dark'] .kalk-switch-off { background: var(--surface-gray-4); }
-.kalk-switch:disabled { opacity: 0.5; cursor: not-allowed; }
-.kalk-switch:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
-.kalk-switch-knob {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 18px;
-  height: 18px;
-  border-radius: 9999px;
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-  transition: transform 0.15s;
-}
-.kalk-switch-on .kalk-switch-knob { transform: translateX(18px); }
-/* Plamka koloru na kafelku modelu klimatyzacji (Czarny/Biały) -- wylacznie
-   wizualne oznaczenie linii produktowej, nie wplywa na wybor. */
-.kalk-kolor-dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 9999px;
-  flex-shrink: 0;
+/* Paragon przyklejony: wysokosc = okno minus naglowek strony (LayoutHeader) i marginesy */
+.kalk-sticky {
+  max-height: calc(100vh - 7rem);
+  overflow-y: auto;
+  padding-right: 0.5rem;
+  scrollbar-width: thin;
 }
 @media (max-width: 880px) {
-  .kalk-split { grid-template-columns: 1fr !important; }
-  .kalk-row2 { grid-template-columns: 1fr !important; }
+  .kalk-split { grid-template-columns: minmax(0, 1fr) !important; }
+  .kalk-row2 { grid-template-columns: minmax(0, 1fr) !important; }
   .kalk-output { border-left: 0 !important; padding-left: 0 !important; margin-top: 0.75rem; }
   .sticky { position: static; }
+  .kalk-sticky { max-height: none; overflow: visible; padding-right: 0; }
   .kalk-part { padding: 1rem; }
   /* Grid 5 selectow grzejnikow na jedna kolumne pod 880px (plan b68, F3).
      `grid-template-columns: 1fr` samo nie wystarcza: wiersz podsumowania
      "Razem" niesie Tailwindowe `col-span-5` (bez wariantu mobilnego), a
      CSS Grid DOGENERUJE niejawne kolumny, zeby pomiescic span-5, nawet gdy
      jawna definicja ma tylko 1 kolumne -- stad bez tej drugiej reguly siatka
-     i tak renderowala 5 kolumn (znalezione headless, PW viewport 375px:
-     `getComputedStyle(grid).gridTemplateColumns` dalej zwracal 5 torow mimo
-     `!important` powyzej). */
-  .kalk-grzejniki-grid { grid-template-columns: 1fr !important; }
+     i tak renderowala 5 kolumn. */
+  .kalk-grzejniki-grid { grid-template-columns: minmax(0, 1fr) !important; }
   .kalk-grzejniki-razem { grid-column: span 1 !important; }
 }
 </style>

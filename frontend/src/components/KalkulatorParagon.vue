@@ -6,8 +6,8 @@
 <template>
   <div v-if="summary.lines.length" class="flex flex-col gap-3">
     <div class="rounded-xl border border-outline-gray-3 bg-surface-gray-1 p-4">
-      <template v-if="indywidualny">
-        <div class="text-xs text-ink-gray-5">Klient zapłaci po dotacji i uldze</div>
+      <template v-if="zUlga">
+        <div class="text-xs text-ink-gray-5">{{ pokazDotacje ? 'Klient zapłaci po dotacji i uldze' : 'Klient zapłaci po uldze' }}</div>
         <div class="mt-1 whitespace-nowrap text-3xl font-bold tabular-nums text-ink-gray-9">{{ formatPln(summary.cena_po_uldze) }}</div>
         <div class="mt-1 text-sm text-ink-gray-6">
           <span class="whitespace-nowrap font-semibold tabular-nums text-ink-gray-8">{{ formatPln(summary.raty.po_uldze) }}</span>
@@ -18,19 +18,23 @@
         <div class="text-xs text-ink-gray-5">Cena brutto</div>
         <div class="mt-1 whitespace-nowrap text-3xl font-bold tabular-nums text-ink-gray-9">{{ formatPln(summary.brutto) }}</div>
         <div class="mt-1 text-sm tabular-nums text-ink-gray-6">netto {{ formatPln(summary.netto) }}</div>
+        <div v-if="pokazRate" class="mt-1 text-sm text-ink-gray-6">
+          <span class="whitespace-nowrap font-semibold tabular-nums text-ink-gray-8">{{ formatPln(summary.raty.brutto) }}</span>
+          /mies. przez {{ okresLat }} lat
+        </div>
       </template>
     </div>
 
-    <template v-if="indywidualny">
+    <template v-if="zUlga">
       <div>
         <div class="mb-1 text-xs text-ink-gray-5">Z ceny brutto {{ formatPln(summary.brutto) }}:</div>
         <div class="flex h-2 overflow-hidden rounded-full bg-surface-gray-3">
           <div class="bg-surface-gray-7" :style="{ width: udzialy.klient + '%' }"></div>
-          <div class="bg-surface-green-3" :style="{ width: udzialy.dotacja + '%' }"></div>
+          <div v-if="pokazDotacje" class="bg-surface-green-3" :style="{ width: udzialy.dotacja + '%' }"></div>
           <div class="bg-surface-gray-4" :style="{ width: udzialy.ulga + '%' }"></div>
         </div>
         <div class="mt-1 text-xs text-ink-gray-5">
-          klient {{ udzialy.klient }}% · dotacja {{ udzialy.dotacja }}% · ulga {{ udzialy.ulga }}%
+          klient {{ udzialy.klient }}%<template v-if="pokazDotacje"> · dotacja {{ udzialy.dotacja }}%</template> · ulga {{ udzialy.ulga }}%
         </div>
       </div>
 
@@ -38,7 +42,7 @@
         <div class="flex justify-between gap-2 py-0.5 font-semibold text-ink-gray-9">
           <span>Cena brutto</span><span class="whitespace-nowrap">{{ formatPln(summary.brutto) }}</span>
         </div>
-        <div class="flex justify-between gap-2 py-0.5 text-ink-gray-7">
+        <div v-if="pokazDotacje" class="flex justify-between gap-2 py-0.5 text-ink-gray-7">
           <span>Dotacja ({{ String(zasadyDotacji || '').toLowerCase() }})</span>
           <span class="whitespace-nowrap text-ink-green-6">− {{ formatPln(summary.dotacja) }}</span>
         </div>
@@ -53,11 +57,11 @@
         <div class="flex justify-between gap-2 py-0.5 text-ink-gray-7">
           <span>Pełna kwota</span><span class="whitespace-nowrap">{{ formatPln(summary.raty.brutto) }}</span>
         </div>
-        <div class="flex justify-between gap-2 py-0.5 text-ink-gray-7">
+        <div v-if="pokazDotacje" class="flex justify-between gap-2 py-0.5 text-ink-gray-7">
           <span>Po dotacji</span><span class="whitespace-nowrap">{{ formatPln(summary.raty.po_dotacji) }}</span>
         </div>
         <div class="flex justify-between gap-2 py-0.5 font-semibold text-ink-gray-9">
-          <span>Po dotacji i uldze</span><span class="whitespace-nowrap">{{ formatPln(summary.raty.po_uldze) }}</span>
+          <span>{{ pokazDotacje ? 'Po dotacji i uldze' : 'Po uldze' }}</span><span class="whitespace-nowrap">{{ formatPln(summary.raty.po_uldze) }}</span>
         </div>
       </div>
     </template>
@@ -102,10 +106,16 @@ const props = defineProps({
   zasadyDotacji: { type: String, default: '' },
   ulgaPct: { type: Number, default: 12 },
   okresLat: { type: Number, default: 10 },
+  // Nowe rodzaje OZE (Rozbudowa, Klimatyzacja, Pompa, Kociol) nie maja dotacji;
+  // domyslne wartosci zachowuja wyglad paragonu kalkulatora PV.
+  pokazDotacje: { type: Boolean, default: true },
+  pokazUlge: { type: Boolean, default: true },
+  // Rata przy cenie brutto, gdy nie ma ulgi (domyslnie ukryta jak dotad).
+  pokazRate: { type: Boolean, default: false },
 })
 
 const skladniki = ref(false)
-const indywidualny = computed(() => props.typKlienta === 'indywidualny')
+const zUlga = computed(() => props.pokazUlge && props.typKlienta === 'indywidualny')
 const udzialy = computed(() => udzialyCeny(props.summary))
 
 function formatQty(q) {
