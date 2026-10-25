@@ -131,7 +131,6 @@
                       <span class="block text-sm font-medium text-ink-gray-8">{{ z.producent }}</span>
                       <span v-if="opisZestawu(z)" class="mt-0.5 block text-xs text-ink-gray-6">{{ opisZestawu(z) }}</span>
                     </span>
-                    <FeatherIcon v-if="sel.zestaw === z.kod" name="check" class="absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-gray-8" />
                   </button>
                 </div>
               </div>
