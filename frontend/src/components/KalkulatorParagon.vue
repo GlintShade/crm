@@ -38,13 +38,7 @@
       </div>
 
       <div class="text-sm tabular-nums">
-        <div class="flex justify-between gap-2 py-0.5 text-ink-gray-9">
-          <span>Cena netto</span><span class="whitespace-nowrap">{{ formatPln(summary.netto) }}</span>
-        </div>
-        <div class="flex justify-between gap-2 py-0.5 text-ink-gray-7">
-          <span>VAT {{ summary.vat_rate }}%</span><span class="whitespace-nowrap">{{ formatPln(summary.vat) }}</span>
-        </div>
-        <div class="mt-0.5 flex justify-between gap-2 border-t border-outline-gray-2 pt-1 font-semibold text-ink-gray-9">
+        <div class="flex justify-between gap-2 py-0.5 font-semibold text-ink-gray-9">
           <span>Cena brutto</span><span class="whitespace-nowrap">{{ formatPln(summary.brutto) }}</span>
         </div>
         <div v-if="pokazDotacje" class="flex justify-between gap-2 py-0.5 text-ink-gray-7">
@@ -54,6 +48,12 @@
         <div class="flex justify-between gap-2 py-0.5 text-ink-gray-7">
           <span>Ulga termo. {{ ulgaPct }}%</span>
           <span class="whitespace-nowrap text-ink-green-6">− {{ formatPln(summary.ulga) }}</span>
+        </div>
+        <div class="mt-0.5 flex justify-between gap-2 border-t border-outline-gray-2 pt-1 text-ink-gray-9">
+          <span>Cena netto</span><span class="whitespace-nowrap">{{ formatPln(summary.netto) }}</span>
+        </div>
+        <div class="flex justify-between gap-2 py-0.5 text-ink-gray-7">
+          <span>VAT {{ summary.vat_rate }}%</span><span class="whitespace-nowrap">{{ formatPln(summary.vat) }}</span>
         </div>
       </div>
 
@@ -77,9 +77,6 @@
       </div>
       <div class="flex justify-between gap-2 py-0.5 text-ink-gray-7">
         <span>VAT {{ summary.vat_rate }}%</span><span class="whitespace-nowrap">{{ formatPln(summary.vat) }}</span>
-      </div>
-      <div class="mt-0.5 flex justify-between gap-2 border-t border-outline-gray-2 pt-1 font-semibold text-ink-gray-9">
-        <span>Cena brutto</span><span class="whitespace-nowrap">{{ formatPln(summary.brutto) }}</span>
       </div>
     </div>
 
