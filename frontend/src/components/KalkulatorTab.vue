@@ -115,34 +115,33 @@
                     type="button"
                     role="radio"
                     :aria-checked="sel.zestaw === z.kod"
-                    class="relative flex items-start gap-2 rounded-lg border p-2.5 text-left transition-colors"
+                    class="relative flex h-full items-start gap-2.5 rounded-lg border p-3 text-left transition-colors"
                     :class="sel.zestaw === z.kod
-                      ? 'border-outline-gray-7 bg-surface-gray-2'
-                      : 'border-outline-gray-2 hover:bg-surface-gray-1'"
+                      ? 'border-outline-gray-8 bg-surface-gray-2 ring-1 ring-outline-gray-8'
+                      : 'border-outline-gray-3 hover:bg-surface-gray-1'"
                     :data-testid="'zestaw-' + z.kod"
                     @click="sel.zestaw = z.kod"
                   >
                     <span
-                      class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border"
-                      :class="sel.zestaw === z.kod ? 'border-outline-gray-8' : 'border-outline-gray-4'"
+                      class="mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border"
+                      :class="sel.zestaw === z.kod ? 'border-outline-gray-8' : 'border-outline-gray-5'"
                     ><span v-if="sel.zestaw === z.kod" class="h-2 w-2 rounded-full bg-surface-gray-9"></span></span>
                     <span class="min-w-0 pr-4">
-                      <span class="block text-sm font-bold text-ink-gray-9">{{ z.kod }}</span>
-                      <span class="block text-sm text-ink-gray-7">{{ z.producent }}</span>
-                      <span v-if="opisZestawu(z)" class="block text-xs text-ink-gray-4">{{ opisZestawu(z) }}</span>
+                      <span class="block text-base font-bold leading-6 text-ink-gray-9">{{ z.kod }}</span>
+                      <span class="block text-sm font-medium text-ink-gray-8">{{ z.producent }}</span>
+                      <span v-if="opisZestawu(z)" class="mt-0.5 block text-xs text-ink-gray-6">{{ opisZestawu(z) }}</span>
                     </span>
                     <FeatherIcon v-if="sel.zestaw === z.kod" name="check" class="absolute right-2 top-2 h-4 w-4 text-ink-gray-8" />
                   </button>
                 </div>
               </div>
 
-              <div class="mb-3">
+              <!-- Producent: wiersz tylko gdy realny wybor (>1). Przy jednym producencie
+                   (zestaw lub sama Fotowoltaika) wynika z karty zestawu / etykiet falownikow;
+                   sel.producent ustawia watcher [variant, zestaw] powyzej, nie ten markup. -->
+              <div v-if="producentOptions.length > 1" class="mb-3">
                 <div class="mb-1 text-sm text-ink-gray-5">Producent</div>
-                <div v-if="producentOptions.length === 1" class="text-sm">
-                  <span class="font-semibold text-ink-gray-9">{{ producentOptions[0] }}</span>
-                  <span class="text-ink-gray-5"> · {{ hasBat ? 'wynika z zestawu' : 'jedyny dostępny' }}</span>
-                </div>
-                <WyborSegmentowy v-else v-model="sel.producent" :options="producentOptions" />
+                <WyborSegmentowy v-model="sel.producent" :options="producentOptions" />
               </div>
 
               <div class="grid grid-cols-2 gap-x-3 gap-y-2.5">
