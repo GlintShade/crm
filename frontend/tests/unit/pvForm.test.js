@@ -966,10 +966,14 @@ describe('grupujMocePv', () => {
 
 describe('grupujMagazyny', () => {
   const m = (k) => ({ pojemnosc_kwh: k })
-  it('dzieli po progach 30/50/70', () => {
-    const g = grupujMagazyny([m(10), m(29.9), m(30), m(49), m(50), m(70), m(90)])
-    expect(g.map((x) => x.naglowek)).toEqual(['Do 30 kWh', '30 do 50 kWh', '50 do 70 kWh', '70 kWh i więcej'])
-    expect(g.map((x) => x.opcje.length)).toEqual([2, 2, 1, 2])
+  it('dzieli po progach 30/50/70, prog liczony dopiero powyzej (ops#301)', () => {
+    const g = grupujMagazyny([m(10), m(29.9), m(30), m(30.1), m(49), m(50), m(50.1), m(70), m(70.1), m(90)])
+    expect(g.map((x) => x.naglowek)).toEqual(['Do 30 kWh', 'Powyżej 30 do 50 kWh', 'Powyżej 50 do 70 kWh', 'Powyżej 70 kWh'])
+    expect(g.map((x) => x.opcje.length)).toEqual([3, 3, 2, 2])
+  })
+  it('wartosci rowne progom ladują w nizszej grupie', () => {
+    const g = grupujMagazyny([m(30), m(50), m(70)])
+    expect(g.map((x) => x.naglowek)).toEqual(['Do 30 kWh', 'Powyżej 30 do 50 kWh', 'Powyżej 50 do 70 kWh'])
   })
   it('brak pojemnosci laduje w pierwszej grupie, puste grupy pomijane', () => {
     const g = grupujMagazyny([{}, m(0)])

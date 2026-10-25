@@ -134,7 +134,7 @@ describe('grupujBreakdown', () => {
 
   it('ops#293: adnotacja progu magazynu tylko w grupie marz i tylko gdy prog > 0', () => {
     const z = grupujBreakdown({ prog_mag_kwh: 50 })
-    expect(z.find((g) => g.klucz === 'marze').adnotacja).toBe('Próg magazynu: 50 kWh+')
+    expect(z.find((g) => g.klucz === 'marze').adnotacja).toBe('Próg magazynu: powyżej 50 kWh')
     expect(z.filter((g) => g.klucz !== 'marze').every((g) => g.adnotacja === '')).toBe(true)
     expect(grupujBreakdown({ prog_mag_kwh: 0 }).every((g) => g.adnotacja === '')).toBe(true)
     expect(grupujBreakdown({}).every((g) => g.adnotacja === '')).toBe(true)
