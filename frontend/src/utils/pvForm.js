@@ -69,15 +69,15 @@ export function variantHasBattery(variant) {
 export const ZESTAWY = [
   { kod: 'COMFORT', producent: 'Hoymiles', opis: 'Hoymiles' },
   { kod: 'COMFORT PREMIUM', producent: 'Solax', opis: 'Solax, Abonament 49 zł/mies.' },
-  { kod: 'COMFORT +', producent: 'Sigenergy', opis: 'Sigenergy' },
+  { kod: 'PREMIUM +', producent: 'Sigenergy', opis: 'Sigenergy' },
 ]
-export const DOMYSLNY_ZESTAW = 'COMFORT +'
+export const DOMYSLNY_ZESTAW = 'PREMIUM +'
 export const PRODUCENT_PV = 'FoxESS'
 
 /**
  * Producent przypisany do zestawu; pusty string dla nieznanego zestawu.
  *
- * @param {string} zestaw - kod zestawu (COMFORT / COMFORT PREMIUM / COMFORT +)
+ * @param {string} zestaw - kod zestawu (COMFORT / COMFORT PREMIUM / PREMIUM +)
  * @returns {string} nazwa producenta albo ''
  */
 export function zestawProducent(zestaw) {

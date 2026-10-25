@@ -101,7 +101,7 @@ describe('PV form logic', () => {
     it('offers only the producer of the chosen zestaw for variants with storage', () => {
       expect(producentOptionsFor(VARIANT_PV_BAT, 'COMFORT')).toEqual(['Hoymiles'])
       expect(producentOptionsFor(VARIANT_BAT, 'COMFORT PREMIUM')).toEqual(['Solax'])
-      expect(producentOptionsFor(VARIANT_BAT, 'COMFORT +')).toEqual(['Sigenergy'])
+      expect(producentOptionsFor(VARIANT_BAT, 'PREMIUM +')).toEqual(['Sigenergy'])
     })
 
     it('falls back to the default zestaw producer when zestaw is missing or unknown', () => {
@@ -115,13 +115,13 @@ describe('PV form logic', () => {
   })
 
   describe('ZESTAWY', () => {
-    it('maps the three zestawy to their producers, default is COMFORT +', () => {
+    it('maps the three zestawy to their producers, default is PREMIUM +', () => {
       expect(ZESTAWY.map((z) => [z.kod, z.producent])).toEqual([
         ['COMFORT', 'Hoymiles'],
         ['COMFORT PREMIUM', 'Solax'],
-        ['COMFORT +', 'Sigenergy'],
+        ['PREMIUM +', 'Sigenergy'],
       ])
-      expect(DOMYSLNY_ZESTAW).toBe('COMFORT +')
+      expect(DOMYSLNY_ZESTAW).toBe('PREMIUM +')
     })
 
     it('carries the bill-guarantee note only as text on COMFORT PREMIUM', () => {
@@ -365,7 +365,7 @@ describe('PV form logic', () => {
     })
 
     it('falls back to universal cards for zestaw without own cards', () => {
-      expect(paneleDlaZestawu(karty, 'COMFORT +')).toEqual([aiko])
+      expect(paneleDlaZestawu(karty, 'PREMIUM +')).toEqual([aiko])
     })
 
     it('shows universal cards for plain PV (empty zestaw)', () => {
