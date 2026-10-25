@@ -17,6 +17,7 @@ import {
   roznicaDoOkna,
   stanZOdpowiedzi,
   zastosujPropozycje,
+  wierszeKomunikatow,
   zestawDlaProducenta,
   zmienPoleKonfiguracji,
   czyZmieniony,
@@ -201,5 +202,28 @@ describe('nota o cenie', () => {
   it('ma ustalony tekst bez pauz', () => {
     expect(MSG_NOTA_PRODUCENTA).toBe('Zmiana producenta nie przelicza ceny ani kosztów, ustaw netto ręcznie.')
     expect(MSG_NOTA_PRODUCENTA).not.toMatch(/[\u2013\u2014]/)
+  })
+})
+
+describe('wierszeKomunikatow', () => {
+  it('rozbija komunikaty po nowej linii i wyciąga typ pozycji', () => {
+    const t =
+      'Pozycja Falownik "Sigenergy TP2 6 kW" jest producenta Sigenergy, a wybrany producent to Hoymiles. Zmień producenta albo pozycję.\n' +
+      'Pozycja Magazyn energii "Sigenergy 12 kWh (6+6)" jest producenta Sigenergy, a wybrany producent to Hoymiles. Zmień producenta albo pozycję.'
+    expect(wierszeKomunikatow(t)).toEqual([
+      { typ: 'Falownik', tresc: '"Sigenergy TP2 6 kW" jest producenta Sigenergy, a wybrany producent to Hoymiles. Zmień producenta albo pozycję.' },
+      { typ: 'Magazyn energii', tresc: '"Sigenergy 12 kWh (6+6)" jest producenta Sigenergy, a wybrany producent to Hoymiles. Zmień producenta albo pozycję.' },
+    ])
+  })
+  it('przycina, pomija puste i zostawia inne komunikaty bez typu', () => {
+    expect(wierszeKomunikatow('  Zly VAT \r\n\n  \nProducent jest wymagany.')).toEqual([
+      { typ: '', tresc: 'Zly VAT' },
+      { typ: '', tresc: 'Producent jest wymagany.' },
+    ])
+  })
+  it('przyjmuje tablicę i puste wejście', () => {
+    expect(wierszeKomunikatow(['A', 'B\nC'])).toHaveLength(3)
+    expect(wierszeKomunikatow('')).toEqual([])
+    expect(wierszeKomunikatow(null)).toEqual([])
   })
 })

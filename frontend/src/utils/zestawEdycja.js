@@ -458,6 +458,26 @@ export function komunikatBledu(err, domyslny) {
   return domyslny
 }
 
+/**
+ * Rozbija komunikat(y) walidacji na osobne wiersze: dzieli po nowej linii, przycina,
+ * odrzuca puste. Wiersz "Pozycja <Typ> "nazwa" ..." dostaje `typ` (np. "Falownik",
+ * "Magazyn energii") i `tresc` bez słów "Pozycja <Typ>"; pozostałe mają `typ` pusty.
+ * Akceptuje string albo tablicę stringów.
+ */
+export function wierszeKomunikatow(komunikaty) {
+  const lista = Array.isArray(komunikaty) ? komunikaty : [komunikaty]
+  const wiersze = []
+  for (const element of lista) {
+    for (const linia of tekst(element).split(/\r?\n/)) {
+      const t = linia.trim()
+      if (!t) continue
+      const m = t.match(/^Pozycja (.+?) ("[^"]*" .*)$/)
+      wiersze.push(m ? { typ: m[1], tresc: m[2] } : { typ: '', tresc: t })
+    }
+  }
+  return wiersze
+}
+
 /** "Ostatnia edycja ręczna: DD.MM.RRRR HH:MM, Kto, powód: ..." (powód pomijany, gdy pusty). */
 export function opisOstatniejEdycji(edycja) {
   if (!edycja) return ''

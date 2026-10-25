@@ -223,11 +223,31 @@
     </div>
     </template>
 
-    <div v-if="blad" class="mt-2 rounded-md border border-outline-red-3 bg-surface-red-2 p-2 text-sm text-ink-red-8" data-testid="zestaw-blad">
-      {{ blad }}
+    <div
+      v-if="wierszeBledu.length"
+      class="mt-2 rounded-md border border-outline-red-3 bg-surface-red-2 p-2 text-sm text-ink-red-8"
+      data-testid="zestaw-blad"
+    >
+      <div v-if="wierszeBledu.length > 1" class="font-medium">{{ __('Do poprawienia przed zapisem:') }}</div>
+      <ul :class="wierszeBledu.length > 1 ? 'mt-1 list-disc space-y-1 pl-5' : 'list-none'">
+        <li v-for="(w, i) in wierszeBledu" :key="i" data-testid="zestaw-blad-wiersz">
+          <strong v-if="w.typ" class="font-semibold">{{ w.typ }}</strong>
+          {{ w.tresc }}
+        </li>
+      </ul>
     </div>
-    <div v-for="o in ostrzezenia" :key="o" class="mt-2 rounded-md border border-outline-amber-3 bg-surface-amber-2 p-2 text-sm text-ink-amber-8">
-      {{ o }}
+    <div
+      v-if="wierszeOstrzezen.length"
+      class="mt-2 rounded-md border border-outline-amber-3 bg-surface-amber-2 p-2 text-sm text-ink-amber-8"
+      data-testid="zestaw-ostrzezenia"
+    >
+      <div v-if="wierszeOstrzezen.length > 1" class="font-medium">{{ __('Uwagi:') }}</div>
+      <ul :class="wierszeOstrzezen.length > 1 ? 'mt-1 list-disc space-y-1 pl-5' : 'list-none'">
+        <li v-for="(w, i) in wierszeOstrzezen" :key="i" data-testid="zestaw-ostrzezenie-wiersz">
+          <strong v-if="w.typ" class="font-semibold">{{ w.typ }}</strong>
+          {{ w.tresc }}
+        </li>
+      </ul>
     </div>
 
     <!-- Konfiguracja -->
@@ -386,6 +406,7 @@ import {
   roznicaDoOkna,
   stanZOdpowiedzi,
   usunWiersz,
+  wierszeKomunikatow,
   zastosujPropozycje,
   nowyZestawTyp,
   zmienPoleCeny,
@@ -487,6 +508,9 @@ const ostrzezenia = computed(() => {
   const k = podglad.value?.konfiguracja_propozycja?._ostrzezenia || []
   return [...new Set([...z, ...k])]
 })
+
+const wierszeBledu = computed(() => wierszeKomunikatow(blad.value))
+const wierszeOstrzezen = computed(() => wierszeKomunikatow(ostrzezenia.value))
 
 const pochodne = computed(() => {
   const c = cenaPodglad.value
