@@ -56,6 +56,7 @@ import {
   dobierzMocComfortPremium,
   dobierzMagazynComfortPremium,
   czyAutodobor,
+  falownikDlaMocyPv,
 } from '@/utils/pvForm'
 
 describe('PV form logic', () => {
@@ -941,6 +942,64 @@ describe('autodobor COMFORT PREMIUM (ops#295)', () => {
     expect(czyAutodobor({ variant: 'Fotowoltaika', zestaw: 'COMFORT PREMIUM' })).toBe(false)
     expect(czyAutodobor({ variant: 'Magazyn energii', zestaw: 'COMFORT PREMIUM' })).toBe(false)
     expect(czyAutodobor()).toBe(false)
+  })
+})
+
+describe('falownikDlaMocyPv (ops#302)', () => {
+  const fal = (producent, moce, extra = {}) => moce.map((m) => ({ name: `${producent} ${m}`, producent, moc_kw: m, ...extra }))
+  // realistyczne listy z katalogu (aktywne falowniki)
+  const solax = fal('Solax', [5, 8, 10, 12, 15, 20])
+  const hoymiles = fal('Hoymiles', [5, 6, 8, 10, 12, 15, 20])
+  const foxess = fal('FoxESS', [8, 10, 12, 15, 17, 20, 25])
+  const sigenTp2 = fal('Sigenergy', [3, 4, 5, 6, 8, 10, 12], { sigen_typ: 'TP2' })
+
+  it('PV rowne mocy falownika wybiera ten falownik', () => {
+    expect(falownikDlaMocyPv(sigenTp2, 8).moc_kw).toBe(8)
+    expect(falownikDlaMocyPv(sigenTp2, 3).moc_kw).toBe(3)
+  })
+  it('PV miedzy dwoma falownikami wybiera nizszy', () => {
+    expect(falownikDlaMocyPv(sigenTp2, 7).moc_kw).toBe(6)
+    expect(falownikDlaMocyPv(foxess, 9).moc_kw).toBe(8)
+    expect(falownikDlaMocyPv(hoymiles, 7.5).moc_kw).toBe(6)
+  })
+  it('PV ponizej najmniejszego falownika wybiera najmniejszy', () => {
+    expect(falownikDlaMocyPv(foxess, 6).moc_kw).toBe(8)
+    expect(falownikDlaMocyPv(sigenTp2, 2.5).moc_kw).toBe(3)
+  })
+  it('PV powyzej najwiekszego wybiera najwiekszy', () => {
+    expect(falownikDlaMocyPv(solax, 50).moc_kw).toBe(20)
+  })
+  it('pusta lista, brak listy i pozycje bez mocy daja undefined', () => {
+    expect(falownikDlaMocyPv([], 6)).toBeUndefined()
+    expect(falownikDlaMocyPv(undefined, 6)).toBeUndefined()
+    expect(falownikDlaMocyPv([{ name: 'x' }, { name: 'y', moc_kw: null }], 6)).toBeUndefined()
+  })
+  it('nieznana moc PV daje najmniejszy', () => {
+    expect(falownikDlaMocyPv(hoymiles, 0).moc_kw).toBe(5)
+    expect(falownikDlaMocyPv(hoymiles, null).moc_kw).toBe(5)
+    expect(falownikDlaMocyPv(hoymiles, 'abc').moc_kw).toBe(5)
+  })
+  it('kolejnosc listy nie ma znaczenia i lista nie jest mutowana', () => {
+    const mieszana = [solax[3], solax[0], solax[5], solax[1], solax[2], solax[4]]
+    const kopia = JSON.stringify(mieszana)
+    expect(falownikDlaMocyPv(mieszana, 11).moc_kw).toBe(10)
+    expect(JSON.stringify(mieszana)).toBe(kopia)
+  })
+  it('moce jako tekst (Float z API) sa porownywane liczbowo', () => {
+    const tekst = [{ name: 'a', moc_kw: '5' }, { name: 'b', moc_kw: '10' }, { name: 'c', moc_kw: '8' }]
+    expect(falownikDlaMocyPv(tekst, 9).name).toBe('c')
+  })
+  it('autodobor z zagadnienia: 5000 kWh, COMFORT PREMIUM -> PV 6,00 kWp -> Solax nie wiekszy niz PV', () => {
+    const moc = dobierzMocComfortPremium(5000, 500)
+    expect(moc).toBe(6)
+    // najwiekszy Solax <= 6 kW to 5 kW (dawniej 8 kW, czyli wiekszy niz PV)
+    expect(falownikDlaMocyPv(solax, moc).moc_kw).toBe(5)
+    // gdyby katalog nie mial falownika <= PV, wybierany jest najmniejszy
+    expect(falownikDlaMocyPv(solax.filter((f) => f.moc_kw >= 8), moc).moc_kw).toBe(8)
+  })
+  it('autodobor Sigenergy PV+ME: 8 kWp -> TP2 8 kW (rowny), 7 kWp -> TP2 6 kW', () => {
+    expect(falownikDlaMocyPv(sigenTp2, 8).moc_kw).toBe(8)
+    expect(falownikDlaMocyPv(sigenTp2, 7).moc_kw).toBe(6)
   })
 })
 
