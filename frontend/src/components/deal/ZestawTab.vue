@@ -262,7 +262,7 @@
           </div>
 
           <div class="mb-1 mt-1 border-t border-outline-gray-2 pt-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Cena') }}</div>
-          <div class="flex justify-between py-0.5 text-ink-gray-7">
+          <div class="flex justify-between py-0.5 text-ink-gray-9">
             <span>{{ __('Cena netto') }}</span><span>{{ formatPln(wycenaFields.custom_netto) }}</span>
           </div>
           <div class="flex justify-between py-0.5 text-ink-gray-7">
@@ -369,7 +369,7 @@
           <div v-if="wycenaFields.custom_typ_klienta" class="flex justify-between py-0.5 text-ink-gray-7">
             <span>{{ __('Typ klienta') }}</span><span>{{ wycenaFields.custom_typ_klienta }}</span>
           </div>
-          <div class="flex justify-between py-0.5 text-ink-gray-7">
+          <div class="flex justify-between py-0.5 text-ink-gray-9">
             <span>{{ __('Cena netto') }}</span><span>{{ formatPln(wycenaFields.custom_netto) }}</span>
           </div>
           <div class="flex justify-between py-0.5 text-ink-gray-7">

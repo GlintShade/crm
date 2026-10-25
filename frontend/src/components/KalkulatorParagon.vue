@@ -17,7 +17,7 @@
       <template v-else>
         <div class="text-xs text-ink-gray-5">Cena brutto</div>
         <div class="mt-1 whitespace-nowrap text-3xl font-bold tabular-nums text-ink-gray-9">{{ formatPln(summary.brutto) }}</div>
-        <div class="mt-1 text-sm tabular-nums text-ink-gray-6">netto {{ formatPln(summary.netto) }}</div>
+        <div class="mt-1 text-sm tabular-nums text-ink-gray-9">netto {{ formatPln(summary.netto) }}</div>
         <div v-if="pokazRate" class="mt-1 text-sm text-ink-gray-6">
           <span class="whitespace-nowrap font-semibold tabular-nums text-ink-gray-8">{{ formatPln(summary.raty.brutto) }}</span>
           /mies. przez {{ okresLat }} lat
@@ -68,7 +68,8 @@
 
     <div>
       <div class="text-xs tabular-nums text-ink-gray-5">
-        Netto {{ formatPln(summary.netto) }} · VAT {{ summary.vat_rate }}% {{ formatPln(summary.vat) }}
+        <span class="text-ink-gray-9">Netto {{ formatPln(summary.netto) }}</span>
+        <span> · VAT {{ summary.vat_rate }}% {{ formatPln(summary.vat) }}</span>
       </div>
       <button
         type="button"
