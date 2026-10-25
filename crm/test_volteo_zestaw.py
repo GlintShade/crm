@@ -243,6 +243,21 @@ class TestWalidujWiersze(unittest.TestCase):
 		for t in ("Falownik", "Ladowarka EV", "Panele PV + mikro (dodatek)", "Rozbudowa", "CWU", "Kocioł"):
 			self.assertIn(t, z.TYPY_WIERSZY_OZE)
 
+	def test_typy_wierszy_zawieraja_skladniki_ops299(self):
+		for t in ("Montaż", "Akcesoria", "Sterownik", "Zasilanie awaryjne"):
+			self.assertIn(t, z.TYPY_WIERSZY_OZE)
+
+	def test_wiersze_informacyjne_ops299_przechodza_walidacje(self):
+		w = [
+			wiersz(typ="Falownik", nazwa="Sigenergy SigenStor 8 kW", ilosc=1),
+			wiersz(typ="Sterownik", nazwa="Sterownik systemu Sigenergy TP2", ilosc=1),
+			wiersz(typ="Montaż", nazwa="Montaż instalacji fotowoltaicznej", ilosc=1),
+			wiersz(typ="Montaż", nazwa="Montaż magazynu energii", ilosc=1),
+			wiersz(typ="Akcesoria", nazwa="Akcesoria i osprzęt montażowy", ilosc=1),
+			wiersz(typ="Zasilanie awaryjne", nazwa="Zasilanie awaryjne (backup)", ilosc=1),
+		]
+		self.assertEqual(z.waliduj_wiersze(w), [])
+
 
 class TestRoznice(unittest.TestCase):
 	def test_brak_zmian(self):
