@@ -94,7 +94,7 @@ _POLA_LISTY = (
 # Dozwolone wartosci `zestaw_typ` na karcie panelu (ops#292); pusta = karta
 # uniwersalna. Lustro `ZESTAWY` w frontend/src/utils/pvForm.js i
 # `ZESTAWY_PRODUCENT` w ops/crm-kalkulator-bom.py.
-DOZWOLONE_ZESTAWY = ("COMFORT", "COMFORT PREMIUM", "COMFORT +")
+DOZWOLONE_ZESTAWY = ("COMFORT", "COMFORT PREMIUM", "PREMIUM +")
 
 
 def _wiersz_do_dict(doc) -> dict:
