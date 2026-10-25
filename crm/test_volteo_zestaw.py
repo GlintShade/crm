@@ -1116,6 +1116,27 @@ class TestZestawDlaProducenta(unittest.TestCase):
 		self.assertEqual(z.zestaw_dla_producenta(" Hoymiles ", "Magazyn energii"), "COMFORT")
 
 
+class TestNowyZestawTyp(unittest.TestCase):
+	def test_zmiana_producenta_wylicza_zestaw(self):
+		self.assertEqual(z.nowy_zestaw_typ("Sigenergy", "Hoymiles", "PREMIUM +", MAG), "COMFORT")
+		self.assertEqual(z.nowy_zestaw_typ("Sigenergy", "Solax", "", MAG), "COMFORT PREMIUM")
+
+	def test_zmiana_na_foxess_czysci_zestaw(self):
+		self.assertEqual(z.nowy_zestaw_typ("Hoymiles", "FoxESS", "COMFORT", MAG), "")
+
+	def test_bez_zmiany_producenta_zestaw_zostaje_nietkniety(self):
+		# Stara szansa Sigenergy z pustym zestawem nie dostaje PREMIUM +.
+		self.assertEqual(z.nowy_zestaw_typ("Sigenergy", "Sigenergy", "", MAG), "")
+		self.assertEqual(z.nowy_zestaw_typ("Sigenergy", "Sigenergy", None, MAG), "")
+		self.assertEqual(z.nowy_zestaw_typ("Hoymiles", " Hoymiles ", "COMFORT +", MAG), "COMFORT +")
+
+	def test_pusty_obecny_i_pusty_nowy_to_brak_zmiany(self):
+		self.assertEqual(z.nowy_zestaw_typ(None, "", "X", MAG), "X")
+
+	def test_sama_pv_po_zmianie_to_pusty(self):
+		self.assertEqual(z.nowy_zestaw_typ("FoxESS", "Sigenergy", "", "Fotowoltaika"), "")
+
+
 class TestProducenciDlaRodzaju(unittest.TestCase):
 	def test_pv_tylko_foxess(self):
 		self.assertEqual(z.producenci_dla_rodzaju("Fotowoltaika"), ("FoxESS",))

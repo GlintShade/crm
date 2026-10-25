@@ -854,6 +854,15 @@ def zestaw_dla_producenta(producent: Any, rodzaj: Any) -> str:
 	return ""
 
 
+def nowy_zestaw_typ(producent_obecny: Any, producent_nowy: Any, zestaw_obecny: Any, rodzaj: Any) -> str:
+	"""Zestaw do zapisania przy edycji. Wyprowadzany z producenta WYLACZNIE gdy producent
+	rzeczywiscie sie zmienia; bez zmiany producenta zwraca zestaw zapisany na szansie bez
+	zadnej poprawki (stare szanse zachowuja to, co mialy)."""
+	if _tekst(producent_nowy) == _tekst(producent_obecny):
+		return _tekst(zestaw_obecny)
+	return zestaw_dla_producenta(producent_nowy, rodzaj)
+
+
 MSG_PRODUCENT_PUSTY = "Wybierz producenta."
 _TYPY_PRODUCENTA = ("Falownik", "Magazyn energii")
 _KATEGORIA_TYPU = {"Falownik": "Falownik", "Magazyn energii": "Magazyn energii"}

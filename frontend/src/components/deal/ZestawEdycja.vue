@@ -387,7 +387,7 @@ import {
   stanZOdpowiedzi,
   usunWiersz,
   zastosujPropozycje,
-  zestawDlaProducenta,
+  nowyZestawTyp,
   zmienPoleCeny,
   zmienPoleKonfiguracji,
   zmienPoleWiersza,
@@ -428,11 +428,17 @@ const polaKonfiguracji = POLA_KONFIGURACJI_TEKSTOWE
 const opcjeProducent = computed(() =>
   opcjeProducenta(props.dostep.rodzaj, (props.dostep.konfiguracja || {})[POLE_PRODUCENT]),
 )
-// Zestaw wylicza serwer (podgląd); do pierwszego podglądu lustro po stronie klienta.
+// Zestaw wylicza serwer (podgląd), tylko przy zmianie producenta; do pierwszego podglądu
+// lustro po stronie klienta (bez zmiany producenta: zestaw zapisany na szansie).
 const zestawPodglad = computed(
   () =>
     podglad.value?.zestaw_typ ??
-    zestawDlaProducenta(stan.value.konfiguracja[POLE_PRODUCENT], props.dostep.rodzaj),
+    nowyZestawTyp(
+      (props.dostep.konfiguracja || {})[POLE_PRODUCENT],
+      stan.value.konfiguracja[POLE_PRODUCENT],
+      props.dostep.zestaw_typ,
+      props.dostep.rodzaj,
+    ),
 )
 const producentZmieniony = computed(
   () =>

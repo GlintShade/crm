@@ -12,6 +12,7 @@ import {
   doWywolania,
   doZapisu,
   konfiguracjaDoWywolania,
+  nowyZestawTyp,
   opcjeProducenta,
   roznicaDoOkna,
   stanZOdpowiedzi,
@@ -122,6 +123,19 @@ describe('zestawDlaProducenta', () => {
     expect(zestawDlaProducenta('', 'Fotowoltaika + Magazyn')).toBe('')
     expect(zestawDlaProducenta('Sigenergy', 'Fotowoltaika')).toBe('')
     expect(zestawDlaProducenta('Hoymiles', 'Rozbudowa PV/ME')).toBe('')
+  })
+})
+
+describe('nowyZestawTyp', () => {
+  const MAG = 'Fotowoltaika + Magazyn'
+  it('przy zmianie producenta wylicza zestaw', () => {
+    expect(nowyZestawTyp('Sigenergy', 'Hoymiles', 'PREMIUM +', MAG)).toBe('COMFORT')
+    expect(nowyZestawTyp('Hoymiles', 'FoxESS', 'COMFORT', MAG)).toBe('')
+  })
+  it('bez zmiany producenta zwraca zestaw zapisany na szansie', () => {
+    expect(nowyZestawTyp('Sigenergy', 'Sigenergy', '', MAG)).toBe('')
+    expect(nowyZestawTyp('Sigenergy', 'Sigenergy', undefined, MAG)).toBe('')
+    expect(nowyZestawTyp('Hoymiles', 'Hoymiles', 'COMFORT +', MAG)).toBe('COMFORT +')
   })
 })
 

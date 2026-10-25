@@ -171,6 +171,15 @@ export function zestawDlaProducenta(producent, rodzaj) {
   return ZESTAWY.find((z) => z.producent === p)?.kod || ''
 }
 
+/**
+ * Zestaw do pokazania w podglądzie (lustro `nowy_zestaw_typ`): wyliczany z producenta
+ * wyłącznie gdy producent się zmienia, inaczej zestaw zapisany na szansie bez zmian.
+ */
+export function nowyZestawTyp(producentObecny, producentNowy, zestawObecny, rodzaj) {
+  if (tekst(producentNowy).trim() === tekst(producentObecny).trim()) return tekst(zestawObecny).trim()
+  return zestawDlaProducenta(producentNowy, rodzaj)
+}
+
 export function czyCp(stan) {
   return stan?.linia === 'cp'
 }

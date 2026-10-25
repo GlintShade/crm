@@ -45,6 +45,7 @@ from crm.volteo_zestaw import (
 	ZNACZNIK_ZESTAW,
 	WalidacjaProducenta,
 	kwota,
+	nowy_zestaw_typ,
 	odtworz_dodatki_bez_ulgi,
 	przelicz_cene,
 	przelicz_cene_cp,
@@ -55,7 +56,6 @@ from crm.volteo_zestaw import (
 	waliduj_producenta,
 	waliduj_wiersze,
 	zaproponuj_konfiguracje,
-	zestaw_dla_producenta,
 )
 from crm.volteo_zestaw import formatuj_kwote as _formatuj_kwote
 
@@ -68,7 +68,8 @@ MAX_DATA = 140  # dlugosc pola Data (typ, nazwa, jednostka)
 POLE_PRODUCENT = "custom_producent"
 POLE_ZESTAW_TYP = "custom_zestaw_typ"
 """`custom_producent` jest polem konfiguracji (select w UI). `custom_zestaw_typ` NIE jest:
-serwer wyprowadza go z producenta (`zestaw_dla_producenta`) i zapisuje w tym samym `doc.save()`."""
+serwer wyprowadza go z producenta (`nowy_zestaw_typ`) i zapisuje w tym samym `doc.save()`,
+wylacznie gdy producent sie zmienia."""
 ETYKIETY_PRODUCENT_ZESTAW = {POLE_PRODUCENT: "Producent", POLE_ZESTAW_TYP: "Zestaw"}
 
 POLA_KONFIGURACJI: tuple[str, ...] = (
@@ -646,7 +647,8 @@ def volteo_zestaw_podglad(
 	Ta sama bramka i walidacja co `volteo_zestaw_zapisz`; bledy walidacji to
 	`frappe.throw` z komunikatami polaczonymi znakiem nowej linii. `producent` (opcjonalny)
 	to wybrany w formularzu producent; None oznacza producenta zapisanego na szansie.
-	Odpowiedz niesie `producent` i wyprowadzony `zestaw_typ`.
+	Odpowiedz niesie `producent` i `zestaw_typ` (wyprowadzony z producenta tylko przy
+	jego zmianie, inaczej zestaw zapisany na szansie).
 	"""
 	doc = _wczytaj_dla_edycji(deal)
 	dozwolone, powod, linia = _blokada(doc.get("custom_rodzaj_umowy"))
@@ -684,7 +686,8 @@ def volteo_zestaw_podglad(
 		walidacja = _walidacja_producenta(doc, producent, nowe)
 		_rzuc_bledy_producenta(walidacja)
 		ostrzezenia += list(walidacja.ostrzezenia)
-		zestaw_typ = zestaw_dla_producenta(wybrany, rodzaj)
+		# Zestaw wyliczany tylko przy zmianie producenta; inaczej zapisany bez zmian.
+		zestaw_typ = nowy_zestaw_typ(doc.get(POLE_PRODUCENT), wybrany, doc.get(POLE_ZESTAW_TYP), rodzaj)
 
 	return {
 		"cena": _cena_z_wyniku(doc, wejscie, wynik),
@@ -898,10 +901,18 @@ def volteo_zestaw_zapisz(
 	else:
 		walidacja = _walidacja_producenta(doc, zmiany_konfiguracji.get(POLE_PRODUCENT), nowe)
 		_rzuc_bledy_producenta(walidacja)
-	if POLE_PRODUCENT in zmiany_konfiguracji and meta.has_field(POLE_ZESTAW_TYP):
-		# Zestaw nie jest wolnym tekstem: wyprowadzany z producenta, zapisywany razem z nim.
-		zmiany_konfiguracji[POLE_ZESTAW_TYP] = zestaw_dla_producenta(
-			zmiany_konfiguracji[POLE_PRODUCENT], doc.get("custom_rodzaj_umowy")
+	if (
+		POLE_PRODUCENT in zmiany_konfiguracji
+		and meta.has_field(POLE_ZESTAW_TYP)
+		and _rozne(doc.get(POLE_PRODUCENT), zmiany_konfiguracji[POLE_PRODUCENT])
+	):
+		# Zestaw nie jest wolnym tekstem: wyprowadzany z producenta i zapisywany razem z nim,
+		# ale TYLKO gdy producent sie zmienia (zapis samej ceny lub wierszy go nie dotyka).
+		zmiany_konfiguracji[POLE_ZESTAW_TYP] = nowy_zestaw_typ(
+			doc.get(POLE_PRODUCENT),
+			zmiany_konfiguracji[POLE_PRODUCENT],
+			doc.get(POLE_ZESTAW_TYP),
+			doc.get("custom_rodzaj_umowy"),
 		)
 
 	stare = _wiersze_z_dokumentu(doc)
