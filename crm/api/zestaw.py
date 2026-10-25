@@ -43,6 +43,7 @@ from crm.volteo_zestaw import (
 	TYPY_WIERSZY_CP,
 	TYPY_WIERSZY_OZE,
 	ZNACZNIK_ZESTAW,
+	WalidacjaProducenta,
 	kwota,
 	odtworz_dodatki_bez_ulgi,
 	przelicz_cene,
@@ -51,8 +52,10 @@ from crm.volteo_zestaw import (
 	tekst_sladu_zestawu,
 	waliduj_cene,
 	waliduj_cene_cp,
+	waliduj_producenta,
 	waliduj_wiersze,
 	zaproponuj_konfiguracje,
+	zestaw_dla_producenta,
 )
 from crm.volteo_zestaw import formatuj_kwote as _formatuj_kwote
 
@@ -62,7 +65,14 @@ POLE_POWOD = "custom_zestaw_edycja_powod"
 MAX_POWOD = 500
 MAX_DATA = 140  # dlugosc pola Data (typ, nazwa, jednostka)
 
+POLE_PRODUCENT = "custom_producent"
+POLE_ZESTAW_TYP = "custom_zestaw_typ"
+"""`custom_producent` jest polem konfiguracji (select w UI). `custom_zestaw_typ` NIE jest:
+serwer wyprowadza go z producenta (`zestaw_dla_producenta`) i zapisuje w tym samym `doc.save()`."""
+ETYKIETY_PRODUCENT_ZESTAW = {POLE_PRODUCENT: "Producent", POLE_ZESTAW_TYP: "Zestaw"}
+
 POLA_KONFIGURACJI: tuple[str, ...] = (
+	"custom_producent",
 	"custom_falownik",
 	"custom_bateria",
 	"custom_pojemnosc_kwh",
@@ -78,7 +88,8 @@ POLA_KONFIGURACJI: tuple[str, ...] = (
 	"custom_pstryk",
 	"custom_ev_ladowarka",
 )
-"""14 pol konfiguracji PV edytowalnych w tym API (lustro kluczy `zaproponuj_konfiguracje`)."""
+"""15 pol konfiguracji PV edytowalnych w tym API: producent plus 14 pol z kluczy
+`zaproponuj_konfiguracje` (producenta ta funkcja celowo nie wylicza)."""
 
 _POLA_KONFIGURACJI_LICZBOWE = frozenset(
 	{
@@ -462,6 +473,7 @@ def _stan(doc: "frappe.model.document.Document") -> dict[str, Any]:
 		"typy": list(TYPY_WIERSZY_OZE),
 		"cena": _cena_ze_szansy(doc),
 		"konfiguracja": {} if nowy_rodzaj else _konfiguracja_ze_szansy(doc),
+		"zestaw_typ": "" if nowy_rodzaj else _tekst(doc.get(POLE_ZESTAW_TYP)),
 		"konfiguracja_info": _(MSG_INFO_KONFIGURACJI) if nowy_rodzaj else "",
 		"umowa": _informacja_o_umowie(deal),
 		"ostatnia_edycja": _ostatnia_edycja(deal, meta),
@@ -523,11 +535,33 @@ def _przelicz(wejscie: dict[str, Any]) -> dict[str, Any]:
 
 
 def _komponenty() -> list[dict[str, Any]]:
+	"""Caly katalog `Volteo Komponent` (tez dezaktywowane wiersze: stare szanse, np. Deye,
+	nadal musza sie dopasowac), z producentem i zestawem do walidacji spojnosci."""
 	return frappe.get_all(
 		"Volteo Komponent",
-		filters={"aktywny": 1},
-		fields=["nazwa", "model", "kategoria", "pojemnosc_kwh"],
+		fields=["nazwa", "model", "kategoria", "pojemnosc_kwh", "producent", "zestaw_typ"],
 	)
+
+
+def _walidacja_producenta(
+	doc: "frappe.model.document.Document", producent: Any, nowe: list[dict[str, Any]]
+) -> WalidacjaProducenta:
+	"""Spojnosc producenta z wierszami (ops#300). `producent` None = bez zmiany (biezacy ze szansy)."""
+	obecny = _tekst(doc.get(POLE_PRODUCENT))
+	wybrany = obecny if producent is None else _tekst(producent)
+	return waliduj_producenta(
+		wybrany,
+		doc.get("custom_rodzaj_umowy"),
+		nowe,
+		_wiersze_z_dokumentu(doc),
+		_komponenty(),
+		obecny,
+	)
+
+
+def _rzuc_bledy_producenta(walidacja: WalidacjaProducenta) -> None:
+	if walidacja.bledy:
+		frappe.throw("\n".join(walidacja.bledy))
 
 
 def _propozycja(
@@ -601,11 +635,18 @@ def volteo_zestaw_get(deal: str) -> dict[str, Any]:
 
 @frappe.whitelist()
 @rate_limit(limit=120, seconds=60)
-def volteo_zestaw_podglad(deal: str, wiersze: list[dict[str, Any]], cena: dict[str, Any]) -> dict[str, Any]:
+def volteo_zestaw_podglad(
+	deal: str,
+	wiersze: list[dict[str, Any]],
+	cena: dict[str, Any],
+	producent: str | None = None,
+) -> dict[str, Any]:
 	"""Podglad edycji bez zapisu: przeliczona cena, propozycja konfiguracji, roznice, ostrzezenia.
 
 	Ta sama bramka i walidacja co `volteo_zestaw_zapisz`; bledy walidacji to
-	`frappe.throw` z komunikatami polaczonymi znakiem nowej linii.
+	`frappe.throw` z komunikatami polaczonymi znakiem nowej linii. `producent` (opcjonalny)
+	to wybrany w formularzu producent; None oznacza producenta zapisanego na szansie.
+	Odpowiedz niesie `producent` i wyprowadzony `zestaw_typ`.
 	"""
 	doc = _wczytaj_dla_edycji(deal)
 	dozwolone, powod, linia = _blokada(doc.get("custom_rodzaj_umowy"))
@@ -636,11 +677,22 @@ def volteo_zestaw_podglad(deal: str, wiersze: list[dict[str, Any]], cena: dict[s
 	if propozycja:
 		ostrzezenia += _ostrzezenie_falownika(doc.get("custom_falownik"), nowe)
 
+	rodzaj = doc.get("custom_rodzaj_umowy")
+	wybrany = _tekst(doc.get(POLE_PRODUCENT)) if producent is None else _tekst(producent)
+	zestaw_typ = ""
+	if rodzaj not in RODZAJE_NOWE:
+		walidacja = _walidacja_producenta(doc, producent, nowe)
+		_rzuc_bledy_producenta(walidacja)
+		ostrzezenia += list(walidacja.ostrzezenia)
+		zestaw_typ = zestaw_dla_producenta(wybrany, rodzaj)
+
 	return {
 		"cena": _cena_z_wyniku(doc, wejscie, wynik),
 		"konfiguracja_propozycja": propozycja,
 		"roznice": _serializuj_roznice(roznice),
-		"ostrzezenia": ostrzezenia,
+		"ostrzezenia": list(dict.fromkeys(ostrzezenia)),
+		"producent": wybrany,
+		"zestaw_typ": zestaw_typ,
 	}
 
 
@@ -841,6 +893,16 @@ def volteo_zestaw_zapisz(
 	zmiany_konfiguracji = _sprawdz_konfiguracje(konfiguracja)
 	meta = frappe.get_meta(DOCTYPE)
 	zmiany_konfiguracji = {p: v for p, v in zmiany_konfiguracji.items() if meta.has_field(p)}
+	if doc.get("custom_rodzaj_umowy") in RODZAJE_NOWE:
+		zmiany_konfiguracji.pop(POLE_PRODUCENT, None)
+	else:
+		walidacja = _walidacja_producenta(doc, zmiany_konfiguracji.get(POLE_PRODUCENT), nowe)
+		_rzuc_bledy_producenta(walidacja)
+	if POLE_PRODUCENT in zmiany_konfiguracji and meta.has_field(POLE_ZESTAW_TYP):
+		# Zestaw nie jest wolnym tekstem: wyprowadzany z producenta, zapisywany razem z nim.
+		zmiany_konfiguracji[POLE_ZESTAW_TYP] = zestaw_dla_producenta(
+			zmiany_konfiguracji[POLE_PRODUCENT], doc.get("custom_rodzaj_umowy")
+		)
 
 	stare = _wiersze_z_dokumentu(doc)
 	roznice = roznice_zestawu(stare, nowe)
@@ -859,6 +921,7 @@ def volteo_zestaw_zapisz(
 	}
 	zmienione_pola_cen = [p for p, v in pola_ceny.items() if _rozne(doc.get(p), v)]
 	zmienione_konfiguracje = [p for p, v in zmiany_konfiguracji.items() if _rozne(doc.get(p), v)]
+	konfiguracja_przed = {p: doc.get(p) for p in zmienione_konfiguracje}
 	if roznice.puste and not zmienione_pola_cen and not zmienione_konfiguracje:
 		frappe.throw(_("Brak zmian do zapisania."))
 
@@ -897,6 +960,13 @@ def volteo_zestaw_zapisz(
 	opis_snapshotu = _zapisz_snapshot(deal, wynik["netto"], powod, meta)
 
 	etykiety = {p: (meta.get_label(p) or p) for p in zmienione_konfiguracje}
+	for pole, etykieta in ETYKIETY_PRODUCENT_ZESTAW.items():
+		if pole in zmienione_konfiguracje:
+			etykiety[pole] = "{0} ({1} -> {2})".format(
+				etykieta,
+				_tekst(konfiguracja_przed.get(pole)) or "-",
+				_tekst(zmiany_konfiguracji.get(pole)) or "-",
+			)
 	try:
 		zapisz_slad(
 			deal,

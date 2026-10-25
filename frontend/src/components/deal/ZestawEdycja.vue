@@ -233,6 +233,26 @@
     <!-- Konfiguracja -->
     <template v-if="maKonfiguracje">
       <div class="mt-4 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Konfiguracja (do umowy)') }}</div>
+      <div class="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-2" data-testid="zestaw-producent-blok">
+        <label class="flex flex-col gap-0.5 text-xs text-ink-gray-6">
+          <span>{{ __('Producent') }}</span>
+          <select
+            class="rounded border border-outline-gray-2 bg-surface-base px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none"
+            :value="stan.konfiguracja.custom_producent"
+            data-testid="zestaw-producent"
+            @change="stan = zmienPoleKonfiguracji(stan, POLE_PRODUCENT, $event.target.value)"
+          >
+            <option v-for="o in opcjeProducent" :key="o.value" :value="o.value" :disabled="o.disabled">{{ o.label }}</option>
+          </select>
+        </label>
+        <div class="flex flex-col gap-0.5 text-xs text-ink-gray-6">
+          <span>{{ __('Zestaw') }}</span>
+          <div class="rounded border border-outline-gray-2 bg-surface-gray-1 px-2 py-1 text-sm text-ink-gray-8" data-testid="zestaw-zestaw-typ">
+            {{ zestawPodglad || '-' }}
+          </div>
+          <span class="text-[11px] text-ink-gray-4">{{ __('Wyliczany z producenta, nie do ręcznej zmiany.') }}</span>
+        </div>
+      </div>
       <div class="mt-1 overflow-x-auto rounded-md border border-outline-gray-2">
         <table class="w-full border-collapse text-sm">
           <thead>
@@ -295,6 +315,13 @@
             </div>
           </div>
           <div
+            v-if="producentZmieniony"
+            class="rounded-md border border-outline-amber-3 bg-surface-amber-2 p-2 text-ink-amber-8"
+            data-testid="zestaw-nota-producent"
+          >
+            {{ __(MSG_NOTA_PRODUCENTA) }}
+          </div>
+          <div
             v-if="!rozniceOkna.dodane.length && !rozniceOkna.usuniete.length && !rozniceOkna.zmienione.length && !rozniceOkna.cena.length && !rozniceOkna.konfiguracja.length"
             class="text-ink-gray-5"
           >
@@ -340,22 +367,27 @@ import {
   ETYKIETY_KONFIGURACJI,
   ETYKIETY_POL_CENY,
   ETYKIETY_POL_CENY_CP,
+  MSG_NOTA_PRODUCENTA,
   POLA_CENY_WEJSCIE,
-  POLA_KONFIGURACJI,
+  POLA_KONFIGURACJI_TEKSTOWE,
+  POLE_PRODUCENT,
+  POLE_ZESTAW_TYP,
   TYP_INNY,
   bledyWierszyCp,
   czyBladWersji,
   czyTypInny,
   czyZmieniony,
   dodajWiersz,
-  doWywolania,
+  doPodgladu,
   doZapisu,
   komunikatBledu,
+  opcjeProducenta,
   przesunWiersz,
   roznicaDoOkna,
   stanZOdpowiedzi,
   usunWiersz,
   zastosujPropozycje,
+  zestawDlaProducenta,
   zmienPoleCeny,
   zmienPoleKonfiguracji,
   zmienPoleWiersza,
@@ -392,7 +424,21 @@ function bladPola(indeks, pole) {
   return bledyCp.value.some((b) => b.indeks === indeks && b.pole === pole)
 }
 
-const polaKonfiguracji = POLA_KONFIGURACJI
+const polaKonfiguracji = POLA_KONFIGURACJI_TEKSTOWE
+const opcjeProducent = computed(() =>
+  opcjeProducenta(props.dostep.rodzaj, (props.dostep.konfiguracja || {})[POLE_PRODUCENT]),
+)
+// Zestaw wylicza serwer (podgląd); do pierwszego podglądu lustro po stronie klienta.
+const zestawPodglad = computed(
+  () =>
+    podglad.value?.zestaw_typ ??
+    zestawDlaProducenta(stan.value.konfiguracja[POLE_PRODUCENT], props.dostep.rodzaj),
+)
+const producentZmieniony = computed(
+  () =>
+    String(stan.value.konfiguracja[POLE_PRODUCENT] ?? '').trim() !==
+    String((props.dostep.konfiguracja || {})[POLE_PRODUCENT] ?? '').trim(),
+)
 const maKonfiguracje = computed(() => Object.keys(props.dostep.konfiguracja || {}).length > 0)
 
 const poleCenyWejscie = POLA_CENY_WEJSCIE.map((klucz) => ({
@@ -522,7 +568,7 @@ async function przelicz() {
   try {
     const odp = await call('crm.api.zestaw.volteo_zestaw_podglad', {
       deal: props.dealId,
-      ...doWywolania(stan.value),
+      ...doPodgladu(stan.value),
     })
     if (moj !== licznikWywolan) return false
     podglad.value = odp
@@ -540,7 +586,7 @@ async function przelicz() {
 
 // Klucz = to, co faktycznie idzie do podglądu (wiersze + cena); zmiana samej
 // konfiguracji nie wywołuje serwera.
-const kluczPodgladu = computed(() => JSON.stringify(doWywolania(stan.value)))
+const kluczPodgladu = computed(() => JSON.stringify(doPodgladu(stan.value)))
 watch(kluczPodgladu, () => {
   if (czasomierz) clearTimeout(czasomierz)
   przelicza.value = true
@@ -557,8 +603,8 @@ const rozniceOkna = computed(() =>
     podglad.value?.roznice,
     props.dostep.cena,
     podglad.value?.cena,
-    props.dostep.konfiguracja,
-    stan.value.konfiguracja,
+    { ...props.dostep.konfiguracja, [POLE_ZESTAW_TYP]: props.dostep.zestaw_typ },
+    { ...stan.value.konfiguracja, [POLE_ZESTAW_TYP]: zestawPodglad.value },
     jestCp.value ? props.dostep.cena_cp : undefined,
     jestCp.value ? podglad.value?.cena_cp : undefined,
   ),

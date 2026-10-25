@@ -65,10 +65,10 @@ describe('stanZOdpowiedzi', () => {
     expect(Object.keys(s.cena)).toEqual(POLA_CENY_WEJSCIE)
     expect(s.cena.netto).toBe('45000')
   })
-  it('ma wszystkie 14 pol konfiguracji', () => {
+  it('ma wszystkie 15 pol konfiguracji', () => {
     const s = stanZOdpowiedzi(odp())
     expect(Object.keys(s.konfiguracja)).toEqual(POLA_KONFIGURACJI)
-    expect(POLA_KONFIGURACJI).toHaveLength(14)
+    expect(POLA_KONFIGURACJI).toHaveLength(15)
   })
   it('obsluguje pusta odpowiedz', () => {
     const s = stanZOdpowiedzi(null)
