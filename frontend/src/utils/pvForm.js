@@ -748,15 +748,16 @@ export function grupujMocePv(opcje, { progKw = PROG_PPOZ_KW, istniejacaKwp = 0, 
 
 const PROGI_MAGAZYNU = [
   { max: 30, naglowek: 'Do 30 kWh' },
-  { max: 50, naglowek: '30 do 50 kWh' },
-  { max: 70, naglowek: '50 do 70 kWh' },
-  { max: Infinity, naglowek: '70 kWh i więcej' },
+  { max: 50, naglowek: 'Powyżej 30 do 50 kWh' },
+  { max: 70, naglowek: 'Powyżej 50 do 70 kWh' },
+  { max: Infinity, naglowek: 'Powyżej 70 kWh' },
 ]
 
 /**
- * Grupuje magazyny energii po pojemnosc_kwh: <30, 30..<50, 50..<70, >=70.
- * Brak lub 0 pojemnosci laduje w "Do 30 kWh". Tylko niepuste grupy; naglowki
- * nie wspominaja o marzach ani kosztach.
+ * Grupuje magazyny energii po pojemnosc_kwh: <=30, >30..<=50, >50..<=70, >70
+ * (prog obowiazuje dopiero powyzej swojej wartosci, ops#301; lustro silnika
+ * `prog_mag`). Brak lub 0 pojemnosci laduje w "Do 30 kWh". Tylko niepuste
+ * grupy; naglowki nie wspominaja o marzach ani kosztach.
  *
  * @param {{pojemnosc_kwh?: number}[]} opcje - komponenty magazynu
  * @returns {{naglowek: string, opcje: object[]}[]} niepuste grupy
@@ -766,7 +767,7 @@ export function grupujMagazyny(opcje) {
   const grupy = PROGI_MAGAZYNU.map((p) => ({ naglowek: p.naglowek, opcje: [] }))
   for (const o of lista) {
     const kwh = Number(o?.pojemnosc_kwh) || 0
-    const idx = PROGI_MAGAZYNU.findIndex((p) => kwh < p.max)
+    const idx = PROGI_MAGAZYNU.findIndex((p) => kwh <= p.max)
     grupy[idx].opcje.push(o)
   }
   return grupy.filter((g) => g.opcje.length > 0)
