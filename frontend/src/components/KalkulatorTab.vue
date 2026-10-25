@@ -126,12 +126,12 @@
                       class="mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border"
                       :class="sel.zestaw === z.kod ? 'border-outline-gray-8' : 'border-outline-gray-5'"
                     ><span v-if="sel.zestaw === z.kod" class="h-2 w-2 rounded-full bg-surface-gray-9"></span></span>
-                    <span class="min-w-0 pr-4">
-                      <span class="block text-base font-bold leading-6 text-ink-gray-9">{{ z.kod }}</span>
+                    <span class="min-w-0 flex-1">
+                      <span class="block whitespace-nowrap text-[15px] font-bold leading-6 text-ink-gray-9">{{ z.kod }}</span>
                       <span class="block text-sm font-medium text-ink-gray-8">{{ z.producent }}</span>
                       <span v-if="opisZestawu(z)" class="mt-0.5 block text-xs text-ink-gray-6">{{ opisZestawu(z) }}</span>
                     </span>
-                    <FeatherIcon v-if="sel.zestaw === z.kod" name="check" class="absolute right-2 top-2 h-4 w-4 text-ink-gray-8" />
+                    <FeatherIcon v-if="sel.zestaw === z.kod" name="check" class="absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-gray-8" />
                   </button>
                 </div>
               </div>
@@ -157,14 +157,7 @@
                   <div class="mb-0.5 text-sm text-ink-gray-5">Magazyn energii</div>
                   <select v-model="sel.bateria" class="kalk-select">
                     <option value="">-- wybierz --</option>
-                    <template v-if="bateriaGrupy.length > 1">
-                      <optgroup v-for="g in bateriaGrupy" :key="g.naglowek" :label="g.naglowek">
-                        <option v-for="c in g.opcje" :key="c.name" :value="c.name">{{ krotkaNazwaKomponentu(c) }}</option>
-                      </optgroup>
-                    </template>
-                    <template v-else>
-                      <option v-for="c in bateriaOptions" :key="c.name" :value="c.name">{{ krotkaNazwaKomponentu(c) }}</option>
-                    </template>
+                    <option v-for="c in bateriaOptions" :key="c.name" :value="c.name">{{ krotkaNazwaKomponentu(c) }}</option>
                   </select>
                 </div>
 
@@ -565,7 +558,6 @@ import {
   evOpcje,
   sanitizujDodatki,
   grupujMocePv,
-  grupujMagazyny,
   opisZestawu,
   PROG_PPOZ_KW,
   podsumowanieMontazu,
@@ -779,7 +771,13 @@ async function loadPozycjeKlimy() {
 loadPozycjeKlimy()
 
 const falownikOptions = computed(() => byKat('Falownik').filter((x) => x.producent === sel.producent))
-const bateriaOptions = computed(() => byKat('Magazyn energii').filter((x) => x.producent === sel.producent))
+// Jedna plaska lista, rosnaco po pojemnosci (progi cenowe liczy serwer, nie lista).
+const bateriaOptions = computed(() =>
+  byKat('Magazyn energii')
+    .filter((x) => x.producent === sel.producent)
+    .slice()
+    .sort((a, b) => (Number(a.pojemnosc_kwh) || 0) - (Number(b.pojemnosc_kwh) || 0)),
+)
 const konstrukcjaOptions = computed(() => byKat('Konstrukcja'))
 const operatorOptions = computed(() => byKat('Operator'))
 const kierunekOptions = computed(() => byKat('Kierunek montazu'))
@@ -1253,7 +1251,6 @@ const mocGrupy = computed(() =>
     etykietaPowyzej: ppozEtykietaPowyzej.value,
   }),
 )
-const bateriaGrupy = computed(() => grupujMagazyny(bateriaOptions.value))
 
 const PIGULKA_KLASY = {
   neutral: 'bg-surface-gray-2 text-ink-gray-7',
