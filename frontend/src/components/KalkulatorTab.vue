@@ -549,6 +549,7 @@ import {
   dobierzMocComfortPremium,
   dobierzMagazynComfortPremium,
   pickBySpec,
+  falownikDlaMocyPv,
   pickMounting,
   ppozWymagane,
   ppozWymuszonyProgiem,
@@ -996,7 +997,8 @@ function zastosujAutodobor() {
   sel.mocPvKw = moc
   const prod = zestawProducent(sel.zestaw)
   const inverters = byKat('Falownik').filter((c) => c.producent === prod)
-  const fal = pickBySpec(inverters, 'moc_kw', moc)
+  // Falownik: najwiekszy <= mocy PV (ops#302), a gdy zaden, najmniejszy.
+  const fal = falownikDlaMocyPv(inverters, moc)
   if (fal) sel.falownik = fal.name
   const bat = dobierzMagazynComfortPremium(
     sel.consumption,
@@ -1053,11 +1055,12 @@ async function applyFromConsumption() {
     }
     sel.mocPvKw = pickMocForTarget(kwp, panelMocWp(sel.panel))
 
-    // Falownik: producent zestawu (Sigenergy tylko TP2), smallest moc_kw >= kwp, else largest.
+    // Falownik: producent zestawu (Sigenergy tylko TP2), largest moc_kw <= faktyczna moc PV
+    // (wybrana wyzej), a gdy zaden, smallest (ops#302).
     const inverters = byKat('Falownik').filter(
       (c) => c.producent === sel.producent && (sel.producent !== 'Sigenergy' || c.sigen_typ === 'TP2'),
     )
-    const fal = pickBySpec(inverters, 'moc_kw', kwp)
+    const fal = falownikDlaMocyPv(inverters, sel.mocPvKw || kwp)
     if (fal) sel.falownik = fal.name
 
     // Bateria: producent zestawu, smallest pojemnosc_kwh >= storage, else largest.
@@ -1085,10 +1088,10 @@ async function applyFromConsumption() {
     }
     sel.mocPvKw = pickMocForTarget(kwp, panelMocWp(sel.panel))
 
-    // Falownik: FoxESS, smallest moc_kw >= kwp, else largest. No sigen_typ
-    // filter — FoxESS rows carry no such field.
+    // Falownik: FoxESS, largest moc_kw <= faktyczna moc PV, a gdy zaden, smallest (ops#302).
+    // No sigen_typ filter, FoxESS rows carry no such field.
     const inverters = byKat('Falownik').filter((c) => c.producent === 'FoxESS')
-    const fal = pickBySpec(inverters, 'moc_kw', kwp)
+    const fal = falownikDlaMocyPv(inverters, sel.mocPvKw || kwp)
     if (fal) sel.falownik = fal.name
 
     // Konstrukcja: prefer "…blacha", else first available.

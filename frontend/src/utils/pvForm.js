@@ -244,6 +244,37 @@ export function pickBySpec(list, field, minValue) {
 }
 
 /**
+ * Automatyczny dobór falownika (ops#302): NAJWIEKSZY falownik o mocy NIE
+ * wiekszej niz moc PV (rowna moc jest OK, decyzja wlasciciela 2026-10-25).
+ * Gdy zaden nie spelnia warunku (PV mniejsze niz najmniejszy falownik) albo
+ * moc PV jest nieznana, zwraca najmniejszy dostepny. Pusta lista (albo bez
+ * pozycji z moca): undefined. Nie mutuje listy. Filtry producenta, typu i
+ * zestawu zostaja po stronie wywolujacego. Dotyczy tylko doboru z PV (dla
+ * samego magazynu energii falownik wybiera sie recznie).
+ *
+ * @param {object[]} falowniki - falowniki z polem moc_kw
+ * @param {number} mocPvKw - moc instalacji PV w kWp
+ * @returns {object|undefined} wybrany falownik lub undefined dla pustej listy
+ */
+export function falownikDlaMocyPv(falowniki, mocPvKw) {
+  if (!Array.isArray(falowniki)) return undefined
+  const sorted = falowniki
+    .filter((item) => item?.moc_kw != null && item.moc_kw !== '' && Number.isFinite(Number(item.moc_kw)))
+    .sort((a, b) => Number(a.moc_kw) - Number(b.moc_kw))
+  if (sorted.length === 0) return undefined
+
+  const pv = Number(mocPvKw)
+  if (!Number.isFinite(pv) || pv <= 0) return sorted[0]
+
+  let wybrany = sorted[0]
+  for (const item of sorted) {
+    if (Number(item.moc_kw) <= pv + 1e-9) wybrany = item
+    else break
+  }
+  return wybrany
+}
+
+/**
  * Wybiera konstrukcję montażową: preferuje nazwę zawierającą "blacha",
  * w innym wypadku pierwszą dostępną.
  *
