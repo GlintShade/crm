@@ -171,6 +171,11 @@ TYPY_WIERSZY_OZE: tuple[str, ...] = (
 	"EMS Zeronest",
 	"Licznik Pstryk",
 	"Ladowarka EV",
+	# ops#299: wiersze informacyjne (skladniki wliczone w cene, bez cen)
+	"Montaż",
+	"Akcesoria",
+	"Sterownik",
+	"Zasilanie awaryjne",
 	# nowe rodzaje (crm/volteo_kalkulator_oze.py, `_linie_zestawu`)
 	"Rozbudowa",
 	"Pompa ciepła",
