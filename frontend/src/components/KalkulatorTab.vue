@@ -150,7 +150,7 @@
                   <div class="mb-0.5 text-sm text-ink-gray-5">Falownik</div>
                   <select v-model="sel.falownik" class="kalk-select">
                     <option value="">-- wybierz --</option>
-                    <option v-for="c in falownikOptions" :key="c.name" :value="c.name">{{ compLabel(c) }}</option>
+                    <option v-for="c in falownikOptions" :key="c.name" :value="c.name">{{ krotkaNazwaKomponentu(c) }}</option>
                   </select>
                 </div>
 
@@ -160,11 +160,11 @@
                     <option value="">-- wybierz --</option>
                     <template v-if="bateriaGrupy.length > 1">
                       <optgroup v-for="g in bateriaGrupy" :key="g.naglowek" :label="g.naglowek">
-                        <option v-for="c in g.opcje" :key="c.name" :value="c.name">{{ compLabel(c) }}</option>
+                        <option v-for="c in g.opcje" :key="c.name" :value="c.name">{{ krotkaNazwaKomponentu(c) }}</option>
                       </optgroup>
                     </template>
                     <template v-else>
-                      <option v-for="c in bateriaOptions" :key="c.name" :value="c.name">{{ compLabel(c) }}</option>
+                      <option v-for="c in bateriaOptions" :key="c.name" :value="c.name">{{ krotkaNazwaKomponentu(c) }}</option>
                     </template>
                   </select>
                 </div>
@@ -174,7 +174,7 @@
                     <div class="mb-0.5 text-sm text-ink-gray-5">Panel fotowoltaiczny</div>
                     <select v-model="sel.panel" class="kalk-select">
                       <option value="">-- wybierz --</option>
-                      <option v-for="c in panelOptions" :key="c.name" :value="c.name">{{ panelLabel(c) }}</option>
+                      <option v-for="c in panelOptions" :key="c.name" :value="c.name">{{ krotkaNazwaKomponentu(c) }}</option>
                     </select>
                   </div>
                   <div>
@@ -536,7 +536,7 @@ import {
   DOMYSLNY_ZESTAW,
   zestawProducent,
   licznikDostepny,
-  panelLabel,
+  krotkaNazwaKomponentu,
   buildMocOptionsForPanel,
   paneleDlaZestawu,
   snapMocToPanel,

@@ -25,6 +25,7 @@ import {
   licznikDostepny,
   buildMocOptions,
   panelLabel,
+  krotkaNazwaKomponentu,
   buildMocOptionsForPanel,
   snapMocToPanel,
   pickMocForTarget,
@@ -295,6 +296,78 @@ describe('PV form logic', () => {
 
     it('returns undefined for an empty list', () => {
       expect(pickMounting([])).toBeUndefined()
+    })
+  })
+
+  describe('krotkaNazwaKomponentu', () => {
+    const falownik = (nazwa, model, extra = {}) => ({ kategoria: 'Falownik', nazwa, model, ...extra })
+    const magazyn = (nazwa, model) => ({ kategoria: 'Magazyn energii', nazwa, model })
+    const panel = (nazwa, model, extra = {}) => ({ kategoria: 'Panel PV', nazwa, model, ...extra })
+
+    it('skraca falowniki do marki i mocy', () => {
+      expect(krotkaNazwaKomponentu(falownik('FoxESS', '8 kW', { producent: 'FoxESS', moc_kw: 8 }))).toBe('FoxESS 8 kW')
+      expect(krotkaNazwaKomponentu(falownik('Hoymiles HIT-G3S', '8 kW', { producent: 'Hoymiles', moc_kw: 8 }))).toBe('Hoymiles 8 kW')
+      expect(krotkaNazwaKomponentu(falownik('Solax', 'X3-NEO-5K-LV 5 kW', { producent: 'Solax', moc_kw: 5 }))).toBe('Solax 5 kW')
+      expect(
+        krotkaNazwaKomponentu(falownik('Sigenergy SigenStor AIO', '5 kW', { producent: 'Sigenergy', sigen_typ: 'AIO', moc_kw: 5 })),
+      ).toBe('Sigenergy All-in-One 5 kW')
+      expect(
+        krotkaNazwaKomponentu(falownik('Sigenergy TP2', '8 kW', { producent: 'Sigenergy', sigen_typ: 'TP2', moc_kw: 8 })),
+      ).toBe('Sigenergy TP2 8 kW')
+    })
+
+    it('falownik: moc z modelu, ulamek z przecinkiem, marka z nazwy', () => {
+      expect(krotkaNazwaKomponentu(falownik('Solax', 'X3 5 kW', { producent: 'Solax' }))).toBe('Solax 5 kW')
+      expect(krotkaNazwaKomponentu(falownik('FoxESS', 'x', { producent: 'FoxESS', moc_kw: 12.5 }))).toBe('FoxESS 12,5 kW')
+      expect(krotkaNazwaKomponentu(falownik('Hoymiles HIT-G3S', '10 kW'))).toBe('Hoymiles 10 kW')
+      expect(krotkaNazwaKomponentu(falownik('Sigenergy', '6 kW', { producent: 'Sigenergy' }))).toBe('Sigenergy 6 kW')
+    })
+
+    it('falownik bez mocy wraca do pelnej etykiety', () => {
+      expect(krotkaNazwaKomponentu(falownik('FoxESS', 'modelX', { producent: 'FoxESS' }))).toBe('FoxESS modelX')
+      expect(krotkaNazwaKomponentu(falownik('FoxESS', '', { moc_kw: 0 }))).toBe('FoxESS')
+    })
+
+    it('magazyn: bez koncowego nawiasu z modulami, przecinek zachowany', () => {
+      expect(krotkaNazwaKomponentu(magazyn('Sigenergy', '12 kWh (6+6)'))).toBe('Sigenergy 12 kWh')
+      expect(krotkaNazwaKomponentu(magazyn('Sigenergy', '54 kWh (9+9+9+9+9+9)'))).toBe('Sigenergy 54 kWh')
+      expect(krotkaNazwaKomponentu(magazyn('Hoymiles', '12 kWh (2x6)'))).toBe('Hoymiles 12 kWh')
+      expect(krotkaNazwaKomponentu(magazyn('Hoymiles', '15 kWh'))).toBe('Hoymiles 15 kWh')
+      expect(krotkaNazwaKomponentu(magazyn('Solax', '10,6 kWh (2x5,3)'))).toBe('Solax 10,6 kWh')
+      expect(krotkaNazwaKomponentu(magazyn('Solax', '14,3 kWh'))).toBe('Solax 14,3 kWh')
+      expect(krotkaNazwaKomponentu(magazyn('Solax', '100,1 kWh (7x14,3)'))).toBe('Solax 100,1 kWh')
+      expect(krotkaNazwaKomponentu(magazyn('Solax', ''))).toBe('Solax')
+    })
+
+    it('panel: nazwa, moc w W i Full Black', () => {
+      expect(
+        krotkaNazwaKomponentu(panel('AIKO', 'Neostar 2S+ AIKO-A500-MAH60Db (Full Black)', { moc_wp: 500 })),
+      ).toBe('AIKO 500W (Full Black)')
+      expect(krotkaNazwaKomponentu(panel('SunEarth', '475W FullBlack DualGlass Bifacial', { moc_wp: 475 }))).toBe(
+        'SunEarth 475W (Full Black)',
+      )
+      expect(krotkaNazwaKomponentu(panel('TCL Solar', '500W FullBlack DualGlass Bifacial', { moc_wp: 500 }))).toBe(
+        'TCL Solar 500W (Full Black)',
+      )
+    })
+
+    it('panel: moc z modelu gdy brak moc_wp, bez Full Black gdy nie ma w tekscie', () => {
+      expect(krotkaNazwaKomponentu(panel('SunEarth', '475W FullBlack DualGlass Bifacial'))).toBe('SunEarth 475W (Full Black)')
+      expect(krotkaNazwaKomponentu(panel('AIKO', 'Neostar 2S+ AIKO-A500-MAH60Db'))).toBe('AIKO 500W')
+      expect(krotkaNazwaKomponentu(panel('Inny', 'model 410 W', { moc_wp: 0 }))).toBe('Inny 410W')
+    })
+
+    it('panel bez mocy wraca do pelnej etykiety', () => {
+      expect(krotkaNazwaKomponentu(panel('AIKO', 'Neostar'))).toBe('AIKO Neostar')
+    })
+
+    it('konstrukcja, nieznana kategoria i null', () => {
+      expect(krotkaNazwaKomponentu({ kategoria: 'Konstrukcja', nazwa: 'Dach skośny - blacha' })).toBe('Dach skośny - blacha')
+      expect(krotkaNazwaKomponentu({ kategoria: 'Inna', nazwa: 'X', model: 'Y (z)' })).toBe('X Y (z)')
+      expect(krotkaNazwaKomponentu({ nazwa: 'Bez kategorii' })).toBe('Bez kategorii')
+      expect(krotkaNazwaKomponentu({})).toBe('')
+      expect(krotkaNazwaKomponentu(null)).toBe('')
+      expect(krotkaNazwaKomponentu(undefined)).toBe('')
     })
   })
 

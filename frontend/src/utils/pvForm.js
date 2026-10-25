@@ -307,6 +307,87 @@ export function panelLabel(row) {
 }
 
 /**
+ * Pełna etykieta komponentu: nazwa i model, puste pola pomijane.
+ * Wartość awaryjna dla `krotkaNazwaKomponentu` oraz etykieta konstrukcji.
+ *
+ * @param {object|null} row - wiersz komponentu
+ * @returns {string} pełna etykieta
+ */
+export function pelnaNazwaKomponentu(row) {
+  if (!row) return ''
+  return [row.nazwa, row.model].filter(Boolean).join(' ')
+}
+
+/** Moc w kW z polskim przecinkiem dziesiętnym ("8", "12,5"). */
+function formatKw(value) {
+  return String(Math.round(value * 100) / 100).replace('.', ',')
+}
+
+/**
+ * Krótka etykieta komponentu do pól wyboru po lewej stronie kalkulatora.
+ * Wyłącznie prezentacja: paragon, zapisany zestaw, umowy i PDF zostają
+ * z pełnymi nazwami z katalogu (pochodzą z serwera, nie z tej funkcji).
+ *
+ * Reguły według `kategoria`:
+ * - Falownik: marka + moc, np. "FoxESS 8 kW", "Sigenergy All-in-One 5 kW"
+ *   (typ AIO), "Sigenergy TP2 8 kW". Moc z `moc_kw`, a gdy jej brak, z
+ *   modelu ("... 5 kW").
+ * - Magazyn energii: nazwa i model bez końcowego nawiasu z podziałem na
+ *   moduły, np. "Sigenergy 12 kWh", "Solax 10,6 kWh".
+ * - Panel PV: nazwa + moc w W + opcjonalnie "(Full Black)", np.
+ *   "AIKO 500W (Full Black)". Moc z `moc_wp`, a gdy jej brak, z modelu.
+ *
+ * Gdy reguła nie wyciągnie potrzebnej liczby albo kategoria jest inna
+ * (np. konstrukcja), zwraca pełną etykietę. Nigdy nie zwraca etykiety
+ * pustej dla niepustego wiersza.
+ *
+ * @param {object|null} row - wiersz komponentu z `volteo_quote_components`
+ * @returns {string} krótka etykieta
+ */
+export function krotkaNazwaKomponentu(row) {
+  const pelna = pelnaNazwaKomponentu(row)
+  if (!row || !pelna) return pelna
+
+  if (row.kategoria === 'Falownik') {
+    let kw = Number(row.moc_kw)
+    if (!(Number.isFinite(kw) && kw > 0)) {
+      const m = /(\d+(?:[.,]\d+)?)\s*kW\b/i.exec(row.model || '')
+      kw = m ? Number(m[1].replace(',', '.')) : NaN
+    }
+    if (!(Number.isFinite(kw) && kw > 0)) return pelna
+
+    const producent = row.producent || String(row.nazwa || '').split(/\s+/)[0]
+    if (!producent) return pelna
+    let marka = producent
+    if (producent === 'Sigenergy') {
+      if (row.sigen_typ === 'AIO') marka = 'Sigenergy All-in-One'
+      else if (row.sigen_typ === 'TP2') marka = 'Sigenergy TP2'
+    }
+    return `${marka} ${formatKw(kw)} kW`
+  }
+
+  if (row.kategoria === 'Magazyn energii') {
+    const skrocona = pelna.replace(/\s*\([^()]*\)\s*$/, '').trim()
+    return skrocona || pelna
+  }
+
+  if (row.kategoria === 'Panel PV') {
+    let wp = Number(row.moc_wp)
+    if (!(Number.isFinite(wp) && wp > 0)) {
+      const tekst = row.model || ''
+      const m = /\b(\d{3,4})\s*W\b/.exec(tekst) || /\bA(\d{3})\b/.exec(tekst)
+      wp = m ? Number(m[1]) : NaN
+    }
+    if (!(Number.isFinite(wp) && wp > 0) || !row.nazwa) return pelna
+
+    const fullBlack = /full\s*black/i.test(pelna) ? ' (Full Black)' : ''
+    return `${row.nazwa} ${wp}W${fullBlack}`
+  }
+
+  return pelna
+}
+
+/**
  * Karty paneli dostępne dla zestawu (ops#292). Zestaw z własnymi kartami
  * (`zestaw_typ` równe kodowi zestawu) widzi wyłącznie je; zestaw bez własnych
  * kart oraz sama fotowoltaika (pusty kod) widzą karty uniwersalne
