@@ -70,6 +70,8 @@ import frappe
 from frappe import _
 from frappe.utils import cint, flt
 
+from crm.volteo_zestaw import ZESTAWY_OZE
+
 # Jedyna kategoria `Volteo Komponent`, którą ten moduł wolno czytać/pisać.
 KATEGORIA_PANEL = "Panel PV"
 
@@ -92,9 +94,9 @@ _POLA_LISTY = (
 )
 
 # Dozwolone wartosci `zestaw_typ` na karcie panelu (ops#292); pusta = karta
-# uniwersalna. Lustro `ZESTAWY` w frontend/src/utils/pvForm.js i
-# `ZESTAWY_PRODUCENT` w ops/crm-kalkulator-bom.py.
-DOZWOLONE_ZESTAWY = ("COMFORT", "COMFORT PREMIUM", "PREMIUM +")
+# uniwersalna. Zrodlo: `crm.volteo_zestaw.ZESTAW_PRODUCENT` (ops#300), lustro `ZESTAWY`
+# w frontend/src/utils/pvForm.js i `ZESTAWY_PRODUCENT` w ops/crm-kalkulator-bom.py.
+DOZWOLONE_ZESTAWY = ZESTAWY_OZE
 
 
 def _wiersz_do_dict(doc) -> dict:

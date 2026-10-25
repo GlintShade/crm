@@ -808,3 +808,160 @@ def tekst_sladu_zestawu(
 	if _tekst(snapshot):
 		czlony.append("Snapshot kosztów: " + _kropka(_tekst(snapshot)))
 	return f"{ZNACZNIK_ZESTAW} " + " ".join(czlony)
+
+
+# ---------------------------------------------------------------------------
+# 8. Producent i zestaw (ops#300, b74)
+# ---------------------------------------------------------------------------
+
+ZESTAW_PRODUCENT: dict[str, str] = {
+	"COMFORT": "Hoymiles",
+	"COMFORT PREMIUM": "Solax",
+	"PREMIUM +": "Sigenergy",
+}
+"""Jedyna mapa zestaw -> producent w forku (kolejnosc = kolejnosc zestawow w UI). Lustro
+`ZESTAWY` w `frontend/src/utils/pvForm.js` i `ZESTAWY_PRODUCENT` w
+`ops/crm-kalkulator-bom.py` (Server Script nie importuje). Producent spoza mapy
+(FoxESS, Deye) albo sama fotowoltaika to zestaw pusty."""
+
+ZESTAWY_OZE: tuple[str, ...] = tuple(ZESTAW_PRODUCENT)
+"""Dozwolone wartosci `zestaw_typ` (karta panelu, `CRM Deal.custom_zestaw_typ`)."""
+
+RODZAJ_PV = "Fotowoltaika"
+RODZAJE_Z_MAGAZYNEM: frozenset[str] = frozenset({"Fotowoltaika + Magazyn", "Magazyn energii"})
+"""Rodzaje umowy, w ktorych zestaw (COMFORT / COMFORT PREMIUM / PREMIUM +) ma sens."""
+
+PRODUCENT_PV = "FoxESS"
+PRODUCENCI_WYBIERALNI: tuple[str, ...] = ("FoxESS", "Sigenergy", "Hoymiles", "Solax")
+"""Producenci do wyboru w edycji zestawu. Deye (historyczny) nigdy nie jest wybieralny,
+moze byc tylko wartoscia biezaca szansy."""
+
+
+def producenci_dla_rodzaju(rodzaj: Any) -> tuple[str, ...]:
+	"""Producenci, ktorych mozna wybrac dla rodzaju umowy: sama PV tylko FoxESS."""
+	return (PRODUCENT_PV,) if _tekst(rodzaj) == RODZAJ_PV else PRODUCENCI_WYBIERALNI
+
+
+def zestaw_dla_producenta(producent: Any, rodzaj: Any) -> str:
+	"""Zestaw wyprowadzony z producenta. Pusty, gdy rodzaj nie ma magazynu albo producent
+	nie ma zestawu (FoxESS, Deye, brak)."""
+	if _tekst(rodzaj) not in RODZAJE_Z_MAGAZYNEM:
+		return ""
+	wybrany = _tekst(producent)
+	for zestaw, prod in ZESTAW_PRODUCENT.items():
+		if prod == wybrany:
+			return zestaw
+	return ""
+
+
+def nowy_zestaw_typ(producent_obecny: Any, producent_nowy: Any, zestaw_obecny: Any, rodzaj: Any) -> str:
+	"""Zestaw do zapisania przy edycji. Wyprowadzany z producenta WYLACZNIE gdy producent
+	rzeczywiscie sie zmienia; bez zmiany producenta zwraca zestaw zapisany na szansie bez
+	zadnej poprawki (stare szanse zachowuja to, co mialy)."""
+	if _tekst(producent_nowy) == _tekst(producent_obecny):
+		return _tekst(zestaw_obecny)
+	return zestaw_dla_producenta(producent_nowy, rodzaj)
+
+
+MSG_PRODUCENT_PUSTY = "Wybierz producenta."
+_TYPY_PRODUCENTA = ("Falownik", "Magazyn energii")
+_KATEGORIA_TYPU = {"Falownik": "Falownik", "Magazyn energii": "Magazyn energii"}
+
+
+@dataclass(frozen=True)
+class WalidacjaProducenta:
+	"""Wynik `waliduj_producenta`: bledy blokujace i ostrzezenia (informacyjne)."""
+
+	bledy: tuple[str, ...] = ()
+	ostrzezenia: tuple[str, ...] = ()
+
+
+def _odcisk_urzadzen(wiersze: Any) -> list[tuple[str, str]]:
+	return sorted(
+		(_tekst(_pole(w, "typ")), _tekst(_pole(w, "nazwa")))
+		for w in (wiersze or ())
+		if _tekst(_pole(w, "typ")) in _TYPY_PRODUCENTA
+	)
+
+
+def _komponent_po_nazwie(komponenty: Any, kategoria: str, nazwa: str) -> Any:
+	"""Wiersz katalogu pasujacy po `f"{nazwa} {model}"` (jak `_znajdz_komponent` w umowie)."""
+	for k in komponenty or ():
+		if k.get("kategoria") != kategoria:
+			continue
+		if f"{k.get('nazwa') or ''} {k.get('model') or ''}".strip() == nazwa:
+			return k
+	return None
+
+
+def waliduj_producenta(
+	producent: Any,
+	rodzaj: Any,
+	wiersze_nowe: Any,
+	wiersze_stare: Any,
+	komponenty: Any,
+	producent_obecny: Any = "",
+) -> WalidacjaProducenta:
+	"""Spojnosc producenta z wierszami Falownik i Magazyn energii oraz ostrzezenia dodatkow.
+
+	Lustro regul kalkulatora (`ops/crm-kalkulator-bom.py`: falownik i bateria musza miec
+	producenta szansy, Pstryk i ladowarka EV tylko Sigenergy, EMS Zeronest tylko
+	Hoymiles/Solax/Deye, Solax z magazynem wymaga EMS, licznik nigdy FoxESS).
+
+	Bledem (blokujacym) jest niezgodnosc TYLKO wtedy, gdy zapis zmienia producenta albo
+	wiersze Falownik / Magazyn energii; na starej, juz niespojnej szansie, przy zmianie
+	samej ceny, ta sama niezgodnosc jest ostrzezeniem. Wiersze niedopasowane do katalogu
+	`Volteo Komponent` zawsze daja ostrzezenie. Wejscia nie sa mutowane.
+	"""
+	wybrany = _tekst(producent)
+	obecny = _tekst(producent_obecny)
+	zmiana_producenta = wybrany != obecny
+	zmiana_urzadzen = _odcisk_urzadzen(wiersze_nowe) != _odcisk_urzadzen(wiersze_stare)
+	blokuje = zmiana_producenta or zmiana_urzadzen
+	bledy: list[str] = []
+	ostrzezenia: list[str] = []
+
+	if zmiana_producenta:
+		if not wybrany:
+			bledy.append(MSG_PRODUCENT_PUSTY)
+		elif wybrany not in producenci_dla_rodzaju(rodzaj):
+			if _tekst(rodzaj) == RODZAJ_PV:
+				bledy.append(f"Dla rodzaju {RODZAJ_PV} dostępny jest tylko producent {PRODUCENT_PV}.")
+			else:
+				bledy.append(f'Producent "{wybrany}" nie jest dostępny do wyboru.')
+
+	if wybrany:
+		lista = bledy if blokuje else ostrzezenia
+		for w in wiersze_nowe or ():
+			typ = _tekst(_pole(w, "typ"))
+			if typ not in _TYPY_PRODUCENTA:
+				continue
+			nazwa = _tekst(_pole(w, "nazwa"))
+			komp = _komponent_po_nazwie(komponenty, _KATEGORIA_TYPU[typ], nazwa)
+			prod_komp = _tekst(komp.get("producent")) if komp else ""
+			if not prod_komp:
+				ostrzezenia.append(
+					f'Pozycja {typ} "{nazwa}" nie została znaleziona w katalogu komponentów '
+					"z producentem, zgodność z producentem nie została sprawdzona."
+				)
+			elif prod_komp != wybrany:
+				lista.append(
+					f'Pozycja {typ} "{nazwa}" jest producenta {prod_komp}, a wybrany producent to {wybrany}. '
+					"Zmień producenta albo pozycję."
+				)
+
+	typy_nowe = {_tekst(_pole(w, "typ")) for w in (wiersze_nowe or ())}
+	ma_ems = bool(typy_nowe & {"EMS Zeronest", "EMS Breeze"})
+	if wybrany and wybrany != "Sigenergy":
+		if "Licznik Pstryk" in typy_nowe:
+			ostrzezenia.append("Licznik Pstryk jest dostępny tylko z producentem Sigenergy.")
+		if "Ladowarka EV" in typy_nowe:
+			ostrzezenia.append("Ładowarka EV jest dostępna tylko z producentem Sigenergy.")
+	if wybrany in ("Sigenergy", PRODUCENT_PV) and ma_ems:
+		ostrzezenia.append(f"EMS Zeronest nie jest dostępny z producentem {wybrany}.")
+	if wybrany == "Solax" and _tekst(rodzaj) in RODZAJE_Z_MAGAZYNEM and not ma_ems:
+		ostrzezenia.append("Producent Solax z magazynem wymaga pozycji EMS Zeronest.")
+	if wybrany == PRODUCENT_PV and "Licznik" in typy_nowe:
+		ostrzezenia.append("Dodatkowy licznik nie jest dostępny z producentem FoxESS.")
+
+	return WalidacjaProducenta(tuple(bledy), tuple(dict.fromkeys(ostrzezenia)))

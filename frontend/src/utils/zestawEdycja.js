@@ -8,6 +8,7 @@
 // zmiana kontraktu była lokalna.
 
 import { formatPln } from '@/utils/money'
+import { PRODUCENT_PV, ZESTAWY } from '@/utils/pvForm'
 
 export const POLA_CENY_WEJSCIE = [
   'netto',
@@ -30,7 +31,10 @@ export const ETYKIETY_POL_CENY_CP = {
   wplata_gotowka: 'Wpłata gotówką',
 }
 
+// Lustro `POLA_KONFIGURACJI` w crm/api/zestaw.py (kolejność i skład). `custom_zestaw_typ`
+// celowo NIE jest polem konfiguracji: serwer wylicza go z producenta.
 export const POLA_KONFIGURACJI = [
+  'custom_producent',
   'custom_falownik',
   'custom_bateria',
   'custom_pojemnosc_kwh',
@@ -47,7 +51,24 @@ export const POLA_KONFIGURACJI = [
   'custom_ev_ladowarka',
 ]
 
+export const POLE_PRODUCENT = 'custom_producent'
+export const POLE_ZESTAW_TYP = 'custom_zestaw_typ'
+
+// Pola konfiguracji w tabeli "do umowy" (wolny tekst); producent ma osobny select.
+export const POLA_KONFIGURACJI_TEKSTOWE = POLA_KONFIGURACJI.filter((p) => p !== POLE_PRODUCENT)
+
+// Pola pokazywane w oknie różnic: producent i wyliczony zestaw na początku.
+const POLA_KONFIGURACJI_OKNO = [POLE_PRODUCENT, POLE_ZESTAW_TYP, ...POLA_KONFIGURACJI_TEKSTOWE]
+
+export const MSG_NOTA_PRODUCENTA = 'Zmiana producenta nie przelicza ceny ani kosztów, ustaw netto ręcznie.'
+
+export const RODZAJE_Z_MAGAZYNEM = ['Fotowoltaika + Magazyn', 'Magazyn energii']
+export const RODZAJ_PV = 'Fotowoltaika'
+const PRODUCENCI_WYBIERALNI = ['FoxESS', 'Sigenergy', 'Hoymiles', 'Solax']
+
 export const ETYKIETY_KONFIGURACJI = {
+  custom_producent: 'Producent',
+  custom_zestaw_typ: 'Zestaw',
   custom_falownik: 'Falownik',
   custom_bateria: 'Magazyn energii',
   custom_pojemnosc_kwh: 'Pojemność magazynu (kWh)',
@@ -123,6 +144,40 @@ function wierszZApi(w) {
     netto: w.netto == null ? '' : tekst(w.netto),
     brutto: w.brutto == null ? '' : tekst(w.brutto),
   }
+}
+
+/**
+ * Opcje selecta "Producent" dla rodzaju umowy. Sama fotowoltaika: tylko FoxESS;
+ * rodzaje z magazynem: FoxESS, Sigenergy, Hoymiles, Solax. Wartość bieżąca spoza
+ * listy (np. Deye) jest pokazana jako opcja zdezaktywowana, nie do wyboru; pusta
+ * wartość bieżąca daje zdezaktywowaną opcję "(nie ustawiono)". Lustro
+ * `producenci_dla_rodzaju` w crm/volteo_zestaw.py.
+ *
+ * @returns {{value: string, label: string, disabled: boolean}[]}
+ */
+export function opcjeProducenta(rodzaj, biezacy) {
+  const dozwolone = rodzaj === RODZAJ_PV ? [PRODUCENT_PV] : PRODUCENCI_WYBIERALNI
+  const obecny = tekst(biezacy).trim()
+  const opcje = dozwolone.map((p) => ({ value: p, label: p, disabled: false }))
+  if (obecny === '') return [{ value: '', label: '(nie ustawiono)', disabled: true }, ...opcje]
+  if (!dozwolone.includes(obecny)) return [{ value: obecny, label: obecny, disabled: true }, ...opcje]
+  return opcje
+}
+
+/** Zestaw wyprowadzany z producenta (lustro `zestaw_dla_producenta`); '' gdy brak. */
+export function zestawDlaProducenta(producent, rodzaj) {
+  if (!RODZAJE_Z_MAGAZYNEM.includes(rodzaj)) return ''
+  const p = tekst(producent).trim()
+  return ZESTAWY.find((z) => z.producent === p)?.kod || ''
+}
+
+/**
+ * Zestaw do pokazania w podglądzie (lustro `nowy_zestaw_typ`): wyliczany z producenta
+ * wyłącznie gdy producent się zmienia, inaczej zestaw zapisany na szansie bez zmian.
+ */
+export function nowyZestawTyp(producentObecny, producentNowy, zestawObecny, rodzaj) {
+  if (tekst(producentNowy).trim() === tekst(producentObecny).trim()) return tekst(zestawObecny).trim()
+  return zestawDlaProducenta(producentNowy, rodzaj)
 }
 
 export function czyCp(stan) {
@@ -281,9 +336,15 @@ export function konfiguracjaDoWywolania(stan) {
   return wynik
 }
 
-/** Argumenty `volteo_zestaw_podglad` (bez `deal`). */
+/** Argumenty wspólne podglądu i zapisu (wiersze + cena). */
 export function doWywolania(stan) {
   return { wiersze: wierszeDoWywolania(stan), cena: cenaDoWywolania(stan) }
+}
+
+/** Argumenty `volteo_zestaw_podglad` (bez `deal`): wiersze, cena i (OZE) wybrany producent. */
+export function doPodgladu(stan) {
+  if (czyCp(stan)) return doWywolania(stan)
+  return { ...doWywolania(stan), producent: tekst(stan.konfiguracja[POLE_PRODUCENT]).trim() }
 }
 
 /** Argumenty `volteo_zestaw_zapisz` (bez `deal` i `modified`). */
@@ -374,7 +435,7 @@ export function roznicaDoOkna(roznice, cenaPrzed, cenaPo, konfiguracjaPrzed, kon
   const konfiguracja = []
   const kp = konfiguracjaPrzed || {}
   const kn = konfiguracjaPo || {}
-  for (const pole of POLA_KONFIGURACJI) {
+  for (const pole of POLA_KONFIGURACJI_OKNO) {
     const a = kp[pole] == null ? '' : String(kp[pole])
     const b = kn[pole] == null ? '' : String(kn[pole])
     if (a === b) continue

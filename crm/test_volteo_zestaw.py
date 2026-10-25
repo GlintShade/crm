@@ -1083,6 +1083,261 @@ class TestGoldenSzansCPZLokalnejBazy(unittest.TestCase):
 		self.assertEqual(r["rata_trify"], D("1426.38"))
 
 
+class TestMapaZestawProducent(unittest.TestCase):
+	def test_mapa_po_ops_298(self):
+		self.assertEqual(
+			z.ZESTAW_PRODUCENT,
+			{"COMFORT": "Hoymiles", "COMFORT PREMIUM": "Solax", "PREMIUM +": "Sigenergy"},
+		)
+
+	def test_zestawy_oze_kolejnosc_z_mapy(self):
+		self.assertEqual(z.ZESTAWY_OZE, ("COMFORT", "COMFORT PREMIUM", "PREMIUM +"))
+
+	def test_zaden_zestaw_nie_ma_starej_nazwy(self):
+		self.assertNotIn("COMFORT +", z.ZESTAW_PRODUCENT)
+
+
+class TestZestawDlaProducenta(unittest.TestCase):
+	def test_trzy_zestawy_z_magazynem(self):
+		for rodzaj in ("Fotowoltaika + Magazyn", "Magazyn energii"):
+			self.assertEqual(z.zestaw_dla_producenta("Hoymiles", rodzaj), "COMFORT")
+			self.assertEqual(z.zestaw_dla_producenta("Solax", rodzaj), "COMFORT PREMIUM")
+			self.assertEqual(z.zestaw_dla_producenta("Sigenergy", rodzaj), "PREMIUM +")
+
+	def test_foxess_deye_i_brak_to_pusty(self):
+		for producent in ("FoxESS", "Deye", "", None, "Inny"):
+			self.assertEqual(z.zestaw_dla_producenta(producent, "Fotowoltaika + Magazyn"), "")
+
+	def test_sama_pv_i_nowe_rodzaje_to_pusty(self):
+		for rodzaj in ("Fotowoltaika", "Rozbudowa PV/ME", "Klimatyzacja", "", None):
+			self.assertEqual(z.zestaw_dla_producenta("Sigenergy", rodzaj), "")
+
+	def test_spacje_sa_obciete(self):
+		self.assertEqual(z.zestaw_dla_producenta(" Hoymiles ", "Magazyn energii"), "COMFORT")
+
+
+class TestNowyZestawTyp(unittest.TestCase):
+	def test_zmiana_producenta_wylicza_zestaw(self):
+		self.assertEqual(z.nowy_zestaw_typ("Sigenergy", "Hoymiles", "PREMIUM +", MAG), "COMFORT")
+		self.assertEqual(z.nowy_zestaw_typ("Sigenergy", "Solax", "", MAG), "COMFORT PREMIUM")
+
+	def test_zmiana_na_foxess_czysci_zestaw(self):
+		self.assertEqual(z.nowy_zestaw_typ("Hoymiles", "FoxESS", "COMFORT", MAG), "")
+
+	def test_bez_zmiany_producenta_zestaw_zostaje_nietkniety(self):
+		# Stara szansa Sigenergy z pustym zestawem nie dostaje PREMIUM +.
+		self.assertEqual(z.nowy_zestaw_typ("Sigenergy", "Sigenergy", "", MAG), "")
+		self.assertEqual(z.nowy_zestaw_typ("Sigenergy", "Sigenergy", None, MAG), "")
+		self.assertEqual(z.nowy_zestaw_typ("Hoymiles", " Hoymiles ", "COMFORT +", MAG), "COMFORT +")
+
+	def test_pusty_obecny_i_pusty_nowy_to_brak_zmiany(self):
+		self.assertEqual(z.nowy_zestaw_typ(None, "", "X", MAG), "X")
+
+	def test_sama_pv_po_zmianie_to_pusty(self):
+		self.assertEqual(z.nowy_zestaw_typ("FoxESS", "Sigenergy", "", "Fotowoltaika"), "")
+
+
+class TestProducenciDlaRodzaju(unittest.TestCase):
+	def test_pv_tylko_foxess(self):
+		self.assertEqual(z.producenci_dla_rodzaju("Fotowoltaika"), ("FoxESS",))
+
+	def test_magazyn_cztery_bez_deye(self):
+		for rodzaj in ("Fotowoltaika + Magazyn", "Magazyn energii"):
+			self.assertEqual(z.producenci_dla_rodzaju(rodzaj), ("FoxESS", "Sigenergy", "Hoymiles", "Solax"))
+		self.assertNotIn("Deye", z.PRODUCENCI_WYBIERALNI)
+
+
+KATALOG = [
+	{"nazwa": "Hoymiles", "model": "HIT-15L-G3S 15 kW", "kategoria": "Falownik", "producent": "Hoymiles"},
+	{
+		"nazwa": "Hoymiles",
+		"model": "45 kWh (15+15+15)",
+		"kategoria": "Magazyn energii",
+		"producent": "Hoymiles",
+	},
+	{"nazwa": "Sigenergy", "model": "TP2 8 kW", "kategoria": "Falownik", "producent": "Sigenergy"},
+	{"nazwa": "Sigenergy", "model": "12 kWh (6+6)", "kategoria": "Magazyn energii", "producent": "Sigenergy"},
+	{"nazwa": "Solax", "model": "X3-NEO 10 kW", "kategoria": "Falownik", "producent": "Solax"},
+	{"nazwa": "Deye", "model": "5 kW", "kategoria": "Falownik", "producent": "Deye"},
+	{"nazwa": "Bez", "model": "Producenta", "kategoria": "Falownik", "producent": ""},
+]
+
+
+def wiersze_hoymiles():
+	return [
+		wiersz("Falownik", "Hoymiles HIT-15L-G3S 15 kW", 1),
+		wiersz("Magazyn energii", "Hoymiles 45 kWh (15+15+15)", 1),
+		wiersz("Panele PV", "AIKO 500W", 12),
+	]
+
+
+MAG = "Fotowoltaika + Magazyn"
+
+
+class TestWalidujProducenta(unittest.TestCase):
+	def waliduj(self, producent, nowe, stare=None, rodzaj=MAG, obecny="Sigenergy"):
+		stare = wiersze_hoymiles() if stare is None else stare
+		return z.waliduj_producenta(producent, rodzaj, nowe, stare, KATALOG, obecny)
+
+	def test_zmiana_sigenergy_na_hoymiles_przy_falowniku_hoymiles_przechodzi(self):
+		w = self.waliduj("Hoymiles", wiersze_hoymiles())
+		self.assertEqual(w.bledy, ())
+
+	def test_producent_niezgodny_z_falownikiem_blokuje(self):
+		w = self.waliduj("Solax", wiersze_hoymiles())
+		self.assertEqual(len(w.bledy), 2)
+		self.assertIn('Falownik "Hoymiles HIT-15L-G3S 15 kW"', w.bledy[0])
+		self.assertIn("producenta Hoymiles", w.bledy[0])
+		self.assertIn("wybrany producent to Solax", w.bledy[0])
+		self.assertIn("Magazyn energii", w.bledy[1])
+
+	def test_niezgodny_magazyn_blokuje_zmiane_wierszy(self):
+		nowe = [
+			wiersz("Falownik", "Sigenergy TP2 8 kW", 1),
+			wiersz("Magazyn energii", "Hoymiles 45 kWh (15+15+15)", 1),
+		]
+		stare = [
+			wiersz("Falownik", "Sigenergy TP2 8 kW", 1),
+			wiersz("Magazyn energii", "Sigenergy 12 kWh (6+6)", 1),
+		]
+		w = self.waliduj("Sigenergy", nowe, stare)
+		self.assertEqual(len(w.bledy), 1)
+		self.assertIn("Magazyn energii", w.bledy[0])
+
+	def test_stara_niespojna_szansa_przy_samej_cenie_to_ostrzezenie(self):
+		# Producent Sigenergy, falownik i magazyn Hoymiles, wiersze bez zmian.
+		w = self.waliduj("Sigenergy", wiersze_hoymiles())
+		self.assertEqual(w.bledy, ())
+		self.assertEqual(len(w.ostrzezenia), 2)
+		self.assertIn("jest producenta Hoymiles", w.ostrzezenia[0])
+
+	def test_zmiana_ilosci_nie_uruchamia_blokady(self):
+		nowe = wiersze_hoymiles()
+		nowe[0] = wiersz("Falownik", "Hoymiles HIT-15L-G3S 15 kW", 2)
+		w = self.waliduj("Sigenergy", nowe)
+		self.assertEqual(w.bledy, ())
+
+	def test_zmiana_kolejnosci_wierszy_nie_uruchamia_blokady(self):
+		nowe = list(reversed(wiersze_hoymiles()))
+		w = self.waliduj("Sigenergy", nowe)
+		self.assertEqual(w.bledy, ())
+
+	def test_zmiana_innego_wiersza_nie_uruchamia_blokady(self):
+		nowe = wiersze_hoymiles()
+		nowe[2] = wiersz("Panele PV", "AIKO 550W", 12)
+		w = self.waliduj("Sigenergy", nowe)
+		self.assertEqual(w.bledy, ())
+
+	def test_niedopasowany_do_katalogu_to_zawsze_ostrzezenie(self):
+		nowe = [wiersz("Falownik", "Nieznany falownik 9 kW", 1)]
+		w = self.waliduj("Hoymiles", nowe, stare=[])
+		self.assertEqual(w.bledy, ())
+		self.assertEqual(len(w.ostrzezenia), 1)
+		self.assertIn("nie została znaleziona w katalogu", w.ostrzezenia[0])
+
+	def test_komponent_bez_producenta_to_ostrzezenie(self):
+		nowe = [wiersz("Falownik", "Bez Producenta", 1)]
+		w = self.waliduj("Hoymiles", nowe, stare=[])
+		self.assertEqual(w.bledy, ())
+		self.assertEqual(len(w.ostrzezenia), 1)
+
+	def test_dopasowanie_po_kategorii(self):
+		# "Hoymiles 45 kWh (15+15+15)" to magazyn, nie falownik.
+		nowe = [wiersz("Falownik", "Hoymiles 45 kWh (15+15+15)", 1)]
+		w = self.waliduj("Hoymiles", nowe, stare=[])
+		self.assertIn("nie została znaleziona", w.ostrzezenia[0])
+
+	def test_deye_historyczny_bez_zmian_przechodzi(self):
+		wiersze = [wiersz("Falownik", "Deye 5 kW", 1)]
+		w = z.waliduj_producenta("Deye", MAG, wiersze, wiersze, KATALOG, "Deye")
+		self.assertEqual((w.bledy, w.ostrzezenia), ((), ()))
+
+	def test_nowy_wybor_deye_jest_zablokowany(self):
+		w = self.waliduj("Deye", [], stare=[])
+		self.assertEqual(w.bledy, ('Producent "Deye" nie jest dostępny do wyboru.',))
+
+	def test_pv_dopuszcza_tylko_foxess_przy_zmianie(self):
+		w = self.waliduj("Hoymiles", [], stare=[], rodzaj="Fotowoltaika", obecny="FoxESS")
+		self.assertEqual(w.bledy, ("Dla rodzaju Fotowoltaika dostępny jest tylko producent FoxESS.",))
+		ok = self.waliduj("FoxESS", [], stare=[], rodzaj="Fotowoltaika", obecny="FoxESS")
+		self.assertEqual(ok.bledy, ())
+
+	def test_pv_z_historycznym_producentem_bez_zmiany_nie_blokuje(self):
+		w = self.waliduj("Sigenergy", [], stare=[], rodzaj="Fotowoltaika", obecny="Sigenergy")
+		self.assertEqual(w.bledy, ())
+
+	def test_zmiana_na_pusty_producent_blokuje(self):
+		w = self.waliduj("", [], stare=[], obecny="Sigenergy")
+		self.assertEqual(w.bledy, (z.MSG_PRODUCENT_PUSTY,))
+
+	def test_pusty_producent_bez_zmiany_nic_nie_sprawdza(self):
+		w = self.waliduj("", wiersze_hoymiles(), obecny="")
+		self.assertEqual((w.bledy, w.ostrzezenia), ((), ()))
+
+	def test_pstryk_i_ladowarka_poza_sigenergy_ostrzezenia(self):
+		nowe = [
+			*wiersze_hoymiles(),
+			wiersz("Licznik Pstryk", "Pstryk", 1),
+			wiersz("Ladowarka EV", "AC 7 kW", 1),
+		]
+		w = self.waliduj("Hoymiles", nowe)
+		self.assertEqual(w.bledy, ())
+		self.assertIn("Licznik Pstryk jest dostępny tylko z producentem Sigenergy.", w.ostrzezenia)
+		self.assertIn("Ładowarka EV jest dostępna tylko z producentem Sigenergy.", w.ostrzezenia)
+
+	def test_pstryk_przy_sigenergy_bez_ostrzezenia(self):
+		nowe = [wiersz("Falownik", "Sigenergy TP2 8 kW", 1), wiersz("Licznik Pstryk", "Pstryk", 1)]
+		w = z.waliduj_producenta("Sigenergy", MAG, nowe, nowe, KATALOG, "Sigenergy")
+		self.assertEqual(w.ostrzezenia, ())
+
+	def test_ems_przy_sigenergy_i_foxess_ostrzezenie(self):
+		for producent in ("Sigenergy", "FoxESS"):
+			nowe = [wiersz("EMS Zeronest", "EMS Zeronest", 1)]
+			w = z.waliduj_producenta(producent, MAG, nowe, nowe, KATALOG, producent)
+			self.assertEqual(w.ostrzezenia, (f"EMS Zeronest nie jest dostępny z producentem {producent}.",))
+
+	def test_ems_breeze_historyczny_liczy_sie_jak_zeronest(self):
+		nowe = [wiersz("EMS Breeze", "EMS Breeze", 1)]
+		w = z.waliduj_producenta("Sigenergy", MAG, nowe, nowe, KATALOG, "Sigenergy")
+		self.assertEqual(len(w.ostrzezenia), 1)
+
+	def test_solax_z_magazynem_bez_ems_ostrzezenie(self):
+		nowe = [wiersz("Falownik", "Solax X3-NEO 10 kW", 1)]
+		w = z.waliduj_producenta("Solax", MAG, nowe, nowe, KATALOG, "Solax")
+		self.assertEqual(w.ostrzezenia, ("Producent Solax z magazynem wymaga pozycji EMS Zeronest.",))
+
+	def test_solax_z_ems_bez_ostrzezenia(self):
+		nowe = [wiersz("Falownik", "Solax X3-NEO 10 kW", 1), wiersz("EMS Zeronest", "EMS Zeronest", 1)]
+		w = z.waliduj_producenta("Solax", MAG, nowe, nowe, KATALOG, "Solax")
+		self.assertEqual(w.ostrzezenia, ())
+
+	def test_solax_sama_pv_bez_ostrzezenia_o_ems(self):
+		nowe = [wiersz("Falownik", "Solax X3-NEO 10 kW", 1)]
+		w = z.waliduj_producenta("Solax", "Fotowoltaika", nowe, nowe, KATALOG, "Solax")
+		self.assertEqual(w.ostrzezenia, ())
+
+	def test_licznik_przy_foxess_ostrzezenie(self):
+		nowe = [wiersz("Licznik", "Dodatkowy licznik", 1)]
+		w = z.waliduj_producenta("FoxESS", "Fotowoltaika", nowe, nowe, KATALOG, "FoxESS")
+		self.assertEqual(w.ostrzezenia, ("Dodatkowy licznik nie jest dostępny z producentem FoxESS.",))
+
+	def test_nie_mutuje_wejscia(self):
+		nowe = wiersze_hoymiles()
+		stare = wiersze_hoymiles()
+		kopia = [dict(x) for x in nowe]
+		katalog = [dict(x) for x in KATALOG]
+		z.waliduj_producenta("Solax", MAG, nowe, stare, KATALOG, "Sigenergy")
+		self.assertEqual(nowe, kopia)
+		self.assertEqual(KATALOG, katalog)
+
+	def test_komunikaty_bez_pauz(self):
+		nowe = [*wiersze_hoymiles(), wiersz("Licznik Pstryk", "Pstryk", 1)]
+		w = self.waliduj("Solax", nowe)
+		for tekst in (*w.bledy, *w.ostrzezenia):
+			self.assertNotIn("\u2014", tekst)
+			self.assertNotIn("\u2013", tekst)
+
+
 class TestFormatuj(unittest.TestCase):
 	def test_tysiace(self):
 		self.assertEqual(z.formatuj_kwote(48200), "48 200,00")
