@@ -42,10 +42,10 @@ from typing import Any
 import frappe
 import requests
 from frappe import _
-from frappe.rate_limiter import rate_limit
 
 from crm.api.kredyt import DOCTYPE as KREDYT_DOCTYPE
 from crm.api.kredyt import _kredyt_po_nazwie, _sprawdz_rodzaj_oze
+from crm.api.limit_zadan import rate_limit
 from crm.api.pipeline import advance_deal_status
 from crm.api.umowa import DOCTYPE as UMOWA_DOCTYPE
 from crm.api.umowa import (

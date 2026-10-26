@@ -28,10 +28,10 @@ from typing import Any
 
 import frappe
 from frappe import _
-from frappe.rate_limiter import rate_limit
 from frappe.utils import flt
 
 from crm.api import volteo_poziom_prowizji, volteo_widzi_prowizje
+from crm.api.limit_zadan import rate_limit
 from crm.api.umowa import _sprawdz_dostep_do_szansy
 from crm.koszty.rdzen import scal_snapshot
 from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad

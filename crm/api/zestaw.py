@@ -28,10 +28,10 @@ from typing import Any
 
 import frappe
 from frappe import _
-from frappe.rate_limiter import rate_limit
 from frappe.utils import cint, flt, now, now_datetime
 
 from crm.api.koszty import ADMIN_ROLE
+from crm.api.limit_zadan import rate_limit
 from crm.api.umowa import RODZAJ_CP, _sprawdz_dostep_do_szansy
 from crm.integrations.autenti.logika import mozna_wyslac
 from crm.koszty.rdzen import aktualizuj_po_edycji_zestawu

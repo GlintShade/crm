@@ -24,10 +24,10 @@ from typing import Any, NoReturn
 
 import frappe
 from frappe import _
-from frappe.rate_limiter import rate_limit
 from frappe.utils import cint, getdate
 
 from crm.api.czyste_powietrze import KALKULATOR_ROLE
+from crm.api.limit_zadan import rate_limit
 from crm.api.pipeline import advance_deal_status
 from crm.integrations.autenti import logika as autenti_logika
 from crm.permissions.file_nazwy_systemowe import plik_systemowy

@@ -18,9 +18,9 @@ from typing import Any
 
 import frappe
 from frappe import _
-from frappe.rate_limiter import rate_limit
 from frappe.utils import formatdate, get_datetime, now, nowdate
 
+from crm.api.limit_zadan import rate_limit
 from crm.volteo_oswiadczenie import imiona_zgodne, wersja_tresci, zbuduj_pdf, zbuduj_tresc
 
 DOCTYPE = "Volteo Oswiadczenie Poufnosci"

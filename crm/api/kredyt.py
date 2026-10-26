@@ -52,9 +52,9 @@ from typing import Any, NoReturn
 
 import frappe
 from frappe import _
-from frappe.rate_limiter import rate_limit
 from frappe.utils import cint, getdate
 
+from crm.api.limit_zadan import rate_limit
 from crm.api.umowa import _dane_kontaktu, _podstawowy_kontakt, _sprawdz_dostep_do_szansy, _sprawdz_role
 from crm.integrations.autenti import logika as autenti_logika
 from crm.permissions.file_nazwy_systemowe import plik_systemowy

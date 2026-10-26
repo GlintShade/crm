@@ -4,10 +4,10 @@ import frappe
 from bs4 import BeautifulSoup
 from frappe import _
 from frappe.core.api.file import get_max_file_size
-from frappe.rate_limiter import rate_limit
 from frappe.translate import get_all_translations
 from frappe.utils import cint, cstr, split_emails, validate_email_address
 
+from crm.api.limit_zadan import rate_limit
 from crm.permissions.file_nazwy_systemowe import KOMUNIKAT_ZAREZERWOWANA
 from crm.permissions.org_hierarchy import czy_admin_lub_bypass
 from crm.utils import is_frappe_version
