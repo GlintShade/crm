@@ -9,16 +9,16 @@
 // maps a known status string to Polish display copy and to the small set of
 // booleans the tab's template needs. It must NOT invent new statuses or
 // re-derive send-eligibility logic independently of the backend's
-// SEND_BLOCKED_STATUSES — see `canSend` below, which mirrors it.
+// SEND_BLOCKED_STATUSES - see `canSend` below, which mirrors it.
 
 /**
  * Display metadata for every known `autenti_status` value: the Polish label
  * shown in the badge and the `frappe-ui` `Badge` `theme` to render it with.
  *
  * Themes are restricted to what `Badge.vue` actually accepts (gray, blue,
- * green, amber, red, violet — `orange` is only a deprecated alias for
+ * green, amber, red, violet - `orange` is only a deprecated alias for
  * `amber`), so 'Wysłana' uses `amber` directly rather than the alias.
- * Never-sent (`null`/`''`) has no entry here — see `badgeFor`.
+ * Never-sent (`null`/`''`) has no entry here - see `badgeFor`.
  */
 export const AUTENTI_BADGE = {
   Wysyłanie: { label: 'Wysyłanie…', theme: 'blue' },
@@ -75,7 +75,7 @@ export function badgeFor(status, dokument = 'umowa') {
 
 // Mirrors the backend's SEND_BLOCKED_STATUSES: sending (or resending) is
 // blocked while a send is in flight or already succeeded. Every other
-// status — including never-sent — is safe to (re)send from.
+// status - including never-sent - is safe to (re)send from.
 const SEND_BLOCKED_STATUSES = new Set(['Wysyłanie', 'Wysłana', 'Podpisana'])
 
 /**
@@ -91,25 +91,7 @@ export function canSend(status) {
   return !SEND_BLOCKED_STATUSES.has(status)
 }
 
-// Statuses that mean "a send is currently in progress" — drives the 30s
-// polling loop in UmowaTab.vue. Deliberately narrower than `!canSend`:
-// 'Podpisana' is also blocked from sending but is a terminal state, not one
-// that should keep polling.
-const IN_FLIGHT_STATUSES = new Set(['Wysyłanie', 'Wysłana'])
-
-/**
- * Whether a send is currently in progress and the tab should keep polling
- * `autenti_umowa_status` for an update.
- *
- * @param {string|null|undefined} status - raw `autenti_status` value
- * @returns {boolean}
- */
-export function isInFlight(status) {
-  if (!status) return false
-  return IN_FLIGHT_STATUSES.has(status)
-}
-
-// Statuses after which a resend is offered — everything canSend() allows
+// Statuses after which a resend is offered - everything canSend() allows
 // except the never-sent case, which gets its own first-send label.
 const RESEND_STATUSES = new Set(['Błąd', 'Odrzucona', 'Wygasła', 'Wycofana'])
 
@@ -154,8 +136,8 @@ export function sendButtonLabel(status, dokument = 'umowa') {
  * `recipients` is the new `proposed_recipients` payload (up to four entries:
  * client + co-signer as SIGNER, sending rep + archive mailbox as VIEWER,
  * already ordered/deduped/email-filtered server-side). When it's missing or
- * empty — an old backend payload mid-rollout, before this endpoint gains the
- * field — this falls back to treating `fallbackSigner` (the pre-existing
+ * empty - an old backend payload mid-rollout, before this endpoint gains the
+ * field - this falls back to treating `fallbackSigner` (the pre-existing
  * `proposed_signer` shape, `{full_name, email}`) as the sole signer, so the
  * confirm panel degrades to exactly what it rendered before this change
  * instead of ever showing an empty recipients block.

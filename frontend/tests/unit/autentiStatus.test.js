@@ -3,11 +3,10 @@ import {
   badgeFor,
   canSend,
   groupRecipients,
-  isInFlight,
   sendButtonLabel,
 } from '@/utils/autentiStatus'
 
-describe('Autenti — status umowy (autentiStatus)', () => {
+describe('Autenti - status umowy (autentiStatus)', () => {
   describe('AUTENTI_BADGE', () => {
     it('zawiera wpis dla każdego znanego statusu z poprawnym theme Badge', () => {
       const validThemes = new Set(['gray', 'blue', 'green', 'amber', 'red', 'violet'])
@@ -89,23 +88,6 @@ describe('Autenti — status umowy (autentiStatus)', () => {
     })
   })
 
-  describe('isInFlight', () => {
-    it.each([
-      ['Wysyłanie', true],
-      ['Wysłana', true],
-      [null, false],
-      [undefined, false],
-      ['', false],
-      ['Podpisana', false],
-      ['Odrzucona', false],
-      ['Wygasła', false],
-      ['Wycofana', false],
-      ['Błąd', false],
-    ])('isInFlight(%p) === %p', (status, expected) => {
-      expect(isInFlight(status)).toBe(expected)
-    })
-  })
-
   describe('sendButtonLabel', () => {
     it.each([
       [null, 'Podpisz umowę'],
@@ -120,7 +102,7 @@ describe('Autenti — status umowy (autentiStatus)', () => {
     })
 
     // Statuses that block sending (in flight / already signed) never reach
-    // the button in the UI (it's not rendered — see canSend), but the
+    // the button in the UI (it's not rendered - see canSend), but the
     // function itself should still degrade sanely rather than throw.
     it.each([
       ['Wysyłanie', 'Podpisz umowę'],

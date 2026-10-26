@@ -31,10 +31,10 @@ from typing import Any
 
 import frappe
 from frappe import _
-from frappe.rate_limiter import rate_limit
 from frappe.utils import add_days, cint, get_datetime, now_datetime
 
 from crm.api import volteo_ma_linie
+from crm.api.limit_zadan import rate_limit
 
 WOJEWODZTWA = (
 	"dolnośląskie",

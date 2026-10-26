@@ -19,10 +19,10 @@ from typing import Any, NoReturn
 
 import frappe
 from frappe import _
-from frappe.rate_limiter import rate_limit
 from frappe.utils import cint, flt
 
 from crm.api import volteo_ma_linie
+from crm.api.limit_zadan import rate_limit
 from crm.koszty.rdzen import zbuduj_snapshot_oze
 from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad
 from crm.volteo_kalkulator_oze import (

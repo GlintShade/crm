@@ -1,8 +1,9 @@
 import frappe
 from frappe import _
 from frappe.auth import LoginAttemptTracker
-from frappe.rate_limiter import rate_limit
 from frappe.utils.password import check_password, update_password
+
+from crm.api.limit_zadan import rate_limit
 
 
 @frappe.whitelist()

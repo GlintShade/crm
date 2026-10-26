@@ -12,10 +12,10 @@ from typing import Any, NoReturn
 
 import frappe
 from frappe import _
-from frappe.rate_limiter import rate_limit
 from frappe.utils import flt
 
 from crm.api import volteo_ma_linie, volteo_poziom_prowizji, volteo_widzi_prowizje
+from crm.api.limit_zadan import rate_limit
 from crm.czyste_powietrze.mapowanie import (
 	katalog_z_wierszy,
 	limity_z_wierszy,

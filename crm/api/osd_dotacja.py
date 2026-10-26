@@ -35,8 +35,8 @@ from typing import Any
 
 import frappe
 from frappe import _
-from frappe.rate_limiter import rate_limit
 
+from crm.api.limit_zadan import rate_limit
 from crm.api.umowa import _sprawdz_dostep_do_szansy
 from crm.permissions.org_hierarchy import BYPASS_ROLES
 from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad

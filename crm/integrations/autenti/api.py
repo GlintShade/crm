@@ -42,10 +42,10 @@ from typing import Any
 import frappe
 import requests
 from frappe import _
-from frappe.rate_limiter import rate_limit
 
 from crm.api.kredyt import DOCTYPE as KREDYT_DOCTYPE
 from crm.api.kredyt import _kredyt_po_nazwie, _sprawdz_rodzaj_oze
+from crm.api.limit_zadan import rate_limit
 from crm.api.pipeline import advance_deal_status
 from crm.api.umowa import DOCTYPE as UMOWA_DOCTYPE
 from crm.api.umowa import (
@@ -853,9 +853,7 @@ def _wyslij_dokument(nazwa: str, konfig: dict[str, Any]) -> dict[str, Any]:
 		if indeks == 0:
 			frappe.throw(_(konfig["komunikat_brak_email"]))
 		nazwa_osoby = (dane or {}).get("full_name") or "Drugi Zamawiający"
-		frappe.throw(
-			_(f"{nazwa_osoby} (drugi Zamawiający) nie ma adresu e-mail. Uzupełnij go w kontaktach.")
-		)
+		frappe.throw(_(f"{nazwa_osoby} (drugi Zamawiający) nie ma adresu e-mail. Uzupełnij go w kontaktach."))
 
 	# Dwaj różni Zamawiający nie mogą dzielić jednego adresu e-mail (ops#169):
 	# `zbuduj_odbiorcow` deduplikuje po e-mailu i po cichu zwinęłaby ich do
@@ -917,7 +915,7 @@ def _wyslij_dokument(nazwa: str, konfig: dict[str, Any]) -> dict[str, Any]:
 		wartosci_zapisu["signer2_name"] = drugi_podpisujacy["full_name"] if drugi_podpisujacy else None
 		wartosci_zapisu["signer2_email"] = drugi_podpisujacy["email"] if drugi_podpisujacy else None
 
-	frappe.db.set_value(konfig["doctype"], nazwa, wartosci_zapisu, update_modified=False)
+	_zapisz_stan_autenti(konfig, nazwa, deal, wartosci_zapisu)
 	frappe.db.commit()
 
 	_slad_z_atrybucja(deal, tekst_sladu("autenti_wyslano", dokument=_etykieta_dokumentu(konfig)))
@@ -1016,6 +1014,31 @@ def _zdalny_status_bezpiecznie(client: AutentiClient, doc_id: str) -> str | None
 		raise
 
 
+def _zapisz_stan_autenti(konfig: dict[str, Any], nazwa: str, deal: str, aktualizacja: dict[str, Any]) -> None:
+	"""Zapisuje stan dokumentu Autenti (`autenti_status`, `signed_pdf_file` itd.)
+	i powiadamia przeglądarki, że mają go odświeżyć (ops#303).
+
+	Jedyne miejsce zapisu tych pól: UI nie odpytuje już serwera co 30 s, tylko
+	czeka na zdarzenie `volteo_autenti_status`. `after_commit=True` jest
+	OBOWIĄZKOWE: bez niego przeglądarka odpytałaby przed zapisem i dostała
+	stary stan.
+
+	BEZPIECZEŃSTWO: zdarzenie idzie WYŁĄCZNIE do pokoju dokumentu szansy
+	(`doctype="CRM Deal", docname=deal`), nigdy do pokoju doctype, nigdy przez
+	`room=` ani `user=`. Ładunek to tylko `{"deal": ...}`, bez statusu i bez
+	innych danych; przeglądarka po zdarzeniu pobiera stan istniejącym
+	endpointem z pełną kontrolą uprawnień.
+	"""
+	frappe.db.set_value(konfig["doctype"], nazwa, aktualizacja, update_modified=False)
+	frappe.publish_realtime(
+		"volteo_autenti_status",
+		{"deal": deal},
+		doctype="CRM Deal",
+		docname=deal,
+		after_commit=True,
+	)
+
+
 def _sprobuj_odzyskac_wyslany_proces(
 	client: AutentiClient,
 	deal: str,
@@ -1053,15 +1076,17 @@ def _sprobuj_odzyskac_wyslany_proces(
 	if logika.decyzja_ponownej_wysylki(zdalny_status) != logika.DECYZJA_ODZYSKAJ:
 		return False
 
-	frappe.db.set_value(
-		konfig["doctype"],
+	_zapisz_stan_autenti(
+		konfig,
 		umowa_name,
+		deal,
 		{"autenti_status": "Wysłana", "sent_at": frappe.utils.now(), "error_message": None},
-		update_modified=False,
 	)
 	frappe.db.commit()
 	_slad_z_atrybucja(
-		deal, tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Wysłana"), wysylajacy
+		deal,
+		tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Wysłana"),
+		wysylajacy,
 	)
 	return True
 
@@ -1146,18 +1171,20 @@ def _autenti_send_job(nazwa: str, wysylajacy: str | None = None, rodzaj: str = "
 					title=f"Autenti: sprawdzenie poprzedniego procesu {konfig['doctype']} nie powiodło się",
 					message=f"Szansa: {deal}\nRekord: {nazwa}\nProces dokumentu: {istniejacy_doc_id}\n{frappe.get_traceback()}",
 				)
-				frappe.db.set_value(
-					konfig["doctype"],
+				_zapisz_stan_autenti(
+					konfig,
 					nazwa,
+					deal,
 					{
 						"autenti_status": "Błąd",
 						"error_message": "Nie udało się sprawdzić stanu poprzedniej wysyłki w Autenti. Spróbuj ponownie.",
 					},
-					update_modified=False,
 				)
 				frappe.db.commit()
 				_slad_z_atrybucja(
-					deal, tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Błąd"), wysylajacy
+					deal,
+					tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Błąd"),
+					wysylajacy,
 				)
 				return
 			if odzyskano:
@@ -1167,15 +1194,14 @@ def _autenti_send_job(nazwa: str, wysylajacy: str | None = None, rodzaj: str = "
 
 		plik = konfig["znajdz_pdf"](deal, nazwa)
 		if plik is None:
-			frappe.db.set_value(
-				konfig["doctype"],
-				nazwa,
-				{"autenti_status": "Błąd", "error_message": "PDF zniknął przed wysyłką."},
-				update_modified=False,
+			_zapisz_stan_autenti(
+				konfig, nazwa, deal, {"autenti_status": "Błąd", "error_message": "PDF zniknął przed wysyłką."}
 			)
 			frappe.db.commit()
 			_slad_z_atrybucja(
-				deal, tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Błąd"), wysylajacy
+				deal,
+				tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Błąd"),
+				wysylajacy,
 			)
 			return
 		pdf_bytes = plik.get_content()
@@ -1190,15 +1216,17 @@ def _autenti_send_job(nazwa: str, wysylajacy: str | None = None, rodzaj: str = "
 		podpisujacy_lista = konfig["podpisujacy"](deal_doc, dokument)
 		pierwszy_podpisujacy = podpisujacy_lista[0] if podpisujacy_lista else None
 		if not pierwszy_podpisujacy or not pierwszy_podpisujacy["email"]:
-			frappe.db.set_value(
-				konfig["doctype"],
+			_zapisz_stan_autenti(
+				konfig,
 				nazwa,
+				deal,
 				{"autenti_status": "Błąd", "error_message": konfig["komunikat_brak_email"]},
-				update_modified=False,
 			)
 			frappe.db.commit()
 			_slad_z_atrybucja(
-				deal, tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Błąd"), wysylajacy
+				deal,
+				tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Błąd"),
+				wysylajacy,
 			)
 			return
 
@@ -1212,18 +1240,20 @@ def _autenti_send_job(nazwa: str, wysylajacy: str | None = None, rodzaj: str = "
 		prezes = _staly_podpisujacy(ustawienia)
 		archiwum = _archiwum(ustawienia)
 		if not prezes or not archiwum:
-			frappe.db.set_value(
-				konfig["doctype"],
+			_zapisz_stan_autenti(
+				konfig,
 				nazwa,
+				deal,
 				{
 					"autenti_status": "Błąd",
 					"error_message": "Brak stałego podpisującego lub adresu archiwum w Ustawieniach Autenti.",
 				},
-				update_modified=False,
 			)
 			frappe.db.commit()
 			_slad_z_atrybucja(
-				deal, tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Błąd"), wysylajacy
+				deal,
+				tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Błąd"),
+				wysylajacy,
 			)
 			return
 
@@ -1282,19 +1312,21 @@ def _autenti_send_job(nazwa: str, wysylajacy: str | None = None, rodzaj: str = "
 		client.upload_file(doc_id, filename=konfig["nazwa_wysylki"](deal, nazwa), pdf_bytes=pdf_bytes)
 		client.send(doc_id)
 
-		frappe.db.set_value(
-			konfig["doctype"],
+		_zapisz_stan_autenti(
+			konfig,
 			nazwa,
+			deal,
 			{
 				"autenti_status": "Wysłana",
 				"sent_at": frappe.utils.now(),
 				"error_message": None,
 			},
-			update_modified=False,
 		)
 		frappe.db.commit()
 		_slad_z_atrybucja(
-			deal, tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Wysłana"), wysylajacy
+			deal,
+			tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Wysłana"),
+			wysylajacy,
 		)
 	except Exception as exc:
 		frappe.log_error(
@@ -1306,15 +1338,17 @@ def _autenti_send_job(nazwa: str, wysylajacy: str | None = None, rodzaj: str = "
 		# F15 (ops#143): polski, czysty komunikat dla handlowca (`komunikat_bledu_wysylki`)
 		# zamiast surowego, angielskiego `str(exc)` -- pełny traceback zostaje w
 		# Error Log przez `frappe.log_error` powyżej.
-		frappe.db.set_value(
-			konfig["doctype"],
+		_zapisz_stan_autenti(
+			konfig,
 			nazwa,
+			deal,
 			{"autenti_status": "Błąd", "error_message": logika.komunikat_bledu_wysylki(exc)},
-			update_modified=False,
 		)
 		frappe.db.commit()
 		_slad_z_atrybucja(
-			deal, tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Błąd"), wysylajacy
+			deal,
+			tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Błąd"),
+			wysylajacy,
 		)
 
 
@@ -1366,7 +1400,7 @@ def _attach_signed_pdf(deal: str, umowa_name: str, doc_id: str, konfig: dict[str
 			"file_url",
 		)
 		if istniejacy_url:
-			frappe.db.set_value(konfig["doctype"], umowa_name, "signed_pdf_file", istniejacy_url, update_modified=False)
+			_zapisz_stan_autenti(konfig, umowa_name, deal, {"signed_pdf_file": istniejacy_url})
 			frappe.db.commit()
 			return
 
@@ -1400,7 +1434,7 @@ def _attach_signed_pdf(deal: str, umowa_name: str, doc_id: str, konfig: dict[str
 		)
 		plik.insert(ignore_permissions=True)
 
-		frappe.db.set_value(konfig["doctype"], umowa_name, "signed_pdf_file", plik.file_url, update_modified=False)
+		_zapisz_stan_autenti(konfig, umowa_name, deal, {"signed_pdf_file": plik.file_url})
 		frappe.db.commit()
 		_slad_z_atrybucja(deal, tekst_sladu("autenti_pdf", dokument=_etykieta_dokumentu(konfig)))
 	except Exception:
@@ -1469,7 +1503,7 @@ def _odpytaj_wyslane(client: AutentiClient, konfig: dict[str, Any]) -> None:
 			aktualizacja: dict[str, Any] = {"autenti_status": nowy_status}
 			if nowy_status == "Podpisana":
 				aktualizacja["signed_at"] = frappe.utils.now()
-			frappe.db.set_value(konfig["doctype"], wiersz.name, aktualizacja, update_modified=False)
+			_zapisz_stan_autenti(konfig, wiersz.name, wiersz.deal, aktualizacja)
 			frappe.db.commit()
 
 			if nowy_status != stary_status:
@@ -1552,30 +1586,37 @@ def _odzyskaj_utkniete_wysylanie(client: AutentiClient, konfig: dict[str, Any]) 
 
 		try:
 			if not wiersz.autenti_document_id:
-				frappe.db.set_value(
-					konfig["doctype"],
+				_zapisz_stan_autenti(
+					konfig,
 					wiersz.name,
-					{"autenti_status": "Błąd", "error_message": logika.KOMUNIKAT_TIMEOUT_WYSYLANIA_BEZ_PROCESU},
-					update_modified=False,
+					wiersz.deal,
+					{
+						"autenti_status": "Błąd",
+						"error_message": logika.KOMUNIKAT_TIMEOUT_WYSYLANIA_BEZ_PROCESU,
+					},
 				)
 				frappe.db.commit()
 				_slad_z_atrybucja(
-					wiersz.deal, tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Błąd")
+					wiersz.deal,
+					tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Błąd"),
 				)
 				continue
 
-			if _sprobuj_odzyskac_wyslany_proces(client, wiersz.deal, wiersz.name, konfig, wiersz.autenti_document_id):
+			if _sprobuj_odzyskac_wyslany_proces(
+				client, wiersz.deal, wiersz.name, konfig, wiersz.autenti_document_id
+			):
 				continue
 
-			frappe.db.set_value(
-				konfig["doctype"],
+			_zapisz_stan_autenti(
+				konfig,
 				wiersz.name,
+				wiersz.deal,
 				{"autenti_status": "Błąd", "error_message": logika.KOMUNIKAT_TIMEOUT_WYSYLANIA_Z_PROCESEM},
-				update_modified=False,
 			)
 			frappe.db.commit()
 			_slad_z_atrybucja(
-				wiersz.deal, tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Błąd")
+				wiersz.deal,
+				tekst_sladu("autenti_status", dokument=_etykieta_dokumentu(konfig), status="Błąd"),
 			)
 		except Exception:
 			frappe.log_error(
