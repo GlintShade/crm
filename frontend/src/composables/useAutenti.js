@@ -1,16 +1,21 @@
-// Autenti e-signature composable — shared lifecycle + state between
-// UmowaTab.vue and KredytTab.vue (and any future tab that gains its own
-// signable document). This is a straight lift-and-parameterize of the
-// Autenti block that originally lived inline in UmowaTab.vue: same status
-// ref, same 30s polling loop, same derived computeds, same names.
+// Autenti e-signature composable - shared lifecycle + state between
+// UmowaTab.vue, UmowaCPTab.vue and KredytTab.vue (and any future tab that
+// gains its own signable document).
 //
-// Why the interval cleanup lives HERE rather than in each tab: the poll
-// handle (`autentiPollInterval`) is closed over by `startAutentiPolling` /
-// `stopAutentiPolling`, and `onUnmounted` must stop it on the SAME closure
-// that started it — splitting "start" and "stop" across the composable and
-// the host component would risk a leaked interval if a future edit moves
-// one but not the other. Keeping the whole lifecycle (mount → poll →
-// unmount) inside one function is what makes it safe to reuse verbatim.
+// Odświeżanie statusu (ops#303): BEZ odpytywania co 30 s. Status w bazie
+// zmienia wyłącznie serwer (zadanie wysyłki i poller co 10 min), a każdy taki
+// zapis publikuje zdarzenie `volteo_autenti_status` do pokoju dokumentu
+// szansy (`CRM Deal`/<deal>). Składowa subskrybuje ten pokój przy montowaniu,
+// po zdarzeniu dla swojej szansy pobiera stan istniejącym endpointem
+// (uprawnienia sprawdza on, zdarzenie niesie tylko nazwę szansy), a odsubskrybowuje
+// przy odmontowaniu. Dla martwego gniazda: dodatkowe odświeżenie gdy karta
+// znów jest widoczna, po `connect` (z ponowną subskrypcją, bo pokoje giną wraz
+// z połączeniem) i jednorazowo ok. 10 s po udanej wysyłce. Powód: stare
+// odpytywanie trafiało w wyścig limitera Frappe, dostawało HTTP 429, a porzucony
+// timer odpytywania żył do przeładowania strony.
+//
+// Flaga `aktywny`: każda asynchroniczna kontynuacja po odmontowaniu jest no-op,
+// nic nie startuje po `onUnmounted`.
 //
 // `docId` (ops#163) accepts a plain string, a ref, or a getter function,
 // call sites differ (a prop can be read directly inside `<script setup>`,
@@ -26,7 +31,7 @@
 // `call()` below sends `{ [docParam]: toValue(docId ?? dealId) }`.
 //
 // `statusMethod` / `sendMethod` are the full dotted whitelisted-API paths
-// (e.g. 'crm.integrations.autenti.api.autenti_umowa_status') — see
+// (e.g. 'crm.integrations.autenti.api.autenti_umowa_status') - see
 // UmowaTab.vue's header comment for why a bare command name silently
 // resolves only for Server Scripts and 417s for fork API methods.
 //
@@ -44,19 +49,16 @@
 // `showAutentiSendButton` below reads whichever is present so it works
 // unchanged against both payload shapes.
 //
-// `restart()` (ops#163): stops any in-flight polling, clears the current
-// `autenti` status, then reloads status for whatever `docId` currently
-// resolves to and restarts polling if that document turns out to be
-// in-flight. KredytTab.vue calls this whenever the rep switches to a
-// different credit-form record in the picker: without it, a poll interval
-// started for the PREVIOUSLY selected record keeps calling `statusMethod`
-// with the old `docId` closed over at `startAutentiPolling()` time (the
-// interval itself does not re-read `docId`, so switching forms would
-// silently keep polling, and later overwrite, the wrong record's status).
+// `restart()` (ops#163): czyści bieżący status i przeładowuje go dla tego, na co
+// `docId` wskazuje TERAZ. KredytTab.vue woła to, gdy przedstawiciel przełącza
+// się na inny formularz kredytowy w pickerze.
+//
+// `dealId` jest nazwą szansy (pokój zdarzeń); dla KredytTab.vue, gdzie `docId`
+// to nazwa formularza, trzeba go podać osobno.
 import { call, toast } from 'frappe-ui'
-import { computed, onMounted, onUnmounted, ref, toValue } from 'vue'
+import { computed, getCurrentInstance, onMounted, onUnmounted, ref, toValue, watch } from 'vue'
 import { formatDate } from '@/utils'
-import { badgeFor, canSend, groupRecipients, isInFlight, sendButtonLabel } from '@/utils/autentiStatus'
+import { badgeFor, canSend, groupRecipients, sendButtonLabel } from '@/utils/autentiStatus'
 
 export function useAutenti({
   dealId,
@@ -68,7 +70,7 @@ export function useAutenti({
   dokument = 'umowa',
 }) {
   // Explicit `null` initial state (never a bare `reactive` key presence
-  // check — see the CLAUDE.md note on the hasOwnProperty/reactive trap that
+  // check - see the CLAUDE.md note on the hasOwnProperty/reactive trap that
   // froze the CP admin panel). `autenti` is a plain ref holding the whole
   // status payload as returned by statusMethod; it is replaced wholesale
   // (never mutated in place) on every load/send so Vue always sees a fresh
@@ -76,7 +78,12 @@ export function useAutenti({
   const autenti = ref(null)
   const showAutentiConfirm = ref(false)
   const sendingAutenti = ref(false)
-  let autentiPollInterval = null
+  // `aktywny`: true od utworzenia do odmontowania; po odmontowaniu każda
+  // kontynuacja asynchroniczna jest no-op.
+  let aktywny = true
+  let odswiezeniePoWysylce = null
+  const socket = getCurrentInstance()?.appContext.config.globalProperties.$socket || null
+  const nazwaSzansy = () => toValue(dealId ?? docId)
 
   async function loadAutentiStatus() {
     // Guard, ops#163 follow-up: KredytTab.vue's docId getter is
@@ -100,43 +107,49 @@ export function useAutenti({
     }
     try {
       const data = await call(statusMethod, { [docParam]: nazwa })
+      if (!aktywny) return
       autenti.value = data || null
     } catch (err) {
       // Non-fatal and silent on purpose: this is a background status check
       // for an optional feature, not a user-triggered action. Leaving
       // `autenti` unset simply keeps the signing UI hidden, same as
-      // "integration disabled" — no toast for a control the rep hasn't
+      // "integration disabled" - no toast for a control the rep hasn't
       // touched.
       console.error(err)
     }
   }
 
-  function startAutentiPolling() {
-    if (autentiPollInterval) return
-    autentiPollInterval = setInterval(async () => {
-      await loadAutentiStatus()
-      if (!isInFlight(autentiStatus.value)) stopAutentiPolling()
-    }, 30000)
+  function onAutentiZdarzenie(payload) {
+    if (!aktywny) return
+    if (!payload || payload.deal !== nazwaSzansy()) return
+    loadAutentiStatus()
   }
 
-  function stopAutentiPolling() {
-    if (autentiPollInterval) {
-      clearInterval(autentiPollInterval)
-      autentiPollInterval = null
-    }
+  function subskrybuj(deal) {
+    if (socket && deal) socket.emit('doc_subscribe', 'CRM Deal', deal)
   }
 
-  // ops#163: switch this composable's instance to a different underlying
-  // record (KredytTab.vue calls this when the rep picks a different
-  // credit-form row). Stops any poll interval closed over the PREVIOUS
-  // docId, clears the stale status so the UI never shows the old record's
-  // badge/buttons for an instant, then reloads status for whatever docId
-  // resolves to NOW and restarts polling if that fresh status is in-flight.
+  function odsubskrybuj(deal) {
+    if (socket && deal) socket.emit('doc_unsubscribe', 'CRM Deal', deal)
+  }
+
+  function onWidocznosc() {
+    if (aktywny && document.visibilityState === 'visible') loadAutentiStatus()
+  }
+
+  function onPolaczenie() {
+    if (!aktywny) return
+    // Pokoje socket.io giną razem z połączeniem, po reconnect trzeba je odtworzyć.
+    subskrybuj(nazwaSzansy())
+    loadAutentiStatus()
+  }
+
+  // ops#163: przełączenie instancji na inny rekord (KredytTab.vue, picker
+  // formularzy). Czyści nieaktualny status, żeby UI nie pokazał na chwilę
+  // badge'a poprzedniego rekordu, i ładuje stan dla bieżącego `docId`.
   async function restart() {
-    stopAutentiPolling()
     autenti.value = null
     await loadAutentiStatus()
-    if (isInFlight(autentiStatus.value)) startAutentiPolling()
   }
 
   function toggleAutentiConfirm() {
@@ -161,7 +174,12 @@ export function useAutenti({
         : autenti.value
       showAutentiConfirm.value = false
       toast.success(sentToastLabel)
-      startAutentiPolling()
+      // Zapas na martwe gniazdo: jedno odświeżenie ok. 10 s po wysyłce.
+      clearTimeout(odswiezeniePoWysylce)
+      odswiezeniePoWysylce = setTimeout(() => {
+        odswiezeniePoWysylce = null
+        if (aktywny) loadAutentiStatus()
+      }, 10000)
     } catch (err) {
       toast.error(extractErrorMessage(err))
     } finally {
@@ -177,7 +195,7 @@ export function useAutenti({
 
   // --- Derived --------------------------------------------------------------
   // `enabled === false` (integration off) OR `autenti === null` (not loaded
-  // yet / load failed) both mean: render NO signing UI at all — the feature
+  // yet / load failed) both mean: render NO signing UI at all - the feature
   // must stay completely invisible rather than show a half-broken control.
   const autentiEnabled = computed(() => autenti.value?.enabled === true)
   const autentiStatus = computed(() => autenti.value?.autenti_status || null)
@@ -199,7 +217,7 @@ export function useAutenti({
   const signerMissingEmail = computed(() => !proposedSigner.value || !proposedSigner.value.email)
   // Grouped SIGNER/VIEWER view of `proposed_recipients` for the confirm
   // panel. Falls back to `proposedSigner` alone when the backend hasn't
-  // shipped `proposed_recipients` yet — see groupRecipients() for why.
+  // shipped `proposed_recipients` yet - see groupRecipients() for why.
   const recipientGroups = computed(() =>
     groupRecipients(autenti.value?.proposed_recipients, proposedSigner.value),
   )
@@ -211,19 +229,39 @@ export function useAutenti({
   )
 
   onMounted(() => {
-    loadAutentiStatus().then(() => {
-      if (isInFlight(autentiStatus.value)) startAutentiPolling()
-    })
+    loadAutentiStatus()
+    subskrybuj(nazwaSzansy())
+    if (socket) {
+      socket.on('volteo_autenti_status', onAutentiZdarzenie)
+      socket.on('connect', onPolaczenie)
+    }
+    document.addEventListener('visibilitychange', onWidocznosc)
   })
-  onUnmounted(stopAutentiPolling)
+
+  // Ta sama składowa może dostać inną szansę (prop się zmienia bez remontu).
+  watch(nazwaSzansy, (nowa, stara) => {
+    if (!aktywny) return
+    odsubskrybuj(stara)
+    subskrybuj(nowa)
+  })
+
+  onUnmounted(() => {
+    aktywny = false
+    clearTimeout(odswiezeniePoWysylce)
+    odswiezeniePoWysylce = null
+    document.removeEventListener('visibilitychange', onWidocznosc)
+    if (socket) {
+      socket.off('volteo_autenti_status', onAutentiZdarzenie)
+      socket.off('connect', onPolaczenie)
+    }
+    odsubskrybuj(nazwaSzansy())
+  })
 
   return {
     autenti,
     showAutentiConfirm,
     sendingAutenti,
     loadAutentiStatus,
-    startAutentiPolling,
-    stopAutentiPolling,
     toggleAutentiConfirm,
     confirmSendAutenti,
     openSignedPdf,
@@ -242,12 +280,12 @@ export function useAutenti({
 }
 
 // Local copy of the same error-message extraction UmowaTab.vue and
-// KredytTab.vue each already define for their own save/PDF calls — kept
+// KredytTab.vue each already define for their own save/PDF calls - kept
 // private to this composable so `confirmSendAutenti`'s toast matches the
 // exact same Polish fallback copy without forcing either tab to export
 // theirs or import a third shared module for one function.
 // Copied verbatim from the extractErrorMessage() pattern used across the
-// deal tabs (useAutenti.js, KredytTab.vue, UmowaTab.vue, ...) — but that
+// deal tabs (useAutenti.js, KredytTab.vue, UmowaTab.vue, ...) - but that
 // pattern was blind to the actual shape of errors thrown by frappe-ui's
 // call() (see frontend/node_modules/frappe-ui/src/utils/frappeRequest.js
 // ~L82-124): call() consumes _server_messages itself and re-throws an

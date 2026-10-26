@@ -981,7 +981,7 @@ function przywrocDaneKlienta() {
 
 // --- Autenti e-signature state ------------------------------------------------
 // Shared with UmowaTab.vue via useAutenti(), see that composable's header
-// comment for why the poll lifecycle lives there, and for docParam/docId
+// comment for the push-based refresh (ops#303), and for docParam/docId
 // (ops#163): this instance is keyed by the SELECTED record's name
 // (`kredyt`), not by the deal, since one deal can carry several records.
 // `restart()` is called explicitly by wybierzFormularz() below whenever the
@@ -1008,6 +1008,8 @@ const {
   autentiSignedAtDisplay,
 } = useAutenti({
   docId: () => wybrany.value?.name,
+  // Nazwa szansy: pokój zdarzeń `volteo_autenti_status` (ops#303).
+  dealId: () => props.dealId,
   docParam: 'kredyt',
   statusMethod: 'crm.integrations.autenti.api.autenti_kredyt_status',
   sendMethod: 'crm.integrations.autenti.api.autenti_send_kredyt',

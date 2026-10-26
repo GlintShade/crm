@@ -137,3 +137,130 @@ describe('useAutenti, pusty docId nie woła statusMethod (ops#163)', () => {
     unmount()
   })
 })
+
+// ops#303: push z serwera zamiast odpytywania co 30 s.
+function mountZSocketem(options) {
+  const socket = { on: vi.fn(), off: vi.fn(), emit: vi.fn() }
+  let exposed
+  const app = createApp({
+    setup() {
+      exposed = useAutenti(options)
+      return () => null
+    },
+  })
+  app.config.globalProperties.$socket = socket
+  app.mount(document.createElement('div'))
+  return { exposed, socket, unmount: () => app.unmount() }
+}
+
+const UMOWA_OPTIONS = {
+  dealId: () => 'PRO/PVME/26/1006',
+  statusMethod: 'crm.integrations.autenti.api.autenti_umowa_status',
+  sendMethod: 'crm.integrations.autenti.api.autenti_send_umowa',
+  sentToastLabel: 'wysłano',
+}
+
+function handler(socket, event) {
+  const wpis = socket.on.mock.calls.find((c) => c[0] === event)
+  return wpis && wpis[1]
+}
+
+describe('useAutenti, status wypychany z serwera (ops#303)', () => {
+  beforeEach(() => {
+    callMock.mockReset()
+    callMock.mockResolvedValue({ enabled: true, autenti_status: 'Wysłana' })
+    vi.useRealTimers()
+  })
+
+  it('nie tworzy żadnego setInterval', async () => {
+    const spy = vi.spyOn(globalThis, 'setInterval')
+    const { unmount } = mountZSocketem(UMOWA_OPTIONS)
+    await nextTick()
+    await nextTick()
+    expect(spy).not.toHaveBeenCalled()
+    unmount()
+    spy.mockRestore()
+  })
+
+  it('subskrybuje pokój szansy przy montowaniu i zdejmuje wszystko przy odmontowaniu', async () => {
+    const { socket, unmount } = mountZSocketem(UMOWA_OPTIONS)
+    await nextTick()
+    expect(socket.emit).toHaveBeenCalledWith('doc_subscribe', 'CRM Deal', 'PRO/PVME/26/1006')
+    const h = handler(socket, 'volteo_autenti_status')
+    expect(typeof h).toBe('function')
+    unmount()
+    expect(socket.off).toHaveBeenCalledWith('volteo_autenti_status', h)
+    expect(socket.emit).toHaveBeenCalledWith('doc_unsubscribe', 'CRM Deal', 'PRO/PVME/26/1006')
+  })
+
+  it('zdarzenie dla innej szansy nie woła call(), dla bieżącej woła', async () => {
+    const { socket, unmount } = mountZSocketem(UMOWA_OPTIONS)
+    await nextTick()
+    await nextTick()
+    callMock.mockClear()
+    const h = handler(socket, 'volteo_autenti_status')
+    h({ deal: 'INNA' })
+    expect(callMock).not.toHaveBeenCalled()
+    h({ deal: 'PRO/PVME/26/1006' })
+    expect(callMock).toHaveBeenCalledTimes(1)
+    unmount()
+  })
+
+  it('odmontowanie przed rozwiązaniem pierwszego call() nic dalej nie robi', async () => {
+    let rozwiaz
+    callMock.mockReturnValue(new Promise((r) => (rozwiaz = r)))
+    const { exposed, socket, unmount } = mountZSocketem(UMOWA_OPTIONS)
+    unmount()
+    const emitPo = socket.emit.mock.calls.length
+    const callPo = callMock.mock.calls.length
+    rozwiaz({ enabled: true, autenti_status: 'Wysłana' })
+    await nextTick()
+    await nextTick()
+    expect(callMock.mock.calls.length).toBe(callPo)
+    expect(socket.emit.mock.calls.length).toBe(emitPo)
+    expect(exposed.autenti.value).toBeNull()
+  })
+
+  it('visibilitychange (visible) i connect odświeżają status', async () => {
+    const { socket, unmount } = mountZSocketem(UMOWA_OPTIONS)
+    await nextTick()
+    await nextTick()
+    callMock.mockClear()
+    document.dispatchEvent(new Event('visibilitychange'))
+    expect(callMock).toHaveBeenCalledTimes(1)
+    handler(socket, 'connect')()
+    expect(callMock).toHaveBeenCalledTimes(2)
+    expect(socket.emit.mock.calls.filter((c) => c[0] === 'doc_subscribe').length).toBe(2)
+    unmount()
+    callMock.mockClear()
+    document.dispatchEvent(new Event('visibilitychange'))
+    expect(callMock).not.toHaveBeenCalled()
+  })
+
+  it('po confirmSendAutenti() jedno dodatkowe call() po 10 s, po odmontowaniu żadnego', async () => {
+    vi.useFakeTimers()
+    const { exposed, unmount } = mountZSocketem(UMOWA_OPTIONS)
+    await vi.advanceTimersByTimeAsync(0)
+    exposed.autenti.value = {
+      enabled: true,
+      dokument_exists: true,
+      pdf_exists: true,
+      proposed_signer: { full_name: 'A B', email: 'a@b.pl' },
+    }
+    callMock.mockResolvedValue({ autenti_status: 'Wysyłanie' })
+    await exposed.confirmSendAutenti()
+    callMock.mockClear()
+    callMock.mockResolvedValue({ enabled: true, autenti_status: 'Wysłana' })
+    await vi.advanceTimersByTimeAsync(9000)
+    expect(callMock).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(callMock).toHaveBeenCalledTimes(1)
+
+    await exposed.confirmSendAutenti()
+    callMock.mockClear()
+    unmount()
+    await vi.advanceTimersByTimeAsync(20000)
+    expect(callMock).not.toHaveBeenCalled()
+    vi.useRealTimers()
+  })
+})
