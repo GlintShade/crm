@@ -18,6 +18,7 @@ rozpoznac, NIE gubi leada: surowa wartosc trafia jako linia do
 """
 
 import re
+import unicodedata
 from collections.abc import Mapping
 from datetime import date, datetime
 from typing import Any
@@ -26,6 +27,7 @@ from crm.volteo_leady_import import (
 	SEPARATOR_UWAG,
 	normalizuj_kod,
 	normalizuj_pisownie_osoby,
+	normalizuj_posiadane_produkty,
 	normalizuj_telefon,
 	rozdziel_imie_nazwisko,
 	wyglada_na_firme,
@@ -67,6 +69,7 @@ _WZOR_DATY = re.compile(r"^(\d{4}-\d{2}-\d{2})(?:[T ].*)?$")
 _WZOR_SLOW = re.compile(r"[^\W_]+", re.UNICODE)
 
 _SLOWA_PV = frozenset({"pv", "fotowoltaika", "fotowoltaiki", "fotowoltaike", "fotowoltaiczna"})
+# Porownanie idzie po zdjeciu diakrytykow, wiec "fotowoltaike/fotowoltaika" z ogonkami tez pasuja.
 _SLOWA_ME = frozenset({"mag", "magazyn", "magazyny", "magazynem", "magazynu", "me"})
 _SLOWA_PC = frozenset({"pc", "pompa", "pompy", "pompe", "ciepla", "ciepła"})
 _SLOWA_CP = frozenset({"cp", "czyste", "powietrze"})
@@ -104,14 +107,35 @@ def _klucze_malymi(ladunek: Mapping[str, Any]) -> dict[str, Any]:
 	return {str(k).strip().lower(): v for k, v in ladunek.items()}
 
 
+def _bez_diakrytykow(tekst: str) -> str:
+	"""Zdejmuje polskie znaki diakrytyczne (`fotowoltaikę` -> `fotowoltaike`)."""
+	rozlozone = unicodedata.normalize("NFD", tekst.replace("\u0142", "l").replace("\u0141", "L"))
+	return "".join(z for z in rozlozone if not unicodedata.combining(z))
+
+
 def normalizuj_posiada_pv(tekst: str) -> str | None:
-	"""`tak/yes/true/1` -> `"PV"`, `nie/no/false/0` albo pusty -> `""`, inne -> `None`."""
+	"""Mapuje odpowiedz na pytanie "Czy masz juz PV?" na tokeny `custom_posiadane_produkty`.
+
+	`tak/yes/true/1` -> `"PV"`, `nie/no/false/0` albo pusty -> `""`. Odpowiedzi opisowe
+	formularza Facebooka (takze jako slugi Meta, np. `mam_fotowoltaike_z_magazynem_energii`),
+	rozpoznawane po slowach: `nie` + `mam` -> `""`; `mam` + PV + magazyn -> `"PV+ME"`
+	(chyba ze jest slowo `bez` -> `"PV"`); `mam` + PV bez magazynu -> `"PV"`.
+	Inne -> `None`."""
 	czysty = _tekst(tekst).lower()
 	if not czysty or czysty in _NIE:
 		return ""
 	if czysty in _TAK:
 		return "PV"
-	return None
+	slowa = set(_WZOR_SLOW.findall(_bez_diakrytykow(czysty)))
+	if "mam" not in slowa:
+		return None
+	if "nie" in slowa:
+		return ""
+	if not slowa & _SLOWA_PV:
+		return None
+	if slowa & _SLOWA_ME and "bez" not in slowa:
+		return normalizuj_posiadane_produkty("PV+ME")
+	return normalizuj_posiadane_produkty("PV")
 
 
 def normalizuj_system_rozliczen(tekst: str) -> str | None:
@@ -252,7 +276,7 @@ def zbuduj_leada_z_webhooka(ladunek: Mapping[str, Any], dzisiaj: str) -> dict[st
 	system_surowy = _tekst(dane.get("system_rozliczen"))
 	zasady = ""
 	if system_surowy:
-		if posiada == "PV":
+		if "PV" in posiada.split("+"):
 			rozpoznane = normalizuj_system_rozliczen(system_surowy)
 			if rozpoznane is None:
 				uwagi_nierozpoznane.append("System rozliczen (nierozpoznane): %s" % system_surowy)

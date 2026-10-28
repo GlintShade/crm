@@ -63,6 +63,23 @@ class TestPosiadaPv(unittest.TestCase):
 	def test_liczba(self):
 		self.assertEqual(normalizuj_posiada_pv(1), "PV")
 
+	def test_opisowe_czytelne_i_slugi(self):
+		przypadki = {
+			"Mam Fotowoltaik\u0119 bez magazynu energii": "PV",
+			"mam_fotowoltaik\u0119_bez_magazynu_energii": "PV",
+			"Mam Fotowoltaik\u0119 z magazynem energii": "PV+ME",
+			"mam_fotowoltaik\u0119_z_magazynem_energii": "PV+ME",
+			"mam_fotowoltaike_z_magazynem_energii": "PV+ME",
+			"Nie mam jeszcze Fotowoltaiki": "",
+			"nie_mam_jeszcze_fotowoltaiki": "",
+		}
+		for tekst, oczekiwane in przypadki.items():
+			self.assertEqual(normalizuj_posiada_pv(tekst), oczekiwane, tekst)
+
+	def test_opisowe_nierozpoznane(self):
+		self.assertIsNone(normalizuj_posiada_pv("mam_pompe_ciepla"))
+		self.assertIsNone(normalizuj_posiada_pv("fotowoltaika z magazynem"))
+
 
 class TestSystemRozliczen(unittest.TestCase):
 	def test_nowe(self):
@@ -72,6 +89,11 @@ class TestSystemRozliczen(unittest.TestCase):
 	def test_stare(self):
 		for t in ("net-metering", "Net Metering", "opust", "stare zasady", "stary"):
 			self.assertEqual(normalizuj_system_rozliczen(t), "Stare zasady", t)
+
+	def test_slugi_meta(self):
+		self.assertEqual(normalizuj_system_rozliczen("nowe_zasady_(net-billing)"), "Nowe zasady")
+		self.assertEqual(normalizuj_system_rozliczen("Nowe zasady (net-billing)"), "Nowe zasady")
+		self.assertEqual(normalizuj_system_rozliczen("stare_zasady"), "Stare zasady")
 
 	def test_nierozpoznane(self):
 		self.assertIsNone(normalizuj_system_rozliczen("nie wiem"))
@@ -281,6 +303,41 @@ class TestImieNazwisko(unittest.TestCase):
 	def test_nazwisko_z_myslnikiem(self):
 		w = zbuduj_leada_z_webhooka(ladunek(imie_nazwisko="ewa kowalska-nowak"), DZIS)
 		self.assertEqual(w["last_name"], "Kowalska-Nowak")
+
+
+class TestOdpowiedziOpisowe(unittest.TestCase):
+	def test_pv_me_ze_starymi_zasadami(self):
+		w = zbuduj_leada_z_webhooka(
+			ladunek(
+				posiada_pv="mam_fotowoltaik\u0119_z_magazynem_energii",
+				system_rozliczen="stare_zasady",
+			),
+			DZIS,
+		)
+		self.assertEqual(w["custom_posiadane_produkty"], "PV+ME")
+		self.assertEqual(w["custom_zasady_dotacji"], "Stare zasady")
+		self.assertNotIn("nierozpoznane", w.get("custom_uwagi_import", ""))
+
+	def test_pv_bez_magazynu_z_nowymi_zasadami(self):
+		w = zbuduj_leada_z_webhooka(
+			ladunek(
+				posiada_pv="Mam Fotowoltaik\u0119 bez magazynu energii",
+				system_rozliczen="nowe_zasady_(net-billing)",
+			),
+			DZIS,
+		)
+		self.assertEqual(w["custom_posiadane_produkty"], "PV")
+		self.assertEqual(w["custom_zasady_dotacji"], "Nowe zasady")
+
+	def test_nie_mam_zasady_do_uwag(self):
+		w = zbuduj_leada_z_webhooka(
+			ladunek(posiada_pv="nie_mam_jeszcze_fotowoltaiki", system_rozliczen="stare_zasady"),
+			DZIS,
+		)
+		self.assertNotIn("custom_posiadane_produkty", w)
+		self.assertNotIn("custom_zasady_dotacji", w)
+		self.assertIn("System rozliczen: stare_zasady", uwagi(w))
+		self.assertNotIn("nierozpoznane", w["custom_uwagi_import"])
 
 
 class TestPolaLadunku(unittest.TestCase):
