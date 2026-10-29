@@ -13,6 +13,7 @@ from crm.volteo_leady_webhook import (
 	klucz_limitu,
 	limit_przekroczony,
 	normalizuj_date_zgloszenia,
+	normalizuj_kod_tolerancyjnie,
 	normalizuj_posiada_pv,
 	normalizuj_produkt_reklamy,
 	normalizuj_system_rozliczen,
@@ -406,19 +407,84 @@ class TestPolaLadunku(unittest.TestCase):
 		self.assertEqual(w["custom_uwagi_import"], "Zrodlo: Facebook Lead Ads")
 
 
+class TestNormalizujKodTolerancyjnie(unittest.TestCase):
+	def test_rozpoznaje_formaty(self):
+		przypadki = {
+			"00-000": "00-000",
+			"00000": "00-000",
+			"00 000": "00-000",
+			"00 - 000": "00-000",
+			"64\u2011000": "64-000",
+			"64\u2013000": "64-000",
+			"64.000": "64-000",
+			"64_000": "64-000",
+			" 64-000 ": "64-000",
+			"64-000 Kościan": "64-000",
+			"kod 64000": "64-000",
+			"64-000 i 64000": "64-000",
+		}
+		for wejscie, oczekiwane in przypadki.items():
+			with self.subTest(wejscie=wejscie):
+				self.assertEqual(normalizuj_kod_tolerancyjnie(wejscie), oczekiwane)
+
+	def test_odrzuca(self):
+		for wejscie in ("6400", "640000", "123456789", "64-000 i 61-001", "", "abc", "Poznań", None):
+			with self.subTest(wejscie=wejscie):
+				self.assertIsNone(normalizuj_kod_tolerancyjnie(wejscie))
+
+
 class TestKodPocztowy(unittest.TestCase):
 	def test_poprawny(self):
 		w = zbuduj_leada_z_webhooka(ladunek(kod_pocztowy="61-001"), DZIS)
 		self.assertEqual(w["custom_install_postal_code"], "61-001")
 
-	def test_niepoprawny(self):
+	def test_bez_kreski(self):
 		w = zbuduj_leada_z_webhooka(ladunek(kod_pocztowy="61001"), DZIS)
+		self.assertEqual(w["custom_install_postal_code"], "61-001")
+		self.assertNotIn("Kod pocztowy (nierozpoznany)", w["custom_uwagi_import"])
+
+	def test_z_dopiskiem(self):
+		w = zbuduj_leada_z_webhooka(ladunek(kod_pocztowy="61 - 001 Poznań"), DZIS)
+		self.assertEqual(w["custom_install_postal_code"], "61-001")
+
+	def test_niepoprawny(self):
+		w = zbuduj_leada_z_webhooka(ladunek(kod_pocztowy="6100"), DZIS)
 		self.assertNotIn("custom_install_postal_code", w)
-		self.assertIn("Kod pocztowy (nierozpoznany): 61001", uwagi(w))
+		self.assertIn("Kod pocztowy (nierozpoznany): 6100", uwagi(w))
+
+	def test_dwa_kody_to_nierozpoznany(self):
+		w = zbuduj_leada_z_webhooka(ladunek(kod_pocztowy="64-000 i 61-001"), DZIS)
+		self.assertNotIn("custom_install_postal_code", w)
+		self.assertIn("Kod pocztowy (nierozpoznany): 64-000 i 61-001", uwagi(w))
 
 	def test_brak(self):
 		w = zbuduj_leada_z_webhooka(ladunek(), DZIS)
 		self.assertNotIn("custom_install_postal_code", w)
+
+	def test_miasto_z_kodem_przy_pustym_kodzie(self):
+		w = zbuduj_leada_z_webhooka(ladunek(miasto="60-101"), DZIS)
+		self.assertEqual(w["custom_install_postal_code"], "60-101")
+		self.assertNotIn("custom_install_city", w)
+
+	def test_miasto_z_kodem_bez_kreski(self):
+		w = zbuduj_leada_z_webhooka(ladunek(miasto="60101", kod_pocztowy=""), DZIS)
+		self.assertEqual(w["custom_install_postal_code"], "60-101")
+		self.assertNotIn("custom_install_city", w)
+
+	def test_nazwa_miasta_zostaje(self):
+		w = zbuduj_leada_z_webhooka(ladunek(miasto="Poznań"), DZIS)
+		self.assertEqual(w["custom_install_city"], "Poznań")
+		self.assertNotIn("custom_install_postal_code", w)
+
+	def test_kod_i_miasto_razem(self):
+		w = zbuduj_leada_z_webhooka(ladunek(miasto="Poznań", kod_pocztowy="61-001"), DZIS)
+		self.assertEqual(w["custom_install_city"], "Poznań")
+		self.assertEqual(w["custom_install_postal_code"], "61-001")
+
+	def test_nierozpoznany_kod_nie_zjada_miasta(self):
+		w = zbuduj_leada_z_webhooka(ladunek(miasto="Poznań", kod_pocztowy="abc"), DZIS)
+		self.assertEqual(w["custom_install_city"], "Poznań")
+		self.assertIn("Kod pocztowy (nierozpoznany): abc", uwagi(w))
 
 
 class TestKluczLimitu(unittest.TestCase):
