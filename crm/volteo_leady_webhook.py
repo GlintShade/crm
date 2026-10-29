@@ -25,7 +25,6 @@ from typing import Any
 
 from crm.volteo_leady_import import (
 	SEPARATOR_UWAG,
-	normalizuj_kod,
 	normalizuj_pisownie_osoby,
 	normalizuj_posiadane_produkty,
 	normalizuj_telefon,
@@ -74,6 +73,24 @@ _SLOWA_ME = frozenset({"mag", "magazyn", "magazyny", "magazynem", "magazynu", "m
 _SLOWA_PC = frozenset({"pc", "pompa", "pompy", "pompe", "ciepla", "ciepła"})
 _SLOWA_CP = frozenset({"cp", "czyste", "powietrze"})
 _SLOWA_LACZNIKI = frozenset({"i", "z", "oraz", "plus", "energii"})
+
+
+# Dwie cyfry, opcjonalny separator (dowolna kreska Unicode, kropka, podkreslnik, spacje), trzy cyfry;
+# calosc nie moze byc czescia dluzszego ciagu cyfr.
+_WZOR_KODU = re.compile(r"(?<!\d)(\d{2})[\s\-\u2010-\u2015\u2212._]*(\d{3})(?!\d)")
+
+
+def normalizuj_kod_tolerancyjnie(tekst: str) -> str | None:
+	"""Tolerancyjna normalizacja kodu pocztowego do `dd-ddd` (tylko webhook).
+
+	Akceptuje `00000`, `00 000`, `00 - 000`, rozne kreski Unicode, kropke albo
+	podkreslnik zamiast kreski oraz dopiski (`64-000 Koscian`, `kod 64000`).
+	Dokladnie jedno unikalne dopasowanie albo `None` (brak lub kilka roznych
+	kodow). Scisly `normalizuj_kod` z importu arkusza zostaje bez zmian."""
+	kody = {f"{a}-{b}" for a, b in _WZOR_KODU.findall(_tekst(tekst))}
+	if len(kody) != 1:
+		return None
+	return next(iter(kody))
 
 
 class LadunekOdrzucony(ValueError):
@@ -305,13 +322,18 @@ def zbuduj_leada_z_webhooka(ladunek: Mapping[str, Any], dzisiaj: str) -> dict[st
 		else:
 			uwagi_nierozpoznane.append("Data zgloszenia (brak): ustawiono date przyjecia")
 
-	# Kod pocztowy (opcjonalny)
+	# Kod pocztowy: klucz `kod_pocztowy`; wsteczna zgodnosc, gdy kod przyszedl pod `miasto`
 	kod_surowy = _tekst(dane.get("kod_pocztowy"))
+	miasto = _tekst(dane.get("miasto"))
 	kod = ""
 	if kod_surowy:
-		kod = normalizuj_kod(kod_surowy) or ""
+		kod = normalizuj_kod_tolerancyjnie(kod_surowy) or ""
 		if not kod:
 			uwagi_nierozpoznane.append("Kod pocztowy (nierozpoznany): %s" % kod_surowy)
+	elif miasto:
+		kod_z_miasta = normalizuj_kod_tolerancyjnie(miasto)
+		if kod_z_miasta:
+			kod, miasto = kod_z_miasta, ""
 
 	linie = ["Zrodlo: Facebook Lead Ads"]
 	formularz = _tekst(dane.get("formularz"))
@@ -334,7 +356,7 @@ def zbuduj_leada_z_webhooka(ladunek: Mapping[str, Any], dzisiaj: str) -> dict[st
 	}
 	opcjonalne = {
 		"last_name": nazwisko,
-		"custom_install_city": _tekst(dane.get("miasto")),
+		"custom_install_city": miasto,
 		"custom_install_postal_code": kod,
 		"custom_posiadane_produkty": posiada,
 		"custom_zasady_dotacji": zasady,

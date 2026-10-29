@@ -64,12 +64,14 @@ from frappe import _
 from crm.volteo_leady_webhook import (
 	LIMIT_ZADAN_NA_MINUTE,
 	ROLA_INTEGRACJI,
+	SEPARATOR_UWAG,
 	LadunekOdrzucony,
 	klucz_limitu,
 	limit_przekroczony,
 	zbuduj_leada_z_webhooka,
 )
 
+UWAGA_KOD_SPOZA_BAZY = "Kod pocztowy spoza bazy kodów, brak pinezki na mapie"
 KOMUNIKAT_LIMITU = "Przekroczono limit %d żądań na minutę. Spróbuj ponownie za chwilę."
 
 
@@ -110,20 +112,35 @@ def _zapisz_odrzucenie(ladunek: dict, powod: str) -> None:
 
 
 def _z_centroidem_kodu(dane: dict) -> dict:
-	"""Nowy słownik z centroidem `Postal Code` (gdy kod jest znany i ma obie współrzędne)."""
+	"""Nowy słownik z danymi `Postal Code`: centroid, województwo i powiat.
+
+	Miejscowości z tabeli NIE przenosimy (GeoNames trzyma jedną na kod, często
+	nie tę). Kod spoza bazy zostaje zapisany bez współrzędnych, z notką w Uwagach."""
 	kod = dane.get("custom_install_postal_code")
 	if not kod:
 		return dane
-	wiersz = frappe.db.get_value("Postal Code", {"kod": kod}, ["lat", "lng"], as_dict=True)
-	if not wiersz or not wiersz.get("lat") or not wiersz.get("lng"):
-		return dane
-	return {
-		**dane,
-		"custom_lat": wiersz["lat"],
-		"custom_lng": wiersz["lng"],
-		"custom_geo_dokladnosc": "kod",
-		"custom_geo_zrodlo": "kod",
-	}
+	wiersz = frappe.db.get_value(
+		"Postal Code", {"kod": kod}, ["lat", "lng", "wojewodztwo", "powiat"], as_dict=True
+	)
+	if not wiersz:
+		uwagi = dane.get("custom_uwagi_import") or ""
+		return {
+			**dane,
+			"custom_uwagi_import": SEPARATOR_UWAG.join(filter(None, [uwagi, UWAGA_KOD_SPOZA_BAZY])),
+		}
+	wynik = dict(dane)
+	if wiersz.get("wojewodztwo"):
+		wynik["custom_voivodeship"] = wiersz["wojewodztwo"]
+	if wiersz.get("powiat"):
+		wynik["custom_powiat"] = wiersz["powiat"]
+	if wiersz.get("lat") and wiersz.get("lng"):
+		wynik.update(
+			custom_lat=wiersz["lat"],
+			custom_lng=wiersz["lng"],
+			custom_geo_dokladnosc="kod",
+			custom_geo_zrodlo="kod",
+		)
+	return wynik
 
 
 def _zakolejkuj_sms_powitalny(lead: str) -> None:
