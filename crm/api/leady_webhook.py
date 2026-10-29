@@ -44,6 +44,14 @@ minucie dostaje HTTP 429, więc Make ponowi je później. Liczy się KAŻDE wywo
 także duplikat i odrzucony. To hamulec przed zalaniem puli leadów przez wyciekły
 klucz, a nie wartość przepustowości.
 
+SMS powitalny (ops#305)
+-----------------------
+Po udanym insercie NOWEGO leada (status `utworzony`, nigdy duplikat ani odrzucony)
+kolejkujemy `crm.api.sms_powitalny.wyslij_sms_powitalny` (kolejka "short",
+`enqueue_after_commit=True`). Awaria SMS nie cofa leada i nie zmienia odpowiedzi
+webhooka. Funkcja sama sprawdza przełącznik `wlaczone` w `Volteo SMS Ustawienia`
+(domyślnie wyłączony) i zapisuje wynik na leadzie.
+
 Cała logika mapowania jest w `crm/volteo_leady_webhook.py` (bez `frappe`).
 """
 
@@ -117,6 +125,22 @@ def _z_centroidem_kodu(dane: dict) -> dict:
 	}
 
 
+def _zakolejkuj_sms_powitalny(lead: str) -> None:
+	"""Błąd kolejkowania nie może zepsuć odpowiedzi webhooka ani leada."""
+	try:
+		frappe.enqueue(
+			"crm.api.sms_powitalny.wyslij_sms_powitalny",
+			queue="short",
+			enqueue_after_commit=True,
+			lead=lead,
+		)
+	except Exception:
+		frappe.log_error(
+			title="SMS powitalny",
+			message=f"Lead {lead}: nie udało się zakolejkować\n{frappe.get_traceback()}",
+		)
+
+
 @frappe.whitelist(methods=["POST"])
 def przyjmij() -> dict:
 	"""Zakłada `CRM Lead` z ładunku Make.com; patrz docstring modułu."""
@@ -138,4 +162,5 @@ def przyjmij() -> dict:
 	doc = frappe.get_doc({"doctype": "CRM Lead", **_z_centroidem_kodu(dane)}).insert(
 		ignore_permissions=True
 	)
+	_zakolejkuj_sms_powitalny(doc.name)
 	return {"status": "utworzony", "lead": doc.name}
