@@ -47,10 +47,11 @@ klucz, a nie wartość przepustowości.
 SMS powitalny (ops#305)
 -----------------------
 Po udanym insercie NOWEGO leada (status `utworzony`, nigdy duplikat ani odrzucony)
-kolejkujemy `crm.api.sms_powitalny.wyslij_sms_powitalny` (kolejka "short",
-`enqueue_after_commit=True`). Awaria SMS nie cofa leada i nie zmienia odpowiedzi
-webhooka. Funkcja sama sprawdza przełącznik `wlaczone` w `Volteo SMS Ustawienia`
-(domyślnie wyłączony) i zapisuje wynik na leadzie.
+rejestrujemy callback `frappe.db.after_commit`, który kolejkuje
+`crm.api.sms_powitalny.wyslij_sms_powitalny` (kolejka "short"). To jedyna ścieżka
+wyzwalająca SMS. Awaria SMS nie cofa leada i nie zmienia odpowiedzi webhooka.
+Funkcja sama sprawdza przełącznik `wlaczone` w `Volteo SMS Ustawienia` (domyślnie
+wyłączony) i zapisuje wynik na leadzie.
 
 Cała logika mapowania jest w `crm/volteo_leady_webhook.py` (bez `frappe`).
 """
@@ -126,18 +127,30 @@ def _z_centroidem_kodu(dane: dict) -> dict:
 
 
 def _zakolejkuj_sms_powitalny(lead: str) -> None:
-	"""Błąd kolejkowania nie może zepsuć odpowiedzi webhooka ani leada."""
+	"""Kolejkuje SMS dopiero po commicie leada, z własnym try/except w callbacku.
+
+	Nie używamy `enqueue_after_commit=True`: Frappe woła callbacki `after_commit` bez
+	obsługi wyjątków, a `sync_database()` jest w `frappe/app.py` poza blokiem except,
+	więc błąd Redis przy kolejkowaniu dałby gołe HTTP 500 po już zapisanym leadzie
+	(Make ponowiłby żądanie i dostał `duplikat`). Własny callback łapie wszystko i
+	zostawia wpis w Error Log.
+	"""
+
+	def _enqueue() -> None:
+		try:
+			frappe.enqueue("crm.api.sms_powitalny.wyslij_sms_powitalny", queue="short", lead=lead)
+		except Exception:
+			frappe.log_error(
+				title="SMS powitalny",
+				message=f"Lead {lead}: nie udało się zakolejkować\n{frappe.get_traceback()}",
+			)
+
 	try:
-		frappe.enqueue(
-			"crm.api.sms_powitalny.wyslij_sms_powitalny",
-			queue="short",
-			enqueue_after_commit=True,
-			lead=lead,
-		)
+		frappe.db.after_commit.add(_enqueue)
 	except Exception:
 		frappe.log_error(
 			title="SMS powitalny",
-			message=f"Lead {lead}: nie udało się zakolejkować\n{frappe.get_traceback()}",
+			message=f"Lead {lead}: nie udało się zarejestrować callbacku\n{frappe.get_traceback()}",
 		)
 
 
