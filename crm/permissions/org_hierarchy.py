@@ -2,6 +2,7 @@
 # For license information, please see license.txt
 
 import frappe
+from frappe.utils import cint
 from frappe.utils.caching import request_cache
 
 _OWNER_FIELD = {
@@ -65,6 +66,20 @@ def _ma_linie_leady(user: str) -> bool:
 		return True
 
 	return bool(frappe.db.get_value("User", user, "custom_linia_leady"))
+
+
+def ma_flage_zmiany_statusu_cc(user: str) -> bool:
+	"""True, gdy `User.custom_zmiana_statusu_cc` jest wlaczone (ops#308, uwaga 81).
+
+	Flaga zdejmuje z handlowca blokade zmiany statusu CC leada. Gdy pola nie ma
+	jeszcze na witrynie (skrypt ops nie byl uruchomiony), zwraca False, czyli
+	dotychczasowe zachowanie (blokada).
+	"""
+	if not user or user == "Administrator":
+		return True
+	if not frappe.get_meta("User").has_field("custom_zmiana_statusu_cc"):
+		return False
+	return bool(cint(frappe.db.get_value("User", user, "custom_zmiana_statusu_cc")))
 
 
 ROLA_CALL_CENTER = "Volteo Call Center"
