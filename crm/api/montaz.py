@@ -52,15 +52,32 @@ schematu", znacznik `ZNACZNIK_PROTOKOLU_MONTAZU`, te same uprawnienia (odczyt
 szansy -> widok, zapis szansy -> dodawanie i usuwanie). Dopuszczone tylko PDF,
 JPG i PNG (`crm.volteo_pliki.czy_plik_protokolu`). Wszystkie pulapki powyzej
 dotycza ja tak samo.
+
+Runda 2 (ops#307): protokol widza wszyscy z prawem odczytu szansy, ale
+dodawac i usuwac moga tylko Administrator, System Manager, Volteo Core Admin i
+Volteo Backend (`czy_admin_lub_bypass`, jedyna bramka). Egzekwuja to trzy
+miejsca: `usun_protokol_montazu`, hook `File.before_insert`
+(`strzez_protokolu_przed_wgraniem`, zamyka bezposredni `upload_file`) i hook
+`has_permission` na `File` (`uprawnienie_pliku_protokolu`, zamyka REST DELETE;
+musi byc tu, bo `frappe.delete_doc` sprawdza uprawnienie przed `on_trash`).
+Obie sekcje Montazu zamiast ogolnego komentarza "Attachment" zostawiaja wlasny
+slad Volteo w Aktywnosci (`slad_po_wgraniu`, `slad_po_usunieciu`).
+Oba hooki pomijaja slad, gdy szansa juz nie istnieje: rdzen w `delete_doc`
+robi `delete_from_table` przed `remove_all`, wiec przy usuwaniu szansy File
+kasuja sie juz po zniknieciu wiersza szansy.
 """
 
 import frappe
 from frappe import _
 
-from crm.volteo_pliki import czy_media_montazu, czy_plik_protokolu
+from crm.permissions.org_hierarchy import czy_admin_lub_bypass
+from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad
+from crm.volteo_pliki import ETYKIETY_SLADU_MONTAZU, czy_media_montazu, czy_plik_protokolu
 
 ZNACZNIK_ZDJEC_MONTAZU = "zdjecia_montaz"
 ZNACZNIK_PROTOKOLU_MONTAZU = "protokol_montaz"
+
+KOMUNIKAT_PROTOKOLU = "Protokół montażu może zmieniać tylko administracja i backoffice."
 
 _POLA = ["name", "file_name", "file_url", "file_size", "creation", "owner"]
 
@@ -124,10 +141,97 @@ def usun_zdjecie_montazu(deal: str, name: str) -> None:
 def protokol_montazu(deal: str) -> dict:
 	return {
 		"pliki": _pliki_ze_znacznikiem(deal, ZNACZNIK_PROTOKOLU_MONTAZU, czy_plik_protokolu),
-		"can_edit": bool(frappe.has_permission("CRM Deal", "write", deal)),
+		"can_edit": bool(czy_admin_lub_bypass()),
 	}
 
 
 @frappe.whitelist(methods=["POST"])
 def usun_protokol_montazu(deal: str, name: str) -> None:
+	if not czy_admin_lub_bypass():
+		frappe.throw(_(KOMUNIKAT_PROTOKOLU), frappe.PermissionError)
 	_usun_ze_znacznikiem(deal, ZNACZNIK_PROTOKOLU_MONTAZU, name)
+
+
+def _to_plik_protokolu(doc) -> bool:
+	return (
+		doc.attached_to_doctype == "CRM Deal" and doc.attached_to_field == ZNACZNIK_PROTOKOLU_MONTAZU
+	)
+
+
+def strzez_protokolu_przed_wgraniem(doc, method=None):
+	"""`File.before_insert`: wgranie pliku protokolu tylko dla administracji i backoffice."""
+	if _to_plik_protokolu(doc) and not czy_admin_lub_bypass():
+		frappe.throw(_(KOMUNIKAT_PROTOKOLU), frappe.PermissionError)
+
+
+def uprawnienie_pliku_protokolu(doc, ptype=None, user=None):
+	"""`has_permission` na `File`: False tylko dla delete pliku protokolu przez kogos spoza
+	administracji i backoffice; w kazdym innym przypadku None (decyduje Frappe)."""
+	if ptype == "delete" and _to_plik_protokolu(doc) and not czy_admin_lub_bypass(user):
+		return False
+	return None
+
+
+def _usun_ogolny_komentarz(doc, typ: str, pasuje) -> None:
+	"""Kasuje ogolny komentarz rdzenia, ktory kontroler `File` dopiero co zapisal.
+
+	Zwykle `frappe.db.delete` jest tu bezpieczne: `update_comment_in_doc` w rdzeniu
+	(`comment.py`) ignoruje kazdy `comment_type` inny niz "Comment", wiec zadna pamiec
+	podreczna `_comments` na szansie nie jest zaangazowana (`remove_comment_from_cache`
+	tez dotyczy tylko "Comment"). Kasujemy tylko wiersz pasujacy do TEGO pliku."""
+	wiersze = frappe.get_all(
+		"Comment",
+		filters={
+			"reference_doctype": "CRM Deal",
+			"reference_name": doc.attached_to_name,
+			"comment_type": typ,
+		},
+		fields=["name", "content"],
+		order_by="creation desc",
+		limit=1,
+	)
+	if wiersze and pasuje(wiersze[0].content or ""):
+		frappe.db.delete("Comment", {"name": wiersze[0].name})
+
+
+def _slad_montazu(doc, akcja: str) -> None:
+	zapisz_slad(
+		doc.attached_to_name,
+		tekst_sladu(
+			"montaz_plik",
+			akcja=akcja,
+			sekcja=ETYKIETY_SLADU_MONTAZU[doc.attached_to_field],
+			nazwa=doc.file_name,
+		),
+	)
+
+
+def _to_plik_montazu(doc) -> bool:
+	return doc.attached_to_doctype == "CRM Deal" and doc.attached_to_field in ETYKIETY_SLADU_MONTAZU
+
+
+def slad_po_wgraniu(doc, method=None):
+	"""`File.after_insert`: wlasny slad zamiast ogolnego komentarza "Attachment"."""
+	if not _to_plik_montazu(doc):
+		return
+	# Rdzen Frappe w delete_doc najpierw robi delete_from_table (wiersz szansy
+	# znika), a dopiero potem remove_all (kasuje podpiete File, a z nimi uruchamia
+	# nasz hook). Komentarz z linkiem do nieistniejacej szansy wywalilby usuwanie.
+	if not frappe.db.exists("CRM Deal", doc.attached_to_name):
+		return
+	nazwa = frappe.utils.escape_html(doc.file_name or "")
+	_usun_ogolny_komentarz(doc, "Attachment", lambda tresc: nazwa in tresc)
+	_slad_montazu(doc, "dodano")
+
+
+def slad_po_usunieciu(doc, method=None):
+	"""`File.on_trash`: wlasny slad zamiast ogolnego komentarza "Attachment Removed"."""
+	if not _to_plik_montazu(doc):
+		return
+	# Rdzen Frappe w delete_doc najpierw robi delete_from_table (wiersz szansy
+	# znika), a dopiero potem remove_all (kasuje podpiete File, a z nimi uruchamia
+	# nasz hook). Komentarz z linkiem do nieistniejacej szansy wywalilby usuwanie.
+	if not frappe.db.exists("CRM Deal", doc.attached_to_name):
+		return
+	_usun_ogolny_komentarz(doc, "Attachment Removed", lambda tresc: tresc == doc.file_name)
+	_slad_montazu(doc, "usunięto")

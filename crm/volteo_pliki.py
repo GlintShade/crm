@@ -48,6 +48,12 @@ ZNACZNIK_PROTOKOLU_MONTAZU = "protokol_montaz"
 """Lustro `crm.api.montaz.ZNACZNIK_PROTOKOLU_MONTAZU` (sekcja "Protokol
 montazu", ops#307)."""
 
+ETYKIETY_SLADU_MONTAZU = {
+	ZNACZNIK_ZDJEC_MONTAZU: "zdjęcie z realizacji",
+	ZNACZNIK_PROTOKOLU_MONTAZU: "protokół montażu",
+}
+"""Etykieta sekcji Montaz w sladzie Aktywnosci, po znaczniku `attached_to_field`."""
+
 ROZSZERZENIA_PROTOKOLU = frozenset({"pdf", "jpg", "jpeg", "png"})
 
 

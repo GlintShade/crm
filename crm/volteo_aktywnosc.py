@@ -89,6 +89,10 @@ _AKCJE_AUDYTU: frozenset[str] = frozenset({"dodano", "usunięto", "zmieniono"})
 """Dozwolone wartości `akcja` dla `tekst_sladu("audyt_plik", ...)`."""
 
 
+_AKCJE_MONTAZU: frozenset[str] = frozenset({"dodano", "usunięto"})
+"""Dozwolone wartości `akcja` dla `tekst_sladu("montaz_plik", ...)`."""
+
+
 def _etykieta(fieldname: str, etykiety: dict[str, str]) -> str:
 	"""Etykieta pola do wyświetlenia: z `etykiety`, albo (gdy brak) sama nazwa pola."""
 	return etykiety.get(fieldname, fieldname)
@@ -303,6 +307,12 @@ def tekst_sladu(rodzaj: str, **dane: object) -> str:
 		if akcja not in _AKCJE_AUDYTU:
 			raise ValueError(f"Nieznana akcja audytu: {akcja!r}")
 		return f"{akcja} dokument audytu: {dane['etykieta']}"
+
+	if rodzaj == "montaz_plik":
+		akcja = dane["akcja"]
+		if akcja not in _AKCJE_MONTAZU:
+			raise ValueError(f"Nieznana akcja montażu: {akcja!r}")
+		return f"{akcja} {dane['sekcja']}: {dane['nazwa']}"
 
 	if rodzaj == "audyt_zdjecia":
 		return "zmieniono zdjęcia audytu"

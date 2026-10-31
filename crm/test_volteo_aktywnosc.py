@@ -712,6 +712,22 @@ class TestTekstSladu(unittest.TestCase):
 		with self.assertRaises(ValueError):
 			tekst_sladu("audyt_plik", akcja="cos innego", etykieta="X")
 
+	def test_montaz_plik_dodano(self: "TestTekstSladu") -> None:
+		self.assertEqual(
+			tekst_sladu("montaz_plik", akcja="dodano", sekcja="protokół montażu", nazwa="protokol.pdf"),
+			"dodano protokół montażu: protokol.pdf",
+		)
+
+	def test_montaz_plik_usunieto(self: "TestTekstSladu") -> None:
+		self.assertEqual(
+			tekst_sladu("montaz_plik", akcja="usunięto", sekcja="zdjęcie z realizacji", nazwa="IMG_1.jpg"),
+			"usunięto zdjęcie z realizacji: IMG_1.jpg",
+		)
+
+	def test_montaz_plik_nieznana_akcja(self: "TestTekstSladu") -> None:
+		with self.assertRaises(ValueError):
+			tekst_sladu("montaz_plik", akcja="zmieniono", sekcja="x", nazwa="y")
+
 	def test_r_audyt_zdjecia(self: "TestTekstSladu") -> None:
 		self.assertEqual(tekst_sladu("audyt_zdjecia"), "zmieniono zdjęcia audytu")
 

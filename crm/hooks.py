@@ -156,6 +156,8 @@ has_permission = {
 		"crm.permissions.contact_visibility.has_contact_permission",
 		"crm.permissions.delete_lockdown.block_nonadmin_delete",
 	],
+	# ops#307: usuwanie pliku protokolu montazu tylko dla administracji i backoffice.
+	"File": ["crm.api.montaz.uprawnienie_pliku_protokolu"],
 	"Volteo Faktura": "crm.permissions.faktura_visibility.has_faktura_permission",
 	"Volteo Trify Update": "crm.permissions.faktura_visibility.has_trify_permission",
 	"Volteo Kredyt": "crm.permissions.faktura_visibility.has_kredyt_permission",
@@ -258,11 +260,18 @@ doc_events = {
 		# Nazwy systemowe (umowa, formularz kredytowy) są zarezerwowane -- poza
 		# generatorem (crm.permissions.file_nazwy_systemowe.plik_systemowy) nikt
 		# nie może wstawić File o takiej nazwie (ops#77).
+		# ops#307: pierwszy na liscie `before_insert` jest straznik protokolu
+		# montazu (tylko administracja i backoffice). `after_insert` i `on_trash`
+		# zastepuja ogolny komentarz "Attachment" wlasnym sladem Volteo dla obu
+		# sekcji Montazu (galeria i protokol).
 		"before_insert": [
+			"crm.api.montaz.strzez_protokolu_przed_wgraniem",
 			"crm.permissions.file_privacy.enforce_private_on_insert",
 			"crm.permissions.file_nazwy_systemowe.blokuj_nazwy_systemowe",
 		],
 		"before_validate": ["crm.permissions.file_privacy.enforce_private_on_validate"],
+		"after_insert": ["crm.api.montaz.slad_po_wgraniu"],
+		"on_trash": ["crm.api.montaz.slad_po_usunieciu"],
 	},
 	# Audyt specjalny Czyste Powietrze -- doctype tworzy ops/crm-audyt-cp.py
 	# (nie istnieje jeszcze na świeżym/lokalnym site). doc_events na
