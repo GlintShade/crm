@@ -310,10 +310,12 @@ import { callEnabled } from '@/composables/telephony'
 import { useBroadcast } from '@/composables/useBroadcast'
 import { formatDate, timeAgo, website, formatTime } from '@/utils'
 import { timestampCell } from '@/composables/useTimelinePreferences'
+import { getSettings } from '@/stores/settings'
+import { formatujWiekLeada } from '@/utils/wiekLeada'
 import { zasadyDotacjiBadge } from '@/utils/zasadyDotacji'
 import { rozbijTagi } from '@/utils/tagiProduktow'
 import { useOnboarding, useTelemetry } from 'frappe-ui/frappe'
-import { Avatar, Tooltip, Dropdown } from 'frappe-ui'
+import { Avatar, Tooltip, Dropdown, dayjsLocal } from 'frappe-ui'
 import { useRoute } from 'vue-router'
 import { ref, computed, reactive, h } from 'vue'
 
@@ -555,7 +557,23 @@ function parseRows(rows, columns = []) {
           label: getUser(user).full_name,
         }))
       } else if (['modified', 'creation'].includes(row)) {
-        _rows[row] = timestampCell(lead[row])
+        const komorka = timestampCell(lead[row])
+        // Prosba wlasciciela 2026-10-31: "Data utworzenia" do 48 h od
+        // utworzenia jako "HH h MM m temu" (tylko creation, nie modified).
+        const wiek =
+          row === 'creation' && lead.creation
+            ? formatujWiekLeada(dayjsLocal(lead.creation).valueOf(), Date.now())
+            : null
+        if (wiek) {
+          const exact =
+            getSettings()._settings.doc?.crm_timeline_timestamp_format ===
+            'Exact'
+          _rows[row] = exact
+            ? { ...komorka, label: wiek }
+            : { ...komorka, timeAgo: wiek }
+        } else {
+          _rows[row] = komorka
+        }
       } else if (
         ['first_response_time', 'first_responded_on', 'response_by'].includes(
           row,
