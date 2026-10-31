@@ -1,4 +1,4 @@
-import { MONTAZ, TRIFY, tekstPusty, zdjeciaDoGalerii } from '@/utils/aktualizacje'
+import { GALERIE_MONTAZU, MONTAZ, TRIFY, tekstPusty, zdjeciaDoGalerii } from '@/utils/aktualizacje'
 
 function bezDuplikatow(arr) {
   return new Set(arr).size === arr.length
@@ -120,5 +120,31 @@ describe('tekstPusty', () => {
     ['tekst ze wzmianką (span)', '<p>Cześć <span data-type="mention">@Jan Kowalski</span></p>'],
   ])('zwraca false dla %s', (_, html) => {
     expect(tekstPusty(html)).toBe(false)
+  })
+})
+
+describe('GALERIE_MONTAZU (ops#307)', () => {
+  it('ma dokładnie klucze zdjecia i protokol', () => {
+    expect(Object.keys(GALERIE_MONTAZU).sort()).toEqual(['protokol', 'zdjecia'])
+  })
+
+  it('protokol przyjmuje tylko PDF, JPG i PNG', () => {
+    const typy = GALERIE_MONTAZU.protokol.typyPlikow
+    expect([...typy].sort()).toEqual(
+      ['application/pdf', 'image/jpeg', 'image/png', '.pdf', '.jpg', '.jpeg', '.png'].sort(),
+    )
+    expect(typy.some((t) => t.startsWith('video/'))).toBe(false)
+    expect(typy).not.toContain('.webp')
+    expect(typy).not.toContain('.gif')
+  })
+
+  it('limity: protokol 10, zdjecia 20', () => {
+    expect(GALERIE_MONTAZU.protokol.limit).toBe(10)
+    expect(GALERIE_MONTAZU.zdjecia.limit).toBe(20)
+  })
+
+  it('MONTAZ.protokol jest true, TRIFY go nie ma', () => {
+    expect(MONTAZ.protokol).toBe(true)
+    expect(TRIFY).not.toHaveProperty('protokol')
   })
 })
