@@ -1,0 +1,217 @@
+# Copyright (c) 2026, ProEnergy and contributors
+# For license information, please see license.txt
+
+"""SMS do dyżurnego backoffice po leadzie z Facebooka (ops#313): logika czysta.
+
+Grafik tygodniowy co do godziny (wiersze `Volteo Dyzur SMS`: dzień tygodnia, od, do,
+użytkownik, aktywny) mówi, kto w danej chwili ma dyżur. Adapter `crm/api/sms_dyzur.py`
+czyta grafik i numery z bazy, a ten moduł odpowiada za wszystko poza I/O: wybór
+dyżurnych w chwili, walidację wiersza, sklejenie treści, klucz dziennego licznika
+i decyzję o wysyłce razem z tekstem śladu w Aktywności.
+
+Moduł celowo nie importuje ``frappe`` (precedens `crm/volteo_sms.py`). Transliteracja,
+numer w formacie SMSAPI i parametry zlecenia pochodzą z `crm/volteo_sms.py`.
+"""
+
+import re
+from collections.abc import Mapping
+from dataclasses import dataclass
+from datetime import datetime, time, timedelta
+from typing import Any
+
+from crm.volteo_sms import przygotuj_tresc
+
+DNI_TYGODNIA: tuple[str, ...] = (
+	"Poniedziałek",
+	"Wtorek",
+	"Środa",
+	"Czwartek",
+	"Piątek",
+	"Sobota",
+	"Niedziela",
+)
+"""Literały Select `dzien_tygodnia`; indeks = `datetime.weekday()`."""
+
+TRESC_DYZUR_DOMYSLNA: str = "Nowy lead FB: {klient}, tel. {telefon}, {kod}. {link}"
+"""Seed `tresc_dyzur`."""
+
+LIMIT_DZIENNY_DYZUR_DOMYSLNY: int = 100
+"""Seed `limit_dzienny_dyzur`: maks. realnie wysłanych SMS dyżurowych na dobę serwera."""
+
+PREFIKS_KLUCZA_LICZNIKA: str = "volteo:sms_dyzur:"
+TTL_LICZNIKA_SEK: int = 2 * 24 * 3600
+
+_WZORZEC_CZASU = re.compile(r"^(\d{1,2}):(\d{2})(?::(\d{2}))?$")
+
+
+def normalizuj_numer_pl(surowy: str | None) -> str | None:
+	"""Polski numer komórkowy na `+48XXXXXXXXX`; None dla pustego i niepoprawnego wejścia.
+
+	Przyjmuje `+48...`, `48...`, `0048...` i gołe 9 cyfr (spacje, kropki, myślniki
+	są ignorowane). 9 cyfr zaczynających się od 0 jest odrzucane.
+	"""
+	if not surowy or not str(surowy).strip():
+		return None
+	cyfry = re.sub(r"[\s\-.]", "", str(surowy))
+	if cyfry.startswith("+"):
+		cyfry = cyfry[1:]
+		if not cyfry.startswith("48"):
+			return None
+	elif cyfry.startswith("0048"):
+		cyfry = cyfry[2:]
+	if not cyfry.isdigit() or not cyfry.isascii():
+		return None
+	if len(cyfry) == 11 and cyfry.startswith("48"):
+		cyfry = cyfry[2:]
+	if len(cyfry) != 9 or cyfry.startswith("0"):
+		return None
+	return "+48" + cyfry
+
+
+def dzien_tygodnia(chwila: datetime) -> str:
+	"""Polska nazwa dnia tygodnia dla chwili."""
+	return DNI_TYGODNIA[chwila.weekday()]
+
+
+def parsuj_czas(wartosc: Any) -> time | None:
+	"""`time`, `timedelta` (tak Frappe zwraca pole Time) albo "HH:MM[:SS]" na `time`; inaczej None."""
+	if isinstance(wartosc, datetime):
+		return wartosc.time().replace(microsecond=0)
+	if isinstance(wartosc, time):
+		return wartosc.replace(microsecond=0)
+	if isinstance(wartosc, timedelta):
+		sekundy = int(wartosc.total_seconds())
+		if sekundy < 0 or sekundy >= 24 * 3600:
+			return None
+		return time(sekundy // 3600, (sekundy % 3600) // 60, sekundy % 60)
+	if isinstance(wartosc, str):
+		trafienie = _WZORZEC_CZASU.match(wartosc.strip())
+		if not trafienie:
+			return None
+		g, m, s = int(trafienie.group(1)), int(trafienie.group(2)), int(trafienie.group(3) or 0)
+		if g > 23 or m > 59 or s > 59:
+			return None
+		return time(g, m, s)
+	return None
+
+
+def dyzurni_w_chwili(grafik: list[Mapping[str, Any]], chwila: datetime) -> list[str]:
+	"""Unikalni użytkownicy aktywnych wierszy pasujących do chwili (`od` włącznie, `do` wyłącznie).
+
+	Kolejność stabilna wg (od, użytkownik). Wiersz z błędnym czasem jest pomijany.
+	"""
+	dzien = dzien_tygodnia(chwila)
+	teraz = chwila.time().replace(microsecond=0)
+	trafione: list[tuple[time, str]] = []
+	for wiersz in grafik or []:
+		if not wiersz.get("aktywny", 1) or wiersz.get("aktywny") in ("0", 0, False):
+			continue
+		if wiersz.get("dzien_tygodnia") != dzien:
+			continue
+		uzytkownik = wiersz.get("uzytkownik")
+		od, do = parsuj_czas(wiersz.get("od")), parsuj_czas(wiersz.get("do"))
+		if not uzytkownik or od is None or do is None:
+			continue
+		if od <= teraz < do:
+			trafione.append((od, str(uzytkownik)))
+	widziani: set[str] = set()
+	wynik: list[str] = []
+	for _od, uzytkownik in sorted(trafione):
+		if uzytkownik not in widziani:
+			widziani.add(uzytkownik)
+			wynik.append(uzytkownik)
+	return wynik
+
+
+def waliduj_wiersz(dzien: Any, od: Any, do: Any) -> str | None:
+	"""Komunikat błędu po polsku albo None, gdy wiersz jest poprawny."""
+	if dzien not in DNI_TYGODNIA:
+		return "Dzień tygodnia musi być jednym z: " + ", ".join(DNI_TYGODNIA) + "."
+	t_od, t_do = parsuj_czas(od), parsuj_czas(do)
+	if t_od is None or t_do is None:
+		return "Godziny dyżuru muszą mieć format GG:MM."
+	if t_od >= t_do:
+		return "Godzina początku dyżuru musi być wcześniejsza niż godzina końca."
+	return None
+
+
+class _SlownikBezBrakow(dict):
+	def __missing__(self, klucz: str) -> str:
+		return ""
+
+
+_PLACEHOLDER = re.compile(r"\{(\w+)\}")
+
+
+def zbuduj_tresc_dyzur(szablon: str, dane: Mapping[str, Any]) -> tuple[str, str | None]:
+	"""Podstawia placeholdery, potem transliteracja GSM-7 (`przygotuj_tresc`).
+
+	Brakujący klucz w `dane` daje pusty string, nieznany placeholder zostaje bez zmian.
+	Zwraca (treść, ostrzeżenie o liczbie części lub None).
+	"""
+	znane = {"klient", "telefon", "kod", "miejscowosc", "link"}
+
+	def _podstaw(trafienie: re.Match) -> str:
+		klucz = trafienie.group(1)
+		if klucz not in znane:
+			return trafienie.group(0)
+		wartosc = dane.get(klucz)
+		return "" if wartosc is None else str(wartosc)
+
+	surowa = _PLACEHOLDER.sub(_podstaw, szablon or "")
+	surowa = re.sub(r"[ \t]+", " ", surowa)
+	surowa = re.sub(r"\s+([,.;:])", r"\1", surowa)
+	surowa = re.sub(r"([,;:])\s*(?=[.])", "", surowa)
+	return przygotuj_tresc(surowa)
+
+
+def klucz_licznika_dnia(chwila: datetime) -> str:
+	"""Klucz Redis dziennego licznika wysłanych SMS dyżurowych (prefiks site dokłada adapter)."""
+	return f"{PREFIKS_KLUCZA_LICZNIKA}{chwila.strftime('%Y-%m-%d')}"
+
+
+def opis_chwili(chwila: datetime) -> str:
+	"""`sobota 14:05` do śladu o braku dyżuru."""
+	return f"{dzien_tygodnia(chwila).lower()} {chwila.strftime('%H:%M')}"
+
+
+@dataclass(frozen=True)
+class DecyzjaDyzur:
+	wyslij: bool
+	slad: str = ""
+	zapisz_slad: bool = True
+	limit_wyczerpany: bool = False
+
+
+def zdecyduj_wysylke_dyzur(
+	*,
+	wlaczone: bool,
+	token_ustawiony: bool,
+	chwila: datetime,
+	dyzurni: list[str],
+	imie_dyzurnego: str | None = None,
+	numer: str | None = None,
+	limit_dzienny: int = LIMIT_DZIENNY_DYZUR_DOMYSLNY,
+	wyslane_dzis: int = 0,
+) -> DecyzjaDyzur:
+	"""Czysta decyzja dla jednego dyżurnego (albo dla całej chwili, gdy `dyzurni` jest puste).
+
+	Kolejność: wyłączone (bez śladu), brak dyżuru, brak tokenu, brak numeru, limit, wysyłaj.
+	Tekst śladu nie zawiera numeru telefonu ani tokenu.
+	"""
+	if not wlaczone:
+		return DecyzjaDyzur(False, zapisz_slad=False)
+	if not dyzurni:
+		return DecyzjaDyzur(False, f"SMS dyżurowy: brak dyżuru ({opis_chwili(chwila)})")
+	osoba = imie_dyzurnego or (dyzurni[0] if dyzurni else "")
+	if not token_ustawiony:
+		return DecyzjaDyzur(False, f"SMS dyżurowy pominięty: brak tokenu SMSAPI ({osoba})")
+	if not numer:
+		return DecyzjaDyzur(False, f"SMS dyżurowy pominięty: {osoba} bez numeru telefonu")
+	if wyslane_dzis >= limit_dzienny:
+		return DecyzjaDyzur(
+			False,
+			f"SMS dyżurowy pominięty: wyczerpany limit dzienny {limit_dzienny} SMS",
+			limit_wyczerpany=True,
+		)
+	return DecyzjaDyzur(True)
