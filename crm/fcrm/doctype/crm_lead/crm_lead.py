@@ -304,13 +304,13 @@ class CRMLead(Document):
 				"label": "Czas do pierwszego kontaktu",
 				"type": "Duration",
 				"key": "custom_czas_do_kontaktu",
-				"width": "4.5rem",
+				"width": "5rem",
 			},
 			{
 				"label": "Próby kontaktu",
 				"type": "Select",
 				"key": "custom_proby_kontaktu",
-				"width": "3.5rem",
+				"width": "4.5rem",
 			},
 			{
 				"label": "Zasady rozliczeń",

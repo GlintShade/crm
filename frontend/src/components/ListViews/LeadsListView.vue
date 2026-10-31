@@ -20,7 +20,7 @@
       <ListHeaderItem
         v-for="column in columns"
         :key="column.key"
-        :item="column"
+        :item="naglowekWyrownany(column)"
         @columnWidthUpdated="emit('columnWidthUpdated', column)"
       >
         <Button
@@ -72,7 +72,10 @@
                inline (patrz galaz KOLUMNY_INLINE w #default nizej), wiec ta
                galaz musi wygrac PRZED starym prefixem-indykatorem ponizej,
                ktory teraz obsluguje juz tylko kolumny spoza KOLUMNY_INLINE. -->
-          <div v-else-if="KOLUMNY_INLINE.has(column.key)" />
+          <div
+            v-else-if="KOLUMNY_INLINE.has(column.key)"
+            :class="{ hidden: KOLUMNY_WYSRODKOWANE.has(column.key) }"
+          />
           <div v-else-if="column.key === 'status'">
             <IndicatorIcon :class="item.color" />
           </div>
@@ -320,6 +323,18 @@ import {
 import { sessionStore } from '@/stores/session'
 import { usersStore } from '@/stores/users'
 import { ref, computed, watch } from 'vue'
+
+// Kolumny CC z ikona w naglowku i kontrolka wypelniajaca komorke: naglowek
+// jest wysrodkowany, a komorka zajmuje cala szerokosc (bez odstepu prefiksu).
+const KOLUMNY_WYSRODKOWANE = new Set([
+  'custom_czas_do_kontaktu',
+  'custom_proby_kontaktu',
+])
+function naglowekWyrownany(column) {
+  return KOLUMNY_WYSRODKOWANE.has(column.key)
+    ? { ...column, align: 'center' }
+    : column
+}
 import { useRoute, useRouter } from 'vue-router'
 
 defineProps({

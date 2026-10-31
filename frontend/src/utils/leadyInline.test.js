@@ -2,6 +2,7 @@ import {
   KOLUMNY_INLINE,
   czyKolumnaInline,
   surowaWartoscKomorki,
+  probyKontaktuDoWyswietlenia,
   nowaListaZPodmienionymPolem,
 } from './leadyInline'
 
@@ -107,5 +108,22 @@ describe('nowaListaZPodmienionymPolem', () => {
       'Odrzucony',
     )
     expect(wynik).toEqual(oryginal)
+  })
+})
+
+describe('probyKontaktuDoWyswietlenia', () => {
+  it('puste wartosci daja "0"', () => {
+    expect(probyKontaktuDoWyswietlenia('')).toBe('0')
+    expect(probyKontaktuDoWyswietlenia(null)).toBe('0')
+    expect(probyKontaktuDoWyswietlenia(undefined)).toBe('0')
+    expect(probyKontaktuDoWyswietlenia('  ')).toBe('0')
+  })
+  it('zachowuje liczby jako tekst', () => {
+    expect(probyKontaktuDoWyswietlenia('3')).toBe('3')
+    expect(probyKontaktuDoWyswietlenia(5)).toBe('5')
+    expect(probyKontaktuDoWyswietlenia(0)).toBe('0')
+  })
+  it('surowaWartoscKomorki dla kolumny prob uzywa fallbacku', () => {
+    expect(surowaWartoscKomorki({ key: 'custom_proby_kontaktu' }, '')).toBe('0')
   })
 })

@@ -51,7 +51,12 @@
   wartosci sprzed edycji, rownej biezacej komorce -- brak emitu).
 -->
 <template>
-  <div class="flex items-center" @click.stop.prevent @dblclick.stop>
+  <div
+    class="flex items-center"
+    :class="{ 'w-full min-w-0': wypelnijKomorke }"
+    @click.stop.prevent
+    @dblclick.stop
+  >
     <Button
       v-if="column.key === 'status' && !mozeZmieniacStatusCC()"
       data-testid="status-cc-readonly"
@@ -101,6 +106,7 @@
 
     <CzasGgMmInput
       v-else-if="column.key === 'custom_czas_do_kontaktu'"
+      class="w-full [&_input]:text-center"
       :value="wartosc"
       :disabled="zapisywanie"
       @change="(v) => zapiszWartosc(column.key, v)"
@@ -111,7 +117,7 @@
       type="select"
       size="sm"
       variant="outline"
-      class="w-14"
+      class="w-full"
       :options="opcjeProbKontaktu"
       :modelValue="wartosc"
       :disabled="zapisywanie"
@@ -207,8 +213,17 @@ const opcjeStatusuHandlowego = computed(() => {
 
 const opcjeProbKontaktu = computed(() => {
   const pole = meta.getFields().find((f) => f.fieldname === 'custom_proby_kontaktu')
-  return pole?.options || []
+  const opcje = pole?.options || []
+  const lista = typeof opcje === 'string' ? opcje.split('\n') : opcje
+  // Bez pustego wyboru: puste pole to "0" (patrz probyKontaktuDoWyswietlenia).
+  return lista.filter((o) => (typeof o === 'object' ? o?.value !== '' : Boolean(o)))
 })
+
+const wypelnijKomorke = computed(
+  () =>
+    props.column.key === 'custom_czas_do_kontaktu' ||
+    props.column.key === 'custom_proby_kontaktu',
+)
 
 const zapisywanie = ref(false)
 

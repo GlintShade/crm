@@ -27,8 +27,20 @@ export function czyKolumnaInline(column) {
 // przez Leads.vue::parseRows: status to {label, color}, Date/Datetime to
 // {label, value}, custom_status_handlowy to goly string (Select nie ma
 // specjalnej galezi w parseRows).
+// Puste Próby kontaktu (null, '', undefined) znaczą "0": pole Select ma opcje
+// 0..5, wiec pusta wartosc nie moze byc osobnym wyborem.
+export function probyKontaktuDoWyswietlenia(wartosc) {
+  if (wartosc === null || wartosc === undefined) return '0'
+  const tekst = String(wartosc).trim()
+  return tekst === '' ? '0' : tekst
+}
+
 export function surowaWartoscKomorki(column, item) {
   if (!column) return item ?? ''
+
+  if (column.key === 'custom_proby_kontaktu') {
+    return probyKontaktuDoWyswietlenia(item)
+  }
 
   if (column.key === 'status') {
     if (item && typeof item === 'object') return item.label ?? ''

@@ -175,6 +175,21 @@
                           @change.stop="fieldChange($event.target.value, field)"
                         />
                         <FormControl
+                          v-else-if="field.fieldname === 'custom_proby_kontaktu'"
+                          :modelValue="
+                            probyKontaktuDoWyswietlenia(doc[field.fieldname])
+                          "
+                          class="form-control cursor-pointer [&_select]:cursor-pointer truncate [&>*]:!ring-0"
+                          type="select"
+                          :options="field.options"
+                          @update:modelValue="
+                            (v) => {
+                              doc[field.fieldname] = v
+                              fieldChange(v, field)
+                            }
+                          "
+                        />
+                        <FormControl
                           v-else-if="field.fieldtype === 'Select'"
                           v-model="doc[field.fieldname]"
                           class="form-control cursor-pointer [&_select]:cursor-pointer truncate [&>*]:!ring-0"
@@ -495,6 +510,7 @@ import {
 import { flt } from '@/utils/numberFormat.js'
 import { Tooltip, DatePicker, TimePicker, Switch } from 'frappe-ui'
 import { useDocument } from '@/data/document'
+import { probyKontaktuDoWyswietlenia } from '@/utils/leadyInline'
 import {
   ref,
   computed,
@@ -582,7 +598,11 @@ function parsedField(field) {
       return { label: option, value: option }
     })
 
-    if (field.options[0].value !== '' && !field.reqd) {
+    if (
+      field.options[0].value !== '' &&
+      !field.reqd &&
+      field.fieldname !== 'custom_proby_kontaktu'
+    ) {
       field.options.unshift({ label: '', value: '' })
     }
   }
