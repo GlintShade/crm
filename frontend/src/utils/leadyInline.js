@@ -70,3 +70,18 @@ export function nowaListaZPodmienionymPolem(lista, name, fieldname, wartosc) {
     wiersz.name === name ? { ...wiersz, [fieldname]: wartosc } : wiersz,
   )
 }
+
+// Minimalne szerokosci kolumn (px) przy recznym przeciaganiu krawedzi
+// naglowka: frappe-ui trzyma twardy prog 32 px (patch), a te kolumny maja
+// zawartosc, ktora przy wezszej szerokosci jest obcinana.
+export const MIN_SZEROKOSC_KOLUMNY_PX = {
+  custom_czas_do_kontaktu: 72,
+  custom_proby_kontaktu: 64,
+  _comment_count: 32,
+}
+
+export function ograniczSzerokoscKolumny(key, widthPx) {
+  const min = MIN_SZEROKOSC_KOLUMNY_PX[key] || 0
+  const w = Number(widthPx)
+  return Math.max(min, Number.isFinite(w) ? w : 0)
+}

@@ -4,6 +4,8 @@ import {
   surowaWartoscKomorki,
   probyKontaktuDoWyswietlenia,
   nowaListaZPodmienionymPolem,
+  MIN_SZEROKOSC_KOLUMNY_PX,
+  ograniczSzerokoscKolumny,
 } from './leadyInline'
 
 describe('KOLUMNY_INLINE / czyKolumnaInline', () => {
@@ -125,5 +127,21 @@ describe('probyKontaktuDoWyswietlenia', () => {
   })
   it('surowaWartoscKomorki dla kolumny prob uzywa fallbacku', () => {
     expect(surowaWartoscKomorki({ key: 'custom_proby_kontaktu' }, '')).toBe('0')
+  })
+})
+
+describe('ograniczSzerokoscKolumny', () => {
+  it('stosuje minimum per kolumna', () => {
+    expect(ograniczSzerokoscKolumny('custom_czas_do_kontaktu', 40)).toBe(72)
+    expect(ograniczSzerokoscKolumny('custom_proby_kontaktu', 50)).toBe(64)
+    expect(ograniczSzerokoscKolumny('_comment_count', 20)).toBe(32)
+  })
+  it('nie zmienia szerokosci powyzej minimum ani innych kolumn', () => {
+    expect(ograniczSzerokoscKolumny('custom_czas_do_kontaktu', 120)).toBe(120)
+    expect(ograniczSzerokoscKolumny('lead_name', 10)).toBe(10)
+  })
+  it('nieliczbowa wartosc daje minimum', () => {
+    expect(ograniczSzerokoscKolumny('_comment_count', NaN)).toBe(32)
+    expect(MIN_SZEROKOSC_KOLUMNY_PX._comment_count).toBe(32)
   })
 })

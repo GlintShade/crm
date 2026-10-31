@@ -305,7 +305,11 @@ import MultipleAvatar from '@/components/MultipleAvatar.vue'
 import ListBulkActions from '@/components/ListBulkActions.vue'
 import ListRows from '@/components/ListViews/ListRows.vue'
 import ListFooterVolteo from '@/components/ListFooterVolteo.vue'
-import { KOLUMNY_INLINE, nowaListaZPodmienionymPolem } from '@/utils/leadyInline'
+import {
+  KOLUMNY_INLINE,
+  nowaListaZPodmienionymPolem,
+  ograniczSzerokoscKolumny,
+} from '@/utils/leadyInline'
 import { formatujGgMm } from '@/utils/czasKontaktu'
 import { isTranslatable, formatDuration } from '@/utils'
 import {
@@ -377,11 +381,23 @@ const list = defineModel('list', { type: Object })
 // payload podajemy dalej niezmieniony, a Leads.vue zapisuje widok dopiero
 // przy `save`.
 function onColumnWidthUpdated(payload) {
-  const col = list.value?.data?.columns?.find((c) => c.key === payload?.key)
-  if (col && payload?.width) {
-    col.width = payload.width
+  // Minimum per kolumna (patrz ograniczSzerokoscKolumny): przycinamy zarowno
+  // szerokosc kolumny, jak i payload, zeby zapisana szerokosc byla ta sama.
+  let wyslij = payload
+  if (payload?.width) {
+    const px = parseFloat(payload.width)
+    if (Number.isFinite(px)) {
+      wyslij = {
+        ...payload,
+        width: `${ograniczSzerokoscKolumny(payload.key, px)}px`,
+      }
+    }
   }
-  emit('columnWidthUpdated', payload)
+  const col = list.value?.data?.columns?.find((c) => c.key === wyslij?.key)
+  if (col && wyslij?.width) {
+    col.width = wyslij.width
+  }
+  emit('columnWidthUpdated', wyslij)
 }
 
 function getLabel(label, column) {

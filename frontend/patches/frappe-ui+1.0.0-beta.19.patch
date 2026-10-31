@@ -205,6 +205,19 @@ index 7d1ae5d..3bef72f 100644
    const days: DateObj[] = []
    let d: Dayjs = start
    const sel = dayjs(selected)
+diff --git a/node_modules/frappe-ui/src/components/ListView/ListHeaderItem.vue b/node_modules/frappe-ui/src/components/ListView/ListHeaderItem.vue
+index 75ee84a..edac112 100644
+--- a/node_modules/frappe-ui/src/components/ListView/ListHeaderItem.vue
++++ b/node_modules/frappe-ui/src/components/ListView/ListHeaderItem.vue
+@@ -74,7 +74,7 @@ const startResizing = (e) => {
+     resizer.value.style.backgroundColor = 'rgb(199 199 199)'
+     let newWidth = initialWidth + (e.clientX - initialX)
+ 
+-    const w = `${newWidth < 50 ? 50 : newWidth}px`
++    const w = `${newWidth < 32 ? 32 : newWidth}px`
+     emit('columnWidthUpdated', { key: props.item.key, width: w, save: false })
+     triggerSave({ key: props.item.key, width: w })
+   }
 diff --git a/node_modules/frappe-ui/src/components/ListView/ListSelectBanner.vue b/node_modules/frappe-ui/src/components/ListView/ListSelectBanner.vue
 index 846acc0..38b36b4 100644
 --- a/node_modules/frappe-ui/src/components/ListView/ListSelectBanner.vue
