@@ -48,6 +48,7 @@
 import LucideLayoutDashboard from '~icons/lucide/layout-dashboard'
 import LucideNetwork from '~icons/lucide/network'
 import LucideZap from '~icons/lucide/zap'
+import LucideClock from '~icons/lucide/clock'
 import MonitorCogIcon from '~icons/lucide/monitor-cog'
 import SlidersIcon from '@/components/Icons/SlidersIcon.vue'
 import SparkleIcon from '@/components/Icons/SparkleIcon.vue'
@@ -62,6 +63,7 @@ import Users from '@/components/Settings/Users.vue'
 import VolteoUsers from '@/components/Settings/VolteoUsers.vue'
 import KartyPaneli from '@/components/Settings/KartyPaneli.vue'
 import Automatyzacje from '@/components/Settings/Automatyzacje.vue'
+import DyzurySms from '@/components/Settings/DyzurySms.vue'
 import LeadyPrzydzial from '@/components/Settings/LeadyPrzydzial.vue'
 import Hierarchy from '@/components/Settings/Hierarchy/Hierarchy.vue'
 import InviteUserPage from '@/components/Settings/InviteUserPage.vue'
@@ -182,6 +184,12 @@ const tabs = computed(() => {
           label: __('Automatyzacje'),
           icon: LucideZap,
           component: markRaw(Automatyzacje),
+          condition: () => isVolteoAdmin(),
+        },
+        {
+          label: __('Dyżury SMS'),
+          icon: LucideClock,
+          component: markRaw(DyzurySms),
           condition: () => isVolteoAdmin(),
         },
         {

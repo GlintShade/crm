@@ -300,6 +300,10 @@ doc_events = {
 		"on_update": ["crm.rozliczenia.po_zmianie_wiersza"],
 		"on_trash": ["crm.rozliczenia.po_zmianie_wiersza"],
 	},
+	# Grafik dyzurow SMS (ops#313) -- doctype tworzy ops/crm-sms-dyzury.py (nie
+	# istnieje jeszcze na swiezym/lokalnym site). Hook na nieistniejacym doctype
+	# jest bezpieczny, patrz komentarz przy "Volteo Audyt CP".
+	"Volteo Dyzur SMS": {"validate": ["crm.api.dyzury.validate_dyzur"]},
 	"Volteo Trify Update": {
 		"validate": ["crm.api.trify.validate"],
 		"after_insert": ["crm.api.trify.after_insert"],

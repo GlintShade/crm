@@ -53,6 +53,12 @@ wyzwalająca SMS. Awaria SMS nie cofa leada i nie zmienia odpowiedzi webhooka.
 Funkcja sama sprawdza przełącznik `wlaczone` w `Volteo SMS Ustawienia` (domyślnie
 wyłączony) i zapisuje wynik na leadzie.
 
+SMS do dyżurnego (ops#313)
+--------------------------
+Tym samym wzorcem, drugim callbackiem `after_commit`, kolejkujemy
+`crm.api.sms_dyzur.powiadom_dyzurnego`: powiadomienie dla osoby z backoffice, która
+według grafiku `Volteo Dyzur SMS` ma teraz dyżur. Własny przełącznik `dyzur_wlaczone`.
+
 Cała logika mapowania jest w `crm/volteo_leady_webhook.py` (bez `frappe`).
 """
 
@@ -171,6 +177,31 @@ def _zakolejkuj_sms_powitalny(lead: str) -> None:
 		)
 
 
+def _zakolejkuj_sms_dyzurny(lead: str) -> None:
+	"""SMS do dyżurnego backoffice (ops#313): ten sam wzorzec co `_zakolejkuj_sms_powitalny`.
+
+	Osobny callback `after_commit` z własnym try/except i wpisem "SMS dyżurowy" w Error Log,
+	żeby błąd jednego kanału nie zablokował drugiego ani odpowiedzi webhooka.
+	"""
+
+	def _enqueue() -> None:
+		try:
+			frappe.enqueue("crm.api.sms_dyzur.powiadom_dyzurnego", queue="short", lead=lead)
+		except Exception:
+			frappe.log_error(
+				title="SMS dyżurowy",
+				message=f"Lead {lead}: nie udało się zakolejkować\n{frappe.get_traceback()}",
+			)
+
+	try:
+		frappe.db.after_commit.add(_enqueue)
+	except Exception:
+		frappe.log_error(
+			title="SMS dyżurowy",
+			message=f"Lead {lead}: nie udało się zarejestrować callbacku\n{frappe.get_traceback()}",
+		)
+
+
 @frappe.whitelist(methods=["POST"])
 def przyjmij() -> dict:
 	"""Zakłada `CRM Lead` z ładunku Make.com; patrz docstring modułu."""
@@ -193,4 +224,5 @@ def przyjmij() -> dict:
 		ignore_permissions=True
 	)
 	_zakolejkuj_sms_powitalny(doc.name)
+	_zakolejkuj_sms_dyzurny(doc.name)
 	return {"status": "utworzony", "lead": doc.name}
