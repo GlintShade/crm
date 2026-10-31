@@ -440,6 +440,12 @@ class CRMLead(Document):
 				"key": "custom_uwagi_import",
 				"width": "16rem",
 			},
+			{
+				"label": "Data utworzenia",
+				"type": "Datetime",
+				"key": "creation",
+				"width": "8rem",
+			},
 		]
 		rows = [
 			"name",
@@ -467,6 +473,7 @@ class CRMLead(Document):
 			"custom_import_source",
 			"modified",
 			"custom_uwagi_import",
+			"creation",
 			# Nie sa osobnymi kolumnami, ale karmia awatar w pseudo-kolumnie
 			# "Klient" (patrz `Leads.vue::parseRows`, galaz `row == 'lead_name'`).
 			"first_name",
