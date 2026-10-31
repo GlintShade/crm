@@ -230,11 +230,13 @@ const zapisywanie = ref(false)
 async function zapiszWartosc(fieldname, wartoscDoZapisu) {
   zapisywanie.value = true
   try {
+    // Pulapka Frappe: frappe/client.py::set_value robi `if not value`, wiec
+    // 0 lub '' wyslane pozycyjnie zamieniaja sie w {pole: ""}, co dla pola
+    // Duration/liczbowego daje DataError 1366. Dict w `fieldname` omija te galaz.
     await call('frappe.client.set_value', {
       doctype: 'CRM Lead',
       name: props.row.name,
-      fieldname,
-      value: wartoscDoZapisu ?? '',
+      fieldname: { [fieldname]: wartoscDoZapisu ?? '' },
     })
     emit('saved', { fieldname, value: wartoscDoZapisu ?? '' })
     toast.success(__('Zapisano'))
