@@ -260,7 +260,7 @@
       totalCount: leads.data.total_count,
     }"
     @loadMore="() => loadMore++"
-    @columnWidthUpdated="() => triggerResize++"
+    @columnWidthUpdated="onColumnWidthUpdated"
     @updatePageCount="(count) => (updatedPageCount = count)"
     @applyFilter="(data) => viewControls.applyFilter(data)"
     @applyLikeFilter="(data) => viewControls.applyLikeFilter(data)"
@@ -341,6 +341,15 @@ const defaults = reactive({})
 const leads = ref({})
 const loadMore = ref(1)
 const triggerResize = ref(1)
+
+// Zapis szerokosci kolumny tylko na potwierdzonym, odebouncowanym ruchu
+// (`payload.save`), nigdy na kazdym mousemove (QueryDeadlockError), jak w
+// Deals.vue (runda 4 klik-testu, 2026 09 29). Prosba wlasciciela 2026-10-31.
+// `.value++`, bo to funkcja w <script setup>, nie wyrazenie szablonu.
+function onColumnWidthUpdated(payload) {
+  if (!payload?.save) return
+  triggerResize.value++
+}
 const updatedPageCount = ref(20)
 const viewControls = ref(null)
 

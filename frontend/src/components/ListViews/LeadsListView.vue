@@ -21,7 +21,7 @@
         v-for="column in columns"
         :key="column.key"
         :item="naglowekWyrownany(column)"
-        @columnWidthUpdated="emit('columnWidthUpdated', column)"
+        @columnWidthUpdated="onColumnWidthUpdated"
       >
         <Button
           v-if="column.key == '_liked_by'"
@@ -366,6 +366,23 @@ const router = useRouter()
 
 const pageLengthCount = defineModel({ type: Number })
 const list = defineModel('list', { type: Object })
+
+// Reczna zmiana szerokosci kolumny przeciagnieciem krawedzi naglowka
+// (prosba wlasciciela 2026-10-31, jak na liscie Umow: runda 4 klik-testu,
+// 2026 09 29, patrz DealsListView.vue). frappe-ui's ListHeaderItem emituje
+// {key, width, save}; stary wzorzec `emit('columnWidthUpdated', column)`
+// gubil ten payload, wiec nic sie nie zmienialo. Kolumne szukamy PO KLUCZU w
+// `list.value.data.columns` (prawdziwa reaktywna tablica zasobu, nie w
+// propie `columns` ani w kopii z naglowekWyrownany) i mutujemy `.width`;
+// payload podajemy dalej niezmieniony, a Leads.vue zapisuje widok dopiero
+// przy `save`.
+function onColumnWidthUpdated(payload) {
+  const col = list.value?.data?.columns?.find((c) => c.key === payload?.key)
+  if (col && payload?.width) {
+    col.width = payload.width
+  }
+  emit('columnWidthUpdated', payload)
+}
 
 function getLabel(label, column) {
   if (column.key === 'custom_czas_do_kontaktu') return formatujGgMm(label)
