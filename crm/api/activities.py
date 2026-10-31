@@ -10,11 +10,13 @@ from frappe.translate import get_translated_doctypes
 from crm.api.koszty import ADMIN_ROLE
 from crm.api.montaz import ZNACZNIK_PROTOKOLU_MONTAZU, ZNACZNIK_ZDJEC_MONTAZU
 from crm.fcrm.doctype.crm_call_log.crm_call_log import parse_call_log
+from crm.fcrm.doctype.crm_fields_layout.crm_fields_layout import get_permlevel_access
 from crm.permissions.org_hierarchy import BYPASS_ROLES, czy_autor_ma_role_cc
 from crm.volteo_aktywnosc import (
 	OKNO_GRUPOWANIA_S,
 	ROLA_D2D,
 	bez_znacznika,
+	czy_pole_widoczne,
 	czy_widoczny,
 	etykieta_wnioskodawcy,
 	grupuj,
@@ -446,8 +448,13 @@ def get_lead_activities(name: str):
 	docinfo = frappe.response["docinfo"]
 	lead_meta = frappe.get_meta("CRM Lead")
 	lead_fields = {
-		field.fieldname: {"label": field.label, "options": field.options} for field in lead_meta.fields
+		field.fieldname: {"label": field.label, "options": field.options, "permlevel": field.permlevel}
+		for field in lead_meta.fields
 	}
+	# ops#312: pola na wyzszym permlevelu (np. czas/proby kontaktu, permlevel 3)
+	# nie moga przeciekac przez Aktywnosc do kogos, kto nie ma na nie odczytu.
+	# Obliczane RAZ na wywolanie, nie per linia.
+	dozwolone_permlevele = get_permlevel_access("read", "CRM Lead")
 	avoid_fields = [
 		"converted",
 		"response_by",
@@ -540,6 +547,10 @@ def get_lead_activities(name: str):
 			field = lead_fields.get(change[0], None)
 
 			if not field or change[0] in avoid_fields or (not change[1] and not change[2]):
+				continue
+
+			# Dotyczy rownoczesnie "changed", "added" i "removed" (typ liczony nizej).
+			if not czy_pole_widoczne(field.get("permlevel"), dozwolone_permlevele):
 				continue
 
 			field_label = field.get("label") or change[0]

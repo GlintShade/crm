@@ -14,6 +14,7 @@ from crm.volteo_aktywnosc import (
 	ZNACZNIK_ZESTAW,
 	ZNACZNIKI_ADMIN,
 	bez_znacznika,
+	czy_pole_widoczne,
 	czy_widoczny,
 	etykieta_wnioskodawcy,
 	grupuj,
@@ -787,6 +788,21 @@ class TestZapiszSladBezFrappe(unittest.TestCase):
 		# od wartości doctype.
 		with self.assertRaises(ImportError):
 			zapisz_slad("LEAD-2026-00001", "tekst", doctype="CRM Lead")
+
+
+class TestCzyPoleWidoczne(unittest.TestCase):
+	def test_brak_lub_zero_zawsze_widoczne(self: "TestCzyPoleWidoczne") -> None:
+		self.assertTrue(czy_pole_widoczne(None, []))
+		self.assertTrue(czy_pole_widoczne(0, []))
+		self.assertTrue(czy_pole_widoczne("0", [1]))
+
+	def test_wyzszy_permlevel_wymaga_odczytu(self: "TestCzyPoleWidoczne") -> None:
+		self.assertFalse(czy_pole_widoczne(3, [0, 1, 2]))
+		self.assertTrue(czy_pole_widoczne(3, [0, 3]))
+		self.assertTrue(czy_pole_widoczne("3", (0, 3)))
+
+	def test_zly_permlevel_ukryty(self: "TestCzyPoleWidoczne") -> None:
+		self.assertFalse(czy_pole_widoczne("abc", [0, 3]))
 
 
 if __name__ == "__main__":

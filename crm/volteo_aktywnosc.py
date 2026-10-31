@@ -329,6 +329,21 @@ def tekst_sladu(rodzaj: str, **dane: object) -> str:
 	raise ValueError(f"Nieznany rodzaj śladu: {rodzaj!r}")
 
 
+def czy_pole_widoczne(permlevel_pola: int | str | None, dozwolone_permlevele: Iterable[int]) -> bool:
+	"""Czy linia zmiany pola ma trafic do Aktywnosci wolajacego (ops#312).
+
+	Pole bez permlevelu (None lub 0) jest zawsze widoczne; pole na wyzszym
+	permlevelu tylko wtedy, gdy wolajacy ma na ten permlevel odczyt.
+	"""
+	try:
+		poziom = int(permlevel_pola or 0)
+	except (TypeError, ValueError):
+		return False
+	if poziom == 0:
+		return True
+	return poziom in set(dozwolone_permlevele)
+
+
 def czy_widoczny(text: str, role: Iterable[str], admin_role: Iterable[str]) -> bool:
 	"""False, gdy `text` zaczyna się od któregoś znacznika z `ZNACZNIKI_ADMIN`, a `role`
 	nie ma części wspólnej z `admin_role`. W przeciwnym razie True."""
