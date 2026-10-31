@@ -107,7 +107,7 @@
       <p class="text-p-sm text-ink-gray-5 max-w-2xl">
         {{
           __(
-            'Wyłączenie linii ukrywa Kalkulator i Dokumenty tej linii dla wskazanego użytkownika i blokuje jej użycie po stronie serwera. Wyłączenie „Leady” ukrywa moduł Leady (listę i mapę) i blokuje przydzielanie temu użytkownikowi. Nie dotyczy kont System Manager / Volteo Core Admin / Volteo Backend, te zawsze mają pełny dostęp.',
+            'Wyłączenie linii ukrywa Kalkulator i Dokumenty tej linii dla wskazanego użytkownika i blokuje jej użycie po stronie serwera. Wyłączenie „Leady” ukrywa moduł Leady (listę i mapę) i blokuje przydzielanie temu użytkownikowi. Nie dotyczy kont System Manager / Volteo Core Admin / Volteo Backend, te zawsze mają pełny dostęp. Włączenie „Zmiana statusu CC” pozwala wskazanemu handlowcowi zmieniać status CC leada (domyślnie zablokowane).',
           )
         }}
       </p>
@@ -140,6 +140,13 @@
             :modelValue="Boolean(linieForm.leady)"
             :disabled="setLinie.loading"
             @update:modelValue="(val) => (linieForm.leady = val ? 1 : 0)"
+          />
+          <FormControl
+            type="checkbox"
+            :label="__('Zmiana statusu CC')"
+            :modelValue="Boolean(linieForm.statusCc)"
+            :disabled="setLinie.loading"
+            @update:modelValue="(val) => (linieForm.statusCc = val ? 1 : 0)"
           />
         </div>
       </div>
@@ -407,6 +414,8 @@ function emptyLinieForm() {
     // Unchecked by default so a blind save (no matched user, or admin who
     // doesn't touch the checkbox) never grants Leady access by accident.
     leady: 0,
+    // Zmiana statusu CC przez handlowca (ops#308): domyslnie wylaczona.
+    statusCc: 0,
   }
 }
 
@@ -454,6 +463,7 @@ watch(
     linieForm.oze = cached.custom_linia_oze === undefined ? 1 : cached.custom_linia_oze ? 1 : 0
     linieForm.cp = cached.custom_linia_cp === undefined ? 1 : cached.custom_linia_cp ? 1 : 0
     linieForm.leady = cached.custom_linia_leady ? 1 : 0
+    linieForm.statusCc = cached.custom_zmiana_statusu_cc ? 1 : 0
   },
 )
 
@@ -464,6 +474,7 @@ const setLinie = createResource({
     oze: linieForm.oze ? 1 : 0,
     cp: linieForm.cp ? 1 : 0,
     leady: linieForm.leady ? 1 : 0,
+    status_cc: linieForm.statusCc ? 1 : 0,
   }),
   onSuccess: (data) => {
     linieError.value = ''
@@ -477,6 +488,7 @@ const setLinie = createResource({
       target.custom_linia_oze = data.custom_linia_oze
       target.custom_linia_cp = data.custom_linia_cp
       target.custom_linia_leady = data.custom_linia_leady
+      target.custom_zmiana_statusu_cc = data.custom_zmiana_statusu_cc
     }
     Object.assign(linieForm, emptyLinieForm())
   },

@@ -47,6 +47,21 @@ class TestCzyMozeZmienicStatusCC(unittest.TestCase):
 		self.assertFalse(moze("h@x.pl", ("Volteo D2D Sales",)))
 		self.assertFalse(moze("h@x.pl", {"Volteo D2D Sales"}))
 
+	def test_d2d_z_flaga(self):
+		self.assertTrue(moze("h@x.pl", ["Volteo D2D Sales"], True))
+
+	def test_d2d_bez_flagi(self):
+		self.assertFalse(moze("h@x.pl", ["Volteo D2D Sales"], False))
+
+	def test_flaga_bez_rol(self):
+		self.assertTrue(moze("h@x.pl", None, True))
+
+	def test_administrator_bez_flagi(self):
+		self.assertTrue(moze("Administrator", ["Volteo D2D Sales"], False))
+
+	def test_cc_bez_flagi(self):
+		self.assertTrue(moze("cc@x.pl", ["Volteo Call Center"], False))
+
 
 if __name__ == "__main__":
 	unittest.main()

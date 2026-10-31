@@ -269,7 +269,7 @@ def volteo_zmien_role(email: str, rola: str) -> dict:
 
 
 @frappe.whitelist()
-def volteo_ustaw_linie(email: str, oze: int, cp: int, leady: int = 0) -> dict:
+def volteo_ustaw_linie(email: str, oze: int, cp: int, leady: int = 0, status_cc: int = 0) -> dict:
 	"""Ustawia flagi dostępu do linii produktowych (`custom_linia_oze` /
 	`custom_linia_cp`, issue #16) oraz dostępu do modułu Leady
 	(`custom_linia_leady`, issue #27) na koncie `User`.
@@ -287,6 +287,11 @@ def volteo_ustaw_linie(email: str, oze: int, cp: int, leady: int = 0) -> dict:
 	bezpiecznym rolloutem z issue #27 — patrz `ops/crm-linia-leady.py`), żeby
 	istniejące wywołania bez tego parametru nie włączały modułu Leady
 	niechcący.
+
+	`status_cc` zapisuje `custom_zmiana_statusu_cc` (ops#308, uwaga 81):
+	zezwolenie dla wskazanego handlowca na zmianę statusu CC leada. Domyślnie 0
+	z tego samego powodu co `leady`: stare wywołanie bez parametru nie może
+	włączyć flagi niechcący.
 	"""
 	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
 
@@ -300,6 +305,7 @@ def volteo_ustaw_linie(email: str, oze: int, cp: int, leady: int = 0) -> dict:
 	oze_flaga = 1 if cint(oze) else 0
 	cp_flaga = 1 if cint(cp) else 0
 	leady_flaga = 1 if cint(leady) else 0
+	status_cc_flaga = 1 if cint(status_cc) else 0
 
 	frappe.db.set_value(
 		"User",
@@ -308,6 +314,7 @@ def volteo_ustaw_linie(email: str, oze: int, cp: int, leady: int = 0) -> dict:
 			"custom_linia_oze": oze_flaga,
 			"custom_linia_cp": cp_flaga,
 			"custom_linia_leady": leady_flaga,
+			"custom_zmiana_statusu_cc": status_cc_flaga,
 		},
 		update_modified=False,
 	)
@@ -317,6 +324,7 @@ def volteo_ustaw_linie(email: str, oze: int, cp: int, leady: int = 0) -> dict:
 		"custom_linia_oze": oze_flaga,
 		"custom_linia_cp": cp_flaga,
 		"custom_linia_leady": leady_flaga,
+		"custom_zmiana_statusu_cc": status_cc_flaga,
 	}
 
 

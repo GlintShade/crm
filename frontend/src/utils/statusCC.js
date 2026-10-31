@@ -1,6 +1,8 @@
 // Uwaga 71: handlowiec (Volteo D2D Sales bez rol uprzywilejowanych) nie zmienia
 // statusu CC leada. Czysta funkcja, wzorem serwerowego
 // crm/volteo_leady_status.py::czy_moze_zmienic_status_cc (ta sama regula).
+// Uwaga 81: flaga uzytkownika `custom_zmiana_statusu_cc` (ustawiana przez
+// administracje w Ustawienia -> Uzytkownicy) zdejmuje blokade z wybranego handlowca.
 const ROLE_ZMIANY_STATUSU_CC = [
   'Volteo Call Center',
   'Volteo Backend',
@@ -8,8 +10,8 @@ const ROLE_ZMIANY_STATUSU_CC = [
   'System Manager',
 ]
 
-export function mozeZmieniacStatusCC(roles, isAdminUser = false) {
-  if (isAdminUser) return true
+export function mozeZmieniacStatusCC(roles, isAdminUser = false, flagaUzytkownika = false) {
+  if (isAdminUser || flagaUzytkownika) return true
   const lista = roles || []
   if (lista.some((r) => ROLE_ZMIANY_STATUSU_CC.includes(r))) return true
   return !lista.includes('Volteo D2D Sales')
