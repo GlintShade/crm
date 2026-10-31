@@ -75,8 +75,10 @@ def ma_flage_zmiany_statusu_cc(user: str) -> bool:
 	jeszcze na witrynie (skrypt ops nie byl uruchomiony), zwraca False, czyli
 	dotychczasowe zachowanie (blokada).
 	"""
-	if not user or user == "Administrator":
+	if user == "Administrator":
 		return True
+	if not user:
+		return False
 	if not frappe.get_meta("User").has_field("custom_zmiana_statusu_cc"):
 		return False
 	return bool(cint(frappe.db.get_value("User", user, "custom_zmiana_statusu_cc")))
