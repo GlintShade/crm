@@ -282,6 +282,7 @@
 </template>
 
 <script setup>
+import { szerokoscKolumnyZMinimum } from '@/utils/leadyInline'
 import ViewBreadcrumbs from '@/components/ViewBreadcrumbs.vue'
 import WidokiLeadowPasek from '@/components/WidokiLeadowPasek.vue'
 import MultipleAvatar from '@/components/MultipleAvatar.vue'
@@ -386,10 +387,11 @@ const columns = computed(() => {
   // Set align right for last column
   if (_columns.length) {
     _columns = _columns.map((col, index) => {
+      const c = szerokoscKolumnyZMinimum(col)
       if (index === _columns.length - 1) {
-        return { ...col, align: 'right' }
+        return { ...c, align: 'right' }
       }
-      return col
+      return c
     })
   }
 

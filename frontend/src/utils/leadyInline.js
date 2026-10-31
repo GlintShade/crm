@@ -85,3 +85,17 @@ export function ograniczSzerokoscKolumny(key, widthPx) {
   const w = Number(widthPx)
   return Math.max(min, Number.isFinite(w) ? w : 0)
 }
+
+// Egzekwuje minimum przy wczytaniu zapisanego widoku: zwraca nowy obiekt
+// kolumny z szerokoscia "NNNpx" tylko gdy zapisana szerokosc (px lub rem,
+// 1rem = 16px jak w frappe-ui) jest ponizej minimum; w pozostalych
+// przypadkach zwraca ta sama kolumne bez zmian.
+export function szerokoscKolumnyZMinimum(column) {
+  const min = column && MIN_SZEROKOSC_KOLUMNY_PX[column.key]
+  if (!min || !column.width) return column
+  const m = String(column.width).match(/^\s*([\d.]+)\s*(px|rem)?\s*$/)
+  if (!m) return column
+  const px = parseFloat(m[1]) * (m[2] === 'rem' ? 16 : 1)
+  if (!Number.isFinite(px) || px >= min) return column
+  return { ...column, width: `${min}px` }
+}

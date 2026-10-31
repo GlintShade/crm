@@ -6,6 +6,7 @@ import {
   nowaListaZPodmienionymPolem,
   MIN_SZEROKOSC_KOLUMNY_PX,
   ograniczSzerokoscKolumny,
+  szerokoscKolumnyZMinimum,
 } from './leadyInline'
 
 describe('KOLUMNY_INLINE / czyKolumnaInline', () => {
@@ -143,5 +144,31 @@ describe('ograniczSzerokoscKolumny', () => {
   it('nieliczbowa wartosc daje minimum', () => {
     expect(ograniczSzerokoscKolumny('_comment_count', NaN)).toBe(32)
     expect(MIN_SZEROKOSC_KOLUMNY_PX._comment_count).toBe(32)
+  })
+})
+
+describe('szerokoscKolumnyZMinimum', () => {
+  const k = 'custom_czas_do_kontaktu'
+  it('px ponizej minimum -> minimum w px, nowy obiekt', () => {
+    const c = { key: k, width: '63px' }
+    const r = szerokoscKolumnyZMinimum(c)
+    expect(r.width).toBe('72px')
+    expect(r).not.toBe(c)
+    expect(c.width).toBe('63px')
+  })
+  it('rem ponizej minimum', () => {
+    expect(szerokoscKolumnyZMinimum({ key: k, width: '4rem' }).width).toBe('72px')
+  })
+  it('px i rem powyzej minimum bez zmian', () => {
+    const a = { key: k, width: '80px' }
+    const b = { key: k, width: '4.5rem' }
+    expect(szerokoscKolumnyZMinimum(a)).toBe(a)
+    expect(szerokoscKolumnyZMinimum(b)).toBe(b)
+  })
+  it('nieznany klucz i brak szerokosci bez zmian', () => {
+    const a = { key: 'lead_name', width: '10px' }
+    const b = { key: k }
+    expect(szerokoscKolumnyZMinimum(a)).toBe(a)
+    expect(szerokoscKolumnyZMinimum(b)).toBe(b)
   })
 })
