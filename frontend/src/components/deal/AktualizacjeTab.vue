@@ -26,6 +26,9 @@
   "Dodaj wpis" galerię MontazZdjecia.vue, "Zdjęcia z realizacji" - jedna
   wspólna galeria dla całej szansy, niezależna od wpisów tego strumienia.
 
+  `konfig.protokol === true` (tylko MONTAZ, ops#307) montuje pod galerią
+  sekcję "Protokół montażu" (ten sam komponent, rodzaj="protokol").
+
   `konfig.prywatneNotatki === true` (tylko MONTAZ, issue #213) montuje nad
   kartą "Dodaj wpis" (nad galerią zdjęć, gdy obie są obecne) strumień
   notatek prywatnych administracji (NotatkiPrywatne.vue, doctype
@@ -37,6 +40,7 @@
     <div class="mx-auto flex w-full max-w-3xl flex-col gap-5">
       <NotatkiPrywatne v-if="konfig.prywatneNotatki" :deal-id="dealId" />
       <MontazZdjecia v-if="konfig.zdjecia" :deal-id="dealId" />
+      <MontazZdjecia v-if="konfig.protokol" :deal-id="dealId" rodzaj="protokol" />
 
       <!-- Dodaj wpis -->
       <div class="rounded-lg border border-outline-gray-2 p-4">

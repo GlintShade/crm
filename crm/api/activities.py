@@ -8,7 +8,7 @@ from frappe.query_builder import JoinType
 from frappe.translate import get_translated_doctypes
 
 from crm.api.koszty import ADMIN_ROLE
-from crm.api.montaz import ZNACZNIK_ZDJEC_MONTAZU
+from crm.api.montaz import ZNACZNIK_PROTOKOLU_MONTAZU, ZNACZNIK_ZDJEC_MONTAZU
 from crm.fcrm.doctype.crm_call_log.crm_call_log import parse_call_log
 from crm.permissions.org_hierarchy import BYPASS_ROLES, czy_autor_ma_role_cc
 from crm.volteo_aktywnosc import (
@@ -1320,6 +1320,8 @@ def get_attachments(doctype: str, name: str):
 	# ZNACZNIK_ZDJEC_MONTAZU, celowo pominięte tutaj, żeby nie dublowały się w
 	# zakładce Pliki. Filtr po wczytaniu, nie w SQL: zależność od tego, jak rdzeń
 	# traktuje NULL w ifnull(attached_to_field, ...), jest niepotrzebnym ryzykiem.
+	# VOLTEO (ops#307): to samo dotyczy protokołu montażu (znacznik
+	# ZNACZNIK_PROTOKOLU_MONTAZU) - własna sekcja w zakładce Montaż.
 	# Klucz attached_to_field jest zdejmowany z odpowiedzi, żeby kształt danych dla
 	# AttachmentArea.vue się nie zmienił.
 	# VOLTEO (issue #198): załączniki notatek (zakładka Notatki) to wiersze File
@@ -1338,7 +1340,7 @@ def get_attachments(doctype: str, name: str):
 			"mozna_zmienic_nazwe": not (doctype == "CRM Deal" and czy_plik_systemowy(wiersz.file_name, name)),
 		}
 		for wiersz in zalaczniki
-		if wiersz.attached_to_field != ZNACZNIK_ZDJEC_MONTAZU
+		if wiersz.attached_to_field not in (ZNACZNIK_ZDJEC_MONTAZU, ZNACZNIK_PROTOKOLU_MONTAZU)
 		and not (wiersz.attached_to_field or "").startswith(_PREFIKS_ZNACZNIKA_NOTATKI)
 	]
 

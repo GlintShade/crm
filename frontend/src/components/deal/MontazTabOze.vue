@@ -2,6 +2,7 @@
   Zakładka "Montaż" na szansach OZE (issue #204, migracja Montazu do
   Volteo Notatka) - wyglądem analogiczna do OsdDotacjaTab.vue: galeria
   "Zdjęcia z realizacji" (MontazZdjecia.vue, ops#191, bez zmian) nad
+  sekcją "Protokół montażu" (ten sam komponent, rodzaj="protokol", ops#307) i
   strumieniem notatek tej zakładki (NotatkiStrumien.vue, zakladka="Montaz",
   issue W2). Ten komponent jest czystą kompozycją tych dwóch - cała logika
   żyje w nich, ten plik dostarcza wyłącznie prop `dealId` do obu i wspólny
@@ -27,6 +28,7 @@
     <div class="mx-auto flex w-full max-w-3xl flex-col gap-5">
       <NotatkiPrywatne :deal-id="dealId" />
       <MontazZdjecia :deal-id="dealId" />
+      <MontazZdjecia :deal-id="dealId" rodzaj="protokol" />
       <NotatkiStrumien :deal-id="dealId" zakladka="Montaz" />
     </div>
   </div>

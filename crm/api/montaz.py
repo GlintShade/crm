@@ -46,20 +46,26 @@ sprawdzany jawnie, `frappe.db.get_all` pomija natomiast uprawnienia `File`.
 
 Nie używać `crm.api.delete_attachment` (usuwa po `file_url`, pierwszy
 pasujący wiersz - przy dedupie po `content_hash` mógłby trafić w cudzy plik).
+
+Sekcja "Protokol montazu" (ops#307): ten sam wzorzec "File + znacznik, zero
+schematu", znacznik `ZNACZNIK_PROTOKOLU_MONTAZU`, te same uprawnienia (odczyt
+szansy -> widok, zapis szansy -> dodawanie i usuwanie). Dopuszczone tylko PDF,
+JPG i PNG (`crm.volteo_pliki.czy_plik_protokolu`). Wszystkie pulapki powyzej
+dotycza ja tak samo.
 """
 
 import frappe
 from frappe import _
 
-from crm.volteo_pliki import czy_media_montazu
+from crm.volteo_pliki import czy_media_montazu, czy_plik_protokolu
 
 ZNACZNIK_ZDJEC_MONTAZU = "zdjecia_montaz"
+ZNACZNIK_PROTOKOLU_MONTAZU = "protokol_montaz"
 
 _POLA = ["name", "file_name", "file_url", "file_size", "creation", "owner"]
 
 
-@frappe.whitelist()
-def zdjecia_montazu(deal: str) -> dict:
+def _pliki_ze_znacznikiem(deal: str, znacznik: str, filtr) -> list:
 	if not frappe.has_permission("CRM Deal", "read", deal):
 		frappe.throw(_("Brak uprawnień do tej szansy sprzedaży."), frappe.PermissionError)
 
@@ -69,7 +75,7 @@ def zdjecia_montazu(deal: str) -> dict:
 			filters={
 				"attached_to_doctype": "CRM Deal",
 				"attached_to_name": deal,
-				"attached_to_field": ZNACZNIK_ZDJEC_MONTAZU,
+				"attached_to_field": znacznik,
 			},
 			fields=_POLA,
 			order_by="creation asc",
@@ -77,15 +83,10 @@ def zdjecia_montazu(deal: str) -> dict:
 		)
 		or []
 	)
-
-	return {
-		"zdjecia": [wiersz for wiersz in wiersze if czy_media_montazu(wiersz.file_name)],
-		"can_edit": bool(frappe.has_permission("CRM Deal", "write", deal)),
-	}
+	return [wiersz for wiersz in wiersze if filtr(wiersz.file_name)]
 
 
-@frappe.whitelist(methods=["POST"])
-def usun_zdjecie_montazu(deal: str, name: str) -> None:
+def _usun_ze_znacznikiem(deal: str, znacznik: str, name: str) -> None:
 	if not frappe.has_permission("CRM Deal", "write", deal):
 		frappe.throw(_("Brak uprawnień do tej szansy sprzedaży."), frappe.PermissionError)
 
@@ -99,8 +100,34 @@ def usun_zdjecie_montazu(deal: str, name: str) -> None:
 		not plik
 		or plik.attached_to_doctype != "CRM Deal"
 		or plik.attached_to_name != deal
-		or plik.attached_to_field != ZNACZNIK_ZDJEC_MONTAZU
+		or plik.attached_to_field != znacznik
 	):
 		frappe.throw(_("Plik nie istnieje."), frappe.DoesNotExistError)
 
 	frappe.delete_doc("File", name, ignore_permissions=True)
+
+
+@frappe.whitelist()
+def zdjecia_montazu(deal: str) -> dict:
+	return {
+		"zdjecia": _pliki_ze_znacznikiem(deal, ZNACZNIK_ZDJEC_MONTAZU, czy_media_montazu),
+		"can_edit": bool(frappe.has_permission("CRM Deal", "write", deal)),
+	}
+
+
+@frappe.whitelist(methods=["POST"])
+def usun_zdjecie_montazu(deal: str, name: str) -> None:
+	_usun_ze_znacznikiem(deal, ZNACZNIK_ZDJEC_MONTAZU, name)
+
+
+@frappe.whitelist()
+def protokol_montazu(deal: str) -> dict:
+	return {
+		"pliki": _pliki_ze_znacznikiem(deal, ZNACZNIK_PROTOKOLU_MONTAZU, czy_plik_protokolu),
+		"can_edit": bool(frappe.has_permission("CRM Deal", "write", deal)),
+	}
+
+
+@frappe.whitelist(methods=["POST"])
+def usun_protokol_montazu(deal: str, name: str) -> None:
+	_usun_ze_znacznikiem(deal, ZNACZNIK_PROTOKOLU_MONTAZU, name)

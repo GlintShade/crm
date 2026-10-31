@@ -1,3 +1,5 @@
+import { TYPY_PLIKOW_WIDEO } from '@/utils/audytPodglad'
+
 // Konfiguracje strumieni aktualizacji na szansie (zakładki typu "wpis + oś
 // czasu"): Montaż (Volteo Montaz Update) i Trify (Volteo Trify Update).
 // Renderuje je jeden wspólny komponent, AktualizacjeTab.vue — ten plik
@@ -9,6 +11,9 @@
 // galerię "Zdjęcia z realizacji" (komponent MontazZdjecia.vue) nad kartą
 // "Dodaj wpis". TRIFY nie ma tego klucza wcale (nie samo `false`) - galeria
 // jest jedna, wspólna dla całej szansy, nie per strumień.
+//
+// `protokol: true` (tylko MONTAZ, ops#307) włącza pod galerią zdjęć sekcję
+// "Protokół montażu" (ten sam MontazZdjecia.vue z `rodzaj="protokol"`, PDF/JPG/PNG).
 //
 // `prywatneNotatki: true` (tylko MONTAZ, issue #213) włącza w
 // AktualizacjeTab.vue strumień notatek prywatnych administracji
@@ -47,6 +52,7 @@ export const MONTAZ = {
   doctype: 'Volteo Montaz Update',
   html: false,
   zdjecia: true,
+  protokol: true,
   prywatneNotatki: true,
   typy: ['Notatka', 'Telefon', 'Wizyta', 'Termin montażu', 'Problem'],
   placeholder: 'Np. Umówiono termin montażu na 20.07…',
@@ -65,6 +71,47 @@ export const TRIFY = {
   pusty: 'Brak wpisów Trify.',
   przycisk: 'Dodaj wpis',
   blad: 'Nie udało się dodać wpisu',
+}
+
+// Konfiguracja dwóch sekcji plików w zakładce Montaż (MontazZdjecia.vue,
+// prop `rodzaj`): galeria zdjęć i filmów oraz protokół montażu (ops#307).
+// Napisy surowym polskim tekstem, tłumaczenie przez __() w komponencie.
+export const GALERIE_MONTAZU = {
+  zdjecia: {
+    naglowek: 'Zdjęcia i filmy z realizacji',
+    pusty: 'Brak zdjęć i filmów',
+    przycisk: 'Dodaj zdjęcia lub filmy',
+    ikona: 'lucide-camera',
+    fieldname: 'zdjecia_montaz',
+    endpointLista: 'crm.api.montaz.zdjecia_montazu',
+    endpointUsun: 'crm.api.montaz.usun_zdjecie_montazu',
+    kluczListy: 'zdjecia',
+    typyPlikow: [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'image/gif',
+      '.jpg',
+      '.jpeg',
+      '.png',
+      '.webp',
+      '.gif',
+      ...TYPY_PLIKOW_WIDEO,
+    ],
+    limit: 20,
+  },
+  protokol: {
+    naglowek: 'Protokół montażu',
+    pusty: 'Brak protokołu',
+    przycisk: 'Dodaj protokół',
+    ikona: 'lucide-file-text',
+    fieldname: 'protokol_montaz',
+    endpointLista: 'crm.api.montaz.protokol_montazu',
+    endpointUsun: 'crm.api.montaz.usun_protokol_montazu',
+    kluczListy: 'pliki',
+    typyPlikow: ['application/pdf', 'image/jpeg', 'image/png', '.pdf', '.jpg', '.jpeg', '.png'],
+    limit: 10,
+  },
 }
 
 // Czy wpis (tekst zwykły albo HTML z edytora) jest w praktyce pusty.

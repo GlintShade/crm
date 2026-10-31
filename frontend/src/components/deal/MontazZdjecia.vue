@@ -1,6 +1,9 @@
 <!--
   Galeria "Zdjęcia i filmy z realizacji" w zakładce Montaż (AktualizacjeTab.vue,
-  konfig.zdjecia === true, ops#191; filmy dodane w b66). Jedna galeria per
+  konfig.zdjecia === true, ops#191; filmy dodane w b66). Od ops#307 ten sam
+  komponent obsługuje też sekcję "Protokół montażu" (prop `rodzaj="protokol"`,
+  PDF/JPG/PNG, limit 10); cała różnica siedzi w `GALERIE_MONTAZU`
+  (utils/aktualizacje.js), wartość `zdjecia` odtwarza dawną galerię 1:1. Jedna galeria per
   szansa, nie per wpis strumienia Montaż: widoczna dla każdego, kto widzi
   szansę, edytowalna (dodawanie/usuwanie) przez każdego z prawem zapisu
   szansy.
@@ -22,16 +25,16 @@
 <template>
   <div class="rounded-lg border border-outline-gray-2 p-3">
     <div class="flex items-center gap-2">
-      <div class="text-base font-medium text-ink-gray-8">{{ __('Zdjęcia i filmy z realizacji') }}</div>
+      <div class="text-base font-medium text-ink-gray-8">{{ __(konfig.naglowek) }}</div>
       <Badge v-if="zdjecia.length" :label="licznikEtykieta" />
-      <div v-else class="text-xs text-ink-gray-5">{{ __('Brak zdjęć i filmów') }}</div>
+      <div v-else class="text-xs text-ink-gray-5">{{ __(konfig.pusty) }}</div>
       <div class="flex-1" />
       <Button
         v-if="mozeDodac"
         size="sm"
         variant="subtle"
-        iconLeft="lucide-camera"
-        :label="__('Dodaj zdjęcia lub filmy')"
+        :iconLeft="konfig.ikona"
+        :label="__(konfig.przycisk)"
         @click="showUploader = true"
       />
     </div>
@@ -43,7 +46,7 @@
         class="group relative aspect-square overflow-hidden rounded-md border border-outline-gray-2"
       >
         <img
-          v-if="!jestWideo(z.url)"
+          v-if="!jestWideo(z.url) && !jestPdf(z.url)"
           :src="z.url"
           :alt="z.etykieta"
           loading="lazy"
@@ -55,7 +58,8 @@
           class="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 px-2"
           @click="otworzPodglad(z.klucz)"
         >
-          <FileVideoIcon class="size-8 text-ink-gray-5" />
+          <FilePdfIcon v-if="jestPdf(z.url)" class="size-8 text-ink-gray-5" />
+          <FileVideoIcon v-else class="size-8 text-ink-gray-5" />
           <span class="w-full truncate text-center text-xs text-ink-gray-6">{{ z.etykieta }}</span>
         </div>
         <div
@@ -80,7 +84,7 @@
       v-model="showUploader"
       doctype="CRM Deal"
       :docname="dealId"
-      fieldname="zdjecia_montaz"
+      :fieldname="konfig.fieldname"
       :options="opcjeUploadu"
       @after="zasob.reload()"
     />
@@ -91,32 +95,40 @@
 
 <script setup>
 import AudytPodgladZdjec from '@/components/deal/AudytPodgladZdjec.vue'
+import FilePdfIcon from '@/components/Icons/FilePdfIcon.vue'
 import FileVideoIcon from '@/components/Icons/FileVideoIcon.vue'
 import FilesUploader from '@/components/FilesUploader/FilesUploader.vue'
 import { globalStore } from '@/stores/global'
-import { zdjeciaDoGalerii } from '@/utils/aktualizacje'
-import { TYPY_PLIKOW_WIDEO, indeksDlaKlucza, jestWideo, zbudujListePodgladu } from '@/utils/audytPodglad'
+import { GALERIE_MONTAZU, zdjeciaDoGalerii } from '@/utils/aktualizacje'
+import { indeksDlaKlucza, jestPdf, jestWideo, zbudujListePodgladu } from '@/utils/audytPodglad'
 import { Badge, Button, call, createResource, toast } from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
 
 const props = defineProps({
   dealId: { type: String, required: true },
+  rodzaj: {
+    type: String,
+    default: 'zdjecia',
+    validator: (v) => Object.keys(GALERIE_MONTAZU).includes(v),
+  },
 })
+
+const konfig = GALERIE_MONTAZU[props.rodzaj]
 
 const { $dialog } = globalStore()
 
-const MAX_ZDJEC = 20
+const MAX_ZDJEC = konfig.limit
 
 // Pełna kropkowana ścieżka OBOWIĄZKOWA (pułapka HTTP 417 na gołej nazwie
 // metody, udokumentowana przy innych whitelisted API forka).
 const zasob = createResource({
-  url: 'crm.api.montaz.zdjecia_montazu',
+  url: konfig.endpointLista,
   params: { deal: props.dealId },
   auto: true,
   onError: (e) => toast.error(e?.messages?.[0] || __('Nie udało się pobrać plików')),
 })
 
-const zdjecia = computed(() => zdjeciaDoGalerii(zasob.data?.zdjecia))
+const zdjecia = computed(() => zdjeciaDoGalerii(zasob.data?.[konfig.kluczListy]))
 const canEdit = computed(() => !!zasob.data?.can_edit)
 const mozeDodac = computed(() => canEdit.value && zdjecia.value.length < MAX_ZDJEC)
 const licznikEtykieta = computed(() =>
@@ -128,18 +140,7 @@ const opcjeUploadu = computed(() => ({
   allowMultiple: true,
   allowWebLink: false,
   restrictions: {
-    allowedFileTypes: [
-      'image/jpeg',
-      'image/png',
-      'image/webp',
-      'image/gif',
-      '.jpg',
-      '.jpeg',
-      '.png',
-      '.webp',
-      '.gif',
-      ...TYPY_PLIKOW_WIDEO,
-    ],
+    allowedFileTypes: konfig.typyPlikow,
     maxNumberOfFiles: Math.max(MAX_ZDJEC - zdjecia.value.length, 0),
   },
 }))
@@ -156,11 +157,18 @@ watch(showUploader, (otwarty) => {
   if (!otwarty) zasob.reload()
 })
 
-const podgladLista = computed(() => zbudujListePodgladu(zdjecia.value))
+// PDF-y zostają otwierane w nowej karcie (natywna przeglądarka PDF jest lepsza
+// niż iframe w modalu), decyzja właściciela, tak samo jak w AudytPhotoSlot.vue.
+const podgladLista = computed(() => zbudujListePodgladu(zdjecia.value.filter((z) => !jestPdf(z.url))))
 const podgladOtwarty = ref(false)
 const podgladIndeks = ref(0)
 
 function otworzPodglad(klucz) {
+  const plik = zdjecia.value.find((z) => z.klucz === klucz)
+  if (plik && jestPdf(plik.url)) {
+    window.open(plik.url, '_blank', 'noopener')
+    return
+  }
   const idx = indeksDlaKlucza(podgladLista.value, klucz)
   if (idx === -1) return
   podgladIndeks.value = idx
@@ -178,7 +186,7 @@ function usun(z) {
         variant: 'solid',
         onClick: async (close) => {
           try {
-            await call('crm.api.montaz.usun_zdjecie_montazu', { deal: props.dealId, name: z.klucz })
+            await call(konfig.endpointUsun, { deal: props.dealId, name: z.klucz })
             await zasob.reload()
             close()
           } catch (err) {

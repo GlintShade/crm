@@ -6,6 +6,8 @@ from crm.volteo_pliki import (
 	KAT_OBRAZ,
 	KAT_WIDEO,
 	PREFIKS_ZNACZNIKA_NOTATKI,
+	PRIORYTET_ZRODLA,
+	ZNACZNIK_PROTOKOLU_MONTAZU,
 	ZNACZNIK_ROBOCZY,
 	ZNACZNIK_ZDJEC_MONTAZU,
 	ZRODLA,
@@ -21,12 +23,14 @@ from crm.volteo_pliki import (
 	ZRODLO_KREDYT_PODPISANY,
 	ZRODLO_LEAD,
 	ZRODLO_LUZEM,
+	ZRODLO_MONTAZ_PROTOKOL,
 	ZRODLO_MONTAZ_ZDJECIE,
 	ZRODLO_NOTATKA,
 	ZRODLO_ROBOCZE,
 	ZRODLO_UMOWA_PDF,
 	ZRODLO_UMOWA_PODPISANA,
 	czy_media_montazu,
+	czy_plik_protokolu,
 	czy_widoczne_robocze,
 	etykieta_zakladki_notatki,
 	etykieta_zrodla,
@@ -246,6 +250,24 @@ class TestKlasyfikacjaCrmDeal(unittest.TestCase):
 		wynik = klasyfikuj_plik_szansy(plik, {})
 		self.assertEqual(wynik["zrodlo"], ZRODLO_MONTAZ_ZDJECIE)
 		self.assertEqual(wynik["zakladka"], "montaz")
+
+	def test_montaz_protokol_po_znaczniku(self):
+		plik = _plik(attached_to_field=ZNACZNIK_PROTOKOLU_MONTAZU)
+		wynik = klasyfikuj_plik_szansy(plik, {})
+		self.assertEqual(wynik["zrodlo"], ZRODLO_MONTAZ_PROTOKOL)
+		self.assertEqual(wynik["zakladka"], "montaz")
+		self.assertEqual(wynik["zrodlo_etykieta"], "Montaż: protokół")
+
+	def test_priorytet_protokolu_tuz_za_zdjeciem(self):
+		self.assertEqual(
+			PRIORYTET_ZRODLA[ZRODLO_MONTAZ_PROTOKOL], PRIORYTET_ZRODLA[ZRODLO_MONTAZ_ZDJECIE] + 1
+		)
+
+	def test_czy_plik_protokolu(self):
+		for nazwa in ("a.pdf", "A.PDF", "a.jpg", "a.JPEG", "a.png"):
+			self.assertTrue(czy_plik_protokolu(nazwa), nazwa)
+		for nazwa in ("a.webp", "a.gif", "a.mp4", "bez_rozszerzenia", "", None):
+			self.assertFalse(czy_plik_protokolu(nazwa), nazwa)
 
 	def test_robocze_po_znaczniku(self):
 		plik = _plik(attached_to_field=ZNACZNIK_ROBOCZY)
@@ -512,8 +534,8 @@ class TestKatalogZrodel(unittest.TestCase):
 		klucze = [zrodlo["klucz"] for zrodlo in ZRODLA]
 		self.assertEqual(len(klucze), len(set(klucze)))
 
-	def test_siedemnascie_zrodel(self):
-		self.assertEqual(len(ZRODLA), 17)
+	def test_osiemnascie_zrodel(self):
+		self.assertEqual(len(ZRODLA), 18)
 
 
 if __name__ == "__main__":

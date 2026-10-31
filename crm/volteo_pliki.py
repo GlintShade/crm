@@ -44,6 +44,12 @@ ZNACZNIK_ZDJEC_MONTAZU = "zdjecia_montaz"
 zaimportowac tamtego pliku wprost (importuje `frappe`, wiec zepsulby test
 lokalny bez zainstalowanego frameworka)."""
 
+ZNACZNIK_PROTOKOLU_MONTAZU = "protokol_montaz"
+"""Lustro `crm.api.montaz.ZNACZNIK_PROTOKOLU_MONTAZU` (sekcja "Protokol
+montazu", ops#307)."""
+
+ROZSZERZENIA_PROTOKOLU = frozenset({"pdf", "jpg", "jpeg", "png"})
+
 
 # ---------------------------------------------------------------------------
 # Kategorie pliku (dokument / obraz / wideo / inny) -- decyzja wlasciciela
@@ -98,6 +104,13 @@ def czy_media_montazu(file_name: str | None) -> bool:
 	nazwa bez rozszerzenia -> False, nigdy wyjatek."""
 	rozszerzenie = _rozszerzenie(file_name)
 	return bool(rozszerzenie) and rozszerzenie in ROZSZERZENIA_MEDIOW_MONTAZU
+
+
+def czy_plik_protokolu(file_name: str | None) -> bool:
+	"""Czy nazwa pliku ma jedno z rozszerzen dopuszczonych w sekcji "Protokol
+	montazu" (PDF, JPG, PNG). Brak nazwy albo rozszerzenia -> False."""
+	rozszerzenie = _rozszerzenie(file_name)
+	return bool(rozszerzenie) and rozszerzenie in ROZSZERZENIA_PROTOKOLU
 
 
 def kategoria_pliku(file_name: str | None, file_type: str | None) -> str:
@@ -213,6 +226,7 @@ ZRODLO_UMOWA_PDF = "umowa_pdf"
 ZRODLO_KREDYT_PDF = "kredyt_pdf"
 ZRODLO_NOTATKA = "notatka"
 ZRODLO_MONTAZ_ZDJECIE = "montaz_zdjecie"
+ZRODLO_MONTAZ_PROTOKOL = "montaz_protokol"
 ZRODLO_KOMENTARZ = "komentarz"
 ZRODLO_EMAIL = "email"
 ZRODLO_LEAD = "lead"
@@ -239,6 +253,7 @@ ZRODLA: tuple[dict[str, Any], ...] = (
 	{"klucz": ZRODLO_KREDYT_PDF, "etykieta": "Kredyt PDF"},
 	{"klucz": ZRODLO_NOTATKA, "etykieta": "Notatka: {szczegol}", "etykieta_domyslna": "Notatka"},
 	{"klucz": ZRODLO_MONTAZ_ZDJECIE, "etykieta": "Montaż: zdjęcie"},
+	{"klucz": ZRODLO_MONTAZ_PROTOKOL, "etykieta": "Montaż: protokół"},
 	{"klucz": ZRODLO_KOMENTARZ, "etykieta": "Komentarz"},
 	{"klucz": ZRODLO_EMAIL, "etykieta": "E-mail"},
 	{"klucz": ZRODLO_LEAD, "etykieta": "Lead"},
@@ -274,6 +289,7 @@ ZAKLADKA_DLA_ZRODLA: dict[str, str] = {
 	ZRODLO_KREDYT_PDF: "kredyt",
 	ZRODLO_NOTATKA: "notatki",
 	ZRODLO_MONTAZ_ZDJECIE: "montaz",
+	ZRODLO_MONTAZ_PROTOKOL: "montaz",
 	ZRODLO_KOMENTARZ: "attachments",
 	ZRODLO_EMAIL: "attachments",
 	ZRODLO_LEAD: "attachments",
@@ -440,6 +456,8 @@ def klasyfikuj_plik_szansy(plik: dict[str, Any], kontekst: dict[str, Any]) -> di
 	elif attached_to_doctype == "CRM Deal":
 		if attached_to_field == ZNACZNIK_ZDJEC_MONTAZU:
 			zrodlo = ZRODLO_MONTAZ_ZDJECIE
+		elif attached_to_field == ZNACZNIK_PROTOKOLU_MONTAZU:
+			zrodlo = ZRODLO_MONTAZ_PROTOKOL
 		elif attached_to_field == ZNACZNIK_ROBOCZY:
 			zrodlo = ZRODLO_ROBOCZE
 		elif attached_to_field.startswith(PREFIKS_ZNACZNIKA_NOTATKI):
