@@ -129,6 +129,7 @@ from crm.api.doc import (
 )
 from crm.permissions.org_hierarchy import BYPASS_ROLES, _ma_linie_leady, czy_autor_ma_role_cc
 from crm.volteo_aktywnosc import maskuj_autora_cc, tekst_sladu, zapisz_slad
+from crm.volteo_leady_telefon import normalizuj_filtr_telefonu
 from crm.volteo_przydzial import normalizuj_wartosci_geo
 
 DOPUSZCZONE_ROLE_WOLAJACEGO = ("System Manager", "Volteo Core Admin")
@@ -684,6 +685,9 @@ def mapa(
 	# rozwin_grupy, PRZED _sprawdz_filtry, zeby mapa i lista dzielily
 	# identyczna semantyke filtrow tagow.
 	filters = _rozwin_filtry_tagow("CRM Lead", filters)
+
+	# VOLTEO (ops#311): ta sama normalizacja filtra telefonu co w get_data.
+	filters = normalizuj_filtr_telefonu(filters)
 
 	_sprawdz_filtry("CRM Lead", filters)
 

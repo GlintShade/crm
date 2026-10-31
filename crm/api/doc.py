@@ -21,6 +21,7 @@ from crm.volteo_filtry_szybkie import (
 	wybierz_kolejnosc,
 )
 from crm.volteo_grupy_filtrow import klucze_z_grup, waliduj_grupy, wydziel_grupy
+from crm.volteo_leady_telefon import normalizuj_filtr_telefonu
 from crm.volteo_lista_szans import (
 	POLA_TAGOW_LEAD,
 	POLA_TAGOW_LEAD_DYNAMICZNE,
@@ -407,6 +408,9 @@ def rozwin_grupy(doctype: str, filters: dict) -> dict:
 		# gdzie tag na najwyzszym poziomie byl rozpoznawany poprawnie, a
 		# w grupie -- nie.
 		grupa_polaczona = _rozwin_filtry_tagow(doctype, {**filtry_bez_grup, **grupa})
+		# ops#311: telefon w grupie normalizowany jak na najwyzszym poziomie.
+		if doctype == "CRM Lead":
+			grupa_polaczona = normalizuj_filtr_telefonu(grupa_polaczona)
 		nazwy.update(
 			frappe.get_list(doctype, filters=grupa_polaczona, pluck="name", limit_page_length=0)
 		)
@@ -1239,6 +1243,12 @@ def get_data(
 	# _rozwin_filtry_tagow), PRZED _sprawdz_filtry nizej. No-op dla kazdego
 	# doctype'u innego niz CRM Lead.
 	filters = frappe._dict(_rozwin_filtry_tagow(doctype, filters))
+
+	# VOLTEO (ops#311): filtr LIKE po telefonie leada ignoruje spacje,
+	# myslniki i "+" we wpisanym numerze (w bazie: +48XXXXXXXXX). PRZED
+	# _sprawdz_filtry nizej.
+	if doctype == "CRM Lead":
+		filters = frappe._dict(normalizuj_filtr_telefonu(filters))
 
 	# Blokada filtrowania po polu bez uprawnien odczytu (permlevel > 0) — patrz
 	# ops#79. Walidujemy PO scaleniu default_filters i podstawieniu @me/@dzis,
