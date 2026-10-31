@@ -296,6 +296,18 @@ class CRMLead(Document):
 				"width": "3.5rem",
 			},
 			{
+				"label": "Czas do pierwszego kontaktu",
+				"type": "Duration",
+				"key": "custom_czas_do_kontaktu",
+				"width": "4.5rem",
+			},
+			{
+				"label": "Próby kontaktu",
+				"type": "Select",
+				"key": "custom_proby_kontaktu",
+				"width": "3.5rem",
+			},
+			{
 				"label": "Zasady rozliczeń",
 				"type": "Select",
 				"key": "custom_zasady_dotacji",
@@ -428,6 +440,8 @@ class CRMLead(Document):
 			"name",
 			"lead_name",
 			"_comment_count",
+			"custom_czas_do_kontaktu",
+			"custom_proby_kontaktu",
 			"custom_zasady_dotacji",
 			"mobile_no",
 			"status",
