@@ -1,6 +1,7 @@
 import unittest
 
 from crm.volteo_pliki import (
+	ETYKIETY_SLADU_MONTAZU,
 	KAT_DOKUMENT,
 	KAT_INNY,
 	KAT_OBRAZ,
@@ -261,6 +262,11 @@ class TestKlasyfikacjaCrmDeal(unittest.TestCase):
 	def test_priorytet_protokolu_tuz_za_zdjeciem(self):
 		self.assertEqual(
 			PRIORYTET_ZRODLA[ZRODLO_MONTAZ_PROTOKOL], PRIORYTET_ZRODLA[ZRODLO_MONTAZ_ZDJECIE] + 1
+		)
+
+	def test_etykiety_sladu_montazu(self):
+		self.assertEqual(
+			set(ETYKIETY_SLADU_MONTAZU), {ZNACZNIK_ZDJEC_MONTAZU, ZNACZNIK_PROTOKOLU_MONTAZU}
 		)
 
 	def test_czy_plik_protokolu(self):
