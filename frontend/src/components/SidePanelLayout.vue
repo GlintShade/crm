@@ -327,6 +327,13 @@
                             fieldChange(flt($event.target.value), field)
                           "
                         />
+                        <CzasGgMmInput
+                          v-else-if="field.fieldname === 'custom_czas_do_kontaktu'"
+                          class="form-control"
+                          :value="doc[field.fieldname]"
+                          :disabled="Boolean(field.read_only)"
+                          @change="(v) => fieldChange(v, field)"
+                        />
                         <DurationInput
                           v-else-if="field.fieldtype === 'Duration'"
                           class="form-control"
@@ -450,6 +457,7 @@
 <script setup>
 import Password from '@/components/Controls/Password.vue'
 import FormattedInput from '@/components/Controls/FormattedInput.vue'
+import CzasGgMmInput from '@/components/Controls/CzasGgMmInput.vue'
 import DurationInput from '@/components/Controls/DurationInput.vue'
 import RatingInput from '@/components/Controls/RatingInput.vue'
 import AttachControl from '@/components/Controls/AttachControl.vue'

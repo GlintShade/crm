@@ -15,6 +15,7 @@ from crm.fcrm.doctype.crm_status_change_log.crm_status_change_log import (
 )
 from crm.fcrm.doctype.utils import add_or_remove_lost_reason_section_in_sidepanel
 from crm.permissions.org_hierarchy import ma_flage_zmiany_statusu_cc
+from crm.volteo_leady_kontakt import waliduj_czas_do_kontaktu, waliduj_proby_kontaktu
 from crm.volteo_leady_status import czy_moze_zmienic_status_cc
 from crm.volteo_lista_szans import FILTER_FIELDS_LEAD, SORT_FIELDS_LEAD
 from crm.volteo_powiadomienia import powiadom_o_zmianie_terminu
@@ -87,6 +88,7 @@ class CRMLead(Document):
 		self.set_title()
 		self.validate_email()
 		self.validate_lost_reason()
+		self.validate_pola_kontaktu()
 		if not self.is_new() and self.has_value_changed("lead_owner") and self.lead_owner:
 			self.share_with_agent(self.lead_owner)
 			self.assign_agent(self.lead_owner)
@@ -103,6 +105,14 @@ class CRMLead(Document):
 			frappe.throw(_("Handlowiec nie może zmieniać statusu CC."), frappe.PermissionError)
 		if self.has_value_changed("status"):
 			add_status_change_log(self)
+
+	def validate_pola_kontaktu(self):
+		# ops#309/#310: walidacja danych, bezwarunkowa (takze pod ignore_permissions).
+		blad = waliduj_czas_do_kontaktu(self.get("custom_czas_do_kontaktu")) or waliduj_proby_kontaktu(
+			self.get("custom_proby_kontaktu")
+		)
+		if blad:
+			frappe.throw(_(blad))
 
 	def after_insert(self):
 		if self.lead_owner:
@@ -291,6 +301,18 @@ class CRMLead(Document):
 				"width": "3.5rem",
 			},
 			{
+				"label": "Czas do pierwszego kontaktu",
+				"type": "Duration",
+				"key": "custom_czas_do_kontaktu",
+				"width": "4.5rem",
+			},
+			{
+				"label": "Próby kontaktu",
+				"type": "Select",
+				"key": "custom_proby_kontaktu",
+				"width": "3.5rem",
+			},
+			{
 				"label": "Zasady rozliczeń",
 				"type": "Select",
 				"key": "custom_zasady_dotacji",
@@ -423,6 +445,8 @@ class CRMLead(Document):
 			"name",
 			"lead_name",
 			"_comment_count",
+			"custom_czas_do_kontaktu",
+			"custom_proby_kontaktu",
 			"custom_zasady_dotacji",
 			"mobile_no",
 			"status",

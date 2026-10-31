@@ -39,6 +39,20 @@
         >
           <CommentIcon class="h-4 w-4" />
         </div>
+        <div
+          v-else-if="column.key === 'custom_czas_do_kontaktu'"
+          class="flex items-center text-ink-gray-5"
+          :title="__('Czas do pierwszego kontaktu')"
+        >
+          <FeatherIcon name="clock" class="h-4 w-4" />
+        </div>
+        <div
+          v-else-if="column.key === 'custom_proby_kontaktu'"
+          class="flex items-center text-ink-gray-5"
+          :title="__('Próby kontaktu')"
+        >
+          <FeatherIcon name="phone-outgoing" class="h-4 w-4" />
+        </div>
       </ListHeaderItem>
     </ListHeader>
     <ListRows
@@ -289,10 +303,12 @@ import ListBulkActions from '@/components/ListBulkActions.vue'
 import ListRows from '@/components/ListViews/ListRows.vue'
 import ListFooterVolteo from '@/components/ListFooterVolteo.vue'
 import { KOLUMNY_INLINE, nowaListaZPodmienionymPolem } from '@/utils/leadyInline'
+import { formatujGgMm } from '@/utils/czasKontaktu'
 import { isTranslatable, formatDuration } from '@/utils'
 import {
   Avatar,
   Dialog,
+  FeatherIcon,
   ListView,
   ListHeader,
   ListHeaderItem,
@@ -337,6 +353,7 @@ const pageLengthCount = defineModel({ type: Number })
 const list = defineModel('list', { type: Object })
 
 function getLabel(label, column) {
+  if (column.key === 'custom_czas_do_kontaktu') return formatujGgMm(label)
   if (column.type === 'Duration') return formatDuration(label)
   if (column.options && isTranslatable(column.options)) return __(label)
   return label
