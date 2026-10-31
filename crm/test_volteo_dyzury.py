@@ -11,6 +11,7 @@ from crm.volteo_dyzury import (
 	dyzurni_w_chwili,
 	dzien_tygodnia,
 	klucz_licznika_dnia,
+	normalizuj_numer_pl,
 	opis_chwili,
 	parsuj_czas,
 	waliduj_wiersz,
@@ -188,6 +189,38 @@ class TestTresc(unittest.TestCase):
 
 	def test_pusty_szablon(self):
 		self.assertEqual(zbuduj_tresc_dyzur("", {})[0], "")
+
+
+class TestNumerPl(unittest.TestCase):
+	def test_akceptowane(self):
+		for wej in (
+			"+48500100200",
+			"48500100200",
+			"0048500100200",
+			"500100200",
+			"500 100 200",
+			"500-100-200",
+			"+48 500 100 200",
+			"500.100.200",
+			" 500100200 ",
+		):
+			self.assertEqual(normalizuj_numer_pl(wej), "+48500100200", wej)
+
+	def test_odrzucone(self):
+		for wej in (
+			"50010020",
+			"5001002000",
+			"abc500100200",
+			"+49500100200",
+			"049500100200",
+			"012345678",
+			"+4850010020",
+		):
+			self.assertIsNone(normalizuj_numer_pl(wej), wej)
+
+	def test_puste(self):
+		for wej in (None, "", "   "):
+			self.assertIsNone(normalizuj_numer_pl(wej))
 
 
 class TestKlucz(unittest.TestCase):

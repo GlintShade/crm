@@ -92,7 +92,7 @@
       <div class="flex flex-col gap-4 px-2 max-w-2xl">
         <div class="text-base-semibold">{{ __('Numery telefonów dyżurnych') }}</div>
         <p class="text-p-sm text-ink-gray-6">
-          {{ __('Format +48XXXXXXXXX. Osoba bez numeru nie dostanie SMS, a w grafiku pojawi się ostrzeżenie.') }}
+          {{ __('Wpisz 9 cyfr numeru komórkowego, zapisze się jako +48. Osoba bez numeru nie dostanie SMS, a w grafiku pojawi się ostrzeżenie.') }}
         </p>
         <div class="flex flex-col gap-2">
           <div
@@ -105,7 +105,7 @@
             <FormControl
               class="flex-1"
               type="text"
-              placeholder="+48500100200"
+              placeholder="500 100 200"
               :modelValue="telefonDraft[u.name] ?? u.mobile_no"
               :disabled="zapisuje"
               @update:modelValue="(val) => (telefonDraft[u.name] = val)"

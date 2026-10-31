@@ -44,6 +44,30 @@ TTL_LICZNIKA_SEK: int = 2 * 24 * 3600
 _WZORZEC_CZASU = re.compile(r"^(\d{1,2}):(\d{2})(?::(\d{2}))?$")
 
 
+def normalizuj_numer_pl(surowy: str | None) -> str | None:
+	"""Polski numer komórkowy na `+48XXXXXXXXX`; None dla pustego i niepoprawnego wejścia.
+
+	Przyjmuje `+48...`, `48...`, `0048...` i gołe 9 cyfr (spacje, kropki, myślniki
+	są ignorowane). 9 cyfr zaczynających się od 0 jest odrzucane.
+	"""
+	if not surowy or not str(surowy).strip():
+		return None
+	cyfry = re.sub(r"[\s\-.]", "", str(surowy))
+	if cyfry.startswith("+"):
+		cyfry = cyfry[1:]
+		if not cyfry.startswith("48"):
+			return None
+	elif cyfry.startswith("0048"):
+		cyfry = cyfry[2:]
+	if not cyfry.isdigit() or not cyfry.isascii():
+		return None
+	if len(cyfry) == 11 and cyfry.startswith("48"):
+		cyfry = cyfry[2:]
+	if len(cyfry) != 9 or cyfry.startswith("0"):
+		return None
+	return "+48" + cyfry
+
+
 def dzien_tygodnia(chwila: datetime) -> str:
 	"""Polska nazwa dnia tygodnia dla chwili."""
 	return DNI_TYGODNIA[chwila.weekday()]

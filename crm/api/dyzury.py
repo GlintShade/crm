@@ -17,7 +17,7 @@ import frappe
 from frappe import _
 from frappe.utils import cint, now_datetime
 
-from crm.volteo_dyzury import dyzurni_w_chwili, waliduj_wiersz
+from crm.volteo_dyzury import dyzurni_w_chwili, normalizuj_numer_pl, waliduj_wiersz
 from crm.volteo_sms import numer_do_smsapi
 
 DOCTYPE = "Volteo Dyzur SMS"
@@ -144,9 +144,13 @@ def volteo_dyzur_telefon_zapisz(uzytkownik: str, mobile_no: str) -> dict[str, An
 		frappe.throw(_("Brak uprawnień do edycji tego użytkownika."), frappe.PermissionError)
 	surowy = (mobile_no or "").strip()
 	if surowy:
-		numer = numer_do_smsapi(surowy)
+		numer = normalizuj_numer_pl(surowy)
 		if not numer:
-			frappe.throw(_("Numer telefonu musi mieć format +48XXXXXXXXX (11 cyfr z prefiksem 48)."))
-		surowy = "+" + numer
+			frappe.throw(
+				_(
+					"Numer telefonu musi mieć 9 cyfr (komórkowy w Polsce), np. 500 100 200 albo +48 500 100 200."
+				)
+			)
+		surowy = numer
 	frappe.db.set_value("User", uzytkownik, "mobile_no", surowy)
 	return {"uzytkownik": uzytkownik, "mobile_no": surowy, "ma_numer": bool(surowy)}
