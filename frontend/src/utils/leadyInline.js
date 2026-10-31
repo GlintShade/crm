@@ -15,6 +15,8 @@ export const KOLUMNY_INLINE = new Set([
   'custom_status_handlowy',
   'custom_kolejny_kontakt',
   'custom_termin_spotkania',
+  'custom_czas_do_kontaktu',
+  'custom_proby_kontaktu',
 ])
 
 export function czyKolumnaInline(column) {
@@ -37,6 +39,8 @@ export function surowaWartoscKomorki(column, item) {
     if (item && typeof item === 'object') return item.value ?? null
     return item ?? null
   }
+
+  if (column.type === 'Duration') return Number(item) || 0
 
   return item ?? ''
 }

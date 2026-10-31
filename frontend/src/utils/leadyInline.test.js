@@ -6,10 +6,12 @@ import {
 } from './leadyInline'
 
 describe('KOLUMNY_INLINE / czyKolumnaInline', () => {
-  it('zawiera dokladnie cztery kolumny inline', () => {
+  it('zawiera dokladnie szesc kolumn inline', () => {
     expect([...KOLUMNY_INLINE].sort()).toEqual(
       [
+        'custom_czas_do_kontaktu',
         'custom_kolejny_kontakt',
+        'custom_proby_kontaktu',
         'custom_status_handlowy',
         'custom_termin_spotkania',
         'status',

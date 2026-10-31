@@ -125,6 +125,8 @@ SORT_FIELDS_LEAD: tuple[tuple[str, str | None], ...] = (
 	("lead_name", "Klient"),
 	("lead_owner", "Przypisany handlowiec"),
 	("custom_cc", "Przypisany CC"),
+	("custom_czas_do_kontaktu", "Czas do pierwszego kontaktu"),
+	("custom_proby_kontaktu", "Próby kontaktu"),
 	("custom_kolejny_kontakt", "Kolejny kontakt"),
 	("custom_termin_spotkania", "Termin spotkania"),
 )
@@ -133,6 +135,8 @@ FILTER_FIELDS_LEAD: tuple[tuple[str, str | None], ...] = (
 	("status", "Status CC"),
 	("custom_status_handlowy", None),
 	("custom_cc", "Przypisany CC"),
+	("custom_czas_do_kontaktu", "Czas do pierwszego kontaktu"),
+	("custom_proby_kontaktu", "Próby kontaktu"),
 	("lead_owner", "Przypisany handlowiec"),
 	("lead_name", "Klient"),
 	("mobile_no", "Telefon"),

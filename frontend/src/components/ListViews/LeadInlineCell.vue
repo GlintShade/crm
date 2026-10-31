@@ -99,6 +99,25 @@
       @update:modelValue="(v) => zapiszWartosc(column.key, v)"
     />
 
+    <CzasGgMmInput
+      v-else-if="column.key === 'custom_czas_do_kontaktu'"
+      :value="wartosc"
+      :disabled="zapisywanie"
+      @change="(v) => zapiszWartosc(column.key, v)"
+    />
+
+    <FormControl
+      v-else-if="column.key === 'custom_proby_kontaktu'"
+      type="select"
+      size="sm"
+      variant="outline"
+      class="w-14"
+      :options="opcjeProbKontaktu"
+      :modelValue="wartosc"
+      :disabled="zapisywanie"
+      @update:modelValue="(v) => zapiszWartosc(column.key, v)"
+    />
+
     <DatePicker
       v-else-if="column.key === 'custom_kolejny_kontakt'"
       :value="wartosc"
@@ -147,6 +166,7 @@ import {
   call,
   toast,
 } from 'frappe-ui'
+import CzasGgMmInput from '@/components/Controls/CzasGgMmInput.vue'
 import DateTimePickerSiatka from '@/components/Controls/DateTimePickerSiatka.vue'
 import { computed, ref, watch } from 'vue'
 
@@ -182,6 +202,11 @@ const opcjeStatusuHandlowego = computed(() => {
   const pole = meta
     .getFields()
     .find((f) => f.fieldname === 'custom_status_handlowy')
+  return pole?.options || []
+})
+
+const opcjeProbKontaktu = computed(() => {
+  const pole = meta.getFields().find((f) => f.fieldname === 'custom_proby_kontaktu')
   return pole?.options || []
 })
 

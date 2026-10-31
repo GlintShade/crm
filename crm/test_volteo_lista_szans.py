@@ -388,7 +388,7 @@ class TestAllowlistyLeadow(unittest.TestCase):
 		self.assertEqual(len(fieldnames), len(set(fieldnames)))
 
 	def test_e_sort_fields_lead_liczba_i_kolejnosc(self: "TestAllowlistyLeadow") -> None:
-		self.assertEqual(len(SORT_FIELDS_LEAD), 8)
+		self.assertEqual(len(SORT_FIELDS_LEAD), 10)
 		self.assertEqual(
 			[fieldname for fieldname, _ in SORT_FIELDS_LEAD],
 			[
@@ -398,19 +398,23 @@ class TestAllowlistyLeadow(unittest.TestCase):
 				"lead_name",
 				"lead_owner",
 				"custom_cc",
+				"custom_czas_do_kontaktu",
+				"custom_proby_kontaktu",
 				"custom_kolejny_kontakt",
 				"custom_termin_spotkania",
 			],
 		)
 
 	def test_f_filter_fields_lead_liczba_i_kolejnosc(self: "TestAllowlistyLeadow") -> None:
-		self.assertEqual(len(FILTER_FIELDS_LEAD), 23)
+		self.assertEqual(len(FILTER_FIELDS_LEAD), 25)
 		self.assertEqual(
 			[fieldname for fieldname, _ in FILTER_FIELDS_LEAD],
 			[
 				"status",
 				"custom_status_handlowy",
 				"custom_cc",
+				"custom_czas_do_kontaktu",
+				"custom_proby_kontaktu",
 				"lead_owner",
 				"lead_name",
 				"mobile_no",
