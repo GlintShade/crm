@@ -88,6 +88,18 @@ def _dane_leada(lead: str) -> dict:
 	}
 
 
+def wyslij_sms_do_numeru(numer: str, tresc: str, ustawienia: dict, token: str) -> tuple[bool, str, bool]:
+	"""Wspólny rdzeń HTTP do SMSAPI: (ok, powód, tryb_testowy). Nie rzuca przy błędzie połączenia."""
+	tryb_testowy = bool(cint(ustawienia.get("tryb_testowy")))
+	parametry = zbuduj_parametry(numer, tresc, ustawienia.get("nadawca") or NADAWCA_DOMYSLNY, tryb_testowy)
+	try:
+		kod_http, odpowiedz = _http_post(SMSAPI_URL, parametry, {"Authorization": f"Bearer {token}"})
+		wynik = interpretuj_odpowiedz(kod_http, odpowiedz)
+	except Exception as wyjatek:  # tekst wyjątku requests może nieść URL, więc tylko typ
+		return False, f"Błąd połączenia z SMSAPI ({type(wyjatek).__name__}).", tryb_testowy
+	return bool(wynik.ok), wynik.powod, tryb_testowy
+
+
 def _wyslij_jednemu(
 	*,
 	lead: str,
@@ -146,18 +158,8 @@ def _wyslij_jednemu(
 		zapisz_slad(lead, f"SMS dyżurowy pominięty: pusta treść ({imie})", doctype="CRM Lead")
 		return
 
-	tryb_testowy = bool(cint(ustawienia.get("tryb_testowy")))
-	parametry = zbuduj_parametry(
-		numer or "", tresc, ustawienia.get("nadawca") or NADAWCA_DOMYSLNY, tryb_testowy
-	)
-	try:
-		kod_http, odpowiedz = _http_post(SMSAPI_URL, parametry, {"Authorization": f"Bearer {token}"})
-		wynik = interpretuj_odpowiedz(kod_http, odpowiedz)
-		powod = wynik.powod
-	except Exception as wyjatek:  # tekst wyjątku requests może nieść URL, więc tylko typ
-		wynik = None
-		powod = f"Błąd połączenia z SMSAPI ({type(wyjatek).__name__})."
-	if wynik is None or not wynik.ok:
+	ok, powod, tryb_testowy = wyslij_sms_do_numeru(numer or "", tresc, ustawienia, token)
+	if not ok:
 		if licznik is not None:
 			_cofnij_licznik(klucz)
 		zapisz_slad(lead, f"SMS dyżurowy: błąd SMSAPI ({imie}): {powod}", doctype="CRM Lead")

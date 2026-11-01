@@ -5,8 +5,11 @@
 
 Wiersze `Volteo Dyzur SMS` (dzień tygodnia, od, do, użytkownik, aktywny) mówią,
 komu `crm.api.sms_dyzur.powiadom_dyzurnego` wyśle SMS po leadzie z Facebooka.
-Dostęp wyłącznie dla `Volteo Core Admin` / `System Manager` (`frappe.only_for` jako
-pierwsza instrukcja każdej metody, wzorzec `crm.api.automatyzacje`). Zapisy idą przez
+`volteo_dyzur_sms_testowy` wysyła SMS z przykładowymi danymi na numer zalogowanego
+administratora (sprawdzenie tokenu i kanału bez czekania na lead; nie wymaga włączonego
+kanału, liczy się do limitu dziennego). Dostęp wyłącznie dla `Volteo Core Admin` /
+`System Manager` (`frappe.only_for` jako pierwsza instrukcja każdej metody, wzorzec
+`crm.api.automatyzacje`). Zapisy idą przez
 `doc.save()`, żeby zadziałał hook `validate_dyzur` i powstał `Version`.
 """
 
@@ -18,8 +21,11 @@ from frappe import _
 from frappe.utils import cint, get_url, now_datetime
 from frappe.utils.password import get_decrypted_password
 
+from crm.api.sms_dyzur import _cofnij_licznik, _licznik_dnia, wyslij_sms_do_numeru
 from crm.volteo_dyzury import (
 	DANE_PRZYKLADOWE_DYZUR,
+	LIMIT_DZIENNY_DYZUR_DOMYSLNY,
+	TRESC_DYZUR_DOMYSLNA,
 	dyzurni_w_chwili,
 	normalizuj_numer_pl,
 	waliduj_limit_dyzur,
@@ -130,6 +136,37 @@ def volteo_dyzur_podglad_tresci(tresc_dyzur: str) -> dict[str, Any]:
 	dane = {**DANE_PRZYKLADOWE_DYZUR, "link": get_url("/crm/leads/CRM-LEAD-2026-00001")}
 	tresc, ostrzezenie = zbuduj_tresc_dyzur(tresc_dyzur, dane)
 	return {"tresc": tresc, "znaki": len(tresc), "ostrzezenie": ostrzezenie}
+
+
+@frappe.whitelist()
+def volteo_dyzur_sms_testowy() -> dict[str, Any]:
+	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
+	ustawienia = frappe.db.get_singles_dict(DOCTYPE_USTAWIEN) or {}
+	token = get_decrypted_password(DOCTYPE_USTAWIEN, DOCTYPE_USTAWIEN, "token_api", raise_exception=False)
+	if not token:
+		frappe.throw(_("Brak tokenu SMSAPI. Uzupełnij go w Desk: Volteo SMS Ustawienia."))
+	numer = numer_do_smsapi(frappe.db.get_value("User", frappe.session.user, "mobile_no"))
+	if not numer:
+		frappe.throw(_("Uzupełnij najpierw swój numer telefonu w sekcji Numery telefonów dyżurnych."))
+	dane = {**DANE_PRZYKLADOWE_DYZUR, "link": get_url("/crm/leads/CRM-LEAD-2026-00001")}
+	tresc, _ostrzezenie = zbuduj_tresc_dyzur(ustawienia.get("tresc_dyzur") or TRESC_DYZUR_DOMYSLNA, dane)
+	limit_surowy = ustawienia.get("limit_dzienny_dyzur")
+	limit = cint(limit_surowy) if limit_surowy not in (None, "") else LIMIT_DZIENNY_DYZUR_DOMYSLNY
+
+	licznik, klucz = _licznik_dnia(now_datetime())
+	if licznik is not None and licznik - 1 >= limit:
+		_cofnij_licznik(klucz)
+		frappe.throw(_("Wyczerpany limit dzienny {0} SMS dyżurowych.").format(limit))
+
+	ok, powod, tryb_testowy = wyslij_sms_do_numeru(numer, tresc, ustawienia, token)
+	if not ok:
+		if licznik is not None:
+			_cofnij_licznik(klucz)
+		frappe.log_error(title="SMS dyżurowy (test)", message=powod)
+		frappe.throw(powod)
+	if tryb_testowy and licznik is not None:
+		_cofnij_licznik(klucz)
+	return {"ok": True, "tryb_testowy": 1 if tryb_testowy else 0, "tresc": tresc, "znaki": len(tresc)}
 
 
 @frappe.whitelist()

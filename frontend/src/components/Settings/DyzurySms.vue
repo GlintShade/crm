@@ -37,6 +37,25 @@
             @update:modelValue="przelacz"
           />
         </div>
+        <div class="flex flex-col gap-1">
+          <div>
+            <Button
+              variant="subtle"
+              size="sm"
+              :label="__('Wyślij SMS testowy do mnie')"
+              :loading="testuje"
+              :disabled="!state.tokenUstawiony || testuje"
+              @click="wyslijTestowy"
+            />
+          </div>
+          <p class="text-p-sm text-ink-gray-6">
+            {{
+              __(
+                'Wysyła treść z przykładowymi danymi na numer zapisany przy Twoim koncie. Liczy się do limitu dziennego.',
+              )
+            }}
+          </p>
+        </div>
       </div>
 
       <!-- SMS text and daily limit -->
@@ -240,6 +259,7 @@ const podglad = reactive({ tresc: '', znaki: 0, ostrzezenie: '' })
 let podgladTimer = null
 const blad = ref('')
 const zapisuje = ref(false)
+const testuje = ref(false)
 const telefonDraft = reactive({})
 
 const dialog = reactive({
@@ -357,6 +377,26 @@ function zapiszUstawienia() {
     __('Nie udało się zapisać ustawień SMS'),
     (msg) => (ustawienia.blad = msg),
   )
+}
+
+function wyslijTestowy() {
+  testuje.value = true
+  createResource({
+    url: 'crm.api.dyzury.volteo_dyzur_sms_testowy',
+    auto: true,
+    onSuccess: (data) => {
+      testuje.value = false
+      toast.success(
+        data?.tryb_testowy
+          ? __('Tryb testowy SMSAPI: treść poprawna, nic nie wysłano')
+          : __('SMS testowy wysłany na Twój numer'),
+      )
+    },
+    onError: (err) => {
+      testuje.value = false
+      toast.error(bladZSerwera(err, __('Nie udało się wysłać SMS testowego')))
+    },
+  })
 }
 
 function bladZSerwera(err, domyslny) {
