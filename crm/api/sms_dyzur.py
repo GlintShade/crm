@@ -24,7 +24,7 @@ wyjątek i nigdy nie rzuca.
 
 import frappe
 import redis
-from frappe.utils import cint, get_url, now_datetime
+from frappe.utils import cint, get_url, getdate, now_datetime
 from frappe.utils.password import get_decrypted_password
 
 from crm.api.sms_powitalny import DOCTYPE_USTAWIEN, _http_post
@@ -33,6 +33,7 @@ from crm.volteo_dyzury import (
 	LIMIT_DZIENNY_DYZUR_DOMYSLNY,
 	TRESC_DYZUR_DOMYSLNA,
 	TTL_LICZNIKA_SEK,
+	czy_wyjatek_dnia,
 	dyzurni_w_chwili,
 	klucz_licznika_dnia,
 	zbuduj_tresc_dyzur,
@@ -86,6 +87,18 @@ def _dane_leada(lead: str) -> dict:
 		"miejscowosc": wiersz.custom_install_city or "",
 		"link": get_url("/crm/leads/" + lead),
 	}
+
+
+def wyslij_sms_do_numeru(numer: str, tresc: str, ustawienia: dict, token: str) -> tuple[bool, str, bool]:
+	"""Wspólny rdzeń HTTP do SMSAPI: (ok, powód, tryb_testowy). Nie rzuca przy błędzie połączenia."""
+	tryb_testowy = bool(cint(ustawienia.get("tryb_testowy")))
+	parametry = zbuduj_parametry(numer, tresc, ustawienia.get("nadawca") or NADAWCA_DOMYSLNY, tryb_testowy)
+	try:
+		kod_http, odpowiedz = _http_post(SMSAPI_URL, parametry, {"Authorization": f"Bearer {token}"})
+		wynik = interpretuj_odpowiedz(kod_http, odpowiedz)
+	except Exception as wyjatek:  # tekst wyjątku requests może nieść URL, więc tylko typ
+		return False, f"Błąd połączenia z SMSAPI ({type(wyjatek).__name__}).", tryb_testowy
+	return bool(wynik.ok), wynik.powod, tryb_testowy
 
 
 def _wyslij_jednemu(
@@ -146,18 +159,8 @@ def _wyslij_jednemu(
 		zapisz_slad(lead, f"SMS dyżurowy pominięty: pusta treść ({imie})", doctype="CRM Lead")
 		return
 
-	tryb_testowy = bool(cint(ustawienia.get("tryb_testowy")))
-	parametry = zbuduj_parametry(
-		numer or "", tresc, ustawienia.get("nadawca") or NADAWCA_DOMYSLNY, tryb_testowy
-	)
-	try:
-		kod_http, odpowiedz = _http_post(SMSAPI_URL, parametry, {"Authorization": f"Bearer {token}"})
-		wynik = interpretuj_odpowiedz(kod_http, odpowiedz)
-		powod = wynik.powod
-	except Exception as wyjatek:  # tekst wyjątku requests może nieść URL, więc tylko typ
-		wynik = None
-		powod = f"Błąd połączenia z SMSAPI ({type(wyjatek).__name__})."
-	if wynik is None or not wynik.ok:
+	ok, powod, tryb_testowy = wyslij_sms_do_numeru(numer or "", tresc, ustawienia, token)
+	if not ok:
 		if licznik is not None:
 			_cofnij_licznik(klucz)
 		zapisz_slad(lead, f"SMS dyżurowy: błąd SMSAPI ({imie}): {powod}", doctype="CRM Lead")
@@ -191,12 +194,19 @@ def powiadom_dyzurnego(lead: str) -> None:
 		grafik = frappe.get_all(
 			DOCTYPE_GRAFIKU,
 			filters={"aktywny": 1},
-			fields=["dzien_tygodnia", "od", "do", "uzytkownik", "aktywny"],
+			fields=["dzien_tygodnia", "od", "do", "uzytkownik", "aktywny", "data", "bez_dyzuru"],
+			or_filters=[["data", "is", "not set"], ["data", ">=", getdate(chwila)]],
 			limit_page_length=500,
 		)
 		dyzurni = dyzurni_w_chwili(grafik, chwila)
 		if not dyzurni:
-			decyzja = zdecyduj_wysylke_dyzur(wlaczone=True, token_ustawiony=True, chwila=chwila, dyzurni=[])
+			decyzja = zdecyduj_wysylke_dyzur(
+				wlaczone=True,
+				token_ustawiony=True,
+				chwila=chwila,
+				dyzurni=[],
+				wyjatek_dnia=czy_wyjatek_dnia(grafik, chwila),
+			)
 			zapisz_slad(lead, decyzja.slad, doctype="CRM Lead")
 			frappe.db.commit()
 			return

@@ -26,11 +26,88 @@
           <div class="flex flex-col gap-1">
             <p class="text-base-semibold">{{ __('SMS dyżurowy włączony') }}</p>
             <p class="text-p-sm text-ink-gray-6">{{ terazTekst }}</p>
+            <p class="text-p-sm text-ink-gray-6">{{ kanalTekst }}</p>
+            <p v-if="state.trybTestowy" class="text-p-sm text-ink-gray-6">
+              {{ __('Tryb testowy SMSAPI włączony: żaden SMS nie wychodzi.') }}
+            </p>
           </div>
           <Switch
             :modelValue="Boolean(state.dyzurWlaczone)"
             :disabled="zapisuje"
             @update:modelValue="przelacz"
+          />
+        </div>
+        <div class="flex flex-col gap-1">
+          <div>
+            <Button
+              variant="subtle"
+              size="sm"
+              :label="__('Wyślij SMS testowy do mnie')"
+              :loading="testuje"
+              :disabled="!state.tokenUstawiony || testuje"
+              @click="wyslijTestowy"
+            />
+          </div>
+          <p class="text-p-sm text-ink-gray-6">
+            {{
+              __(
+                'Wysyła treść z przykładowymi danymi na numer zapisany przy Twoim koncie. Liczy się do limitu dziennego.',
+              )
+            }}
+          </p>
+        </div>
+      </div>
+
+      <!-- SMS text and daily limit -->
+      <div class="flex flex-col gap-4 px-2 max-w-2xl">
+        <div class="text-base-semibold">{{ __('Treść SMS') }}</div>
+        <FormControl
+          type="textarea"
+          :rows="3"
+          :modelValue="ustawienia.tresc"
+          :disabled="zapisuje"
+          @update:modelValue="zmienTresc"
+        />
+        <p class="text-p-sm text-ink-gray-6">
+          {{
+            __(
+              'Placeholdery: {klient}, {telefon}, {kod}, {miejscowosc}, {link}. Polskie znaki zamieniane na łacińskie, 160 znaków to jedna część SMS.',
+            )
+          }}
+        </p>
+        <div class="flex flex-col gap-1">
+          <FormControl
+            class="w-32"
+            type="number"
+            min="0"
+            max="1000"
+            :label="__('Limit dzienny SMS')"
+            :modelValue="ustawienia.limit"
+            :disabled="zapisuje"
+            @update:modelValue="zmienLimit"
+          />
+          <p class="text-p-sm text-ink-gray-6">{{ __('0 blokuje wysyłkę') }}</p>
+        </div>
+        <div class="flex flex-col gap-1">
+          <p class="text-p-sm text-ink-gray-6">{{ __('Podgląd') }}</p>
+          <div class="rounded-lg border p-3 text-p-base text-ink-gray-8 break-words">
+            {{ podglad.tresc || '…' }}
+          </div>
+          <p class="text-p-sm text-ink-gray-6">
+            {{ __('{0} znaków', [podglad.znaki]) }}
+          </p>
+          <p v-if="podglad.ostrzezenie" class="text-p-sm text-ink-amber-3">
+            {{ podglad.ostrzezenie }}
+          </p>
+        </div>
+        <ErrorMessage :message="ustawienia.blad" />
+        <div>
+          <Button
+            variant="solid"
+            :label="__('Zapisz treść i limit')"
+            :loading="zapisuje"
+            :disabled="!ustawieniaZmienione"
+            @click="zapiszUstawienia"
           />
         </div>
       </div>
@@ -83,6 +160,65 @@
                   />
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Schedule exceptions -->
+      <div class="flex flex-col gap-4 px-2 max-w-2xl">
+        <div class="flex items-center justify-between">
+          <div class="text-base-semibold">{{ __('Wyjątki od grafiku') }}</div>
+          <Button
+            variant="subtle"
+            size="sm"
+            icon-left="plus"
+            :label="__('Dodaj wyjątek')"
+            @click="otworzWyjatek(null)"
+          />
+        </div>
+        <p class="text-p-sm text-ink-gray-6">
+          {{
+            __(
+              'Wyjątek na konkretną datę zastępuje grafik tygodniowy tego dnia. Minione wyjątki znikają same.',
+            )
+          }}
+        </p>
+        <div v-if="!wyjatki.length" class="rounded-lg border p-3 text-p-sm text-ink-gray-5">
+          {{ __('Brak wyjątków. Dodaj wyjątek, gdy ktoś ma urlop albo wypada święto.') }}
+        </div>
+        <div v-else class="flex flex-col rounded-lg border divide-y">
+          <div
+            v-for="w in wyjatki"
+            :key="w.name"
+            class="flex items-center justify-between gap-2 p-3"
+            :class="{ 'opacity-60': !w.aktywny }"
+          >
+            <div class="flex items-center gap-2 text-p-sm text-ink-gray-8">
+              <span class="text-p-base-medium">{{ formatujDate(w.data) }}</span>
+              <span v-if="w.bez_dyzuru" class="text-ink-gray-6">{{ __('Nikt nie ma dyżuru') }}</span>
+              <template v-else>
+                <UserAvatar :user="w.uzytkownik" size="sm" />
+                <span>{{ nazwa(w.uzytkownik) }}</span>
+                <span class="text-ink-gray-6"
+                  >{{ formatujGodzine(w.od) }} - {{ formatujGodzine(w.do) }}</span
+                >
+                <span v-if="brakNumeru(w.uzytkownik)" class="text-ink-gray-6">
+                  {{ __('Brak numeru telefonu') }}
+                </span>
+              </template>
+              <span v-if="!w.aktywny" class="text-ink-gray-5">({{ __('wyłączony') }})</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <Button variant="ghost" size="sm" :label="__('Edytuj')" @click="otworzWyjatek(w)" />
+              <Button
+                variant="ghost"
+                size="sm"
+                theme="red"
+                :label="__('Usuń')"
+                :disabled="zapisuje"
+                @click="usun(w)"
+              />
             </div>
           </div>
         </div>
@@ -146,6 +282,46 @@
         </div>
       </template>
     </Dialog>
+    <Dialog
+      v-model="wyj.otwarty"
+      :options="{ title: wyj.name ? __('Edytuj wyjątek') : __('Dodaj wyjątek') }"
+    >
+      <template #body-content>
+        <div class="flex flex-col gap-4">
+          <FormControl
+            type="date"
+            :label="__('Data')"
+            :modelValue="wyj.data"
+            @update:modelValue="zmienDateWyjatku"
+          />
+          <FormControl
+            type="checkbox"
+            :label="__('Tego dnia nikt nie ma dyżuru')"
+            v-model="wyj.bezDyzuru"
+          />
+          <template v-if="!wyj.bezDyzuru">
+            <FormControl
+              type="select"
+              :label="__('Użytkownik')"
+              :options="opcjeUzytkownikow"
+              v-model="wyj.uzytkownik"
+            />
+            <div class="grid grid-cols-2 gap-4">
+              <FormControl type="text" :label="__('Od (GG:MM)')" placeholder="08:00" v-model="wyj.od" />
+              <FormControl type="text" :label="__('Do (GG:MM)')" placeholder="18:00" v-model="wyj.do" />
+            </div>
+          </template>
+          <FormControl type="checkbox" :label="__('Aktywny')" v-model="wyj.aktywny" />
+          <ErrorMessage :message="wyj.blad" />
+        </div>
+      </template>
+      <template #actions>
+        <div class="flex justify-end gap-2">
+          <Button variant="ghost" :label="__('Anuluj')" @click="wyj.otwarty = false" />
+          <Button variant="solid" :label="__('Zapisz')" :loading="zapisuje" @click="zapiszWyjatek" />
+        </div>
+      </template>
+    </Dialog>
   </div>
 </template>
 
@@ -155,10 +331,16 @@ import { createResource, toast, Switch, ErrorMessage, Button, FormControl, Dialo
 import UserAvatar from '@/components/UserAvatar.vue'
 import {
   DNI_TYGODNIA,
+  dzienZDaty,
+  formatujDate,
   formatujGodzine,
   grupujPoDniach,
   naSekundy,
+  sortujWyjatki,
+  walidujLimit,
+  walidujTresc,
   walidujWiersz,
+  walidujWyjatek,
 } from '@/utils/dyzury'
 
 // Wszystkie klucze deklarowane z gory, tablice zawsze podmieniane na nowe
@@ -168,10 +350,21 @@ const state = reactive({
   uzytkownicy: [],
   dyzurWlaczone: 0,
   dyzurniTeraz: [],
+  wyjatekDzis: false,
+  nadawca: '',
+  trybTestowy: 0,
+  tokenUstawiony: false,
+  zapisanaTresc: '',
+  zapisanyLimit: 0,
   zaladowano: false,
 })
+const ustawienia = reactive({ tresc: '', limit: 0, blad: '' })
+const podglad = reactive({ tresc: '', znaki: 0, ostrzezenie: '' })
+let podgladTimer = null
+let podgladNr = 0
 const blad = ref('')
 const zapisuje = ref(false)
+const testuje = ref(false)
 const telefonDraft = reactive({})
 
 const dialog = reactive({
@@ -185,6 +378,18 @@ const dialog = reactive({
   blad: '',
 })
 
+const wyj = reactive({
+  otwarty: false,
+  name: null,
+  data: '',
+  bezDyzuru: false,
+  uzytkownik: '',
+  od: '08:00',
+  do: '18:00',
+  aktywny: true,
+  blad: '',
+})
+
 const listResource = createResource({
   url: 'crm.api.dyzury.volteo_dyzury_lista',
   auto: true,
@@ -193,6 +398,16 @@ const listResource = createResource({
     state.uzytkownicy = data?.uzytkownicy || []
     state.dyzurWlaczone = data?.dyzur_wlaczone || 0
     state.dyzurniTeraz = data?.dyzurni_teraz || []
+    state.wyjatekDzis = Boolean(data?.wyjatek_dzis)
+    state.nadawca = data?.nadawca || ''
+    state.trybTestowy = data?.tryb_testowy || 0
+    state.tokenUstawiony = Boolean(data?.token_ustawiony)
+    state.zapisanaTresc = data?.tresc_dyzur || ''
+    state.zapisanyLimit = data?.limit_dzienny_dyzur ?? 0
+    ustawienia.tresc = state.zapisanaTresc
+    ustawienia.limit = state.zapisanyLimit
+    ustawienia.blad = ''
+    odswiezPodglad()
     state.zaladowano = true
     blad.value = ''
   },
@@ -202,6 +417,7 @@ const listResource = createResource({
 })
 
 const grupy = computed(() => grupujPoDniach(state.wiersze))
+const wyjatki = computed(() => sortujWyjatki(state.wiersze))
 const opcjeDni = computed(() => DNI_TYGODNIA.map((d) => ({ label: __(d), value: d })))
 const opcjeUzytkownikow = computed(() =>
   state.uzytkownicy.map((u) => ({ label: u.full_name, value: u.name })),
@@ -217,9 +433,94 @@ function brakNumeru(email) {
 }
 
 const terazTekst = computed(() => {
-  if (!state.dyzurniTeraz.length) return __('Teraz nikt nie ma dyżuru')
-  return __('Teraz dyżur: {0}', [state.dyzurniTeraz.map(nazwa).join(', ')])
+  const dopisek = state.wyjatekDzis ? ' ' + __('(wyjątek od grafiku)') : ''
+  if (!state.dyzurniTeraz.length) return __('Teraz nikt nie ma dyżuru') + dopisek
+  return __('Teraz dyżur: {0}', [state.dyzurniTeraz.map(nazwa).join(', ')]) + dopisek
 })
+
+const kanalTekst = computed(() => {
+  if (!state.tokenUstawiony) {
+    return __('Token SMSAPI: brak (uzupełnij w Desk, Volteo SMS Ustawienia)')
+  }
+  return __('Nadawca: {0}. Token SMSAPI: ustawiony', [state.nadawca])
+})
+
+const ustawieniaZmienione = computed(
+  () =>
+    ustawienia.tresc !== state.zapisanaTresc ||
+    String(ustawienia.limit) !== String(state.zapisanyLimit),
+)
+
+function odswiezPodglad() {
+  const nr = ++podgladNr
+  createResource({
+    url: 'crm.api.dyzury.volteo_dyzur_podglad_tresci',
+    params: { tresc_dyzur: ustawienia.tresc },
+    auto: true,
+    onSuccess: (data) => {
+      if (nr !== podgladNr) return
+      podglad.tresc = data?.tresc || ''
+      podglad.znaki = data?.znaki || 0
+      podglad.ostrzezenie = data?.ostrzezenie || ''
+    },
+    onError: () => {
+      if (nr !== podgladNr) return
+      podglad.tresc = ''
+      podglad.znaki = 0
+      podglad.ostrzezenie = ''
+    },
+  })
+}
+
+function zmienTresc(val) {
+  ustawienia.tresc = val
+  ustawienia.blad = ''
+  clearTimeout(podgladTimer)
+  podgladTimer = setTimeout(odswiezPodglad, 400)
+}
+
+function zmienLimit(val) {
+  ustawienia.limit = val
+  ustawienia.blad = ''
+}
+
+function zapiszUstawienia() {
+  const komunikat = walidujTresc(ustawienia.tresc) || walidujLimit(ustawienia.limit)
+  if (komunikat) {
+    ustawienia.blad = komunikat
+    return
+  }
+  wywolaj(
+    'crm.api.dyzury.volteo_dyzury_ustawienia_zapisz',
+    { tresc_dyzur: ustawienia.tresc, limit_dzienny_dyzur: Number(ustawienia.limit) },
+    () => {
+      toast.success(__('Ustawienia SMS zapisane'))
+      listResource.reload()
+    },
+    __('Nie udało się zapisać ustawień SMS'),
+    (msg) => (ustawienia.blad = msg),
+  )
+}
+
+function wyslijTestowy() {
+  testuje.value = true
+  createResource({
+    url: 'crm.api.dyzury.volteo_dyzur_sms_testowy',
+    auto: true,
+    onSuccess: (data) => {
+      testuje.value = false
+      toast.success(
+        data?.tryb_testowy
+          ? __('Tryb testowy SMSAPI: treść poprawna, nic nie wysłano')
+          : __('SMS testowy wysłany na Twój numer'),
+      )
+    },
+    onError: (err) => {
+      testuje.value = false
+      toast.error(bladZSerwera(err, __('Nie udało się wysłać SMS testowego')))
+    },
+  })
+}
 
 function bladZSerwera(err, domyslny) {
   return err?.messages?.[0] || domyslny
@@ -293,6 +594,58 @@ function zapiszDialog() {
     },
     __('Nie udało się zapisać dyżuru'),
     (msg) => (dialog.blad = msg),
+  )
+}
+
+function otworzWyjatek(wiersz) {
+  wyj.name = wiersz?.name || null
+  wyj.data = wiersz?.data || ''
+  wyj.bezDyzuru = wiersz ? Boolean(wiersz.bez_dyzuru) : false
+  wyj.uzytkownik = wiersz?.uzytkownik || state.uzytkownicy[0]?.name || ''
+  wyj.od = wiersz?.od ? formatujGodzine(wiersz.od) : '08:00'
+  wyj.do = wiersz?.do ? formatujGodzine(wiersz.do) : '18:00'
+  wyj.aktywny = wiersz ? Boolean(wiersz.aktywny) : true
+  wyj.blad = ''
+  wyj.otwarty = true
+}
+
+// Nowy wyjatek: po wyborze daty podstawiamy godziny z pierwszego wiersza tygodniowego tego dnia
+function zmienDateWyjatku(val) {
+  wyj.data = val || ''
+  wyj.blad = ''
+  if (wyj.name) return
+  const dzien = dzienZDaty(wyj.data)
+  const pierwszy = dzien ? grupy.value[dzien]?.[0] : null
+  if (pierwszy) {
+    wyj.od = formatujGodzine(pierwszy.od)
+    wyj.do = formatujGodzine(pierwszy.do)
+  }
+}
+
+function zapiszWyjatek() {
+  const komunikat = walidujWyjatek(wyj.data, wyj.od, wyj.do, wyj.bezDyzuru, wyj.uzytkownik)
+  if (komunikat) {
+    wyj.blad = komunikat
+    return
+  }
+  wywolaj(
+    'crm.api.dyzury.volteo_dyzur_zapisz',
+    {
+      name: wyj.name,
+      dzien_tygodnia: '',
+      od: wyj.bezDyzuru ? '' : naSekundy(wyj.od),
+      do: wyj.bezDyzuru ? '' : naSekundy(wyj.do),
+      uzytkownik: wyj.bezDyzuru ? '' : wyj.uzytkownik,
+      aktywny: wyj.aktywny ? 1 : 0,
+      data: wyj.data,
+      bez_dyzuru: wyj.bezDyzuru ? 1 : 0,
+    },
+    () => {
+      wyj.otwarty = false
+      listResource.reload()
+    },
+    __('Nie udało się zapisać wyjątku'),
+    (msg) => (wyj.blad = msg),
   )
 }
 

@@ -6,14 +6,22 @@ from datetime import datetime, time, timedelta
 from typing import ClassVar
 
 from crm.volteo_dyzury import (
+	DANE_PRZYKLADOWE_DYZUR,
 	DNI_TYGODNIA,
+	PLACEHOLDERY_DYZUR,
 	TRESC_DYZUR_DOMYSLNA,
+	czy_wyjatek_dnia,
 	dyzurni_w_chwili,
 	dzien_tygodnia,
+	dzien_z_daty,
 	klucz_licznika_dnia,
 	normalizuj_numer_pl,
 	opis_chwili,
+	opis_daty,
 	parsuj_czas,
+	parsuj_date,
+	waliduj_limit_dyzur,
+	waliduj_tresc_dyzur,
 	waliduj_wiersz,
 	zbuduj_tresc_dyzur,
 	zdecyduj_wysylke_dyzur,
@@ -286,3 +294,172 @@ class TestDecyzja(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+class TestTrescIPodglad(unittest.TestCase):
+	def test_pusta_tresc(self):
+		self.assertEqual(waliduj_tresc_dyzur("   "), "Treść SMS nie może być pusta.")
+		self.assertEqual(waliduj_tresc_dyzur(None), "Treść SMS nie może być pusta.")
+
+	def test_nieznany_placeholder(self):
+		komunikat = waliduj_tresc_dyzur("Lead {klient} {xxx}")
+		self.assertIn("Nieznany placeholder {xxx}", komunikat)
+		self.assertIn("{miejscowosc}", komunikat)
+
+	def test_poprawna_tresc(self):
+		self.assertIsNone(waliduj_tresc_dyzur(TRESC_DYZUR_DOMYSLNA))
+
+	def test_wszystkie_znane_placeholdery_przechodza(self):
+		tresc = " ".join("{" + p + "}" for p in PLACEHOLDERY_DYZUR)
+		self.assertIsNone(waliduj_tresc_dyzur(tresc))
+
+	def test_limit(self):
+		self.assertIsNone(waliduj_limit_dyzur(0))
+		self.assertIsNone(waliduj_limit_dyzur("1000"))
+		self.assertIsNotNone(waliduj_limit_dyzur(1001))
+		self.assertIsNotNone(waliduj_limit_dyzur(-1))
+		self.assertIsNotNone(waliduj_limit_dyzur("abc"))
+
+	def test_dane_przykladowe_daja_tekst_bez_polskich_znakow(self):
+		tresc, _ostrzezenie = zbuduj_tresc_dyzur(
+			"Nowy lead FB: {klient}, {miejscowosc}, tel. {telefon}, {kod}. {link}",
+			{**DANE_PRZYKLADOWE_DYZUR, "link": "https://crm.example/crm/leads/X"},
+		)
+		self.assertIn("Jan Testowy", tresc)
+		self.assertTrue(tresc.isascii())
+		self.assertNotIn("{", tresc)
+
+
+def wyjatek(data, od, do, uzytkownik, aktywny=1, bez_dyzuru=0):
+	return {
+		"dzien_tygodnia": dzien_z_daty(data),
+		"data": data,
+		"od": od,
+		"do": do,
+		"uzytkownik": uzytkownik,
+		"aktywny": aktywny,
+		"bez_dyzuru": bez_dyzuru,
+	}
+
+
+# 2026-11-03 to wtorek (normalnie dyżur ma A)
+WT_DATA = "2026-11-03"
+
+
+class TestParsujDate(unittest.TestCase):
+	def test_string_date_datetime(self):
+		from datetime import date
+
+		self.assertEqual(parsuj_date("2026-11-03"), date(2026, 11, 3))
+		self.assertEqual(parsuj_date(date(2026, 11, 3)), date(2026, 11, 3))
+		self.assertEqual(parsuj_date(datetime(2026, 11, 3, 12, 30)), date(2026, 11, 3))
+
+	def test_zle_wartosci(self):
+		for zle in (None, "", "03.11.2026", "2026-13-01", "2026-02-30", 5):
+			self.assertIsNone(parsuj_date(zle))
+
+	def test_opis_i_dzien(self):
+		self.assertEqual(opis_daty("2026-11-11"), "11.11.2026")
+		self.assertEqual(dzien_z_daty(WT_DATA), "Wtorek")
+		self.assertIsNone(dzien_z_daty("x"))
+
+
+class TestWyjatki(unittest.TestCase):
+	def test_wyjatek_z_osoba_zastepuje_grafik(self):
+		g = [*GRAFIK, wyjatek(WT_DATA, "09:00:00", "12:00:00", R)]
+		self.assertEqual(dyzurni_w_chwili(g, o(1, 10)), [R])
+		# poza godzinami wyjatku grafik tygodniowy A tez nie dziala
+		self.assertEqual(dyzurni_w_chwili(g, o(1, 14)), [])
+
+	def test_bez_dyzuru_daje_pusto_mimo_wiersza_tygodniowego(self):
+		g = [*GRAFIK, wyjatek(WT_DATA, None, None, None, bez_dyzuru=1)]
+		self.assertEqual(dyzurni_w_chwili(g, o(1, 10)), [])
+		self.assertTrue(czy_wyjatek_dnia(g, o(1, 10)))
+
+	def test_wyjatek_innej_daty_ignorowany(self):
+		g = [*GRAFIK, wyjatek("2026-11-10", "09:00:00", "12:00:00", R)]
+		self.assertEqual(dyzurni_w_chwili(g, o(1, 10)), [A])
+		self.assertFalse(czy_wyjatek_dnia(g, o(1, 10)))
+
+	def test_wyjatek_nieaktywny_ignorowany(self):
+		g = [*GRAFIK, wyjatek(WT_DATA, None, None, None, aktywny=0, bez_dyzuru=1)]
+		self.assertEqual(dyzurni_w_chwili(g, o(1, 10)), [A])
+		self.assertFalse(czy_wyjatek_dnia(g, o(1, 10)))
+
+	def test_dwie_zmiany_jednej_daty(self):
+		g = [
+			*GRAFIK,
+			wyjatek(WT_DATA, "08:00:00", "12:00:00", R),
+			wyjatek(WT_DATA, "12:00:00", "18:00:00", A),
+		]
+		self.assertEqual(dyzurni_w_chwili(g, o(1, 11, 59)), [R])
+		self.assertEqual(dyzurni_w_chwili(g, o(1, 12)), [A])
+		self.assertEqual(dyzurni_w_chwili(g, o(1, 18)), [])
+
+	def test_granice_od_do(self):
+		g = [wyjatek(WT_DATA, "09:00:00", "10:00:00", R)]
+		self.assertEqual(dyzurni_w_chwili(g, o(1, 9)), [R])
+		self.assertEqual(dyzurni_w_chwili(g, o(1, 8, 59)), [])
+		self.assertEqual(dyzurni_w_chwili(g, o(1, 10)), [])
+
+	def test_data_jako_date_i_datetime(self):
+		from datetime import date
+
+		for d in (date(2026, 11, 3), datetime(2026, 11, 3)):
+			g = [{**wyjatek(WT_DATA, "09:00:00", "12:00:00", R), "data": d}]
+			self.assertEqual(dyzurni_w_chwili(g, o(1, 10)), [R])
+
+	def test_bez_dyzuru_i_osoba_tej_samej_daty(self):
+		# wiersz bez_dyzuru sam nic nie dodaje, ale inny wyjatek tej daty nadal obowiazuje
+		g = [
+			wyjatek(WT_DATA, None, None, None, bez_dyzuru=1),
+			wyjatek(WT_DATA, "09:00:00", "12:00:00", R),
+		]
+		self.assertEqual(dyzurni_w_chwili(g, o(1, 10)), [R])
+
+	def test_wiersz_tygodniowy_bez_klucza_data_dziala_jak_dawniej(self):
+		self.assertEqual(dyzurni_w_chwili(GRAFIK, o(1, 10)), [A])
+
+	def test_slad_z_wyjatkiem(self):
+		d = zdecyduj_wysylke_dyzur(
+			wlaczone=True, token_ustawiony=True, chwila=o(1, 10, 5), dyzurni=[], wyjatek_dnia=True
+		)
+		self.assertEqual(d.slad, "SMS dyżurowy: brak dyżuru (wtorek 10:05, wyjątek od grafiku na 03.11.2026)")
+
+	def test_slad_bez_wyjatku_bez_zmian(self):
+		d = zdecyduj_wysylke_dyzur(wlaczone=True, token_ustawiony=True, chwila=o(1, 10, 5), dyzurni=[])
+		self.assertEqual(d.slad, "SMS dyżurowy: brak dyżuru (wtorek 10:05)")
+
+
+class TestWalidujWyjatek(unittest.TestCase):
+	def test_stare_wywolanie_trzyargumentowe(self):
+		self.assertIsNone(waliduj_wiersz("Wtorek", "08:00", "18:00"))
+		self.assertIn("Dzień tygodnia", waliduj_wiersz("x", "08:00", "18:00"))
+		self.assertIn("wcześniejsza", waliduj_wiersz("Wtorek", "18:00", "08:00"))
+
+	def test_bez_dyzuru_wymaga_daty(self):
+		self.assertEqual(
+			waliduj_wiersz("Wtorek", "08:00", "18:00", bez_dyzuru=1),
+			"Opcja 'nikt nie ma dyżuru' dotyczy tylko wyjątku z datą.",
+		)
+
+	def test_zla_data(self):
+		self.assertEqual(
+			waliduj_wiersz(None, "08:00", "18:00", data="03.11.2026"),
+			"Data wyjątku musi mieć format RRRR-MM-DD.",
+		)
+
+	def test_wyjatek_bez_dyzuru_przyjmuje_puste_reszte(self):
+		self.assertIsNone(waliduj_wiersz("", None, None, data=WT_DATA, bez_dyzuru=1, uzytkownik=""))
+
+	def test_wyjatek_z_osoba_wymaga_godzin_i_uzytkownika(self):
+		self.assertIsNone(waliduj_wiersz("", "09:00", "12:00", data=WT_DATA, uzytkownik=R))
+		self.assertIn("GG:MM", waliduj_wiersz("", None, "12:00", data=WT_DATA, uzytkownik=R))
+		self.assertIn("wcześniejsza", waliduj_wiersz("", "12:00", "09:00", data=WT_DATA, uzytkownik=R))
+		self.assertEqual(
+			waliduj_wiersz("", "09:00", "12:00", data=WT_DATA, uzytkownik=""), "Wybierz użytkownika."
+		)
+
+	def test_wiersz_tygodniowy_z_uzytkownikiem(self):
+		self.assertEqual(waliduj_wiersz("Wtorek", "08:00", "18:00", uzytkownik=None), "Wybierz użytkownika.")
+		self.assertIsNone(waliduj_wiersz("Wtorek", "08:00", "18:00", uzytkownik=R))
