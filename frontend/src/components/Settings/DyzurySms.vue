@@ -290,7 +290,7 @@
         <div class="flex flex-col gap-4">
           <FormControl
             type="date"
-            :label="__('Data')"
+            :label="__('Data wyjątku')"
             :modelValue="wyj.data"
             @update:modelValue="zmienDateWyjatku"
           />
