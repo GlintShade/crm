@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from typing import Any
 
+from crm.volteo_leady_import import SEPARATOR_UWAG
 from crm.volteo_sms import przygotuj_tresc
 
 DNI_TYGODNIA: tuple[str, ...] = (
@@ -32,13 +33,27 @@ DNI_TYGODNIA: tuple[str, ...] = (
 )
 """Literały Select `dzien_tygodnia`; indeks = `datetime.weekday()`."""
 
-TRESC_DYZUR_DOMYSLNA: str = "Nowy lead FB: {klient}, tel. {telefon}, {kod}. {link}"
-"""Seed `tresc_dyzur`."""
+TRESC_DYZUR_DOMYSLNA: str = "Lead FB: {klient}, tel. {telefon}, {kod}, {produkt}, {ma_pv}, {zasady}. {link}"
+"""Seed `tresc_dyzur` i fallback (wartość zapisana w Single zostaje bez zmian)."""
 
 LIMIT_DZIENNY_DYZUR_DOMYSLNY: int = 100
 """Seed `limit_dzienny_dyzur`: maks. realnie wysłanych SMS dyżurowych na dobę serwera."""
 
-PLACEHOLDERY_DYZUR: tuple[str, ...] = ("klient", "telefon", "kod", "miejscowosc", "link")
+PLACEHOLDERY_DYZUR: tuple[str, ...] = (
+	"klient",
+	"telefon",
+	"kod",
+	"miejscowosc",
+	"link",
+	"produkt",
+	"ma_pv",
+	"zasady",
+	"kampania",
+	"formularz",
+	"data_zgloszenia",
+	"wojewodztwo",
+	"uwagi",
+)
 """Znane placeholdery treści SMS dyżurowego."""
 
 DANE_PRZYKLADOWE_DYZUR: Mapping[str, str] = {
@@ -46,10 +61,30 @@ DANE_PRZYKLADOWE_DYZUR: Mapping[str, str] = {
 	"telefon": "500 100 200",
 	"kod": "00-001",
 	"miejscowosc": "Warszawa",
+	"produkt": "PV + magazyn",
+	"ma_pv": "ma PV bez magazynu",
+	"zasady": "nowe zasady",
+	"kampania": "[S][KAMPANIA LEADOWA][WROCLAW][27.10.2026]",
+	"formularz": "Formularz PV 2026",
+	"data_zgloszenia": "01.11",
+	"wojewodztwo": "dolnoslaskie",
+	"uwagi": "Pytanie dodatkowe: tak",
 }
 """Dane do podglądu i SMS testowego; `link` dokłada adapter (zależy od URL site)."""
 
 LIMIT_DYZUR_MAX: int = 1000
+
+LIMIT_UWAG_W_SMS: int = 120
+"""Maks. długość placeholdera `{uwagi}` (z wielokropkiem)."""
+
+_PRODUKTY_OPIS: Mapping[str, str] = {
+	"PV": "fotowoltaika",
+	"PVME": "PV + magazyn",
+	"ME": "magazyn energii",
+	"PC": "pompa ciepla",
+	"CP": "Czyste Powietrze",
+}
+_ETYKIETY_WYLACZONE_Z_UWAG: tuple[str, ...] = ("Zrodlo", "Formularz", "Kampania")
 
 PREFIKS_KLUCZA_LICZNIKA: str = "volteo:sms_dyzur:"
 TTL_LICZNIKA_SEK: int = 2 * 24 * 3600
@@ -222,6 +257,69 @@ def waliduj_wiersz(
 	return None
 
 
+def opisz_produkt(token: Any) -> str:
+	"""Token produktu reklamy (`custom_produkt_procesu`) na opis; nieznany token wraca bez zmian."""
+	czysty = str(token or "").strip()
+	if not czysty:
+		return ""
+	return _PRODUKTY_OPIS.get(czysty.upper(), czysty)
+
+
+def opisz_posiadane_pv(tokeny: Any) -> str:
+	"""`custom_posiadane_produkty` ("", "PV", "PV+ME" lub zbiór tokenów) na opis posiadania PV.
+
+	Puste pole daje "nie ma PV" (zamierzone: SMS idzie tylko po leadzie z Facebooka).
+	"""
+	if isinstance(tokeny, str) or tokeny is None:
+		czesci = [t for t in (tokeny or "").replace(" ", "").upper().split("+") if t]
+	else:
+		czesci = [str(t).strip().upper() for t in tokeny if str(t).strip()]
+	zbior = set(czesci)
+	if "PV" not in zbior:
+		return "nie ma PV"
+	if "ME" in zbior:
+		return "ma PV z magazynem"
+	if zbior == {"PV"}:
+		return "ma PV bez magazynu"
+	return "ma PV"
+
+
+def opisz_zasady(wartosc: Any) -> str:
+	""" "Nowe zasady" / "Stare zasady" na małe litery; inne wartości dają pusty tekst."""
+	czysty = str(wartosc or "").strip()
+	return czysty.lower() if czysty in ("Nowe zasady", "Stare zasady") else ""
+
+
+def _linie_uwag(uwagi: Any) -> list[str]:
+	return [l.strip() for l in str(uwagi or "").split(SEPARATOR_UWAG.strip()) if l.strip()]
+
+
+def wyciagnij_z_uwag(uwagi: Any, etykieta: str) -> str:
+	"""Wartość pierwszej linii Uwag zaczynającej się od `etykieta + ": "`, inaczej pusty tekst."""
+	prefiks = f"{etykieta}: "
+	for linia in _linie_uwag(uwagi):
+		if linia.startswith(prefiks):
+			return linia[len(prefiks) :].strip()
+	return ""
+
+
+def reszta_uwag(uwagi: Any) -> str:
+	"""Linie Uwag bez Zrodlo/Formularz/Kampania, łączone "; ", do `LIMIT_UWAG_W_SMS` znaków."""
+	linie = [
+		l for l in _linie_uwag(uwagi) if not l.startswith(tuple(f"{e}:" for e in _ETYKIETY_WYLACZONE_Z_UWAG))
+	]
+	tekst = "; ".join(linie)
+	if len(tekst) > LIMIT_UWAG_W_SMS:
+		return tekst[: LIMIT_UWAG_W_SMS - 3].rstrip() + "..."
+	return tekst
+
+
+def opisz_date(wartosc: Any) -> str:
+	"""`date`/`datetime`/"RRRR-MM-DD" na "DD.MM" (bez roku); inaczej pusty tekst."""
+	parsed = parsuj_date(wartosc)
+	return parsed.strftime("%d.%m") if parsed else ""
+
+
 class _SlownikBezBrakow(dict):
 	def __missing__(self, klucz: str) -> str:
 		return ""
@@ -247,6 +345,9 @@ def zbuduj_tresc_dyzur(szablon: str, dane: Mapping[str, Any]) -> tuple[str, str 
 
 	surowa = _PLACEHOLDER.sub(_podstaw, szablon or "")
 	surowa = re.sub(r"[ \t]+", " ", surowa)
+	surowa = re.sub(r"\|(?:\s*\|)+", "|", surowa)
+	surowa = re.sub(r"([,;:])(?:\s*[,;:])+", r"\1", surowa)
+	surowa = re.sub(r"^\s*\|\s*|\s*\|\s*$", "", surowa)
 	surowa = re.sub(r"\s+([,.;:])", r"\1", surowa)
 	surowa = re.sub(r"([,;:])\s*(?=[.])", "", surowa)
 	return przygotuj_tresc(surowa)

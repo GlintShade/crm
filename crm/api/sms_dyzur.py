@@ -36,6 +36,12 @@ from crm.volteo_dyzury import (
 	czy_wyjatek_dnia,
 	dyzurni_w_chwili,
 	klucz_licznika_dnia,
+	opisz_date,
+	opisz_posiadane_pv,
+	opisz_produkt,
+	opisz_zasady,
+	reszta_uwag,
+	wyciagnij_z_uwag,
 	zbuduj_tresc_dyzur,
 	zdecyduj_wysylke_dyzur,
 )
@@ -74,7 +80,19 @@ def _dane_leada(lead: str) -> dict:
 	wiersz = frappe.db.get_value(
 		"CRM Lead",
 		lead,
-		["first_name", "last_name", "mobile_no", "custom_install_postal_code", "custom_install_city"],
+		[
+			"first_name",
+			"last_name",
+			"mobile_no",
+			"custom_install_postal_code",
+			"custom_install_city",
+			"custom_produkt_procesu",
+			"custom_posiadane_produkty",
+			"custom_zasady_dotacji",
+			"custom_import_date",
+			"custom_voivodeship",
+			"custom_uwagi_import",
+		],
 		as_dict=True,
 	)
 	if not wiersz:
@@ -86,6 +104,14 @@ def _dane_leada(lead: str) -> dict:
 		"kod": wiersz.custom_install_postal_code or "",
 		"miejscowosc": wiersz.custom_install_city or "",
 		"link": get_url("/crm/leads/" + lead),
+		"produkt": opisz_produkt(wiersz.custom_produkt_procesu),
+		"ma_pv": opisz_posiadane_pv(wiersz.custom_posiadane_produkty),
+		"zasady": opisz_zasady(wiersz.custom_zasady_dotacji),
+		"kampania": wyciagnij_z_uwag(wiersz.custom_uwagi_import, "Kampania"),
+		"formularz": wyciagnij_z_uwag(wiersz.custom_uwagi_import, "Formularz"),
+		"data_zgloszenia": opisz_date(wiersz.custom_import_date),
+		"wojewodztwo": wiersz.custom_voivodeship or "",
+		"uwagi": reszta_uwag(wiersz.custom_uwagi_import),
 	}
 
 

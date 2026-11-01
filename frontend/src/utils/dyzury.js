@@ -62,7 +62,21 @@ export function grupujPoDniach(wiersze) {
   return wynik
 }
 
-export const PLACEHOLDERY_DYZUR = ['klient', 'telefon', 'kod', 'miejscowosc', 'link']
+export const PLACEHOLDERY_DYZUR = [
+  'klient',
+  'telefon',
+  'kod',
+  'miejscowosc',
+  'link',
+  'produkt',
+  'ma_pv',
+  'zasady',
+  'kampania',
+  'formularz',
+  'data_zgloszenia',
+  'wojewodztwo',
+  'uwagi',
+]
 export const LIMIT_DYZUR_MAX = 1000
 
 // Komunikat bledu po polsku albo null; lustro waliduj_tresc_dyzur z Pythona

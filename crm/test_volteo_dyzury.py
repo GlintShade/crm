@@ -2,7 +2,7 @@
 # For license information, please see license.txt
 
 import unittest
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import ClassVar
 
 from crm.volteo_dyzury import (
@@ -18,14 +18,21 @@ from crm.volteo_dyzury import (
 	normalizuj_numer_pl,
 	opis_chwili,
 	opis_daty,
+	opisz_date,
+	opisz_posiadane_pv,
+	opisz_produkt,
+	opisz_zasady,
 	parsuj_czas,
 	parsuj_date,
+	reszta_uwag,
 	waliduj_limit_dyzur,
 	waliduj_tresc_dyzur,
 	waliduj_wiersz,
+	wyciagnij_z_uwag,
 	zbuduj_tresc_dyzur,
 	zdecyduj_wysylke_dyzur,
 )
+from crm.volteo_sms import dlugosc_gsm7
 
 R = "r.rzepecki@proenergy.pro"
 A = "a.rzysko@proenergy.pro"
@@ -170,7 +177,7 @@ class TestTresc(unittest.TestCase):
 		tresc, ostrz = zbuduj_tresc_dyzur(TRESC_DYZUR_DOMYSLNA, self.DANE)
 		self.assertEqual(
 			tresc,
-			"Nowy lead FB: Zazolc Gesla, tel. +48500100200, 64-000. https://crm.proenergy.pro/crm/leads/L1",
+			"Lead FB: Zazolc Gesla, tel. +48500100200, 64-000. https://crm.proenergy.pro/crm/leads/L1",
 		)
 		self.assertIsNone(ostrz)
 
@@ -322,7 +329,7 @@ class TestTrescIPodglad(unittest.TestCase):
 
 	def test_dane_przykladowe_daja_tekst_bez_polskich_znakow(self):
 		tresc, _ostrzezenie = zbuduj_tresc_dyzur(
-			"Nowy lead FB: {klient}, {miejscowosc}, tel. {telefon}, {kod}. {link}",
+			"Lead FB: {klient}, {miejscowosc}, tel. {telefon}, {kod}. {link}",
 			{**DANE_PRZYKLADOWE_DYZUR, "link": "https://crm.example/crm/leads/X"},
 		)
 		self.assertIn("Jan Testowy", tresc)
@@ -463,3 +470,105 @@ class TestWalidujWyjatek(unittest.TestCase):
 	def test_wiersz_tygodniowy_z_uzytkownikiem(self):
 		self.assertEqual(waliduj_wiersz("Wtorek", "08:00", "18:00", uzytkownik=None), "Wybierz użytkownika.")
 		self.assertIsNone(waliduj_wiersz("Wtorek", "08:00", "18:00", uzytkownik=R))
+
+
+UWAGI = (
+	"Zrodlo: Facebook Lead Ads | Formularz: Formularz PV 2026 | "
+	"Kampania: [S][KAMPANIA LEADOWA][WROCLAW][27.10.2026] | Pytanie dodatkowe: tak | Dach: skos"
+)
+
+
+class TestFormatery(unittest.TestCase):
+	def test_produkt(self):
+		self.assertEqual(opisz_produkt("PV"), "fotowoltaika")
+		self.assertEqual(opisz_produkt("PVME"), "PV + magazyn")
+		self.assertEqual(opisz_produkt("ME"), "magazyn energii")
+		self.assertEqual(opisz_produkt("PC"), "pompa ciepla")
+		self.assertEqual(opisz_produkt("CP"), "Czyste Powietrze")
+		self.assertEqual(opisz_produkt("XYZ"), "XYZ")
+		self.assertEqual(opisz_produkt(""), "")
+		self.assertEqual(opisz_produkt(None), "")
+
+	def test_posiadane_pv(self):
+		self.assertEqual(opisz_posiadane_pv(""), "nie ma PV")
+		self.assertEqual(opisz_posiadane_pv(None), "nie ma PV")
+		self.assertEqual(opisz_posiadane_pv("PV"), "ma PV bez magazynu")
+		self.assertEqual(opisz_posiadane_pv("PV+ME"), "ma PV z magazynem")
+		self.assertEqual(opisz_posiadane_pv({"ME", "PV"}), "ma PV z magazynem")
+		self.assertEqual(opisz_posiadane_pv("PV+PC"), "ma PV")
+		self.assertEqual(opisz_posiadane_pv("PC"), "nie ma PV")
+
+	def test_zasady(self):
+		self.assertEqual(opisz_zasady("Nowe zasady"), "nowe zasady")
+		self.assertEqual(opisz_zasady("Stare zasady"), "stare zasady")
+		self.assertEqual(opisz_zasady("coś innego"), "")
+		self.assertEqual(opisz_zasady(None), "")
+
+	def test_wyciagnij_z_uwag(self):
+		self.assertEqual(wyciagnij_z_uwag(UWAGI, "Kampania"), "[S][KAMPANIA LEADOWA][WROCLAW][27.10.2026]")
+		self.assertEqual(wyciagnij_z_uwag(UWAGI, "Formularz"), "Formularz PV 2026")
+		self.assertEqual(wyciagnij_z_uwag(UWAGI, "Brak"), "")
+		self.assertEqual(wyciagnij_z_uwag("", "Kampania"), "")
+		self.assertEqual(wyciagnij_z_uwag(None, "Kampania"), "")
+
+	def test_reszta_uwag(self):
+		self.assertEqual(reszta_uwag(UWAGI), "Pytanie dodatkowe: tak; Dach: skos")
+		self.assertEqual(reszta_uwag("Zrodlo: Facebook Lead Ads"), "")
+		self.assertEqual(reszta_uwag(None), "")
+
+	def test_reszta_uwag_przycina(self):
+		wynik = reszta_uwag("Zrodlo: x | " + " | ".join(f"Pytanie {i}: odpowiedz dluga" for i in range(20)))
+		self.assertEqual(len(wynik), 120)
+		self.assertTrue(wynik.endswith("..."))
+
+	def test_data(self):
+		self.assertEqual(opisz_date(date(2026, 11, 1)), "01.11")
+		self.assertEqual(opisz_date(datetime(2026, 11, 1, 10, 5)), "01.11")
+		self.assertEqual(opisz_date("2026-11-01"), "01.11")
+		self.assertEqual(opisz_date("xx"), "")
+		self.assertEqual(opisz_date(None), "")
+
+
+class TestNoweTresci(unittest.TestCase):
+	LINK = "https://crm.proenergy.pro/crm/leads/CRM-LEAD-2026-21825"
+
+	def test_separator_pionowa_kreska(self):
+		tresc, _ = zbuduj_tresc_dyzur(
+			"{klient} | {kampania} | {link}", {"klient": "Jan", "kampania": "", "link": "http://x"}
+		)
+		self.assertEqual(tresc, "Jan | http://x")
+
+	def test_separator_na_koncu_i_poczatku(self):
+		tresc, _ = zbuduj_tresc_dyzur("{kampania} | {klient} | {formularz}", {"klient": "Jan"})
+		self.assertEqual(tresc, "Jan")
+
+	def test_pelna_tresc_nowymi_placeholderami(self):
+		tresc, _ = zbuduj_tresc_dyzur(
+			"{produkt}, {ma_pv}, {zasady}, {data_zgloszenia}, {wojewodztwo}, {formularz}",
+			{**DANE_PRZYKLADOWE_DYZUR, "link": self.LINK},
+		)
+		self.assertEqual(
+			tresc, "PV + magazyn, ma PV bez magazynu, nowe zasady, 01.11, dolnoslaskie, Formularz PV 2026"
+		)
+
+	def test_domyslna_miesci_sie_w_jednej_czesci(self):
+		dane = {**DANE_PRZYKLADOWE_DYZUR, "link": self.LINK}
+		tresc, ostrz = zbuduj_tresc_dyzur(TRESC_DYZUR_DOMYSLNA, dane)
+		self.assertLessEqual(dlugosc_gsm7(tresc), 160)
+		self.assertIsNone(ostrz)
+
+	def test_domyslna_z_pustymi_danymi_bez_wiszacych_separatorow(self):
+		tresc, _ = zbuduj_tresc_dyzur(
+			TRESC_DYZUR_DOMYSLNA, {"klient": "Jan", "telefon": "500", "link": self.LINK}
+		)
+		self.assertNotIn(",,", tresc)
+		self.assertNotIn(", ,", tresc)
+		self.assertNotIn(", .", tresc)
+
+	def test_trzy_nowe_placeholdery_walidacja(self):
+		self.assertEqual(len(PLACEHOLDERY_DYZUR), 13)
+		self.assertIsNone(waliduj_tresc_dyzur("{produkt} {ma_pv} {zasady} {kampania} {uwagi}"))
+
+	def test_dane_przykladowe_maja_wszystkie_klucze(self):
+		brakujace = set(PLACEHOLDERY_DYZUR) - set(DANE_PRZYKLADOWE_DYZUR) - {"link"}
+		self.assertEqual(brakujace, set())
