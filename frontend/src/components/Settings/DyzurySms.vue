@@ -68,13 +68,25 @@
           :disabled="zapisuje"
           @update:modelValue="zmienTresc"
         />
-        <p class="text-p-sm text-ink-gray-6">
-          {{
-            __(
-              'Placeholdery: {klient}, {telefon}, {kod}, {miejscowosc}, {link}. Polskie znaki zamieniane na łacińskie, 160 znaków to jedna część SMS.',
-            )
-          }}
-        </p>
+        <div class="flex flex-col gap-1 text-p-sm text-ink-gray-6">
+          <p>
+            {{
+              __(
+                'Dane klienta: {klient}, {telefon}, {kod}, {miejscowosc}, {wojewodztwo}, {link}.',
+              )
+            }}
+          </p>
+          <p>
+            {{
+              __(
+                'Z formularza FB: {produkt} (czego dotyczyła reklama), {ma_pv} (czy ma już PV), {zasady} (rozliczenie), {kampania}, {formularz}, {data_zgloszenia}, {uwagi} (pozostałe odpowiedzi, do 120 znaków).',
+              )
+            }}
+          </p>
+          <p>
+            {{ __('Polskie znaki zamieniane na łacińskie, 160 miejsc GSM-7 to jedna część SMS.') }}
+          </p>
+        </div>
         <div class="flex flex-col gap-1">
           <FormControl
             class="w-32"
@@ -94,7 +106,7 @@
             {{ podglad.tresc || '…' }}
           </div>
           <p class="text-p-sm text-ink-gray-6">
-            {{ __('{0} znaków', [podglad.znaki]) }}
+            {{ licznikPodgladu }}
           </p>
           <p v-if="podglad.ostrzezenie" class="text-p-sm text-ink-amber-3">
             {{ podglad.ostrzezenie }}
@@ -359,7 +371,12 @@ const state = reactive({
   zaladowano: false,
 })
 const ustawienia = reactive({ tresc: '', limit: 0, blad: '' })
-const podglad = reactive({ tresc: '', znaki: 0, ostrzezenie: '' })
+const podglad = reactive({ tresc: '', znaki: 0, czesci: 1, ostrzezenie: '' })
+const licznikPodgladu = computed(() =>
+  podglad.czesci === 1
+    ? __('{0} miejsc GSM-7, {1} część SMS', [podglad.znaki, podglad.czesci])
+    : __('{0} miejsc GSM-7, {1} części SMS', [podglad.znaki, podglad.czesci]),
+)
 let podgladTimer = null
 let podgladNr = 0
 const blad = ref('')
@@ -461,12 +478,14 @@ function odswiezPodglad() {
       if (nr !== podgladNr) return
       podglad.tresc = data?.tresc || ''
       podglad.znaki = data?.znaki || 0
+      podglad.czesci = data?.czesci || 1
       podglad.ostrzezenie = data?.ostrzezenie || ''
     },
     onError: () => {
       if (nr !== podgladNr) return
       podglad.tresc = ''
       podglad.znaki = 0
+      podglad.czesci = 1
       podglad.ostrzezenie = ''
     },
   })

@@ -36,7 +36,7 @@ from crm.volteo_dyzury import (
 	waliduj_wiersz,
 	zbuduj_tresc_dyzur,
 )
-from crm.volteo_sms import numer_do_smsapi
+from crm.volteo_sms import dlugosc_gsm7, liczba_czesci_sms, numer_do_smsapi
 
 DOCTYPE = "Volteo Dyzur SMS"
 DOCTYPE_USTAWIEN = "Volteo SMS Ustawienia"
@@ -161,7 +161,12 @@ def volteo_dyzur_podglad_tresci(tresc_dyzur: str) -> dict[str, Any]:
 	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
 	dane = {**DANE_PRZYKLADOWE_DYZUR, "link": get_url("/crm/leads/CRM-LEAD-2026-00001")}
 	tresc, ostrzezenie = zbuduj_tresc_dyzur(tresc_dyzur, dane)
-	return {"tresc": tresc, "znaki": len(tresc), "ostrzezenie": ostrzezenie}
+	return {
+		"tresc": tresc,
+		"znaki": dlugosc_gsm7(tresc),
+		"czesci": max(1, liczba_czesci_sms(tresc)),
+		"ostrzezenie": ostrzezenie,
+	}
 
 
 @frappe.whitelist()
