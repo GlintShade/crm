@@ -6,7 +6,9 @@ from datetime import datetime, time, timedelta
 from typing import ClassVar
 
 from crm.volteo_dyzury import (
+	DANE_PRZYKLADOWE_DYZUR,
 	DNI_TYGODNIA,
+	PLACEHOLDERY_DYZUR,
 	TRESC_DYZUR_DOMYSLNA,
 	dyzurni_w_chwili,
 	dzien_tygodnia,
@@ -14,6 +16,8 @@ from crm.volteo_dyzury import (
 	normalizuj_numer_pl,
 	opis_chwili,
 	parsuj_czas,
+	waliduj_limit_dyzur,
+	waliduj_tresc_dyzur,
 	waliduj_wiersz,
 	zbuduj_tresc_dyzur,
 	zdecyduj_wysylke_dyzur,
@@ -286,3 +290,37 @@ class TestDecyzja(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+class TestTrescIPodglad(unittest.TestCase):
+	def test_pusta_tresc(self):
+		self.assertEqual(waliduj_tresc_dyzur("   "), "Treść SMS nie może być pusta.")
+		self.assertEqual(waliduj_tresc_dyzur(None), "Treść SMS nie może być pusta.")
+
+	def test_nieznany_placeholder(self):
+		komunikat = waliduj_tresc_dyzur("Lead {klient} {xxx}")
+		self.assertIn("Nieznany placeholder {xxx}", komunikat)
+		self.assertIn("{miejscowosc}", komunikat)
+
+	def test_poprawna_tresc(self):
+		self.assertIsNone(waliduj_tresc_dyzur(TRESC_DYZUR_DOMYSLNA))
+
+	def test_wszystkie_znane_placeholdery_przechodza(self):
+		tresc = " ".join("{" + p + "}" for p in PLACEHOLDERY_DYZUR)
+		self.assertIsNone(waliduj_tresc_dyzur(tresc))
+
+	def test_limit(self):
+		self.assertIsNone(waliduj_limit_dyzur(0))
+		self.assertIsNone(waliduj_limit_dyzur("1000"))
+		self.assertIsNotNone(waliduj_limit_dyzur(1001))
+		self.assertIsNotNone(waliduj_limit_dyzur(-1))
+		self.assertIsNotNone(waliduj_limit_dyzur("abc"))
+
+	def test_dane_przykladowe_daja_tekst_bez_polskich_znakow(self):
+		tresc, _ostrzezenie = zbuduj_tresc_dyzur(
+			"Nowy lead FB: {klient}, {miejscowosc}, tel. {telefon}, {kod}. {link}",
+			{**DANE_PRZYKLADOWE_DYZUR, "link": "https://crm.example/crm/leads/X"},
+		)
+		self.assertIn("Jan Testowy", tresc)
+		self.assertTrue(tresc.isascii())
+		self.assertNotIn("{", tresc)

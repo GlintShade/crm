@@ -3,6 +3,8 @@ import {
   formatujGodzine,
   grupujPoDniach,
   naSekundy,
+  walidujLimit,
+  walidujTresc,
   walidujWiersz,
 } from '@/utils/dyzury'
 
@@ -73,5 +75,35 @@ describe('dyzury: grupujPoDniach', () => {
   it('ignoruje wiersz z nieznanym dniem', () => {
     const g = grupujPoDniach([{ dzien_tygodnia: 'x', od: '08:00', uzytkownik: 'a' }])
     expect(Object.values(g).flat()).toHaveLength(0)
+  })
+})
+
+describe('dyzury: walidujTresc', () => {
+  it('akceptuje znane placeholdery', () => {
+    expect(walidujTresc('Lead {klient}, {telefon}, {kod}, {miejscowosc}. {link}')).toBeNull()
+  })
+
+  it('odrzuca pusta tresc', () => {
+    expect(walidujTresc('   ')).toBe('Treść SMS nie może być pusta.')
+    expect(walidujTresc(null)).toBe('Treść SMS nie może być pusta.')
+  })
+
+  it('odrzuca nieznany placeholder', () => {
+    expect(walidujTresc('Lead {xxx}')).toContain('Nieznany placeholder {xxx}')
+  })
+})
+
+describe('dyzury: walidujLimit', () => {
+  it('akceptuje 0 i 1000', () => {
+    expect(walidujLimit(0)).toBeNull()
+    expect(walidujLimit('100')).toBeNull()
+    expect(walidujLimit(1000)).toBeNull()
+  })
+
+  it('odrzuca poza zakresem, puste i niecalkowite', () => {
+    expect(walidujLimit(1001)).toContain('od 0 do 1000')
+    expect(walidujLimit(-1)).toContain('od 0 do 1000')
+    expect(walidujLimit('')).toContain('od 0 do 1000')
+    expect(walidujLimit(1.5)).toContain('od 0 do 1000')
   })
 })

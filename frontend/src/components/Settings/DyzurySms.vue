@@ -26,11 +26,69 @@
           <div class="flex flex-col gap-1">
             <p class="text-base-semibold">{{ __('SMS dyżurowy włączony') }}</p>
             <p class="text-p-sm text-ink-gray-6">{{ terazTekst }}</p>
+            <p class="text-p-sm text-ink-gray-6">{{ kanalTekst }}</p>
+            <p v-if="state.trybTestowy" class="text-p-sm text-ink-gray-6">
+              {{ __('Tryb testowy SMSAPI włączony: żaden SMS nie wychodzi.') }}
+            </p>
           </div>
           <Switch
             :modelValue="Boolean(state.dyzurWlaczone)"
             :disabled="zapisuje"
             @update:modelValue="przelacz"
+          />
+        </div>
+      </div>
+
+      <!-- SMS text and daily limit -->
+      <div class="flex flex-col gap-4 px-2 max-w-2xl">
+        <div class="text-base-semibold">{{ __('Treść SMS') }}</div>
+        <FormControl
+          type="textarea"
+          :rows="3"
+          :modelValue="ustawienia.tresc"
+          :disabled="zapisuje"
+          @update:modelValue="zmienTresc"
+        />
+        <p class="text-p-sm text-ink-gray-6">
+          {{
+            __(
+              'Placeholdery: {klient}, {telefon}, {kod}, {miejscowosc}, {link}. Polskie znaki zamieniane na łacińskie, 160 znaków to jedna część SMS.',
+            )
+          }}
+        </p>
+        <div class="flex flex-col gap-1">
+          <FormControl
+            class="w-32"
+            type="number"
+            min="0"
+            max="1000"
+            :label="__('Limit dzienny SMS')"
+            :modelValue="ustawienia.limit"
+            :disabled="zapisuje"
+            @update:modelValue="zmienLimit"
+          />
+          <p class="text-p-sm text-ink-gray-6">{{ __('0 blokuje wysyłkę') }}</p>
+        </div>
+        <div class="flex flex-col gap-1">
+          <p class="text-p-sm text-ink-gray-6">{{ __('Podgląd') }}</p>
+          <div class="rounded-lg border p-3 text-p-base text-ink-gray-8 break-words">
+            {{ podglad.tresc || '…' }}
+          </div>
+          <p class="text-p-sm text-ink-gray-6">
+            {{ __('{0} znaków', [podglad.znaki]) }}
+          </p>
+          <p v-if="podglad.ostrzezenie" class="text-p-sm text-ink-amber-3">
+            {{ podglad.ostrzezenie }}
+          </p>
+        </div>
+        <ErrorMessage :message="ustawienia.blad" />
+        <div>
+          <Button
+            variant="solid"
+            :label="__('Zapisz treść i limit')"
+            :loading="zapisuje"
+            :disabled="!ustawieniaZmienione"
+            @click="zapiszUstawienia"
           />
         </div>
       </div>
@@ -158,6 +216,8 @@ import {
   formatujGodzine,
   grupujPoDniach,
   naSekundy,
+  walidujLimit,
+  walidujTresc,
   walidujWiersz,
 } from '@/utils/dyzury'
 
@@ -168,8 +228,16 @@ const state = reactive({
   uzytkownicy: [],
   dyzurWlaczone: 0,
   dyzurniTeraz: [],
+  nadawca: '',
+  trybTestowy: 0,
+  tokenUstawiony: false,
+  zapisanaTresc: '',
+  zapisanyLimit: 0,
   zaladowano: false,
 })
+const ustawienia = reactive({ tresc: '', limit: 0, blad: '' })
+const podglad = reactive({ tresc: '', znaki: 0, ostrzezenie: '' })
+let podgladTimer = null
 const blad = ref('')
 const zapisuje = ref(false)
 const telefonDraft = reactive({})
@@ -193,6 +261,15 @@ const listResource = createResource({
     state.uzytkownicy = data?.uzytkownicy || []
     state.dyzurWlaczone = data?.dyzur_wlaczone || 0
     state.dyzurniTeraz = data?.dyzurni_teraz || []
+    state.nadawca = data?.nadawca || ''
+    state.trybTestowy = data?.tryb_testowy || 0
+    state.tokenUstawiony = Boolean(data?.token_ustawiony)
+    state.zapisanaTresc = data?.tresc_dyzur || ''
+    state.zapisanyLimit = data?.limit_dzienny_dyzur ?? 0
+    ustawienia.tresc = state.zapisanaTresc
+    ustawienia.limit = state.zapisanyLimit
+    ustawienia.blad = ''
+    odswiezPodglad()
     state.zaladowano = true
     blad.value = ''
   },
@@ -220,6 +297,67 @@ const terazTekst = computed(() => {
   if (!state.dyzurniTeraz.length) return __('Teraz nikt nie ma dyżuru')
   return __('Teraz dyżur: {0}', [state.dyzurniTeraz.map(nazwa).join(', ')])
 })
+
+const kanalTekst = computed(() => {
+  if (!state.tokenUstawiony) {
+    return __('Token SMSAPI: brak (uzupełnij w Desk, Volteo SMS Ustawienia)')
+  }
+  return __('Nadawca: {0}. Token SMSAPI: ustawiony', [state.nadawca])
+})
+
+const ustawieniaZmienione = computed(
+  () =>
+    ustawienia.tresc !== state.zapisanaTresc ||
+    String(ustawienia.limit) !== String(state.zapisanyLimit),
+)
+
+function odswiezPodglad() {
+  createResource({
+    url: 'crm.api.dyzury.volteo_dyzur_podglad_tresci',
+    params: { tresc_dyzur: ustawienia.tresc },
+    auto: true,
+    onSuccess: (data) => {
+      podglad.tresc = data?.tresc || ''
+      podglad.znaki = data?.znaki || 0
+      podglad.ostrzezenie = data?.ostrzezenie || ''
+    },
+    onError: () => {
+      podglad.tresc = ''
+      podglad.znaki = 0
+      podglad.ostrzezenie = ''
+    },
+  })
+}
+
+function zmienTresc(val) {
+  ustawienia.tresc = val
+  ustawienia.blad = ''
+  clearTimeout(podgladTimer)
+  podgladTimer = setTimeout(odswiezPodglad, 400)
+}
+
+function zmienLimit(val) {
+  ustawienia.limit = val
+  ustawienia.blad = ''
+}
+
+function zapiszUstawienia() {
+  const komunikat = walidujTresc(ustawienia.tresc) || walidujLimit(ustawienia.limit)
+  if (komunikat) {
+    ustawienia.blad = komunikat
+    return
+  }
+  wywolaj(
+    'crm.api.dyzury.volteo_dyzury_ustawienia_zapisz',
+    { tresc_dyzur: ustawienia.tresc, limit_dzienny_dyzur: Number(ustawienia.limit) },
+    () => {
+      toast.success(__('Ustawienia SMS zapisane'))
+      listResource.reload()
+    },
+    __('Nie udało się zapisać ustawień SMS'),
+    (msg) => (ustawienia.blad = msg),
+  )
+}
 
 function bladZSerwera(err, domyslny) {
   return err?.messages?.[0] || domyslny

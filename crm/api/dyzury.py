@@ -15,9 +15,18 @@ from typing import Any
 
 import frappe
 from frappe import _
-from frappe.utils import cint, now_datetime
+from frappe.utils import cint, get_url, now_datetime
+from frappe.utils.password import get_decrypted_password
 
-from crm.volteo_dyzury import dyzurni_w_chwili, normalizuj_numer_pl, waliduj_wiersz
+from crm.volteo_dyzury import (
+	DANE_PRZYKLADOWE_DYZUR,
+	dyzurni_w_chwili,
+	normalizuj_numer_pl,
+	waliduj_limit_dyzur,
+	waliduj_tresc_dyzur,
+	waliduj_wiersz,
+	zbuduj_tresc_dyzur,
+)
 from crm.volteo_sms import numer_do_smsapi
 
 DOCTYPE = "Volteo Dyzur SMS"
@@ -86,12 +95,41 @@ def _uzytkownicy() -> list[dict[str, Any]]:
 def volteo_dyzury_lista() -> dict[str, Any]:
 	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
 	wiersze = _wiersze()
+	ustawienia = frappe.db.get_singles_dict(DOCTYPE_USTAWIEN) or {}
+	token = get_decrypted_password(DOCTYPE_USTAWIEN, DOCTYPE_USTAWIEN, "token_api", raise_exception=False)
+	limit_surowy = ustawienia.get("limit_dzienny_dyzur")
 	return {
 		"wiersze": wiersze,
 		"uzytkownicy": _uzytkownicy(),
-		"dyzur_wlaczone": cint(frappe.db.get_singles_dict(DOCTYPE_USTAWIEN).get("dyzur_wlaczone")),
+		"dyzur_wlaczone": cint(ustawienia.get("dyzur_wlaczone")),
+		"tresc_dyzur": ustawienia.get("tresc_dyzur") or "",
+		"limit_dzienny_dyzur": cint(limit_surowy) if limit_surowy not in (None, "") else 0,
+		"nadawca": ustawienia.get("nadawca") or "",
+		"tryb_testowy": cint(ustawienia.get("tryb_testowy")),
+		"token_ustawiony": bool(token),
 		"dyzurni_teraz": dyzurni_w_chwili([w for w in wiersze if w["aktywny"]], now_datetime()),
 	}
+
+
+@frappe.whitelist()
+def volteo_dyzury_ustawienia_zapisz(tresc_dyzur: str, limit_dzienny_dyzur: int) -> dict[str, Any]:
+	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
+	komunikat = waliduj_tresc_dyzur(tresc_dyzur) or waliduj_limit_dyzur(limit_dzienny_dyzur)
+	if komunikat:
+		frappe.throw(_(komunikat))
+	tresc = tresc_dyzur.strip()
+	limit = cint(limit_dzienny_dyzur)
+	frappe.db.set_single_value(DOCTYPE_USTAWIEN, "tresc_dyzur", tresc)
+	frappe.db.set_single_value(DOCTYPE_USTAWIEN, "limit_dzienny_dyzur", limit)
+	return {"tresc_dyzur": tresc, "limit_dzienny_dyzur": limit}
+
+
+@frappe.whitelist()
+def volteo_dyzur_podglad_tresci(tresc_dyzur: str) -> dict[str, Any]:
+	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
+	dane = {**DANE_PRZYKLADOWE_DYZUR, "link": get_url("/crm/leads/CRM-LEAD-2026-00001")}
+	tresc, ostrzezenie = zbuduj_tresc_dyzur(tresc_dyzur, dane)
+	return {"tresc": tresc, "znaki": len(tresc), "ostrzezenie": ostrzezenie}
 
 
 @frappe.whitelist()

@@ -60,3 +60,27 @@ export function grupujPoDniach(wiersze) {
   }
   return wynik
 }
+
+export const PLACEHOLDERY_DYZUR = ['klient', 'telefon', 'kod', 'miejscowosc', 'link']
+export const LIMIT_DYZUR_MAX = 1000
+
+// Komunikat bledu po polsku albo null; lustro waliduj_tresc_dyzur z Pythona
+export function walidujTresc(tresc) {
+  if (!String(tresc ?? '').trim()) return 'Treść SMS nie może być pusta.'
+  for (const m of String(tresc).matchAll(/\{(\w+)\}/g)) {
+    if (!PLACEHOLDERY_DYZUR.includes(m[1])) {
+      const dozwolone = PLACEHOLDERY_DYZUR.map((p) => `{${p}}`).join(', ')
+      return `Nieznany placeholder {${m[1]}}. Dozwolone: ${dozwolone}.`
+    }
+  }
+  return null
+}
+
+// Komunikat bledu albo null; limit 0..1000 (0 blokuje wysylke)
+export function walidujLimit(limit) {
+  const n = Number(limit)
+  if (String(limit ?? '').trim() === '' || !Number.isInteger(n) || n < 0 || n > LIMIT_DYZUR_MAX) {
+    return `Limit dzienny musi być liczbą od 0 do ${LIMIT_DYZUR_MAX} (0 blokuje wysyłkę).`
+  }
+  return null
+}

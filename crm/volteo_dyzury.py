@@ -38,6 +38,19 @@ TRESC_DYZUR_DOMYSLNA: str = "Nowy lead FB: {klient}, tel. {telefon}, {kod}. {lin
 LIMIT_DZIENNY_DYZUR_DOMYSLNY: int = 100
 """Seed `limit_dzienny_dyzur`: maks. realnie wysłanych SMS dyżurowych na dobę serwera."""
 
+PLACEHOLDERY_DYZUR: tuple[str, ...] = ("klient", "telefon", "kod", "miejscowosc", "link")
+"""Znane placeholdery treści SMS dyżurowego."""
+
+DANE_PRZYKLADOWE_DYZUR: Mapping[str, str] = {
+	"klient": "Jan Testowy",
+	"telefon": "500 100 200",
+	"kod": "00-001",
+	"miejscowosc": "Warszawa",
+}
+"""Dane do podglądu i SMS testowego; `link` dokłada adapter (zależy od URL site)."""
+
+LIMIT_DYZUR_MAX: int = 1000
+
 PREFIKS_KLUCZA_LICZNIKA: str = "volteo:sms_dyzur:"
 TTL_LICZNIKA_SEK: int = 2 * 24 * 3600
 
@@ -149,7 +162,7 @@ def zbuduj_tresc_dyzur(szablon: str, dane: Mapping[str, Any]) -> tuple[str, str 
 	Brakujący klucz w `dane` daje pusty string, nieznany placeholder zostaje bez zmian.
 	Zwraca (treść, ostrzeżenie o liczbie części lub None).
 	"""
-	znane = {"klient", "telefon", "kod", "miejscowosc", "link"}
+	znane = set(PLACEHOLDERY_DYZUR)
 
 	def _podstaw(trafienie: re.Match) -> str:
 		klucz = trafienie.group(1)
@@ -163,6 +176,28 @@ def zbuduj_tresc_dyzur(szablon: str, dane: Mapping[str, Any]) -> tuple[str, str 
 	surowa = re.sub(r"\s+([,.;:])", r"\1", surowa)
 	surowa = re.sub(r"([,;:])\s*(?=[.])", "", surowa)
 	return przygotuj_tresc(surowa)
+
+
+def waliduj_tresc_dyzur(szablon: Any) -> str | None:
+	"""Komunikat błędu po polsku albo None, gdy treść szablonu jest poprawna."""
+	if not isinstance(szablon, str) or not szablon.strip():
+		return "Treść SMS nie może być pusta."
+	for nazwa in _PLACEHOLDER.findall(szablon):
+		if nazwa not in PLACEHOLDERY_DYZUR:
+			dozwolone = ", ".join("{" + p + "}" for p in PLACEHOLDERY_DYZUR)
+			return f"Nieznany placeholder {{{nazwa}}}. Dozwolone: {dozwolone}."
+	return None
+
+
+def waliduj_limit_dyzur(limit: Any) -> str | None:
+	"""Komunikat błędu albo None; limit 0..1000 (0 blokuje wysyłkę)."""
+	try:
+		wartosc = int(limit)
+	except (TypeError, ValueError):
+		wartosc = -1
+	if not 0 <= wartosc <= LIMIT_DYZUR_MAX:
+		return f"Limit dzienny musi być liczbą od 0 do {LIMIT_DYZUR_MAX} (0 blokuje wysyłkę)."
+	return None
 
 
 def klucz_licznika_dnia(chwila: datetime) -> str:
