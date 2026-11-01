@@ -203,6 +203,9 @@
                 <span class="text-ink-gray-6"
                   >{{ formatujGodzine(w.od) }} - {{ formatujGodzine(w.do) }}</span
                 >
+                <span v-if="brakNumeru(w.uzytkownik)" class="text-ink-gray-6">
+                  {{ __('Brak numeru telefonu') }}
+                </span>
               </template>
               <span v-if="!w.aktywny" class="text-ink-gray-5">({{ __('wyłączony') }})</span>
             </div>
@@ -358,6 +361,7 @@ const state = reactive({
 const ustawienia = reactive({ tresc: '', limit: 0, blad: '' })
 const podglad = reactive({ tresc: '', znaki: 0, ostrzezenie: '' })
 let podgladTimer = null
+let podgladNr = 0
 const blad = ref('')
 const zapisuje = ref(false)
 const testuje = ref(false)
@@ -448,16 +452,19 @@ const ustawieniaZmienione = computed(
 )
 
 function odswiezPodglad() {
+  const nr = ++podgladNr
   createResource({
     url: 'crm.api.dyzury.volteo_dyzur_podglad_tresci',
     params: { tresc_dyzur: ustawienia.tresc },
     auto: true,
     onSuccess: (data) => {
+      if (nr !== podgladNr) return
       podglad.tresc = data?.tresc || ''
       podglad.znaki = data?.znaki || 0
       podglad.ostrzezenie = data?.ostrzezenie || ''
     },
     onError: () => {
+      if (nr !== podgladNr) return
       podglad.tresc = ''
       podglad.znaki = 0
       podglad.ostrzezenie = ''
