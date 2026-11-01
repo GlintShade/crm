@@ -18,7 +18,7 @@ from typing import Any
 
 import frappe
 from frappe import _
-from frappe.utils import cint, get_url, now_datetime
+from frappe.utils import cint, get_url, getdate, now_datetime
 from frappe.utils.password import get_decrypted_password
 
 from crm.api.sms_dyzur import _cofnij_licznik, _licznik_dnia, wyslij_sms_do_numeru
@@ -26,8 +26,11 @@ from crm.volteo_dyzury import (
 	DANE_PRZYKLADOWE_DYZUR,
 	LIMIT_DZIENNY_DYZUR_DOMYSLNY,
 	TRESC_DYZUR_DOMYSLNA,
+	czy_wyjatek_dnia,
 	dyzurni_w_chwili,
+	dzien_z_daty,
 	normalizuj_numer_pl,
+	parsuj_date,
 	waliduj_limit_dyzur,
 	waliduj_tresc_dyzur,
 	waliduj_wiersz,
@@ -43,9 +46,20 @@ ROLE_DYZURNYCH = ("Volteo Backend", "Volteo Core Admin", "System Manager")
 
 def validate_dyzur(doc: "frappe.model.document.Document", method: str | None = None) -> None:
 	"""Hook `validate` na `Volteo Dyzur SMS` (działa też przy zapisie z Desk)."""
-	komunikat = waliduj_wiersz(doc.get("dzien_tygodnia"), doc.get("od"), doc.get("do"))
+	data = doc.get("data") or None
+	komunikat = waliduj_wiersz(
+		doc.get("dzien_tygodnia"),
+		doc.get("od"),
+		doc.get("do"),
+		data=data,
+		bez_dyzuru=cint(doc.get("bez_dyzuru")),
+		uzytkownik=doc.get("uzytkownik"),
+	)
 	if komunikat:
 		frappe.throw(_(komunikat))
+	if data:
+		# wyjątek: dzień tygodnia wyliczamy z daty (lista w Desku czytelna, wartość od klienta ignorowana)
+		doc.dzien_tygodnia = dzien_z_daty(data)
 
 
 def _godzina(wartosc: Any) -> str:
@@ -56,14 +70,24 @@ def _godzina(wartosc: Any) -> str:
 
 
 def _wiersze() -> list[dict[str, Any]]:
+	"""Wiersze tygodniowe oraz wyjątki z datą >= dziś (minione wyjątki zostają w bazie)."""
 	wiersze = frappe.get_all(
 		DOCTYPE,
-		fields=["name", "dzien_tygodnia", "od", "do", "uzytkownik", "aktywny"],
+		fields=["name", "dzien_tygodnia", "od", "do", "uzytkownik", "aktywny", "data", "bez_dyzuru"],
+		or_filters=[["data", "is", "not set"], ["data", ">=", getdate(now_datetime())]],
 		order_by="creation asc",
 		limit_page_length=500,
 	)
 	return [
-		{**w, "od": _godzina(w["od"]), "do": _godzina(w["do"]), "aktywny": cint(w["aktywny"])}
+		{
+			**w,
+			"od": _godzina(w["od"]),
+			"do": _godzina(w["do"]),
+			"uzytkownik": w["uzytkownik"] or "",
+			"aktywny": cint(w["aktywny"]),
+			"data": parsuj_date(w["data"]).isoformat() if parsuj_date(w["data"]) else "",
+			"bez_dyzuru": cint(w["bez_dyzuru"]),
+		}
 		for w in wiersze
 	]
 
@@ -101,6 +125,7 @@ def _uzytkownicy() -> list[dict[str, Any]]:
 def volteo_dyzury_lista() -> dict[str, Any]:
 	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
 	wiersze = _wiersze()
+	teraz = now_datetime()
 	ustawienia = frappe.db.get_singles_dict(DOCTYPE_USTAWIEN) or {}
 	token = get_decrypted_password(DOCTYPE_USTAWIEN, DOCTYPE_USTAWIEN, "token_api", raise_exception=False)
 	limit_surowy = ustawienia.get("limit_dzienny_dyzur")
@@ -113,7 +138,8 @@ def volteo_dyzury_lista() -> dict[str, Any]:
 		"nadawca": ustawienia.get("nadawca") or "",
 		"tryb_testowy": cint(ustawienia.get("tryb_testowy")),
 		"token_ustawiony": bool(token),
-		"dyzurni_teraz": dyzurni_w_chwili([w for w in wiersze if w["aktywny"]], now_datetime()),
+		"dyzurni_teraz": dyzurni_w_chwili(wiersze, teraz),
+		"wyjatek_dzis": czy_wyjatek_dnia(wiersze, teraz),
 	}
 
 
@@ -172,21 +198,25 @@ def volteo_dyzur_sms_testowy() -> dict[str, Any]:
 @frappe.whitelist()
 def volteo_dyzur_zapisz(
 	name: str | None,
-	dzien_tygodnia: str,
-	od: str,
-	do: str,
-	uzytkownik: str,
+	dzien_tygodnia: str = "",
+	od: str = "",
+	do: str = "",
+	uzytkownik: str = "",
 	aktywny: int = 1,
+	data: str | None = None,
+	bez_dyzuru: int = 0,
 ) -> dict[str, Any]:
 	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
-	if not frappe.db.exists("User", uzytkownik):
+	if uzytkownik and not frappe.db.exists("User", uzytkownik):
 		frappe.throw(_("Nie ma takiego użytkownika."))
 	dane = {
-		"dzien_tygodnia": dzien_tygodnia,
-		"od": od,
-		"do": do,
-		"uzytkownik": uzytkownik,
+		"dzien_tygodnia": dzien_tygodnia or None,
+		"od": od or None,
+		"do": do or None,
+		"uzytkownik": uzytkownik or None,
 		"aktywny": 1 if cint(aktywny) else 0,
+		"data": data or None,
+		"bez_dyzuru": 1 if cint(bez_dyzuru) else 0,
 	}
 	if name:
 		doc = frappe.get_doc(DOCTYPE, name)

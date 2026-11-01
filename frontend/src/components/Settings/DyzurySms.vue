@@ -165,6 +165,62 @@
         </div>
       </div>
 
+      <!-- Schedule exceptions -->
+      <div class="flex flex-col gap-4 px-2 max-w-2xl">
+        <div class="flex items-center justify-between">
+          <div class="text-base-semibold">{{ __('Wyjątki od grafiku') }}</div>
+          <Button
+            variant="subtle"
+            size="sm"
+            icon-left="plus"
+            :label="__('Dodaj wyjątek')"
+            @click="otworzWyjatek(null)"
+          />
+        </div>
+        <p class="text-p-sm text-ink-gray-6">
+          {{
+            __(
+              'Wyjątek na konkretną datę zastępuje grafik tygodniowy tego dnia. Minione wyjątki znikają same.',
+            )
+          }}
+        </p>
+        <div v-if="!wyjatki.length" class="rounded-lg border p-3 text-p-sm text-ink-gray-5">
+          {{ __('Brak wyjątków. Dodaj wyjątek, gdy ktoś ma urlop albo wypada święto.') }}
+        </div>
+        <div v-else class="flex flex-col rounded-lg border divide-y">
+          <div
+            v-for="w in wyjatki"
+            :key="w.name"
+            class="flex items-center justify-between gap-2 p-3"
+            :class="{ 'opacity-60': !w.aktywny }"
+          >
+            <div class="flex items-center gap-2 text-p-sm text-ink-gray-8">
+              <span class="text-p-base-medium">{{ formatujDate(w.data) }}</span>
+              <span v-if="w.bez_dyzuru" class="text-ink-gray-6">{{ __('Nikt nie ma dyżuru') }}</span>
+              <template v-else>
+                <UserAvatar :user="w.uzytkownik" size="sm" />
+                <span>{{ nazwa(w.uzytkownik) }}</span>
+                <span class="text-ink-gray-6"
+                  >{{ formatujGodzine(w.od) }} - {{ formatujGodzine(w.do) }}</span
+                >
+              </template>
+              <span v-if="!w.aktywny" class="text-ink-gray-5">({{ __('wyłączony') }})</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <Button variant="ghost" size="sm" :label="__('Edytuj')" @click="otworzWyjatek(w)" />
+              <Button
+                variant="ghost"
+                size="sm"
+                theme="red"
+                :label="__('Usuń')"
+                :disabled="zapisuje"
+                @click="usun(w)"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Phone numbers -->
       <div class="flex flex-col gap-4 px-2 max-w-2xl">
         <div class="text-base-semibold">{{ __('Numery telefonów dyżurnych') }}</div>
@@ -223,6 +279,46 @@
         </div>
       </template>
     </Dialog>
+    <Dialog
+      v-model="wyj.otwarty"
+      :options="{ title: wyj.name ? __('Edytuj wyjątek') : __('Dodaj wyjątek') }"
+    >
+      <template #body-content>
+        <div class="flex flex-col gap-4">
+          <FormControl
+            type="date"
+            :label="__('Data')"
+            :modelValue="wyj.data"
+            @update:modelValue="zmienDateWyjatku"
+          />
+          <FormControl
+            type="checkbox"
+            :label="__('Tego dnia nikt nie ma dyżuru')"
+            v-model="wyj.bezDyzuru"
+          />
+          <template v-if="!wyj.bezDyzuru">
+            <FormControl
+              type="select"
+              :label="__('Użytkownik')"
+              :options="opcjeUzytkownikow"
+              v-model="wyj.uzytkownik"
+            />
+            <div class="grid grid-cols-2 gap-4">
+              <FormControl type="text" :label="__('Od (GG:MM)')" placeholder="08:00" v-model="wyj.od" />
+              <FormControl type="text" :label="__('Do (GG:MM)')" placeholder="18:00" v-model="wyj.do" />
+            </div>
+          </template>
+          <FormControl type="checkbox" :label="__('Aktywny')" v-model="wyj.aktywny" />
+          <ErrorMessage :message="wyj.blad" />
+        </div>
+      </template>
+      <template #actions>
+        <div class="flex justify-end gap-2">
+          <Button variant="ghost" :label="__('Anuluj')" @click="wyj.otwarty = false" />
+          <Button variant="solid" :label="__('Zapisz')" :loading="zapisuje" @click="zapiszWyjatek" />
+        </div>
+      </template>
+    </Dialog>
   </div>
 </template>
 
@@ -232,12 +328,16 @@ import { createResource, toast, Switch, ErrorMessage, Button, FormControl, Dialo
 import UserAvatar from '@/components/UserAvatar.vue'
 import {
   DNI_TYGODNIA,
+  dzienZDaty,
+  formatujDate,
   formatujGodzine,
   grupujPoDniach,
   naSekundy,
+  sortujWyjatki,
   walidujLimit,
   walidujTresc,
   walidujWiersz,
+  walidujWyjatek,
 } from '@/utils/dyzury'
 
 // Wszystkie klucze deklarowane z gory, tablice zawsze podmieniane na nowe
@@ -247,6 +347,7 @@ const state = reactive({
   uzytkownicy: [],
   dyzurWlaczone: 0,
   dyzurniTeraz: [],
+  wyjatekDzis: false,
   nadawca: '',
   trybTestowy: 0,
   tokenUstawiony: false,
@@ -273,6 +374,18 @@ const dialog = reactive({
   blad: '',
 })
 
+const wyj = reactive({
+  otwarty: false,
+  name: null,
+  data: '',
+  bezDyzuru: false,
+  uzytkownik: '',
+  od: '08:00',
+  do: '18:00',
+  aktywny: true,
+  blad: '',
+})
+
 const listResource = createResource({
   url: 'crm.api.dyzury.volteo_dyzury_lista',
   auto: true,
@@ -281,6 +394,7 @@ const listResource = createResource({
     state.uzytkownicy = data?.uzytkownicy || []
     state.dyzurWlaczone = data?.dyzur_wlaczone || 0
     state.dyzurniTeraz = data?.dyzurni_teraz || []
+    state.wyjatekDzis = Boolean(data?.wyjatek_dzis)
     state.nadawca = data?.nadawca || ''
     state.trybTestowy = data?.tryb_testowy || 0
     state.tokenUstawiony = Boolean(data?.token_ustawiony)
@@ -299,6 +413,7 @@ const listResource = createResource({
 })
 
 const grupy = computed(() => grupujPoDniach(state.wiersze))
+const wyjatki = computed(() => sortujWyjatki(state.wiersze))
 const opcjeDni = computed(() => DNI_TYGODNIA.map((d) => ({ label: __(d), value: d })))
 const opcjeUzytkownikow = computed(() =>
   state.uzytkownicy.map((u) => ({ label: u.full_name, value: u.name })),
@@ -314,8 +429,9 @@ function brakNumeru(email) {
 }
 
 const terazTekst = computed(() => {
-  if (!state.dyzurniTeraz.length) return __('Teraz nikt nie ma dyżuru')
-  return __('Teraz dyżur: {0}', [state.dyzurniTeraz.map(nazwa).join(', ')])
+  const dopisek = state.wyjatekDzis ? ' ' + __('(wyjątek od grafiku)') : ''
+  if (!state.dyzurniTeraz.length) return __('Teraz nikt nie ma dyżuru') + dopisek
+  return __('Teraz dyżur: {0}', [state.dyzurniTeraz.map(nazwa).join(', ')]) + dopisek
 })
 
 const kanalTekst = computed(() => {
@@ -471,6 +587,58 @@ function zapiszDialog() {
     },
     __('Nie udało się zapisać dyżuru'),
     (msg) => (dialog.blad = msg),
+  )
+}
+
+function otworzWyjatek(wiersz) {
+  wyj.name = wiersz?.name || null
+  wyj.data = wiersz?.data || ''
+  wyj.bezDyzuru = wiersz ? Boolean(wiersz.bez_dyzuru) : false
+  wyj.uzytkownik = wiersz?.uzytkownik || state.uzytkownicy[0]?.name || ''
+  wyj.od = wiersz?.od ? formatujGodzine(wiersz.od) : '08:00'
+  wyj.do = wiersz?.do ? formatujGodzine(wiersz.do) : '18:00'
+  wyj.aktywny = wiersz ? Boolean(wiersz.aktywny) : true
+  wyj.blad = ''
+  wyj.otwarty = true
+}
+
+// Nowy wyjatek: po wyborze daty podstawiamy godziny z pierwszego wiersza tygodniowego tego dnia
+function zmienDateWyjatku(val) {
+  wyj.data = val || ''
+  wyj.blad = ''
+  if (wyj.name) return
+  const dzien = dzienZDaty(wyj.data)
+  const pierwszy = dzien ? grupy.value[dzien]?.[0] : null
+  if (pierwszy) {
+    wyj.od = formatujGodzine(pierwszy.od)
+    wyj.do = formatujGodzine(pierwszy.do)
+  }
+}
+
+function zapiszWyjatek() {
+  const komunikat = walidujWyjatek(wyj.data, wyj.od, wyj.do, wyj.bezDyzuru, wyj.uzytkownik)
+  if (komunikat) {
+    wyj.blad = komunikat
+    return
+  }
+  wywolaj(
+    'crm.api.dyzury.volteo_dyzur_zapisz',
+    {
+      name: wyj.name,
+      dzien_tygodnia: '',
+      od: wyj.bezDyzuru ? '' : naSekundy(wyj.od),
+      do: wyj.bezDyzuru ? '' : naSekundy(wyj.do),
+      uzytkownik: wyj.bezDyzuru ? '' : wyj.uzytkownik,
+      aktywny: wyj.aktywny ? 1 : 0,
+      data: wyj.data,
+      bez_dyzuru: wyj.bezDyzuru ? 1 : 0,
+    },
+    () => {
+      wyj.otwarty = false
+      listResource.reload()
+    },
+    __('Nie udało się zapisać wyjątku'),
+    (msg) => (wyj.blad = msg),
   )
 }
 

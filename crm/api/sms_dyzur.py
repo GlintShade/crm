@@ -24,7 +24,7 @@ wyjątek i nigdy nie rzuca.
 
 import frappe
 import redis
-from frappe.utils import cint, get_url, now_datetime
+from frappe.utils import cint, get_url, getdate, now_datetime
 from frappe.utils.password import get_decrypted_password
 
 from crm.api.sms_powitalny import DOCTYPE_USTAWIEN, _http_post
@@ -33,6 +33,7 @@ from crm.volteo_dyzury import (
 	LIMIT_DZIENNY_DYZUR_DOMYSLNY,
 	TRESC_DYZUR_DOMYSLNA,
 	TTL_LICZNIKA_SEK,
+	czy_wyjatek_dnia,
 	dyzurni_w_chwili,
 	klucz_licznika_dnia,
 	zbuduj_tresc_dyzur,
@@ -193,12 +194,19 @@ def powiadom_dyzurnego(lead: str) -> None:
 		grafik = frappe.get_all(
 			DOCTYPE_GRAFIKU,
 			filters={"aktywny": 1},
-			fields=["dzien_tygodnia", "od", "do", "uzytkownik", "aktywny"],
+			fields=["dzien_tygodnia", "od", "do", "uzytkownik", "aktywny", "data", "bez_dyzuru"],
+			or_filters=[["data", "is", "not set"], ["data", ">=", getdate(chwila)]],
 			limit_page_length=500,
 		)
 		dyzurni = dyzurni_w_chwili(grafik, chwila)
 		if not dyzurni:
-			decyzja = zdecyduj_wysylke_dyzur(wlaczone=True, token_ustawiony=True, chwila=chwila, dyzurni=[])
+			decyzja = zdecyduj_wysylke_dyzur(
+				wlaczone=True,
+				token_ustawiony=True,
+				chwila=chwila,
+				dyzurni=[],
+				wyjatek_dnia=czy_wyjatek_dnia(grafik, chwila),
+			)
 			zapisz_slad(lead, decyzja.slad, doctype="CRM Lead")
 			frappe.db.commit()
 			return

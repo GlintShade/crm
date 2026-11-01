@@ -16,7 +16,7 @@ numer w formacie SMSAPI i parametry zlecenia pochodzą z `crm/volteo_sms.py`.
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from crm.volteo_sms import przygotuj_tresc
@@ -53,6 +53,10 @@ LIMIT_DYZUR_MAX: int = 1000
 
 PREFIKS_KLUCZA_LICZNIKA: str = "volteo:sms_dyzur:"
 TTL_LICZNIKA_SEK: int = 2 * 24 * 3600
+
+_WZORZEC_DATY = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
+_BRAK = object()
+_FALSZ = (None, "", 0, "0", False)
 
 _WZORZEC_CZASU = re.compile(r"^(\d{1,2}):(\d{2})(?::(\d{2}))?$")
 
@@ -108,19 +112,68 @@ def parsuj_czas(wartosc: Any) -> time | None:
 	return None
 
 
+def parsuj_date(wartosc: Any) -> date | None:
+	"""`date`, `datetime` albo "RRRR-MM-DD" na `date`; inaczej None."""
+	if isinstance(wartosc, datetime):
+		return wartosc.date()
+	if isinstance(wartosc, date):
+		return wartosc
+	if isinstance(wartosc, str):
+		trafienie = _WZORZEC_DATY.match(wartosc.strip())
+		if not trafienie:
+			return None
+		try:
+			return date(int(trafienie.group(1)), int(trafienie.group(2)), int(trafienie.group(3)))
+		except ValueError:
+			return None
+	return None
+
+
+def opis_daty(d: Any) -> str:
+	"""`11.11.2026` do śladu i komunikatów."""
+	parsed = parsuj_date(d)
+	return parsed.strftime("%d.%m.%Y") if parsed else ""
+
+
+def dzien_z_daty(d: Any) -> str | None:
+	"""Polska nazwa dnia tygodnia dla daty (wyliczana dla wyjątków)."""
+	parsed = parsuj_date(d)
+	return DNI_TYGODNIA[parsed.weekday()] if parsed else None
+
+
+def _aktywny(wiersz: Mapping[str, Any]) -> bool:
+	return wiersz.get("aktywny", 1) not in _FALSZ
+
+
+def _wyjatki_dnia(grafik: list[Mapping[str, Any]], dzien: date) -> list[Mapping[str, Any]]:
+	"""Aktywne wiersze-wyjątki z datą równą `dzien`."""
+	return [w for w in grafik or [] if _aktywny(w) and parsuj_date(w.get("data")) == dzien]
+
+
+def czy_wyjatek_dnia(grafik: list[Mapping[str, Any]], chwila: datetime) -> bool:
+	"""Czy na dzień chwili istnieje aktywny wyjątek (wtedy grafik tygodniowy nie obowiązuje)."""
+	return bool(_wyjatki_dnia(grafik, chwila.date()))
+
+
 def dyzurni_w_chwili(grafik: list[Mapping[str, Any]], chwila: datetime) -> list[str]:
 	"""Unikalni użytkownicy aktywnych wierszy pasujących do chwili (`od` włącznie, `do` wyłącznie).
 
+	Gdy na dzień chwili istnieje aktywny wyjątek (wiersz z `data`), grafik tygodniowy tego dnia
+	jest ignorowany w całości: dyżurnych wyznaczają wyłącznie wyjątki tej daty z
+	`bez_dyzuru == 0`. Wyjątek `bez_dyzuru` sam nikogo nie dodaje, ale wyłącza grafik tygodniowy.
 	Kolejność stabilna wg (od, użytkownik). Wiersz z błędnym czasem jest pomijany.
 	"""
-	dzien = dzien_tygodnia(chwila)
+	wyjatki = _wyjatki_dnia(grafik, chwila.date())
+	if wyjatki:
+		kandydaci = [w for w in wyjatki if w.get("bez_dyzuru") in _FALSZ]
+	else:
+		dzien = dzien_tygodnia(chwila)
+		kandydaci = [
+			w for w in grafik or [] if _aktywny(w) and not w.get("data") and w.get("dzien_tygodnia") == dzien
+		]
 	teraz = chwila.time().replace(microsecond=0)
 	trafione: list[tuple[time, str]] = []
-	for wiersz in grafik or []:
-		if not wiersz.get("aktywny", 1) or wiersz.get("aktywny") in ("0", 0, False):
-			continue
-		if wiersz.get("dzien_tygodnia") != dzien:
-			continue
+	for wiersz in kandydaci:
 		uzytkownik = wiersz.get("uzytkownik")
 		od, do = parsuj_czas(wiersz.get("od")), parsuj_czas(wiersz.get("do"))
 		if not uzytkownik or od is None or do is None:
@@ -136,15 +189,36 @@ def dyzurni_w_chwili(grafik: list[Mapping[str, Any]], chwila: datetime) -> list[
 	return wynik
 
 
-def waliduj_wiersz(dzien: Any, od: Any, do: Any) -> str | None:
-	"""Komunikat błędu po polsku albo None, gdy wiersz jest poprawny."""
-	if dzien not in DNI_TYGODNIA:
+def waliduj_wiersz(
+	dzien: Any,
+	od: Any,
+	do: Any,
+	*,
+	data: Any = None,
+	bez_dyzuru: Any = False,
+	uzytkownik: Any = _BRAK,
+) -> str | None:
+	"""Komunikat błędu po polsku albo None, gdy wiersz jest poprawny.
+
+	Wołane 3-argumentowo waliduje wiersz tygodniowy jak dawniej. `uzytkownik` jest sprawdzany
+	tylko gdy został podany. Wyjątek (`data`) ma dzień wyliczany z daty, więc `dzien` pomija.
+	"""
+	jest_data = data not in _FALSZ
+	if bez_dyzuru not in _FALSZ and not jest_data:
+		return "Opcja 'nikt nie ma dyżuru' dotyczy tylko wyjątku z datą."
+	if jest_data and parsuj_date(data) is None:
+		return "Data wyjątku musi mieć format RRRR-MM-DD."
+	if bez_dyzuru not in _FALSZ:
+		return None
+	if not jest_data and dzien not in DNI_TYGODNIA:
 		return "Dzień tygodnia musi być jednym z: " + ", ".join(DNI_TYGODNIA) + "."
 	t_od, t_do = parsuj_czas(od), parsuj_czas(do)
 	if t_od is None or t_do is None:
 		return "Godziny dyżuru muszą mieć format GG:MM."
 	if t_od >= t_do:
 		return "Godzina początku dyżuru musi być wcześniejsza niż godzina końca."
+	if uzytkownik is not _BRAK and not uzytkownik:
+		return "Wybierz użytkownika."
 	return None
 
 
@@ -228,6 +302,7 @@ def zdecyduj_wysylke_dyzur(
 	numer: str | None = None,
 	limit_dzienny: int = LIMIT_DZIENNY_DYZUR_DOMYSLNY,
 	wyslane_dzis: int = 0,
+	wyjatek_dnia: bool = False,
 ) -> DecyzjaDyzur:
 	"""Czysta decyzja dla jednego dyżurnego (albo dla całej chwili, gdy `dyzurni` jest puste).
 
@@ -237,6 +312,12 @@ def zdecyduj_wysylke_dyzur(
 	if not wlaczone:
 		return DecyzjaDyzur(False, zapisz_slad=False)
 	if not dyzurni:
+		if wyjatek_dnia:
+			return DecyzjaDyzur(
+				False,
+				f"SMS dyżurowy: brak dyżuru ({opis_chwili(chwila)}, "
+				f"wyjątek od grafiku na {opis_daty(chwila)})",
+			)
 		return DecyzjaDyzur(False, f"SMS dyżurowy: brak dyżuru ({opis_chwili(chwila)})")
 	osoba = imie_dyzurnego or (dyzurni[0] if dyzurni else "")
 	if not token_ustawiony:
