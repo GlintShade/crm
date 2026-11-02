@@ -833,7 +833,15 @@ function rysujMarkery() {
   }
 
   skupNaCelu()
+  dopasujWidokDoPinezek()
+}
 
+// VOLTEO (Pokaż na mapie): dopasowanie widoku do wszystkich pinezek, wydzielone
+// z rysujMarkery(), bo musi się wykonać także po NIEUDANYM celu ?lead= (patrz
+// pokazBladCelu): dopóki cel był w toku, fitBounds był pominięty, a po błędzie
+// nikt inny nie dopasowałby widoku i mapa zostałaby na domyślnej Europie.
+function dopasujWidokDoPinezek() {
+  if (!mapInstance || !markerLayer) return
   if (!dopasowanoWidok && !celMapy.value && leadyPrzefiltrowane.value.length) {
     const bounds = markerLayer.getBounds()
     if (bounds.isValid()) {
@@ -875,6 +883,7 @@ function pokazBladCelu(err) {
     (err && extractErrorMessage(err)) ||
     __('Nie można pokazać leada na mapie: brak współrzędnych albo brak dostępu')
   zakonczCel()
+  dopasujWidokDoPinezek()
 }
 
 function pobierzCelFallbackiem() {
