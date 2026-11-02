@@ -1,4 +1,5 @@
 import {
+  modelPrzyciskuTrasy,
   czyLokalizacjaPrzyblizona,
   linkTrasyGoogle,
 } from '@/utils/mapaNawigacja'
@@ -63,5 +64,34 @@ describe('czyLokalizacjaPrzyblizona', () => {
     for (const v of ['adres', 'ulica', 'brak', '', null, undefined]) {
       expect(czyLokalizacjaPrzyblizona(v)).toBe(false)
     }
+  })
+})
+
+describe('modelPrzyciskuTrasy', () => {
+  const TEKST = 'Lokalizacja przybliżona'
+
+  it('zwraca href z prawdziwych współrzędnych i pusty title dla adresu', () => {
+    const m = modelPrzyciskuTrasy(
+      { custom_lat: 53.372662, custom_lng: 17.314668, custom_geo_dokladnosc: 'adres' },
+      TEKST,
+    )
+    expect(m.href).toContain('destination=53.372662,17.314668')
+    expect(m.title).toBe('')
+  })
+
+  it('dla lokalizacji przybliżonej ustawia title', () => {
+    for (const d of ['miejscowosc', 'kod']) {
+      const m = modelPrzyciskuTrasy(
+        { custom_lat: 52.1, custom_lng: 21.0, custom_geo_dokladnosc: d },
+        TEKST,
+      )
+      expect(m.title).toBe(TEKST)
+    }
+  })
+
+  it('zwraca null bez współrzędnych albo bez leada', () => {
+    expect(modelPrzyciskuTrasy(null, TEKST)).toBeNull()
+    expect(modelPrzyciskuTrasy({ custom_lat: 0, custom_lng: 0 }, TEKST)).toBeNull()
+    expect(modelPrzyciskuTrasy({ custom_lat: '', custom_lng: null }, TEKST)).toBeNull()
   })
 })

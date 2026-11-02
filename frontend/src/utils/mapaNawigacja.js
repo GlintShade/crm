@@ -46,3 +46,22 @@ export function linkTrasyGoogle(lat, lng) {
 export function czyLokalizacjaPrzyblizona(dokladnosc) {
   return dokladnosc === 'miejscowosc' || dokladnosc === 'kod'
 }
+
+/**
+ * Model przycisku "Trasa" w dymku pinezki: href liczony z PRAWDZIWYCH
+ * współrzędnych leada (nie z pozycji markera z jitterem) oraz podpowiedź
+ * (title) tylko dla lokalizacji przybliżonej. Null, gdy nie ma celu trasy.
+ *
+ * @param {{ custom_lat?: unknown, custom_lng?: unknown, custom_geo_dokladnosc?: unknown }} lead
+ * @param {string} tekstPrzyblizona
+ * @returns {{ href: string, title: string } | null}
+ */
+export function modelPrzyciskuTrasy(lead, tekstPrzyblizona) {
+  if (!lead) return null
+  const href = linkTrasyGoogle(lead.custom_lat, lead.custom_lng)
+  if (!href) return null
+  return {
+    href,
+    title: czyLokalizacjaPrzyblizona(lead.custom_geo_dokladnosc) ? tekstPrzyblizona : '',
+  }
+}

@@ -217,6 +217,7 @@ import { widocznyLead } from '@/utils/mapaFiltry'
 import { rozbijTagi } from '@/utils/tagiProduktow'
 import { ZOOM_CELU, adresBezCelu, odczytajCelMapy } from '@/utils/mapaCel'
 import { formatujTermin } from '@/utils/dataPolska'
+import { modelPrzyciskuTrasy } from '@/utils/mapaNawigacja'
 import {
   KOLOR_BRAK,
   hashString,
@@ -823,7 +824,10 @@ function rysujMarkery() {
       // className: przelacza tlo/obramowanie/strzalke dymku na tokeny
       // motywu, patrz blok <style> na koncu pliku.
       className: 'volteo-mapa-dymek',
+      // VOLTEO (Trasa w dymku): dymek musi byc klikalny (link "Trasa").
+      interactive: true,
     })
+    zatrzymajDymekPodKursorem(marker)
     marker.on('click', () => {
       wybranyLead.value = lead
     })
@@ -923,6 +927,48 @@ function ustawStylWybranego(nazwa, wybrany) {
   if (wybrany) wpis.marker.bringToFront()
 }
 
+// VOLTEO (Trasa w dymku): domyslnie Leaflet zamyka dymek na 'mouseout'
+// markera (Layer._initTooltipInteractions: mouseout -> closeTooltip), wiec
+// przejscie kursorem z pinezki na dymek (interactive: true) zamykalo go,
+// zanim dalo sie kliknac link. Zamiast tego zdejmujemy domyslny handler i
+// zamykamy z krotkim opoznieniem; wejscie kursora na dymek anuluje
+// zamkniecie, a zjazd z dymku zamyka go (tez z opoznieniem, zeby wrocic na
+// pinezke). Zamkniecie nie rusza dymku otwartego przez openTooltip() w
+// skupNaCelu() poza hoverem: ten sam timer, ale odpala sie tylko po mouseout.
+const OPOZNIENIE_ZAMKNIECIA_DYMKU_MS = 250
+function zatrzymajDymekPodKursorem(marker) {
+  let timer = null
+  const anuluj = () => {
+    if (timer) {
+      clearTimeout(timer)
+      timer = null
+    }
+  }
+  const zamknijPozniej = () => {
+    anuluj()
+    timer = setTimeout(() => {
+      timer = null
+      marker.closeTooltip()
+    }, OPOZNIENIE_ZAMKNIECIA_DYMKU_MS)
+  }
+  marker.off('mouseout', marker.closeTooltip, marker)
+  marker.on('mouseover', anuluj)
+  marker.on('mouseout', zamknijPozniej)
+  marker.on('remove', anuluj)
+  const dymek = marker.getTooltip()
+  dymek.on('add', () => {
+    // Zdarzenia DOM interaktywnego dymku Leaflet przekazuje jako zdarzenia
+    // samej warstwy Tooltip.
+    dymek.on('mouseover', anuluj)
+    dymek.on('mouseout', zamknijPozniej)
+  })
+  dymek.on('remove', () => {
+    anuluj()
+    dymek.off('mouseover', anuluj)
+    dymek.off('mouseout', zamknijPozniej)
+  })
+}
+
 // Dymek pinezki (hover, Leaflet Tooltip), uklad D -- decyzja wlasciciela
 // 2026-09-25 (plan "Dymek pinezki na mapie leadow: uklady danych").
 // Naglowek: nazwisko leada plus pigulka statusu w kolorze statusu, w
@@ -961,6 +1007,9 @@ function budujDymek(lead) {
   statusText.textContent = lead.status || BRAK_STATUSU
   pill.appendChild(statusText)
   header.appendChild(pill)
+
+  const przyciskTrasy = budujPrzyciskTrasy(lead)
+  if (przyciskTrasy) header.appendChild(przyciskTrasy)
 
   container.appendChild(header)
 
@@ -1080,6 +1129,53 @@ function budujDymek(lead) {
   return container
 }
 
+// VOLTEO (Trasa w dymku): link do trasy Google Maps do prawdziwych
+// wspolrzednych leada (nie do pozycji markera z jitterem). Prawdziwy <a
+// target=_blank>, wiec dziala tez po tapnieciu na telefonie. Klik nie moze
+// dojsc do mapy (disableClickPropagation), a mousedown/dblclick tez nie, zeby
+// nie startowac przeciagania mapy spod linku. Budowane przez DOM.
+function budujPrzyciskTrasy(lead) {
+  const model = modelPrzyciskuTrasy(
+    lead,
+    __('Lokalizacja przybliżona: środek miejscowości lub kodu pocztowego'),
+  )
+  if (!model) return null
+
+  const link = document.createElement('a')
+  link.href = model.href
+  link.target = '_blank'
+  link.rel = 'noopener noreferrer'
+  link.className =
+    'inline-flex shrink-0 items-center gap-1 rounded-full border border-outline-gray-2 bg-surface-gray-2 px-1.5 py-0.5 text-xs text-ink-gray-7 hover:bg-surface-gray-3 hover:text-ink-gray-9'
+  if (model.title) link.title = model.title
+
+  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  icon.setAttribute('width', '12')
+  icon.setAttribute('height', '12')
+  icon.setAttribute('viewBox', '0 0 24 24')
+  icon.setAttribute('fill', 'none')
+  icon.setAttribute('stroke', 'currentColor')
+  icon.setAttribute('stroke-width', '2')
+  icon.setAttribute('stroke-linecap', 'round')
+  icon.setAttribute('stroke-linejoin', 'round')
+  icon.setAttribute('class', 'shrink-0')
+  // lucide "navigation"
+  const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon')
+  polygon.setAttribute('points', '3 11 22 2 13 21 11 13 3 11')
+  icon.appendChild(polygon)
+  link.appendChild(icon)
+
+  const label = document.createElement('span')
+  label.textContent = __('Trasa')
+  link.appendChild(label)
+
+  L.DomEvent.disableClickPropagation(link)
+  // disableClickPropagation tylko oznacza element dla Leaflet; sam DOM-owy click
+  // zatrzymujemy tez tutaj (preventDefault NIE, bo link ma sie otworzyc).
+  L.DomEvent.on(link, 'click', L.DomEvent.stopPropagation)
+  return link
+}
+
 function destroyMap() {
   if (mapInstance) {
     mapInstance.remove()
@@ -1122,6 +1218,14 @@ onBeforeUnmount(() => destroyMap())
   border-color: var(--outline-gray-2);
   color: var(--ink-gray-9);
   min-width: 260px;
+}
+/* VOLTEO (Trasa w dymku): interaktywny dymek Leaflet dostaje kursor pointer
+   na calej powierzchni; kursor reka ma tylko link. */
+.leaflet-tooltip.volteo-mapa-dymek.leaflet-interactive {
+  cursor: default;
+}
+.leaflet-tooltip.volteo-mapa-dymek a {
+  cursor: pointer;
 }
 .leaflet-tooltip.volteo-mapa-dymek.leaflet-tooltip-top::before {
   border-top-color: var(--surface-elevation-1);
