@@ -510,19 +510,21 @@ export function osWspolna(mapa, uzytkownicy, od = OS_OD, doGodziny = OS_DO) {
 }
 
 /**
- * Chip liczby spotkań w nagłówku karty: tylko liczba umówionych ("1 umówione",
- * "3 umówione", "5 umówionych"); bez umówionych szary "wolny cały tydzień"
- * (w widoku dnia "wolny cały dzień"), wolny=true.
+ * Chip liczby spotkań w nagłówku karty: liczba umówionych ("1 umówione",
+ * "3 umówione", "5 umówionych"). Szary chip (wolny=true): "wolny cały tydzień"
+ * (w widoku dnia "wolny cały dzień") tylko gdy NIE MA żadnych spotkań, a gdy są
+ * wyłącznie niepotwierdzone, "0 umówionych".
  */
 export function etykietaChipa(spotkania, okres = 'tydzien') {
-  const umowione = liczbaUmowionych(spotkania || [])
-  if (!umowione) {
+  const lista = spotkania || []
+  if (!lista.length) {
     return {
       tekst: okres === 'dzien' ? 'wolny cały dzień' : 'wolny cały tydzień',
       wolny: true,
     }
   }
-  return { tekst: etykietaUmowionych(umowione), wolny: false }
+  const umowione = liczbaUmowionych(lista)
+  return { tekst: etykietaUmowionych(umowione), wolny: umowione === 0 }
 }
 
 /** Pozycja godziny `g` na osi `od..do` w % szerokości (do centrowania etykiet i linii). */

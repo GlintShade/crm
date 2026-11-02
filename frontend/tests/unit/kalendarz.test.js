@@ -502,7 +502,10 @@ describe('runda UI: oś wspólna, ścieżki, etykiety, dymek', () => {
     expect(
       etykietaChipa(Array.from({ length: 12 }, (_, i) => sp(String(i)))).tekst,
     ).toBe('12 umówionych')
-    expect(etykietaChipa([sp('a', { status: 'Nowy' })]).wolny).toBe(true)
+    expect(etykietaChipa([sp('a', { status: 'Nowy' })])).toEqual({
+      tekst: '0 umówionych',
+      wolny: true,
+    })
     expect(
       etykietaChipa([sp('a'), sp('b', { status: 'Nowy' })]).tekst,
     ).not.toMatch(/potwierdzenia/)
