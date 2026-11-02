@@ -383,10 +383,12 @@ export function etykietaPelna(fieldname) {
 // requires it whenever the "praca" group is on, for either period type;
 // the old frontend rule only showed it for 'Czas określony', so a rep
 // filling 'Czas nieokreślony' could never clear the missing-fields banner).
+// praca_okres_od deliberately has NO rule: it is rendered whenever the praca
+// group is on (the group itself is the gate), so the employment grid never
+// jumps while "Okres zatrudnienia" is still empty.
 // A rule here has either a `value` (equality) or a `values` (membership)
 // key, never both.
 export const WARUNKI_WIDOCZNOSCI = {
-  praca_okres_od: { fieldname: 'praca_okres', values: ['Czas określony', 'Czas nieokreślony'] },
   praca_okres_do: { fieldname: 'praca_okres', value: 'Czas określony' },
   dzialalnosc_forma_inna: { fieldname: 'dzialalnosc_forma_opodatkowania', value: 'inne' },
   adres_zameldowania: { fieldname: 'adres_zameldowania_taki_sam', value: 'Nie' },
@@ -1114,4 +1116,81 @@ export function rozdzielAdresTelefon(tekst) {
   const po = surowy.slice(ostatni.index + ostatni[0].length)
   const adres = `${przed} ${po}`.replace(/[\s,;|\-]+$/g, '').replace(/^[\s,;|\-]+/, '').trim()
   return { adres, telefon: ostatni[1].trim() }
+}
+
+/**
+ * Jak oznaczać wymagalność pól w sekcji: zawsze oznaczamy mniejszość.
+ *  - 'wszystkie': każde widoczne pole wymagane (zdanie w podtytule, bez znaczników),
+ *  - 'opcjonalne': wymaganych co najmniej tyle co opcjonalnych (zdanie w
+ *    podtytule, przy polach opcjonalnych dopisek "(opcjonalnie)"),
+ *  - 'gwiazdki': wymaganych mniej niż połowa (szara gwiazdka przy wymaganych).
+ *
+ * @param {string[]} pola - widoczne pola sekcji
+ * @param {Iterable<string>} wymagane - wynik wymaganePola() (lub własna lista)
+ * @returns {'wszystkie'|'opcjonalne'|'gwiazdki'}
+ */
+export function oznaczenieWymaganych(pola, wymagane) {
+  const lista = pola || []
+  if (lista.length === 0) return 'gwiazdki'
+  const zbior = new Set(wymagane)
+  const liczbaWymaganych = lista.filter((fn) => zbior.has(fn)).length
+  if (liczbaWymaganych === lista.length) return 'wszystkie'
+  if (liczbaWymaganych === 0) return 'gwiazdki'
+  return liczbaWymaganych >= lista.length - liczbaWymaganych ? 'opcjonalne' : 'gwiazdki'
+}
+
+/**
+ * Znacznik jednego pola wynikający z oznaczenia sekcji.
+ *
+ * @param {'wszystkie'|'opcjonalne'|'gwiazdki'} oznaczenie
+ * @param {Iterable<string>} wymagane
+ * @param {string} fieldname
+ * @returns {''|'gwiazdka'|'opcjonalne'}
+ */
+export function znacznikPola(oznaczenie, wymagane, fieldname) {
+  const wymagane_ = new Set(wymagane).has(fieldname)
+  if (oznaczenie === 'gwiazdki') return wymagane_ ? 'gwiazdka' : ''
+  if (oznaczenie === 'opcjonalne') return wymagane_ ? '' : 'opcjonalne'
+  return ''
+}
+
+/**
+ * Odmiana "pole" po liczbie. 'dopelniacz' ("Brakuje 1 pola / 5 pól"),
+ * 'biernik' ("Popraw 1 pole / 3 pola / 5 pól").
+ *
+ * @param {number} n
+ * @param {'dopelniacz'|'biernik'} przypadek
+ * @returns {string}
+ */
+export function odmianaPol(n, przypadek) {
+  if (n === 1) return przypadek === 'dopelniacz' ? 'pola' : 'pole'
+  if (przypadek === 'biernik') {
+    const jednostki = n % 10
+    const dziesiatki = n % 100
+    if (jednostki >= 2 && jednostki <= 4 && !(dziesiatki >= 12 && dziesiatki <= 14)) return 'pola'
+  }
+  return 'pól'
+}
+
+/**
+ * Podsumowanie braków dla banera: tylko pola WIDOCZNE (te z `sekcje`), z
+ * żywego zbioru braków, nigdy z odpowiedzi serwera. Sekcje bez braków
+ * są pomijane, kolejność jak na ekranie.
+ *
+ * @param {{label: string, pola: string[]}[]} sekcje
+ * @param {Iterable<string>} braki
+ * @returns {{razem: number, sekcje: {label: string, liczba: number}[]}}
+ */
+export function podsumowanieBrakow(sekcje, braki) {
+  const zbior = new Set(braki)
+  const wynik = []
+  let razem = 0
+  ;(sekcje || []).forEach((sek) => {
+    const liczba = (sek.pola || []).filter((fn) => zbior.has(fn)).length
+    if (liczba > 0) {
+      wynik.push({ label: sek.label, liczba })
+      razem += liczba
+    }
+  })
+  return { razem, sekcje: wynik }
 }
