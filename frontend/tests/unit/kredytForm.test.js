@@ -32,6 +32,17 @@ import {
   STATUSY_FINANSOWANIA_OPCJE,
   KOLOR_STATUSU_FINANSOWANIA,
   badgeStatusuFinansowania,
+  wymaganePola,
+  czyPoprawnyNip,
+  czyPoprawnyTelefon,
+  bladFormatu,
+  stanPola,
+  licznikSekcji,
+  sekcjaWszystkieWymagane,
+  rozdzielAdresTelefon,
+  KOMUNIKAT_NIP,
+  KOMUNIKAT_TELEFON,
+  KOMUNIKAT_WYMAGANE,
 } from '@/utils/kredytForm'
 
 function deepFreeze(value) {
@@ -76,7 +87,8 @@ function kredytKompletny(nadpisania = {}) {
     praca_okres_do: '',
     praca_nip: '',
     praca_nazwa_zakladu: '',
-    praca_adres_telefon: '',
+    praca_adres: '',
+    praca_telefon: '',
     praca_kwota_dochodu: '',
     emerytura_wlaczone: false,
     emerytura_numer_swiadczenia: '',
@@ -298,7 +310,9 @@ describe('Kredyt form logic', () => {
       expect(dane.praca_okres_do).toBeNull()
       expect(dane.praca_nip).toBeNull()
       expect(dane.praca_nazwa_zakladu).toBeNull()
-      expect(dane.praca_adres_telefon).toBeNull()
+      expect(dane.praca_adres).toBeNull()
+      expect(dane.praca_telefon).toBeNull()
+      expect(dane).not.toHaveProperty('praca_adres_telefon')
       expect(dane.praca_kwota_dochodu).toBeNull()
     })
 
@@ -311,7 +325,8 @@ describe('Kredyt form logic', () => {
       form.praca_okres_do = '2028-01-15'
       form.praca_nip = '1234567890'
       form.praca_nazwa_zakladu = 'ACME sp. z o.o.'
-      form.praca_adres_telefon = 'ul. Testowa 1, 500600700'
+      form.praca_adres = 'ul. Testowa 1'
+      form.praca_telefon = '500600700'
       form.praca_kwota_dochodu = '6500'
 
       const dane = buildDane(form)
@@ -323,7 +338,8 @@ describe('Kredyt form logic', () => {
         praca_okres_do: '2028-01-15',
         praca_nip: '1234567890',
         praca_nazwa_zakladu: 'ACME sp. z o.o.',
-        praca_adres_telefon: 'ul. Testowa 1, 500600700',
+        praca_adres: 'ul. Testowa 1',
+        praca_telefon: '500600700',
         praca_kwota_dochodu: '6500',
       })
     })
@@ -871,7 +887,8 @@ describe('Kredyt form logic', () => {
         praca_okres_do: '',
         praca_nip: '123',
         praca_nazwa_zakladu: 'Firma',
-        praca_adres_telefon: 'tel',
+        praca_adres: 'ul. Testowa 1',
+        praca_telefon: '600700800',
         praca_kwota_dochodu: '5000',
       })
       const wynik = brakujacePola(dane)
@@ -996,7 +1013,8 @@ describe('Kredyt form logic', () => {
           praca_okres_od: '2020-01-01',
           praca_nip: '123',
           praca_nazwa_zakladu: 'Firma',
-          praca_adres_telefon: 'tel',
+          praca_adres: 'ul. Testowa 1',
+          praca_telefon: '600700800',
           praca_kwota_dochodu: '5000',
         })
         expect(brakujacePola(daneOkreslony)).toContain('praca_okres_do')
@@ -1114,7 +1132,8 @@ describe('Kredyt form logic', () => {
           praca_okres_do: '',
           praca_nip: '123',
           praca_nazwa_zakladu: 'Firma',
-          praca_adres_telefon: 'tel',
+          praca_adres: 'ul. Testowa 1',
+          praca_telefon: '600700800',
           praca_kwota_dochodu: '5000',
         })
         const wynik = brakujacePola(dane).filter((pole) => pole.startsWith('praca_'))
@@ -1469,7 +1488,8 @@ describe('Kredyt form logic', () => {
         praca_okres_do: '',
         praca_nip: '123',
         praca_nazwa_zakladu: 'Firma',
-        praca_adres_telefon: 'tel',
+        praca_adres: 'ul. Testowa 1',
+        praca_telefon: '600700800',
         praca_kwota_dochodu: '5000',
       }),
       kredytKompletny({
@@ -1479,7 +1499,8 @@ describe('Kredyt form logic', () => {
         praca_okres_od: '',
         praca_nip: '123',
         praca_nazwa_zakladu: 'Firma',
-        praca_adres_telefon: 'tel',
+        praca_adres: 'ul. Testowa 1',
+        praca_telefon: '600700800',
         praca_kwota_dochodu: '5000',
       }),
       kredytKompletny({
@@ -1504,7 +1525,8 @@ describe('Kredyt form logic', () => {
         praca_okres_od: '2020-01-01',
         praca_nip: '123',
         praca_nazwa_zakladu: 'Firma',
-        praca_adres_telefon: 'tel',
+        praca_adres: 'ul. Testowa 1',
+        praca_telefon: '600700800',
         praca_kwota_dochodu: '5000',
         gospodarstwo_wlaczone: true,
       }),
@@ -1640,7 +1662,8 @@ describe('Kredyt form logic', () => {
       'praca_okres_do',
       'praca_nip',
       'praca_nazwa_zakladu',
-      'praca_adres_telefon',
+      'praca_adres',
+      'praca_telefon',
       'praca_kwota_dochodu',
       'emerytura_wlaczone',
       'emerytura_numer_swiadczenia',
@@ -1680,9 +1703,9 @@ describe('Kredyt form logic', () => {
       'wnioskodawca_nr_lokalu',
     ]
 
-    it('kanon ma dokładnie 63 unikalne nazwy pól', () => {
-      expect(DANE_POLA_DOZWOLONE_KANON.length).toBe(63)
-      expect(new Set(DANE_POLA_DOZWOLONE_KANON).size).toBe(63)
+    it('kanon ma dokładnie 64 unikalne nazwy pól', () => {
+      expect(DANE_POLA_DOZWOLONE_KANON.length).toBe(64)
+      expect(new Set(DANE_POLA_DOZWOLONE_KANON).size).toBe(64)
     })
 
     it('Object.keys(buildDane(defaultForm())) jest zbiorem równym kanonowi', () => {
@@ -1736,7 +1759,8 @@ const ETYKIETY_KANON_DOCTYPE = {
   praca_okres_do: 'Zatrudnienie do',
   praca_nip: 'NIP zakładu pracy',
   praca_nazwa_zakladu: 'Nazwa zakładu pracy',
-  praca_adres_telefon: 'Adres i numer telefonu zakładu pracy',
+  praca_adres: 'Adres zakładu pracy',
+  praca_telefon: 'Telefon zakładu pracy',
   praca_kwota_dochodu: 'Kwota dochodu',
   emerytura_wlaczone: 'Dochód: emerytura',
   emerytura_numer_swiadczenia: 'Numer świadczenia',
@@ -1789,12 +1813,15 @@ describe('ETYKIETY_POL / ETYKIETY_PELNE (kanon etykiet, ops#148/#157/#163)', () 
     ...POLA_WNIOSKODAWCY,
   ]
 
-  it('ma dokładnie 63 pola (BASE_FIELDS + toggle + pola GRUPY + POLA_WNIOSKODAWCY)', () => {
-    expect(wszystkieFieldnames.length).toBe(63)
+  it('ma dokładnie 64 pola (BASE_FIELDS + toggle + pola GRUPY + POLA_WNIOSKODAWCY)', () => {
+    expect(wszystkieFieldnames.length).toBe(64)
   })
 
-  it('klucze ETYKIETY_POL pokrywają się dokładnie z BASE_FIELDS + polami GRUPY + POLA_WNIOSKODAWCY', () => {
-    expect(Object.keys(ETYKIETY_POL).slice().sort()).toEqual(wszystkieFieldnames.slice().sort())
+  it('klucze ETYKIETY_POL pokrywają się z BASE_FIELDS + polami GRUPY + POLA_WNIOSKODAWCY plus historyczne praca_adres_telefon (ops#321)', () => {
+    expect(Object.keys(ETYKIETY_POL).slice().sort()).toEqual(
+      [...wszystkieFieldnames, 'praca_adres_telefon'].sort(),
+    )
+    expect(ETYKIETY_POL.praca_adres_telefon).toBe('Adres i numer telefonu zakładu pracy')
   })
 
   it('każde pole rozstrzyga się do kanonu doctype (ETYKIETY_PELNE gdy jest, inaczej ETYKIETY_POL)', () => {
@@ -1881,6 +1908,301 @@ describe('POLA_WNIOSKODAWCY / ETYKIETY_WNIOSKODAWCY (kanon wnioskodawcy, ops#157
   it('zero myślników em/en w ETYKIETY_WNIOSKODAWCY', () => {
     Object.values(ETYKIETY_WNIOSKODAWCY).forEach((etykieta) => {
       expect(etykieta).not.toMatch(WZORZEC_MYSLNIKOW)
+    })
+  })
+})
+
+describe('trzy poziomy pól i sekcja zatrudnienia (ops#321)', () => {
+  describe('GRUPY.praca i kontrakt pól', () => {
+    const praca = GRUPY.find((g) => g.key === 'praca')
+
+    it('kolejność pól grupy praca zgodna z kontraktem, bez praca_adres_telefon', () => {
+      expect(praca.fields).toEqual([
+        'praca_forma',
+        'praca_okres',
+        'praca_okres_od',
+        'praca_okres_do',
+        'praca_nip',
+        'praca_nazwa_zakladu',
+        'praca_adres',
+        'praca_telefon',
+        'praca_kwota_dochodu',
+      ])
+    })
+
+    it('tytuł i podtytuł grupy', () => {
+      expect(praca.label).toBe('Dochód z zatrudnienia')
+      expect(praca.podtytul).toBe('Umowa o pracę, zlecenie lub dzieło.')
+    })
+
+    it('nowe etykiety i zachowana etykieta historyczna', () => {
+      expect(ETYKIETY_POL.praca_adres).toBe('Adres zakładu pracy')
+      expect(ETYKIETY_POL.praca_telefon).toBe('Telefon zakładu pracy')
+      expect(ETYKIETY_POL.praca_adres_telefon).toBe('Adres i numer telefonu zakładu pracy')
+    })
+
+    it('buildDane nie wysyła praca_adres_telefon, wysyła nowe pola', () => {
+      const form = defaultForm()
+      form.praca_wlaczone = true
+      form.praca_adres = 'ul. A 1'
+      form.praca_telefon = '600 700 800'
+      const dane = buildDane(form)
+      expect(dane).not.toHaveProperty('praca_adres_telefon')
+      expect(dane.praca_adres).toBe('ul. A 1')
+      expect(dane.praca_telefon).toBe('600 700 800')
+    })
+
+    it('daty w buildDane zostają w YYYY-MM-DD (format DD.MM.YYYY jest tylko wyświetlaniem)', () => {
+      const form = defaultForm()
+      form.data_wydania_dokumentu = '2020-01-15'
+      form.praca_wlaczone = true
+      form.praca_okres_od = '2021-02-03'
+      const dane = buildDane(form)
+      expect(dane.data_wydania_dokumentu).toBe('2020-01-15')
+      expect(dane.praca_okres_od).toBe('2021-02-03')
+    })
+  })
+
+  describe('wymaganePola / brakujacePola (zgodność ze starym wynikiem)', () => {
+    it('brakujacePola === wymaganePola z filtrem pustości', () => {
+      const dane = kredytKompletny({ praca_wlaczone: true, praca_forma: 'Umowa o pracę' })
+      const oczekiwane = wymaganePola(dane).filter(
+        (fn) => dane[fn] === undefined || dane[fn] === null || String(dane[fn]).trim() === '',
+      )
+      expect(brakujacePola(dane)).toEqual(oczekiwane)
+    })
+
+    it('praca włączona: adres i telefon zakładu wymagane, praca_adres_telefon nie', () => {
+      const dane = kredytKompletny({ praca_wlaczone: true })
+      const wymagane = wymaganePola(dane)
+      expect(wymagane).toContain('praca_adres')
+      expect(wymagane).toContain('praca_telefon')
+      expect(wymagane).not.toContain('praca_adres_telefon')
+      expect(brakujacePola(dane)).toContain('praca_adres')
+      expect(brakujacePola(dane)).toContain('praca_telefon')
+    })
+
+    it('praca wyłączona: pola pracy niewymagane', () => {
+      const wymagane = wymaganePola(kredytKompletny())
+      expect(wymagane.some((fn) => fn.startsWith('praca_'))).toBe(false)
+    })
+
+    it('wymaganePola nie mutuje formularza', () => {
+      const dane = deepFreeze(kredytKompletny({ praca_wlaczone: true }))
+      expect(() => wymaganePola(dane)).not.toThrow()
+    })
+  })
+
+  describe('czyPoprawnyNip', () => {
+    it.each(['5260250995', '7831843756', '526-025-09-95', '526 025 09 95', 'PL5260250995', 'pl 526-025-09-95'])(
+      'poprawny: %s',
+      (nip) => expect(czyPoprawnyNip(nip)).toBe(true),
+    )
+    it.each(['5260250996', '123456789', '52602509955', '', 'abcdefghij', '1234567890'])(
+      'niepoprawny: "%s"',
+      (nip) => expect(czyPoprawnyNip(nip)).toBe(false),
+    )
+    it('nie-string to false', () => {
+      expect(czyPoprawnyNip(null)).toBe(false)
+      expect(czyPoprawnyNip(5260250995)).toBe(false)
+    })
+  })
+
+  describe('czyPoprawnyTelefon', () => {
+    it.each([
+      '600700800',
+      '600 700 800',
+      '600-700-800',
+      '(61) 812 40 00',
+      '+48 600 700 800',
+      '+48600700800',
+      '0048 600 700 800',
+      '61 812 40 00',
+    ])('poprawny: %s', (t) => expect(czyPoprawnyTelefon(t)).toBe(true))
+    it.each(['', '12345', '+48 600 700', '60070080a', 'tel. 600700800', '+49 600 700 800'])(
+      'niepoprawny: "%s"',
+      (t) => expect(czyPoprawnyTelefon(t)).toBe(false),
+    )
+  })
+
+  describe('bladFormatu', () => {
+    it('pusta wartość nigdy nie jest błędem formatu', () => {
+      expect(bladFormatu('praca_nip', '')).toBe('')
+      expect(bladFormatu('praca_nip', '   ')).toBe('')
+      expect(bladFormatu('praca_telefon', null)).toBe('')
+    })
+    it('trzy pola NIP', () => {
+      ;['praca_nip', 'dzialalnosc_nip', 'gospodarstwo_nip'].forEach((fn) => {
+        expect(bladFormatu(fn, '5260250995')).toBe('')
+        expect(bladFormatu(fn, '5260250996')).toBe(KOMUNIKAT_NIP)
+      })
+      expect(KOMUNIKAT_NIP).toBe('Nieprawidłowy NIP, sprawdź cyfry')
+    })
+    it('telefon zakładu pracy', () => {
+      expect(bladFormatu('praca_telefon', '600 700 800')).toBe('')
+      expect(bladFormatu('praca_telefon', '123')).toBe(KOMUNIKAT_TELEFON)
+      expect(KOMUNIKAT_TELEFON).toBe('Podaj numer telefonu (min. 9 cyfr)')
+    })
+    it('pole bez reguły formatu', () => {
+      expect(bladFormatu('dzialalnosc_telefon', '1')).toBe('')
+      expect(bladFormatu('miejsce_urodzenia', 'x')).toBe('')
+    })
+  })
+
+  describe('stanPola', () => {
+    const brakujace = new Set(['a', 'b'])
+    it('błąd formatu ma pierwszeństwo', () => {
+      expect(stanPola('a', { brakujace, bledyFormatu: { a: 'zle' }, probaGenerowania: true })).toEqual({
+        stan: 'blad',
+        komunikat: 'zle',
+      })
+    })
+    it('brak po próbie generowania jest czerwony z komunikatem', () => {
+      expect(stanPola('a', { brakujace, bledyFormatu: {}, probaGenerowania: true })).toEqual({
+        stan: 'blad',
+        komunikat: KOMUNIKAT_WYMAGANE,
+      })
+      expect(KOMUNIKAT_WYMAGANE).toBe('Wymagane do wniosku')
+    })
+    it('brak przed próbą jest niebieski bez komunikatu', () => {
+      expect(stanPola('b', { brakujace, bledyFormatu: {}, probaGenerowania: false })).toEqual({
+        stan: 'brak',
+        komunikat: '',
+      })
+    })
+    it('pole kompletne i brak kontekstu', () => {
+      expect(stanPola('z', { brakujace, bledyFormatu: {}, probaGenerowania: true })).toEqual({
+        stan: '',
+        komunikat: '',
+      })
+      expect(stanPola('z')).toEqual({ stan: '', komunikat: '' })
+    })
+  })
+
+  describe('licznikSekcji', () => {
+    const ctx = (over = {}) => ({
+      brakujace: new Set(['b1', 'b2']),
+      bledyFormatu: {},
+      probaGenerowania: false,
+      ...over,
+    })
+    it('komplet gdy nic nie brakuje', () => {
+      expect(licznikSekcji(['x', 'y'], ctx())).toEqual({ stan: 'komplet', liczba: 0 })
+      expect(licznikSekcji([], ctx())).toEqual({ stan: 'komplet', liczba: 0 })
+    })
+    it('brak: liczba brakujących', () => {
+      expect(licznikSekcji(['b1', 'b2', 'x'], ctx())).toEqual({ stan: 'brak', liczba: 2 })
+    })
+    it('błąd formatu ma pierwszeństwo nad brakami, liczy tylko błędy', () => {
+      expect(licznikSekcji(['b1', 'b2', 'n'], ctx({ bledyFormatu: { n: 'zle' } }))).toEqual({
+        stan: 'blad',
+        liczba: 1,
+      })
+    })
+    it('po próbie generowania wszystkie braki to błędy', () => {
+      expect(licznikSekcji(['b1', 'b2', 'x'], ctx({ probaGenerowania: true }))).toEqual({
+        stan: 'blad',
+        liczba: 2,
+      })
+    })
+  })
+
+  describe('sekcjaWszystkieWymagane', () => {
+    it('wszystkie widoczne pola wymagane', () => {
+      expect(sekcjaWszystkieWymagane(['a', 'b'], ['a', 'b', 'c'])).toBe(true)
+    })
+    it('jedno niewymagane psuje zdanie', () => {
+      expect(sekcjaWszystkieWymagane(['a', 'x'], ['a', 'b'])).toBe(false)
+    })
+    it('pusta sekcja nie jest "wszystkie wymagane"', () => {
+      expect(sekcjaWszystkieWymagane([], ['a'])).toBe(false)
+    })
+    it('sekcje formularza: zatrudnienie całe wymagane, inne źródła mieszane', () => {
+      const dane = kredytKompletny({
+        praca_wlaczone: true,
+        praca_okres: 'Czas określony',
+        inne_wlaczone: true,
+      })
+      const wymagane = wymaganePola(dane)
+      const praca = GRUPY.find((g) => g.key === 'praca')
+      const inne = GRUPY.find((g) => g.key === 'inne')
+      expect(sekcjaWszystkieWymagane(praca.fields, wymagane)).toBe(true)
+      expect(sekcjaWszystkieWymagane(inne.fields, wymagane)).toBe(false)
+    })
+  })
+
+  describe('rozdzielAdresTelefon', () => {
+    it('z prefiksem tel.', () => {
+      expect(rozdzielAdresTelefon('ul. Dworcowa 5, 61-123 Poznań, tel. 61 812 40 00')).toEqual({
+        adres: 'ul. Dworcowa 5, 61-123 Poznań',
+        telefon: '61 812 40 00',
+      })
+    })
+    it('z prefiksem telefon: i nr tel.', () => {
+      expect(rozdzielAdresTelefon('Długa 1, Gdańsk; Telefon: 600700800').telefon).toBe('600700800')
+      expect(rozdzielAdresTelefon('Długa 1, Gdańsk, nr tel. 600 700 800')).toEqual({
+        adres: 'Długa 1, Gdańsk',
+        telefon: '600 700 800',
+      })
+    })
+    it('bez prefiksu', () => {
+      expect(rozdzielAdresTelefon('ul. Krótka 2, Łódź, 600-700-800')).toEqual({
+        adres: 'ul. Krótka 2, Łódź',
+        telefon: '600-700-800',
+      })
+    })
+    it('z +48', () => {
+      expect(rozdzielAdresTelefon('ul. X 3, Kraków, +48 600 700 800')).toEqual({
+        adres: 'ul. X 3, Kraków',
+        telefon: '+48 600 700 800',
+      })
+    })
+    it('bez telefonu: kod pocztowy i numer domu nie są telefonem', () => {
+      expect(rozdzielAdresTelefon('  ul. Dworcowa 5/7, 61-123 Poznań  ')).toEqual({
+        adres: 'ul. Dworcowa 5/7, 61-123 Poznań',
+        telefon: '',
+      })
+    })
+    it('"Hotel" nie jest prefiksem tel', () => {
+      expect(rozdzielAdresTelefon('Hotel Pod Różą 1, Kraków').telefon).toBe('')
+      expect(rozdzielAdresTelefon('Hotel Pod Różą 1, Kraków').adres).toBe('Hotel Pod Różą 1, Kraków')
+    })
+    it('sam telefon', () => {
+      expect(rozdzielAdresTelefon('tel. 600700800')).toEqual({ adres: '', telefon: '600700800' })
+    })
+    it('puste i nie-string', () => {
+      expect(rozdzielAdresTelefon('')).toEqual({ adres: '', telefon: '' })
+      expect(rozdzielAdresTelefon(null)).toEqual({ adres: '', telefon: '' })
+    })
+  })
+
+  describe('hydrateFrom: stary formularz z praca_adres_telefon', () => {
+    it('rozcina stare pole na adres i telefon, gdy nowe są puste', () => {
+      const form = hydrateFrom({
+        praca_wlaczone: 1,
+        praca_adres_telefon: 'ul. Dworcowa 5, Poznań, tel. 61 812 40 00',
+      })
+      expect(form.praca_adres).toBe('ul. Dworcowa 5, Poznań')
+      expect(form.praca_telefon).toBe('61 812 40 00')
+      expect(form).not.toHaveProperty('praca_adres_telefon')
+    })
+    it('nie nadpisuje nowych pól, gdy któreś jest wypełnione', () => {
+      const form = hydrateFrom({
+        praca_adres: 'Nowy adres 1',
+        praca_telefon: '',
+        praca_adres_telefon: 'ul. Dworcowa 5, tel. 61 812 40 00',
+      })
+      expect(form.praca_adres).toBe('Nowy adres 1')
+      expect(form.praca_telefon).toBe('')
+    })
+    it('puste stare pole zostawia puste nowe', () => {
+      const form = hydrateFrom({ praca_adres_telefon: '   ' })
+      expect(form.praca_adres).toBe('')
+      expect(form.praca_telefon).toBe('')
+    })
+    it('nie mutuje rekordu', () => {
+      const rekord = deepFreeze({ praca_adres_telefon: 'ul. X 1, 600700800' })
+      expect(() => hydrateFrom(rekord)).not.toThrow()
     })
   })
 })

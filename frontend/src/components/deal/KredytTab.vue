@@ -106,7 +106,7 @@
       </div>
 
       <!-- Form -->
-      <div v-else class="flex flex-col gap-6">
+      <div v-else ref="formRoot" class="flex flex-col gap-6">
         <!-- Form picker: which of this deal's several Volteo Kredyt records is shown -->
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div ref="pickerRoot" class="relative">
@@ -232,7 +232,7 @@
             <Button
               variant="outline"
               :label="__('Generuj PDF')"
-              :disabled="generatingPdf || pdfZablokowany"
+              :disabled="generatingPdf"
               :loading="generatingPdf"
               :tooltip="pdfTooltip"
               @click="generatePdf"
@@ -341,8 +341,20 @@
         <!-- Applicant data block: editable snapshot taken at record creation -->
         <div class="rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-4">
           <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div class="text-sm font-semibold text-ink-gray-7">
-              {{ __('Dane wnioskodawcy') }}
+            <div class="flex items-center gap-2">
+              <div class="text-sm font-semibold text-ink-gray-7">
+                {{ __('Dane wnioskodawcy') }}
+              </div>
+              <Badge
+                v-bind="badgeLicznika(wnioskodawcaLicznik)"
+                variant="subtle"
+                size="sm"
+                data-testid="kredyt-licznik-wnioskodawca"
+              >
+                <template v-if="wnioskodawcaLicznik.stan === 'komplet'" #prefix>
+                  <LucideCheck class="h-3 w-3" />
+                </template>
+              </Badge>
             </div>
             <div class="flex items-center gap-2">
               <Button
@@ -362,7 +374,10 @@
 
           <div v-if="!wnioskodawcaEdytowalny" class="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div v-for="p in wnioskodawcaWyswietlanie" :key="p.fieldname" class="min-w-0">
-              <div class="text-xs text-ink-gray-5">{{ p.label }}</div>
+              <div class="text-xs text-ink-gray-5">
+                {{ p.label }}
+                <span v-if="brakWnioskodawcySet.has(p.fieldname)" :class="KROPKA_BRAK_KLASY" />
+              </div>
               <TelefonLink
                 v-if="czyPoleTelefonu(p.fieldname) && p.value"
                 :numer="p.value"
@@ -372,24 +387,19 @@
             </div>
           </div>
           <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div v-for="f in wnioskodawcaPola" :key="f.fieldname">
-              <FormControl
-                :type="f.type"
-                :label="f.label"
-                :disabled="saving"
-                v-model="form[f.fieldname]"
-              >
-                <template v-if="czyPoleTelefonu(f.fieldname) && czyTelefon(form[f.fieldname])" #suffix>
-                  <Button
-                    variant="ghost"
-                    icon="lucide-phone"
-                    class="!size-5"
-                    :tooltip="__('Zadzwoń')"
-                    :link="telHref(form[f.fieldname])"
-                  />
-                </template>
-              </FormControl>
-            </div>
+            <KredytPole
+              v-for="f in wnioskodawcaPola"
+              :key="f.fieldname"
+              :data-pole="f.fieldname"
+              :f="f"
+              v-model="form[f.fieldname]"
+              :stan="stanDla(f.fieldname).stan"
+              :komunikat="stanDla(f.fieldname).komunikat"
+              :wymagane="wymaganeSet.has(f.fieldname)"
+              :telefon="czyPoleTelefonu(f.fieldname)"
+              :disabled="saving"
+              @blur="dotknij(f.fieldname)"
+            />
           </div>
 
           <div class="mt-3 text-xs text-ink-gray-4">
@@ -401,100 +411,173 @@
           </div>
         </div>
 
-        <!-- Missing-fields summary -->
+        <!-- Summary banner (ops#321): blue while filling, red after a failed
+        "Generuj PDF" attempt. Never amber (amber is reserved for admin-only
+        panels). -->
         <div
-          v-if="missingLabels.length || brakujaceKlienta.length"
-          class="rounded-lg border border-outline-amber-3 bg-surface-amber-2 px-4 py-3 text-sm text-ink-amber-8"
+          v-if="banerWidoczny"
+          data-testid="kredyt-baner"
+          :class="[
+            'rounded-lg border px-4 py-3 text-sm',
+            probaGenerowania
+              ? 'border-outline-red-3 bg-surface-red-2 text-ink-red-8'
+              : 'border-outline-blue-2 bg-surface-blue-2 text-ink-blue-8',
+          ]"
         >
+          <div v-if="probaGenerowania" class="mb-1 font-medium">
+            {{ __('Nie można wygenerować wniosku. Popraw te pola:') }}
+          </div>
           <div v-if="missingLabels.length">
             {{ __('Brakujące pola:') }} {{ missingLabels.join(', ') }}
+          </div>
+          <div v-if="bledyFormatuLista.length">
+            {{ __('Błędny format:') }} {{ bledyFormatuLista.join(', ') }}
           </div>
           <div v-if="brakujaceKlienta.length">
             {{ __('Brakujące dane wnioskodawcy:') }} {{ brakujaceKlienta.join(', ') }}
           </div>
+          <Button
+            v-if="probaGenerowania"
+            class="mt-2"
+            variant="outline"
+            size="sm"
+            :label="__('Przejdź do pierwszego')"
+            @click="przejdzDoPierwszego"
+          />
         </div>
 
         <!-- §1-3: base sections -->
-        <section v-for="sec in formSections" :key="sec.key">
-          <div class="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-gray-5">
-            {{ sec.label }}
+        <section v-for="sec in sekcjeBazowe" :key="sec.key">
+          <div class="mb-3 flex items-start justify-between gap-2">
+            <div>
+              <div class="text-sm font-semibold uppercase tracking-wide text-ink-gray-5">
+                {{ sec.label }}
+              </div>
+              <div v-if="sec.wszystkie" class="mt-0.5 text-sm text-ink-gray-5">
+                {{ __('Wszystkie pola są wymagane.') }}
+              </div>
+            </div>
+            <Badge
+              v-bind="badgeLicznika(sec.licznik)"
+              variant="subtle"
+              size="sm"
+              :data-testid="'kredyt-licznik-' + sec.key"
+            >
+              <template v-if="sec.licznik.stan === 'komplet'" #prefix>
+                <LucideCheck class="h-3 w-3" />
+              </template>
+            </Badge>
           </div>
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div
-              v-for="f in visibleFields(sec.fields)"
+            <KredytPole
+              v-for="f in sec.pola"
               :key="f.fieldname"
-              :title="etykietaPelna(f.fieldname)"
-              :class="[
-                'rounded',
-                missingSet.has(f.fieldname) ? 'ring-1 ring-outline-red-3' : '',
-                f.fullWidth ? 'sm:col-span-3' : '',
-              ]"
-            >
-              <FormControl
-                :type="f.type"
-                :label="f.label"
-                :options="f.options"
-                :inputmode="f.inputmode"
-                :placeholder="f.placeholder"
-                :disabled="saving"
-                v-model="form[f.fieldname]"
-                @blur="onKwotaBlur(f)"
-                @input="onPoleInput(f, $event)"
-              />
-            </div>
+              :data-pole="f.fieldname"
+              :class="f.fullWidth ? 'sm:col-span-3' : ''"
+              :f="f"
+              v-model="form[f.fieldname]"
+              :stan="stanDla(f.fieldname).stan"
+              :komunikat="stanDla(f.fieldname).komunikat"
+              :wymagane="!sec.wszystkie && wymaganeSet.has(f.fieldname)"
+              :tytul="etykietaPelna(f.fieldname)"
+              :disabled="saving"
+              @blur="onBlurPola(f)"
+              @input="onPoleInput(f, $event)"
+            />
           </div>
         </section>
 
         <!-- §4-9: income groups -->
-        <section v-for="grupa in GRUPY" :key="grupa.key" class="kalk-part">
+        <section v-for="g in sekcjeGrup" :key="g.grupa.key" class="kalk-part">
           <div class="kalk-part-heading mb-4 flex items-center justify-between gap-2 border-b border-outline-gray-1 pb-2.5 text-base font-semibold text-ink-gray-9">
-            <div>{{ grupa.label }}</div>
-            <button
-              type="button"
-              role="switch"
-              :aria-checked="form[grupa.wlaczone]"
-              :aria-label="grupa.label"
-              class="kalk-switch shrink-0"
-              :class="form[grupa.wlaczone] ? 'kalk-switch-on' : 'kalk-switch-off'"
-              :disabled="saving"
-              @click="form[grupa.wlaczone] = !form[grupa.wlaczone]"
-            ><span class="kalk-switch-knob" /></button>
+            <div class="min-w-0">
+              <div>{{ g.grupa.label }}</div>
+              <div
+                v-if="g.grupa.podtytul || (g.wlaczona && g.wszystkie)"
+                class="mt-0.5 text-sm font-normal text-ink-gray-5"
+              >
+                {{ g.grupa.podtytul }}
+                <template v-if="g.wlaczona && g.wszystkie">
+                  {{ __('Wszystkie pola są wymagane.') }}
+                </template>
+              </div>
+            </div>
+            <div class="flex shrink-0 items-center gap-3">
+              <Badge
+                v-if="g.wlaczona"
+                v-bind="badgeLicznika(g.licznik)"
+                variant="subtle"
+                size="sm"
+                :data-testid="'kredyt-licznik-' + g.grupa.key"
+              >
+                <template v-if="g.licznik.stan === 'komplet'" #prefix>
+                  <LucideCheck class="h-3 w-3" />
+                </template>
+              </Badge>
+              <button
+                type="button"
+                role="switch"
+                :aria-checked="g.wlaczona"
+                :aria-label="g.grupa.label"
+                class="kalk-switch shrink-0"
+                :class="g.wlaczona ? 'kalk-switch-on' : 'kalk-switch-off'"
+                :disabled="saving"
+                @click="form[g.grupa.wlaczone] = !form[g.grupa.wlaczone]"
+              ><span class="kalk-switch-knob" /></button>
+            </div>
           </div>
 
           <div
-            v-if="form[grupa.wlaczone]"
+            v-if="g.wlaczona"
             :class="[
               'grid grid-cols-1 gap-4',
-              grupa.key === 'inne' ? 'sm:grid-cols-2' : 'sm:grid-cols-3',
+              g.grupa.key === 'inne' ? 'sm:grid-cols-2' : 'sm:grid-cols-3',
             ]"
           >
-            <div
-              v-for="f in visibleFields(grupaPola[grupa.key])"
-              :key="f.fieldname"
-              :title="etykietaPelna(f.fieldname)"
-              :class="['rounded', missingSet.has(f.fieldname) ? 'ring-1 ring-outline-red-3' : '']"
-            >
-              <FormControl
-                :type="f.type"
-                :label="f.label"
-                :options="f.options"
-                :inputmode="f.inputmode"
-                :placeholder="f.placeholder"
-                :disabled="saving"
-                v-model="form[f.fieldname]"
-                @blur="onKwotaBlur(f)"
-              >
-                <template v-if="czyPoleTelefonu(f.fieldname) && czyTelefon(form[f.fieldname])" #suffix>
-                  <Button
-                    variant="ghost"
-                    icon="lucide-phone"
-                    class="!size-5"
-                    :tooltip="__('Zadzwoń')"
-                    :link="telHref(form[f.fieldname])"
+            <template v-for="el in g.elementy" :key="el.f.fieldname">
+              <!-- Para dat "od / do" w jednej komórce, pod wspólną etykietą -->
+              <div v-if="el.doPole" :data-pole="el.f.fieldname" class="min-w-0">
+                <div class="mb-1.5 whitespace-nowrap text-base text-ink-gray-5">
+                  {{ __('Zatrudnienie od / do') }}
+                  <span
+                    v-if="!g.wszystkie && (wymaganeSet.has(el.f.fieldname) || wymaganeSet.has(el.doPole.fieldname))"
+                    class="select-none text-ink-red-6"
+                  >*</span>
+                  <span
+                    v-if="stanDla(el.f.fieldname).stan === 'brak' || stanDla(el.doPole.fieldname).stan === 'brak'"
+                    :class="KROPKA_BRAK_KLASY"
                   />
-                </template>
-              </FormControl>
-            </div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <KredytPole
+                    v-for="pole in [el.f, el.doPole]"
+                    :key="pole.fieldname"
+                    :data-pole="pole.fieldname"
+                    :f="pole"
+                    bez-etykiety
+                    v-model="form[pole.fieldname]"
+                    :stan="stanDla(pole.fieldname).stan"
+                    :komunikat="stanDla(pole.fieldname).komunikat"
+                    :disabled="saving"
+                    @blur="onBlurPola(pole)"
+                  />
+                </div>
+              </div>
+              <KredytPole
+                v-else
+                :data-pole="el.f.fieldname"
+                :class="el.f.kolumny === 2 ? 'sm:col-span-2' : ''"
+                :f="el.f"
+                v-model="form[el.f.fieldname]"
+                :stan="stanDla(el.f.fieldname).stan"
+                :komunikat="stanDla(el.f.fieldname).komunikat"
+                :wymagane="!g.wszystkie && wymaganeSet.has(el.f.fieldname)"
+                :tytul="etykietaPelna(el.f.fieldname)"
+                :telefon="czyPoleTelefonu(el.f.fieldname)"
+                :disabled="saving"
+                @blur="onBlurPola(el.f)"
+              />
+            </template>
           </div>
         </section>
       </div>
@@ -515,11 +598,12 @@
 <script setup>
 import KredytIcon from '@/components/Icons/KredytIcon.vue'
 import TelefonLink from '@/components/TelefonLink.vue'
+import KredytPole from '@/components/deal/KredytPole.vue'
+import LucideCheck from '~icons/lucide/check'
 import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
 import NotatkiStrumien from '@/components/deal/NotatkiStrumien.vue'
-import { telHref, czyTelefon } from '@/utils/telefon'
 import { onClickOutside } from '@vueuse/core'
-import { Badge, Button, Dropdown, FormControl, call, toast } from 'frappe-ui'
+import { Badge, Button, Dropdown, call, toast } from 'frappe-ui'
 import { computed, h, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useAutenti } from '@/composables/useAutenti'
 import { badgeFor } from '@/utils/autentiStatus'
@@ -546,6 +630,11 @@ import {
   widocznePola,
   brakujacePola,
   brakujaceDaneWnioskodawcy,
+  wymaganePola,
+  bladFormatu,
+  stanPola,
+  licznikSekcji,
+  sekcjaWszystkieWymagane,
   prefillDoWnioskodawcy,
   etykietaFormularza,
   ETYKIETY_POL,
@@ -700,12 +789,12 @@ const formSections = [
 ]
 
 // Fields carrying a phone number, across the applicant block
-// (wnioskodawca_telefon) and the income groups (praca_adres_telefon,
+// (wnioskodawca_telefon) and the income groups (praca_telefon,
 // dzialalnosc_telefon): the small "Zadzwon" icon button next to the input,
 // and the tel: link on the read-only applicant display, both key off this.
 const POLA_TELEFONU = new Set([
   'wnioskodawca_telefon',
-  'praca_adres_telefon',
+  'praca_telefon',
   'dzialalnosc_telefon',
 ])
 
@@ -758,9 +847,34 @@ const grupaPola = {
       label: __(ETYKIETY_POL.praca_okres_do),
       type: 'date',
     },
-    { fieldname: 'praca_nip', label: __(ETYKIETY_POL.praca_nip), type: 'text' },
-    { fieldname: 'praca_nazwa_zakladu', label: __(ETYKIETY_POL.praca_nazwa_zakladu), type: 'text' },
-    { fieldname: 'praca_adres_telefon', label: __(ETYKIETY_POL.praca_adres_telefon), type: 'text' },
+    {
+      fieldname: 'praca_nip',
+      label: __(ETYKIETY_POL.praca_nip),
+      type: 'text',
+      inputmode: 'numeric',
+      placeholder: __('10 cyfr'),
+    },
+    {
+      fieldname: 'praca_nazwa_zakladu',
+      label: __(ETYKIETY_POL.praca_nazwa_zakladu),
+      type: 'text',
+      placeholder: __('Nazwa pracodawcy'),
+      kolumny: 2,
+    },
+    {
+      fieldname: 'praca_adres',
+      label: __(ETYKIETY_POL.praca_adres),
+      type: 'text',
+      placeholder: __('Ulica i numer, kod pocztowy, miejscowość'),
+      kolumny: 2,
+    },
+    {
+      fieldname: 'praca_telefon',
+      label: __(ETYKIETY_POL.praca_telefon),
+      type: 'text',
+      inputmode: 'tel',
+      placeholder: __('np. 61 812 40 00'),
+    },
     {
       fieldname: 'praca_kwota_dochodu',
       label: __(ETYKIETY_POL.praca_kwota_dochodu),
@@ -803,7 +917,7 @@ const grupaPola = {
       label: __(ETYKIETY_POL.dzialalnosc_forma_inna),
       type: 'text',
     },
-    { fieldname: 'dzialalnosc_nip', label: __(ETYKIETY_POL.dzialalnosc_nip), type: 'text' },
+    { fieldname: 'dzialalnosc_nip', label: __(ETYKIETY_POL.dzialalnosc_nip), type: 'text', inputmode: 'numeric' },
     { fieldname: 'dzialalnosc_nazwa', label: __(ETYKIETY_POL.dzialalnosc_nazwa), type: 'text' },
     { fieldname: 'dzialalnosc_adres', label: __(ETYKIETY_POL.dzialalnosc_adres), type: 'text' },
     { fieldname: 'dzialalnosc_telefon', label: __(ETYKIETY_POL.dzialalnosc_telefon), type: 'text' },
@@ -817,7 +931,7 @@ const grupaPola = {
     },
   ],
   gospodarstwo: [
-    { fieldname: 'gospodarstwo_nip', label: __(ETYKIETY_POL.gospodarstwo_nip), type: 'text' },
+    { fieldname: 'gospodarstwo_nip', label: __(ETYKIETY_POL.gospodarstwo_nip), type: 'text', inputmode: 'numeric' },
     { fieldname: 'gospodarstwo_od_kiedy', label: __(ETYKIETY_POL.gospodarstwo_od_kiedy), type: 'date' },
     {
       fieldname: 'gospodarstwo_kwota_dochodu',
@@ -876,6 +990,13 @@ function visibleFields(fields) {
 function onKwotaBlur(f) {
   if (f.inputmode !== 'decimal') return
   form[f.fieldname] = normalizujKwote(form[f.fieldname])
+}
+
+// Wyjście z pola: najpierw normalizacja kwoty (jak dotąd), potem pole liczy
+// się jako opuszczone (od tej chwili może pokazać błąd formatu).
+function onBlurPola(f) {
+  onKwotaBlur(f)
+  dotknij(f.fieldname)
 }
 
 // Live NRB space-grouping for numer_rachunku, applied on every keystroke
@@ -1081,6 +1202,8 @@ async function wybierzFormularz(row) {
   try {
     wybrany.value = row
     wnioskodawcaEdytowalny.value = false
+    probaGenerowania.value = false
+    dotkniete.value = new Set()
     await loadKredyt(row.name)
     await restartAutenti()
   } catch (err) {
@@ -1116,8 +1239,8 @@ onMounted(initKredyt)
 // Missing-fields semantics (ops#147, K3/K4/K8): brakujaceLokalne is
 // computed LIVE from `form` (kredytForm.js's brakujacePola, a pure mirror
 // of crm/volteo_kredyt.py brakujace_pola), it is the PRIMARY source for
-// the red field rings (missingSet) and for whether "Generuj PDF" is
-// disabled, so completing the last required field, or switching an
+// the field states (brakiWszystkieSet, ops#321) and for whether
+// "Generuj PDF" is blocked, so completing the last required field, or switching an
 // income-group toggle off, updates the banner and the button instantly,
 // with no need to click "Zapisz" first.
 //
@@ -1126,12 +1249,11 @@ onMounted(initKredyt)
 // parameter in visibleFields() below, so a field the server ever reports
 // missing is always rendered even if a frontend rule disagrees (the
 // ops#139 pattern); and (2) after a round-trip it is unioned INTO the
-// banner TEXT only (never into missingSet or the disabled condition):
+// banner TEXT only (never into the field states or the blocking condition):
 // if the server ever reports something the local mirror does not, the
 // rep still sees it named. The union only ever ADDS a field name, it
 // never hides a requirement the local list already found.
 const brakujaceLokalne = computed(() => brakujacePola(form))
-const missingSet = computed(() => new Set(brakujaceLokalne.value))
 
 const brakujaceBanerNazwy = computed(() => {
   const lokalne = brakujaceLokalne.value
@@ -1154,6 +1276,157 @@ const missingLabels = computed(() =>
 const brakujaceKlienta = computed(() =>
   brakujaceDaneWnioskodawcy(form).map((fn) => __(ETYKIETY_WNIOSKODAWCY[fn] || fn)),
 )
+
+// --- Trzy poziomy pól (ops#321) ------------------------------------------------
+// wymagane -> brakuje (LIVE, niebieskie) -> błąd (czerwone: zły format po
+// wyjściu z pola, albo próba generowania z brakami). Cała logika stanów jest w
+// kredytForm.js (stanPola/licznikSekcji/bladFormatu), tu tylko stan Vue.
+const probaGenerowania = ref(false)
+const dotkniete = ref(new Set())
+
+function dotknij(fieldname) {
+  if (dotkniete.value.has(fieldname)) return
+  dotkniete.value = new Set([...dotkniete.value, fieldname])
+}
+
+// Zbiór brakujących: pola formularza (lokalnie, na żywo) plus pola bloku
+// wnioskodawcy. Nazwy się nie krzyżują.
+const brakujaceKlientaPola = computed(() => brakujaceDaneWnioskodawcy(form))
+const brakWnioskodawcySet = computed(() => new Set(brakujaceKlientaPola.value))
+const brakiWszystkieSet = computed(
+  () => new Set([...brakujaceLokalne.value, ...brakujaceKlientaPola.value]),
+)
+
+// Pola z regułą formatu (NIP, telefon zakładu pracy), liczone tylko dla grup,
+// które są włączone. "Surowe" = wszystkie błędy, bez względu na to, czy pole
+// było już opuszczone; to ich używa generatePdf() do decyzji o próbie.
+const POLA_Z_FORMATEM = ['praca_nip', 'praca_telefon', 'dzialalnosc_nip', 'gospodarstwo_nip']
+const bledyFormatuSurowe = computed(() => {
+  const out = {}
+  POLA_Z_FORMATEM.forEach((fn) => {
+    const wlaczone = GRUPY.some((g) => g.fields.includes(fn) && form[g.wlaczone])
+    if (!wlaczone) return
+    const komunikat = bladFormatu(fn, form[fn])
+    if (komunikat) out[fn] = komunikat
+  })
+  return out
+})
+// Błąd formatu pokazujemy dopiero po opuszczeniu pola albo po próbie generowania.
+const bledyFormatu = computed(() =>
+  Object.fromEntries(
+    Object.entries(bledyFormatuSurowe.value).filter(
+      ([fn]) => probaGenerowania.value || dotkniete.value.has(fn),
+    ),
+  ),
+)
+const bledyFormatuLista = computed(() =>
+  Object.entries(bledyFormatu.value).map(([fn, msg]) => `${fieldLabelByName.get(fn) || fn} (${msg})`),
+)
+
+const ctxStanu = computed(() => ({
+  brakujace: brakiWszystkieSet.value,
+  bledyFormatu: bledyFormatu.value,
+  probaGenerowania: probaGenerowania.value,
+}))
+function stanDla(fieldname) {
+  return stanPola(fieldname, ctxStanu.value)
+}
+
+// Wymagane: wymaganePola() formularza plus 9 pól wnioskodawcy (wszystkie
+// poza nr lokalu, własna reguła brakujaceDaneWnioskodawcy).
+const wymaganeSet = computed(
+  () =>
+    new Set([
+      ...wymaganePola(form),
+      ...POLA_WNIOSKODAWCY.filter((p) => p !== 'wnioskodawca_nr_lokalu'),
+    ]),
+)
+
+const wnioskodawcaLicznik = computed(() => licznikSekcji(POLA_WNIOSKODAWCY, ctxStanu.value))
+
+// Sekcje bazowe: widoczne pola, licznik w nagłówku, flaga "wszystkie wymagane".
+function opisSekcji(pola) {
+  const nazwy = pola.map((f) => f.fieldname)
+  return {
+    licznik: licznikSekcji(nazwy, ctxStanu.value),
+    wszystkie: sekcjaWszystkieWymagane(nazwy, wymaganeSet.value),
+  }
+}
+const sekcjeBazowe = computed(() =>
+  formSections.map((sec) => {
+    const pola = visibleFields(sec.fields)
+    return { ...sec, pola, ...opisSekcji(pola) }
+  }),
+)
+
+// Grupy dochodu. W grupie praca "Czas określony" łączy daty od i do w jedną
+// komórkę pod wspólną etykietą, więc lista elementów do narysowania jest
+// zbudowana tu, nie w szablonie.
+function elementyGrupy(grupa, pola) {
+  if (grupa.key !== 'praca' || form.praca_okres !== 'Czas określony') {
+    return pola.map((f) => ({ f }))
+  }
+  const doPole = pola.find((f) => f.fieldname === 'praca_okres_do')
+  return pola.flatMap((f) => {
+    if (f.fieldname === 'praca_okres_do' && doPole) return []
+    if (f.fieldname === 'praca_okres_od' && doPole) return [{ f, doPole }]
+    return [{ f }]
+  })
+}
+const sekcjeGrup = computed(() =>
+  GRUPY.map((grupa) => {
+    const pola = visibleFields(grupaPola[grupa.key])
+    return {
+      grupa,
+      wlaczona: Boolean(form[grupa.wlaczone]),
+      elementy: elementyGrupy(grupa, pola),
+      ...opisSekcji(pola),
+    }
+  }),
+)
+
+function badgeLicznika(licznik) {
+  if (licznik.stan === 'blad') return { theme: 'red', label: __('{0} do poprawy', [licznik.liczba]) }
+  if (licznik.stan === 'brak') return { theme: 'blue', label: __('Brakuje {0}', [licznik.liczba]) }
+  return { theme: 'green', label: __('Komplet') }
+}
+
+// Ta sama kropka co przy etykiecie pola w KredytPole.vue (bg-current + token).
+const KROPKA_BRAK_KLASY =
+  'ml-1.5 inline-block size-1.5 rounded-full bg-current align-middle text-ink-blue-6'
+
+const banerWidoczny = computed(
+  () =>
+    brakujaceBanerNazwy.value.length > 0 ||
+    brakujaceKlienta.value.length > 0 ||
+    Object.keys(bledyFormatu.value).length > 0,
+)
+
+// Gdy nic już nie brakuje ani nie jest błędne, próba generowania jest
+// "rozliczona": kolejny brak ma znów zacząć jako niebieski, nie czerwony.
+watch(banerWidoczny, (widoczny) => {
+  if (!widoczny) probaGenerowania.value = false
+})
+
+// Kolejność pól na ekranie, do "Przejdź do pierwszego".
+const kolejnoscPol = [
+  ...POLA_WNIOSKODAWCY,
+  ...formSections.flatMap((s) => s.fields.map((f) => f.fieldname)),
+  ...GRUPY.flatMap((g) => grupaPola[g.key].map((f) => f.fieldname)),
+]
+const formRoot = ref(null)
+
+async function przejdzDoPierwszego() {
+  const pierwsze = kolejnoscPol.find((fn) => stanDla(fn).stan === 'blad')
+  if (!pierwsze) return
+  // Blok wnioskodawcy w trybie podglądu nie ma inputów.
+  if (pierwsze.startsWith('wnioskodawca_')) wnioskodawcaEdytowalny.value = true
+  await nextTick()
+  const el = formRoot.value?.querySelector(`[data-pole="${pierwsze}"]`)
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  el.querySelector('input, select, textarea, button')?.focus({ preventScroll: true })
+}
 
 const pdfZablokowany = computed(
   () => brakujaceLokalne.value.length > 0 || brakujaceKlienta.value.length > 0,
@@ -1313,6 +1586,19 @@ const generatingPdf = ref(false)
 // throws), stop before ever calling the PDF endpoint.
 async function generatePdf() {
   if (generatingPdf.value || !wybrany.value) return
+
+  // ops#321: przycisk jest zawsze aktywny, a kliknięcie z brakami albo ze
+  // złym formatem włącza "próbę generowania" (braki i błędy robią się
+  // czerwone, baner też). Braki nadal blokują generowanie, jak dotąd
+  // blokował je disabled; sam zły format nie blokuje niczego.
+  const maBraki = pdfZablokowany.value
+  const maBledyFormatu = Object.keys(bledyFormatuSurowe.value).length > 0
+  if (maBraki || maBledyFormatu) probaGenerowania.value = true
+  if (maBraki) {
+    await przejdzDoPierwszego()
+    return
+  }
+
   generatingPdf.value = true
   try {
     const zapisano = await saveForm()
@@ -1324,6 +1610,10 @@ async function generatePdf() {
 
     const data = await call('crm.api.kredyt.volteo_kredyt_pdf', { kredyt: wybrany.value.name })
     if (data?.file_url) {
+      // Po udanym generowaniu próba jest rozliczona. Pola z błędem formatu
+      // zostają czerwone (liczą się jako opuszczone), bo format nie blokował.
+      dotkniete.value = new Set([...dotkniete.value, ...Object.keys(bledyFormatuSurowe.value)])
+      probaGenerowania.value = false
       window.open(data.file_url, '_blank')
       toast.success(__('Wygenerowano PDF wniosku'))
       // Optimistic local flip so the Autenti send button can appear
