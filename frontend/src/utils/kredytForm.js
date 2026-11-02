@@ -262,12 +262,11 @@ export const GRUPY = [
 // to ETYKIETY_PELNE below, keyed by the same fieldname. The missing-fields
 // banner and a field's tooltip always resolve through etykietaPelna(),
 // never through this object directly, so they never show a truncated
-// label. Today ETYKIETY_PELNE has exactly one entry: `suma_zobowiazan`
-// (K6, ops#148): the doctype/paper wording ("Suma miesięcznych zobowiązań
-// kredytowych i finansowych") is too long for the form's 1/3-width column,
-// so the on-screen label is shortened but keeps the word "miesięcznych"
-// (owner requirement) so a rep can never mistake it for the running debt
-// balance again.
+// label. ETYKIETY_PELNE holds every field whose screen label is shortened so
+// that each label fits on ONE line in a 3-column row at ~1280 px (ops#321,
+// measured with Inter 16 px: column about 198 px, minus asterisk/dot). The
+// first such entry was `suma_zobowiazan` (K6, ops#148); its screen label
+// keeps "mies." so it is never mistaken for the running debt balance.
 //
 // ONE deliberate divergence from ops/crm-kredyt.py itself: that doctype's
 // `dzialalnosc_forma_inna` label joins its two clauses with an em dash
@@ -278,26 +277,26 @@ export const GRUPY = [
 // by this file).
 export const ETYKIETY_POL = {
   miejsce_urodzenia: 'Miejsce urodzenia',
-  rodzaj_dokumentu: 'Rodzaj dokumentu tożsamości',
-  seria_numer_dokumentu: 'Seria i numer dokumentu tożsamości',
-  data_wydania_dokumentu: 'Data wydania dokumentu tożsamości',
-  data_waznosci_dokumentu: 'Data ważności dokumentu tożsamości',
-  adres_zameldowania_taki_sam: 'Czy adres zamieszkania jest taki sam, jak adres zameldowania?',
+  rodzaj_dokumentu: 'Rodzaj dokumentu',
+  seria_numer_dokumentu: 'Seria i nr dokumentu',
+  data_wydania_dokumentu: 'Data wydania',
+  data_waznosci_dokumentu: 'Data ważności',
+  adres_zameldowania_taki_sam: 'Adres zamieszkania jak zameldowania?',
   adres_zameldowania: 'Adres zamieszkania',
-  adres_korespondencji_taki_sam: 'Czy adres do korespondencji jest taki sam, jak adres zameldowania?',
+  adres_korespondencji_taki_sam: 'Korespondencja jak zameldowania?',
   adres_korespondencji: 'Adres do korespondencji',
   wyksztalcenie: 'Wykształcenie',
   stan_cywilny: 'Stan cywilny',
-  liczba_osob_na_utrzymaniu: 'Liczba osób w gospodarstwie domowym na utrzymaniu',
-  kwota_800_plus: 'Kwota świadczenia 800+',
-  dochod_wspolmalzonka: 'Deklarowany dochód współmałżonka',
-  zrodlo_dochodu_malzonka: 'Źródło dochodu małżonka',
+  liczba_osob_na_utrzymaniu: 'Osoby na utrzymaniu',
+  kwota_800_plus: 'Świadczenie 800+',
+  dochod_wspolmalzonka: 'Dochód współmałżonka',
+  zrodlo_dochodu_malzonka: 'Skąd dochód małżonka?',
   oplaty_miesieczne: 'Opłaty miesięczne',
   // K6, ops#148: etykieta ekranowa skrócona (patrz komentarz nad
   // ETYKIETY_POL). Pełny kanon "Suma miesięcznych zobowiązań kredytowych i
   // finansowych" żyje w ETYKIETY_PELNE.suma_zobowiazan i to jego widzi baner
   // braków oraz tooltip pola, nigdy tej krótszej wersji.
-  suma_zobowiazan: 'Suma miesięcznych zobowiązań',
+  suma_zobowiazan: 'Suma zobowiązań mies.',
   numer_rachunku: 'Numer rachunku bankowego',
   praca_wlaczone: 'Dochód: umowa o pracę / zlecenie / dzieło',
   praca_forma: 'Forma zatrudnienia',
@@ -314,24 +313,24 @@ export const ETYKIETY_POL = {
   praca_kwota_dochodu: 'Kwota dochodu',
   emerytura_wlaczone: 'Dochód: emerytura',
   emerytura_numer_swiadczenia: 'Numer świadczenia',
-  emerytura_od_kiedy: 'Od kiedy przyznane jest świadczenie',
+  emerytura_od_kiedy: 'Przyznane od',
   emerytura_kwota_dochodu: 'Kwota dochodu',
   renta_wlaczone: 'Dochód: renta',
   renta_numer_swiadczenia: 'Numer świadczenia',
-  renta_od_kiedy: 'Od kiedy przyznane jest świadczenie',
+  renta_od_kiedy: 'Przyznane od',
   renta_kwota_dochodu: 'Kwota dochodu',
   dzialalnosc_wlaczone: 'Dochód: działalność gospodarcza',
   dzialalnosc_forma_opodatkowania: 'Forma opodatkowania',
-  dzialalnosc_forma_inna: 'Inna forma opodatkowania: jaka?',
+  dzialalnosc_forma_inna: 'Inna forma: jaka?',
   dzialalnosc_nip: 'NIP firmy',
   dzialalnosc_nazwa: 'Nazwa firmy',
   dzialalnosc_adres: 'Adres firmy',
-  dzialalnosc_telefon: 'Numer telefonu do firmy',
-  dzialalnosc_od_kiedy: 'Od kiedy prowadzona jest działalność?',
+  dzialalnosc_telefon: 'Telefon firmy',
+  dzialalnosc_od_kiedy: 'Działalność od',
   dzialalnosc_kwota_dochodu: 'Kwota dochodu',
   gospodarstwo_wlaczone: 'Dochód: gospodarstwo rolne',
   gospodarstwo_nip: 'NIP gospodarstwa',
-  gospodarstwo_od_kiedy: 'Od kiedy prowadzone jest gospodarstwo?',
+  gospodarstwo_od_kiedy: 'Gospodarstwo od',
   gospodarstwo_kwota_dochodu: 'Kwota dochodu',
   inne_wlaczone: 'Dochód: inne',
   inne_1_typ: 'Typ dochodu (1)',
@@ -352,7 +351,23 @@ export const ETYKIETY_POL = {
 // etykietaPelna(), never reads this object directly. See the header
 // comment on ETYKIETY_POL for the exception mechanism this backs.
 export const ETYKIETY_PELNE = {
+  rodzaj_dokumentu: 'Rodzaj dokumentu tożsamości',
+  seria_numer_dokumentu: 'Seria i numer dokumentu tożsamości',
+  data_wydania_dokumentu: 'Data wydania dokumentu tożsamości',
+  data_waznosci_dokumentu: 'Data ważności dokumentu tożsamości',
+  adres_zameldowania_taki_sam: 'Czy adres zamieszkania jest taki sam, jak adres zameldowania?',
+  adres_korespondencji_taki_sam: 'Czy adres do korespondencji jest taki sam, jak adres zameldowania?',
+  liczba_osob_na_utrzymaniu: 'Liczba osób w gospodarstwie domowym na utrzymaniu',
+  kwota_800_plus: 'Kwota świadczenia 800+',
+  dochod_wspolmalzonka: 'Deklarowany dochód współmałżonka',
+  zrodlo_dochodu_malzonka: 'Źródło dochodu małżonka',
   suma_zobowiazan: 'Suma miesięcznych zobowiązań kredytowych i finansowych',
+  emerytura_od_kiedy: 'Od kiedy przyznane jest świadczenie',
+  renta_od_kiedy: 'Od kiedy przyznane jest świadczenie',
+  dzialalnosc_forma_inna: 'Inna forma opodatkowania: jaka?',
+  dzialalnosc_telefon: 'Numer telefonu do firmy',
+  dzialalnosc_od_kiedy: 'Od kiedy prowadzona jest działalność?',
+  gospodarstwo_od_kiedy: 'Od kiedy prowadzone jest gospodarstwo?',
 }
 
 /**

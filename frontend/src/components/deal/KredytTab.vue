@@ -339,24 +339,18 @@
         </div>
 
         <!-- Applicant data block: editable snapshot taken at record creation -->
-        <div class="rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-4">
-          <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div class="flex min-w-0 flex-wrap items-center gap-2">
-              <div class="text-sm font-semibold text-ink-gray-7">
-                {{ __('Dane wnioskodawcy') }}
-              </div>
-              <Badge
-                v-bind="badgeLicznika(wnioskodawcaLicznik)"
-                variant="subtle"
-                size="sm"
-                data-testid="kredyt-licznik-wnioskodawca"
+        <div class="kalk-part">
+          <div :class="NAGLOWEK_KLASY">
+            <div class="min-w-0">
+              <div>{{ __('Dane wnioskodawcy') }}</div>
+              <div
+                v-if="wnioskodawcaEdytowalny && podtytulOznaczenia(wnioskodawcaOznaczenie)"
+                :class="PODTYTUL_KLASY"
               >
-                <template v-if="wnioskodawcaLicznik.stan === 'komplet'" #prefix>
-                  <LucideCheck class="h-3 w-3" />
-                </template>
-              </Badge>
+                {{ podtytulOznaczenia(wnioskodawcaOznaczenie) }}
+              </div>
             </div>
-            <div class="flex flex-wrap items-center gap-2">
+            <div class="flex flex-wrap items-center justify-end gap-2">
               <Button
                 variant="ghost"
                 class="max-w-full min-w-0"
@@ -372,14 +366,18 @@
                 :disabled="saving"
                 @click="przelaczEdycjeWnioskodawcy"
               />
+              <Badge
+                v-bind="badgeLicznika(wnioskodawcaLicznik)"
+                variant="subtle"
+                size="sm"
+                class="shrink-0"
+                data-testid="kredyt-licznik-wnioskodawca"
+              >
+                <template v-if="wnioskodawcaLicznik.stan === 'komplet'" #prefix>
+                  <LucideCheck class="h-3 w-3" />
+                </template>
+              </Badge>
             </div>
-          </div>
-
-          <div
-            v-if="wnioskodawcaEdytowalny && podtytulOznaczenia(wnioskodawcaOznaczenie)"
-            class="-mt-1 mb-3 text-sm text-ink-gray-5"
-          >
-            {{ podtytulOznaczenia(wnioskodawcaOznaczenie) }}
           </div>
 
           <div v-if="!wnioskodawcaEdytowalny" class="kredyt-siatka-3 grid gap-3">
@@ -467,29 +465,29 @@
         </div>
 
         <!-- §1-3: base sections -->
-        <section v-for="sec in sekcjeBazowe" :key="sec.key">
-          <div class="mb-3 flex flex-wrap items-start justify-between gap-2">
+        <section v-for="sec in sekcjeBazowe" :key="sec.key" class="kalk-part">
+          <div :class="NAGLOWEK_KLASY">
             <div class="min-w-0">
-              <div class="text-sm font-semibold uppercase tracking-wide text-ink-gray-5">
-                {{ sec.label }}
-              </div>
-              <div v-if="podtytulOznaczenia(sec.oznaczenie)" class="mt-0.5 text-sm text-ink-gray-5">
+              <div>{{ sec.label }}</div>
+              <div v-if="podtytulOznaczenia(sec.oznaczenie)" :class="PODTYTUL_KLASY">
                 {{ podtytulOznaczenia(sec.oznaczenie) }}
               </div>
             </div>
-            <Badge
-              v-bind="badgeLicznika(sec.licznik)"
-              variant="subtle"
-              size="sm"
-              class="shrink-0"
-              :data-testid="'kredyt-licznik-' + sec.key"
-            >
-              <template v-if="sec.licznik.stan === 'komplet'" #prefix>
-                <LucideCheck class="h-3 w-3" />
-              </template>
-            </Badge>
+            <div class="flex shrink-0 items-center gap-3">
+              <Badge
+                v-bind="badgeLicznika(sec.licznik)"
+                variant="subtle"
+                size="sm"
+                class="shrink-0"
+                :data-testid="'kredyt-licznik-' + sec.key"
+              >
+                <template v-if="sec.licznik.stan === 'komplet'" #prefix>
+                  <LucideCheck class="h-3 w-3" />
+                </template>
+              </Badge>
+            </div>
           </div>
-          <div class="kredyt-siatka-3 grid gap-4">
+          <div :class="['grid gap-4', sec.kolumny === 2 ? 'kredyt-siatka-2' : 'kredyt-siatka-3']">
             <KredytPole
               v-for="f in sec.pola"
               :key="f.fieldname"
@@ -510,13 +508,17 @@
         </section>
 
         <!-- §4-9: income groups -->
-        <section v-for="g in sekcjeGrup" :key="g.grupa.key" class="kalk-part">
-          <div class="kalk-part-heading mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-outline-gray-1 pb-2.5 text-base font-semibold text-ink-gray-9">
+        <section
+          v-for="g in sekcjeGrup"
+          :key="g.grupa.key"
+          :class="['kalk-part', g.wlaczona ? '' : 'kalk-part-zwinieta']"
+        >
+          <div :class="g.wlaczona ? NAGLOWEK_KLASY : NAGLOWEK_ZWINIETY_KLASY">
             <div class="min-w-0">
               <div>{{ g.grupa.label }}</div>
               <div
                 v-if="g.grupa.podtytul || (g.wlaczona && podtytulOznaczenia(g.oznaczenie))"
-                class="mt-0.5 text-sm font-normal text-ink-gray-5"
+                :class="PODTYTUL_KLASY"
               >
                 {{ g.grupa.podtytul }}
                 <template v-if="g.wlaczona && podtytulOznaczenia(g.oznaczenie)">
@@ -717,6 +719,7 @@ const formSections = [
   {
     key: 'adresy',
     label: __('Adresy'),
+    kolumny: 2,
     fields: [
       {
         fieldname: 'adres_zameldowania_taki_sam',
@@ -1408,6 +1411,14 @@ function badgeLicznika(licznik) {
   return { theme: 'green', label: __('Komplet') }
 }
 
+// Wspólny nagłówek karty sekcji (tytuł, podtytuł, licznik po prawej).
+const NAGLOWEK_KLASY =
+  'kalk-part-heading mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-outline-gray-1 pb-2.5 text-base font-semibold text-ink-gray-9'
+// Wyłączona grupa dochodu: jeden zwarty wiersz, bez kreski i odstępu.
+const NAGLOWEK_ZWINIETY_KLASY =
+  'kalk-part-heading flex flex-wrap items-center justify-between gap-2 text-base font-semibold text-ink-gray-9'
+const PODTYTUL_KLASY = 'mt-0.5 text-sm font-normal text-ink-gray-5'
+
 // Ta sama kropka co przy etykiecie pola w KredytPole.vue: znak ● po nbsp,
 // zawija się razem z ostatnim słowem (treść w szablonie: &nbsp;●).
 const KROPKA_BRAK_KLASY = 'select-none align-middle text-[0.6em] text-ink-blue-6'
@@ -1713,6 +1724,10 @@ function extractErrorMessage(err) {
 .kredyt-siatka-2 {
   grid-template-columns: minmax(0, 1fr);
 }
+/* Pole na całą szerokość siatki w każdym układzie (1 kolumna też). */
+.kredyt-span-3 {
+  grid-column: 1 / -1;
+}
 @container (min-width: 560px) {
   .kredyt-siatka-3 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1722,9 +1737,6 @@ function extractErrorMessage(err) {
   }
   .kredyt-span-2 {
     grid-column: span 2 / span 2;
-  }
-  .kredyt-span-3 {
-    grid-column: span 3 / span 3;
   }
 }
 
@@ -1740,6 +1752,9 @@ function extractErrorMessage(err) {
   border-radius: 0.75rem;
   background: var(--surface-elevation-1);
   padding: 1.25rem 1.25rem 1.375rem;
+}
+.kalk-part-zwinieta {
+  padding: 0.875rem 1.25rem;
 }
 .kalk-part-heading {
   letter-spacing: -0.01em;
