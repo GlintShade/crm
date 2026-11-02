@@ -91,7 +91,7 @@
                         v-model.number="form.rozbudowa[blok.klucz]"
                         class="kalk-select kalk-select-wariant"
                       >
-                        <option v-for="n in blok.max" :key="n" :value="n">{{ n }} {{ odmianaPaneli(n) }}</option>
+                        <option v-for="n in blok.max" :key="n" :value="n">{{ n }} {{ blok.klucz === 'bateria' ? odmianaModulow(n) : odmianaPaneli(n) }}</option>
                       </select>
                     </div>
                     <p v-if="opisBlokady(blok.klucz)" class="mt-1 text-xs text-ink-gray-5">{{ opisBlokady(blok.klucz) }}</p>
@@ -411,6 +411,7 @@ import {
   modeleKlimy,
   moceKlimy,
   odmianaPaneli,
+  odmianaModulow,
   opcjeIlosciGrzejnika,
   producenciPc,
   pustyFormularzOze,

@@ -24,6 +24,7 @@ import {
   modeleKlimy,
   moceKlimy,
   odmianaPaneli,
+  odmianaModulow,
   ogrzewanieDoTabeli,
   opcjeIlosciGrzejnika,
   pozycjeGrupy,
@@ -541,5 +542,12 @@ describe('Rozbudowa: wykluczanie paneli i paneli z mikrofalownikiem', () => {
     // stan konfliktowy: oba da sie wylaczyc
     expect(elementRozbudowyZablokowany({ ...baza, panele: 1, paneleMikro: 1 }, 'panele')).toBe(false)
     expect(przelaczElementRozbudowy({ panele: 1, paneleMikro: 1, bateria: 0 }, 'panele')).toEqual({ panele: 0, paneleMikro: 1, bateria: 0 })
+  })
+})
+
+describe('odmianaModulow', () => {
+  it('stosuje polska odmiane', () => {
+    const e = { 1: 'moduł', 2: 'moduły', 4: 'moduły', 5: 'modułów', 12: 'modułów', 22: 'moduły', 25: 'modułów' }
+    for (const [n, w] of Object.entries(e)) expect(odmianaModulow(Number(n))).toBe(w)
   })
 })

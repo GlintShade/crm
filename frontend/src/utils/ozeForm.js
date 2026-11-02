@@ -162,6 +162,22 @@ export function odmianaPaneli(ilosc) {
   return 'paneli'
 }
 
+/**
+ * Polska odmiana rzeczownika "modul" wg liczby (1 -> "modul", koncowki 2-4
+ * poza 12-14 -> "moduly", reszta -> "modulow").
+ *
+ * @param {number} ilosc
+ * @returns {'moduł'|'moduły'|'modułów'}
+ */
+export function odmianaModulow(ilosc) {
+  const n = Math.abs(Number(ilosc) || 0)
+  if (n === 1) return 'moduł'
+  const d = n % 10
+  const dd = n % 100
+  if (d >= 2 && d <= 4 && !(dd >= 12 && dd <= 14)) return 'moduły'
+  return 'modułów'
+}
+
 // --- Klimatyzacja: kaskada typ -> model -> moc -------------------------------
 
 // Kolejnosc musi zgadzac sie z backendowym `_KLIMA_RODZAJ_LABEL` w
