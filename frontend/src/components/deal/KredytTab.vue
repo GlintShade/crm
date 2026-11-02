@@ -492,7 +492,7 @@
               v-for="f in sec.pola"
               :key="f.fieldname"
               :data-pole="f.fieldname"
-              :class="f.fullWidth ? 'kredyt-span-3' : ''"
+              :class="f.fullWidth ? 'kredyt-span-2' : ''"
               :f="f"
               v-model="form[f.fieldname]"
               :stan="stanDla(f.fieldname).stan"
@@ -1724,10 +1724,6 @@ function extractErrorMessage(err) {
 .kredyt-siatka-2 {
   grid-template-columns: minmax(0, 1fr);
 }
-/* Pole na całą szerokość siatki w każdym układzie (1 kolumna też). */
-.kredyt-span-3 {
-  grid-column: 1 / -1;
-}
 @container (min-width: 560px) {
   .kredyt-siatka-3 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1737,6 +1733,9 @@ function extractErrorMessage(err) {
   }
   .kredyt-span-2 {
     grid-column: span 2 / span 2;
+  }
+  .kredyt-span-3 {
+    grid-column: span 3 / span 3;
   }
 }
 
