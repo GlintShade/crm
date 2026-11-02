@@ -16,6 +16,26 @@
         v-if="document.actions?.length"
         :actions="document.actions"
       />
+      <!-- VOLTEO (Pokaż na mapie): otwiera mapę leadów wycentrowaną na tym
+           leadzie. Wrapper <div> jest potrzebny, bo wyłączony <button> nie
+           emituje zdarzeń myszy i tooltip "Lead bez współrzędnych" by się
+           nie otwierał. -->
+      <template v-if="doc.name">
+        <Tooltip
+          :text="__('Lead bez współrzędnych')"
+          :disabled="mozePokazacNaMapie"
+        >
+          <div>
+            <Button
+              data-testid="pokaz-na-mapie"
+              :label="__('Pokaż na mapie')"
+              icon-left="lucide-map-pin"
+              :disabled="!mozePokazacNaMapie"
+              @click="pokazNaMapie"
+            />
+          </div>
+        </Tooltip>
+      </template>
       <PrzekazHandlowcowi
         v-if="isCallCenter() || isVolteoAdmin()"
         :docname="leadId"
@@ -360,6 +380,7 @@ import { whatsappEnabled } from '@/composables/whatsapp'
 import { callEnabled } from '@/composables/telephony'
 import { telHref, czyTelefon } from '@/utils/telefon'
 import { sekcjeZeStatusemTylkoDoOdczytu } from '@/utils/statusCC'
+import { czyMoznaPokazacNaMapie, trasaMapyDlaLeada } from '@/utils/mapaCel'
 import {
   createResource,
   FileUploader,
@@ -411,6 +432,12 @@ const {
 const canDelete = computed(() => permissions.data?.permissions?.delete || false)
 
 const doc = computed(() => document.doc || {})
+
+const mozePokazacNaMapie = computed(() => czyMoznaPokazacNaMapie(doc.value))
+
+function pokazNaMapie() {
+  router.push(trasaMapyDlaLeada(props.leadId))
+}
 
 function onPrzekazano() {
   document.reload()

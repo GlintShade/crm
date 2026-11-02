@@ -215,6 +215,7 @@ import { statusesStore } from '@/stores/statuses'
 import { colorNameFromParsed } from '@/utils/statusColors'
 import { widocznyLead } from '@/utils/mapaFiltry'
 import { rozbijTagi } from '@/utils/tagiProduktow'
+import { ZOOM_CELU, adresBezCelu, odczytajCelMapy } from '@/utils/mapaCel'
 import { formatujTermin } from '@/utils/dataPolska'
 import {
   KOLOR_BRAK,
@@ -248,6 +249,7 @@ import {
   dayjsLocal,
 } from 'frappe-ui'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 
 const props = defineProps({
   // Zasób ViewControls (crm.api.doc.get_data) - patrz docstring pliku. Ten
@@ -262,6 +264,8 @@ const props = defineProps({
 const emit = defineEmits(['ustawFiltr'])
 
 const mapId = `mapa-leadow-${Math.random().toString(36).slice(2)}`
+
+const route = useRoute()
 
 const { getUser } = usersStore()
 const { getLeadStatus } = statusesStore()
@@ -291,6 +295,31 @@ const mapaResource = createResource({
 })
 
 let zadanieSeq = 0
+
+// VOLTEO (Pokaż na mapie): nazwa leada z ?lead=, odczytana raz przy montowaniu.
+// Dopóki jest ustawiona, mapa NIE robi fitBounds na całość (nadpisałoby
+// centrowanie na leadzie), a po pierwszym skupieniu (albo błędzie) cel jest
+// czyszczony, razem z parametrem w URL, żeby odświeżenie strony ani cofnięcie
+// nie centrowały mapy drugi raz.
+const celMapy = ref(odczytajCelMapy(route.query))
+let daneWczytane = false
+let fallbackCeluWolany = false
+
+// Fallback dla leada spoza bieżących filtrów widoku: ten sam endpoint co mapa,
+// zawężony do jednej nazwy (zachowuje uprawnienia roli i filtr custom_lat != 0).
+const celResource = createResource({ url: 'crm.api.volteo_leady.mapa' })
+
+// Parametr czyścimy przez history.replaceState, NIE przez router.replace: App.vue
+// ma <router-view :key="$route.fullPath">, więc każda zmiana query montowałaby
+// stronę od nowa (nowa mapa, fitBounds na całość, utrata dymka i panelu).
+function zakonczCel() {
+  celMapy.value = null
+  window.history.replaceState(
+    window.history.state,
+    '',
+    adresBezCelu(window.location.href),
+  )
+}
 
 // VOLTEO (issue #100): odpytanie mapy dopiero PO tym, jak Tabela skończy
 // własne odświeżenie z nowymi filtrami (.data, nie .params) - patrz
@@ -326,6 +355,9 @@ watch(
           if (tenZadanieSeq !== zadanieSeq) return // spóźniona odpowiedź, nowsze zadanie już w locie
           stan.leady = data || []
           blad.value = ''
+          // Po tym przypisaniu watch(leadyPrzefiltrowane) woła rysujMarkery(),
+          // które przez skupNaCelu() uruchomi fallback, gdy celu nie ma w danych.
+          daneWczytane = true
         },
         onError: (err) => {
           if (tenZadanieSeq !== zadanieSeq) return
@@ -800,13 +832,74 @@ function rysujMarkery() {
     if (wybrany) marker.bringToFront()
   }
 
-  if (!dopasowanoWidok && leadyPrzefiltrowane.value.length) {
+  skupNaCelu()
+
+  if (!dopasowanoWidok && !celMapy.value && leadyPrzefiltrowane.value.length) {
     const bounds = markerLayer.getBounds()
     if (bounds.isValid()) {
       mapInstance.fitBounds(bounds, { padding: [20, 20] })
     }
     dopasowanoWidok = true
   }
+}
+
+// VOLTEO (Pokaż na mapie): centruje mapę na leadzie z ?lead=, zaznacza go
+// (pinezka powiększona, panel "Szybki podgląd") i otwiera dymek. Współrzędne
+// bierzemy z MARKERA, nie z surowych custom_lat/lng, bo pinezki o niedokładnym
+// geokodzie mają jitter. zoomToShowLayer (markercluster) rozbija klaster, w
+// którym lead siedzi, zanim ustawimy widok; bez klastrowania wystarczy setView.
+function skupNaCelu() {
+  if (!celMapy.value || !mapInstance) return
+  const wpis = markeryPoNazwie.get(celMapy.value)
+  if (!wpis) {
+    if (daneWczytane && !fallbackCeluWolany) pobierzCelFallbackiem()
+    return
+  }
+
+  wybranyLead.value = wpis.lead
+  const ustawWidok = () => {
+    mapInstance.setView(wpis.marker.getLatLng(), ZOOM_CELU)
+    wpis.marker.openTooltip()
+  }
+  if (typeof markerLayer.zoomToShowLayer === 'function') {
+    markerLayer.zoomToShowLayer(wpis.marker, ustawWidok)
+  } else {
+    ustawWidok()
+  }
+  dopasowanoWidok = true
+  zakonczCel()
+}
+
+function pokazBladCelu(err) {
+  blad.value =
+    (err && extractErrorMessage(err)) ||
+    __('Nie można pokazać leada na mapie: brak współrzędnych albo brak dostępu')
+  zakonczCel()
+}
+
+function pobierzCelFallbackiem() {
+  fallbackCeluWolany = true
+  celResource.submit(
+    { filters: JSON.stringify({ name: celMapy.value }), default_filters: '{}' },
+    {
+      onSuccess: (data) => {
+        const wiersz = (data || []).find((lead) => lead.name === celMapy.value)
+        if (!wiersz) {
+          pokazBladCelu(null)
+          return
+        }
+        if (!stan.leady.some((lead) => lead.name === wiersz.name)) {
+          // Przerysowanie przez watch(leadyPrzefiltrowane) -> rysujMarkery()
+          // -> skupNaCelu() już z markerem tego leada.
+          stan.leady = [...stan.leady, wiersz]
+        } else {
+          // Jest w danych, ale odfiltrowany lokalnie chipem statusu.
+          pokazBladCelu(null)
+        }
+      },
+      onError: (err) => pokazBladCelu(err),
+    },
+  )
 }
 
 // Styl "wybrany" na jednej pinezce, in-place, bez przebudowy warstwy (klik w

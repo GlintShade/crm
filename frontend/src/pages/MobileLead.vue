@@ -54,6 +54,21 @@
     class="flex h-12 items-center justify-end gap-2 border-b px-3 py-2.5"
   >
     <div class="flex items-center gap-2">
+      <!-- VOLTEO (Pokaż na mapie): ta sama logika co w Lead.vue. -->
+      <Tooltip
+        :text="__('Lead bez współrzędnych')"
+        :disabled="mozePokazacNaMapie"
+      >
+        <div>
+          <Button
+            data-testid="pokaz-na-mapie"
+            :label="__('Pokaż na mapie')"
+            icon-left="lucide-map-pin"
+            :disabled="!mozePokazacNaMapie"
+            @click="pokazNaMapie"
+          />
+        </div>
+      </Tooltip>
       <CustomActions
         v-if="document._actions?.length"
         :actions="document._actions"
@@ -157,6 +172,7 @@ import { globalStore } from '@/stores/global'
 import { statusesStore } from '@/stores/statuses'
 import { usersStore } from '@/stores/users'
 import { sekcjeZeStatusemTylkoDoOdczytu } from '@/utils/statusCC'
+import { czyMoznaPokazacNaMapie, trasaMapyDlaLeada } from '@/utils/mapaCel'
 import { getMeta } from '@/stores/meta'
 import { useDocument } from '@/data/document'
 import { isMobileView } from '@/composables/settings'
@@ -165,6 +181,7 @@ import { useActiveTabManager } from '@/composables/useActiveTabManager'
 import {
   createResource,
   Dropdown,
+  Tooltip,
   Tabs,
   Breadcrumbs,
   call,
@@ -208,6 +225,12 @@ const {
 } = useDocument('CRM Lead', props.leadId)
 
 const doc = computed(() => document.doc || {})
+
+const mozePokazacNaMapie = computed(() => czyMoznaPokazacNaMapie(doc.value))
+
+function pokazNaMapie() {
+  router.push(trasaMapyDlaLeada(props.leadId))
+}
 
 onMounted(async () => {
   if (document.doc) await triggerOnRender()
