@@ -84,7 +84,6 @@
           </div>
         </template>
         <PrzelacznikSegmentowy
-          v-if="zakres === 'wlasny' || stan.tryb === 'jeden'"
           v-model="stan.orientacja"
           :options="OPCJE_ORIENTACJI"
         />
@@ -119,18 +118,32 @@
           class="grid grid-cols-1 gap-4 lg:grid-cols-2"
           data-testid="kalendarz-tablica"
         >
-          <KartaHandlowca
-            v-for="h in widoczni"
-            :key="h.user"
-            :handlowiec="h"
-            :kolor-index="indeksKoloru(h.user)"
-            :spotkania="spotkania[h.user] || []"
-            :dni="dni"
-            :teraz="teraz"
-            @otworz="otworzLeada"
-            @nowe="otworzModal"
-            @przesun="przesun"
-          />
+          <template v-for="h in widoczni" :key="h.user">
+            <KartaHandlowca
+              v-if="stan.orientacja === 'poziomo'"
+              :handlowiec="h"
+              :kolor-index="indeksKoloru(h.user)"
+              :spotkania="spotkania[h.user] || []"
+              :dni="dni"
+              :teraz="teraz"
+              @otworz="otworzLeada"
+              @nowe="otworzModal"
+              @przesun="przesun"
+            />
+            <KalendarzPionowy
+              v-else
+              :handlowiec="h"
+              :kolor-index="indeksKoloru(h.user)"
+              :spotkania="spotkania[h.user] || []"
+              :dni="dni"
+              :teraz="teraz"
+              kompakt
+              naglowek
+              @otworz="otworzLeada"
+              @nowe="otworzModal"
+              @przesun="przesun"
+            />
+          </template>
         </div>
 
         <!-- Jeden handlowiec / własny -->

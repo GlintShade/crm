@@ -28,6 +28,8 @@ import {
   podpowiedzDnia,
   pogrupujPoDniach,
   pozycjaBlokuPion,
+  skalaPionowa,
+  PX_NA_GODZINE_KOMPAKT,
   pozycjaPaska,
   pozycjaTeraz,
   przesunKotwice,
@@ -237,6 +239,23 @@ describe('oś godzin i pozycje', () => {
       heightPx: 72,
     })
     expect(pozycjaBlokuPion('zle')).toEqual({ topPx: 0, heightPx: 0 })
+  })
+
+  it('skalaPionowa: pełna i kompaktowa', () => {
+    expect(skalaPionowa(false)).toBe(48)
+    expect(skalaPionowa(true)).toBe(PX_NA_GODZINE_KOMPAKT)
+    expect(PX_NA_GODZINE_KOMPAKT).toBeGreaterThanOrEqual(28)
+    expect(PX_NA_GODZINE_KOMPAKT).toBeLessThanOrEqual(32)
+  })
+
+  it('pozycjaBlokuPion i klik w skali kompaktowej', () => {
+    const k = PX_NA_GODZINE_KOMPAKT
+    expect(pozycjaBlokuPion('2026-11-02 10:00:00', 8, k)).toEqual({
+      topPx: 2 * k,
+      heightPx: 1.5 * k,
+    })
+    expect(godzinaZKliknieciaPion(k, 8, 18, k)).toBe('09:00')
+    expect(godzinaZKliknieciaPion(2.5 * k, 8, 18, k)).toBe('10:30')
   })
 
   it('pozycjaTeraz w osi i poza nią', () => {

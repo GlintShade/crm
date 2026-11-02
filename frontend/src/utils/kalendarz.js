@@ -11,6 +11,7 @@ export const OS_OD = 8
 export const OS_DO = 18
 export const DLUGOSC_SPOTKANIA_H = 1.5
 export const PX_NA_GODZINE = 48
+export const PX_NA_GODZINE_KOMPAKT = 30
 export const STATUS_UMOWIONY = 'Umówiony'
 
 const DNI_PELNE = [
@@ -222,6 +223,11 @@ export function pozycjaPaska(
   const lewo = Math.max(0, ((start - od) / zakres) * 100)
   const szerokosc = Math.min((dlugoscH / zakres) * 100, 100 - lewo)
   return { leftPct: lewo, widthPct: Math.max(0, szerokosc) }
+}
+
+/** Wysokość godziny w widoku pionowym: pełna (jeden handlowiec) albo kompaktowa (karta w tablicy). */
+export function skalaPionowa(kompakt) {
+  return kompakt ? PX_NA_GODZINE_KOMPAKT : PX_NA_GODZINE
 }
 
 /** Pozycja bloku w widoku pionowym w pikselach (góra i wysokość). */

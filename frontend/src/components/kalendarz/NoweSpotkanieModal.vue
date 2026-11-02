@@ -19,7 +19,11 @@
           />
         </div>
         <div class="grid grid-cols-2 gap-3">
-          <FormControl v-model="data" type="date" :label="__('Dzień spotkania')" />
+          <FormControl
+            v-model="data"
+            type="date"
+            :label="__('Dzień spotkania')"
+          />
           <FormControl
             v-model="godzina"
             type="select"
