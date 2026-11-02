@@ -12,10 +12,10 @@
       zarezerwowana dla błędów) albo 'opcjonalne' (dopisek "(opcjonalnie)"
       w etykiecie).
     - `wymagany`: tylko `aria-required` dla dostępności.
-  Układ: komórka jest kolumną flex, etykieta ma `mb-auto`, więc pole
-  (input + komunikat) zawsze ląduje na dole komórki i inputy w jednym
-  wierszu siatki mają wspólną górną krawędź niezależnie od zawinięcia
-  etykiety.
+  Układ: komórka jest kolumną flex, zawartość (etykieta, input,
+  komunikat) jest dosunięta do dołu komórki, więc etykieta wisi tuż nad
+  inputem, a inputy w jednym wierszu siatki mają wspólną górną krawędź
+  niezależnie od zawinięcia etykiety (najwyższa etykieta wyznacza wiersz).
   Kropka i obramowanie idą przez klasy na wrapperze (warianty `[&_...]`),
   nie przez slot etykiety, bo DatePicker nie przekazuje slotu `label` do
   swojego inputu: tak działają jednakowo dla text, select i date.
@@ -64,6 +64,11 @@
         />
         <span v-else class="select-none text-sm text-ink-gray-5">zł</span>
       </template>
+      <!-- Para dat: pusty sufiks wyłącza domyślną strzałkę frappe-ui (picker
+           nadal otwiera się kliknięciem w input). -->
+      <template v-else-if="bezEtykiety && f.type === 'date'" #suffix>
+        <span />
+      </template>
     </FormControl>
   </div>
 </template>
@@ -110,7 +115,7 @@ const placeholder = computed(() => {
 // Kropka to znak (nbsp + ●) w ::after (treść w <style> poniżej), więc
 // zawija się razem z ostatnim słowem etykiety i nigdy nie ląduje sama.
 const KLASY_UKLAD =
-  '[&>div]:flex [&>div]:flex-1 [&>div]:flex-col [&_[data-slot=label]]:mb-auto'
+  '[&>div]:flex [&>div]:flex-1 [&>div]:flex-col [&>div]:justify-end [&_[data-slot=label]]:block'
 // Para dat "od / do" w jednej komórce (~95 px na pole): bez ikony kalendarza,
 // z mniejszym krojem i wcięciem, żeby pełne "DD.MM.RRRR" się mieściło
 // (10 znaków w 14 px to ok. 78 px, plus 2 x 4 px wcięcia i ramka).
@@ -143,6 +148,9 @@ function onFocusOut(e) {
 
 <style scoped>
 .kredyt-pole-brak :deep([data-slot='label'])::after {
-  content: '\00a0\25cf';
+  /* Przed pseudo-elementem zostaje zwykła spacja z szablonu etykiety, która
+     jest miejscem łamania; WORD JOINER (U+2060) zabrania łamania przed
+     kropką, więc kropka zawsze zostaje z ostatnim słowem. */
+  content: '\2060\25cf';
 }
 </style>
