@@ -5,6 +5,10 @@ import {
   MIN_PX_NA_GODZINE,
   PROPORCJA_KARTY,
   czyJednaLinia,
+  czyJednaLiniaBloku,
+  dlugosciBlokowPion,
+  DLUGOSC_SPOTKANIA_H,
+  MIN_DLUGOSC_BLOKU_H,
   godzinyEtykietPion,
   pxNaGodzineZSzerokosci,
   OS_DO,
@@ -236,13 +240,13 @@ describe('oś godzin i pozycje', () => {
   it('pozycjaPaska od pełnej godziny', () => {
     const p = pozycjaPaska('2026-11-02 08:00:00')
     expect(p.leftPct).toBe(0)
-    expect(p.widthPct).toBeCloseTo((1.5 / 14) * 100, 5)
+    expect(p.widthPct).toBeCloseTo((2 / 14) * 100, 5)
   })
 
   it('pozycjaPaska w środku osi', () => {
     const p = pozycjaPaska('2026-11-02 13:00:00')
     expect(p.leftPct).toBeCloseTo((5 / 14) * 100, 5)
-    expect(p.widthPct).toBeCloseTo((1.5 / 14) * 100, 5)
+    expect(p.widthPct).toBeCloseTo((2 / 14) * 100, 5)
   })
 
   it('pozycjaPaska przycina do prawego brzegu', () => {
@@ -261,7 +265,7 @@ describe('oś godzin i pozycje', () => {
   it('pozycjaBlokuPion', () => {
     expect(pozycjaBlokuPion('2026-11-02 10:30:00')).toEqual({
       topPx: 2.5 * 36,
-      heightPx: 54,
+      heightPx: 2 * 36,
     })
     expect(pozycjaBlokuPion('zle')).toEqual({ topPx: 0, heightPx: 0 })
   })
@@ -278,7 +282,7 @@ describe('oś godzin i pozycje', () => {
     const k = PX_NA_GODZINE_KOMPAKT
     expect(pozycjaBlokuPion('2026-11-02 10:00:00', 8, k)).toEqual({
       topPx: 2 * k,
-      heightPx: 1.5 * k,
+      heightPx: 2 * k,
     })
     expect(godzinaZKliknieciaPion(k, 8, 18, k)).toBe('09:00')
     expect(godzinaZKliknieciaPion(2.5 * k, 8, 18, k)).toBe('10:30')
@@ -646,5 +650,66 @@ describe('proporcje karty pionowej 16:9', () => {
     expect(godzinyEtykietPion(8, 22, 14)).toEqual([
       8, 10, 12, 14, 16, 18, 20, 22,
     ])
+  })
+})
+
+describe('domyślna długość spotkania 2 h i nakładanie spotkań', () => {
+  const w = (name, termin) => ({ name, termin })
+
+  it('stała długość to 2 h, szerokość paska i wysokość bloku z niej wynikają', () => {
+    expect(DLUGOSC_SPOTKANIA_H).toBe(2)
+    expect(pozycjaPaska('2026-11-02 10:00:00', 8, 22).widthPct).toBeCloseTo(
+      (2 / 14) * 100,
+      6,
+    )
+    expect(pozycjaBlokuPx('2026-11-02 10:00:00', 8, 36).heightPx).toBe(72)
+  })
+
+  it('oś rozszerza się o koniec spotkania liczony po 2 h', () => {
+    expect(osGodzin([w('a', '2026-11-02 21:00:00')]).do).toBe(23)
+    expect(osGodzin([w('a', '2026-11-02 20:00:00')]).do).toBe(22)
+  })
+
+  it('dlugosciBlokowPion: bez nakładania pełne 2 h', () => {
+    const d = dlugosciBlokowPion([
+      w('a', '2026-11-02 08:00:00'),
+      w('b', '2026-11-02 12:00:00'),
+    ])
+    expect(d).toEqual({ a: 2, b: 2 })
+  })
+
+  it('dlugosciBlokowPion: wcześniejszy blok skracany do początku następnego', () => {
+    // 09:30 i 11:00: odstęp 1,5 h < 2 h
+    const d = dlugosciBlokowPion([
+      w('b', '2026-11-02 11:00:00'),
+      w('a', '2026-11-02 09:30:00'),
+    ])
+    expect(d).toEqual({ a: 1.5, b: 2 })
+  })
+
+  it('dlugosciBlokowPion: łańcuch nakładających się i minimum', () => {
+    const d = dlugosciBlokowPion([
+      w('a', '2026-11-02 09:00:00'),
+      w('b', '2026-11-02 09:15:00'),
+      w('c', '2026-11-02 09:15:00'),
+      w('d', '2026-11-02 10:00:00'),
+    ])
+    expect(d.a).toBe(MIN_DLUGOSC_BLOKU_H)
+    expect(d.b).toBe(MIN_DLUGOSC_BLOKU_H)
+    expect(d.c).toBe(0.75)
+    expect(d.d).toBe(2)
+  })
+
+  it('dlugosciBlokowPion: pusta lista i spotkania bez poprawnego terminu', () => {
+    expect(dlugosciBlokowPion([])).toEqual({})
+    expect(dlugosciBlokowPion(null)).toEqual({})
+    expect(dlugosciBlokowPion([w('x', 'zle')])).toEqual({})
+  })
+
+  it('czyJednaLiniaBloku: mała skala albo krótki blok', () => {
+    expect(czyJednaLiniaBloku(36, 2)).toBe(false)
+    expect(czyJednaLiniaBloku(36, 0.5)).toBe(true)
+    expect(czyJednaLiniaBloku(20, 2)).toBe(true)
+    expect(czyJednaLiniaBloku(14, 2)).toBe(true)
   })
 })

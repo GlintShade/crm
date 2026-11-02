@@ -90,7 +90,7 @@
           >
             <button
               type="button"
-              class="absolute bottom-0.5 top-0.5 z-[2] overflow-hidden whitespace-nowrap rounded-md px-2 text-left text-xs font-medium text-white"
+              class="absolute bottom-0.5 top-0.5 z-[2] overflow-hidden whitespace-nowrap rounded-[5px] border border-surface-base px-2 text-left text-xs font-medium text-white"
               :class="[
                 kolor.pelny,
                 czyUmowiony(s.status) ? '' : 'opacity-[0.7]',

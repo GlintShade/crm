@@ -9,7 +9,7 @@ import { DNI_TYGODNIA_SKROT, MIESIACE_SKROT } from './dataPolska'
 
 export const OS_OD = 8
 export const OS_DO = 22
-export const DLUGOSC_SPOTKANIA_H = 1.5
+export const DLUGOSC_SPOTKANIA_H = 2
 export const PX_NA_GODZINE = 36
 export const PX_NA_GODZINE_KOMPAKT = 27
 export const STATUS_UMOWIONY = 'Umówiony'
@@ -643,4 +643,42 @@ export function czyJednaLinia(pxNaH) {
 export function godzinyEtykietPion(od, doGodziny, pxNaH) {
   const krok = pxNaH < PROG_ETYKIETY_CO_2H_PX ? 2 : 1
   return godzinyOsi(od, doGodziny).filter((_, i) => i % krok === 0)
+}
+
+// ---------------------------------------------------------------------------
+// Nakładające się spotkania tego samego handlowca (ops#318).
+// ---------------------------------------------------------------------------
+
+/** Najkrótszy blok pionowy po skróceniu do początku następnego spotkania (godz.). */
+export const MIN_DLUGOSC_BLOKU_H = 0.5
+/** Poniżej tej wysokości (px) blok pionowy pokazuje jedną linię tekstu. */
+export const PROG_WYSOKOSC_DWIE_LINIE_PX = 30
+
+/**
+ * Długości bloków pionowych dla spotkań JEDNEGO handlowca w JEDNYM dniu: pełna
+ * `dlugoscH`, ale wcześniejszy blok jest skracany do początku następnego
+ * spotkania (nie mniej niż `MIN_DLUGOSC_BLOKU_H`). Zwraca obiekt
+ * { [spotkanie.name]: długość w godzinach }.
+ */
+export function dlugosciBlokowPion(listaDnia, dlugoscH = DLUGOSC_SPOTKANIA_H) {
+  const posortowane = [...(listaDnia || [])]
+    .filter((s) => poczatekWGodzinach(s.termin) !== null)
+    .sort((a, b) => poczatekWGodzinach(a.termin) - poczatekWGodzinach(b.termin))
+  const wynik = {}
+  posortowane.forEach((s, i) => {
+    let h = dlugoscH
+    const nastepny = posortowane[i + 1]
+    if (nastepny) {
+      const odstep =
+        poczatekWGodzinach(nastepny.termin) - poczatekWGodzinach(s.termin)
+      if (odstep < h) h = Math.max(MIN_DLUGOSC_BLOKU_H, odstep)
+    }
+    wynik[s.name] = h
+  })
+  return wynik
+}
+
+/** Czy blok o takiej skali i długości ma pokazać jedną linię (bez miasta). */
+export function czyJednaLiniaBloku(pxNaH, dlugoscH) {
+  return czyJednaLinia(pxNaH) || pxNaH * dlugoscH < PROG_WYSOKOSC_DWIE_LINIE_PX
 }

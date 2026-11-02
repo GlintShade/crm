@@ -93,7 +93,7 @@
           >
             <button
               type="button"
-              class="absolute z-[2] overflow-hidden rounded-md text-left text-xs leading-[1.15] text-white"
+              class="absolute z-[2] overflow-hidden rounded-[5px] text-left text-xs leading-[1.15] text-white"
               :class="[
                 kompakt
                   ? 'left-0.5 right-0.5 px-1 py-px'
@@ -105,7 +105,7 @@
               :data-lead="s.name"
               @click.stop="$emit('otworz', s.name)"
             >
-              <template v-if="jednaLinia">
+              <template v-if="jednaLiniaBloku(s)">
                 <span class="block truncate font-semibold">{{
                   godzinaTekst(s.termin) + ' ' + nazwisko(s.lead_name)
                 }}</span>
@@ -153,7 +153,9 @@ import {
   etykietaZakresu as zbudujEtykieteZakresu,
   godzinaTekst,
   godzinaZKliknieciaPion,
-  czyJednaLinia,
+  DLUGOSC_SPOTKANIA_H,
+  czyJednaLiniaBloku,
+  dlugosciBlokowPion,
   godzinyEtykietPion,
   godzinyOsi,
   pxNaGodzineZSzerokosci,
@@ -220,7 +222,24 @@ const pxNaH = computed(() =>
       })
     : skalaPionowa(props.kompakt),
 )
-const jednaLinia = computed(() => czyJednaLinia(pxNaH.value))
+// Długości bloków: pełne 2 h, ale wcześniejsze spotkanie tego samego handlowca
+// w tym samym dniu jest skracane do początku następnego (bez nieczytelnego
+// nakładania).
+const dlugosci = computed(() => {
+  const wynik = {}
+  for (const lista of Object.values(poDniach.value)) {
+    Object.assign(wynik, dlugosciBlokowPion(lista))
+  }
+  return wynik
+})
+
+function dlugoscBloku(s) {
+  return dlugosci.value[s.name] ?? DLUGOSC_SPOTKANIA_H
+}
+
+function jednaLiniaBloku(s) {
+  return czyJednaLiniaBloku(pxNaH.value, dlugoscBloku(s))
+}
 const etykietyGodzin = computed(() =>
   godzinyEtykietPion(os.value.od, os.value.do, pxNaH.value),
 )
@@ -239,7 +258,7 @@ const etykietaZakresu = computed(() =>
 )
 
 function stylBloku(s) {
-  const p = pozycjaBlokuPx(s.termin, os.value.od, pxNaH.value)
+  const p = pozycjaBlokuPx(s.termin, os.value.od, pxNaH.value, dlugoscBloku(s))
   return { top: p.topPx + 1 + 'px', height: p.heightPx - 2 + 'px' }
 }
 
