@@ -1,8 +1,8 @@
 <!--
   VOLTEO (ops#309): pole "Czas do pierwszego kontaktu" w formacie gg:mm
-  (maks. 24:00). Wartosc to sekundy (Duration). Zapis tylko po Enter/blur, gdy
-  wpis jest poprawny i rozny od biezacej wartosci; wpis nieparsowalny albo
-  powyzej 24:00 daje toast bledu i przywrocenie poprzedniej wartosci, nigdy
+  (bez limitu 24:00). Wartosc to sekundy (Duration). Zapis tylko po Enter/blur, gdy
+  wpis jest poprawny i rozny od biezacej wartosci; wpis nieparsowalny
+  daje toast bledu i przywrocenie poprzedniej wartosci, nigdy
   zapis. Puste pole czysci wartosc (emit 0).
 -->
 <template>
@@ -21,7 +21,6 @@
 
 <script setup>
 import {
-  czyCzasPoprawny,
   formatujGgMm,
   parsujGgMm,
 } from '@/utils/czasKontaktu'
@@ -65,10 +64,6 @@ function zatwierdz() {
   const sekundy = parsujGgMm(surowy)
   if (sekundy === null) {
     toast.error(__('Nieprawidłowy format. Wpisz czas jako gg:mm, np. 1:30.'))
-    return
-  }
-  if (!czyCzasPoprawny(sekundy)) {
-    toast.error(__('Czas do pierwszego kontaktu nie może przekraczać 24:00.'))
     return
   }
   if (sekundy !== biezaca) emit('change', sekundy)

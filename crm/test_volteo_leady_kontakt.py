@@ -4,7 +4,6 @@
 import unittest
 
 from crm.volteo_leady_kontakt import (
-	MAKS_CZAS_DO_KONTAKTU_S,
 	PROBY_KONTAKTU_OPCJE,
 	formatuj_gg_mm,
 	parsuj_gg_mm,
@@ -22,9 +21,9 @@ class TestWalidujCzas(unittest.TestCase):
 		for v in (60, 5400, 86400, "5400", 86400.0):
 			self.assertIsNone(waliduj_czas_do_kontaktu(v), v)
 
-	def test_ponad_limit(self):
-		self.assertIn("24:00", waliduj_czas_do_kontaktu(86401))
-		self.assertIn("24:00", waliduj_czas_do_kontaktu(90000))
+	def test_ponad_24h_przyjete(self):
+		for v in (86401, 90000, 138000, 3599940, "138000"):
+			self.assertIsNone(waliduj_czas_do_kontaktu(v), v)
 
 	def test_ujemne(self):
 		self.assertIn("ujemny", waliduj_czas_do_kontaktu(-1))
@@ -33,8 +32,11 @@ class TestWalidujCzas(unittest.TestCase):
 		self.assertIsNotNone(waliduj_czas_do_kontaktu("abc"))
 		self.assertIsNotNone(waliduj_czas_do_kontaktu(True))
 
-	def test_stala(self):
-		self.assertEqual(MAKS_CZAS_DO_KONTAKTU_S, 86400)
+	def test_formatowanie_ponad_24h(self):
+		self.assertEqual(formatuj_gg_mm(138000), "38:20")
+		self.assertEqual(formatuj_gg_mm(3599940), "999:59")
+		self.assertEqual(parsuj_gg_mm("38:20"), 138000)
+		self.assertEqual(parsuj_gg_mm("999:59"), 3599940)
 
 
 class TestWalidujProby(unittest.TestCase):

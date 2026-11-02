@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import {
-  MAKS_CZAS_S,
   czyCzasPoprawny,
   formatujGgMm,
   parsujGgMm,
@@ -39,14 +38,18 @@ describe('parsujGgMm', () => {
       expect(parsujGgMm(v)).toBeNull()
     }
   })
-  it('25:00 parsuje sie, ale nie jest poprawne', () => {
+  it('ponad 24:00 parsuje sie i jest poprawne', () => {
     expect(parsujGgMm('25:00')).toBe(90000)
-    expect(czyCzasPoprawny(90000)).toBe(false)
+    expect(parsujGgMm('38:20')).toBe(138000)
+    expect(parsujGgMm('999:59')).toBe(3599940)
+    expect(czyCzasPoprawny(90000)).toBe(true)
+    expect(formatujGgMm(138000)).toBe('38:20')
   })
   it('granice poprawnosci', () => {
     expect(czyCzasPoprawny(0)).toBe(true)
-    expect(czyCzasPoprawny(MAKS_CZAS_S)).toBe(true)
-    expect(czyCzasPoprawny(MAKS_CZAS_S + 1)).toBe(false)
+    expect(czyCzasPoprawny(86400)).toBe(true)
+    expect(czyCzasPoprawny(3599940)).toBe(true)
+    expect(czyCzasPoprawny(NaN)).toBe(false)
     expect(czyCzasPoprawny(-1)).toBe(false)
   })
   it('round trip', () => {

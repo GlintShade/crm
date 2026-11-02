@@ -1,9 +1,7 @@
 // VOLTEO (ops#309): lustro crm/volteo_leady_kontakt.py po stronie frontendu.
 // Czas do pierwszego kontaktu to sekundy (Duration), wpisywane jako gg:mm,
-// maksymalnie 24:00. Zero importu z '@/utils' (barel ciagnie unplugin-icons,
+// bez gornej granicy biznesowej (godziny 1 do 3 cyfr). Zero importu z '@/utils' (barel ciagnie unplugin-icons,
 // ktorego vitest nie zna; patrz komentarz w utils/leadyInline.js).
-
-export const MAKS_CZAS_S = 24 * 3600
 
 // Sekundy -> "HH:MM" (z zerami wiodacymi); "" dla 0/puste/nieliczby.
 export function formatujGgMm(sekundy) {
@@ -17,7 +15,7 @@ export function formatujGgMm(sekundy) {
 
 // "H:MM", "HH:MM", "HHMM"/"HMM" (3-4 cyfry) lub "H"/"HH" (same godziny)
 // -> sekundy; null dla nieparsowalnego (minuty musza byc 0..59). Gornej
-// granicy nie sprawdza (to robi czyCzasPoprawny).
+// granicy nie ma (limit 24:00 zdjety, ops#319).
 export function parsujGgMm(tekst) {
   if (tekst === null || tekst === undefined) return null
   const t = String(tekst).trim()
@@ -46,5 +44,5 @@ export function parsujGgMm(tekst) {
 }
 
 export function czyCzasPoprawny(sekundy) {
-  return Number.isFinite(sekundy) && sekundy >= 0 && sekundy <= MAKS_CZAS_S
+  return Number.isFinite(sekundy) && sekundy >= 0
 }

@@ -7,16 +7,14 @@ Modul celowo nie importuje ``frappe``: logike da sie wtedy przetestowac
 lokalnie. `throw` mieszka w `CRMLead.validate()`.
 
 - `CRM Lead.custom_czas_do_kontaktu` (Duration, sekundy): wpisywany recznie w
-  formacie `gg:mm`, maksymalnie `24:00` (86400 s); 0/puste = nie wpisano.
+  formacie `gg:mm` (godziny 1 do 3 cyfr, bez gornej granicy biznesowej);
+  0/puste = nie wpisano.
 - `CRM Lead.custom_proby_kontaktu` (Select "0".."5"): licznik prob polaczenia.
 
 Frontendowe lustro formatowania i parsowania: `frontend/src/utils/czasKontaktu.js`.
 """
 
 import re
-
-MAKS_CZAS_DO_KONTAKTU_S: int = 24 * 3600
-"""Gorna granica czasu do pierwszego kontaktu: 24:00."""
 
 PROBY_KONTAKTU_OPCJE: tuple[str, ...] = ("0", "1", "2", "3", "4", "5")
 """Dozwolone wartosci Select `custom_proby_kontaktu`."""
@@ -49,8 +47,6 @@ def waliduj_czas_do_kontaktu(sekundy) -> str | None:
 		return "Czas do pierwszego kontaktu musi być liczbą sekund."
 	if liczba < 0:
 		return "Czas do pierwszego kontaktu nie może być ujemny."
-	if liczba > MAKS_CZAS_DO_KONTAKTU_S:
-		return "Czas do pierwszego kontaktu nie może przekraczać 24:00."
 	return None
 
 
@@ -80,7 +76,7 @@ def parsuj_gg_mm(tekst) -> int | None:
 	"""Parsuje `H:MM`, `HH:MM`, `HHMM` (3-4 cyfry) lub `H`/`HH` (same godziny).
 
 	Zwraca sekundy albo None dla wejscia nieparsowalnego (minuty musza byc
-	0..59). Nie sprawdza gornej granicy 24:00, to robi walidator.
+	0..59). Gornej granicy nie ma (limit 24:00 zdjety, ops#319).
 	"""
 	if tekst is None:
 		return None
