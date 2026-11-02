@@ -188,7 +188,8 @@ export const GRUPY = [
   {
     key: 'praca',
     wlaczone: 'praca_wlaczone',
-    label: 'Umowa o pracę / zlecenie / dzieło',
+    label: 'Dochód z zatrudnienia',
+    podtytul: 'Umowa o pracę, zlecenie lub dzieło.',
     fields: [
       'praca_forma',
       'praca_okres',
@@ -196,7 +197,8 @@ export const GRUPY = [
       'praca_okres_do',
       'praca_nip',
       'praca_nazwa_zakladu',
-      'praca_adres_telefon',
+      'praca_adres',
+      'praca_telefon',
       'praca_kwota_dochodu',
     ],
   },
@@ -304,7 +306,11 @@ export const ETYKIETY_POL = {
   praca_okres_do: 'Zatrudnienie do',
   praca_nip: 'NIP zakładu pracy',
   praca_nazwa_zakladu: 'Nazwa zakładu pracy',
+  // Pole historyczne (ops#321): poza GRUPY, backend nadal je zwraca dla
+  // starych formularzy, ekran rozcina je na praca_adres + praca_telefon.
   praca_adres_telefon: 'Adres i numer telefonu zakładu pracy',
+  praca_adres: 'Adres zakładu pracy',
+  praca_telefon: 'Telefon zakładu pracy',
   praca_kwota_dochodu: 'Kwota dochodu',
   emerytura_wlaczone: 'Dochód: emerytura',
   emerytura_numer_swiadczenia: 'Numer świadczenia',
@@ -517,6 +523,17 @@ export function hydrateFrom(record) {
     form[fn] = r[fn] ?? ''
   })
 
+  // Stary formularz (ops#321): nowe pola puste, stare `praca_adres_telefon`
+  // wypełnione. Ekran rozcina stary tekst na adres i telefon; zapis idzie
+  // dopiero po kliknięciu "Zapisz", samo otwarcie niczego nie zmienia na
+  // serwerze.
+  const stary = typeof r.praca_adres_telefon === 'string' ? r.praca_adres_telefon : ''
+  if (!form.praca_adres && !form.praca_telefon && stary.trim() !== '') {
+    const { adres, telefon } = rozdzielAdresTelefon(stary)
+    form.praca_adres = adres
+    form.praca_telefon = telefon
+  }
+
   return form
 }
 
@@ -613,6 +630,31 @@ function polaGrupyWymagane(grupa, form) {
 }
 
 /**
+ * Fieldnames the form requires in its current state, BEFORE the emptiness
+ * filter (ops#321): BAZA_WYMAGANE, then the two conditional addresses, then
+ * each switched-on income group's required fields in GRUPY order. Used by
+ * brakujacePola() (which only adds the "is empty" filter) and by the screen
+ * to decide whether a section is "all required" or mixed. Never mutates `form`.
+ *
+ * @param {object} form - current form state
+ * @returns {string[]} required fieldnames, in backend order
+ */
+export function wymaganePola(form) {
+  const dane = form || {}
+  let wymagane = [...BAZA_WYMAGANE]
+
+  if (dane.adres_zameldowania_taki_sam === 'Nie') wymagane.push('adres_zameldowania')
+  if (dane.adres_korespondencji_taki_sam === 'Nie') wymagane.push('adres_korespondencji')
+
+  GRUPY.forEach((grupa) => {
+    if (!jestWlaczone(dane[grupa.wlaczone])) return
+    wymagane = wymagane.concat(polaGrupyWymagane(grupa, dane))
+  })
+
+  return wymagane
+}
+
+/**
  * Pure mirror of crm/volteo_kredyt.py `brakujace_pola()`, returns the
  * fieldnames required by the form and currently empty, in the same
  * deterministic order the backend produces (BAZA_WYMAGANE, then the two
@@ -625,17 +667,7 @@ function polaGrupyWymagane(grupa, form) {
  */
 export function brakujacePola(form) {
   const dane = form || {}
-  let wymagane = [...BAZA_WYMAGANE]
-
-  if (dane.adres_zameldowania_taki_sam === 'Nie') wymagane.push('adres_zameldowania')
-  if (dane.adres_korespondencji_taki_sam === 'Nie') wymagane.push('adres_korespondencji')
-
-  GRUPY.forEach((grupa) => {
-    if (!jestWlaczone(dane[grupa.wlaczone])) return
-    wymagane = wymagane.concat(polaGrupyWymagane(grupa, dane))
-  })
-
-  return wymagane.filter((pole) => jestPuste(dane[pole]))
+  return wymaganePola(dane).filter((pole) => jestPuste(dane[pole]))
 }
 
 /**
@@ -932,4 +964,154 @@ export function formatujNumerRachunkuZKursorem(tekst, kursor) {
   }
 
   return { tekst: sformatowany, kursor: nowyKursor }
+}
+
+// --- Trzy poziomy pól wymaganych (ops#321) -----------------------------------
+// wymagane (gwiazdka / zdanie w podtytule) -> brakuje (niebieska kropka,
+// licznik "Brakuje N") -> błąd (czerwony: zły format po wyjściu z pola albo
+// próba generowania z brakami). Cała logika tu, bez Vue, żeby dało się ją
+// testować.
+
+export const KOMUNIKAT_NIP = 'Nieprawidłowy NIP, sprawdź cyfry'
+export const KOMUNIKAT_TELEFON = 'Podaj numer telefonu (min. 9 cyfr)'
+export const KOMUNIKAT_WYMAGANE = 'Wymagane do wniosku'
+
+const POLA_NIP = ['praca_nip', 'dzialalnosc_nip', 'gospodarstwo_nip']
+const POLA_TELEFONU_FORMAT = ['praca_telefon']
+
+const WAGI_NIP = [6, 5, 7, 2, 3, 4, 5, 6, 7]
+
+/**
+ * Suma kontrolna NIP: spacje, myślniki i opcjonalny prefiks "PL" są
+ * ignorowane; 10 cyfr, wagi 6,5,7,2,3,4,5,6,7, reszta z dzielenia przez 11
+ * musi równać się ostatniej cyfrze (reszta 10 jest zawsze błędna).
+ * Pusty tekst zwraca false (pustość to sprawa poziomu "brakuje").
+ *
+ * @param {string} tekst
+ * @returns {boolean}
+ */
+export function czyPoprawnyNip(tekst) {
+  if (typeof tekst !== 'string') return false
+  const cyfry = tekst.replace(/[\s\-]/g, '').replace(/^PL/i, '')
+  if (!/^\d{10}$/.test(cyfry)) return false
+  const suma = WAGI_NIP.reduce((acc, waga, i) => acc + waga * Number(cyfry[i]), 0)
+  const reszta = suma % 11
+  return reszta !== 10 && reszta === Number(cyfry[9])
+}
+
+/**
+ * Telefon: dozwolone cyfry, spacje, myślniki, nawiasy i opcjonalny prefiks
+ * +48 / 0048; po odjęciu prefiksu co najmniej 9 cyfr. Inne znaki = false.
+ *
+ * @param {string} tekst
+ * @returns {boolean}
+ */
+export function czyPoprawnyTelefon(tekst) {
+  if (typeof tekst !== 'string') return false
+  const bezPrefiksu = tekst.trim().replace(/^(?:\+|00)48(?=[\s\-(\d])/, '')
+  if (!/^[\d\s\-()]+$/.test(bezPrefiksu)) return false
+  return (bezPrefiksu.match(/\d/g) || []).length >= 9
+}
+
+/**
+ * Komunikat błędu formatu dla jednego pola albo '' (format poprawny, pole
+ * bez reguły formatu albo wartość pusta). Niczego nie blokuje: to tylko
+ * czerwony stan i wpis w banerze.
+ *
+ * @param {string} fieldname
+ * @param {*} value
+ * @returns {string}
+ */
+export function bladFormatu(fieldname, value) {
+  if (jestPuste(value)) return ''
+  if (POLA_NIP.includes(fieldname)) {
+    return czyPoprawnyNip(String(value)) ? '' : KOMUNIKAT_NIP
+  }
+  if (POLA_TELEFONU_FORMAT.includes(fieldname)) {
+    return czyPoprawnyTelefon(String(value)) ? '' : KOMUNIKAT_TELEFON
+  }
+  return ''
+}
+
+/**
+ * Stan jednego pola: '' | 'brak' | 'blad' (+ komunikat dla 'blad').
+ * Kolejność: błąd formatu > brak po próbie generowania (czerwony) > brak
+ * (niebieski) > nic.
+ *
+ * @param {string} fieldname
+ * @param {{brakujace?: Set<string>, bledyFormatu?: object, probaGenerowania?: boolean}} ctx
+ * @returns {{stan: string, komunikat: string}}
+ */
+export function stanPola(fieldname, ctx = {}) {
+  const { brakujace, bledyFormatu, probaGenerowania } = ctx
+  const blad = bledyFormatu && bledyFormatu[fieldname]
+  if (blad) return { stan: 'blad', komunikat: blad }
+  if (brakujace && brakujace.has(fieldname)) {
+    if (probaGenerowania) return { stan: 'blad', komunikat: KOMUNIKAT_WYMAGANE }
+    return { stan: 'brak', komunikat: '' }
+  }
+  return { stan: '', komunikat: '' }
+}
+
+/**
+ * Licznik w nagłówku sekcji. 'blad' (liczba pól do poprawy) ma pierwszeństwo
+ * przed 'brak' (liczba brakujących), inaczej 'komplet'.
+ *
+ * @param {string[]} pola - widoczne pola sekcji
+ * @param {object} ctx - jak w stanPola()
+ * @returns {{stan: 'blad'|'brak'|'komplet', liczba: number}}
+ */
+export function licznikSekcji(pola, ctx = {}) {
+  let bledy = 0
+  let braki = 0
+  ;(pola || []).forEach((fn) => {
+    const { stan } = stanPola(fn, ctx)
+    if (stan === 'blad') bledy += 1
+    else if (stan === 'brak') braki += 1
+  })
+  if (bledy > 0) return { stan: 'blad', liczba: bledy }
+  if (braki > 0) return { stan: 'brak', liczba: braki }
+  return { stan: 'komplet', liczba: 0 }
+}
+
+/**
+ * Czy KAŻDE widoczne pole sekcji jest wymagane (wtedy podtytuł kończy się
+ * zdaniem "Wszystkie pola są wymagane." zamiast gwiazdek przy etykietach).
+ *
+ * @param {string[]} pola - widoczne pola sekcji
+ * @param {Iterable<string>} wymagane - wynik wymaganePola() (lub własna lista)
+ * @returns {boolean}
+ */
+export function sekcjaWszystkieWymagane(pola, wymagane) {
+  const zbior = new Set(wymagane)
+  return (pola || []).length > 0 && pola.every((fn) => zbior.has(fn))
+}
+
+// Ostatni "ciąg telefonopodobny": opcjonalny prefiks (tel, tel., telefon,
+// nr tel.), opcjonalne +48 / 0048, potem cyfry ze spacjami, myślnikami i
+// nawiasami. Ciąg musi zaczynać i kończyć się cyfrą.
+const WZORZEC_TELEFONU_W_TEKSCIE =
+  /(?:\b(?:nr\s+)?tel(?:efon)?\.?\s*:?\s*)?((?:(?:\+|00)48[\s-]*)?\(?\d[\d\s\-()]*\d)/gi
+
+/**
+ * Rozcina stare pole "adres i telefon" na dwa. Bierze ostatni ciąg
+ * telefonopodobny z co najmniej 9 cyframi (prefiks "tel." jest odrzucany,
+ * numer zostaje tak, jak wpisano, po trimie); reszta to adres z obciętymi
+ * końcowymi separatorami. Brak telefonu: cały tekst jako adres.
+ *
+ * @param {string} tekst
+ * @returns {{adres: string, telefon: string}}
+ */
+export function rozdzielAdresTelefon(tekst) {
+  const surowy = typeof tekst === 'string' ? tekst : ''
+  let ostatni = null
+  for (const m of surowy.matchAll(WZORZEC_TELEFONU_W_TEKSCIE)) {
+    if (((m[1] || '').match(/\d/g) || []).length >= 9) ostatni = m
+  }
+  if (!ostatni) return { adres: surowy.trim(), telefon: '' }
+
+  const przed = surowy.slice(0, ostatni.index)
+  const po = surowy.slice(ostatni.index + ostatni[0].length)
+  const adres = `${przed} ${po}`.replace(/[\s,;|\-]+$/g, '').replace(/^[\s,;|\-]+/, '').trim()
+  return { adres, telefon: ostatni[1].trim() }
 }
