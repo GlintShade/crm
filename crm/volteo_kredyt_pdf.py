@@ -290,6 +290,25 @@ zerują WSZYSTKIE klucze bloku, nawet gdy `kredyt` niesie resztki wcześniej
 wypełnionych pól (wyłączony przełącznik unieważnia dane)."""
 
 
+def zloz_adres_telefon_zakladu(adres: Any, telefon: Any, legacy: Any = None) -> str:
+	"""Wartość jedynego slotu `praca_adres_telefon` na papierze (frappe-free).
+
+	Nowe, osobne pola (`praca_adres`, `praca_telefon`) sklejają się do
+	`"<adres>, tel. <telefon>"`; tylko adres daje `"<adres>"`, tylko telefon
+	`"tel. <telefon>"`. Gdy oba nowe pola są puste, wraca stary, jednoliniowy
+	`praca_adres_telefon` (formularze sprzed rozdzielenia). Jawny wybór nowych
+	pól zawsze wygrywa ze starym tekstem."""
+	adres_t = _tekst(adres)
+	telefon_t = _tekst(telefon)
+	if adres_t and telefon_t:
+		return f"{adres_t}, tel. {telefon_t}"
+	if adres_t:
+		return adres_t
+	if telefon_t:
+		return f"tel. {telefon_t}"
+	return _tekst(legacy)
+
+
 def _blok_praca(kredyt: dict[str, Any]) -> dict[str, str | bool]:
 	"""Blok "praca" — bramkowany `praca_wlaczone`; routing okresu zatrudnienia opisany w `zbuduj_kontekst_kredytu`."""
 	if not _wlaczone(kredyt.get("praca_wlaczone")):
@@ -310,7 +329,9 @@ def _blok_praca(kredyt: dict[str, Any]) -> dict[str, str | bool]:
 		"praca_nieokreslony_od": nieokreslony_od,
 		"praca_nip": _tekst(kredyt.get("praca_nip")),
 		"praca_nazwa_zakladu": _tekst(kredyt.get("praca_nazwa_zakladu")),
-		"praca_adres_telefon": _tekst(kredyt.get("praca_adres_telefon")),
+		"praca_adres_telefon": zloz_adres_telefon_zakladu(
+			kredyt.get("praca_adres"), kredyt.get("praca_telefon"), kredyt.get("praca_adres_telefon")
+		),
 		"praca_kwota_dochodu": _kwota(kredyt.get("praca_kwota_dochodu")),
 		"praca_umowa_o_prace": _rowna(forma, FORMA_UMOWA_O_PRACE),
 		"praca_zlecenie": _rowna(forma, FORMA_UMOWA_ZLECENIE),

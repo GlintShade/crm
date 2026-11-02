@@ -4,7 +4,7 @@ from datetime import date
 from typing import Any
 
 from crm.volteo_kredyt import brakujace_pola, kwota_poprawna
-from crm.volteo_kredyt_pdf import KLUCZE_KONTEKSTU, zbuduj_kontekst_kredytu
+from crm.volteo_kredyt_pdf import KLUCZE_KONTEKSTU, zbuduj_kontekst_kredytu, zloz_adres_telefon_zakladu
 
 _DZIS = date(2026, 8, 15)
 
@@ -120,6 +120,8 @@ def _kredyt(**nadpisania: Any) -> dict[str, Any]:
 		"praca_okres_do": "",
 		"praca_nip": "",
 		"praca_nazwa_zakladu": "",
+		"praca_adres": "",
+		"praca_telefon": "",
 		"praca_adres_telefon": "",
 		"praca_kwota_dochodu": "",
 		"emerytura_wlaczone": 0,
@@ -301,7 +303,9 @@ class TestGrupaWylaczonaZerujePola(unittest.TestCase):
 			praca_okres_do="2026-01-01",
 			praca_nip="1234567890",
 			praca_nazwa_zakladu="Firma Sp. z o.o.",
-			praca_adres_telefon="Warszawa, 500600700",
+			praca_adres="Warszawa",
+			praca_telefon="500600700",
+			praca_adres_telefon="Stara Linia, tel. 1",
 			praca_kwota_dochodu="5000",
 		)
 		kredyt_kopia = copy.deepcopy(kredyt)
@@ -776,7 +780,8 @@ class TestBrakujacePolaGrupyDochodu(unittest.TestCase):
 			praca_okres_od="2020-01-01",
 			praca_nip="123",
 			praca_nazwa_zakladu="Firma",
-			praca_adres_telefon="tel",
+			praca_adres="Warszawa",
+			praca_telefon="500600700",
 			praca_kwota_dochodu="5000",
 		)
 		self.assertIn("praca_okres_do", brakujace_pola(dane_okreslony))
@@ -873,7 +878,8 @@ class TestBrakujacePolaGrupyDochodu(unittest.TestCase):
 			praca_okres_do="",
 			praca_nip="123",
 			praca_nazwa_zakladu="Firma",
-			praca_adres_telefon="tel",
+			praca_adres="Warszawa",
+			praca_telefon="500600700",
 			praca_kwota_dochodu="5000",
 		)
 		wynik = brakujace_pola(dane)
@@ -1015,6 +1021,40 @@ class TestBrakujacePolaNoweNazwyPol(unittest.TestCase):
 		wynik = brakujace_pola(dane)
 		self.assertNotIn("dzialalnosc_adres", wynik)
 		self.assertNotIn("dzialalnosc_telefon", wynik)
+
+
+class TestAdresTelefonZakladu(unittest.TestCase):
+	"""Ops#321: osobne `praca_adres` i `praca_telefon` sklejają się w jedyny slot PDF-u."""
+
+	def test_a_oba_pola(self: "TestAdresTelefonZakladu") -> None:
+		self.assertEqual(zloz_adres_telefon_zakladu("ul. Długa 1, Kielce", "41 555 44 33"), "ul. Długa 1, Kielce, tel. 41 555 44 33")
+
+	def test_b_tylko_adres(self: "TestAdresTelefonZakladu") -> None:
+		self.assertEqual(zloz_adres_telefon_zakladu("ul. Długa 1", ""), "ul. Długa 1")
+		self.assertEqual(zloz_adres_telefon_zakladu("  ul. Długa 1 ", None, "stary"), "ul. Długa 1")
+
+	def test_c_tylko_telefon(self: "TestAdresTelefonZakladu") -> None:
+		self.assertEqual(zloz_adres_telefon_zakladu(None, " 500600700 ", "stary"), "tel. 500600700")
+
+	def test_d_oba_puste_wraca_stary_tekst(self: "TestAdresTelefonZakladu") -> None:
+		self.assertEqual(zloz_adres_telefon_zakladu("", "  ", " Kielce, 123 "), "Kielce, 123")
+		self.assertEqual(zloz_adres_telefon_zakladu(None, None), "")
+
+	def test_e_kontekst_praca_wlaczona(self: "TestAdresTelefonZakladu") -> None:
+		kontekst = _kontekst(praca_wlaczone=1, praca_adres="Kielce", praca_telefon="123", praca_adres_telefon="Stary")
+		self.assertEqual(kontekst["praca_adres_telefon"], "Kielce, tel. 123")
+		kontekst = _kontekst(praca_wlaczone=1, praca_adres="", praca_telefon="", praca_adres_telefon="Stary")
+		self.assertEqual(kontekst["praca_adres_telefon"], "Stary")
+
+	def test_f_kontekst_praca_wylaczona(self: "TestAdresTelefonZakladu") -> None:
+		kontekst = _kontekst(praca_wlaczone=0, praca_adres="Kielce", praca_telefon="123", praca_adres_telefon="Stary")
+		self.assertEqual(kontekst["praca_adres_telefon"], "")
+
+	def test_g_wymagania_grupy(self: "TestAdresTelefonZakladu") -> None:
+		wynik = brakujace_pola(_kredyt(praca_wlaczone=1))
+		self.assertIn("praca_adres", wynik)
+		self.assertIn("praca_telefon", wynik)
+		self.assertNotIn("praca_adres_telefon", wynik)
 
 
 class TestKwotaPoprawna(unittest.TestCase):
