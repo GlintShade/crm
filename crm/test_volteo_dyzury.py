@@ -16,6 +16,7 @@ from crm.volteo_dyzury import (
 	dzien_z_daty,
 	klucz_licznika_dnia,
 	normalizuj_numer_pl,
+	okreg_z_kampanii,
 	opis_chwili,
 	opis_daty,
 	opisz_date,
@@ -566,9 +567,51 @@ class TestNoweTresci(unittest.TestCase):
 		self.assertNotIn(", .", tresc)
 
 	def test_trzy_nowe_placeholdery_walidacja(self):
-		self.assertEqual(len(PLACEHOLDERY_DYZUR), 13)
+		self.assertEqual(len(PLACEHOLDERY_DYZUR), 14)
 		self.assertIsNone(waliduj_tresc_dyzur("{produkt} {ma_pv} {zasady} {kampania} {uwagi}"))
 
 	def test_dane_przykladowe_maja_wszystkie_klucze(self):
 		brakujace = set(PLACEHOLDERY_DYZUR) - set(DANE_PRZYKLADOWE_DYZUR) - {"link"}
 		self.assertEqual(brakujace, set())
+
+
+class TestOkregZKampanii(unittest.TestCase):
+	def test_cztery_okregi(self):
+		for nazwa, oczekiwany in (
+			("WROCŁAW", "Wrocław"),
+			("GORZÓW", "Gorzów"),
+			("SZCZECIN", "Szczecin"),
+			("TRÓJMIASTO", "Trójmiasto"),
+		):
+			kampania = f"[S][KAMPANIA LEADOWA][{nazwa}][27.10.2026]"
+			self.assertEqual(okreg_z_kampanii(kampania), oczekiwany, kampania)
+
+	def test_male_litery_i_bez_polskich_znakow(self):
+		self.assertEqual(okreg_z_kampanii("[s][kampania][wroclaw][27.10.2026]"), "Wrocław")
+		self.assertEqual(okreg_z_kampanii("[S][K][Trojmiasto][1]"), "Trójmiasto")
+		self.assertEqual(okreg_z_kampanii("[S][K][gorzow wlkp][1]"), "Gorzów")
+
+	def test_polskie_znaki_w_wejsciu(self):
+		self.assertEqual(okreg_z_kampanii("[S][K][Wrocław][1]"), "Wrocław")
+		self.assertEqual(okreg_z_kampanii("[S][K][Trójmiasto][1]"), "Trójmiasto")
+
+	def test_inny_okreg_i_puste(self):
+		self.assertEqual(okreg_z_kampanii("[S][KAMPANIA LEADOWA][POZNAŃ][27.10.2026]"), "")
+		self.assertEqual(okreg_z_kampanii(None), "")
+		self.assertEqual(okreg_z_kampanii(""), "")
+
+	def test_bez_nawiasow(self):
+		self.assertEqual(okreg_z_kampanii("Kampania Wroclaw 2026"), "")
+
+	def test_pierwsze_trafienie_wygrywa(self):
+		self.assertEqual(okreg_z_kampanii("[WROCLAW][SZCZECIN]"), "Wrocław")
+
+	def test_szablon_z_okregiem_waliduje_sie_i_renderuje(self):
+		self.assertIsNone(waliduj_tresc_dyzur("Lead {klient} z {okreg}"))
+		tresc, _ = zbuduj_tresc_dyzur("Lead {klient} z {okreg}", {"klient": "Jan", "okreg": "Wrocław"})
+		self.assertEqual(tresc, "Lead Jan z Wroclaw")
+		tresc, _ = zbuduj_tresc_dyzur("Lead {klient} z {okreg}.", {"klient": "Jan", "okreg": ""})
+		self.assertIn("Jan", tresc)
+		self.assertEqual(
+			DANE_PRZYKLADOWE_DYZUR["okreg"], okreg_z_kampanii(DANE_PRZYKLADOWE_DYZUR["kampania"])
+		)

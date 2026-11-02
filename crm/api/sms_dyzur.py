@@ -36,6 +36,7 @@ from crm.volteo_dyzury import (
 	czy_wyjatek_dnia,
 	dyzurni_w_chwili,
 	klucz_licznika_dnia,
+	okreg_z_kampanii,
 	opisz_date,
 	opisz_posiadane_pv,
 	opisz_produkt,
@@ -98,6 +99,7 @@ def _dane_leada(lead: str) -> dict:
 	if not wiersz:
 		return {}
 	klient = " ".join(p for p in (wiersz.first_name, wiersz.last_name) if p).strip()
+	kampania = wyciagnij_z_uwag(wiersz.custom_uwagi_import, "Kampania")
 	return {
 		"klient": klient,
 		"telefon": wiersz.mobile_no or "",
@@ -107,7 +109,8 @@ def _dane_leada(lead: str) -> dict:
 		"produkt": opisz_produkt(wiersz.custom_produkt_procesu),
 		"ma_pv": opisz_posiadane_pv(wiersz.custom_posiadane_produkty),
 		"zasady": opisz_zasady(wiersz.custom_zasady_dotacji),
-		"kampania": wyciagnij_z_uwag(wiersz.custom_uwagi_import, "Kampania"),
+		"kampania": kampania,
+		"okreg": okreg_z_kampanii(kampania),
 		"formularz": wyciagnij_z_uwag(wiersz.custom_uwagi_import, "Formularz"),
 		"data_zgloszenia": opisz_date(wiersz.custom_import_date),
 		"wojewodztwo": wiersz.custom_voivodeship or "",

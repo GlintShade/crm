@@ -49,6 +49,7 @@ PLACEHOLDERY_DYZUR: tuple[str, ...] = (
 	"ma_pv",
 	"zasady",
 	"kampania",
+	"okreg",
 	"formularz",
 	"data_zgloszenia",
 	"wojewodztwo",
@@ -65,6 +66,7 @@ DANE_PRZYKLADOWE_DYZUR: Mapping[str, str] = {
 	"ma_pv": "ma PV bez magazynu",
 	"zasady": "nowe zasady",
 	"kampania": "[S][KAMPANIA LEADOWA][WROCLAW][27.10.2026]",
+	"okreg": "Wrocław",
 	"formularz": "Formularz PV 2026",
 	"data_zgloszenia": "01.11",
 	"wojewodztwo": "dolnoslaskie",
@@ -318,6 +320,37 @@ def opisz_date(wartosc: Any) -> str:
 	"""`date`/`datetime`/"RRRR-MM-DD" na "DD.MM" (bez roku); inaczej pusty tekst."""
 	parsed = parsuj_date(wartosc)
 	return parsed.strftime("%d.%m") if parsed else ""
+
+
+OKREGI_KAMPANII: tuple[tuple[str, str], ...] = (
+	("WROCLAW", "Wrocław"),
+	("GORZOW", "Gorzów"),
+	("SZCZECIN", "Szczecin"),
+	("TROJMIASTO", "Trójmiasto"),
+)
+"""Okręgi rozpoznawane w nazwie kampanii FB (decyzja właściciela 2026-11-02, ops#320):
+(słowo bez polskich znaków, wielkie litery) -> nazwa do SMS. Pierwsze trafienie wygrywa."""
+
+_ODWZOROWANIE_POLSKICH_ZNAKOW = str.maketrans("ĄĆĘŁŃÓŚŹŻąćęłńóśźż", "ACELNOSZZACELNOSZZ")
+_SEGMENT_KAMPANII = re.compile(r"\[([^\]]*)\]")
+
+
+def okreg_z_kampanii(kampania: Any) -> str:
+	"""Okręg z nazwy kampanii w układzie `[S][KAMPANIA LEADOWA][WROCŁAW][27.10.2026]`.
+
+	Nazwa jest normalizowana (bez polskich znaków, wielkie litery), a okręg rozpoznany,
+	gdy któryś segment w nawiasach kwadratowych zawiera jego słowo. Inna wartość, brak
+	nawiasów albo brak kampanii daje pusty string. Bez transliteracji GSM-7 (robi ją SMS).
+	"""
+	if not isinstance(kampania, str):
+		return ""
+	segmenty = [
+		s.translate(_ODWZOROWANIE_POLSKICH_ZNAKOW).upper() for s in _SEGMENT_KAMPANII.findall(kampania)
+	]
+	for slowo, nazwa in OKREGI_KAMPANII:
+		if any(slowo in s for s in segmenty):
+			return nazwa
+	return ""
 
 
 class _SlownikBezBrakow(dict):
