@@ -106,7 +106,7 @@
       </div>
 
       <!-- Form -->
-      <div v-else ref="formRoot" class="flex flex-col gap-6">
+      <div v-else ref="formRoot" class="kredyt-form flex flex-col gap-6">
         <!-- Form picker: which of this deal's several Volteo Kredyt records is shown -->
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div ref="pickerRoot" class="relative">
@@ -372,11 +372,18 @@
             </div>
           </div>
 
-          <div v-if="!wnioskodawcaEdytowalny" class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div
+            v-if="wnioskodawcaEdytowalny && podtytulOznaczenia(wnioskodawcaOznaczenie)"
+            class="-mt-1 mb-3 text-sm text-ink-gray-5"
+          >
+            {{ podtytulOznaczenia(wnioskodawcaOznaczenie) }}
+          </div>
+
+          <div v-if="!wnioskodawcaEdytowalny" class="kredyt-siatka-3 grid gap-3">
             <div v-for="p in wnioskodawcaWyswietlanie" :key="p.fieldname" class="min-w-0">
               <div class="text-xs text-ink-gray-5">
                 {{ p.label }}
-                <span v-if="brakWnioskodawcySet.has(p.fieldname)" :class="KROPKA_BRAK_KLASY" />
+                <span v-if="brakWnioskodawcySet.has(p.fieldname)" :class="KROPKA_BRAK_KLASY">&nbsp;●</span>
               </div>
               <TelefonLink
                 v-if="czyPoleTelefonu(p.fieldname) && p.value"
@@ -386,7 +393,7 @@
               <div v-else class="break-words text-sm text-ink-gray-8">{{ p.value || '-' }}</div>
             </div>
           </div>
-          <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div v-else class="kredyt-siatka-3 grid gap-4">
             <KredytPole
               v-for="f in wnioskodawcaPola"
               :key="f.fieldname"
@@ -395,7 +402,8 @@
               v-model="form[f.fieldname]"
               :stan="stanDla(f.fieldname).stan"
               :komunikat="stanDla(f.fieldname).komunikat"
-              :wymagane="wymaganeSet.has(f.fieldname)"
+              :znacznik="znacznikPola(wnioskodawcaOznaczenie, wymaganeSet, f.fieldname)"
+              :wymagany="wymaganeSet.has(f.fieldname)"
               :telefon="czyPoleTelefonu(f.fieldname)"
               :disabled="saving"
               @blur="dotknij(f.fieldname)"
@@ -424,17 +432,26 @@
               : 'border-outline-blue-2 bg-surface-blue-2 text-ink-blue-8',
           ]"
         >
-          <div v-if="probaGenerowania" class="mb-1 font-medium">
-            {{ __('Nie można wygenerować wniosku. Popraw te pola:') }}
+          <div class="font-medium">
+            <template v-if="probaGenerowania">
+              {{
+                __('Nie można wygenerować wniosku. Popraw {0} {1}:', [
+                  liczbaDoPoprawy,
+                  odmianaPol(liczbaDoPoprawy, 'biernik'),
+                ])
+              }}
+            </template>
+            <template v-else-if="podsumowanie.razem > 0">
+              {{
+                __('Brakuje {0} {1}', [podsumowanie.razem, odmianaPol(podsumowanie.razem, 'dopelniacz')])
+              }}
+            </template>
           </div>
-          <div v-if="missingLabels.length">
-            {{ __('Brakujące pola:') }} {{ missingLabels.join(', ') }}
+          <div v-if="podsumowanie.sekcje.length" data-testid="kredyt-baner-sekcje">
+            {{ podsumowanie.sekcje.map((x) => `${x.label} ${x.liczba}`).join(', ') }}
           </div>
           <div v-if="bledyFormatuLista.length">
             {{ __('Błędny format:') }} {{ bledyFormatuLista.join(', ') }}
-          </div>
-          <div v-if="brakujaceKlienta.length">
-            {{ __('Brakujące dane wnioskodawcy:') }} {{ brakujaceKlienta.join(', ') }}
           </div>
           <Button
             v-if="probaGenerowania"
@@ -448,19 +465,20 @@
 
         <!-- §1-3: base sections -->
         <section v-for="sec in sekcjeBazowe" :key="sec.key">
-          <div class="mb-3 flex items-start justify-between gap-2">
-            <div>
+          <div class="mb-3 flex flex-wrap items-start justify-between gap-2">
+            <div class="min-w-0">
               <div class="text-sm font-semibold uppercase tracking-wide text-ink-gray-5">
                 {{ sec.label }}
               </div>
-              <div v-if="sec.wszystkie" class="mt-0.5 text-sm text-ink-gray-5">
-                {{ __('Wszystkie pola są wymagane.') }}
+              <div v-if="podtytulOznaczenia(sec.oznaczenie)" class="mt-0.5 text-sm text-ink-gray-5">
+                {{ podtytulOznaczenia(sec.oznaczenie) }}
               </div>
             </div>
             <Badge
               v-bind="badgeLicznika(sec.licznik)"
               variant="subtle"
               size="sm"
+              class="shrink-0"
               :data-testid="'kredyt-licznik-' + sec.key"
             >
               <template v-if="sec.licznik.stan === 'komplet'" #prefix>
@@ -468,17 +486,18 @@
               </template>
             </Badge>
           </div>
-          <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div class="kredyt-siatka-3 grid gap-4">
             <KredytPole
               v-for="f in sec.pola"
               :key="f.fieldname"
               :data-pole="f.fieldname"
-              :class="f.fullWidth ? 'sm:col-span-3' : ''"
+              :class="f.fullWidth ? 'kredyt-span-3' : ''"
               :f="f"
               v-model="form[f.fieldname]"
               :stan="stanDla(f.fieldname).stan"
               :komunikat="stanDla(f.fieldname).komunikat"
-              :wymagane="!sec.wszystkie && wymaganeSet.has(f.fieldname)"
+              :znacznik="znacznikPola(sec.oznaczenie, wymaganeSet, f.fieldname)"
+              :wymagany="wymaganeSet.has(f.fieldname)"
               :tytul="etykietaPelna(f.fieldname)"
               :disabled="saving"
               @blur="onBlurPola(f)"
@@ -489,16 +508,16 @@
 
         <!-- §4-9: income groups -->
         <section v-for="g in sekcjeGrup" :key="g.grupa.key" class="kalk-part">
-          <div class="kalk-part-heading mb-4 flex items-center justify-between gap-2 border-b border-outline-gray-1 pb-2.5 text-base font-semibold text-ink-gray-9">
+          <div class="kalk-part-heading mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-outline-gray-1 pb-2.5 text-base font-semibold text-ink-gray-9">
             <div class="min-w-0">
               <div>{{ g.grupa.label }}</div>
               <div
-                v-if="g.grupa.podtytul || (g.wlaczona && g.wszystkie)"
+                v-if="g.grupa.podtytul || (g.wlaczona && podtytulOznaczenia(g.oznaczenie))"
                 class="mt-0.5 text-sm font-normal text-ink-gray-5"
               >
                 {{ g.grupa.podtytul }}
-                <template v-if="g.wlaczona && g.wszystkie">
-                  {{ __('Wszystkie pola są wymagane.') }}
+                <template v-if="g.wlaczona && podtytulOznaczenia(g.oznaczenie)">
+                  {{ podtytulOznaczenia(g.oznaczenie) }}
                 </template>
               </div>
             </div>
@@ -508,6 +527,7 @@
                 v-bind="badgeLicznika(g.licznik)"
                 variant="subtle"
                 size="sm"
+                class="shrink-0"
                 :data-testid="'kredyt-licznik-' + g.grupa.key"
               >
                 <template v-if="g.licznik.stan === 'komplet'" #prefix>
@@ -530,8 +550,8 @@
           <div
             v-if="g.wlaczona"
             :class="[
-              'grid grid-cols-1 gap-4',
-              g.grupa.key === 'inne' ? 'sm:grid-cols-2' : 'sm:grid-cols-3',
+              'grid gap-4',
+              g.grupa.key === 'inne' ? 'kredyt-siatka-2' : 'kredyt-siatka-3',
             ]"
           >
             <template v-for="el in g.elementy" :key="el.f.fieldname">
@@ -540,13 +560,13 @@
                 <div class="mb-1.5 whitespace-nowrap text-base text-ink-gray-5">
                   {{ __('Zatrudnienie od / do') }}
                   <span
-                    v-if="!g.wszystkie && (wymaganeSet.has(el.f.fieldname) || wymaganeSet.has(el.doPole.fieldname))"
-                    class="select-none text-ink-red-6"
+                    v-if="g.oznaczenie === 'gwiazdki' && (wymaganeSet.has(el.f.fieldname) || wymaganeSet.has(el.doPole.fieldname))"
+                    class="select-none text-ink-gray-5"
                   >*</span>
                   <span
                     v-if="stanDla(el.f.fieldname).stan === 'brak' || stanDla(el.doPole.fieldname).stan === 'brak'"
                     :class="KROPKA_BRAK_KLASY"
-                  />
+                  >&nbsp;●</span>
                 </div>
                 <div class="grid grid-cols-2 gap-2">
                   <KredytPole
@@ -566,12 +586,13 @@
               <KredytPole
                 v-else
                 :data-pole="el.f.fieldname"
-                :class="el.f.kolumny === 2 ? 'sm:col-span-2' : ''"
+                :class="el.f.kolumny === 2 ? 'kredyt-span-2' : ''"
                 :f="el.f"
                 v-model="form[el.f.fieldname]"
                 :stan="stanDla(el.f.fieldname).stan"
                 :komunikat="stanDla(el.f.fieldname).komunikat"
-                :wymagane="!g.wszystkie && wymaganeSet.has(el.f.fieldname)"
+                :znacznik="znacznikPola(g.oznaczenie, wymaganeSet, el.f.fieldname)"
+                :wymagany="wymaganeSet.has(el.f.fieldname)"
                 :tytul="etykietaPelna(el.f.fieldname)"
                 :telefon="czyPoleTelefonu(el.f.fieldname)"
                 :disabled="saving"
@@ -634,7 +655,10 @@ import {
   bladFormatu,
   stanPola,
   licznikSekcji,
-  sekcjaWszystkieWymagane,
+  oznaczenieWymaganych,
+  odmianaPol,
+  podsumowanieBrakow,
+  znacznikPola,
   prefillDoWnioskodawcy,
   etykietaFormularza,
   ETYKIETY_POL,
@@ -742,14 +766,12 @@ const formSections = [
         label: __(ETYKIETY_POL.kwota_800_plus),
         type: 'text',
         inputmode: 'decimal',
-        placeholder: '0,00',
       },
       {
         fieldname: 'dochod_wspolmalzonka',
         label: __(ETYKIETY_POL.dochod_wspolmalzonka),
         type: 'text',
         inputmode: 'decimal',
-        placeholder: '0,00',
       },
       {
         fieldname: 'zrodlo_dochodu_malzonka',
@@ -761,7 +783,6 @@ const formSections = [
         label: __(ETYKIETY_POL.oplaty_miesieczne),
         type: 'text',
         inputmode: 'decimal',
-        placeholder: '0,00',
       },
       {
         // K6, ops#148: on-screen label is the shortened ETYKIETY_POL entry
@@ -773,7 +794,6 @@ const formSections = [
         label: __(ETYKIETY_POL.suma_zobowiazan),
         type: 'text',
         inputmode: 'decimal',
-        placeholder: '0,00',
       },
       {
         fieldname: 'numer_rachunku',
@@ -880,7 +900,6 @@ const grupaPola = {
       label: __(ETYKIETY_POL.praca_kwota_dochodu),
       type: 'text',
       inputmode: 'decimal',
-      placeholder: '0,00',
     },
   ],
   emerytura: [
@@ -891,7 +910,6 @@ const grupaPola = {
       label: __(ETYKIETY_POL.emerytura_kwota_dochodu),
       type: 'text',
       inputmode: 'decimal',
-      placeholder: '0,00',
     },
   ],
   renta: [
@@ -902,7 +920,6 @@ const grupaPola = {
       label: __(ETYKIETY_POL.renta_kwota_dochodu),
       type: 'text',
       inputmode: 'decimal',
-      placeholder: '0,00',
     },
   ],
   dzialalnosc: [
@@ -927,7 +944,6 @@ const grupaPola = {
       label: __(ETYKIETY_POL.dzialalnosc_kwota_dochodu),
       type: 'text',
       inputmode: 'decimal',
-      placeholder: '0,00',
     },
   ],
   gospodarstwo: [
@@ -938,7 +954,6 @@ const grupaPola = {
       label: __(ETYKIETY_POL.gospodarstwo_kwota_dochodu),
       type: 'text',
       inputmode: 'decimal',
-      placeholder: '0,00',
     },
   ],
   inne: [
@@ -948,7 +963,6 @@ const grupaPola = {
       label: __(ETYKIETY_POL.inne_1_kwota),
       type: 'text',
       inputmode: 'decimal',
-      placeholder: '0,00',
     },
     { fieldname: 'inne_2_typ', label: __(ETYKIETY_POL.inne_2_typ), type: 'text' },
     {
@@ -956,7 +970,6 @@ const grupaPola = {
       label: __(ETYKIETY_POL.inne_2_kwota),
       type: 'text',
       inputmode: 'decimal',
-      placeholder: '0,00',
     },
   ],
 }
@@ -1244,25 +1257,12 @@ onMounted(initKredyt)
 // income-group toggle off, updates the banner and the button instantly,
 // with no need to click "Zapisz" first.
 //
-// The server's list (`brakujace`, refreshed after get/create/save) keeps
-// two narrower jobs: (1) it still feeds widocznePola()'s safety-net
-// parameter in visibleFields() below, so a field the server ever reports
-// missing is always rendered even if a frontend rule disagrees (the
-// ops#139 pattern); and (2) after a round-trip it is unioned INTO the
-// banner TEXT only (never into the field states or the blocking condition):
-// if the server ever reports something the local mirror does not, the
-// rep still sees it named. The union only ever ADDS a field name, it
-// never hides a requirement the local list already found.
+// The server's list (`brakujace`, refreshed after get/create/save) only
+// feeds widocznePola()'s safety-net parameter in visibleFields() below, so
+// a field the server ever reports missing is always rendered even if a
+// frontend rule disagrees (the ops#139 pattern). It never reaches the banner
+// or the counters: those are live-only.
 const brakujaceLokalne = computed(() => brakujacePola(form))
-
-const brakujaceBanerNazwy = computed(() => {
-  const lokalne = brakujaceLokalne.value
-  const zSerweraDodatkowe = brakujace.value.filter((fn) => !lokalne.includes(fn))
-  return [...lokalne, ...zSerweraDodatkowe]
-})
-const missingLabels = computed(() =>
-  brakujaceBanerNazwy.value.map((fn) => fieldLabelByName.get(fn) || fn),
-)
 
 // Applicant-block (wnioskodawca) completeness (ops#157/#158/#163): computed
 // LIVE from `form`, the same "no server round trip" pattern as
@@ -1320,7 +1320,7 @@ const bledyFormatu = computed(() =>
   ),
 )
 const bledyFormatuLista = computed(() =>
-  Object.entries(bledyFormatu.value).map(([fn, msg]) => `${fieldLabelByName.get(fn) || fn} (${msg})`),
+  Object.keys(bledyFormatu.value).map((fn) => fieldLabelByName.get(fn) || fn),
 )
 
 const ctxStanu = computed(() => ({
@@ -1342,14 +1342,28 @@ const wymaganeSet = computed(
     ]),
 )
 
+const wnioskodawcaOznaczenie = computed(() =>
+  oznaczenieWymaganych(POLA_WNIOSKODAWCY, wymaganeSet.value),
+)
+
+function podtytulOznaczenia(oznaczenie) {
+  if (oznaczenie === 'wszystkie') return __('Wszystkie pola są wymagane.')
+  if (oznaczenie === 'opcjonalne') {
+    return __('Wszystkie pola są wymagane, poza oznaczonymi jako opcjonalne.')
+  }
+  return ''
+}
+
 const wnioskodawcaLicznik = computed(() => licznikSekcji(POLA_WNIOSKODAWCY, ctxStanu.value))
 
 // Sekcje bazowe: widoczne pola, licznik w nagłówku, flaga "wszystkie wymagane".
 function opisSekcji(pola) {
   const nazwy = pola.map((f) => f.fieldname)
+  const oznaczenie = oznaczenieWymaganych(nazwy, wymaganeSet.value)
   return {
     licznik: licznikSekcji(nazwy, ctxStanu.value),
-    wszystkie: sekcjaWszystkieWymagane(nazwy, wymaganeSet.value),
+    oznaczenie,
+    wszystkie: oznaczenie === 'wszystkie',
   }
 }
 const sekcjeBazowe = computed(() =>
@@ -1391,16 +1405,31 @@ function badgeLicznika(licznik) {
   return { theme: 'green', label: __('Komplet') }
 }
 
-// Ta sama kropka co przy etykiecie pola w KredytPole.vue (bg-current + token).
-const KROPKA_BRAK_KLASY =
-  'ml-1.5 inline-block size-1.5 rounded-full bg-current align-middle text-ink-blue-6'
+// Ta sama kropka co przy etykiecie pola w KredytPole.vue: znak ● po nbsp,
+// zawija się razem z ostatnim słowem (treść w szablonie: &nbsp;●).
+const KROPKA_BRAK_KLASY = 'select-none align-middle text-[0.6em] text-ink-blue-6'
 
-const banerWidoczny = computed(
-  () =>
-    brakujaceBanerNazwy.value.length > 0 ||
-    brakujaceKlienta.value.length > 0 ||
-    Object.keys(bledyFormatu.value).length > 0,
-)
+// Baner liczy WYŁĄCZNIE z żywych źródeł (te same co liczniki sekcji) i tylko
+// z pól widocznych: odpowiedź serwera (`brakujace`) go nie dotyczy.
+const sekcjeBanera = computed(() => [
+  { label: __('Dane wnioskodawcy'), pola: POLA_WNIOSKODAWCY },
+  ...sekcjeBazowe.value.map((sec) => ({
+    label: sec.label,
+    pola: sec.pola.map((f) => f.fieldname),
+  })),
+  ...sekcjeGrup.value
+    .filter((g) => g.wlaczona)
+    .map((g) => ({
+      label: g.grupa.label,
+      pola: g.elementy.flatMap((el) =>
+        el.doPole ? [el.f.fieldname, el.doPole.fieldname] : [el.f.fieldname],
+      ),
+    })),
+])
+const podsumowanie = computed(() => podsumowanieBrakow(sekcjeBanera.value, brakiWszystkieSet.value))
+const liczbaDoPoprawy = computed(() => podsumowanie.value.razem + bledyFormatuLista.value.length)
+
+const banerWidoczny = computed(() => liczbaDoPoprawy.value > 0)
 
 // Gdy nic już nie brakuje ani nie jest błędne, próba generowania jest
 // "rozliczona": kolejny brak ma znów zacząć jako niebieski, nie czerwony.
@@ -1671,6 +1700,31 @@ function extractErrorMessage(err) {
 </script>
 
 <style scoped>
+/* Układ siatek wg szerokości FORMULARZA (nie okna): wokół są dwa paski
+   boczne, więc kolumna treści bywa wąska nawet na dużym monitorze.
+   Poniżej 560 px jedna kolumna, od 560 px trzy (dwa w grupie "inne"). */
+.kredyt-form {
+  container-type: inline-size;
+}
+.kredyt-siatka-3,
+.kredyt-siatka-2 {
+  grid-template-columns: minmax(0, 1fr);
+}
+@container (min-width: 560px) {
+  .kredyt-siatka-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .kredyt-siatka-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .kredyt-span-2 {
+    grid-column: span 2 / span 2;
+  }
+  .kredyt-span-3 {
+    grid-column: span 3 / span 3;
+  }
+}
+
 /* Income-group card + iOS-style TAK/NIE switch, copied from
    KalkulatorCPTab.vue's `.kalk-part`/`.kalk-switch` pattern (see that
    file's CSS comments for the full rationale). Colours are fixed by owner

@@ -7,7 +7,15 @@
       wypełniania, nic czerwonego.
     - `stan === 'blad'`: czerwone obramowanie pola i komunikat pod nim (prop
       `error` FormControl).
-    - `wymagane`: gwiazdka przy etykiecie (prop `required` FormControl).
+    - `znacznik`: 'gwiazdka' (szara gwiazdka przy wymaganym polu, prop
+      `required` FormControl z przemalowaniem na token szary: czerwień jest
+      zarezerwowana dla błędów) albo 'opcjonalne' (dopisek "(opcjonalnie)"
+      w etykiecie).
+    - `wymagany`: tylko `aria-required` dla dostępności.
+  Układ: komórka jest kolumną flex, etykieta ma `mb-auto`, więc pole
+  (input + komunikat) zawsze ląduje na dole komórki i inputy w jednym
+  wierszu siatki mają wspólną górną krawędź niezależnie od zawinięcia
+  etykiety.
   Kropka i obramowanie idą przez klasy na wrapperze (warianty `[&_...]`),
   nie przez slot etykiety, bo DatePicker nie przekazuje slotu `label` do
   swojego inputu: tak działają jednakowo dla text, select i date.
@@ -15,19 +23,26 @@
 -->
 <template>
   <div
-    :class="['rounded', stan === 'brak' ? KLASY_BRAK : '', stan === 'blad' ? KLASY_BLAD : '']"
+    :class="[
+      'flex h-full flex-col justify-end rounded',
+      bezEtykiety ? KLASY_PARA : KLASY_UKLAD,
+      znacznik === 'gwiazdka' ? KLASY_GWIAZDKA : '',
+      stan === 'brak' ? KLASY_BRAK + ' kredyt-pole-brak' : '',
+      stan === 'blad' ? KLASY_BLAD : '',
+    ]"
     :title="tytul"
     @focusout="onFocusOut"
   >
     <FormControl
       :type="f.type"
-      :label="bezEtykiety ? undefined : f.label"
+      :label="bezEtykiety ? undefined : etykieta"
       :options="f.options"
       :inputmode="f.inputmode"
-      :placeholder="f.placeholder || (f.type === 'date' ? 'DD.MM.RRRR' : undefined)"
+      :placeholder="placeholder"
       :format="f.type === 'date' ? 'DD.MM.YYYY' : undefined"
       :disabled="disabled"
-      :required="wymagane"
+      :required="znacznik === 'gwiazdka'"
+      :aria-required="wymagany ? 'true' : undefined"
       :error="stan === 'blad' ? komunikat : undefined"
       :model-value="modelValue"
       @update:model-value="emit('update:modelValue', $event)"
@@ -66,7 +81,10 @@ const props = defineProps({
   // '' | 'brak' | 'blad' (kredytForm.js stanPola)
   stan: { type: String, default: '' },
   komunikat: { type: String, default: '' },
-  wymagane: { type: Boolean, default: false },
+  // '' | 'gwiazdka' | 'opcjonalne' (kredytForm.js znacznikPola)
+  znacznik: { type: String, default: '' },
+  // Pole wymagane (aria-required), niezależnie od widocznego znacznika.
+  wymagany: { type: Boolean, default: false },
   disabled: { type: Boolean, default: false },
   tytul: { type: String, default: '' },
   // Pole telefonu: mała ikona "Zadzwoń" w sufiksie, gdy wartość to numer.
@@ -77,19 +95,41 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'input', 'blur'])
 
+const etykieta = computed(() =>
+  props.znacznik === 'opcjonalne' ? `${props.f.label} ${__('(opcjonalnie)')}` : props.f.label,
+)
+const placeholder = computed(() => {
+  if (props.f.placeholder) return props.f.placeholder
+  if (props.f.type === 'date') return 'DD.MM.RRRR'
+  if (props.f.type === 'select') return __('Wybierz')
+  return undefined
+})
+
 // Literały w całości, bez składania z kawałków: Tailwind skanuje źródło
-// tekstowo i nie zobaczy klas zbudowanych z interpolacji. Kropka za
-// etykietą ma ten sam kształt co KROPKA_BRAK_KLASY w KredytTab.vue
-// (bg-current + text-ink-blue-6).
+// tekstowo i nie zobaczy klas zbudowanych z interpolacji.
+// Kropka to znak (nbsp + ●) w ::after (treść w <style> poniżej), więc
+// zawija się razem z ostatnim słowem etykiety i nigdy nie ląduje sama.
+const KLASY_UKLAD =
+  '[&>div]:flex [&>div]:flex-1 [&>div]:flex-col [&_[data-slot=label]]:mb-auto'
+// Para dat "od / do" w jednej komórce (~95 px na pole): bez ikony kalendarza,
+// z mniejszym krojem i wcięciem, żeby pełne "DD.MM.RRRR" się mieściło
+// (10 znaków w 14 px to ok. 78 px, plus 2 x 4 px wcięcia i ramka).
+const KLASY_PARA = '[&_[data-slot=control]]:!px-1 [&_[data-slot=control]]:!text-sm'
+// Natywna gwiazdka frappe-ui jest czerwona (text-ink-red-6): w etykiecie
+// przemalowana na szary token, czerwień zostaje dla błędów.
+const KLASY_GWIAZDKA = '[&_[data-slot=label]_.text-ink-red-6]:text-ink-gray-5'
 const KLASY_BRAK =
-  '[&_[data-slot=label]]:after:ml-1.5 [&_[data-slot=label]]:after:inline-block [&_[data-slot=label]]:after:size-1.5 [&_[data-slot=label]]:after:rounded-full [&_[data-slot=label]]:after:bg-current [&_[data-slot=label]]:after:align-middle [&_[data-slot=label]]:after:text-ink-blue-6 [&_[data-slot=control]:not(:focus)]:border-outline-blue-3 [&_[data-slot=trigger]:not(:focus)]:border-outline-blue-3'
+  '[&_[data-slot=label]]:after:text-[0.6em] [&_[data-slot=label]]:after:align-middle [&_[data-slot=label]]:after:text-ink-blue-6 [&_[data-slot=control]:not(:focus)]:border-outline-blue-3 [&_[data-slot=trigger]:not(:focus)]:border-outline-blue-3'
 const KLASY_BLAD = '[&_[aria-invalid=true]]:border-outline-red-3'
 
 const przyciskTelefonu = computed(
   () => props.telefon && czyTelefon(String(props.modelValue ?? '')),
 )
 const maSufiks = computed(
-  () => przyciskTelefonu.value || props.f.type === 'date' || props.f.inputmode === 'decimal',
+  () =>
+    przyciskTelefonu.value ||
+    (props.f.type === 'date' && !props.bezEtykiety) ||
+    props.f.inputmode === 'decimal',
 )
 
 // Błąd formatu i "dotknięte" liczymy po wyjściu z pola. focusout bąbelkuje
@@ -100,3 +140,9 @@ function onFocusOut(e) {
   emit('blur')
 }
 </script>
+
+<style scoped>
+.kredyt-pole-brak :deep([data-slot='label'])::after {
+  content: '\00a0\25cf';
+}
+</style>

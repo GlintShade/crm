@@ -39,6 +39,10 @@ import {
   stanPola,
   licznikSekcji,
   sekcjaWszystkieWymagane,
+  oznaczenieWymaganych,
+  odmianaPol,
+  podsumowanieBrakow,
+  znacznikPola,
   rozdzielAdresTelefon,
   KOMUNIKAT_NIP,
   KOMUNIKAT_TELEFON,
@@ -728,10 +732,11 @@ describe('Kredyt form logic', () => {
       })
     })
 
-    it('a "values" rule hides the field for the empty PRACA_OKRES_OPCJE value', () => {
+    it('praca_okres_od has no rule: visible also while praca_okres is empty (grid must not jump)', () => {
       const form = defaultForm()
       form.praca_okres = ''
-      expect(poleWidoczne(form, 'praca_okres_od')).toBe(false)
+      expect(poleWidoczne(form, 'praca_okres_od')).toBe(true)
+      expect(WARUNKI_WIDOCZNOSCI.praca_okres_od).toBeUndefined()
     })
 
     it('never mutates the form it inspects', () => {
@@ -1455,7 +1460,7 @@ describe('Kredyt form logic', () => {
       // as that third argument, never `[]`, so this transient state never
       // actually reproduces the ops#139 banner deadlock in the running app.
       const bezSiatki = widocznePola(pracaFields, form, [])
-      expect(bezSiatki.map((f) => f.fieldname)).not.toContain('praca_okres_od')
+      expect(bezSiatki.map((f) => f.fieldname)).toContain('praca_okres_od')
 
       const zSiatka = widocznePola(pracaFields, form, braki)
       expect(zSiatka.map((f) => f.fieldname)).toContain('praca_okres_od')
@@ -2128,6 +2133,77 @@ describe('trzy poziomy pól i sekcja zatrudnienia (ops#321)', () => {
       const inne = GRUPY.find((g) => g.key === 'inne')
       expect(sekcjaWszystkieWymagane(praca.fields, wymagane)).toBe(true)
       expect(sekcjaWszystkieWymagane(inne.fields, wymagane)).toBe(false)
+    })
+  })
+
+  describe('oznaczenieWymaganych', () => {
+    it('wszystkie wymagane', () => {
+      expect(oznaczenieWymaganych(['a', 'b'], ['a', 'b', 'c'])).toBe('wszystkie')
+    })
+    it('większość wymaganych: opcjonalne dostają dopisek', () => {
+      expect(oznaczenieWymaganych(['a', 'b', 'c'], ['a', 'b'])).toBe('opcjonalne')
+    })
+    it('równo wymaganych i opcjonalnych: nadal opcjonalne', () => {
+      expect(oznaczenieWymaganych(['a', 'b'], ['a'])).toBe('opcjonalne')
+    })
+    it('mniej niż połowa wymaganych: gwiazdki', () => {
+      expect(oznaczenieWymaganych(['a', 'b', 'c'], ['a'])).toBe('gwiazdki')
+    })
+    it('żadne nie wymagane lub pusta sekcja: gwiazdki (nic do oznaczenia)', () => {
+      expect(oznaczenieWymaganych(['a', 'b'], [])).toBe('gwiazdki')
+      expect(oznaczenieWymaganych([], ['a'])).toBe('gwiazdki')
+    })
+    it('znacznikPola zgodnie z trybem', () => {
+      const w = ['a']
+      expect(znacznikPola('wszystkie', w, 'a')).toBe('')
+      expect(znacznikPola('opcjonalne', w, 'a')).toBe('')
+      expect(znacznikPola('opcjonalne', w, 'b')).toBe('opcjonalne')
+      expect(znacznikPola('gwiazdki', w, 'a')).toBe('gwiazdka')
+      expect(znacznikPola('gwiazdki', w, 'b')).toBe('')
+    })
+    it('sekcje formularza: zatrudnienie wszystkie, inne źródła z oznaczeniem', () => {
+      const dane = kredytKompletny({
+        praca_wlaczone: true,
+        praca_okres: 'Czas określony',
+        inne_wlaczone: true,
+      })
+      const wymagane = wymaganePola(dane)
+      const praca = GRUPY.find((g) => g.key === 'praca')
+      const inne = GRUPY.find((g) => g.key === 'inne')
+      expect(oznaczenieWymaganych(praca.fields, wymagane)).toBe('wszystkie')
+      expect(oznaczenieWymaganych(inne.fields, wymagane)).not.toBe('wszystkie')
+    })
+  })
+
+  describe('odmianaPol i podsumowanieBrakow', () => {
+    it('dopełniacz: 1 pola, reszta pól', () => {
+      expect(odmianaPol(1, 'dopelniacz')).toBe('pola')
+      expect(odmianaPol(3, 'dopelniacz')).toBe('pól')
+      expect(odmianaPol(12, 'dopelniacz')).toBe('pól')
+    })
+    it('biernik: 1 pole, 2-4 pola, 5+ i 12-14 pól', () => {
+      expect(odmianaPol(1, 'biernik')).toBe('pole')
+      expect(odmianaPol(3, 'biernik')).toBe('pola')
+      expect(odmianaPol(5, 'biernik')).toBe('pól')
+      expect(odmianaPol(12, 'biernik')).toBe('pól')
+      expect(odmianaPol(22, 'biernik')).toBe('pola')
+    })
+    it('podsumowanie liczy tylko pola widoczne i pomija sekcje bez braków', () => {
+      const sekcje = [
+        { label: 'Dane podstawowe', pola: ['a', 'b', 'c'] },
+        { label: 'Adresy', pola: ['d'] },
+        { label: 'Praca', pola: ['e', 'f'] },
+      ]
+      // 'x' nie jest widoczne w żadnej sekcji: nie liczy się
+      const wynik = podsumowanieBrakow(sekcje, new Set(['a', 'c', 'f', 'x']))
+      expect(wynik).toEqual({
+        razem: 3,
+        sekcje: [
+          { label: 'Dane podstawowe', liczba: 2 },
+          { label: 'Praca', liczba: 1 },
+        ],
+      })
+      expect(podsumowanieBrakow(sekcje, []).razem).toBe(0)
     })
   })
 
