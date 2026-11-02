@@ -110,6 +110,15 @@
         icon-left="lucide-external-link"
         @click="otworzLeada"
       />
+      <!-- VOLTEO: trasa Google Maps do współrzędnych leada -->
+      <Button
+        v-if="linkTrasy"
+        data-testid="lead-trasa"
+        :label="__('Trasa')"
+        icon-left="lucide-navigation"
+        :title="trasaPodpowiedz"
+        @click="otworzTrase"
+      />
     </div>
 
     <div
@@ -213,6 +222,10 @@ import { statusesStore } from '@/stores/statuses'
 import { callEnabled } from '@/composables/telephony'
 import { rozbijTagi } from '@/utils/tagiProduktow'
 import { isTranslatable } from '@/utils'
+import {
+  czyLokalizacjaPrzyblizona,
+  linkTrasyGoogle,
+} from '@/utils/mapaNawigacja'
 import { sekcjeZeStatusemTylkoDoOdczytu } from '@/utils/statusCC'
 import router from '@/router'
 import { Button, Dropdown, createResource } from 'frappe-ui'
@@ -321,6 +334,24 @@ function otworzLeada() {
     params: { leadId: props.lead.name },
   }).href
   window.open(href, '_blank', 'noopener')
+}
+
+// --- Trasa (Google Maps) ---------------------------------------------------
+
+// VOLTEO: współrzędne bierzemy z obiektu leada z mapy (prawdziwe wartości, bez
+// jittera pinów), nie z adresu tekstowego.
+const linkTrasy = computed(() =>
+  linkTrasyGoogle(props.lead.custom_lat, props.lead.custom_lng),
+)
+const trasaPodpowiedz = computed(() =>
+  czyLokalizacjaPrzyblizona(props.lead.custom_geo_dokladnosc)
+    ? __('Lokalizacja przybliżona: środek miejscowości lub kodu pocztowego')
+    : undefined,
+)
+
+function otworzTrase() {
+  if (!linkTrasy.value) return
+  window.open(linkTrasy.value, '_blank', 'noopener')
 }
 
 // --- Telefon --------------------------------------------------------------
