@@ -1889,11 +1889,22 @@ def remove_linked_doc_reference(items: str | list, remove_contact: bool = False,
 				remove_contact_link(item["doctype"], item["docname"])
 			else:
 				remove_doc_link(item["doctype"], item["docname"])
-			if delete:
-				frappe.delete_doc(item["doctype"], item["docname"])
 		except (frappe.DoesNotExistError, frappe.ValidationError):
 			# Skip if document doesn't exist or has validation errors
 			continue
+
+		if delete:
+			if item["doctype"] == "Address":
+				# Contact.address jest polem Link do Address: bez zdjecia tego
+				# odwolania delete_doc konczy sie LinkExistsError.
+				for contact in frappe.get_all("Contact", filters={"address": item["docname"]}, pluck="name"):
+					frappe.db.set_value("Contact", contact, "address", None, update_modified=False)
+			try:
+				frappe.delete_doc(item["doctype"], item["docname"])
+			except frappe.DoesNotExistError:
+				continue
+			# Inny blad (np. LinkExistsError) celowo wychodzi do klienta: wczesniej
+			# byl polykany, wiec modal "usun lub odlacz" wracal w kolko bez skutku.
 
 	return "success"
 

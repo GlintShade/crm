@@ -243,27 +243,27 @@ const unlinkLinkedDoc = (doc) => {
 }
 
 const confirmDelete = () => {
-  const items =
-    viewControls.value.selections.length == 0
-      ? 'all'
-      : viewControls.value.selections.length
+  const n = viewControls.value.selections.length
   confirmDeleteInfo.value = {
     show: true,
     title: __('Delete Linked Item'),
-    message: __('Are you sure you want to delete {0} linked item(s)?', [items]),
+    message:
+      n == 0
+        ? __('Are you sure you want to delete all linked item(s)?')
+        : __('Are you sure you want to delete {0} linked item(s)?', [n]),
     delete: true,
   }
 }
 
 const confirmUnlink = () => {
-  const items =
-    viewControls.value.selections.length == 0
-      ? 'all'
-      : viewControls.value.selections.length
+  const n = viewControls.value.selections.length
   confirmDeleteInfo.value = {
     show: true,
     title: __('Unlink Linked Item'),
-    message: __('Are you sure you want to unlink {0} linked item(s)?', [items]),
+    message:
+      n == 0
+        ? __('Are you sure you want to unlink all linked item(s)?')
+        : __('Are you sure you want to unlink {0} linked item(s)?', [n]),
     delete: false,
   }
 }

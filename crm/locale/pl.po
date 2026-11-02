@@ -607,6 +607,10 @@ msgstr "Czy na pewno chcesz usunąć to zadanie?"
 msgid "Are you sure you want to delete {0} linked item(s)?"
 msgstr "Czy na pewno chcesz usunąć {0} powiązany(ch) element(ów)?"
 
+#: frontend/src/components/DeleteLinkedDocModal.vue
+msgid "Are you sure you want to delete all linked item(s)?"
+msgstr "Czy na pewno chcesz usunąć wszystkie powiązane elementy?"
+
 #: frontend/src/components/Calendar/CalendarEventPanel.vue:912
 msgid "Are you sure you want to discard unsaved changes to this event?"
 msgstr "Czy na pewno chcesz odrzucić niezapisane zmiany w tym wydarzeniu?"
@@ -634,6 +638,10 @@ msgstr "Czy na pewno chcesz ustawić walutę na {0}? Tej zmiany nie będzie moż
 #: frontend/src/components/DeleteLinkedDocModal.vue:237
 msgid "Are you sure you want to unlink {0} linked item(s)?"
 msgstr "Czy na pewno chcesz odłączyć {0} powiązany(ch) element(ów)?"
+
+#: frontend/src/components/DeleteLinkedDocModal.vue
+msgid "Are you sure you want to unlink all linked item(s)?"
+msgstr "Czy na pewno chcesz odłączyć wszystkie powiązane elementy?"
 
 #: crm/api/exchange_rate.py:144
 msgid "Ask your manager to set up the Exchange Rate Provider, as default provider does not support currency conversion for {0} to {1}."
