@@ -590,3 +590,57 @@ export function opisDymka(s) {
   const linia3 = [s.status, s.telefon].filter(Boolean).join(', ')
   return { linia1, linia2, linia3 }
 }
+
+// ---------------------------------------------------------------------------
+// Proporcje karty pionowej: wysokość = szerokość * 9/16 (ops#318).
+// ---------------------------------------------------------------------------
+
+export const PROPORCJA_KARTY = 9 / 16
+export const MIN_PX_NA_GODZINE = 14
+export const MAX_PX_NA_GODZINE = 36
+/** Poniżej tej skali blok spotkania pokazuje jedną linię "HH:MM Nazwisko". */
+export const PROG_JEDNA_LINIA_PX = 24
+/** Poniżej tej skali etykiety godzin tylko co 2 h (żeby się nie nakładały). */
+export const PROG_ETYKIETY_CO_2H_PX = 20
+/** Stałe wysokości karty pionowej poza skalą godzin (px). */
+export const STALE_KARTY_PIONOWEJ = {
+  narzut: 30, // padding 2 x 14 i obramowanie 2 x 1
+  naglowekKarty: 0, // wysokość nagłówka karty z marginesem (0 = brak nagłówka)
+  naglowekDni: WYSOKOSC_NAGLOWKA_DNI_PX,
+  dolny: 8, // pb-2 na wystającą etykietę ostatniej godziny
+  min: MIN_PX_NA_GODZINE,
+  max: MAX_PX_NA_GODZINE,
+}
+
+/**
+ * Skala px/h tak, by karta miała proporcje ok. 16:9: wysokość docelowa =
+ * szerokość * 9/16, z niej odejmowane stałe (padding, nagłówek karty, nagłówek
+ * dni, dolny margines), reszta dzielona przez liczbę godzin osi i obcięta do
+ * `min..max`. Niepoprawne wejście daje `max`.
+ */
+export function pxNaGodzineZSzerokosci(szerokosc, liczbaGodzin, stale = {}) {
+  const s = { ...STALE_KARTY_PIONOWEJ, ...stale }
+  if (
+    !Number.isFinite(szerokosc) ||
+    szerokosc <= 0 ||
+    !Number.isFinite(liczbaGodzin) ||
+    liczbaGodzin <= 0
+  ) {
+    return s.max
+  }
+  const wysokoscDocelowa = szerokosc * PROPORCJA_KARTY
+  const naSkale =
+    wysokoscDocelowa - s.narzut - s.naglowekKarty - s.naglowekDni - s.dolny
+  return Math.min(s.max, Math.max(s.min, Math.floor(naSkale / liczbaGodzin)))
+}
+
+/** Czy blok przy tej skali ma pokazać jedną linię "HH:MM Nazwisko" (bez miasta). */
+export function czyJednaLinia(pxNaH) {
+  return pxNaH < PROG_JEDNA_LINIA_PX
+}
+
+/** Godziny z etykietą w widoku pionowym: wszystkie, a przy małej skali co 2 h. */
+export function godzinyEtykietPion(od, doGodziny, pxNaH) {
+  const krok = pxNaH < PROG_ETYKIETY_CO_2H_PX ? 2 : 1
+  return godzinyOsi(od, doGodziny).filter((_, i) => i % krok === 0)
+}

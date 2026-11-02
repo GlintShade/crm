@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   LICZBA_KOLOROW,
+  MAX_PX_NA_GODZINE,
+  MIN_PX_NA_GODZINE,
+  PROPORCJA_KARTY,
+  czyJednaLinia,
+  godzinyEtykietPion,
+  pxNaGodzineZSzerokosci,
   OS_DO,
   OS_OD,
   MIN_SZEROKOSC_PASKA_PX,
@@ -586,5 +592,59 @@ describe('runda UI: oś wspólna, ścieżki, etykiety, dymek', () => {
       'Jan Kowalski',
     )
     expect(opisDymka({ termin: 'zle' }).linia1).toBe('')
+  })
+})
+
+describe('proporcje karty pionowej 16:9', () => {
+  it('stałe: proporcja 9/16, zakres 14 do 36', () => {
+    expect(PROPORCJA_KARTY).toBeCloseTo(0.5625, 6)
+    expect(MIN_PX_NA_GODZINE).toBe(14)
+    expect(MAX_PX_NA_GODZINE).toBe(36)
+  })
+
+  it('karta kompaktowa na tablicy (585 px, nagłówek 48 + 12) dostaje małą skalę', () => {
+    // 585 * 9/16 = 329; 329 - 30 - 60 - 28 - 8 = 203; 203 / 14 = 14,5
+    expect(pxNaGodzineZSzerokosci(585, 14, { naglowekKarty: 60 })).toBe(14)
+  })
+
+  it('karta duża bez nagłówka (1190 px) dostaje maksimum', () => {
+    // 1190 * 9/16 = 669; 669 - 66 = 603; 603 / 14 = 43 => max 36
+    expect(pxNaGodzineZSzerokosci(1190, 14)).toBe(36)
+  })
+
+  it('wartość środkowa jest liczona z proporcji i zaokrąglana w dół', () => {
+    // 800 * 9/16 = 450; 450 - 30 - 28 - 8 = 384; 384 / 14 = 27,4 => 27
+    expect(pxNaGodzineZSzerokosci(800, 14)).toBe(27)
+  })
+
+  it('wysokość karty wychodzi bliska 16:9 w zakresie bez obcięcia', () => {
+    const px = pxNaGodzineZSzerokosci(800, 14)
+    const wysokosc = 30 + 28 + 14 * px + 8
+    expect(Math.abs(wysokosc / 800 - PROPORCJA_KARTY)).toBeLessThan(0.02)
+  })
+
+  it('wąska karta nie schodzi poniżej minimum', () => {
+    expect(pxNaGodzineZSzerokosci(200, 14, { naglowekKarty: 60 })).toBe(14)
+  })
+
+  it('niepoprawne wejście daje maksimum', () => {
+    expect(pxNaGodzineZSzerokosci(0, 14)).toBe(36)
+    expect(pxNaGodzineZSzerokosci(800, 0)).toBe(36)
+    expect(pxNaGodzineZSzerokosci(NaN, 14)).toBe(36)
+  })
+
+  it('czyJednaLinia poniżej 24 px/h', () => {
+    expect(czyJednaLinia(14)).toBe(true)
+    expect(czyJednaLinia(23)).toBe(true)
+    expect(czyJednaLinia(24)).toBe(false)
+    expect(czyJednaLinia(36)).toBe(false)
+  })
+
+  it('godzinyEtykietPion: co 2 h poniżej 20 px/h, inaczej wszystkie', () => {
+    expect(godzinyEtykietPion(8, 12, 19)).toEqual([8, 10, 12])
+    expect(godzinyEtykietPion(8, 12, 20)).toEqual([8, 9, 10, 11, 12])
+    expect(godzinyEtykietPion(8, 22, 14)).toEqual([
+      8, 10, 12, 14, 16, 18, 20, 22,
+    ])
   })
 })

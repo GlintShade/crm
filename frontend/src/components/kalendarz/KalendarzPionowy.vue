@@ -9,11 +9,13 @@
 -->
 <template>
   <div
+    ref="korzen"
     class="rounded-xl border border-outline-gray-2 bg-surface-base p-3.5"
     :class="kompakt ? '' : 'overflow-x-auto'"
   >
     <NaglowekKarty
       v-if="naglowek"
+      ref="naglowekKarty"
       class="mb-3"
       :handlowiec="handlowiec"
       :kolor="kolor"
@@ -55,7 +57,7 @@
           :style="{ height: wysokosc + 'px' }"
         >
           <span
-            v-for="g in godziny"
+            v-for="g in etykietyGodzin"
             :key="g"
             class="absolute right-2 text-xs tabular-nums text-ink-gray-5"
             :style="{
@@ -103,14 +105,21 @@
               :data-lead="s.name"
               @click.stop="$emit('otworz', s.name)"
             >
-              <span class="block truncate font-semibold">{{
-                kompakt
-                  ? godzinaTekst(s.termin)
-                  : godzinaTekst(s.termin) + ' ' + s.lead_name
-              }}</span>
-              <span class="block truncate">{{
-                kompakt ? nazwisko(s.lead_name) : s.miasto
-              }}</span>
+              <template v-if="jednaLinia">
+                <span class="block truncate font-semibold">{{
+                  godzinaTekst(s.termin) + ' ' + nazwisko(s.lead_name)
+                }}</span>
+              </template>
+              <template v-else>
+                <span class="block truncate font-semibold">{{
+                  kompakt
+                    ? godzinaTekst(s.termin)
+                    : godzinaTekst(s.termin) + ' ' + s.lead_name
+                }}</span>
+                <span class="block truncate">{{
+                  kompakt ? nazwisko(s.lead_name) : s.miasto
+                }}</span>
+              </template>
             </button>
           </DymekSpotkania>
           <span
@@ -130,7 +139,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import NaglowekKarty from '@/components/kalendarz/NaglowekKarty.vue'
 import DymekSpotkania from '@/components/kalendarz/DymekSpotkania.vue'
 import {
@@ -144,7 +153,10 @@ import {
   etykietaZakresu as zbudujEtykieteZakresu,
   godzinaTekst,
   godzinaZKliknieciaPion,
+  czyJednaLinia,
+  godzinyEtykietPion,
   godzinyOsi,
+  pxNaGodzineZSzerokosci,
   kolorHandlowca,
   nazwisko,
   osGodzin,
@@ -172,7 +184,46 @@ const emit = defineEmits(['otworz', 'nowe', 'przesun'])
 const kolor = computed(() => kolorHandlowca(props.kolorIndex))
 const os = computed(() => props.osZewnetrzna || osGodzin(props.spotkania))
 const godziny = computed(() => godzinyOsi(os.value.od, os.value.do))
-const pxNaH = computed(() => skalaPionowa(props.kompakt))
+// Skala px/h z SZEROKOŚCI karty (proporcje ok. 16:9): ResizeObserver mierzy
+// szerokość i wysokość nagłówka karty; przed pierwszym pomiarem skala stała.
+const korzen = ref(null)
+const naglowekKarty = ref(null)
+const szerokosc = ref(0)
+const wysokoscNaglowka = ref(0)
+let obserwator = null
+
+function zmierz() {
+  if (!korzen.value) return
+  szerokosc.value = korzen.value.offsetWidth
+  const el = naglowekKarty.value && naglowekKarty.value.$el
+  wysokoscNaglowka.value = el ? el.offsetHeight : 0
+}
+
+onMounted(() => {
+  zmierz()
+  if (typeof ResizeObserver !== 'undefined' && korzen.value) {
+    obserwator = new ResizeObserver(zmierz)
+    obserwator.observe(korzen.value)
+  }
+})
+
+onBeforeUnmount(() => {
+  if (obserwator) obserwator.disconnect()
+})
+
+const pxNaH = computed(() =>
+  szerokosc.value > 0
+    ? pxNaGodzineZSzerokosci(szerokosc.value, os.value.do - os.value.od, {
+        // nagłówek karty + jego dolny margines mb-3 (12 px)
+        naglowekKarty:
+          wysokoscNaglowka.value > 0 ? wysokoscNaglowka.value + 12 : 0,
+      })
+    : skalaPionowa(props.kompakt),
+)
+const jednaLinia = computed(() => czyJednaLinia(pxNaH.value))
+const etykietyGodzin = computed(() =>
+  godzinyEtykietPion(os.value.od, os.value.do, pxNaH.value),
+)
 const wysokosc = computed(() =>
   wysokoscSiatkiPion(os.value.od, os.value.do, pxNaH.value),
 )
