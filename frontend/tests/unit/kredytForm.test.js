@@ -1848,11 +1848,18 @@ describe('ETYKIETY_POL / ETYKIETY_PELNE (kanon etykiet, ops#148/#157/#163)', () 
     expect(ETYKIETY_POL.adres_zameldowania).toBe('Adres zamieszkania')
   })
 
-  it('K6: suma_zobowiazan ma etykietę ekranową ze słowem "miesięcznych" i pełny kanon w ETYKIETY_PELNE', () => {
-    expect(ETYKIETY_POL.suma_zobowiazan).toMatch(/miesięcznych/)
+  it('K6: suma_zobowiazan ma etykietę ekranową z "mies." i pełny kanon w ETYKIETY_PELNE', () => {
+    expect(ETYKIETY_POL.suma_zobowiazan).toMatch(/mies\./)
     expect(ETYKIETY_PELNE.suma_zobowiazan).toBe(
       'Suma miesięcznych zobowiązań kredytowych i finansowych',
     )
+  })
+
+  it('ops#321: skrócona etykieta ekranowa jest krótsza od pełnej, a pełna to kanon doctype', () => {
+    Object.keys(ETYKIETY_PELNE).forEach((fn) => {
+      expect(ETYKIETY_POL[fn].length).toBeLessThan(ETYKIETY_PELNE[fn].length)
+      expect(etykietaPelna(fn)).toBe(ETYKIETY_KANON_DOCTYPE[fn])
+    })
   })
 
   it('etykietaPelna spada na ETYKIETY_POL, gdy nie ma wyjątku w ETYKIETY_PELNE', () => {
