@@ -72,6 +72,7 @@ export const PLACEHOLDERY_DYZUR = [
   'ma_pv',
   'zasady',
   'kampania',
+  'okreg',
   'formularz',
   'data_zgloszenia',
   'wojewodztwo',

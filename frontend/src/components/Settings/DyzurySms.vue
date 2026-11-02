@@ -79,7 +79,7 @@
           <p>
             {{
               __(
-                'Z formularza FB: {produkt} (czego dotyczyła reklama), {ma_pv} (czy ma już PV), {zasady} (rozliczenie), {kampania}, {formularz}, {data_zgloszenia}, {uwagi} (pozostałe odpowiedzi, do 120 znaków).',
+                'Z formularza FB: {produkt} (czego dotyczyła reklama), {ma_pv} (czy ma już PV), {zasady} (rozliczenie), {kampania}, {okreg} (okręg z nazwy kampanii, np. Wrocław), {formularz}, {data_zgloszenia}, {uwagi} (pozostałe odpowiedzi, do 120 znaków).',
               )
             }}
           </p>
