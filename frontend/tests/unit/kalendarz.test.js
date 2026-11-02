@@ -476,7 +476,7 @@ describe('runda UI: oś wspólna, ścieżki, etykiety, dymek', () => {
     expect(osWspolna(null, ['x'])).toEqual({ od: 8, do: 18 })
   })
 
-  it('etykietaChipa: wolny, umówione i do potwierdzenia', () => {
+  it('etykietaChipa: tylko liczba umówionych, bez do potwierdzenia', () => {
     expect(etykietaChipa([])).toEqual({
       tekst: 'wolny cały tydzień',
       wolny: true,
@@ -485,16 +485,27 @@ describe('runda UI: oś wspólna, ścieżki, etykiety, dymek', () => {
       tekst: 'wolny cały dzień',
       wolny: true,
     })
+    expect(etykietaChipa([sp('a')])).toEqual({
+      tekst: '1 umówione',
+      wolny: false,
+    })
     expect(etykietaChipa([sp('a'), sp('b'), sp('c')])).toEqual({
       tekst: '3 umówione',
       wolny: false,
     })
     expect(etykietaChipa([sp('a'), sp('b', { status: 'Nowy' })]).tekst).toBe(
-      '1 umówione, 1 do potwierdzenia',
+      '1 umówione',
     )
-    expect(etykietaChipa([sp('a', { status: 'Nowy' })]).tekst).toBe(
-      '0 umówionych, 1 do potwierdzenia',
-    )
+    expect(
+      etykietaChipa(Array.from({ length: 5 }, (_, i) => sp(String(i)))).tekst,
+    ).toBe('5 umówionych')
+    expect(
+      etykietaChipa(Array.from({ length: 12 }, (_, i) => sp(String(i)))).tekst,
+    ).toBe('12 umówionych')
+    expect(etykietaChipa([sp('a', { status: 'Nowy' })]).wolny).toBe(true)
+    expect(
+      etykietaChipa([sp('a'), sp('b', { status: 'Nowy' })]).tekst,
+    ).not.toMatch(/potwierdzenia/)
   })
 
   it('wymiaryTorow: duży 36/8, kompakt 24/6, kolumna dni 64', () => {

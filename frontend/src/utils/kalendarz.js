@@ -139,7 +139,8 @@ export function etykietaZakresu(od, doDnia) {
   const a = rozbierzDate(od)
   const b = rozbierzDate(doDnia)
   if (!a || !b) return ''
-  if (a.rok === b.rok) return `${dzienMiesiacSkrot(a)} do ${dzienMiesiacSkrot(b)} ${b.rok}`
+  if (a.rok === b.rok)
+    return `${dzienMiesiacSkrot(a)} do ${dzienMiesiacSkrot(b)} ${b.rok}`
   return `${dzienMiesiacSkrot(a)} ${a.rok} do ${dzienMiesiacSkrot(b)} ${b.rok}`
 }
 
@@ -509,23 +510,19 @@ export function osWspolna(mapa, uzytkownicy, od = OS_OD, doGodziny = OS_DO) {
 }
 
 /**
- * Chip liczby spotkań w nagłówku karty: "3 umówione", "3 umówione, 1 do
- * potwierdzenia", a bez spotkań "wolny cały tydzień" (wolny=true, szary chip).
+ * Chip liczby spotkań w nagłówku karty: tylko liczba umówionych ("1 umówione",
+ * "3 umówione", "5 umówionych"); bez umówionych szary "wolny cały tydzień"
+ * (w widoku dnia "wolny cały dzień"), wolny=true.
  */
 export function etykietaChipa(spotkania, okres = 'tydzien') {
-  const lista = spotkania || []
-  if (!lista.length) {
+  const umowione = liczbaUmowionych(spotkania || [])
+  if (!umowione) {
     return {
       tekst: okres === 'dzien' ? 'wolny cały dzień' : 'wolny cały tydzień',
       wolny: true,
     }
   }
-  const umowione = liczbaUmowionych(lista)
-  const reszta = lista.length - umowione
-  const tekst = reszta
-    ? `${etykietaUmowionych(umowione)}, ${reszta} do potwierdzenia`
-    : etykietaUmowionych(umowione)
-  return { tekst, wolny: false }
+  return { tekst: etykietaUmowionych(umowione), wolny: false }
 }
 
 /** Pozycja godziny `g` na osi `od..do` w % szerokości (do centrowania etykiet i linii). */
