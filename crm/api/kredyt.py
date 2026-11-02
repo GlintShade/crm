@@ -22,7 +22,7 @@ jak formularz umowy, niekompletny zapis jest poprawnym stanem roboczym
 (`status="Roboczy"`), nie błędem; brakujące pola wracają w odpowiedzi, nigdy
 nie blokują `volteo_kredyt_save`. Generowanie PDF-u jest tu jednak świadomie
 SUROWSZE niż w `Volteo Umowa`: `volteo_kredyt_pdf` odmawia złożenia dokumentu,
-dopóki formularz (55 pól podstawowe) i blok wnioskodawcy zapisany NA TYM
+dopóki formularz (55 pól podstawowych) i blok wnioskodawcy zapisany NA TYM
 REKORDZIE (`wnioskodawca_*`, ops#157/#158, migawka z chwili założenia
 formularza, nie aktualna karta `Contact`) nie są komplet: decyzja
 właściciela, bo formularz kredytowy trafia do banku/pośrednika i częściowy
@@ -149,7 +149,7 @@ odrębny sygnał (`brakujace_dane_wnioskodawcy`, blokuje tylko PDF)."""
 
 _DANE_POLA_DOZWOLONE = [*_DANE_POLA_PODSTAWOWE, *POLA_WNIOSKODAWCY]
 """Jedyne pola `Volteo Kredyt`, jakie `volteo_kredyt_save` przyjmuje od klienta:
-55 pól podstawowe (`_DANE_POLA_PODSTAWOWE`) plus 10 pól wnioskodawcy
+55 pól podstawowych (`_DANE_POLA_PODSTAWOWE`) plus 10 pól wnioskodawcy
 (`crm.volteo_kredyt.POLA_WNIOSKODAWCY`, ops#157/#158). Kanon kolejności i
 nazw pól wnioskodawcy żyje WYŁĄCZNIE w `crm.volteo_kredyt`, tu tylko domieszany.
 
@@ -464,7 +464,7 @@ def _odpowiedz_kredytu(
 ) -> dict[str, Any]:
 	"""Kształt odpowiedzi wspólny dla `volteo_kredyt_create`: `kredyt` + `prefill`
 	kontaktu podstawowego szansy (do podglądu przed ewentualnym „Przywróć dane
-	klienta”) + `brakujace_pola` (55 pól podstawowe, bez bloku wnioskodawcy)."""
+	klienta”) + `brakujace_pola` (55 pól podstawowych, bez bloku wnioskodawcy)."""
 	dane_do_walidacji = {pole: kredyt_doc.get(pole) for pole in _DANE_POLA_PODSTAWOWE}
 	return {
 		"kredyt": _kredyt_do_dict(kredyt_doc),
@@ -579,7 +579,7 @@ def volteo_kredyt_get(kredyt: str) -> dict[str, Any]:
 	wnioskodawcy ZAPISANE NA TYM REKORDZIE, migawka z chwili założenia),
 	`prefill_kontakt` (AKTUALNE dane kontaktu podstawowego szansy, osobno, do
 	obsługi przycisku „Przywróć dane klienta” bez kolejnego endpointu),
-	`brakujace_pola` (55 pól podstawowe) i `brakujace_dane_wnioskodawcy`
+	`brakujace_pola` (55 pól podstawowych) i `brakujace_dane_wnioskodawcy`
 	(kompletność bloku wnioskodawcy, patrz `volteo_kredyt_pdf`).
 
 	Celowo BEZ bramki OZE (`_sprawdz_rodzaj_oze`), inaczej niż
@@ -809,7 +809,7 @@ def volteo_kredyt_pdf(kredyt: str) -> dict[str, Any]:
 	W odróżnieniu od `volteo_umowa_pdf` (który generuje niekompletny PDF bez
 	blokady — dokument jest roboczy, wracany do edycji), generowanie tutaj jest
 	CELOWO zablokowane, dopóki: (1) formularz `Volteo Kredyt` nie ma żadnych
-	brakujących pól wg `crm.volteo_kredyt.brakujace_pola` (55 pól podstawowe),
+	brakujących pól wg `crm.volteo_kredyt.brakujace_pola` (55 pól podstawowych),
 	i (2) blok wnioskodawcy zapisany NA TYM REKORDZIE (`wnioskodawca_*`) nie ma
 	braków wg `crm.volteo_kredyt.brakujace_dane_wnioskodawcy`. Decyzja
 	właściciela: ten PDF trafia do banku/pośrednika kredytowego, więc
