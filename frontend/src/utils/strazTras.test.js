@@ -21,6 +21,12 @@ describe('czyZablokowana', () => {
     }
   })
 
+  it('obejmuje kalendarz spotkań (ops#318)', () => {
+    expect(TRASY_LEADOW).toContain('Kalendarz')
+    expect(czyZablokowana('Kalendarz', { hideLeads: true })).toBe(true)
+    expect(czyZablokowana('Kalendarz', { hideLeads: false })).toBe(false)
+  })
+
   it('nie blokuje innych tras, nawet gdy hideLeads=true', () => {
     expect(czyZablokowana('Deals', { hideLeads: true })).toBe(false)
     expect(czyZablokowana('Kalkulator', { hideLeads: true })).toBe(false)

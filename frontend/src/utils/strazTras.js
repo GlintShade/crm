@@ -11,8 +11,9 @@
 // Trasy leadów chronione tą samą flagą co menu boczne (AppSidebar.vue/MobileSidebar.vue,
 // `condition: () => !window.hide_leads`, issue ops#26): 'Leads' (lista), 'Lead' (widok
 // pojedynczego leada, desktop i mobile dzielą tę samą nazwę trasy przez handleMobileView),
-// 'MapaLeadow' (mapa leadów, issue ops#26).
-export const TRASY_LEADOW = ['Leads', 'Lead', 'MapaLeadow']
+// 'MapaLeadow' (mapa leadów, issue ops#26), 'Kalendarz' (kalendarz spotkań handlowców,
+// ops#318: spotkanie to lead z terminem, więc bez linii Leady nie ma czego pokazać).
+export const TRASY_LEADOW = ['Leads', 'Lead', 'MapaLeadow', 'Kalendarz']
 
 /**
  * Czy wejście na trasę `nazwaTrasy` powinno zostać zablokowane (przekierowane na

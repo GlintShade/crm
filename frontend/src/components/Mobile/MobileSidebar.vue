@@ -102,6 +102,7 @@ import {
 } from '@headlessui/vue'
 import LucideLayoutDashboard from '~icons/lucide/layout-dashboard'
 import LucideWallet from '~icons/lucide/wallet'
+import LucideCalendarDays from '~icons/lucide/calendar-days'
 import Section from '@/components/CollapsibleSection.vue'
 import PinIcon from '@/components/Icons/PinIcon.vue'
 import UserDropdown from '@/components/UserDropdown.vue'
@@ -159,6 +160,12 @@ const links = [
     icon: LeadsIcon,
     to: 'Leads',
     condition: () => !window.hide_leads, // VOLTEO
+  },
+  {
+    label: 'Kalendarz', // VOLTEO (ops#318)
+    icon: LucideCalendarDays,
+    to: 'Kalendarz',
+    condition: () => !window.hide_leads,
   },
   {
     divider: true, // VOLTEO

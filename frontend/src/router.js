@@ -59,6 +59,13 @@ const routes = [
     component: () => import('@/pages/RozliczeniaProwizji.vue'),
   },
   {
+    // VOLTEO (ops#318): kalendarz spotkań handlowców (tablica dla CC/backoffice,
+    // własny kalendarz handlowca); zakres danych egzekwuje serwer.
+    path: '/kalendarz',
+    name: 'Kalendarz',
+    component: () => import('@/pages/Kalendarz.vue'),
+  },
+  {
     path: '/dokumenty-oze',
     name: 'DokumentyOze',
     component: () => import('@/pages/DokumentyOze.vue'),

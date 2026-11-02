@@ -166,6 +166,7 @@
 import BrushCleaningIcon from '~icons/lucide/brush-cleaning'
 import LucideLayoutDashboard from '~icons/lucide/layout-dashboard'
 import LucideWallet from '~icons/lucide/wallet'
+import LucideCalendarDays from '~icons/lucide/calendar-days'
 import CRMLogo from '@/components/Icons/CRMLogo.vue'
 import InviteIcon from '@/components/Icons/InviteIcon.vue'
 import CommentIcon from '@/components/Icons/CommentIcon.vue'
@@ -265,6 +266,12 @@ const links = [
     icon: LeadsIcon,
     to: 'Leads',
     condition: () => !window.hide_leads, // VOLTEO
+  },
+  {
+    label: 'Kalendarz', // VOLTEO (ops#318)
+    icon: LucideCalendarDays,
+    to: 'Kalendarz',
+    condition: () => !window.hide_leads,
   },
   {
     divider: true, // VOLTEO
