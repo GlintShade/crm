@@ -11,31 +11,36 @@
       />
       <Button
         variant="solid"
-        :label="__('Create')"
+        :label="isMobileView ? '' : __('Create')"
+        :tooltip="__('Create')"
         iconLeft="plus"
         @click="showLeadModal = true"
       />
     </template>
   </LayoutHeader>
   <WidokiLeadowPasek tryb="filtry" :viewControls="viewControls" />
-  <ViewControls
-    ref="viewControls"
-    v-model="leads"
-    v-model:loadMore="loadMore"
-    v-model:resizeColumn="triggerResize"
-    v-model:updatedPageCount="updatedPageCount"
-    doctype="CRM Lead"
-    :filters="{ converted: 0 }"
-    :options="{
-      allowedViews: ['list', 'mapa', 'group_by', 'kanban'],
-      // VOLTEO (owner feedback 2026-10-05): pasek szybkich filtrów Leadów ma
-      // zawsze dokładnie dwa wiersze (grid, patrz ViewControls.vue), bo 14
-      // filtrów w jednym flex-wrap dawało 3-4 nierówne wiersze. Inne listy
-      // (Szanse, Klienci...) nie ustawiają tej flagi i zostają przy
-      // flex-wrap, jeden wiersz.
-      filtryDwaWiersze: true,
-    }"
-  />
+  <!-- VOLTEO (ops#318): w widoku Kalendarz pasek filtrów listy jest ukryty
+       (v-show, nie v-if: ref viewControls zasila ViewBreadcrumbs). -->
+  <div v-show="route.params.viewType != 'kalendarz'">
+    <ViewControls
+      ref="viewControls"
+      v-model="leads"
+      v-model:loadMore="loadMore"
+      v-model:resizeColumn="triggerResize"
+      v-model:updatedPageCount="updatedPageCount"
+      doctype="CRM Lead"
+      :filters="{ converted: 0 }"
+      :options="{
+        allowedViews: ['list', 'mapa', 'kalendarz', 'group_by', 'kanban'],
+        // VOLTEO (owner feedback 2026-10-05): pasek szybkich filtrów Leadów ma
+        // zawsze dokładnie dwa wiersze (grid, patrz ViewControls.vue), bo 14
+        // filtrów w jednym flex-wrap dawało 3-4 nierówne wiersze. Inne listy
+        // (Szanse, Klienci...) nie ustawiają tej flagi i zostają przy
+        // flex-wrap, jeden wiersz.
+        filtryDwaWiersze: true,
+      }"
+    />
+  </div>
   <KanbanView
     v-if="route.params.viewType == 'kanban'"
     v-model="leads"
@@ -241,6 +246,13 @@
       </div>
     </template>
   </KanbanView>
+  <div
+    v-else-if="route.params.viewType == 'kalendarz'"
+    class="min-h-0 flex-1 overflow-y-auto p-4"
+    data-testid="leady-kalendarz"
+  >
+    <KalendarzWidok pasek />
+  </div>
   <MapaLeadow
     v-else-if="route.params.viewType == 'mapa'"
     :list="leads"
@@ -297,11 +309,13 @@ import LeadsIcon from '@/components/Icons/LeadsIcon.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import LeadsListView from '@/components/ListViews/LeadsListView.vue'
 import MapaLeadow from '@/components/MapaLeadow.vue'
+import KalendarzWidok from '@/components/kalendarz/KalendarzWidok.vue'
 import EmptyState from '@/components/ListViews/EmptyState.vue'
 import KanbanView from '@/components/Kanban/KanbanView.vue'
 import LeadModal from '@/components/Modals/LeadModal.vue'
 import ViewControls from '@/components/ViewControls.vue'
 import { useDoctypeModal } from '@/composables/doctypeModal'
+import { isMobileView } from '@/composables/settings'
 import { getMeta } from '@/stores/meta'
 import { globalStore } from '@/stores/global'
 import { usersStore } from '@/stores/users'

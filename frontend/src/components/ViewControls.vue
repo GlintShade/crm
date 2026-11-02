@@ -384,6 +384,7 @@ import ImportIcon from '~icons/lucide/import'
 // VOLTEO (issue #100): ikona widoku Mapa dla Leadów, ten sam import co
 // AppSidebar.vue/MobileSidebar.vue miały dla starej pozycji menu "Mapa leadów".
 import MapaIcon from '~icons/lucide/map'
+import KalendarzIcon from '~icons/lucide/calendar-days'
 import { typWidokuDoZapisu } from '@/utils/widokLeady'
 import { czyWidokDozwolony } from '@/utils/widokiDozwolone'
 
@@ -471,6 +472,13 @@ function getViewType() {
       label: __('Mapa'),
       icon: markRaw(MapaIcon),
     },
+    // VOLTEO (ops#318): widok Kalendarz w Leadach, tak samo jak Mapa tylko
+    // parametr trasy (persystencja przez typWidokuDoZapisu() -> 'list').
+    kalendarz: {
+      name: 'kalendarz',
+      label: __('Kalendarz'),
+      icon: markRaw(KalendarzIcon),
+    },
   }
 
   return types[viewType]
@@ -498,7 +506,8 @@ const currentView = computed(() => {
   // czyta ten sam `currentView.value.label`, więc poprawka naprawia razem
   // przycisk widoku i tytuł karty przeglądarki ("Leads - Mapa").
   const jestMapaStandardowa =
-    route.params.viewType === 'mapa' && (!_view || _view.is_standard)
+    ['mapa', 'kalendarz'].includes(route.params.viewType) &&
+    (!_view || _view.is_standard)
 
   return {
     name: _view?.name || getViewType().name,
@@ -772,6 +781,17 @@ if (allowedViews.includes('mapa')) {
     onClick() {
       viewUpdated.value = false
       router.push({ name: route.name, params: { viewType: 'mapa' } })
+    },
+  })
+}
+if (allowedViews.includes('kalendarz')) {
+  standardViews.push({
+    name: 'kalendarz',
+    label: __('Kalendarz'),
+    icon: markRaw(KalendarzIcon),
+    onClick() {
+      viewUpdated.value = false
+      router.push({ name: route.name, params: { viewType: 'kalendarz' } })
     },
   })
 }

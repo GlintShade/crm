@@ -451,7 +451,8 @@ router.beforeEach(async (to, from, next) => {
     // więc ten wpis nigdy tam nie trafia; jedyny cel to uznanie viewType=='mapa'
     // za ZNANY standardowy typ, zamiast traktowania '/leads/view/mapa' jako
     // nazwy zapisanego widoku i cichego przekierowania na 'list'.
-    const standardViewTypes = ['list', 'kanban', 'group_by', 'mapa']
+    // 'kalendarz' (ops#318) tak samo jak 'mapa': znany typ trasy, nigdy zapisany.
+    const standardViewTypes = ['list', 'kanban', 'group_by', 'mapa', 'kalendarz']
 
     if (!viewType) {
       const doctypeMap = {

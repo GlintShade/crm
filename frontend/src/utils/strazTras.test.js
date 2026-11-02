@@ -27,6 +27,11 @@ describe('czyZablokowana', () => {
     expect(czyZablokowana('Kalendarz', { hideLeads: false })).toBe(false)
   })
 
+  it('trasa Leads (także /leads/view/kalendarz, ops#318) jest blokowana bez linii Leady', () => {
+    expect(czyZablokowana('Leads', { hideLeads: true })).toBe(true)
+    expect(czyZablokowana('Leads', { hideLeads: false })).toBe(false)
+  })
+
   it('nie blokuje innych tras, nawet gdy hideLeads=true', () => {
     expect(czyZablokowana('Deals', { hideLeads: true })).toBe(false)
     expect(czyZablokowana('Kalkulator', { hideLeads: true })).toBe(false)

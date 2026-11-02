@@ -12,6 +12,10 @@
 // Frappe-free (bez importu `frappe-ui` / `@/`), testowalne bezpośrednio przez
 // vitest - ten sam wzorzec co utils/strazTras.js.
 
+// Mapa i Kalendarz (ops#318) to widoki leadów oparte na tym samym zapisanym
+// widoku typu "list": żaden z nich nie jest zapisywanym typem.
+export const TYPY_ALIASOWANE_DO_LISTY = ['mapa', 'kalendarz']
+
 /**
  * Zamienia typ widoku z parametru trasy na typ, pod którym widok jest
  * TRWALE zapisywany (`CRM View Settings.type` / `create_or_update_standard_view`).
@@ -21,5 +25,5 @@
  * @returns {string}
  */
 export function typWidokuDoZapisu(viewType) {
-  return viewType === 'mapa' ? 'list' : viewType
+  return TYPY_ALIASOWANE_DO_LISTY.includes(viewType) ? 'list' : viewType
 }

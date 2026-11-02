@@ -4,7 +4,7 @@
     class="flex items-center gap-2"
     data-testid="widoki-leadow-przelacznik-wrap"
   >
-    <div class="h-5 w-px shrink-0 bg-outline-gray-2" />
+    <div class="hidden h-5 w-px shrink-0 bg-outline-gray-2 sm:block" />
     <div
       class="inline-flex items-center rounded border border-outline-gray-2 overflow-hidden shrink-0"
       data-testid="widoki-leadow-przelacznik"
@@ -13,7 +13,7 @@
         v-for="(typ, index) in typyWidoku"
         :key="typ.key"
         type="button"
-        class="flex h-7 items-center gap-1.5 whitespace-nowrap px-2 text-base transition-colors"
+        class="flex h-7 items-center gap-1.5 whitespace-nowrap px-1.5 text-base transition-colors sm:px-2"
         :class="[
           typ.key === aktywnyTyp
             ? 'bg-surface-gray-4 text-ink-gray-9'
@@ -21,16 +21,22 @@
           index > 0 && 'border-l border-outline-gray-2',
         ]"
         :data-testid="`widoki-leadow-przelacznik-typ-${typ.key}`"
+        :title="typ.label"
         @click="wybierzTyp(typ.key)"
       >
         <component :is="typ.icon" class="h-4 w-4" />
-        <span>{{ typ.label }}</span>
+        <span class="hidden sm:inline">{{ typ.label }}</span>
       </button>
     </div>
   </div>
 
   <div
-    v-else-if="tryb === 'filtry' && pokazPasek && zapisaneWidoki.length"
+    v-else-if="
+      tryb === 'filtry' &&
+      pokazPasek &&
+      !czyKalendarz &&
+      zapisaneWidoki.length
+    "
     class="flex items-center gap-1.5 sm:px-5 px-3 pt-3 pb-1"
     :class="isMobileView ? 'flex-nowrap overflow-x-auto' : 'flex-wrap'"
     data-testid="widoki-leadow-pasek"
@@ -104,6 +110,7 @@
 // jakby uzytkownik wybral widok z rozwijanego przelacznika.
 import ListIcon from '@/components/Icons/ListIcon.vue'
 import MapaIcon from '~icons/lucide/map'
+import KalendarzIcon from '~icons/lucide/calendar-days'
 import { isMobileView } from '@/composables/settings'
 import { viewsStore } from '@/stores/views'
 import { czyWidokDozwolony } from '@/utils/widokiDozwolone'
@@ -154,10 +161,13 @@ if (!dozwolonePola.data?.length && !dozwolonePola.loading) {
 const typyWidoku = [
   { key: 'list', label: __('List'), icon: markRaw(ListIcon) },
   { key: 'mapa', label: __('Mapa'), icon: markRaw(MapaIcon) },
+  { key: 'kalendarz', label: __('Kalendarz'), icon: markRaw(KalendarzIcon) },
 ]
 
 const aktywnyTyp = computed(() =>
-  route.params.viewType === 'mapa' ? 'mapa' : 'list',
+  ['mapa', 'kalendarz'].includes(route.params.viewType)
+    ? route.params.viewType
+    : 'list',
 )
 
 // Oba tryby maja sens tylko dla Lista/Mapa - na Kanban i Grupuj wg znikaja
@@ -165,6 +175,9 @@ const aktywnyTyp = computed(() =>
 const pokazPasek = computed(
   () => !['kanban', 'group_by'].includes(route.params.viewType),
 )
+
+// Kalendarz (ops#318) nie używa filtrów listy: rząd zapisanych filtrów znika.
+const czyKalendarz = computed(() => route.params.viewType === 'kalendarz')
 
 function wybierzTyp(viewType) {
   router.push({
