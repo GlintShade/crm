@@ -1,120 +1,154 @@
 <!--
-  Karta handlowca (kalendarz spotkań, ops#318, układ E): nagłówek z awatarem,
-  wiersze dni z poziomą osią godzin i paskami spotkań. Czysta prezentacja:
+  Karta handlowca (kalendarz spotkań, ops#318): nagłówek, oś godzin i osobna
+  zaokrąglona ścieżka na każdy dzień z paskami spotkań. Czysta prezentacja:
   pozycje i daty liczy utils/kalendarz.js, dane i zapis żyją w Kalendarz.vue.
-  Prop `duzy` = ta sama karta na całą szerokość, większa czcionka.
+  Prop `duzy` = karta na całą szerokość (ścieżki 36 px), domyślnie kompakt
+  tablicy (ścieżki 24 px). Prop `os` = wspólna oś godzin całej tablicy.
 -->
 <template>
   <div
-    class="overflow-hidden rounded-lg border border-outline-gray-2 bg-surface-base"
+    class="rounded-xl border border-outline-gray-2 bg-surface-base p-4"
     :class="duzy ? 'text-sm' : 'text-xs'"
   >
     <NaglowekKarty
       :handlowiec="handlowiec"
       :kolor="kolor"
       :etykieta-zakresu="etykietaZakresu"
-      :umowione="umowione"
-      :duzy="duzy"
+      :chip="chip"
       @przesun="(k) => $emit('przesun', k)"
     />
 
-    <div
-      class="flex items-stretch border-b border-outline-gray-1 bg-surface-gray-1"
-    >
-      <div class="shrink-0" :class="duzy ? 'w-24' : 'w-16'"></div>
-      <div class="relative h-6 flex-1">
+    <div class="mt-4 flex items-end border-b border-outline-gray-2 pb-1.5">
+      <div
+        class="shrink-0 text-xs uppercase tracking-wide text-ink-gray-5"
+        :style="{ width: wymiary.kolumnaDniPx + 'px' }"
+      >
+        {{ __('Dzień') }}
+      </div>
+      <div class="relative h-4 flex-1">
         <span
-          v-for="g in godziny.slice(0, -1)"
+          v-for="g in etykietyGodzin"
           :key="g"
-          class="absolute top-1 -translate-x-0 pl-1 text-ink-gray-5"
-          :style="{ left: pozycjaGodziny(g) }"
+          class="absolute top-0 -translate-x-1/2 text-xs tabular-nums text-ink-gray-5"
+          :style="{ left: pozycjaGodzinyPct(g, os.od, os.do) + '%' }"
         >
           {{ String(g).padStart(2, '0') }}
         </span>
       </div>
     </div>
 
-    <div>
+    <div
+      class="relative mt-2 flex flex-col"
+      :style="{ gap: wymiary.odstepPx + 'px' }"
+    >
       <div
         v-for="dzien in dni"
         :key="dzien"
-        class="flex items-stretch border-b border-outline-gray-1 last:border-b-0"
-        :class="[
-          czyWeekend(dzien) ? 'bg-surface-gray-1' : '',
-          czyDzis(dzien, teraz) ? 'bg-surface-blue-1' : '',
-        ]"
+        class="flex items-center"
+        :style="{ height: wymiary.sciezkaPx + 'px' }"
       >
         <div
-          class="flex shrink-0 items-center px-2"
-          :class="[
-            duzy ? 'w-24' : 'w-16',
-            czyDzis(dzien, teraz)
-              ? 'font-semibold text-ink-blue-8'
-              : czyWeekend(dzien)
-                ? 'text-ink-gray-4'
-                : 'text-ink-gray-7',
-          ]"
+          class="flex shrink-0 items-center gap-1.5"
+          :style="{ width: wymiary.kolumnaDniPx + 'px' }"
         >
-          {{ etykietaDniaKrotka(dzien) }}
+          <span
+            class="font-semibold"
+            :class="[
+              duzy ? 'text-sm' : 'text-xs',
+              czyDzis(dzien, teraz)
+                ? 'text-ink-blue-8'
+                : czyWeekend(dzien)
+                  ? 'text-ink-gray-4'
+                  : 'text-ink-gray-8',
+            ]"
+          >
+            {{ skrotDnia(dzien) }}
+          </span>
+          <span
+            v-if="czyDzis(dzien, teraz)"
+            class="flex h-5 min-w-5 items-center justify-center rounded-full bg-surface-blue-6 px-1 text-xs font-semibold text-white"
+          >
+            {{ numerDnia(dzien) }}
+          </span>
+          <span v-else class="text-ink-gray-5">{{ numerDnia(dzien) }}</span>
         </div>
         <div
-          class="relative flex-1 cursor-pointer"
-          :class="duzy ? 'h-12' : 'h-9'"
+          class="relative h-full min-w-0 flex-1 cursor-pointer"
           :data-dzien="dzien"
           @click="klikPuste($event, dzien)"
         >
-          <span
-            v-for="g in godziny"
-            :key="g"
-            class="pointer-events-none absolute bottom-0 top-0 border-l border-outline-gray-1"
-            :style="{ left: pozycjaGodziny(g) }"
-          ></span>
-          <button
+          <div
+            class="absolute inset-0 rounded-md"
+            :class="[
+              czyDzis(dzien, teraz) ? 'bg-surface-blue-1' : 'bg-surface-gray-1',
+              czyWeekend(dzien) ? 'opacity-50' : '',
+            ]"
+          ></div>
+          <DymekSpotkania
             v-for="s in poDniach[dzien] || []"
             :key="s.name"
-            type="button"
-            class="absolute bottom-1 top-1 overflow-hidden rounded px-1.5 text-left font-medium leading-tight text-white"
-            :class="[
-              kolor.pelny,
-              czyUmowiony(s.status) ? '' : 'opacity-[0.65]',
-            ]"
-            :style="stylPaska(s)"
-            :title="opisSpotkania(s)"
-            :data-lead="s.name"
-            @click.stop="$emit('otworz', s.name)"
+            :spotkanie="s"
           >
-            <span class="block truncate">{{ s.lead_name }}</span>
-          </button>
+            <button
+              type="button"
+              class="absolute bottom-0.5 top-0.5 z-[2] overflow-hidden whitespace-nowrap rounded-md px-2 text-left text-xs font-medium text-white"
+              :class="[
+                kolor.pelny,
+                czyUmowiony(s.status) ? '' : 'opacity-[0.7]',
+              ]"
+              :style="stylPaskaPoziomo(s.termin, os.od, os.do)"
+              :data-lead="s.name"
+              @click.stop="$emit('otworz', s.name)"
+            >
+              <span class="block truncate">{{ nazwisko(s.lead_name) }}</span>
+            </button>
+          </DymekSpotkania>
           <span
             v-if="znacznikTeraz(dzien) !== null"
-            class="pointer-events-none absolute bottom-0 top-0 w-px bg-surface-red-4"
+            class="pointer-events-none absolute bottom-0 top-0 z-[3] w-0.5 -translate-x-1/2 rounded bg-surface-red-5"
             :style="{ left: znacznikTeraz(dzien) + '%' }"
+            data-testid="kalendarz-teraz"
           ></span>
         </div>
+      </div>
+      <div
+        class="pointer-events-none absolute inset-y-0 right-0 z-[1]"
+        :style="{ left: wymiary.kolumnaDniPx + 'px' }"
+      >
+        <span
+          v-for="g in liniePionowe(os.od, os.do)"
+          :key="g"
+          class="absolute bottom-0 top-0 border-l border-dashed border-outline-gray-2"
+          :style="{ left: pozycjaGodzinyPct(g, os.od, os.do) + '%' }"
+        ></span>
       </div>
     </div>
 
     <div
-      class="flex items-center gap-4 border-t border-outline-gray-2 px-3 py-2 text-ink-gray-5"
+      class="mt-3 flex items-center justify-between gap-3 whitespace-nowrap border-t border-outline-gray-2 pt-3 text-ink-gray-6"
+      :class="duzy ? 'text-sm' : 'text-xs'"
     >
-      <span class="flex items-center gap-1.5"
-        ><span class="h-2.5 w-2.5 rounded-sm" :class="kolor.pelny"></span
-        >{{ __('Umówiony') }}</span
-      >
-      <span class="flex items-center gap-1.5"
-        ><span
-          class="h-2.5 w-2.5 rounded-sm opacity-[0.65]"
-          :class="kolor.pelny"
-        ></span
-        >{{ __('Do potwierdzenia') }}</span
-      >
-      <span class="flex items-center gap-1.5"
-        ><span class="h-3 w-px bg-surface-red-4"></span>{{ __('Teraz') }}</span
-      >
-      <span class="ml-auto"
-        >{{ String(os.od).padStart(2, '0') }}:00 {{ __('do') }}
-        {{ String(os.do).padStart(2, '0') }}:00</span
-      >
+      <div class="flex items-center gap-3">
+        <span class="flex items-center gap-1.5">
+          <span class="h-2 w-2 rounded-full" :class="kolor.pelny"></span
+          >{{ __('Umówiony') }}
+        </span>
+        <span class="flex items-center gap-1.5">
+          <span
+            class="h-2 w-2 rounded-full opacity-[0.7]"
+            :class="kolor.pelny"
+          ></span
+          >{{ __('Do potwierdzenia') }}
+        </span>
+        <span class="flex items-center gap-1.5">
+          <span class="h-2 w-2 rounded-full bg-surface-red-5"></span
+          >{{ __('Teraz') }}
+        </span>
+      </div>
+      <span class="hidden sm:inline">
+        {{ String(os.od).padStart(2, '0') }}:00 {{ __('do') }}
+        {{ String(os.do).padStart(2, '0') }}:00
+      </span>
     </div>
   </div>
 </template>
@@ -122,21 +156,26 @@
 <script setup>
 import { computed } from 'vue'
 import NaglowekKarty from '@/components/kalendarz/NaglowekKarty.vue'
+import DymekSpotkania from '@/components/kalendarz/DymekSpotkania.vue'
 import {
   czyDzis,
   czyUmowiony,
   czyWeekend,
-  etykietaDniaKrotka,
+  etykietaChipa,
   etykietaZakresu as zbudujEtykieteZakresu,
   godzinaZKlikniecia,
-  godzinyOsi,
+  godzinyEtykiet,
   kolorHandlowca,
-  liczbaUmowionych,
-  opisSpotkania,
+  liniePionowe,
+  nazwisko,
+  numerDnia,
   osGodzin,
   pogrupujPoDniach,
-  pozycjaPaska,
+  pozycjaGodzinyPct,
   pozycjaTeraz,
+  skrotDnia,
+  stylPaskaPoziomo,
+  wymiaryTorow,
 } from '@/utils/kalendarz'
 
 const props = defineProps({
@@ -146,29 +185,27 @@ const props = defineProps({
   dni: { type: Array, required: true },
   teraz: { type: Date, default: () => new Date() },
   duzy: { type: Boolean, default: false },
+  // Wspólna oś godzin tablicy ({ od, do }); bez niej oś liczona z własnych spotkań.
+  osZewnetrzna: { type: Object, default: null },
 })
 
 const emit = defineEmits(['otworz', 'nowe', 'przesun'])
 
 const kolor = computed(() => kolorHandlowca(props.kolorIndex))
-const os = computed(() => osGodzin(props.spotkania))
-const godziny = computed(() => godzinyOsi(os.value.od, os.value.do))
+const os = computed(() => props.osZewnetrzna || osGodzin(props.spotkania))
+const wymiary = computed(() => wymiaryTorow(props.duzy))
+const etykietyGodzin = computed(() =>
+  godzinyEtykiet(os.value.od, os.value.do, props.duzy ? 1 : 2),
+)
 const poDniach = computed(() => pogrupujPoDniach(props.spotkania))
-const umowione = computed(() => liczbaUmowionych(props.spotkania))
+const chip = computed(() =>
+  etykietaChipa(props.spotkania, props.dni.length === 1 ? 'dzien' : 'tydzien'),
+)
 const etykietaZakresu = computed(() =>
   props.dni.length
     ? zbudujEtykieteZakresu(props.dni[0], props.dni[props.dni.length - 1])
     : '',
 )
-
-function pozycjaGodziny(g) {
-  return ((g - os.value.od) / (os.value.do - os.value.od)) * 100 + '%'
-}
-
-function stylPaska(s) {
-  const p = pozycjaPaska(s.termin, os.value.od, os.value.do)
-  return { left: p.leftPct + '%', width: p.widthPct + '%' }
-}
 
 function znacznikTeraz(dzien) {
   if (!czyDzis(dzien, props.teraz)) return null
@@ -176,8 +213,7 @@ function znacznikTeraz(dzien) {
 }
 
 function klikPuste(event, dzien) {
-  const cel = event.currentTarget
-  const prostokat = cel.getBoundingClientRect()
+  const prostokat = event.currentTarget.getBoundingClientRect()
   if (!prostokat.width) return
   const xPct = ((event.clientX - prostokat.left) / prostokat.width) * 100
   emit('nowe', {

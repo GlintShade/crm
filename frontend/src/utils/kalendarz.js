@@ -130,7 +130,7 @@ export function przesunKotwice(dataIso, widok, kierunek) {
   return dodajDni(dataIso, (widok === 'dzien' ? 1 : 7) * kierunek)
 }
 
-function skrotDnia(d) {
+function dzienMiesiacSkrot(d) {
   return `${d.dzien} ${MIESIACE_SKROT[d.miesiac - 1]}`
 }
 
@@ -139,8 +139,8 @@ export function etykietaZakresu(od, doDnia) {
   const a = rozbierzDate(od)
   const b = rozbierzDate(doDnia)
   if (!a || !b) return ''
-  if (a.rok === b.rok) return `${skrotDnia(a)} do ${skrotDnia(b)} ${b.rok}`
-  return `${skrotDnia(a)} ${a.rok} do ${skrotDnia(b)} ${b.rok}`
+  if (a.rok === b.rok) return `${dzienMiesiacSkrot(a)} do ${dzienMiesiacSkrot(b)} ${b.rok}`
+  return `${dzienMiesiacSkrot(a)} ${a.rok} do ${dzienMiesiacSkrot(b)} ${b.rok}`
 }
 
 /** "poniedziałek, 2 lis 2026". */
@@ -149,7 +149,7 @@ export function etykietaDnia(dataIso) {
   if (!d) return ''
   const dzienTygodnia =
     DNI_PELNE[new Date(d.rok, d.miesiac - 1, d.dzien).getDay()]
-  return `${dzienTygodnia}, ${skrotDnia(d)} ${d.rok}`
+  return `${dzienTygodnia}, ${dzienMiesiacSkrot(d)} ${d.rok}`
 }
 
 /** "pon. 2" do etykiety wiersza/kolumny dnia. */
@@ -456,4 +456,138 @@ export function wczytajStan(surowy, zakres) {
       ? dane.filtr.filter((x) => typeof x === 'string')
       : [],
   }
+}
+
+// ---------------------------------------------------------------------------
+// Runda UI (ops#318): wspólna oś, ścieżki dni, linie, etykiety, dymek.
+// ---------------------------------------------------------------------------
+
+export const MIN_SZEROKOSC_PASKA_PX = 44
+export const WYSOKOSC_NAGLOWKA_DNI_PX = 32
+
+/** Wymiary ścieżek dni w karcie poziomej: pełna (`duzy`) albo kompaktowa (tablica). */
+export function wymiaryTorow(duzy) {
+  return duzy
+    ? { sciezkaPx: 36, odstepPx: 8, kolumnaDniPx: 64 }
+    : { sciezkaPx: 24, odstepPx: 6, kolumnaDniPx: 64 }
+}
+
+/** Nazwisko klienta = ostatni człon `lead_name`; '' dla pustego. */
+export function nazwisko(leadName) {
+  const slowa = String(leadName || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+  return slowa.length ? slowa[slowa.length - 1] : ''
+}
+
+/** Skrót dnia tygodnia bez kropki ("pon"). */
+export function skrotDnia(dataIso) {
+  const d = rozbierzDate(dataIso)
+  if (!d) return ''
+  return DNI_TYGODNIA_SKROT[
+    new Date(d.rok, d.miesiac - 1, d.dzien).getDay()
+  ].replace('.', '')
+}
+
+/** Numer dnia miesiąca ("2"); '' dla niepoprawnej daty. */
+export function numerDnia(dataIso) {
+  const d = rozbierzDate(dataIso)
+  return d ? String(d.dzien) : ''
+}
+
+/**
+ * Wspólna oś godzin dla wielu list spotkań (tablica): zakres 8 do 18 rozszerzony
+ * o spotkania WSZYSTKICH podanych handlowców, żeby karty obok siebie miały te
+ * same kolumny. `mapa` = { user: [spotkania] }, `uzytkownicy` = widoczni.
+ */
+export function osWspolna(mapa, uzytkownicy, od = OS_OD, doGodziny = OS_DO) {
+  const wszystkie = []
+  for (const u of uzytkownicy || [])
+    wszystkie.push(...((mapa && mapa[u]) || []))
+  return osGodzin(wszystkie, od, doGodziny)
+}
+
+/**
+ * Chip liczby spotkań w nagłówku karty: "3 umówione", "3 umówione, 1 do
+ * potwierdzenia", a bez spotkań "wolny cały tydzień" (wolny=true, szary chip).
+ */
+export function etykietaChipa(spotkania, okres = 'tydzien') {
+  const lista = spotkania || []
+  if (!lista.length) {
+    return {
+      tekst: okres === 'dzien' ? 'wolny cały dzień' : 'wolny cały tydzień',
+      wolny: true,
+    }
+  }
+  const umowione = liczbaUmowionych(lista)
+  const reszta = lista.length - umowione
+  const tekst = reszta
+    ? `${etykietaUmowionych(umowione)}, ${reszta} do potwierdzenia`
+    : etykietaUmowionych(umowione)
+  return { tekst, wolny: false }
+}
+
+/** Pozycja godziny `g` na osi `od..do` w % szerokości (do centrowania etykiet i linii). */
+export function pozycjaGodzinyPct(g, od, doGodziny) {
+  if (doGodziny <= od) return 0
+  return ((g - od) / (doGodziny - od)) * 100
+}
+
+/**
+ * Godziny z etykietą nad osią poziomą: co `krok` godzin od `od`, zawsze z
+ * ostatnią godziną osi (`do`), bez duplikatu.
+ */
+export function godzinyEtykiet(od, doGodziny, krok = 1) {
+  const wynik = []
+  for (let g = od; g <= doGodziny; g += krok) wynik.push(g)
+  if (wynik[wynik.length - 1] !== doGodziny && doGodziny > od)
+    wynik.push(doGodziny)
+  return wynik
+}
+
+/** Linie pionowe poziomej karty: co `krok` godzin, tylko wewnątrz osi (bez krawędzi). */
+export function liniePionowe(od, doGodziny, krok = 2) {
+  const wynik = []
+  for (let g = od + krok; g < doGodziny; g += krok) wynik.push(g)
+  return wynik
+}
+
+/**
+ * Styl paska poziomego: początek i szerokość w % z minimalną szerokością
+ * `minPx`; `left` ograniczony tak, by pasek z minimalną szerokością nie wyszedł
+ * poza prawy brzeg ścieżki.
+ */
+export function stylPaskaPoziomo(
+  termin,
+  od,
+  doGodziny,
+  minPx = MIN_SZEROKOSC_PASKA_PX,
+) {
+  const p = pozycjaPaska(termin, od, doGodziny)
+  return {
+    left: `min(${p.leftPct}%, calc(100% - ${minPx}px))`,
+    width: `${p.widthPct}%`,
+    minWidth: `${minPx}px`,
+  }
+}
+
+/** Pozycja bloku w widoku pionowym w pikselach, w układzie współrzędnych siatki godzin. */
+export const pozycjaBlokuPx = pozycjaBlokuPion
+
+/** Wysokość siatki godzin w widoku pionowym (px); nagłówek dni NIE jest jej częścią. */
+export function wysokoscSiatkiPion(od, doGodziny, pxNaH) {
+  return Math.max(0, (doGodziny - od) * pxNaH)
+}
+
+/** Trzy linie dymka: czas i data, klient i miasto, status i telefon. */
+export function opisDymka(s) {
+  const godzina = godzinaTekst(s.termin)
+  const dzien = dataTerminu(s.termin)
+  const linia1 = [godzina, dzien ? etykietaDnia(dzien).replace(', ', ' ') : '']
+    .filter(Boolean)
+    .join(', ')
+  const linia2 = [s.lead_name, s.miasto].filter(Boolean).join(', ')
+  const linia3 = [s.status, s.telefon].filter(Boolean).join(', ')
+  return { linia1, linia2, linia3 }
 }

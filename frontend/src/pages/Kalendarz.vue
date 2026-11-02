@@ -67,32 +67,33 @@
         <span class="text-sm text-ink-gray-7">{{ etykieta }}</span>
         <PrzelacznikSegmentowy v-model="stan.widok" :options="OPCJE_WIDOKU" />
       </div>
-      <div v-if="zakres" class="mb-4 flex flex-wrap items-end gap-3">
+      <div v-if="zakres" class="mb-4 flex flex-wrap items-center gap-2">
         <PrzelacznikSegmentowy
           v-if="zakres === 'wszyscy'"
           v-model="stan.tryb"
           :options="OPCJE_TRYBU"
         />
-        <template v-if="zakres === 'wszyscy' && stan.tryb === 'jeden'">
-          <div class="w-56">
-            <FormControl
-              type="select"
-              :model-value="wybranyHandlowiec"
-              :options="opcjeHandlowcow"
-              @update:model-value="(v) => (stan.handlowiec = v)"
-            />
-          </div>
-        </template>
         <PrzelacznikSegmentowy
           v-model="stan.orientacja"
           :options="OPCJE_ORIENTACJI"
         />
+        <div
+          v-if="zakres === 'wszyscy' && stan.tryb === 'jeden'"
+          class="w-56 text-sm"
+        >
+          <FormControl
+            type="select"
+            :model-value="wybranyHandlowiec"
+            :options="opcjeHandlowcow"
+            @update:model-value="(v) => (stan.handlowiec = v)"
+          />
+        </div>
         <MultiWyborProsty
           v-if="zakres === 'wszyscy' && stan.tryb === 'tablica'"
           v-model="stan.filtr"
           :options="opcjeHandlowcow"
           :pusty="__('Wszyscy handlowcy')"
-          class="w-56"
+          class="w-56 text-sm"
         />
       </div>
 
@@ -115,7 +116,7 @@
         <!-- Tablica: siatka kart -->
         <div
           v-else-if="zakres === 'wszyscy' && stan.tryb === 'tablica'"
-          class="grid grid-cols-1 gap-4 lg:grid-cols-2"
+          class="grid grid-cols-1 items-start gap-4 lg:grid-cols-2"
           data-testid="kalendarz-tablica"
         >
           <template v-for="h in widoczni" :key="h.user">
@@ -126,6 +127,7 @@
               :spotkania="spotkania[h.user] || []"
               :dni="dni"
               :teraz="teraz"
+              :os-zewnetrzna="osTablicy"
               @otworz="otworzLeada"
               @nowe="otworzModal"
               @przesun="przesun"
@@ -139,6 +141,7 @@
               :teraz="teraz"
               kompakt
               naglowek
+              :os-zewnetrzna="osTablicy"
               @otworz="otworzLeada"
               @nowe="otworzModal"
               @przesun="przesun"
@@ -211,6 +214,7 @@ import {
   etykietaDnia,
   etykietaZakresu,
   kluczStanu,
+  osWspolna,
   przesunKotwice,
   wczytajStan,
   zakresWidoku,
@@ -281,6 +285,15 @@ const widoczni = computed(() => {
   if (!stan.filtr.length) return handlowcy.value
   return handlowcy.value.filter((h) => stan.filtr.includes(h.user))
 })
+
+// Wspólna oś godzin kart tablicy (spotkania wszystkich widocznych handlowców),
+// żeby karty obok siebie miały te same kolumny godzin.
+const osTablicy = computed(() =>
+  osWspolna(
+    spotkania.value,
+    widoczni.value.map((h) => h.user),
+  ),
+)
 
 function indeksKoloru(userName) {
   return Math.max(

@@ -1,6 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import {
   LICZBA_KOLOROW,
+  MIN_SZEROKOSC_PASKA_PX,
+  WYSOKOSC_NAGLOWKA_DNI_PX,
+  etykietaChipa,
+  godzinyEtykiet,
+  liniePionowe,
+  nazwisko,
+  numerDnia,
+  opisDymka,
+  osWspolna,
+  pozycjaBlokuPx,
+  pozycjaGodzinyPct,
+  skrotDnia,
+  stylPaskaPoziomo,
+  wymiaryTorow,
+  wysokoscSiatkiPion,
   czyDzis,
   czyUmowiony,
   czyWeekend,
@@ -444,5 +459,110 @@ describe('stan w localStorage', () => {
       handlowiec: '',
       filtr: [],
     })
+  })
+})
+
+describe('runda UI: oś wspólna, ścieżki, etykiety, dymek', () => {
+  it('osWspolna rozszerza oś o spotkania wszystkich handlowców', () => {
+    const mapa = {
+      a: [sp('2026-11-02 10:00:00')],
+      b: [sp('2026-11-02 06:30:00')],
+      c: [sp('2026-11-02 18:00:00')],
+    }
+    expect(osWspolna(mapa, ['a'])).toEqual({ od: 8, do: 18 })
+    expect(osWspolna(mapa, ['a', 'b'])).toEqual({ od: 6, do: 18 })
+    expect(osWspolna(mapa, ['a', 'b', 'c'])).toEqual({ od: 6, do: 20 })
+    expect(osWspolna(mapa, [])).toEqual({ od: 8, do: 18 })
+    expect(osWspolna(null, ['x'])).toEqual({ od: 8, do: 18 })
+  })
+
+  it('etykietaChipa: wolny, umówione i do potwierdzenia', () => {
+    expect(etykietaChipa([])).toEqual({
+      tekst: 'wolny cały tydzień',
+      wolny: true,
+    })
+    expect(etykietaChipa([], 'dzien')).toEqual({
+      tekst: 'wolny cały dzień',
+      wolny: true,
+    })
+    expect(etykietaChipa([sp('a'), sp('b'), sp('c')])).toEqual({
+      tekst: '3 umówione',
+      wolny: false,
+    })
+    expect(etykietaChipa([sp('a'), sp('b', { status: 'Nowy' })]).tekst).toBe(
+      '1 umówione, 1 do potwierdzenia',
+    )
+    expect(etykietaChipa([sp('a', { status: 'Nowy' })]).tekst).toBe(
+      '0 umówionych, 1 do potwierdzenia',
+    )
+  })
+
+  it('wymiaryTorow: duży 36/8, kompakt 24/6, kolumna dni 64', () => {
+    expect(wymiaryTorow(true)).toEqual({
+      sciezkaPx: 36,
+      odstepPx: 8,
+      kolumnaDniPx: 64,
+    })
+    expect(wymiaryTorow(false)).toEqual({
+      sciezkaPx: 24,
+      odstepPx: 6,
+      kolumnaDniPx: 64,
+    })
+  })
+
+  it('nazwisko to ostatni człon, skrotDnia bez kropki, numerDnia', () => {
+    expect(nazwisko('Jan Maria Kowalski')).toBe('Kowalski')
+    expect(nazwisko('Kowalski')).toBe('Kowalski')
+    expect(nazwisko('')).toBe('')
+    expect(nazwisko(null)).toBe('')
+    expect(skrotDnia('2026-11-02')).toBe('pon')
+    expect(skrotDnia('2026-11-08')).toBe('niedz')
+    expect(skrotDnia('zle')).toBe('')
+    expect(numerDnia('2026-11-02')).toBe('2')
+    expect(numerDnia('zle')).toBe('')
+  })
+
+  it('pozycjaGodzinyPct i etykiety godzin z ostatnią', () => {
+    expect(pozycjaGodzinyPct(8, 8, 18)).toBe(0)
+    expect(pozycjaGodzinyPct(13, 8, 18)).toBe(50)
+    expect(pozycjaGodzinyPct(18, 8, 18)).toBe(100)
+    expect(pozycjaGodzinyPct(8, 8, 8)).toBe(0)
+    expect(godzinyEtykiet(8, 12, 1)).toEqual([8, 9, 10, 11, 12])
+    expect(godzinyEtykiet(8, 18, 2)).toEqual([8, 10, 12, 14, 16, 18])
+    expect(godzinyEtykiet(8, 19, 2)).toEqual([8, 10, 12, 14, 16, 18, 19])
+  })
+
+  it('liniePionowe co 2 godziny, tylko wewnątrz osi', () => {
+    expect(liniePionowe(8, 18)).toEqual([10, 12, 14, 16])
+    expect(liniePionowe(8, 19)).toEqual([10, 12, 14, 16, 18])
+    expect(liniePionowe(8, 9)).toEqual([])
+  })
+
+  it('stylPaskaPoziomo ma minimalną szerokość i nie wychodzi poza prawy brzeg', () => {
+    const st = stylPaskaPoziomo('2026-11-02 17:30:00', 8, 19)
+    expect(st.minWidth).toBe(MIN_SZEROKOSC_PASKA_PX + 'px')
+    expect(st.left).toMatch(/^min\(.*%, calc\(100% - 44px\)\)$/)
+    expect(st.width).toMatch(/%$/)
+    expect(MIN_SZEROKOSC_PASKA_PX).toBe(44)
+  })
+
+  it('wysokoscSiatkiPion nie zawiera nagłówka dni, pozycjaBlokuPx w tym samym układzie', () => {
+    expect(wysokoscSiatkiPion(8, 18, 48)).toBe(480)
+    expect(wysokoscSiatkiPion(8, 18, 30)).toBe(300)
+    expect(WYSOKOSC_NAGLOWKA_DNI_PX).toBe(32)
+    // 10:00 przy osi od 8 i 48 px/h = 96 px od pierwszej linii, bez offsetu nagłówka
+    expect(pozycjaBlokuPx('2026-11-02 10:00:00', 8, 48).topPx).toBe(96)
+    expect(pozycjaBlokuPx('2026-11-02 08:00:00', 8, 48).topPx).toBe(0)
+  })
+
+  it('opisDymka daje trzy linie', () => {
+    const d = opisDymka(sp('2026-11-03 10:00:00', { telefon: '600 100 200' }))
+    expect(d.linia1).toBe('10:00, wtorek 3 lis 2026')
+    expect(d.linia2).toBe('Jan Kowalski, Poznań')
+    expect(d.linia3).toBe('Umówiony, 600 100 200')
+    expect(opisDymka(sp('2026-11-03 10:00:00', { miasto: null })).linia2).toBe(
+      'Jan Kowalski',
+    )
+    expect(opisDymka({ termin: 'zle' }).linia1).toBe('')
   })
 })
