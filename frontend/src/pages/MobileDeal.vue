@@ -207,6 +207,9 @@
           </div>
         </div>
         <ZestawTab v-else-if="tab.name === 'Zestaw'" :deal-id="dealId" />
+        <UmowaTab v-else-if="tab.name === 'Umowa'" :deal-id="dealId" :rodzaj="doc.custom_rodzaj_umowy || ''" />
+        <UmowaCPTab v-else-if="tab.name === 'UmowaCP'" :deal-id="dealId" />
+        <KredytTab v-else-if="tab.name === 'Kredyt'" :deal-id="dealId" />
         <FakturyTab v-else-if="tab.name === 'Faktury'" :deal-id="dealId" />
         <MontazTabOze v-else-if="tab.name === 'Montaz' && czyOze(doc.custom_rodzaj_umowy)" :deal-id="dealId" />
         <AktualizacjeTab v-else-if="tab.name === 'Montaz'" :deal-id="dealId" :konfig="MONTAZ" />
@@ -291,6 +294,8 @@ import ArrowUpRightIcon from '@/components/Icons/ArrowUpRightIcon.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import Activities from '@/components/Activities/Activities.vue'
 import ZestawIcon from '@/components/Icons/ZestawIcon.vue'
+import UmowaIcon from '@/components/Icons/UmowaIcon.vue'
+import KredytIcon from '@/components/Icons/KredytIcon.vue'
 import FakturyIcon from '@/components/Icons/FakturyIcon.vue'
 import MontazIcon from '@/components/Icons/MontazIcon.vue'
 import AudytIcon from '@/components/Icons/AudytIcon.vue'
@@ -298,6 +303,9 @@ import TrifyIcon from '@/components/Icons/TrifyIcon.vue'
 import OsdIcon from '@/components/Icons/OsdIcon.vue'
 import DotacjaIcon from '@/components/Icons/DotacjaIcon.vue'
 import ZestawTab from '@/components/deal/ZestawTab.vue'
+import UmowaTab from '@/components/deal/UmowaTab.vue'
+import UmowaCPTab from '@/components/deal/UmowaCPTab.vue'
+import KredytTab from '@/components/deal/KredytTab.vue'
 import FakturyTab from '@/components/deal/FakturyTab.vue'
 import AktualizacjeTab from '@/components/deal/AktualizacjeTab.vue'
 import MontazTabOze from '@/components/deal/MontazTabOze.vue'
@@ -496,11 +504,11 @@ usePageMeta(() => {
 // desktop set: Pliki reuses Attachments, Historia reuses Activity (native `name`,
 // Polish `label`); Zestaw/Faktury/Montaż/Audyt/Trify are custom panels.
 // Order follows the sales process, owner decision 2026-09-28: OZE is Dane,
-// Zestaw, Audyt, Montaż, OSD, Dotacja, Faktury, Notatki, Pliki, Historia;
-// Czyste Powietrze is Dane, Zestaw, Trify, Audyt, Montaż, Faktury, Pliki,
-// Historia (mobile has no Kredyt tab; a single tabOptions order below yields
-// both, since each conditional entry simply drops out of the filtered
-// list).
+// Zestaw, Umowa, Kredyt, Audyt, Montaż, OSD, Dotacja, Faktury, Notatki, Pliki,
+// Historia; Czyste Powietrze is Dane, Zestaw, Umowa, Trify, Audyt, Montaż,
+// Faktury, Pliki, Historia (same order as desktop Deal.vue since 2026-11-02;
+// a single tabOptions order below yields both, since each conditional entry
+// simply drops out of the filtered list).
 const tabs = computed(() => {
   // Jedno wyliczenie zakladkiSzansy() per przebudowa listy zakladek, tak
   // samo jak Deal.vue - OSD i Dotacja nizej roznia sie od siebie od b68
@@ -516,9 +524,30 @@ const tabs = computed(() => {
     },
     { name: 'Zestaw', label: __('Zestaw'), icon: ZestawIcon },
     {
+      name: 'Umowa',
+      label: __('Umowa'),
+      icon: UmowaIcon,
+      // zakladki.umowaOze jest fail-open dla rodzaju pustego/nierozpoznanego
+      // (tylko Czyste Powietrze daje false), jak w Deal.vue.
+      condition: () => zakladki.umowaOze,
+    },
+    {
+      // Mała umowa CP o obsłudze dofinansowania (UmowaCPTab) - wyklucza się
+      // z 'Umowa' powyżej, jak w Deal.vue (ops#212).
+      name: 'UmowaCP',
+      label: __('Umowa'),
+      icon: UmowaIcon,
+      condition: () => doc.value?.custom_rodzaj_umowy === 'Czyste Powietrze',
+    },
+    {
+      name: 'Kredyt',
+      label: __('Kredyt'),
+      icon: KredytIcon,
+      condition: () => zakladki.kredyt,
+    },
+    {
       // Strumień wpisów o finansowaniu Trify, tylko Czyste Powietrze (pozytywna
-      // równość jak AudytCP). Dla linii OZE odpowiednikiem jest zakładka Kredyt
-      // (nieobecna na mobile).
+      // równość jak AudytCP). Dla linii OZE odpowiednikiem jest zakładka Kredyt.
       name: 'Trify', label: __('Trify'), icon: TrifyIcon,
       condition: () => doc.value?.custom_rodzaj_umowy === 'Czyste Powietrze',
     },
@@ -562,8 +591,7 @@ const tabs = computed(() => {
       // Feed "Notatki" (issue ops#201, uwaga 40): strumień łączący notatki
       // z każdej zakładki z komentarzami wątku Audytu. Faza 1 = tylko OZE
       // (`czyOze`, lustro OZE_RODZAJE z Deal.vue/crm.volteo_pipeline.py) -
-      // Kredyt nie istnieje na tej stronie, więc bez wzoru "condition jak
-      // Kredyt" dosłownie, ale sama reguła OZE jest identyczna.
+      // Ta sama reguła OZE co w Deal.vue.
       name: 'Notatki',
       label: __('Notatki'),
       icon: NoteIcon,
