@@ -254,19 +254,18 @@ describe('oś godzin i pozycje', () => {
 
   it('pozycjaBlokuPion', () => {
     expect(pozycjaBlokuPion('2026-11-02 10:30:00')).toEqual({
-      topPx: 2.5 * 40,
-      heightPx: 60,
+      topPx: 2.5 * 36,
+      heightPx: 54,
     })
     expect(pozycjaBlokuPion('zle')).toEqual({ topPx: 0, heightPx: 0 })
   })
 
   it('skalaPionowa: pełna i kompaktowa', () => {
-    expect(skalaPionowa(false)).toBe(40)
+    expect(skalaPionowa(false)).toBe(36)
     // 14 godzin osi 8 do 22 mieści się bez przewijania na 900 px wysokości
-    expect(14 * skalaPionowa(false)).toBeLessThan(700)
+    expect(14 * skalaPionowa(false)).toBeLessThan(600)
     expect(skalaPionowa(true)).toBe(PX_NA_GODZINE_KOMPAKT)
-    expect(PX_NA_GODZINE_KOMPAKT).toBeGreaterThanOrEqual(28)
-    expect(PX_NA_GODZINE_KOMPAKT).toBeLessThanOrEqual(32)
+    expect(PX_NA_GODZINE_KOMPAKT).toBe(27)
   })
 
   it('pozycjaBlokuPion i klik w skali kompaktowej', () => {
@@ -314,8 +313,8 @@ describe('kliknięcia', () => {
 
   it('godzinaZKliknieciaPion', () => {
     expect(godzinaZKliknieciaPion(0)).toBe('08:00')
-    expect(godzinaZKliknieciaPion(40)).toBe('09:00')
-    expect(godzinaZKliknieciaPion(40 * 1.5)).toBe('09:30')
+    expect(godzinaZKliknieciaPion(36)).toBe('09:00')
+    expect(godzinaZKliknieciaPion(36 * 1.5)).toBe('09:30')
     expect(godzinaZKliknieciaPion(9999)).toBe('21:30')
   })
 
@@ -520,16 +519,16 @@ describe('runda UI: oś wspólna, ścieżki, etykiety, dymek', () => {
     ).not.toMatch(/potwierdzenia/)
   })
 
-  it('wymiaryTorow: duży 36/8, kompakt 24/6, kolumna dni 64', () => {
+  it('wymiaryTorow: duży 32/7, kompakt 22/5, kolumna dni 58', () => {
     expect(wymiaryTorow(true)).toEqual({
-      sciezkaPx: 36,
-      odstepPx: 8,
-      kolumnaDniPx: 64,
+      sciezkaPx: 32,
+      odstepPx: 7,
+      kolumnaDniPx: 58,
     })
     expect(wymiaryTorow(false)).toEqual({
-      sciezkaPx: 24,
-      odstepPx: 6,
-      kolumnaDniPx: 64,
+      sciezkaPx: 22,
+      odstepPx: 5,
+      kolumnaDniPx: 58,
     })
   })
 
@@ -572,7 +571,7 @@ describe('runda UI: oś wspólna, ścieżki, etykiety, dymek', () => {
   it('wysokoscSiatkiPion nie zawiera nagłówka dni, pozycjaBlokuPx w tym samym układzie', () => {
     expect(wysokoscSiatkiPion(8, 18, 48)).toBe(480)
     expect(wysokoscSiatkiPion(8, 18, 30)).toBe(300)
-    expect(WYSOKOSC_NAGLOWKA_DNI_PX).toBe(32)
+    expect(WYSOKOSC_NAGLOWKA_DNI_PX).toBe(28)
     // 10:00 przy osi od 8 i 48 px/h = 96 px od pierwszej linii, bez offsetu nagłówka
     expect(pozycjaBlokuPx('2026-11-02 10:00:00', 8, 48).topPx).toBe(96)
     expect(pozycjaBlokuPx('2026-11-02 08:00:00', 8, 48).topPx).toBe(0)

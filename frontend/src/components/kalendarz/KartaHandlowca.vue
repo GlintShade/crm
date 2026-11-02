@@ -7,8 +7,7 @@
 -->
 <template>
   <div
-    class="rounded-xl border border-outline-gray-2 bg-surface-base p-4"
-    :class="duzy ? 'text-sm' : 'text-xs'"
+    class="rounded-xl border border-outline-gray-2 bg-surface-base p-3.5 text-xs"
   >
     <NaglowekKarty
       :handlowiec="handlowiec"
@@ -18,7 +17,7 @@
       @przesun="(k) => $emit('przesun', k)"
     />
 
-    <div class="mt-4 flex items-end border-b border-outline-gray-2 pb-1.5">
+    <div class="mt-3 flex items-end border-b border-outline-gray-2 pb-1.5">
       <div
         class="shrink-0 text-xs uppercase tracking-wide text-ink-gray-5"
         :style="{ width: wymiary.kolumnaDniPx + 'px' }"
@@ -48,13 +47,13 @@
         :style="{ height: wymiary.sciezkaPx + 'px' }"
       >
         <div
-          class="flex shrink-0 items-center gap-1.5"
+          class="flex shrink-0 items-center gap-1"
           :style="{ width: wymiary.kolumnaDniPx + 'px' }"
         >
           <span
             class="font-semibold"
             :class="[
-              duzy ? 'text-sm' : 'text-xs',
+              'text-xs',
               czyDzis(dzien, teraz)
                 ? 'text-ink-blue-8'
                 : czyWeekend(dzien)
@@ -66,7 +65,7 @@
           </span>
           <span
             v-if="czyDzis(dzien, teraz)"
-            class="flex h-5 min-w-5 items-center justify-center rounded-full bg-surface-blue-6 px-1 text-xs font-semibold text-white"
+            class="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-surface-blue-6 px-1 text-[11px] font-semibold text-white"
           >
             {{ numerDnia(dzien) }}
           </span>
@@ -125,8 +124,7 @@
     </div>
 
     <div
-      class="mt-3 flex items-center justify-between gap-3 whitespace-nowrap border-t border-outline-gray-2 pt-3 text-ink-gray-6"
-      :class="duzy ? 'text-sm' : 'text-xs'"
+      class="mt-2.5 flex items-center justify-between gap-3 whitespace-nowrap border-t border-outline-gray-2 pt-2.5 text-xs text-ink-gray-6"
     >
       <div class="flex items-center gap-3">
         <span class="flex items-center gap-1.5">

@@ -9,12 +9,12 @@
 -->
 <template>
   <div
-    class="rounded-xl border border-outline-gray-2 bg-surface-base p-4"
+    class="rounded-xl border border-outline-gray-2 bg-surface-base p-3.5"
     :class="kompakt ? '' : 'overflow-x-auto'"
   >
     <NaglowekKarty
       v-if="naglowek"
-      class="mb-4"
+      class="mb-3"
       :handlowiec="handlowiec"
       :kolor="kolor"
       :etykieta-zakresu="etykietaZakresu"
@@ -33,7 +33,7 @@
           :key="dzien"
           class="flex min-w-0 flex-1 items-center justify-center truncate whitespace-nowrap text-center"
           :class="[
-            kompakt ? 'text-xs' : 'text-sm',
+            'text-xs',
             czyDzis(dzien, teraz)
               ? 'font-semibold text-ink-blue-8'
               : czyWeekend(dzien)
@@ -91,11 +91,11 @@
           >
             <button
               type="button"
-              class="absolute z-[2] overflow-hidden rounded-md text-left text-xs leading-tight text-white"
+              class="absolute z-[2] overflow-hidden rounded-md text-left text-xs leading-[1.15] text-white"
               :class="[
                 kompakt
-                  ? 'left-0.5 right-0.5 px-1 py-0.5'
-                  : 'left-1 right-1 px-2 py-1',
+                  ? 'left-0.5 right-0.5 px-1 py-px'
+                  : 'left-1 right-1 px-1.5 py-0.5',
                 kolor.pelny,
                 czyUmowiony(s.status) ? '' : 'opacity-[0.7]',
               ]"

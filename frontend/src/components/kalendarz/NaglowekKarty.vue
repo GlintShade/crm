@@ -5,21 +5,21 @@
   i KalendarzPionowy (z propem `naglowek`).
 -->
 <template>
-  <div class="flex flex-wrap items-center gap-x-3 gap-y-2 sm:flex-nowrap">
+  <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 sm:flex-nowrap">
     <span
-      class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
+      class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
       :class="kolor.pelny"
     >
       {{ inicjaly(handlowiec.full_name) }}
     </span>
     <div class="min-w-0 flex-1">
-      <div class="truncate text-base font-semibold text-ink-gray-9">
+      <div class="truncate text-sm font-semibold text-ink-gray-9">
         {{ handlowiec.full_name }}
       </div>
-      <div class="truncate text-sm text-ink-gray-5">{{ etykietaZakresu }}</div>
+      <div class="truncate text-xs text-ink-gray-5">{{ etykietaZakresu }}</div>
     </div>
     <span
-      class="order-last shrink-0 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium sm:order-none sm:text-sm"
+      class="order-last shrink-0 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium sm:order-none"
       :class="
         chip.wolny
           ? 'border-outline-gray-2 bg-surface-gray-2 text-ink-gray-6'
@@ -32,19 +32,19 @@
     <div class="flex shrink-0 items-center rounded-lg bg-surface-gray-2 p-0.5">
       <button
         type="button"
-        class="rounded-md p-1.5 text-ink-gray-7 hover:bg-surface-gray-3"
+        class="rounded-md p-1 text-ink-gray-7 hover:bg-surface-gray-3"
         :title="__('Poprzedni')"
         @click="$emit('przesun', -1)"
       >
-        <FeatherIcon name="chevron-left" class="h-4 w-4" />
+        <FeatherIcon name="chevron-left" class="h-3.5 w-3.5" />
       </button>
       <button
         type="button"
-        class="rounded-md p-1.5 text-ink-gray-7 hover:bg-surface-gray-3"
+        class="rounded-md p-1 text-ink-gray-7 hover:bg-surface-gray-3"
         :title="__('Następny')"
         @click="$emit('przesun', 1)"
       >
-        <FeatherIcon name="chevron-right" class="h-4 w-4" />
+        <FeatherIcon name="chevron-right" class="h-3.5 w-3.5" />
       </button>
     </div>
   </div>

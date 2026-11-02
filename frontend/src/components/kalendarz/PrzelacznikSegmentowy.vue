@@ -1,11 +1,11 @@
 <!-- Mały przełącznik segmentowy (kalendarz, ops#318): opcje [{ value, label }]. -->
 <template>
-  <div class="flex rounded border border-outline-gray-2 p-0.5 text-sm">
+  <div class="flex rounded border border-outline-gray-2 p-0.5 text-xs">
     <button
       v-for="o in options"
       :key="o.value"
       type="button"
-      class="rounded px-3 py-0.5"
+      class="rounded px-2.5 py-0.5"
       :class="
         modelValue === o.value
           ? 'bg-surface-gray-3 text-ink-gray-9'

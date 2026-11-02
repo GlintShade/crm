@@ -79,7 +79,7 @@
         />
         <div
           v-if="zakres === 'wszyscy' && stan.tryb === 'jeden'"
-          class="w-56 text-sm"
+          class="w-52 text-xs"
         >
           <FormControl
             type="select"
@@ -93,7 +93,7 @@
           v-model="stan.filtr"
           :options="opcjeHandlowcow"
           :pusty="__('Wszyscy handlowcy')"
-          class="w-56 text-sm"
+          class="w-52 text-xs"
         />
       </div>
 

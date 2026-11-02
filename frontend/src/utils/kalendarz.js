@@ -10,8 +10,8 @@ import { DNI_TYGODNIA_SKROT, MIESIACE_SKROT } from './dataPolska'
 export const OS_OD = 8
 export const OS_DO = 22
 export const DLUGOSC_SPOTKANIA_H = 1.5
-export const PX_NA_GODZINE = 40
-export const PX_NA_GODZINE_KOMPAKT = 30
+export const PX_NA_GODZINE = 36
+export const PX_NA_GODZINE_KOMPAKT = 27
 export const STATUS_UMOWIONY = 'Umówiony'
 
 const DNI_PELNE = [
@@ -464,13 +464,13 @@ export function wczytajStan(surowy, zakres) {
 // ---------------------------------------------------------------------------
 
 export const MIN_SZEROKOSC_PASKA_PX = 44
-export const WYSOKOSC_NAGLOWKA_DNI_PX = 32
+export const WYSOKOSC_NAGLOWKA_DNI_PX = 28
 
 /** Wymiary ścieżek dni w karcie poziomej: pełna (`duzy`) albo kompaktowa (tablica). */
 export function wymiaryTorow(duzy) {
   return duzy
-    ? { sciezkaPx: 36, odstepPx: 8, kolumnaDniPx: 64 }
-    : { sciezkaPx: 24, odstepPx: 6, kolumnaDniPx: 64 }
+    ? { sciezkaPx: 32, odstepPx: 7, kolumnaDniPx: 58 }
+    : { sciezkaPx: 22, odstepPx: 5, kolumnaDniPx: 58 }
 }
 
 /** Nazwisko klienta = ostatni człon `lead_name`; '' dla pustego. */
