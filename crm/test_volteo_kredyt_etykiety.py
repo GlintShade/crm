@@ -42,6 +42,8 @@ _DANE_POLA_DOZWOLONE = (
 	"praca_okres_do",
 	"praca_nip",
 	"praca_nazwa_zakladu",
+	"praca_adres",
+	"praca_telefon",
 	"praca_adres_telefon",
 	"praca_kwota_dochodu",
 	"emerytura_wlaczone",
@@ -122,6 +124,8 @@ _ETYKIETY_KANON_DOCTYPE = {
 	"praca_okres_do": "Zatrudnienie do",
 	"praca_nip": "NIP zakładu pracy",
 	"praca_nazwa_zakladu": "Nazwa zakładu pracy",
+	"praca_adres": "Adres zakładu pracy",
+	"praca_telefon": "Telefon zakładu pracy",
 	"praca_adres_telefon": "Adres i numer telefonu zakładu pracy",
 	"praca_kwota_dochodu": "Kwota dochodu",
 	"emerytura_wlaczone": "Dochód: emerytura",
@@ -167,10 +171,10 @@ class TestEtykietyKanonZgodneZDozwolonymiPolami(unittest.TestCase):
 	def test_a_klucze_etykiet_pokrywaja_sie_z_dozwolonymi_polami(self: "TestEtykietyKanonZgodneZDozwolonymiPolami") -> None:
 		self.assertEqual(set(ETYKIETY_POL.keys()), set(_DANE_POLA_DOZWOLONE))
 
-	def test_b_pol_jest_63(self: "TestEtykietyKanonZgodneZDozwolonymiPolami") -> None:
-		# 53 pola danych Volteo Kredyt + 10 pól wnioskodawcy (ops#157).
-		self.assertEqual(len(_DANE_POLA_DOZWOLONE), 63)
-		self.assertEqual(len(ETYKIETY_POL), 63)
+	def test_b_pol_jest_65(self: "TestEtykietyKanonZgodneZDozwolonymiPolami") -> None:
+		# 55 pól danych Volteo Kredyt (53 + praca_adres, praca_telefon, ops#321) + 10 pól wnioskodawcy (ops#157).
+		self.assertEqual(len(_DANE_POLA_DOZWOLONE), 65)
+		self.assertEqual(len(ETYKIETY_POL), 65)
 
 
 class TestEtykietyKanonZgodneZDoctype(unittest.TestCase):

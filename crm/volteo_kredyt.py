@@ -25,7 +25,8 @@ GRUPY_DOCHODU: dict[str, tuple[str, ...]] = {
 		"praca_okres_do",
 		"praca_nip",
 		"praca_nazwa_zakladu",
-		"praca_adres_telefon",
+		"praca_adres",
+		"praca_telefon",
 		"praca_kwota_dochodu",
 	),
 	"emerytura_wlaczone": (
@@ -124,6 +125,8 @@ _ETYKIETY_KREDYT_POL: dict[str, str] = {
 	"praca_okres_do": "Zatrudnienie do",
 	"praca_nip": "NIP zakładu pracy",
 	"praca_nazwa_zakladu": "Nazwa zakładu pracy",
+	"praca_adres": "Adres zakładu pracy",
+	"praca_telefon": "Telefon zakładu pracy",
 	"praca_adres_telefon": "Adres i numer telefonu zakładu pracy",
 	"praca_kwota_dochodu": "Kwota dochodu",
 	"emerytura_wlaczone": "Dochód: emerytura",
@@ -153,7 +156,7 @@ _ETYKIETY_KREDYT_POL: dict[str, str] = {
 	"inne_2_typ": "Typ dochodu (2)",
 	"inne_2_kwota": "Kwota dochodu (2)",
 }
-"""Etykiety PL dla 53 pól danych formularza `Volteo Kredyt`
+"""Etykiety PL dla 55 pól danych formularza `Volteo Kredyt`
 (`_DANE_POLA_DOZWOLONE` w `crm/api/kredyt.py`): przepisane 1:1 z etykiet
 doctype'u (`ops/crm-kredyt.py`, sekcja `KREDYT_FIELDS`), które są zgodne z
 oryginalnym szablonem PDF-u (ops#148: front, komunikat blokujący PDF i Desk
@@ -163,8 +166,8 @@ Baza prywatna, złożona z `ETYKIETY_WNIOSKODAWCY` w publiczny kanon
 `ETYKIETY_POL` niżej, zamiast być konsumowana wprost."""
 
 ETYKIETY_POL: dict[str, str] = {**_ETYKIETY_KREDYT_POL, **ETYKIETY_WNIOSKODAWCY}
-"""Jedyny kanon etykiet PL dla wszystkich 63 pól danych formularza kredytowego:
-53 pola `Volteo Kredyt` (`_ETYKIETY_KREDYT_POL` wyżej) plus 10 pól
+"""Jedyny kanon etykiet PL dla wszystkich 65 pól danych formularza kredytowego:
+55 pól `Volteo Kredyt` (`_ETYKIETY_KREDYT_POL` wyżej) plus 10 pól
 wnioskodawcy (`ETYKIETY_WNIOSKODAWCY`, ops#157).
 
 Ta sama etykieta ma się pojawić w banerze braków, w komunikacie serwera
