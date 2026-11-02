@@ -7,41 +7,62 @@
       wypełniania, nic czerwonego.
     - `stan === 'blad'`: czerwone obramowanie pola i komunikat pod nim (prop
       `error` FormControl).
-    - `znacznik`: 'gwiazdka' (szara gwiazdka przy wymaganym polu, prop
-      `required` FormControl z przemalowaniem na token szary: czerwień jest
-      zarezerwowana dla błędów) albo 'opcjonalne' (dopisek "(opcjonalnie)"
-      w etykiecie).
+    - `znacznik`: 'gwiazdka' (szara gwiazdka przy wymaganym polu, czerwień
+      jest zarezerwowana dla błędów) albo 'opcjonalne' (szary dopisek
+      "(opcjonalnie)").
     - `wymagany`: tylko `aria-required` dla dostępności.
-  Układ: komórka jest kolumną flex, zawartość (etykieta, input,
-  komunikat) jest dosunięta do dołu komórki, więc etykieta wisi tuż nad
-  inputem, a inputy w jednym wierszu siatki mają wspólną górną krawędź
-  niezależnie od zawinięcia etykiety (najwyższa etykieta wyznacza wiersz).
-  Kropka i obramowanie idą przez klasy na wrapperze (warianty `[&_...]`),
-  nie przez slot etykiety, bo DatePicker nie przekazuje slotu `label` do
-  swojego inputu: tak działają jednakowo dla text, select i date.
+  Etykieta jest własna (`<label for>` z klasami jak InputLabel frappe-ui),
+  nie etykieta FormControl: ostatnie słowo, dopisek, gwiazdka i kropka są
+  w jednym span `whitespace-nowrap`, więc kropka nigdy nie zawija się sama.
+  Kontrolka dostaje stabilne `id` (Vue useId), etykieta wskazuje je przez `for`.
+  Układ: komórka jest kolumną flex dosuniętą do dołu, więc etykieta wisi tuż
+  nad inputem (6 px), a inputy w wierszu siatki mają wspólną górną krawędź
+  (najwyższa etykieta wyznacza wiersz).
   Tokeny kolorów wyłącznie z presetu frappe-ui (tryb ciemny za darmo).
 -->
 <template>
   <div
     :class="[
       'flex h-full flex-col justify-end rounded',
-      bezEtykiety ? KLASY_PARA : KLASY_UKLAD,
-      znacznik === 'gwiazdka' ? KLASY_GWIAZDKA : '',
-      stan === 'brak' ? KLASY_BRAK + ' kredyt-pole-brak' : '',
+      bezEtykiety ? KLASY_PARA : '',
+      stan === 'brak' ? KLASY_BRAK : '',
       stan === 'blad' ? KLASY_BLAD : '',
     ]"
     :title="tytul"
     @focusout="onFocusOut"
   >
+    <!-- Własna etykieta zamiast etykiety frappe-ui: ostatnie słowo, dopisek,
+         gwiazdka i kropka są w jednym nowrap, więc kropka nigdy nie zostaje
+         sama w nowej linii. Klasy jak w frappe-ui InputLabel.vue. -->
+    <label
+      v-if="!bezEtykiety"
+      :for="inputId"
+      data-slot="label"
+      class="mb-1.5 block text-base text-ink-gray-5"
+    >
+      {{ etykietaPoczatek }}
+      <span class="whitespace-nowrap">{{ etykietaKoniec }}<span
+          v-if="znacznik === 'opcjonalne'"
+          class="text-ink-gray-5"
+        >&nbsp;{{ __('(opcjonalnie)') }}</span><span
+          v-if="znacznik === 'gwiazdka'"
+          class="select-none text-ink-gray-5"
+          aria-hidden="true"
+        >&nbsp;*</span><span
+          v-if="stan === 'brak'"
+          data-testid="kropka-brak"
+          class="select-none align-middle text-[0.6em] text-ink-blue-6"
+          aria-hidden="true"
+        >&nbsp;●</span></span>
+    </label>
     <FormControl
+      :id="inputId"
       :type="f.type"
-      :label="bezEtykiety ? undefined : etykieta"
       :options="f.options"
       :inputmode="f.inputmode"
       :placeholder="placeholder"
       :format="f.type === 'date' ? 'DD.MM.YYYY' : undefined"
       :disabled="disabled"
-      :required="znacznik === 'gwiazdka'"
       :aria-required="wymagany ? 'true' : undefined"
       :error="stan === 'blad' ? komunikat : undefined"
       :model-value="modelValue"
@@ -74,7 +95,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, useId } from 'vue'
 import { Button, FormControl } from 'frappe-ui'
 import LucideCalendar from '~icons/lucide/calendar'
 import { telHref, czyTelefon } from '@/utils/telefon'
@@ -100,9 +121,11 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'input', 'blur'])
 
-const etykieta = computed(() =>
-  props.znacznik === 'opcjonalne' ? `${props.f.label} ${__('(opcjonalnie)')}` : props.f.label,
-)
+// Stabilne id kontrolki (label for=, czytniki ekranu). Vue 3.5 useId.
+const inputId = `kredyt-${useId()}`
+const slowa = computed(() => String(props.f.label || '').trim().split(/\s+/))
+const etykietaPoczatek = computed(() => slowa.value.slice(0, -1).join(' '))
+const etykietaKoniec = computed(() => slowa.value[slowa.value.length - 1] || '')
 const placeholder = computed(() => {
   if (props.f.placeholder) return props.f.placeholder
   if (props.f.type === 'date') return 'DD.MM.RRRR'
@@ -112,19 +135,12 @@ const placeholder = computed(() => {
 
 // Literały w całości, bez składania z kawałków: Tailwind skanuje źródło
 // tekstowo i nie zobaczy klas zbudowanych z interpolacji.
-// Kropka to znak (nbsp + ●) w ::after (treść w <style> poniżej), więc
-// zawija się razem z ostatnim słowem etykiety i nigdy nie ląduje sama.
-const KLASY_UKLAD =
-  '[&>div]:flex [&>div]:flex-1 [&>div]:flex-col [&>div]:justify-end [&_[data-slot=label]]:block'
 // Para dat "od / do" w jednej komórce (~95 px na pole): bez ikony kalendarza,
 // z mniejszym krojem i wcięciem, żeby pełne "DD.MM.RRRR" się mieściło
 // (10 znaków w 14 px to ok. 78 px, plus 2 x 4 px wcięcia i ramka).
 const KLASY_PARA = '[&_[data-slot=control]]:!px-1 [&_[data-slot=control]]:!text-sm'
-// Natywna gwiazdka frappe-ui jest czerwona (text-ink-red-6): w etykiecie
-// przemalowana na szary token, czerwień zostaje dla błędów.
-const KLASY_GWIAZDKA = '[&_[data-slot=label]_.text-ink-red-6]:text-ink-gray-5'
 const KLASY_BRAK =
-  '[&_[data-slot=label]]:after:text-[0.6em] [&_[data-slot=label]]:after:align-middle [&_[data-slot=label]]:after:text-ink-blue-6 [&_[data-slot=control]:not(:focus)]:border-outline-blue-3 [&_[data-slot=trigger]:not(:focus)]:border-outline-blue-3'
+  '[&_[data-slot=control]:not(:focus)]:border-outline-blue-3 [&_[data-slot=trigger]:not(:focus)]:border-outline-blue-3'
 const KLASY_BLAD = '[&_[aria-invalid=true]]:border-outline-red-3'
 
 const przyciskTelefonu = computed(
@@ -145,12 +161,3 @@ function onFocusOut(e) {
   emit('blur')
 }
 </script>
-
-<style scoped>
-.kredyt-pole-brak :deep([data-slot='label'])::after {
-  /* Przed pseudo-elementem zostaje zwykła spacja z szablonu etykiety, która
-     jest miejscem łamania; WORD JOINER (U+2060) zabrania łamania przed
-     kropką, więc kropka zawsze zostaje z ostatnim słowem. */
-  content: '\2060\25cf';
-}
-</style>

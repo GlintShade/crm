@@ -359,12 +359,15 @@
             <div class="flex flex-wrap items-center gap-2">
               <Button
                 variant="ghost"
+                class="max-w-full min-w-0"
+                :title="__('Przywróć dane klienta')"
                 :label="__('Przywróć dane klienta')"
                 :disabled="saving"
                 @click="przywrocDaneKlienta"
               />
               <Button
                 variant="outline"
+                class="max-w-full min-w-0"
                 :label="wnioskodawcaEdytowalny ? __('Zakończ edycję') : __('Edytuj')"
                 :disabled="saving"
                 @click="przelaczEdycjeWnioskodawcy"
