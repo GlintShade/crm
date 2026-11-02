@@ -341,7 +341,7 @@
         <!-- Applicant data block: editable snapshot taken at record creation -->
         <div class="rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-4">
           <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div class="flex items-center gap-2">
+            <div class="flex min-w-0 flex-wrap items-center gap-2">
               <div class="text-sm font-semibold text-ink-gray-7">
                 {{ __('Dane wnioskodawcy') }}
               </div>
@@ -356,7 +356,7 @@
                 </template>
               </Badge>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
               <Button
                 variant="ghost"
                 :label="__('Przywróć dane klienta')"
