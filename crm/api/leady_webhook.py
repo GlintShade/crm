@@ -70,14 +70,13 @@ from frappe import _
 from crm.volteo_leady_webhook import (
 	LIMIT_ZADAN_NA_MINUTE,
 	ROLA_INTEGRACJI,
-	SEPARATOR_UWAG,
 	LadunekOdrzucony,
+	dane_z_kodu_pocztowego,
 	klucz_limitu,
 	limit_przekroczony,
 	zbuduj_leada_z_webhooka,
 )
 
-UWAGA_KOD_SPOZA_BAZY = "Kod pocztowy spoza bazy kodów, brak pinezki na mapie"
 KOMUNIKAT_LIMITU = "Przekroczono limit %d żądań na minutę. Spróbuj ponownie za chwilę."
 
 
@@ -128,25 +127,7 @@ def _z_centroidem_kodu(dane: dict) -> dict:
 	wiersz = frappe.db.get_value(
 		"Postal Code", {"kod": kod}, ["lat", "lng", "wojewodztwo", "powiat"], as_dict=True
 	)
-	if not wiersz:
-		uwagi = dane.get("custom_uwagi_import") or ""
-		return {
-			**dane,
-			"custom_uwagi_import": SEPARATOR_UWAG.join(filter(None, [uwagi, UWAGA_KOD_SPOZA_BAZY])),
-		}
-	wynik = dict(dane)
-	if wiersz.get("wojewodztwo"):
-		wynik["custom_voivodeship"] = wiersz["wojewodztwo"]
-	if wiersz.get("powiat"):
-		wynik["custom_powiat"] = wiersz["powiat"]
-	if wiersz.get("lat") and wiersz.get("lng"):
-		wynik.update(
-			custom_lat=wiersz["lat"],
-			custom_lng=wiersz["lng"],
-			custom_geo_dokladnosc="kod",
-			custom_geo_zrodlo="kod",
-		)
-	return wynik
+	return dane_z_kodu_pocztowego(dane, wiersz)
 
 
 def _zakolejkuj_sms_powitalny(lead: str) -> None:

@@ -28,6 +28,7 @@ from crm.volteo_leady_import import (
 	normalizuj_pisownie_osoby,
 	normalizuj_posiadane_produkty,
 	normalizuj_telefon,
+	normalizuj_wojewodztwo,
 	rozdziel_imie_nazwisko,
 	wyglada_na_firme,
 )
@@ -364,3 +365,38 @@ def zbuduj_leada_z_webhooka(ladunek: Mapping[str, Any], dzisiaj: str) -> dict[st
 		"facebook_form_id": _tekst(dane.get("facebook_form_id")),
 	}
 	return {**wynik, **{k: v for k, v in opcjonalne.items() if v}}
+
+
+UWAGA_KOD_SPOZA_BAZY: str = "Kod pocztowy spoza bazy kodów, brak pinezki na mapie"
+"""Notka w Uwagach, gdy kod pocztowy leada nie istnieje w tabeli `Postal Code`."""
+
+
+def dane_z_kodu_pocztowego(dane: dict, wiersz: Mapping[str, Any] | None) -> dict:
+	"""Nowy słownik z danymi wiersza `Postal Code`: centroid, województwo i powiat.
+
+	`wiersz` to wynik zapytania o kod (lub `None`, gdy kodu nie ma w tabeli).
+	Miejscowości z tabeli NIE przenosimy (GeoNames trzyma jedną na kod, często nie
+	tę). Kod spoza bazy zostaje zapisany bez współrzędnych, z notką w Uwagach.
+	Województwo przechodzi przez `normalizuj_wojewodztwo` (w tabeli bywa WIELKIMI
+	literami, a `custom_voivodeship` to Select z małymi): wartość spoza kanonu jest
+	pomijana, nigdy nie wywala insertu (ops#322). Nie mutuje `dane`."""
+	if not wiersz:
+		uwagi = dane.get("custom_uwagi_import") or ""
+		return {
+			**dane,
+			"custom_uwagi_import": SEPARATOR_UWAG.join(filter(None, [uwagi, UWAGA_KOD_SPOZA_BAZY])),
+		}
+	wynik = dict(dane)
+	wojewodztwo = normalizuj_wojewodztwo(wiersz.get("wojewodztwo") or "")
+	if wojewodztwo:
+		wynik["custom_voivodeship"] = wojewodztwo
+	if wiersz.get("powiat"):
+		wynik["custom_powiat"] = wiersz["powiat"]
+	if wiersz.get("lat") and wiersz.get("lng"):
+		wynik.update(
+			custom_lat=wiersz["lat"],
+			custom_lng=wiersz["lng"],
+			custom_geo_dokladnosc="kod",
+			custom_geo_zrodlo="kod",
+		)
+	return wynik
