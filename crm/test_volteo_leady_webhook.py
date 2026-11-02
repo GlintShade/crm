@@ -9,7 +9,9 @@ from crm.volteo_leady_import import SEPARATOR_UWAG
 from crm.volteo_leady_webhook import (
 	IMIE_ZASTEPCZE,
 	LIMIT_ZADAN_NA_MINUTE,
+	UWAGA_KOD_SPOZA_BAZY,
 	LadunekOdrzucony,
+	dane_z_kodu_pocztowego,
 	klucz_limitu,
 	limit_przekroczony,
 	normalizuj_date_zgloszenia,
@@ -485,6 +487,65 @@ class TestKodPocztowy(unittest.TestCase):
 		w = zbuduj_leada_z_webhooka(ladunek(miasto="Poznań", kod_pocztowy="abc"), DZIS)
 		self.assertEqual(w["custom_install_city"], "Poznań")
 		self.assertIn("Kod pocztowy (nierozpoznany): abc", uwagi(w))
+
+
+class TestDaneZKoduPocztowego(unittest.TestCase):
+	"""ops#322: województwo z `Postal Code` bywa WIELKIMI literami."""
+
+	def _wiersz(self, **nadpisz):
+		return {"lat": 51.1, "lng": 17.0, "wojewodztwo": "dolnośląskie", "powiat": "wrocławski", **nadpisz}
+
+	def test_wielkie_litery_z_diakrytykami(self):
+		for surowe, oczekiwane in [
+			("DOLNOŚLĄSKIE", "dolnośląskie"),
+			("MAŁOPOLSKIE", "małopolskie"),
+			("ŚLĄSKIE", "śląskie"),
+			("Mazowieckie", "mazowieckie"),
+			("pomorskie", "pomorskie"),
+		]:
+			wynik = dane_z_kodu_pocztowego({}, self._wiersz(wojewodztwo=surowe))
+			self.assertEqual(wynik["custom_voivodeship"], oczekiwane)
+
+	def test_spoza_kanonu_pomija_pole(self):
+		wynik = dane_z_kodu_pocztowego({}, self._wiersz(wojewodztwo="Bawaria"))
+		self.assertNotIn("custom_voivodeship", wynik)
+		self.assertEqual(wynik["custom_lat"], 51.1)
+
+	def test_puste_i_none(self):
+		for surowe in ("", None):
+			wynik = dane_z_kodu_pocztowego({}, self._wiersz(wojewodztwo=surowe))
+			self.assertNotIn("custom_voivodeship", wynik)
+
+	def test_powiat_kopiowany_bez_zmian(self):
+		wynik = dane_z_kodu_pocztowego({}, self._wiersz(powiat="WROCŁAWSKI"))
+		self.assertEqual(wynik["custom_powiat"], "WROCŁAWSKI")
+
+	def test_wspolrzedne(self):
+		wynik = dane_z_kodu_pocztowego({}, self._wiersz())
+		self.assertEqual(wynik["custom_lng"], 17.0)
+		self.assertEqual(wynik["custom_geo_dokladnosc"], "kod")
+		self.assertEqual(wynik["custom_geo_zrodlo"], "kod")
+
+	def test_brak_wspolrzednych_nie_ustawia_geo(self):
+		wynik = dane_z_kodu_pocztowego({}, self._wiersz(lat=None))
+		self.assertNotIn("custom_lat", wynik)
+		self.assertNotIn("custom_geo_zrodlo", wynik)
+
+	def test_brak_wiersza_dopisuje_notke(self):
+		wynik = dane_z_kodu_pocztowego({"custom_uwagi_import": "stara"}, None)
+		self.assertEqual(wynik["custom_uwagi_import"], SEPARATOR_UWAG.join(["stara", UWAGA_KOD_SPOZA_BAZY]))
+		self.assertNotIn("custom_lat", wynik)
+
+	def test_brak_wiersza_bez_uwag(self):
+		wynik = dane_z_kodu_pocztowego({}, None)
+		self.assertEqual(wynik["custom_uwagi_import"], UWAGA_KOD_SPOZA_BAZY)
+
+	def test_nie_mutuje_wejscia(self):
+		dane = {"custom_uwagi_import": "x"}
+		kopia = copy.deepcopy(dane)
+		dane_z_kodu_pocztowego(dane, self._wiersz(wojewodztwo="ŚLĄSKIE"))
+		dane_z_kodu_pocztowego(dane, None)
+		self.assertEqual(dane, kopia)
 
 
 class TestKluczLimitu(unittest.TestCase):
