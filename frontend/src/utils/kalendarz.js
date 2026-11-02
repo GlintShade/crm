@@ -8,9 +8,9 @@
 import { DNI_TYGODNIA_SKROT, MIESIACE_SKROT } from './dataPolska'
 
 export const OS_OD = 8
-export const OS_DO = 18
+export const OS_DO = 22
 export const DLUGOSC_SPOTKANIA_H = 1.5
-export const PX_NA_GODZINE = 48
+export const PX_NA_GODZINE = 40
 export const PX_NA_GODZINE_KOMPAKT = 30
 export const STATUS_UMOWIONY = 'Umówiony'
 
@@ -184,7 +184,7 @@ export function poczatekWGodzinach(termin) {
 }
 
 /**
- * Zakres osi godzin: domyślnie 8 do 18, ale spotkanie poza zakresem rozszerza oś
+ * Zakres osi godzin: domyślnie 8 do 22, ale spotkanie poza zakresem rozszerza oś
  * (nigdy nie jest ukrywane). Koniec spotkania = początek + `dlugoscH`.
  */
 export function osGodzin(
@@ -289,7 +289,7 @@ export function godzinaZKliknieciaPion(
 }
 
 /** Opcje godzin do modalu: 06:00 do 21:00 co 30 min. */
-export function opcjeGodzin(od = 6, doGodziny = 21) {
+export function opcjeGodzin(od = 6, doGodziny = 22) {
   const wynik = []
   for (let m = od * 60; m <= doGodziny * 60; m += 30) {
     wynik.push(`${d2(Math.floor(m / 60))}:${d2(m % 60)}`)
@@ -498,7 +498,7 @@ export function numerDnia(dataIso) {
 }
 
 /**
- * Wspólna oś godzin dla wielu list spotkań (tablica): zakres 8 do 18 rozszerzony
+ * Wspólna oś godzin dla wielu list spotkań (tablica): zakres 8 do 22 rozszerzony
  * o spotkania WSZYSTKICH podanych handlowców, żeby karty obok siebie miały te
  * same kolumny. `mapa` = { user: [spotkania] }, `uzytkownicy` = widoczni.
  */

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   LICZBA_KOLOROW,
+  OS_DO,
+  OS_OD,
   MIN_SZEROKOSC_PASKA_PX,
   WYSOKOSC_NAGLOWKA_DNI_PX,
   etykietaChipa,
@@ -204,19 +206,21 @@ describe('zakresy i etykiety', () => {
 })
 
 describe('oś godzin i pozycje', () => {
-  it('osGodzin domyślnie 8 do 18', () => {
-    expect(osGodzin([sp('2026-11-02 10:00:00')])).toEqual({ od: 8, do: 18 })
-    expect(osGodzin([])).toEqual({ od: 8, do: 18 })
+  it('osGodzin domyślnie 8 do 22', () => {
+    expect(osGodzin([sp('2026-11-02 10:00:00')])).toEqual({ od: 8, do: 22 })
+    expect(osGodzin([])).toEqual({ od: 8, do: 22 })
+    expect(OS_OD).toBe(8)
+    expect(OS_DO).toBe(22)
   })
 
   it('osGodzin rozszerza się o spotkanie poza zakresem', () => {
-    expect(osGodzin([sp('2026-11-02 06:30:00')])).toEqual({ od: 6, do: 18 })
-    expect(osGodzin([sp('2026-11-02 17:30:00')])).toEqual({ od: 8, do: 19 })
-    expect(osGodzin([sp('2026-11-02 20:00:00')])).toEqual({ od: 8, do: 22 })
+    expect(osGodzin([sp('2026-11-02 06:30:00')])).toEqual({ od: 6, do: 22 })
+    expect(osGodzin([sp('2026-11-02 17:30:00')])).toEqual({ od: 8, do: 22 })
+    expect(osGodzin([sp('2026-11-02 21:00:00')])).toEqual({ od: 8, do: 23 })
   })
 
   it('osGodzin ignoruje spotkania bez poprawnego terminu', () => {
-    expect(osGodzin([sp(null), sp('zle')])).toEqual({ od: 8, do: 18 })
+    expect(osGodzin([sp(null), sp('zle')])).toEqual({ od: 8, do: 22 })
   })
 
   it('godzinyOsi', () => {
@@ -226,17 +230,17 @@ describe('oś godzin i pozycje', () => {
   it('pozycjaPaska od pełnej godziny', () => {
     const p = pozycjaPaska('2026-11-02 08:00:00')
     expect(p.leftPct).toBe(0)
-    expect(p.widthPct).toBeCloseTo(15, 5)
+    expect(p.widthPct).toBeCloseTo((1.5 / 14) * 100, 5)
   })
 
   it('pozycjaPaska w środku osi', () => {
     const p = pozycjaPaska('2026-11-02 13:00:00')
-    expect(p.leftPct).toBeCloseTo(50, 5)
-    expect(p.widthPct).toBeCloseTo(15, 5)
+    expect(p.leftPct).toBeCloseTo((5 / 14) * 100, 5)
+    expect(p.widthPct).toBeCloseTo((1.5 / 14) * 100, 5)
   })
 
   it('pozycjaPaska przycina do prawego brzegu', () => {
-    const p = pozycjaPaska('2026-11-02 17:30:00')
+    const p = pozycjaPaska('2026-11-02 21:30:00')
     expect(p.leftPct + p.widthPct).toBeLessThanOrEqual(100.0000001)
   })
 
@@ -250,14 +254,16 @@ describe('oś godzin i pozycje', () => {
 
   it('pozycjaBlokuPion', () => {
     expect(pozycjaBlokuPion('2026-11-02 10:30:00')).toEqual({
-      topPx: 2.5 * 48,
-      heightPx: 72,
+      topPx: 2.5 * 40,
+      heightPx: 60,
     })
     expect(pozycjaBlokuPion('zle')).toEqual({ topPx: 0, heightPx: 0 })
   })
 
   it('skalaPionowa: pełna i kompaktowa', () => {
-    expect(skalaPionowa(false)).toBe(48)
+    expect(skalaPionowa(false)).toBe(40)
+    // 14 godzin osi 8 do 22 mieści się bez przewijania na 900 px wysokości
+    expect(14 * skalaPionowa(false)).toBeLessThan(700)
     expect(skalaPionowa(true)).toBe(PX_NA_GODZINE_KOMPAKT)
     expect(PX_NA_GODZINE_KOMPAKT).toBeGreaterThanOrEqual(28)
     expect(PX_NA_GODZINE_KOMPAKT).toBeLessThanOrEqual(32)
@@ -274,9 +280,12 @@ describe('oś godzin i pozycje', () => {
   })
 
   it('pozycjaTeraz w osi i poza nią', () => {
-    expect(pozycjaTeraz(new Date(2026, 10, 2, 13, 0))).toBeCloseTo(50, 5)
+    expect(pozycjaTeraz(new Date(2026, 10, 2, 13, 0))).toBeCloseTo(
+      (5 / 14) * 100,
+      5,
+    )
     expect(pozycjaTeraz(new Date(2026, 10, 2, 7, 59))).toBeNull()
-    expect(pozycjaTeraz(new Date(2026, 10, 2, 18, 30))).toBeNull()
+    expect(pozycjaTeraz(new Date(2026, 10, 2, 22, 30))).toBeNull()
   })
 })
 
@@ -291,29 +300,29 @@ describe('kliknięcia', () => {
 
   it('godzinaZKlikniecia środek i brzegi', () => {
     expect(godzinaZKlikniecia(0)).toBe('08:00')
-    expect(godzinaZKlikniecia(50)).toBe('13:00')
-    expect(godzinaZKlikniecia(100)).toBe('17:30')
+    expect(godzinaZKlikniecia(50)).toBe('15:00')
+    expect(godzinaZKlikniecia(100)).toBe('21:30')
     expect(godzinaZKlikniecia(-20)).toBe('08:00')
-    expect(godzinaZKlikniecia(150)).toBe('17:30')
+    expect(godzinaZKlikniecia(150)).toBe('21:30')
   })
 
   it('godzinaZKlikniecia zaokrągla do 30 minut', () => {
-    // 8 + 0.12 * 10 = 9.2 h => 9:12 => 9:00 ; 8 + 0.17*10 = 9.7 => 9:42 => 9:30
-    expect(godzinaZKlikniecia(12)).toBe('09:00')
-    expect(godzinaZKlikniecia(17)).toBe('09:30')
+    // 8 + 0.08 * 14 = 9.12 h => 9:07 => 9:00 ; 8 + 0.10 * 14 = 9.4 h => 9:24 => 9:30
+    expect(godzinaZKlikniecia(8)).toBe('09:00')
+    expect(godzinaZKlikniecia(10)).toBe('09:30')
   })
 
   it('godzinaZKliknieciaPion', () => {
     expect(godzinaZKliknieciaPion(0)).toBe('08:00')
-    expect(godzinaZKliknieciaPion(48)).toBe('09:00')
-    expect(godzinaZKliknieciaPion(48 * 1.5)).toBe('09:30')
-    expect(godzinaZKliknieciaPion(9999)).toBe('17:30')
+    expect(godzinaZKliknieciaPion(40)).toBe('09:00')
+    expect(godzinaZKliknieciaPion(40 * 1.5)).toBe('09:30')
+    expect(godzinaZKliknieciaPion(9999)).toBe('21:30')
   })
 
   it('opcjeGodzin i terminDoApi', () => {
     const o = opcjeGodzin()
     expect(o[0]).toBe('06:00')
-    expect(o[o.length - 1]).toBe('21:00')
+    expect(o[o.length - 1]).toBe('22:00')
     expect(o).toContain('13:30')
     expect(terminDoApi('2026-11-04', '10:30')).toBe('2026-11-04 10:30:00')
     expect(terminDoApi('2026-11-04', '')).toBe('')
@@ -467,13 +476,13 @@ describe('runda UI: oś wspólna, ścieżki, etykiety, dymek', () => {
     const mapa = {
       a: [sp('2026-11-02 10:00:00')],
       b: [sp('2026-11-02 06:30:00')],
-      c: [sp('2026-11-02 18:00:00')],
+      c: [sp('2026-11-02 22:00:00')],
     }
-    expect(osWspolna(mapa, ['a'])).toEqual({ od: 8, do: 18 })
-    expect(osWspolna(mapa, ['a', 'b'])).toEqual({ od: 6, do: 18 })
-    expect(osWspolna(mapa, ['a', 'b', 'c'])).toEqual({ od: 6, do: 20 })
-    expect(osWspolna(mapa, [])).toEqual({ od: 8, do: 18 })
-    expect(osWspolna(null, ['x'])).toEqual({ od: 8, do: 18 })
+    expect(osWspolna(mapa, ['a'])).toEqual({ od: 8, do: 22 })
+    expect(osWspolna(mapa, ['a', 'b'])).toEqual({ od: 6, do: 22 })
+    expect(osWspolna(mapa, ['a', 'b', 'c'])).toEqual({ od: 6, do: 24 })
+    expect(osWspolna(mapa, [])).toEqual({ od: 8, do: 22 })
+    expect(osWspolna(null, ['x'])).toEqual({ od: 8, do: 22 })
   })
 
   it('etykietaChipa: tylko liczba umówionych, bez do potwierdzenia', () => {
