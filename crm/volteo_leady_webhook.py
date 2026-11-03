@@ -249,6 +249,43 @@ def splaszcz_odpowiedzi(odpowiedzi: Any) -> list[tuple[str, str]]:
 	return wynik
 
 
+ODPOWIEDZI_POSIADA_PV: dict[str, tuple[str, str]] = {
+	"tak,_bez_magazynu": ("PV", "Tak, bez magazynu"),
+	"tak,_z_magazynem": ("PV+ME", "Tak, z magazynem"),
+	"mam_fotowoltaikę_bez_magazynu_energii": ("PV", "Mam fotowoltaikę bez magazynu energii"),
+	"nie_mam_jeszcze_fotowoltaiki": ("", "Nie mam jeszcze fotowoltaiki"),
+	"mam_fotowoltaikę_z_magazynem_energii": ("PV+ME", "Mam fotowoltaikę z magazynem energii"),
+}
+ODPOWIEDZI_SYSTEM_ROZLICZEN: dict[str, tuple[str, str]] = {
+	"stare_zasady": ("Stare zasady", "Stare zasady"),
+	"nowe_zasady_(net-billing)": ("Nowe zasady", "Nowe zasady (net-billing)"),
+}
+
+
+def rozpoznaj_posiada_pv(surowe: Any) -> tuple[str | None, str]:
+	"""Zwraca (wartosc pola, etykieta do Uwag) dla odpowiedzi "Czy masz PV?".
+
+	Najpierw dokladny slownik `ODPOWIEDZI_POSIADA_PV` (klucz: `_tekst(surowe).lower()`),
+	potem `normalizuj_posiada_pv`; poza slownikiem etykieta to surowy tekst. Nierozpoznane
+	daje `(None, surowy tekst)`."""
+	tekst = _tekst(surowe)
+	trafienie = ODPOWIEDZI_POSIADA_PV.get(tekst.lower())
+	if trafienie is not None:
+		wartosc, etykieta = trafienie
+		return (normalizuj_posiadane_produkty(wartosc) if wartosc else ""), etykieta
+	return normalizuj_posiada_pv(tekst), tekst
+
+
+def rozpoznaj_system_rozliczen(surowe: Any) -> tuple[str | None, str]:
+	"""Jak `rozpoznaj_posiada_pv`, dla systemu rozliczen (`ODPOWIEDZI_SYSTEM_ROZLICZEN`,
+	potem `normalizuj_system_rozliczen`)."""
+	tekst = _tekst(surowe)
+	trafienie = ODPOWIEDZI_SYSTEM_ROZLICZEN.get(tekst.lower())
+	if trafienie is not None:
+		return trafienie
+	return normalizuj_system_rozliczen(tekst), tekst
+
+
 def zbuduj_leada_z_webhooka(ladunek: Mapping[str, Any], dzisiaj: str) -> dict[str, Any]:
 	"""Zamienia ladunek webhooka na slownik pol `CRM Lead` (bez `doctype`).
 
@@ -270,7 +307,7 @@ def zbuduj_leada_z_webhooka(ladunek: Mapping[str, Any], dzisiaj: str) -> dict[st
 	if not id_leada:
 		raise LadunekOdrzucony("Brak facebook_lead_id.")
 
-	uwagi_nierozpoznane: list[str] = []
+	linie_odpowiedzi: list[str] = []
 
 	# Imie i nazwisko
 	pelne = _tekst(dane.get("imie_nazwisko"))
@@ -285,23 +322,30 @@ def zbuduj_leada_z_webhooka(ladunek: Mapping[str, Any], dzisiaj: str) -> dict[st
 
 	# Czy posiada PV
 	posiada_surowe = _tekst(dane.get("posiada_pv"))
-	posiada = normalizuj_posiada_pv(posiada_surowe)
-	if posiada is None:
-		uwagi_nierozpoznane.append("Posiada PV (nierozpoznane): %s" % posiada_surowe)
-		posiada = ""
+	posiada: str | None = ""
+	if posiada_surowe:
+		posiada, etykieta_pv = rozpoznaj_posiada_pv(posiada_surowe)
+		if posiada is None:
+			linie_odpowiedzi.append("Posiada PV (nierozpoznane): %s" % posiada_surowe)
+		else:
+			linie_odpowiedzi.append("Posiada PV: %s" % etykieta_pv)
 
-	# System rozliczen: tylko gdy klient ma PV
+	# System rozliczen: pole tylko gdy klient ma PV
 	system_surowy = _tekst(dane.get("system_rozliczen"))
 	zasady = ""
 	if system_surowy:
-		if "PV" in posiada.split("+"):
-			rozpoznane = normalizuj_system_rozliczen(system_surowy)
+		rozpoznane, etykieta_sys = rozpoznaj_system_rozliczen(system_surowy)
+		if posiada is None:
+			linie_odpowiedzi.append("System rozliczen (PV nierozpoznane): %s" % etykieta_sys)
+		elif "PV" in posiada.split("+"):
 			if rozpoznane is None:
-				uwagi_nierozpoznane.append("System rozliczen (nierozpoznane): %s" % system_surowy)
+				linie_odpowiedzi.append("System rozliczen (nierozpoznane): %s" % system_surowy)
 			else:
 				zasady = rozpoznane
+				linie_odpowiedzi.append("System rozliczen: %s" % etykieta_sys)
 		else:
-			uwagi_nierozpoznane.append("System rozliczen: %s" % system_surowy)
+			linie_odpowiedzi.append("System rozliczen (klient bez PV): %s" % etykieta_sys)
+	posiada = posiada or ""
 
 	# Produkt z reklamy
 	produkt_surowy = _tekst(dane.get("produkt"))
@@ -309,7 +353,7 @@ def zbuduj_leada_z_webhooka(ladunek: Mapping[str, Any], dzisiaj: str) -> dict[st
 	if produkt_surowy:
 		rozpoznany = normalizuj_produkt_reklamy(produkt_surowy)
 		if rozpoznany is None:
-			uwagi_nierozpoznane.append("Produkt (nierozpoznany): %s" % produkt_surowy)
+			linie_odpowiedzi.append("Produkt (nierozpoznany): %s" % produkt_surowy)
 		else:
 			produkt = rozpoznany
 
@@ -319,9 +363,9 @@ def zbuduj_leada_z_webhooka(ladunek: Mapping[str, Any], dzisiaj: str) -> dict[st
 	if data is None:
 		data = dzisiaj
 		if data_surowa:
-			uwagi_nierozpoznane.append("Data zgloszenia (nierozpoznana): %s" % data_surowa)
+			linie_odpowiedzi.append("Data zgloszenia (nierozpoznana): %s" % data_surowa)
 		else:
-			uwagi_nierozpoznane.append("Data zgloszenia (brak): ustawiono date przyjecia")
+			linie_odpowiedzi.append("Data zgloszenia (brak): ustawiono date przyjecia")
 
 	# Kod pocztowy: klucz `kod_pocztowy`; wsteczna zgodnosc, gdy kod przyszedl pod `miasto`
 	kod_surowy = _tekst(dane.get("kod_pocztowy"))
@@ -330,7 +374,7 @@ def zbuduj_leada_z_webhooka(ladunek: Mapping[str, Any], dzisiaj: str) -> dict[st
 	if kod_surowy:
 		kod = normalizuj_kod_tolerancyjnie(kod_surowy) or ""
 		if not kod:
-			uwagi_nierozpoznane.append("Kod pocztowy (nierozpoznany): %s" % kod_surowy)
+			linie_odpowiedzi.append("Kod pocztowy (nierozpoznany): %s" % kod_surowy)
 	elif miasto:
 		kod_z_miasta = normalizuj_kod_tolerancyjnie(miasto)
 		if kod_z_miasta:
@@ -343,7 +387,7 @@ def zbuduj_leada_z_webhooka(ladunek: Mapping[str, Any], dzisiaj: str) -> dict[st
 	kampania = _tekst(dane.get("kampania"))
 	if kampania:
 		linie.append("Kampania: %s" % kampania)
-	linie.extend(uwagi_nierozpoznane)
+	linie.extend(linie_odpowiedzi)
 	linie.extend("%s: %s" % (p, o) for p, o in splaszcz_odpowiedzi(dane.get("odpowiedzi")))
 
 	wynik: dict[str, Any] = {
