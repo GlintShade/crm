@@ -475,6 +475,7 @@
                         <TagiProduktowInput
                           v-else-if="czyPoleTagow(field)"
                           :field="field"
+                          :placeholder="karty ? __('Wybierz') : ''"
                           :value="doc[field.fieldname]"
                           :doctype="doctype"
                           @change="(v) => fieldChange(v, field)"
@@ -662,6 +663,11 @@ function opakowanieSekcji(section) {
 }
 
 const TYPY_SZEROKIE = [
+  'Datetime',
+  'Link',
+  'User',
+  'Dynamic Link',
+  'Select',
   'Text Editor',
   'Code',
   'HTML',

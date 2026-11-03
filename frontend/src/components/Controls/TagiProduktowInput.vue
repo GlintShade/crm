@@ -24,7 +24,7 @@
       class="min-w-[110px] flex-1"
       value=""
       :options="dostepneOpcjeAutocomplete"
-      :placeholder="__('Dodaj') + '...'"
+      :placeholder="placeholder || __('Dodaj') + '...'"
       @change="(o) => dodajToken(o?.value)"
     />
     <div
@@ -68,6 +68,7 @@ const props = defineProps({
   field: { type: Object, required: true },
   value: { type: String, default: '' },
   doctype: { type: String, default: 'CRM Lead' },
+  placeholder: { type: String, default: '' },
 })
 
 const emit = defineEmits(['change'])
