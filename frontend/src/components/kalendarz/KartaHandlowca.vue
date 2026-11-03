@@ -4,6 +4,10 @@
   pozycje i daty liczy utils/kalendarz.js, dane i zapis żyją w Kalendarz.vue.
   Prop `duzy` = karta na całą szerokość (ścieżki 36 px), domyślnie kompakt
   tablicy (ścieżki 24 px). Prop `os` = wspólna oś godzin całej tablicy.
+  Grafik dostępności (b82): prop `dostepnosc` (mapa dzień -> okna, null = brak
+  grafiku, undefined = funkcja wyłączona) daje ciemne odcinki w paski,
+  czerwoną obwódkę spotkań poza grafikiem i chip "brak grafiku"; prop
+  `edycja` pokazuje przycisk "Grafik" (emit `grafik`).
 -->
 <template>
   <div
@@ -14,8 +18,23 @@
       :kolor="kolor"
       :etykieta-zakresu="etykietaZakresu"
       :chip="chip"
+      :brak-grafiku="grafikWlaczony && dostepnosc === null"
       @przesun="(k) => $emit('przesun', k)"
-    />
+    >
+      <template v-if="edycja" #akcje>
+        <Button
+          size="sm"
+          variant="outline"
+          data-testid="kalendarz-grafik"
+          @click="$emit('grafik')"
+        >
+          <template #prefix
+            ><FeatherIcon name="edit-2" class="h-3.5 w-3.5"
+          /></template>
+          {{ __('Grafik') }}
+        </Button>
+      </template>
+    </NaglowekKarty>
 
     <div class="mt-3 flex items-end border-b border-outline-gray-2 pb-1.5">
       <div
@@ -83,6 +102,18 @@
               czyWeekend(dzien) ? 'opacity-50' : '',
             ]"
           ></div>
+          <div
+            v-if="niedostepne[dzien]?.length"
+            class="pointer-events-none absolute inset-0 z-[1]"
+            data-testid="kalendarz-niedostepny"
+          >
+            <span
+              v-for="[a, b] in niedostepne[dzien]"
+              :key="a"
+              class="kalendarz-niedostepny absolute bottom-0 top-0 rounded-md"
+              :style="stylOdcinkaPoziomo(a, b, os.od, os.do)"
+            ></span>
+          </div>
           <DymekSpotkania
             v-for="s in poDniach[dzien] || []"
             :key="s.name"
@@ -94,6 +125,7 @@
               :class="[
                 kolor.pelny,
                 czyUmowiony(s.status) ? '' : 'opacity-[0.7]',
+                pozaGrafikiem(s) ? 'kalendarz-poza-grafikiem' : '',
               ]"
               :style="stylPaskaPoziomo(s.termin, os.od, os.do)"
               :data-lead="s.name"
@@ -111,7 +143,7 @@
         </div>
       </div>
       <div
-        class="pointer-events-none absolute inset-y-0 right-0 z-[1]"
+        class="pointer-events-none absolute inset-y-0 right-0 z-0"
         :style="{ left: wymiary.kolumnaDniPx + 'px' }"
       >
         <span
@@ -142,6 +174,14 @@
           <span class="h-2 w-2 rounded-full bg-surface-red-5"></span
           >{{ __('Teraz') }}
         </span>
+        <span v-if="grafikWlaczony" class="flex items-center gap-1.5">
+          <span class="kalendarz-niedostepny h-2.5 w-4 rounded-sm"></span
+          >{{ __('Niedostępny') }}
+        </span>
+        <span v-if="maPozaGrafikiem" class="flex items-center gap-1.5">
+          <span class="kalendarz-poza-grafikiem h-2 w-3 rounded-sm"></span
+          >{{ __('Poza grafikiem') }}
+        </span>
       </div>
       <span class="hidden sm:inline">
         {{ String(os.od).padStart(2, '0') }}:00 {{ __('do') }}
@@ -153,10 +193,12 @@
 
 <script setup>
 import { computed } from 'vue'
+import { Button, FeatherIcon } from 'frappe-ui'
 import NaglowekKarty from '@/components/kalendarz/NaglowekKarty.vue'
 import DymekSpotkania from '@/components/kalendarz/DymekSpotkania.vue'
 import {
   czyDzis,
+  czyPozaGrafikiem,
   czyUmowiony,
   czyWeekend,
   etykietaChipa,
@@ -167,11 +209,14 @@ import {
   liniePionowe,
   nazwisko,
   numerDnia,
+  odcinkiNiedostepne,
+  oknaDnia,
   osGodzin,
   pogrupujPoDniach,
   pozycjaGodzinyPct,
   pozycjaTeraz,
   skrotDnia,
+  stylOdcinkaPoziomo,
   stylPaskaPoziomo,
   wymiaryTorow,
 } from '@/utils/kalendarz'
@@ -185,9 +230,35 @@ const props = defineProps({
   duzy: { type: Boolean, default: false },
   // Wspólna oś godzin tablicy ({ od, do }); bez niej oś liczona z własnych spotkań.
   osZewnetrzna: { type: Object, default: null },
+  // Grafik dostępności: { 'RRRR-MM-DD': [[od, do]] }, null = brak grafiku,
+  // undefined = grafik wyłączony (brak doctype na serwerze).
+  dostepnosc: { type: Object, default: undefined },
+  // Przycisk "Grafik" (backoffice, widok tygodnia).
+  edycja: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['otworz', 'nowe', 'przesun'])
+const emit = defineEmits(['otworz', 'nowe', 'przesun', 'grafik'])
+
+const grafikWlaczony = computed(() => props.dostepnosc !== undefined)
+const niedostepne = computed(() => {
+  const wynik = {}
+  if (!grafikWlaczony.value) return wynik
+  for (const dzien of props.dni) {
+    wynik[dzien] = odcinkiNiedostepne(
+      oknaDnia(props.dostepnosc, dzien),
+      os.value.od,
+      os.value.do,
+    )
+  }
+  return wynik
+})
+const maPozaGrafikiem = computed(() =>
+  props.spotkania.some((s) => pozaGrafikiem(s)),
+)
+
+function pozaGrafikiem(s) {
+  return grafikWlaczony.value && czyPozaGrafikiem(s, props.dostepnosc)
+}
 
 const kolor = computed(() => kolorHandlowca(props.kolorIndex))
 const os = computed(() => props.osZewnetrzna || osGodzin(props.spotkania))

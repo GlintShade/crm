@@ -30,3 +30,33 @@
 			prose-th:relative;
   }
 }
+
+/*
+  Grafik dostępności w kalendarzu (b82, decyzja 1: wariant B). Niedostępny
+  czas: ciemny szary z ukośnymi paskami, każdy blok zaokrąglony ze wszystkich
+  stron. W ciemnym motywie prawie czarny, żeby nadal był wyraźnie ciemniejszy
+  od wolnego wiersza (szare tokeny frappe-ui jaśnieją w dark mode, więc
+  kolory są tu własne).
+*/
+:root {
+  --kalendarz-niedostepny: 106 106 106;
+  --kalendarz-niedostepny-pasek: 255 255 255 / 0.13;
+  --kalendarz-poza-grafikiem: 224 54 54;
+}
+[data-theme='dark'] {
+  --kalendarz-niedostepny: 9 9 9;
+  --kalendarz-niedostepny-pasek: 255 255 255 / 0.08;
+  --kalendarz-poza-grafikiem: 240 75 75;
+}
+.kalendarz-niedostepny {
+  background-color: rgb(var(--kalendarz-niedostepny));
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgb(var(--kalendarz-niedostepny-pasek)) 0 3px,
+    transparent 3px 8px
+  );
+}
+/* Decyzja 9: spotkanie poza grafikiem dostaje czerwoną obwódkę, nic więcej. */
+.kalendarz-poza-grafikiem {
+  box-shadow: 0 0 0 2px rgb(var(--kalendarz-poza-grafikiem));
+}

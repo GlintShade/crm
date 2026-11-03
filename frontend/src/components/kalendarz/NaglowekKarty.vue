@@ -2,7 +2,9 @@
   Nagłówek karty handlowca (kalendarz, ops#318): awatar 40 px z inicjałami w
   kolorze handlowca, nazwisko, zakres dat, obramowany chip liczby spotkań i
   strzałki tygodnia w jednym pojemniku. Wspólny dla KartaHandlowca (poziomo)
-  i KalendarzPionowy (z propem `naglowek`).
+  i KalendarzPionowy (z propem `naglowek`). Grafik dostępności (b82): żółty
+  chip "brak grafiku" (prop `brak-grafiku`) i slot `akcje` przed strzałkami
+  (przycisk "Grafik" dla backoffice).
 -->
 <template>
   <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 sm:flex-nowrap">
@@ -19,6 +21,14 @@
       <div class="truncate text-xs text-ink-gray-5">{{ etykietaZakresu }}</div>
     </div>
     <span
+      v-if="brakGrafiku"
+      class="order-last shrink-0 whitespace-nowrap rounded-full bg-surface-amber-1 px-2 py-0.5 text-xs font-medium text-ink-amber-8 sm:order-none"
+      :title="__('Nikt jeszcze nie wpisał grafiku tego handlowca')"
+      data-testid="kalendarz-brak-grafiku"
+    >
+      {{ __('brak grafiku') }}
+    </span>
+    <span
       class="order-last shrink-0 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium sm:order-none"
       :class="
         chip.wolny
@@ -29,6 +39,7 @@
     >
       {{ chip.tekst }}
     </span>
+    <slot name="akcje" />
     <div class="flex shrink-0 items-center rounded-lg bg-surface-gray-2 p-0.5">
       <button
         type="button"
@@ -59,6 +70,7 @@ defineProps({
   kolor: { type: Object, required: true },
   etykietaZakresu: { type: String, default: '' },
   chip: { type: Object, required: true },
+  brakGrafiku: { type: Boolean, default: false },
 })
 
 defineEmits(['przesun'])
