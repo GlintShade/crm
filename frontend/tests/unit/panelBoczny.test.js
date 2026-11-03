@@ -165,3 +165,22 @@ describe('czyWygenerowanyPlaceholder', () => {
     expect(czyWygenerowanyPlaceholder('')).toBe(false)
   })
 })
+
+describe('podsumowanie: typy pol', () => {
+  it('Duration jako gg:mm, a "Nie"/"0" pomijane', () => {
+    const s = sek('Call center', [
+      { fieldname: 'custom_czas_do_kontaktu', fieldtype: 'Duration' },
+      { fieldname: 'a', fieldtype: 'Select' },
+      { fieldname: 'b', fieldtype: 'Select' },
+      { fieldname: 'custom_proby_kontaktu', fieldtype: 'Select' },
+      { fieldname: 'c', fieldtype: 'Check', label: 'Tak' },
+    ])
+    expect(
+      podsumowanieSekcji(s, { custom_czas_do_kontaktu: 359940, a: 'Nie', b: 'Nowy', custom_proby_kontaktu: '0', c: 0 }),
+    ).toBe('99:59 · Nowy')
+  })
+  it('same "Nie" daje Brak danych', () => {
+    const s = sek('Zestaw i dodatki', [{ fieldname: 'a', fieldtype: 'Select' }])
+    expect(podsumowanieSekcji(s, { a: 'Nie' })).toBe('Brak danych')
+  })
+})

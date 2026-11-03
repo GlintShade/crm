@@ -3,6 +3,8 @@
 // rozbicie pola Uwagi na linie "Klucz: wartosc" i pamiec otwartych sekcji.
 // Frappe-free (bez importow `frappe-ui` / `@/`), testowalne przez vitest.
 
+import { formatujGgMm } from './czasKontaktu'
+
 const NBSP = ' '
 
 // --- Formaty -----------------------------------------------------------------
@@ -150,6 +152,9 @@ export function zapiszOtwartaSekcje(doctype, nazwaSekcji, otwarta) {
 
 // --- Podsumowania sekcji ------------------------------------------------------
 
+// Wartosci, ktore w podsumowaniu nic nie mowia (przelacznik na "Nie", zero).
+const WARTOSCI_NIEZNACZACE = new Set(['nie', '0', 'false', 'no'])
+
 const BRAK_DANYCH = 'Brak danych'
 
 function pustaWartosc(v) {
@@ -180,6 +185,12 @@ export function wartoscDoWyswietlenia(pole, wartosc, opcje = {}) {
   const nazwa = pole?.fieldname || ''
   if (typ === 'Check') return Number(wartosc) ? pole.label || '' : ''
   if (!typ && RE_DATA_PELNA.test(String(wartosc))) return formatDataCzas(wartosc)
+  if (typ === 'Duration' || nazwa === 'custom_czas_do_kontaktu') {
+    return formatujGgMm(wartosc)
+  }
+  if (['Select', 'Check', 'Data'].includes(typ) && WARTOSCI_NIEZNACZACE.has(String(wartosc).trim().toLowerCase())) {
+    return ''
+  }
   if (typ === 'Date') return formatData(wartosc)
   if (typ === 'Datetime') return formatDataCzas(wartosc)
   if (typ === 'Currency') return Number(wartosc) === 0 ? '' : formatKwota(wartosc)
