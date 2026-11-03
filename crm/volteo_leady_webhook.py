@@ -446,3 +446,65 @@ def dane_z_kodu_pocztowego(dane: dict, wiersz: Mapping[str, Any] | None) -> dict
 			custom_geo_zrodlo="kod",
 		)
 	return wynik
+
+
+POLA_TAGOW_DO_UZUPELNIENIA: tuple[str, ...] = (
+	"custom_posiadane_produkty",
+	"custom_zasady_dotacji",
+	"custom_produkt_procesu",
+)
+"""Pola, ktore ponowne zgloszenie FB uzupelnia na istniejacym leadzie, wylacznie gdy sa puste (ops#324)."""
+
+PREFIKS_KAMPANII: str = "Kampania: "
+"""Prefiks linii z kampania w `custom_uwagi_import` (patrz `zbuduj_leada_z_webhooka`)."""
+
+
+def _znacznik_zgloszenia(facebook_lead_id: str) -> str:
+	"""Fragment linii Uwag identyfikujacy zgloszenie; z nawiasem, by id 123 nie pasowalo do 1234."""
+	return "lead FB %s)" % facebook_lead_id
+
+
+def linia_ponownego_zgloszenia(dane: Mapping[str, Any]) -> str:
+	"""Linia dopisywana do Uwag istniejacego leada (ops#324).
+
+	`dane` to wynik `zbuduj_leada_z_webhooka` dla NOWEGO zgloszenia."""
+	return "Ponowne zgłoszenie FB %s (%s: %s" % (
+		dane.get("custom_import_date") or "",
+		_znacznik_zgloszenia(dane["facebook_lead_id"]),
+		dane.get("custom_uwagi_import") or "",
+	)
+
+
+def juz_scalone(uwagi_istniejace: str | None, facebook_lead_id: str) -> bool:
+	"""Czy Uwagi istniejacego leada juz zawieraja to zgloszenie (idempotencja retry Make)."""
+	return _znacznik_zgloszenia(facebook_lead_id) in (uwagi_istniejace or "")
+
+
+def kampania_z_uwag(uwagi: str | None) -> str:
+	"""Wartosc linii `Kampania: ...` z Uwag nowego ladunku, albo pusty tekst."""
+	for linia in (uwagi or "").split(SEPARATOR_UWAG):
+		if linia.startswith(PREFIKS_KAMPANII):
+			return linia[len(PREFIKS_KAMPANII) :].strip()
+	return ""
+
+
+def tresc_sladu_ponownego_zgloszenia(dane: Mapping[str, Any]) -> str:
+	"""Tresc komentarza `Info` w Aktywnosci leada."""
+	kampania = kampania_z_uwag(dane.get("custom_uwagi_import"))
+	return "Ponowne zgłoszenie z Facebooka: %s" % (kampania or "brak kampanii")
+
+
+def pola_do_scalenia(istniejacy: Mapping[str, Any], nowy: Mapping[str, Any]) -> dict[str, str]:
+	"""Tylko te pola, ktore trzeba zapisac na istniejacym leadzie.
+
+	`custom_uwagi_import` zawsze (stare Uwagi plus nowa linia, `SEPARATOR_UWAG`); trzy pola
+	tagow tylko gdy puste u istniejacego, a niepuste w nowym. Status, wlasciciel, CC, adres,
+	imie i `facebook_lead_id` nigdy nie wchodza do wyniku. Nie mutuje argumentow."""
+	uwagi = SEPARATOR_UWAG.join(
+		filter(None, [istniejacy.get("custom_uwagi_import") or "", linia_ponownego_zgloszenia(nowy)])
+	)
+	wynik = {"custom_uwagi_import": uwagi}
+	for pole in POLA_TAGOW_DO_UZUPELNIENIA:
+		if not istniejacy.get(pole) and nowy.get(pole):
+			wynik[pole] = nowy[pole]
+	return wynik

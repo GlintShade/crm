@@ -14,16 +14,21 @@ from crm.volteo_leady_webhook import (
 	UWAGA_KOD_SPOZA_BAZY,
 	LadunekOdrzucony,
 	dane_z_kodu_pocztowego,
+	juz_scalone,
+	kampania_z_uwag,
 	klucz_limitu,
 	limit_przekroczony,
+	linia_ponownego_zgloszenia,
 	normalizuj_date_zgloszenia,
 	normalizuj_kod_tolerancyjnie,
 	normalizuj_posiada_pv,
 	normalizuj_produkt_reklamy,
 	normalizuj_system_rozliczen,
+	pola_do_scalenia,
 	rozpoznaj_posiada_pv,
 	rozpoznaj_system_rozliczen,
 	splaszcz_odpowiedzi,
+	tresc_sladu_ponownego_zgloszenia,
 	zbuduj_leada_z_webhooka,
 )
 
@@ -687,3 +692,82 @@ class TestLimitPrzekroczony(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+class TestPonowneZgloszenie(unittest.TestCase):
+	def setUp(self):
+		self.nowy = zbuduj_leada_z_webhooka(
+			ladunek(kampania="GORZÓW", facebook_lead_id="B22", produkt="PV", posiada_pv="Tak"), DZIS
+		)
+
+	def test_format_linii(self):
+		linia = linia_ponownego_zgloszenia(self.nowy)
+		self.assertTrue(linia.startswith("Ponowne zgłoszenie FB 2026-10-20 (lead FB B22): "))
+		self.assertTrue(linia.endswith(self.nowy["custom_uwagi_import"]))
+
+	def test_juz_scalone_trafienie_i_pudlo(self):
+		uwagi_ist = "stare | " + linia_ponownego_zgloszenia(self.nowy)
+		self.assertTrue(juz_scalone(uwagi_ist, "B22"))
+		self.assertFalse(juz_scalone(uwagi_ist, "B2"))
+		self.assertFalse(juz_scalone("stare", "B22"))
+		self.assertFalse(juz_scalone(None, "B22"))
+		self.assertFalse(juz_scalone("", "B22"))
+
+	def test_prefiks_id_nie_pasuje_do_dluzszego(self):
+		self.assertFalse(juz_scalone("Ponowne zgłoszenie FB x (lead FB 1234): y", "123"))
+
+	def test_kampania_z_uwag(self):
+		self.assertEqual(kampania_z_uwag(self.nowy["custom_uwagi_import"]), "GORZÓW")
+		self.assertEqual(kampania_z_uwag("Zrodlo: Facebook Lead Ads"), "")
+		self.assertEqual(kampania_z_uwag(None), "")
+
+	def test_tresc_sladu(self):
+		self.assertEqual(
+			tresc_sladu_ponownego_zgloszenia(self.nowy), "Ponowne zgłoszenie z Facebooka: GORZÓW"
+		)
+		bez = zbuduj_leada_z_webhooka(ladunek(), DZIS)
+		self.assertEqual(
+			tresc_sladu_ponownego_zgloszenia(bez), "Ponowne zgłoszenie z Facebooka: brak kampanii"
+		)
+
+	def test_uwagi_dopisane_do_istniejacych(self):
+		wynik = pola_do_scalenia({"custom_uwagi_import": "stare uwagi"}, self.nowy)
+		czesci = wynik["custom_uwagi_import"].split(SEPARATOR_UWAG, 1)
+		self.assertEqual(czesci[0], "stare uwagi")
+		self.assertEqual(czesci[1], linia_ponownego_zgloszenia(self.nowy))
+
+	def test_puste_uwagi_istniejace(self):
+		for puste in ("", None):
+			wynik = pola_do_scalenia({"custom_uwagi_import": puste}, self.nowy)
+			self.assertEqual(wynik["custom_uwagi_import"], linia_ponownego_zgloszenia(self.nowy))
+
+	def test_tagi_tylko_gdy_puste(self):
+		ist = {"custom_posiadane_produkty": "", "custom_zasady_dotacji": None, "custom_produkt_procesu": ""}
+		wynik = pola_do_scalenia(ist, self.nowy)
+		self.assertEqual(wynik["custom_posiadane_produkty"], "PV")
+		self.assertEqual(wynik["custom_zasady_dotacji"], "Nowe zasady")
+		self.assertEqual(wynik["custom_produkt_procesu"], "PV")
+
+	def test_tagi_wypelnione_zostaja(self):
+		ist = {
+			"custom_posiadane_produkty": "ME",
+			"custom_zasady_dotacji": "Stare zasady",
+			"custom_produkt_procesu": "PC",
+		}
+		wynik = pola_do_scalenia(ist, self.nowy)
+		self.assertEqual(list(wynik), ["custom_uwagi_import"])
+
+	def test_nowy_bez_tagu_nie_zapisuje_pustego(self):
+		nowy = zbuduj_leada_z_webhooka(ladunek(posiada_pv="", system_rozliczen="", produkt=""), DZIS)
+		wynik = pola_do_scalenia({}, nowy)
+		self.assertEqual(list(wynik), ["custom_uwagi_import"])
+
+	def test_nie_dotyka_pol_chronionych_i_nie_mutuje(self):
+		ist = {"custom_uwagi_import": "x", "status": "Umówiony", "lead_owner": "a@b.pl"}
+		kopia = copy.deepcopy(ist)
+		nowy_kopia = copy.deepcopy(self.nowy)
+		wynik = pola_do_scalenia(ist, self.nowy)
+		for pole in ("status", "lead_owner", "custom_cc", "first_name", "facebook_lead_id", "mobile_no"):
+			self.assertNotIn(pole, wynik)
+		self.assertEqual(ist, kopia)
+		self.assertEqual(self.nowy, nowy_kopia)

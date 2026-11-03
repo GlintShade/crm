@@ -33,6 +33,15 @@ Idempotencja i odrzucenia
   Celowo NIE `frappe.throw`: zły telefon nie naprawi się przy retry Make, a
   wyjątek cofnąłby wpis logu. Nieoczekiwane wyjątki lecą dalej (HTTP 500, Make
   ponawia).
+- Ten sam numer telefonu, inny `facebook_lead_id` (ops#324): NIE zakładamy drugiego
+  leada. Szukamy istniejącego `CRM Lead` o tym samym `mobile_no` (najnowszy wg
+  `creation`, każde źródło, bez okna czasowego) i scalamy: dopisujemy linię
+  "Ponowne zgłoszenie FB ..." do `custom_uwagi_import`, uzupełniamy tylko puste pola
+  tagów (`custom_posiadane_produkty`, `custom_zasady_dotacji`, `custom_produkt_procesu`),
+  zostawiamy komentarz `Info` w Aktywności. Status, właściciel, CC, adres, imię i
+  `facebook_lead_id` zostają bez zmian. Odpowiedź: HTTP 200 `{"status": "scalony",
+  "lead": <name>}`. Retry Make tego samego zgłoszenia (Uwagi już zawierają
+  `lead FB <id>)`) też daje `scalony`, bez zapisu i bez SMS.
 - Sukces: `{"status": "utworzony", "lead": <name>}`.
 
 Limit żądań
@@ -46,7 +55,7 @@ klucz, a nie wartość przepustowości.
 
 SMS powitalny (ops#305)
 -----------------------
-Po udanym insercie NOWEGO leada (status `utworzony`, nigdy duplikat ani odrzucony)
+Po udanym insercie NOWEGO leada (status `utworzony`, nigdy duplikat, scalony ani odrzucony)
 rejestrujemy callback `frappe.db.after_commit`, który kolejkuje
 `crm.api.sms_powitalny.wyslij_sms_powitalny` (kolejka "short"). To jedyna ścieżka
 wyzwalająca SMS. Awaria SMS nie cofa leada i nie zmienia odpowiedzi webhooka.
@@ -58,6 +67,8 @@ SMS do dyżurnego (ops#313)
 Tym samym wzorcem, drugim callbackiem `after_commit`, kolejkujemy
 `crm.api.sms_dyzur.powiadom_dyzurnego`: powiadomienie dla osoby z backoffice, która
 według grafiku `Volteo Dyzur SMS` ma teraz dyżur. Własny przełącznik `dyzur_wlaczone`.
+Idzie przy `utworzony` oraz przy pierwszym `scalony` (klient ponownie zgłasza
+zainteresowanie, SMS dotyczy istniejącego leada); powtórka scalenia go nie wysyła.
 
 Cała logika mapowania jest w `crm/volteo_leady_webhook.py` (bez `frappe`).
 """
@@ -67,13 +78,17 @@ import json
 import frappe
 from frappe import _
 
+from crm.volteo_aktywnosc import zapisz_slad
 from crm.volteo_leady_webhook import (
 	LIMIT_ZADAN_NA_MINUTE,
 	ROLA_INTEGRACJI,
 	LadunekOdrzucony,
 	dane_z_kodu_pocztowego,
+	juz_scalone,
 	klucz_limitu,
 	limit_przekroczony,
+	pola_do_scalenia,
+	tresc_sladu_ponownego_zgloszenia,
 	zbuduj_leada_z_webhooka,
 )
 
@@ -183,6 +198,37 @@ def _zakolejkuj_sms_dyzurny(lead: str) -> None:
 		)
 
 
+def _scal_z_istniejacym(dane: dict) -> str | None:
+	"""Ponowne zgłoszenie tego samego numeru (ops#324): zwraca nazwę istniejącego leada albo None.
+
+	Zapis przez `frappe.db.set_value`, nie `doc.save()`: konto integracji nie ma DocPerm na
+	`CRM Lead`, a dotykamy wyłącznie Uwag i pól tagów, więc walidacje kontrolera (strażnik
+	statusu CC, ops#265) nie mają tu nic do ochrony, a `set_value` ich nie uruchamia.
+	`update_modified=True` zostawia ślad zmiany na leadzie."""
+	nazwa = frappe.db.get_value(
+		"CRM Lead", {"mobile_no": dane["mobile_no"]}, "name", order_by="creation desc"
+	)
+	if not nazwa:
+		return None
+	istniejacy = frappe.db.get_value(
+		"CRM Lead",
+		nazwa,
+		[
+			"custom_uwagi_import",
+			"custom_posiadane_produkty",
+			"custom_zasady_dotacji",
+			"custom_produkt_procesu",
+		],
+		as_dict=True,
+	)
+	if juz_scalone(istniejacy.get("custom_uwagi_import"), dane["facebook_lead_id"]):
+		return nazwa
+	frappe.db.set_value("CRM Lead", nazwa, pola_do_scalenia(istniejacy, dane), update_modified=True)
+	zapisz_slad(nazwa, tresc_sladu_ponownego_zgloszenia(dane), doctype="CRM Lead")
+	_zakolejkuj_sms_dyzurny(nazwa)
+	return nazwa
+
+
 @frappe.whitelist(methods=["POST"])
 def przyjmij() -> dict:
 	"""Zakłada `CRM Lead` z ładunku Make.com; patrz docstring modułu."""
@@ -201,9 +247,11 @@ def przyjmij() -> dict:
 	if istniejacy:
 		return {"status": "duplikat", "lead": istniejacy}
 
-	doc = frappe.get_doc({"doctype": "CRM Lead", **_z_centroidem_kodu(dane)}).insert(
-		ignore_permissions=True
-	)
+	scalony = _scal_z_istniejacym(dane)
+	if scalony:
+		return {"status": "scalony", "lead": scalony}
+
+	doc = frappe.get_doc({"doctype": "CRM Lead", **_z_centroidem_kodu(dane)}).insert(ignore_permissions=True)
 	_zakolejkuj_sms_powitalny(doc.name)
 	_zakolejkuj_sms_dyzurny(doc.name)
 	return {"status": "utworzony", "lead": doc.name}
