@@ -11,7 +11,14 @@
   zamontowany.
 -->
 <template>
-  <div v-if="note" class="border-b p-5">
+  <div
+    v-if="note"
+    :class="
+      karty
+        ? 'mx-3 mt-3 rounded-lg border border-outline-gray-1 bg-surface-white px-3 py-2.5'
+        : 'border-b p-5'
+    "
+  >
     <div class="text-xs text-ink-gray-5">{{ __('Następny krok') }}</div>
     <div class="mt-1.5 text-sm text-ink-gray-8">{{ note }}</div>
   </div>
@@ -26,6 +33,7 @@ const props = defineProps({
   dealId: { type: String, required: true },
   status: { type: String, default: '' },
   rodzaj: { type: String, default: '' },
+  karty: { type: Boolean, default: false },
 })
 
 const { getDealStatus } = statusesStore()

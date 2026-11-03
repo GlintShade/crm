@@ -135,12 +135,12 @@
         v-show="!isSidePanelCollapsed"
         class="flex min-h-0 flex-1 flex-col overflow-hidden"
       >
-        <div
-          class="flex h-[45px] cursor-copy items-center border-b px-5 py-2.5 text-lg-medium text-ink-gray-9"
-          @click="copyToClipboard(leadId)"
-        >
-          {{ __(leadId) }}
-        </div>
+        <PanelNaglowek
+          :imie="doc.lead_name || [doc.first_name, doc.last_name].filter(Boolean).join(' ')"
+          :telefon="doc.mobile_no || ''"
+          :rekord="leadId"
+          @zwin="isSidePanelCollapsed = true"
+        />
         <FileUploader
           :validateFile="validateIsImageFile"
           :upload-args="{ private: true }"
@@ -263,7 +263,7 @@
           v-model="doc"
           @updateField="updateField"
         />
-        <TasksSection doctype="CRM Lead" :docname="leadId" />
+        <TasksSection doctype="CRM Lead" :docname="leadId" karty />
         <div
           v-if="sections.data"
           class="flex flex-1 flex-col justify-between overflow-hidden"
@@ -277,6 +277,7 @@
                "Szczegoly" (patrz uzycie wyzej), znika tylko z tego panelu. -->
           <SidePanelLayout
             :sections="sectionsBezEmailaWPrawymPanelu"
+            wariant="karty"
             doctype="CRM Lead"
             :docname="leadId"
             @reload="sections.reload"
@@ -357,6 +358,7 @@ import Activities from '@/components/Activities/Activities.vue'
 import PrzekazHandlowcowi from '@/components/PrzekazHandlowcowi.vue'
 import FilesUploader from '@/components/FilesUploader/FilesUploader.vue'
 import SidePanelLayout from '@/components/SidePanelLayout.vue'
+import PanelNaglowek from '@/components/PanelNaglowek.vue'
 import SLASection from '@/components/SLASection.vue'
 import TasksSection from '@/components/TasksSection.vue'
 import CustomActions from '@/components/CustomActions.vue'
