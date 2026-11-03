@@ -304,6 +304,11 @@ doc_events = {
 	# istnieje jeszcze na swiezym/lokalnym site). Hook na nieistniejacym doctype
 	# jest bezpieczny, patrz komentarz przy "Volteo Audyt CP".
 	"Volteo Dyzur SMS": {"validate": ["crm.api.dyzury.validate_dyzur"]},
+	# Grafik dostepnosci handlowcow w kalendarzu (b82) -- doctype tworzy ops
+	# (wzor skryptu w docs/ops/crm-dostepnosc.py); na swiezym/lokalnym site go
+	# nie ma. Hook na nieistniejacym doctype jest bezpieczny, patrz komentarz
+	# przy "Volteo Audyt CP".
+	"Volteo Dostepnosc": {"validate": ["crm.api.kalendarz.validate_dostepnosc"]},
 	"Volteo Trify Update": {
 		"validate": ["crm.api.trify.validate"],
 		"after_insert": ["crm.api.trify.after_insert"],

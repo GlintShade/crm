@@ -4,12 +4,22 @@
 import unittest
 
 from crm.volteo_kalendarz import (
+	DNI_TYGODNIA,
+	dni_zakresu,
+	dostepnosc_handlowcow,
 	granice_czasu,
+	moze_edytowac_grafik,
 	normalizuj_handlowcow,
+	normalizuj_okna,
 	normalizuj_termin,
+	normalizuj_tydzien,
+	plan_zapisu,
 	pogrupuj_spotkania,
 	przetnij_handlowcow,
+	rozwin_dostepnosc,
+	waliduj_wiersz_dostepnosci,
 	waliduj_zakres_dat,
+	wiersze_dnia,
 	zakres_dnia,
 	zakres_kalendarza,
 	zakres_tygodnia,
@@ -258,3 +268,230 @@ class TestPogrupujSpotkania(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+class TestGrafikUprawnienia(unittest.TestCase):
+	def test_role_grafiku(self):
+		for rola in ("System Manager", "Volteo Core Admin", "Volteo Backend"):
+			self.assertTrue(moze_edytowac_grafik("a@x.pl", [rola]))
+
+	def test_administrator(self):
+		self.assertTrue(moze_edytowac_grafik("Administrator", []))
+
+	def test_call_center_i_handlowiec_nie(self):
+		self.assertFalse(moze_edytowac_grafik("a@x.pl", ["Volteo Call Center"]))
+		self.assertFalse(moze_edytowac_grafik("a@x.pl", ["Volteo D2D Sales"]))
+		self.assertFalse(moze_edytowac_grafik("a@x.pl", None))
+
+
+class TestNormalizujOkna(unittest.TestCase):
+	def test_puste_to_wolne(self):
+		self.assertEqual(normalizuj_okna([]), [])
+		self.assertEqual(normalizuj_okna(None), [])
+
+	def test_sortuje_i_scala(self):
+		self.assertEqual(normalizuj_okna([[14, 22], [8, 12], [12, 13]]), [[8, 13], [14, 22]])
+
+	def test_nachodzace(self):
+		self.assertEqual(normalizuj_okna([[8, 15], [10, 20]]), [[8, 20]])
+
+	def test_godziny_jako_tekst_i_float(self):
+		self.assertEqual(normalizuj_okna([["8", 14.0]]), [[8, 14]])
+
+	def test_caly_dzien(self):
+		self.assertEqual(normalizuj_okna([[0, 24]]), [[0, 24]])
+
+	def test_bledy(self):
+		for zle in (
+			[[14, 8]],
+			[[8, 8]],
+			[[-1, 5]],
+			[[20, 25]],
+			[[8.5, 10]],
+			[[True, 5]],
+			[[8]],
+			"8-14",
+			[["a", 5]],
+		):
+			with self.assertRaises(ValueError, msg=repr(zle)):
+				normalizuj_okna(zle)
+
+
+class TestNormalizujTydzien(unittest.TestCase):
+	def test_json(self):
+		t = normalizuj_tydzien("[[[0,24]],[[0,24]],[[0,24]],[],[],[],[]]")
+		self.assertEqual(t[0], [[0, 24]])
+		self.assertEqual(t[6], [])
+
+	def test_zla_liczba_dni(self):
+		with self.assertRaises(ValueError):
+			normalizuj_tydzien([[]] * 6)
+
+	def test_zly_json(self):
+		with self.assertRaises(ValueError):
+			normalizuj_tydzien("{nie json")
+
+
+class TestWalidujWierszDostepnosci(unittest.TestCase):
+	def test_wzor_poprawny(self):
+		self.assertIsNone(waliduj_wiersz_dostepnosci("Poniedziałek", None, 0, 8, 14))
+
+	def test_zmiana_na_dzien(self):
+		self.assertIsNone(waliduj_wiersz_dostepnosci("", "2026-11-06", 0, 14, 22))
+
+	def test_wolne_bez_godzin(self):
+		self.assertIsNone(waliduj_wiersz_dostepnosci("Piątek", None, 1, None, None))
+
+	def test_brak_dnia_i_daty(self):
+		self.assertIsNotNone(waliduj_wiersz_dostepnosci("", None, 0, 8, 14))
+
+	def test_zla_data(self):
+		self.assertIsNotNone(waliduj_wiersz_dostepnosci("", "2026-13-40", 0, 8, 14))
+
+	def test_zle_godziny(self):
+		self.assertIsNotNone(waliduj_wiersz_dostepnosci("Wtorek", None, 0, 14, 8))
+		self.assertIsNotNone(waliduj_wiersz_dostepnosci("Wtorek", None, 0, None, None))
+
+
+class TestDniZakresu(unittest.TestCase):
+	def test_tydzien(self):
+		dni = dni_zakresu("2026-11-02", "2026-11-08")
+		self.assertEqual(len(dni), 7)
+		self.assertEqual(dni[0], "2026-11-02")
+		self.assertEqual(dni[-1], "2026-11-08")
+
+	def test_przelom_miesiaca(self):
+		self.assertEqual(dni_zakresu("2026-10-31", "2026-11-01"), ["2026-10-31", "2026-11-01"])
+
+
+TYDZIEN = dni_zakresu("2026-11-02", "2026-11-08")
+
+
+class TestRozwinDostepnosc(unittest.TestCase):
+	def test_brak_wierszy_to_brak_grafiku(self):
+		self.assertIsNone(rozwin_dostepnosc([], TYDZIEN))
+
+	def test_wzor_tygodniowy(self):
+		wiersze = [
+			{"dzien_tygodnia": d, "data": None, "wolne": 0, "od": 0, "do": 24} for d in DNI_TYGODNIA[:3]
+		] + [
+			{"dzien_tygodnia": d, "data": None, "wolne": 1, "od": None, "do": None} for d in DNI_TYGODNIA[3:]
+		]
+		wynik = rozwin_dostepnosc(wiersze, TYDZIEN)
+		self.assertEqual(wynik["2026-11-02"], [[0, 24]])
+		self.assertEqual(wynik["2026-11-05"], [])
+		self.assertEqual(wynik["2026-11-08"], [])
+
+	def test_zmiana_zastepuje_wzor(self):
+		wiersze = [
+			{"dzien_tygodnia": "Piątek", "data": None, "wolne": 0, "od": 8, "do": 20},
+			{"dzien_tygodnia": "", "data": "2026-11-06", "wolne": 1, "od": None, "do": None},
+		]
+		wynik = rozwin_dostepnosc(wiersze, TYDZIEN)
+		self.assertEqual(wynik["2026-11-06"], [])
+
+	def test_dzien_bez_wzoru_to_none(self):
+		wiersze = [{"dzien_tygodnia": "Poniedziałek", "data": None, "wolne": 0, "od": 8, "do": 14}]
+		wynik = rozwin_dostepnosc(wiersze, TYDZIEN)
+		self.assertEqual(wynik["2026-11-02"], [[8, 14]])
+		self.assertIsNone(wynik["2026-11-03"])
+
+	def test_kilka_okien_dnia(self):
+		wiersze = [
+			{"dzien_tygodnia": "Wtorek", "data": None, "wolne": 0, "od": 14, "do": 18},
+			{"dzien_tygodnia": "Wtorek", "data": None, "wolne": 0, "od": 8, "do": 12},
+		]
+		self.assertEqual(rozwin_dostepnosc(wiersze, TYDZIEN)["2026-11-03"], [[8, 12], [14, 18]])
+
+	def test_zepsuty_wiersz_pominiety(self):
+		wiersze = [
+			{"dzien_tygodnia": "Wtorek", "data": None, "wolne": 0, "od": 18, "do": 10},
+			{"dzien_tygodnia": "Wtorek", "data": None, "wolne": 0, "od": 8, "do": 12},
+		]
+		self.assertEqual(rozwin_dostepnosc(wiersze, TYDZIEN)["2026-11-03"], [[8, 12]])
+
+	def test_data_jako_obiekt_date(self):
+		from datetime import date
+
+		wiersze = [{"dzien_tygodnia": "", "data": date(2026, 11, 4), "wolne": 0, "od": 9, "do": 10}]
+		self.assertEqual(rozwin_dostepnosc(wiersze, TYDZIEN)["2026-11-04"], [[9, 10]])
+
+
+class TestDostepnoscHandlowcow(unittest.TestCase):
+	def test_kazdy_handlowiec_ma_klucz(self):
+		wiersze = [
+			{
+				"handlowiec": "a@x.pl",
+				"dzien_tygodnia": "Poniedziałek",
+				"data": None,
+				"wolne": 0,
+				"od": 8,
+				"do": 14,
+			},
+			{
+				"handlowiec": "a@x.pl",
+				"dzien_tygodnia": "",
+				"data": "2026-11-03",
+				"wolne": 1,
+				"od": None,
+				"do": None,
+			},
+			{"handlowiec": "obcy@x.pl", "dzien_tygodnia": "Poniedziałek", "data": None, "wolne": 1},
+		]
+		dost, zmiany = dostepnosc_handlowcow(wiersze, ["a@x.pl", "b@x.pl"], TYDZIEN)
+		self.assertEqual(set(dost), {"a@x.pl", "b@x.pl"})
+		self.assertIsNone(dost["b@x.pl"])
+		self.assertEqual(dost["a@x.pl"]["2026-11-02"], [[8, 14]])
+		self.assertEqual(zmiany["a@x.pl"], ["2026-11-03"])
+		self.assertEqual(zmiany["b@x.pl"], [])
+
+	def test_zmiana_spoza_zakresu_nie_w_liscie(self):
+		wiersze = [{"handlowiec": "a@x.pl", "dzien_tygodnia": "", "data": "2026-12-01", "wolne": 1}]
+		_, zmiany = dostepnosc_handlowcow(wiersze, ["a@x.pl"], TYDZIEN)
+		self.assertEqual(zmiany["a@x.pl"], [])
+
+
+class TestWierszeDnia(unittest.TestCase):
+	def test_wolne(self):
+		self.assertEqual(wiersze_dnia([]), [{"wolne": 1, "od": None, "do": None}])
+
+	def test_okna(self):
+		self.assertEqual(
+			wiersze_dnia([[14, 22], [8, 12]]),
+			[{"wolne": 0, "od": 8, "do": 12}, {"wolne": 0, "od": 14, "do": 22}],
+		)
+
+
+TYDZ_KAMILA = (((0, 24),), ((0, 24),), ((0, 24),), (), (), (), ())
+
+
+class TestPlanZapisu(unittest.TestCase):
+	TYDZ = [[list(o) for o in d] for d in TYDZ_KAMILA]  # noqa: RUF012
+
+	def test_staly(self):
+		plan = plan_zapisu(self.TYDZ, "staly", "2026-11-02", {})
+		self.assertEqual(plan["wzor"], self.TYDZ)
+		self.assertEqual(plan["zmiany"], {})
+		self.assertEqual(plan["usun_zmiany"], TYDZIEN)
+
+	def test_tydzien_tylko_rozne_dni(self):
+		wzor = {d: [[0, 24]] for d in DNI_TYGODNIA[:3]}
+		wzor.update({d: [] for d in DNI_TYGODNIA[3:]})
+		tydz = [list(d) for d in self.TYDZ]
+		tydz[4] = [[8, 12]]
+		plan = plan_zapisu(tydz, "tydzien", "2026-11-02", wzor)
+		self.assertIsNone(plan["wzor"])
+		self.assertEqual(plan["zmiany"], {"2026-11-06": [[8, 12]]})
+		self.assertEqual(plan["usun_zmiany"], TYDZIEN)
+
+	def test_tydzien_bez_wzoru_wszystkie_dni(self):
+		plan = plan_zapisu(self.TYDZ, "tydzien", "2026-11-02", {})
+		self.assertEqual(len(plan["zmiany"]), 7)
+
+	def test_nie_poniedzialek(self):
+		with self.assertRaises(ValueError):
+			plan_zapisu(self.TYDZ, "staly", "2026-11-03", {})
+
+	def test_zly_zakres(self):
+		with self.assertRaises(ValueError):
+			plan_zapisu(self.TYDZ, "zawsze", "2026-11-02", {})
