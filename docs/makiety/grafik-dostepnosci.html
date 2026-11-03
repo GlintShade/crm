@@ -1,0 +1,1269 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Grafik dostępności</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<!--
+  Makieta (b82, tylko projekt UI, bez implementacji): grafik dostępności
+  handlowców w kalendarzu spotkań (/crm/kalendarz, ops#318). Statyczny HTML,
+  CSS i JS inline. Wygląd kart odwzorowuje KartaHandlowca.vue,
+  NaglowekKarty.vue, KalendarzPasek.vue i utils/kalendarz.js (oś 08 do 22,
+  ścieżki 22 px co 5 px, kolumna dni 58 px, karta rounded-xl p-3.5).
+-->
+<style>
+:root {
+  --page: #f3f3f3;
+  --base: #ffffff;
+  --g1: #f8f8f8;
+  --g2: #f3f3f3;
+  --g3: #ededed;
+  --g4: #e2e2e2;
+  --line1: #ededed;
+  --line2: #e2e2e2;
+  --line3: #c7c7c7;
+  --ink9: #171717;
+  --ink8: #383838;
+  --ink7: #525252;
+  --ink6: #6b6b6b;
+  --ink5: #7c7c7c;
+  --ink4: #a3a3a3;
+  --blue1: #edf6fd;
+  --blue6: #0289f7;
+  --blue8: #007be0;
+  --red5: #e03636;
+  --red-bg: #fff0f0;
+  --red-ink: #c22828;
+  --amber-ink: #b45309;
+  --amber-bg: #fff7e6;
+  --green-bg: #e4faeb;
+  --green-line: #b9e6c9;
+  --green-ink: #137949;
+  --solid: #171717;
+  --solid-ink: #ffffff;
+  --shadow: 0 10px 30px rgba(0,0,0,.12), 0 2px 6px rgba(0,0,0,.06);
+
+  /* Dostępność: wolny czas zostaje jasny, niedostępny ciemny. */
+  --row: #f8f8f8;
+  --row-today: #edf6fd;
+  --un-a: #4f4f4f;
+  --un-b: #6a6a6a;
+  --un-b-stripe: rgba(255,255,255,.13);
+  --dim-c: #c4c4c4;
+  --slot-c: #ffffff;
+  --slot-c-line: #d4d4d4;
+  --edit-on: #ffffff;
+  --edit-off: #4f4f4f;
+}
+html[data-theme="dark"] {
+  --page: #0b0b0b;
+  --base: #171717;
+  --g1: #1e1e1e;
+  --g2: #232323;
+  --g3: #2c2c2c;
+  --g4: #343434;
+  --line1: #242424;
+  --line2: #2e2e2e;
+  --line3: #444444;
+  --ink9: #f5f5f5;
+  --ink8: #e2e2e2;
+  --ink7: #c7c7c7;
+  --ink6: #a8a8a8;
+  --ink5: #8a8a8a;
+  --ink4: #666666;
+  --blue1: #0f2538;
+  --blue6: #2b9bf8;
+  --blue8: #67b6fa;
+  --red5: #f04b4b;
+  --red-bg: #3a1414;
+  --red-ink: #ff8a8a;
+  --amber-ink: #f5b452;
+  --amber-bg: #33240b;
+  --green-bg: #0f2b1b;
+  --green-line: #1e5235;
+  --green-ink: #6fd39b;
+  --solid: #f5f5f5;
+  --solid-ink: #171717;
+  --shadow: 0 10px 30px rgba(0,0,0,.6), 0 2px 6px rgba(0,0,0,.4);
+
+  --row: #3a3a3a;
+  --row-today: #173a5a;
+  --un-a: #050505;
+  --un-b: #090909;
+  --un-b-stripe: rgba(255,255,255,.07);
+  --dim-c: #070707;
+  --slot-c: #4a4a4a;
+  --slot-c-line: #5e5e5e;
+  --edit-on: #4a4a4a;
+  --edit-off: #050505;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--page);
+  color: var(--ink8);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv11";
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* ---------- Rama makiety (poza aplikacją) ---------- */
+.mk-top {
+  position: sticky; top: 0; z-index: 50;
+  background: var(--base);
+  border-bottom: 1px solid var(--line2);
+}
+.mk-top-in {
+  max-width: 1440px; margin: 0 auto; padding: 12px 16px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px;
+}
+.mk-title { font-weight: 600; color: var(--ink9); font-size: 15px; }
+.mk-title small { display: block; font-weight: 400; color: var(--ink5); font-size: 12px; margin-top: 2px; }
+.mk-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.mk-tab {
+  border: 1px solid var(--line2); background: var(--base); color: var(--ink7);
+  border-radius: 8px; padding: 6px 12px; font-size: 13px;
+}
+.mk-tab[aria-selected="true"] { background: var(--solid); color: var(--solid-ink); border-color: var(--solid); }
+.mk-spacer { flex: 1; }
+.mk-wrap { max-width: 1440px; margin: 0 auto; padding: 16px; }
+.mk-panel {
+  background: var(--base); border: 1px solid var(--line2); border-radius: 12px;
+  padding: 14px 16px; margin-bottom: 14px;
+}
+.mk-panel h2 { margin: 0 0 4px; font-size: 15px; color: var(--ink9); }
+.mk-panel p { margin: 4px 0; color: var(--ink6); font-size: 13px; line-height: 1.5; }
+.mk-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; margin-top: 10px; }
+.mk-label { font-size: 12px; color: var(--ink5); margin-right: 6px; }
+.mk-note { font-size: 12px; color: var(--ink5); }
+.badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 20px; height: 20px; padding: 0 6px; border-radius: 6px;
+  background: var(--g3); color: var(--ink8); font-size: 11px; font-weight: 600; margin-right: 6px;
+}
+
+/* ---------- Kontrolki frappe-ui ---------- */
+.seg { display: inline-flex; border: 1px solid var(--line2); border-radius: 6px; padding: 2px; font-size: 12px; background: var(--base); }
+.seg button { border: 0; background: transparent; color: var(--ink6); border-radius: 4px; padding: 2px 10px; white-space: nowrap; }
+.seg button:hover { background: var(--g2); }
+.seg button.on { background: var(--g3); color: var(--ink9); }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px;
+  border-radius: 8px; border: 0; background: var(--g2); color: var(--ink8); font-size: 13px; white-space: nowrap;
+}
+.btn:hover { background: var(--g3); }
+.btn.ghost { background: transparent; }
+.btn.ghost:hover { background: var(--g2); }
+.btn.solid { background: var(--solid); color: var(--solid-ink); }
+.btn.solid:hover { opacity: .9; }
+.btn.outline { background: var(--base); border: 1px solid var(--line2); }
+.btn.sm { height: 24px; font-size: 12px; padding: 0 8px; border-radius: 6px; }
+.btn[disabled] { opacity: .45; cursor: not-allowed; }
+.ico { width: 16px; height: 16px; flex: none; }
+.ico.s { width: 14px; height: 14px; }
+.inp, .sel {
+  height: 28px; border-radius: 8px; border: 1px solid var(--line2); background: var(--base);
+  padding: 0 8px; font-size: 13px; color: var(--ink8);
+}
+.sel { padding-right: 4px; }
+
+/* ---------- Szkielet aplikacji ---------- */
+.app {
+  display: flex; border: 1px solid var(--line2); border-radius: 12px; overflow: hidden;
+  background: var(--base); min-height: 640px;
+}
+.side {
+  width: 208px; flex: none; border-right: 1px solid var(--line2); background: var(--g1);
+  padding: 10px 8px; font-size: 13px;
+}
+.side .brand { display: flex; align-items: center; gap: 8px; padding: 6px 8px 12px; font-weight: 600; color: var(--ink9); }
+.side .logo { width: 24px; height: 24px; border-radius: 6px; background: var(--solid); color: var(--solid-ink); display: grid; place-items: center; font-size: 11px; }
+.side a { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; color: var(--ink7); text-decoration: none; }
+.side a.on { background: var(--base); color: var(--ink9); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.lhead {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+  padding: 10px 20px; border-bottom: 1px solid var(--line2); min-height: 48px;
+}
+.lhead .l, .lhead .r { display: flex; align-items: center; gap: 8px; }
+.lhead h1 { margin: 0; font-size: 18px; font-weight: 600; color: var(--ink9); }
+.range { font-size: 14px; color: var(--ink7); }
+.content { padding: 16px; position: relative; flex: 1; }
+.ctrls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; }
+.msel {
+  height: 32px; width: 208px; display: flex; align-items: center; justify-content: space-between;
+  border: 1px solid var(--line2); border-radius: 6px; padding: 0 8px; font-size: 13px; color: var(--ink8); background: var(--base);
+}
+.grid { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; }
+@media (min-width: 1100px) { .grid { grid-template-columns: minmax(0,1fr) minmax(0,1fr); } }
+.grid > .span2 { grid-column: 1 / -1; }
+
+/* ---------- Karta handlowca (KartaHandlowca.vue) ---------- */
+.card { border: 1px solid var(--line2); border-radius: 12px; background: var(--base); padding: 14px; font-size: 12px; position: relative; }
+.card.editing { box-shadow: 0 0 0 2px var(--blue6); border-color: transparent; }
+.chead { display: flex; align-items: center; gap: 10px; }
+.av { width: 36px; height: 36px; border-radius: 999px; display: grid; place-items: center; color: #fff; font-weight: 600; font-size: 12px; flex: none; }
+.who { flex: 1; min-width: 0; }
+.who .n { font-size: 14px; font-weight: 600; color: var(--ink9); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who .d { font-size: 12px; color: var(--ink5); }
+.chip { border: 1px solid var(--line2); background: var(--g2); color: var(--ink6); border-radius: 999px; padding: 2px 8px; font-weight: 500; white-space: nowrap; }
+.chip.green { border-color: var(--green-line); background: var(--green-bg); color: var(--green-ink); }
+.chip.amber { border-color: transparent; background: var(--amber-bg); color: var(--amber-ink); }
+.arrows { display: flex; background: var(--g2); border-radius: 8px; padding: 2px; }
+.arrows button { border: 0; background: transparent; padding: 4px; border-radius: 6px; color: var(--ink7); display: grid; place-items: center; }
+.arrows button:hover { background: var(--g3); }
+.gbtn { border: 1px solid var(--line2); background: var(--base); color: var(--ink7); border-radius: 8px; height: 26px; padding: 0 8px; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; white-space: nowrap; }
+.gbtn:hover { background: var(--g2); }
+.gbtn.hl { border-color: var(--blue6); color: var(--blue8); }
+
+.axis { display: flex; align-items: flex-end; margin-top: 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line2); }
+.axis .dz { flex: none; width: 58px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink5); font-size: 12px; }
+.axis .hrs { position: relative; height: 16px; flex: 1; }
+.axis .hrs span { position: absolute; top: 0; transform: translateX(-50%); color: var(--ink5); font-variant-numeric: tabular-nums; }
+.rows { position: relative; margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
+.rows.big { gap: 7px; }
+.row { display: flex; align-items: center; height: 22px; }
+.rows.big .row { height: 32px; }
+.dl { flex: none; width: 58px; display: flex; align-items: center; gap: 4px; }
+.dl b { font-weight: 600; color: var(--ink8); }
+.dl b.we { color: var(--ink4); }
+.dl b.td { color: var(--blue8); }
+.dl .num { color: var(--ink5); }
+.dl .pill { height: 18px; min-width: 18px; padding: 0 4px; border-radius: 999px; background: var(--blue6); color: #fff; font-size: 11px; font-weight: 600; display: grid; place-items: center; }
+.track { position: relative; flex: 1; min-width: 0; height: 100%; cursor: pointer; }
+.track .base { position: absolute; inset: 0; border-radius: 6px; background: var(--row); }
+.track .base.td { background: var(--row-today); }
+.track .base.we { opacity: .5; }
+.shade { position: absolute; inset: 0; border-radius: 6px; overflow: hidden; z-index: 1; pointer-events: none; }
+.shade i { position: absolute; top: 0; bottom: 0; display: block; }
+.v-a .shade i { background: var(--un-a); }
+.v-b .shade i {
+  background-color: var(--un-b);
+  background-image: repeating-linear-gradient(135deg, var(--un-b-stripe) 0 3px, transparent 3px 8px);
+}
+.v-c .track .base { background: var(--dim-c); opacity: 1; }
+.v-c .shade.c i { background: var(--slot-c); box-shadow: inset 0 0 0 1px var(--slot-c-line); border-radius: 5px; top: 2px; bottom: 2px; }
+.v-c .shade.c i.td { background: var(--row-today); box-shadow: inset 0 0 0 1px var(--blue6); }
+.bar {
+  position: absolute; top: 2px; bottom: 2px; z-index: 2; border: 1px solid var(--base); border-radius: 5px;
+  color: #fff; font-weight: 500; font-size: 12px; padding: 0 8px; text-align: left; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  line-height: 18px; min-width: 40px;
+}
+.rows.big .bar { line-height: 26px; }
+.bar.tbc { opacity: .7; }
+.bar.conf { box-shadow: 0 0 0 2px var(--red5); }
+.now { position: absolute; top: 0; bottom: 0; z-index: 3; width: 2px; transform: translateX(-50%); border-radius: 2px; background: var(--red5); pointer-events: none; }
+.vlines { position: absolute; top: 0; bottom: 0; right: 0; pointer-events: none; }
+.vlines span { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--line2); }
+.legend {
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line2);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--ink6); white-space: nowrap; flex-wrap: wrap;
+}
+.legend .it { display: inline-flex; align-items: center; gap: 6px; margin-right: 12px; }
+.dot { width: 8px; height: 8px; border-radius: 999px; display: inline-block; }
+.sw { width: 18px; height: 10px; border-radius: 3px; display: inline-block; }
+.sw.free { background: var(--row); box-shadow: inset 0 0 0 1px var(--line3); }
+.v-a .sw.un { background: var(--un-a); }
+.v-b .sw.un { background-color: var(--un-b); background-image: repeating-linear-gradient(135deg, var(--un-b-stripe) 0 3px, transparent 3px 8px); }
+.v-c .sw.un { background: var(--dim-c); }
+.v-c .sw.free { background: var(--slot-c); box-shadow: inset 0 0 0 1px var(--slot-c-line); }
+
+/* Porównanie wariantów */
+.cmp { display: grid; grid-template-columns: 1fr; gap: 12px; }
+@media (min-width: 1100px) { .cmp { grid-template-columns: repeat(3, minmax(0,1fr)); } }
+.cmp .lab { font-size: 12px; font-weight: 600; color: var(--ink8); margin: 0 0 6px 2px; }
+.cmp .lab span { font-weight: 400; color: var(--ink5); }
+.cmp .card.pick { box-shadow: 0 0 0 2px var(--blue6); border-color: transparent; }
+
+/* ---------- Tryb edycji (wariant a) ---------- */
+.etool { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; padding: 8px; border-radius: 8px; background: var(--g2); }
+.etool .hint { color: var(--ink5); margin-right: 4px; }
+.erow { display: flex; align-items: center; height: 30px; }
+.erows { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; user-select: none; }
+.edl { flex: none; width: 58px; display: flex; align-items: center; gap: 4px; }
+.edl button { border: 1px solid var(--line2); background: var(--base); border-radius: 6px; height: 24px; padding: 0 6px; display: inline-flex; align-items: center; gap: 4px; color: var(--ink8); font-weight: 600; font-size: 12px; }
+.edl button.sel { background: var(--blue6); border-color: var(--blue6); color: #fff; }
+.cells { flex: 1; display: grid; grid-template-columns: repeat(14, 1fr); gap: 2px; height: 100%; cursor: crosshair; touch-action: none; }
+.cell { border-radius: 4px; background: var(--edit-off); }
+.cell.on { background: var(--edit-on); box-shadow: inset 0 0 0 1px var(--line3); }
+.cell.on.c0 { background: #d7ecfe; box-shadow: inset 0 0 0 1px #8cc8fb; }
+.cell.on.c1 { background: #d3f3e1; box-shadow: inset 0 0 0 1px #8bd5ad; }
+.cell.on.c2 { background: #e6e0fb; box-shadow: inset 0 0 0 1px #b6a5f0; }
+.cell.on.c3 { background: #fbdcee; box-shadow: inset 0 0 0 1px #f0a3cf; }
+html[data-theme="dark"] .cell.on.c0, html[data-theme="dark"] .cell.on.c1, html[data-theme="dark"] .cell.on.c2, html[data-theme="dark"] .cell.on.c3 { background: #4a4a4a; box-shadow: inset 0 0 0 1px #6a6a6a; }
+.esum { flex: none; width: 92px; text-align: right; color: var(--ink6); font-variant-numeric: tabular-nums; padding-left: 8px; }
+.efoot { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line2); display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.radio { display: inline-flex; align-items: center; gap: 6px; color: var(--ink8); cursor: pointer; }
+.radio input { accent-color: var(--blue6); margin: 0; }
+
+/* ---------- Panel boczny (wariant b) ---------- */
+.drawer {
+  position: absolute; top: 0; right: 0; bottom: 0; width: 380px; max-width: 100%;
+  background: var(--base); border-left: 1px solid var(--line2); box-shadow: var(--shadow); z-index: 20;
+  display: flex; flex-direction: column;
+}
+.drawer .dh { padding: 14px 16px; border-bottom: 1px solid var(--line2); display: flex; align-items: center; gap: 10px; }
+.drawer .dh .t { font-size: 15px; font-weight: 600; color: var(--ink9); flex: 1; }
+.drawer .db { padding: 12px 16px; overflow-y: auto; flex: 1; }
+.drawer .df { padding: 12px 16px; border-top: 1px solid var(--line2); display: flex; justify-content: flex-end; gap: 8px; }
+.drow { display: grid; grid-template-columns: 58px 38px 1fr; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line1); font-size: 13px; }
+.drow .dd b { font-weight: 600; color: var(--ink8); }
+.drow .dd span { color: var(--ink5); margin-left: 3px; }
+.drow .tt { display: flex; align-items: center; gap: 6px; color: var(--ink6); }
+.drow .tt .sel { height: 26px; font-size: 12px; }
+.tog { width: 30px; height: 18px; border-radius: 999px; background: var(--g4); border: 0; position: relative; padding: 0; }
+.tog::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 999px; background: #fff; transition: left .12s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.tog.on { background: var(--blue6); }
+.tog.on::after { left: 14px; }
+.flabel { font-size: 12px; color: var(--ink5); margin: 0 0 4px; }
+
+/* ---------- Tabela zespołu (wariant c) ---------- */
+.tz { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
+.tz th { text-align: left; font-weight: 500; color: var(--ink5); padding: 6px; border-bottom: 1px solid var(--line2); white-space: nowrap; }
+.tz th.td { color: var(--blue8); font-weight: 600; }
+.tz td { padding: 5px 4px; border-bottom: 1px solid var(--line1); vertical-align: middle; }
+.tz .rep { display: flex; align-items: center; gap: 8px; min-width: 170px; }
+.tz .rep .av { width: 26px; height: 26px; font-size: 10px; }
+.tz .rep b { color: var(--ink9); font-weight: 600; }
+.tcell { width: 100%; min-width: 92px; border: 1px solid var(--line2); border-radius: 8px; background: var(--base); padding: 4px; text-align: left; position: relative; }
+.tcell:hover { border-color: var(--line3); }
+.tcell.chg { border-color: var(--blue6); }
+.tcell .mini { position: relative; height: 10px; border-radius: 3px; overflow: hidden; background: var(--row); }
+.tcell .mini i { position: absolute; top: 0; bottom: 0; }
+.v-a .tcell .mini i { background: var(--un-a); }
+.v-b .tcell .mini i { background-color: var(--un-b); background-image: repeating-linear-gradient(135deg, var(--un-b-stripe) 0 3px, transparent 3px 8px); }
+.v-c .tcell .mini { background: var(--dim-c); }
+.v-c .tcell .mini i { background: var(--slot-c); }
+.tcell .lbl { display: block; margin-top: 3px; color: var(--ink7); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tcell .lbl.none { color: var(--amber-ink); }
+.pop {
+  position: absolute; z-index: 40; width: 236px; background: var(--base); border: 1px solid var(--line2); border-radius: 10px;
+  box-shadow: var(--shadow); padding: 6px; font-size: 13px;
+}
+.pop .ttl { padding: 4px 8px 6px; color: var(--ink5); font-size: 12px; }
+.pop button.opt { display: flex; width: 100%; justify-content: space-between; border: 0; background: transparent; padding: 6px 8px; border-radius: 6px; color: var(--ink8); }
+.pop button.opt:hover { background: var(--g2); }
+.pop button.opt span { color: var(--ink5); font-variant-numeric: tabular-nums; }
+.pop .own { display: flex; align-items: center; gap: 6px; padding: 6px 8px 4px; border-top: 1px solid var(--line1); margin-top: 4px; color: var(--ink6); }
+.pop .own .sel { height: 26px; font-size: 12px; }
+
+/* ---------- Modal i toast ---------- */
+.ovl { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: grid; place-items: center; z-index: 80; padding: 16px; }
+.dlg { width: 448px; max-width: 100%; background: var(--base); border-radius: 12px; box-shadow: var(--shadow); padding: 20px 24px; }
+.dlg h3 { margin: 0 0 16px; font-size: 20px; font-weight: 600; color: var(--ink9); }
+.dlg .fl { font-size: 12px; color: var(--ink5); margin-bottom: 4px; }
+.dlg .fc { height: 32px; border-radius: 8px; background: var(--g2); display: flex; align-items: center; padding: 0 8px; color: var(--ink8); font-size: 13px; }
+.dlg .fc.ph { color: var(--ink4); }
+.dlg .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.dlg .st { display: flex; flex-direction: column; gap: 14px; }
+.dlg .acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.warn { font-size: 12px; color: var(--amber-ink); line-height: 1.5; }
+.err { font-size: 12px; color: var(--red-ink); background: var(--red-bg); border-radius: 8px; padding: 8px 10px; line-height: 1.5; }
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--solid); color: var(--solid-ink); padding: 9px 14px; border-radius: 8px; font-size: 13px; z-index: 90; box-shadow: var(--shadow); }
+
+/* ---------- Pytania i model danych ---------- */
+.q { border-top: 1px solid var(--line1); padding: 12px 0; }
+.q:first-of-type { border-top: 0; }
+.q h3 { margin: 0 0 4px; font-size: 14px; color: var(--ink9); }
+.q p { margin: 0 0 8px; }
+.q .opts { display: flex; flex-direction: column; gap: 6px; }
+.q .rec { font-size: 11px; color: var(--green-ink); background: var(--green-bg); border-radius: 4px; padding: 1px 5px; margin-left: 6px; }
+textarea.inp { height: 72px; width: 100%; padding: 8px; resize: vertical; }
+.dm table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+.dm th, .dm td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line1); vertical-align: top; }
+.dm th { color: var(--ink5); font-weight: 500; font-size: 12px; }
+.dm code, .mk-panel code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; background: var(--g2); padding: 1px 4px; border-radius: 4px; color: var(--ink8); }
+.flow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.flow span { font-size: 12px; color: var(--ink7); background: var(--g2); border-radius: 6px; padding: 4px 8px; }
+.flow span b { color: var(--ink9); }
+
+@media (max-width: 760px) {
+  .side { display: none; }
+  .lhead { padding: 10px 12px; }
+  .content { padding: 12px; }
+  .esum { display: none; }
+  .tzwrap { overflow-x: auto; }
+}
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<header class="mk-top">
+  <div class="mk-top-in">
+    <div class="mk-title">Grafik dostępności handlowców
+      <small>Makieta do akceptacji, b82. Nic tu się nie zapisuje.</small>
+    </div>
+    <nav class="mk-tabs" role="tablist">
+      <button class="mk-tab" role="tab" data-tab="tablica" aria-selected="true"><span class="badge">1</span>Tablica z dostępnością</button>
+      <button class="mk-tab" role="tab" data-tab="wpisywanie" aria-selected="false"><span class="badge">2</span>Wpisywanie grafiku</button>
+      <button class="mk-tab" role="tab" data-tab="pytania" aria-selected="false"><span class="badge">3</span>Pytania otwarte</button>
+    </nav>
+    <div class="mk-spacer"></div>
+    <div class="seg" id="theme">
+      <button data-v="light" class="on">Jasny</button>
+      <button data-v="dark">Ciemny</button>
+    </div>
+  </div>
+</header>
+
+<main class="mk-wrap">
+
+  <!-- ========== 1. Tablica ========== -->
+  <section data-pane="tablica">
+    <div class="mk-panel">
+      <h2>Tablica z dostępnością</h2>
+      <p>Ciemne pola to godziny, w których handlowiec <b>nie jest dostępny</b>. Jasne pola to czas, w który można umawiać. Spotkania leżą na wierzchu w kolorze handlowca. Kliknij pusty termin na karcie, żeby zobaczyć, co się dzieje przy umawianiu.</p>
+      <div class="mk-row">
+        <div><span class="mk-label">Wariant zacienienia</span>
+          <div class="seg" id="wariant">
+            <button data-v="a" class="on">A. Ciemne wypełnienie</button>
+            <button data-v="b">B. Ciemne z paskami</button>
+            <button data-v="c">C. Jasne okna</button>
+          </div>
+        </div>
+        <div><span class="mk-label">Brak grafiku oznacza</span>
+          <div class="seg" id="brak">
+            <button data-v="dostepny" class="on">dostępny</button>
+            <button data-v="niedostepny">niedostępny</button>
+          </div>
+        </div>
+        <div><span class="mk-label">Klik w niedostępny termin</span>
+          <div class="seg" id="polityka">
+            <button data-v="ostrzezenie" class="on">ostrzeżenie</button>
+            <button data-v="blokada">blokada</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mk-panel">
+      <h2>Trzy warianty obok siebie</h2>
+      <p>Ta sama karta (Marek Kowalczyk: pon do czw 8 do 20, piątek wolny, sobota 9 do 14). Kliknij kartę, żeby ustawić wariant dla całej tablicy poniżej.</p>
+      <div class="cmp" id="cmp" style="margin-top:10px"></div>
+    </div>
+
+    <div id="app1"></div>
+  </section>
+
+  <!-- ========== 2. Wpisywanie ========== -->
+  <section data-pane="wpisywanie" hidden>
+    <div class="mk-panel">
+      <h2>Wpisywanie grafiku przez backoffice</h2>
+      <p>Trzy sposoby do wyboru, wszystkie zmieniają te same dane, więc wynik od razu widać na kartach (i na zakładce 1). Wpisywać mogą: System Manager, Volteo Core Admin, Volteo Backend.</p>
+      <div class="mk-row">
+        <div class="seg" id="wejscie">
+          <button data-v="a" class="on">a. Malowanie na karcie</button>
+          <button data-v="b">b. Panel boczny z godzinami</button>
+          <button data-v="c">c. Tabela całego zespołu</button>
+        </div>
+        <button class="btn sm outline" id="reset">Przywróć dane przykładowe</button>
+      </div>
+      <div class="flow" id="flow"></div>
+    </div>
+    <div id="app2"></div>
+  </section>
+
+  <!-- ========== 3. Pytania ========== -->
+  <section data-pane="pytania" hidden>
+    <div class="mk-panel" id="pytania"></div>
+  </section>
+
+  <!-- ========== Model danych (zawsze na dole) ========== -->
+  <div class="mk-panel dm">
+    <h2>Model danych (propozycja)</h2>
+    <p>Nowy doctype <code>Volteo Dostepnosc</code>: jeden rekord to jeden dzień jednego handlowca z jednym oknem dostępności (od, do) albo z zaznaczonym dniem wolnym. Dzień bez rekordu znaczy "brak grafiku" (zachowanie wg pytania 3). Stały grafik tygodniowy, jeśli go wybierzesz, zapisujemy jako rekordy z <code>dzien_tygodnia</code> zamiast <code>data</code>, a konkretna data nadpisuje stały wzór. Zapis: System Manager, Volteo Core Admin, Volteo Backend (nowa metoda <code>crm.api.kalendarz.ustaw_dostepnosc</code>, walidacja w frappe-free <code>crm/volteo_kalendarz.py</code>). Odczyt: wszystkie role tablicy, handlowiec tylko swoje. <code>crm.api.kalendarz.spotkania</code> zwraca obok <code>spotkania</code> nowy klucz <code>dostepnosc: {user: {"2026-11-02": [["08:00", "22:00"]], "2026-11-06": []}}</code>, gdzie pusta lista to dzień wolny, brak daty to brak grafiku, a front liczy z tego ciemne odcinki (czysta funkcja w <code>utils/kalendarz.js</code>, z testami).</p>
+    <table>
+      <thead><tr><th>Pole</th><th>Typ</th><th>Opis</th></tr></thead>
+      <tbody>
+        <tr><td><code>handlowiec</code></td><td>Link User</td><td>Aktywny handlowiec D2D (ta sama lista co na tablicy). Wymagane.</td></tr>
+        <tr><td><code>data</code></td><td>Date</td><td>Konkretny dzień. Pusta tylko we wzorze stałym.</td></tr>
+        <tr><td><code>dzien_tygodnia</code></td><td>Select (pon ... niedz)</td><td>Tylko dla stałego wzoru tygodniowego (pytanie 7).</td></tr>
+        <tr><td><code>wolne</code></td><td>Check</td><td>Cały dzień niedostępny; wtedy od i do puste.</td></tr>
+        <tr><td><code>od</code>, <code>do</code></td><td>Time</td><td>Okno dostępności, pełne godziny (albo co 30 min, pytanie 8). "Cały dzień" to 00:00 do 24:00.</td></tr>
+        <tr><td><code>uwagi</code></td><td>Small Text</td><td>Opcjonalnie, np. "tel. 3.11, Remigiusz".</td></tr>
+      </tbody>
+    </table>
+    <p class="mk-note" style="margin-top:8px">Unikalność: (handlowiec, data) oraz (handlowiec, dzien_tygodnia). Kto i kiedy wpisał: standardowe <code>owner</code> i <code>modified</code> Frappe.</p>
+  </div>
+</main>
+
+<div id="modal"></div>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+'use strict';
+
+/* ================= Dane przykładowe ================= */
+const DNI = [
+  { iso: '2026-11-02', skrot: 'pon', nr: 2, pelna: 'poniedziałek 2 lis' },
+  { iso: '2026-11-03', skrot: 'wt', nr: 3, pelna: 'wtorek 3 lis' },
+  { iso: '2026-11-04', skrot: 'śr', nr: 4, pelna: 'środa 4 lis' },
+  { iso: '2026-11-05', skrot: 'czw', nr: 5, pelna: 'czwartek 5 lis' },
+  { iso: '2026-11-06', skrot: 'pt', nr: 6, pelna: 'piątek 6 lis' },
+  { iso: '2026-11-07', skrot: 'sob', nr: 7, pelna: 'sobota 7 lis' },
+  { iso: '2026-11-08', skrot: 'niedz', nr: 8, pelna: 'niedziela 8 lis' },
+];
+const DZIS = 1;            // wtorek 3 lis
+const TERAZ_H = 11 + 40 / 60;
+const OS = { od: 8, do: 22 };
+const ZAKRES_TYG = '2 lis do 8 lis 2026';
+const KOLORY = ['#0289f7', '#30a66d', '#6846e3', '#e34aa6'];
+
+// Godziny dostępne dnia: tablica 24 wartości true/false (godzina pełna).
+function okno(od, doH) { const t = Array(24).fill(false); for (let h = od; h < doH; h++) t[h] = true; return t; }
+const CALY = () => okno(0, 24);
+const WOLNE = () => okno(0, 0);
+const RANO = () => okno(8, 14);
+const POPO = () => okno(14, 22);
+
+function przyklad() {
+  return [
+    {
+      user: 'kamil.nowak', imie: 'Kamil Nowak', kolor: 0,
+      grafik: [CALY(), CALY(), CALY(), WOLNE(), WOLNE(), WOLNE(), WOLNE()],
+      poprzedni: [CALY(), CALY(), CALY(), CALY(), WOLNE(), WOLNE(), WOLNE()],
+      spotkania: [
+        { d: 0, h: 10, n: 'Jan Lewandowski', s: 'Umówiony', m: 'Radom', t: '601 223 410' },
+        { d: 1, h: 13, n: 'Anna Wójcik', s: 'Umówiony', m: 'Kozienice', t: '512 908 331' },
+        { d: 2, h: 17, n: 'Ewa Kamińska', s: 'Do potwierdzenia', m: 'Pionki', t: '698 120 774' },
+      ],
+    },
+    {
+      user: 'pawel.wisniewski', imie: 'Paweł Wiśniewski', kolor: 1,
+      grafik: [POPO(), POPO(), POPO(), POPO(), POPO(), POPO(), WOLNE()],
+      poprzedni: [POPO(), POPO(), POPO(), POPO(), POPO(), WOLNE(), WOLNE()],
+      spotkania: [
+        { d: 0, h: 15, n: 'Piotr Dąbrowski', s: 'Umówiony', m: 'Kielce', t: '604 551 002' },
+        { d: 2, h: 18, n: 'Katarzyna Mazur', s: 'Do potwierdzenia', m: 'Busko-Zdrój', t: '535 400 918' },
+        { d: 3, h: 14.5, n: 'Marian Krawczyk', s: 'Umówiony', m: 'Chęciny', t: '667 019 245' },
+      ],
+    },
+    {
+      user: 'tomasz.zielinski', imie: 'Tomasz Zieliński', kolor: 2,
+      grafik: null,
+      poprzedni: [okno(9, 17), okno(9, 17), okno(9, 17), okno(9, 17), okno(9, 17), WOLNE(), WOLNE()],
+      spotkania: [],
+    },
+    {
+      user: 'marek.kowalczyk', imie: 'Marek Kowalczyk', kolor: 3,
+      grafik: [okno(8, 20), okno(8, 20), okno(8, 20), okno(8, 20), WOLNE(), okno(9, 14), WOLNE()],
+      poprzedni: [okno(8, 20), okno(8, 20), okno(8, 20), okno(8, 20), okno(8, 20), WOLNE(), WOLNE()],
+      spotkania: [
+        { d: 1, h: 9, n: 'Zofia Piotrowska', s: 'Umówiony', m: 'Skarżysko', t: '600 781 330' },
+        { d: 3, h: 16, n: 'Adam Grabowski', s: 'Umówiony', m: 'Starachowice', t: '501 664 129' },
+        { d: 4, h: 12, n: 'Henryk Pawlak', s: 'Umówiony', m: 'Iłża', t: '727 300 856' },
+      ],
+    },
+  ];
+}
+
+/* ================= Stan makiety ================= */
+const S = {
+  tab: 'tablica',
+  theme: 'light',
+  wariant: 'a',
+  brak: 'dostepny',
+  polityka: 'ostrzezenie',
+  wejscie: 'a',
+  reps: przyklad(),
+  // widok aplikacji per zakładka
+  v1: { widok: 'tydzien', tryb: 'tablica', jeden: 'kamil.nowak' },
+  v2: { widok: 'tydzien', tryb: 'tablica', jeden: 'kamil.nowak' },
+  edycja: null,      // wariant a: { user, kopia, wybrane:Set, zakres }
+  panel: null,       // wariant b: { user, kopia, zakres }
+  tabela: { kopia: null, zmiany: new Set(), pop: null },
+  odp: {},
+};
+
+/* ================= Pomocnicze ================= */
+const $ = (s, el = document) => el.querySelector(s);
+const pct = (h) => ((h - OS.od) / (OS.do - OS.od)) * 100;
+const nazwisko = (n) => n.trim().split(/\s+/).pop();
+const inicjaly = (n) => n.split(/\s+/).map((s) => s[0]).slice(0, 2).join('').toUpperCase();
+const g2 = (h) => String(Math.floor(h)).padStart(2, '0') + ':' + (h % 1 ? '30' : '00');
+const rep = (u) => S.reps.find((r) => r.user === u);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function umowione(n) {
+  if (n === 1) return '1 umówione';
+  const a = n % 10, b = n % 100;
+  if (a >= 2 && a <= 4 && !(b >= 12 && b <= 14)) return n + ' umówione';
+  return n + ' umówionych';
+}
+
+// Dostępność dnia: null = brak grafiku, inaczej tablica 24 godzin.
+function dzienGrafiku(r, d) { return r.grafik ? r.grafik[d] : null; }
+function dostepnyGodz(r, d, h) {
+  const g = dzienGrafiku(r, d);
+  if (!g) return S.brak === 'dostepny';
+  return !!g[Math.floor(h)];
+}
+// Odcinki w osi [od, do]: [[start, koniec], ...] gdzie wartość = dostępny?
+function odcinki(r, d, chceDostepne) {
+  const wynik = [];
+  let start = null;
+  for (let h = OS.od; h < OS.do; h++) {
+    const ok = dostepnyGodz(r, d, h) === chceDostepne;
+    if (ok && start === null) start = h;
+    if (!ok && start !== null) { wynik.push([start, h]); start = null; }
+  }
+  if (start !== null) wynik.push([start, OS.do]);
+  return wynik;
+}
+function konflikt(r, s) {
+  for (let h = s.h; h < s.h + 2; h += 0.5) if (!dostepnyGodz(r, s.d, h)) return true;
+  return false;
+}
+function opisDnia(g) {
+  if (!g) return 'brak grafiku';
+  const godz = []; g.forEach((v, h) => v && godz.push(h));
+  if (!godz.length) return 'wolne';
+  if (godz.length === 24) return 'cały dzień';
+  const ciagle = godz[godz.length - 1] - godz[0] + 1 === godz.length;
+  const od = godz[0], doH = godz[godz.length - 1] + 1;
+  return ciagle ? od + ' do ' + doH : od + ' do ' + doH + ' z przerwą';
+}
+function krotkiOpis(g) {
+  const o = opisDnia(g);
+  return o === 'cały dzień' ? 'Cały dzień' : o === 'wolne' ? 'Wolne' : o === 'brak grafiku' ? 'brak' : o;
+}
+
+const IKONY = {
+  l: '<svg class="ico s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>',
+  r: '<svg class="ico s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>',
+  L: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>',
+  R: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>',
+  plus: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+  down: '<svg class="ico s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
+  cal: '<svg class="ico s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+  pen: '<svg class="ico s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+  x: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+  copy: '<svg class="ico s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+  users: '<svg class="ico s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+};
+
+/* ================= Karta handlowca ================= */
+function kartaHTML(r, o = {}) {
+  const wariant = o.wariant || S.wariant;
+  const duzy = !!o.duzy;
+  const dni = o.dni || [0, 1, 2, 3, 4, 5, 6];
+  const spotk = r.spotkania.filter((s) => dni.includes(s.d));
+  const ile = spotk.filter((s) => s.s === 'Umówiony').length;
+  const chip = !spotk.length
+    ? `<span class="chip">${dni.length === 1 ? 'wolny cały dzień' : 'wolny cały tydzień'}</span>`
+    : `<span class="chip ${ile ? 'green' : ''}">${umowione(ile)}</span>`;
+  const brakChip = !r.grafik ? `<span class="chip amber" title="Nikt jeszcze nie wpisał grafiku tego handlowca">brak grafiku</span>` : '';
+  const przycisk = o.przycisk || '';
+  const krok = duzy ? 1 : 2;
+  let etyk = '';
+  for (let g = OS.od; g <= OS.do; g += krok) etyk += `<span style="left:${pct(g)}%">${String(g).padStart(2, '0')}</span>`;
+  let linie = '';
+  for (let g = OS.od + 2; g < OS.do; g += 2) linie += `<span style="left:${pct(g)}%"></span>`;
+
+  const wiersze = dni.map((d) => {
+    const dz = DNI[d];
+    const td = d === DZIS, we = d >= 5;
+    const lab = td
+      ? `<b class="td">${dz.skrot}</b><span class="pill">${dz.nr}</span>`
+      : `<b class="${we ? 'we' : ''}">${dz.skrot}</b><span class="num">${dz.nr}</span>`;
+    let cien = '';
+    if (wariant === 'c') {
+      cien = `<div class="shade c">${odcinki(r, d, true).map(([a, b]) => `<i class="${td ? 'td' : ''}" style="left:calc(${pct(a)}% + 1px);width:calc(${pct(b) - pct(a)}% - 2px)"></i>`).join('')}</div>`;
+    } else {
+      cien = `<div class="shade">${odcinki(r, d, false).map(([a, b]) => `<i style="left:${pct(a)}%;width:${pct(b) - pct(a)}%"></i>`).join('')}</div>`;
+    }
+    const paski = r.spotkania.filter((s) => s.d === d).map((s) => {
+      const k = konflikt(r, s);
+      const tip = `${g2(s.h)} ${dz.pelna}\n${s.n}, ${s.m}\n${s.s}, ${s.t}${k ? '\nPoza grafikiem dostępności' : ''}`;
+      return `<button type="button" class="bar ${s.s === 'Umówiony' ? '' : 'tbc'} ${k ? 'conf' : ''}" data-lead="${esc(s.n)}" title="${esc(tip)}" style="background:${KOLORY[r.kolor]};left:min(${pct(s.h)}%, calc(100% - 40px));width:${pct(s.h + 2) - pct(s.h)}%">${esc(nazwisko(s.n))}</button>`;
+    }).join('');
+    const teraz = td ? `<span class="now" style="left:${pct(TERAZ_H)}%"></span>` : '';
+    return `<div class="row"><div class="dl">${lab}</div><div class="track" data-user="${r.user}" data-d="${d}"><div class="base ${td ? 'td' : ''} ${we ? 'we' : ''}"></div>${cien}${paski}${teraz}</div></div>`;
+  }).join('');
+
+  const maKonflikt = r.spotkania.some((s) => dni.includes(s.d) && konflikt(r, s));
+  return `<div class="card v-${wariant} ${o.klasa || ''}" data-card="${r.user}">
+    <div class="chead">
+      <span class="av" style="background:${KOLORY[r.kolor]}">${inicjaly(r.imie)}</span>
+      <div class="who"><div class="n">${esc(r.imie)}</div><div class="d">${dni.length === 1 ? DNI[dni[0]].pelna + ' 2026' : ZAKRES_TYG}</div></div>
+      ${brakChip}${chip}${przycisk}
+      <div class="arrows"><button type="button" data-nav title="Poprzedni">${IKONY.l}</button><button type="button" data-nav title="Następny">${IKONY.r}</button></div>
+    </div>
+    <div class="axis"><div class="dz">Dzień</div><div class="hrs">${etyk}</div></div>
+    <div class="rows ${duzy ? 'big' : ''}">${wiersze}<div class="vlines" style="left:58px">${linie}</div></div>
+    <div class="legend">
+      <div>
+        <span class="it"><span class="dot" style="background:${KOLORY[r.kolor]}"></span>Umówiony</span>
+        <span class="it"><span class="dot" style="background:${KOLORY[r.kolor]};opacity:.7"></span>Do potwierdzenia</span>
+        <span class="it"><span class="dot" style="background:var(--red5)"></span>Teraz</span>
+        <span class="it"><span class="sw un"></span>Niedostępny</span>
+        ${maKonflikt ? '<span class="it"><span class="sw" style="box-shadow:0 0 0 2px var(--red5);background:transparent;width:12px"></span>Poza grafikiem</span>' : ''}
+      </div>
+      <span>08:00 do 22:00</span>
+    </div>
+  </div>`;
+}
+
+/* ================= Rama aplikacji ================= */
+function aplikacjaHTML(v, srodek, opts = {}) {
+  const opcje = S.reps.map((r) => `<option value="${r.user}" ${v.jeden === r.user ? 'selected' : ''}>${esc(r.imie)}</option>`).join('');
+  return `<div class="app">
+    <aside class="side">
+      <div class="brand"><span class="logo">PE</span>ProEnergy CRM</div>
+      <a href="#" onclick="return false">Leady</a>
+      <a href="#" class="on" onclick="return false">${IKONY.cal} Kalendarz</a>
+      <a href="#" onclick="return false">Deale</a>
+      <a href="#" onclick="return false">Kontakty</a>
+      <a href="#" onclick="return false">Zadania</a>
+      <a href="#" onclick="return false">Notatki</a>
+    </aside>
+    <div class="main">
+      <div class="lhead">
+        <div class="l">
+          <h1>Kalendarz</h1>
+          <div style="display:flex">
+            <button class="btn ghost" data-nav title="Poprzedni">${IKONY.L}</button>
+            <button class="btn ghost" data-nav>Dziś</button>
+            <button class="btn ghost" data-nav title="Następny">${IKONY.R}</button>
+          </div>
+          <span class="range">${v.widok === 'dzien' ? 'wtorek, 3 lis 2026' : ZAKRES_TYG}</span>
+        </div>
+        <div class="r">
+          <div class="seg" data-ctl="widok">
+            <button data-v="tydzien" class="${v.widok === 'tydzien' ? 'on' : ''}">Tydzień</button>
+            <button data-v="dzien" class="${v.widok === 'dzien' ? 'on' : ''}">Dzień</button>
+          </div>
+          <button class="btn solid" data-nowe>${IKONY.plus}Nowe spotkanie</button>
+        </div>
+      </div>
+      <div class="content">
+        <div class="ctrls">
+          <div class="seg" data-ctl="tryb">
+            <button data-v="tablica" class="${v.tryb === 'tablica' ? 'on' : ''}">Tablica</button>
+            <button data-v="jeden" class="${v.tryb === 'jeden' ? 'on' : ''}">Jeden handlowiec</button>
+          </div>
+          <div class="seg" data-ctl="orient">
+            <button class="on">Poziomo</button>
+            <button data-pion>Pionowo</button>
+          </div>
+          ${v.tryb === 'jeden'
+            ? `<select class="sel" data-ctl="jeden" style="width:208px;height:32px">${opcje}</select>`
+            : `<div class="msel"><span>Wszyscy handlowcy</span>${IKONY.down}</div>`}
+          ${opts.ctrlExtra || ''}
+        </div>
+        ${srodek}
+      </div>
+    </div>
+  </div>`;
+}
+
+function widoczni(v) { return v.tryb === 'jeden' ? S.reps.filter((r) => r.user === v.jeden) : S.reps; }
+function dniWidoku(v) { return v.widok === 'dzien' ? [DZIS] : [0, 1, 2, 3, 4, 5, 6]; }
+
+/* ================= Zakładka 1 ================= */
+function renderTablica() {
+  const m = rep('marek.kowalczyk');
+  const nazwy = { a: 'A. Ciemne wypełnienie', b: 'B. Ciemne z paskami', c: 'C. Jasne okna' };
+  const opisy = { a: 'pełny ciemny szary', b: 'ciemny szary z ukośnymi paskami', c: 'cały wiersz przyciemniony, dostępne okna białe' };
+  $('#cmp').innerHTML = ['a', 'b', 'c'].map((w) => `<div data-pick="${w}" style="cursor:pointer"><div class="lab">${nazwy[w]} <span>${opisy[w]}</span></div>${kartaHTML(m, { wariant: w, klasa: S.wariant === w ? 'pick' : '' })}</div>`).join('');
+  const v = S.v1;
+  const dni = dniWidoku(v);
+  const karty = widoczni(v).map((r) => kartaHTML(r, { dni, duzy: v.tryb === 'jeden', klasa: v.tryb === 'jeden' ? 'span2' : '' })).join('');
+  $('#app1').innerHTML = aplikacjaHTML(v, `<div class="grid">${karty}</div>`);
+}
+
+/* ================= Zakładka 2 ================= */
+const FLOW = {
+  a: ['<b>1.</b> Na karcie handlowca "Grafik"', '<b>2.</b> Karta rozkłada się na całą szerokość, godziny jako kratki', '<b>3.</b> Przeciągnij po kratkach albo zaznacz dni i kliknij szablon', '<b>4.</b> "Zapisz grafik"'],
+  b: ['<b>1.</b> Na karcie "Grafik"', '<b>2.</b> Z prawej panel: 7 dni, przełącznik i godziny od do', '<b>3.</b> Karta obok zmienia się na żywo', '<b>4.</b> "Zapisz"'],
+  c: ['<b>1.</b> Nad tablicą "Grafik zespołu"', '<b>2.</b> Tabela: handlowcy w wierszach, dni w kolumnach', '<b>3.</b> Klik w komórkę, wybór szablonu albo własnych godzin', '<b>4.</b> "Zapisz zmiany" dla wszystkich naraz'],
+};
+
+function renderWpisywanie() {
+  $('#flow').innerHTML = FLOW[S.wejscie].map((t) => `<span>${t}</span>`).join('');
+  const v = S.v2;
+  const dni = dniWidoku(v);
+  let srodek = '';
+  let ctrlExtra = '';
+
+  if (S.wejscie === 'c') {
+    ctrlExtra = `<button class="gbtn ${S.tabela.kopia ? 'hl' : ''}" data-tz-open>${IKONY.users} Grafik zespołu</button>`;
+  }
+
+  const lista = S.panel && S.wejscie === 'b' && v.tryb === 'tablica'
+    ? [rep(S.panel.user), ...S.reps.filter((r) => r.user !== S.panel.user)]
+    : widoczni(v);
+  const karty = lista.map((r) => {
+    const ed = S.edycja && S.edycja.user === r.user && S.wejscie === 'a';
+    if (ed) return edycjaHTML(r);
+    let przycisk = '';
+    if (S.wejscie === 'a') przycisk = `<button class="gbtn" data-edit="${r.user}">${IKONY.pen} Grafik</button>`;
+    if (S.wejscie === 'b') przycisk = `<button class="gbtn ${S.panel && S.panel.user === r.user ? 'hl' : ''}" data-panel="${r.user}">${IKONY.pen} Grafik</button>`;
+    return kartaHTML(r, { dni, duzy: v.tryb === 'jeden', klasa: v.tryb === 'jeden' ? 'span2' : '', przycisk });
+  }).join('');
+
+  if (S.wejscie === 'c' && S.tabela.kopia) srodek += tabelaHTML();
+  srodek += `<div class="grid" style="${S.panel && S.wejscie === 'b' ? 'margin-right:396px;grid-template-columns:minmax(0,1fr)' : ''}">${karty}</div>`;
+  if (S.wejscie === 'b' && S.panel) srodek += panelHTML();
+  $('#app2').innerHTML = aplikacjaHTML(v, srodek, { ctrlExtra });
+  if (S.wejscie === 'c' && S.tabela.pop) pokazPop();
+}
+
+/* ----- a. Malowanie na karcie ----- */
+function edycjaHTML(r) {
+  const E = S.edycja;
+  const g = r.grafik || Array.from({ length: 7 }, WOLNE);
+  let etyk = '';
+  for (let h = OS.od; h <= OS.do; h += 1) etyk += `<span style="left:${pct(h)}%">${String(h).padStart(2, '0')}</span>`;
+  const wiersze = DNI.map((dz, d) => {
+    const cells = [];
+    for (let h = OS.od; h < OS.do; h++) cells.push(`<div class="cell ${g[d][h] ? 'on c' + r.kolor : ''}" data-h="${h}" data-d="${d}"></div>`);
+    return `<div class="erow"><div class="edl"><button type="button" class="${E.wybrane.has(d) ? 'sel' : ''}" data-sel="${d}">${dz.skrot} <span style="font-weight:400;opacity:.75">${dz.nr}</span></button></div>
+      <div class="cells" data-d="${d}">${cells.join('')}</div><div class="esum">${r.grafik ? opisDnia(g[d]) : 'brak grafiku'}</div></div>`;
+  }).join('');
+  const zaz = E.wybrane.size;
+  return `<div class="card editing span2" data-card="${r.user}">
+    <div class="chead">
+      <span class="av" style="background:${KOLORY[r.kolor]}">${inicjaly(r.imie)}</span>
+      <div class="who"><div class="n">${esc(r.imie)}: grafik dostępności</div><div class="d">${ZAKRES_TYG}</div></div>
+      <div class="arrows"><button type="button" data-nav title="Poprzedni">${IKONY.l}</button><button type="button" data-nav title="Następny">${IKONY.r}</button></div>
+    </div>
+    <div class="etool">
+      <span class="hint">${zaz ? 'Zaznaczone dni: ' + zaz + '. Ustaw:' : 'Zaznacz dni po lewej albo przeciągnij po kratkach.'}</span>
+      ${[['caly', 'Cały dzień'], ['rano', 'Rano 8-14'], ['popo', 'Popołudnie 14-22'], ['wolne', 'Wolne']].map(([k, t]) => `<button class="btn sm outline" data-szablon="${k}" ${zaz ? '' : 'disabled'}>${t}</button>`).join('')}
+      <span style="flex:1"></span>
+      <button class="btn sm ghost" data-zaznacz="robocze">Zaznacz pon do pt</button>
+      <button class="btn sm ghost" data-zaznacz="nic">Odznacz</button>
+    </div>
+    <div class="axis" style="margin-top:10px"><div class="dz" style="width:58px">Dzień</div><div class="hrs" style="margin-right:92px">${etyk}</div></div>
+    <div class="erows">${wiersze}</div>
+    <div class="legend" style="justify-content:flex-start">
+      <span class="it"><span class="sw" style="background:var(--edit-on);box-shadow:inset 0 0 0 1px var(--line3)"></span>Dostępny</span>
+      <span class="it"><span class="sw" style="background:var(--edit-off)"></span>Niedostępny</span>
+      <span class="mk-note">Przeciągnij od jasnej kratki, żeby zaciemnić; od ciemnej, żeby rozjaśnić.</span>
+    </div>
+    <div class="efoot">
+      <span class="mk-label" style="margin:0">Obowiązuje</span>
+      <label class="radio"><input type="radio" name="zakresA" value="tydzien" ${E.zakres === 'tydzien' ? 'checked' : ''}> tylko ten tydzień (2 do 8 lis)</label>
+      <label class="radio"><input type="radio" name="zakresA" value="staly" ${E.zakres === 'staly' ? 'checked' : ''}> co tydzień, od 2 lis</label>
+      <span style="flex:1"></span>
+      <button class="btn sm outline" data-kopiuj="${r.user}">${IKONY.copy} Kopiuj z poprzedniego tygodnia</button>
+      <button class="btn" data-edit-anuluj>Anuluj</button>
+      <button class="btn solid" data-edit-zapisz>Zapisz grafik</button>
+    </div>
+  </div>`;
+}
+
+let malowanie = null;
+function zapewnijGrafik(r) { if (!r.grafik) r.grafik = Array.from({ length: 7 }, WOLNE); }
+function ustawKratke(el) {
+  if (!el || !el.classList.contains('cell')) return;
+  const r = rep(S.edycja.user);
+  const d = +el.dataset.d, h = +el.dataset.h;
+  zapewnijGrafik(r);
+  if (r.grafik[d][h] === malowanie.wartosc) return;
+  r.grafik[d][h] = malowanie.wartosc;
+  el.className = 'cell' + (malowanie.wartosc ? ' on c' + r.kolor : '');
+  const sum = el.parentElement.nextElementSibling;
+  if (sum) sum.textContent = opisDnia(r.grafik[d]);
+}
+
+/* ----- b. Panel boczny ----- */
+function zakresDnia(g) {
+  const godz = []; g.forEach((v, h) => v && godz.push(h));
+  if (!godz.length) return null;
+  return [godz[0], godz[godz.length - 1] + 1];
+}
+function panelHTML() {
+  const P = S.panel;
+  const r = rep(P.user);
+  const opcjeGodz = (sel, min, max) => {
+    let s = '';
+    for (let h = min; h <= max; h++) s += `<option value="${h}" ${h === sel ? 'selected' : ''}>${String(h).padStart(2, '0')}:00</option>`;
+    return s;
+  };
+  const wiersze = DNI.map((dz, d) => {
+    const g = r.grafik ? r.grafik[d] : null;
+    const z = g ? zakresDnia(g) : null;
+    const on = !!z;
+    return `<div class="drow">
+      <div class="dd"><b>${dz.skrot}</b><span>${dz.nr}</span></div>
+      <button type="button" class="tog ${on ? 'on' : ''}" data-tog="${d}" title="${on ? 'Dostępny' : 'Wolne'}"></button>
+      <div class="tt">${on
+        ? `<select class="sel" data-od="${d}">${opcjeGodz(z[0], 0, 23)}</select> do <select class="sel" data-do="${d}">${opcjeGodz(z[1], 1, 24)}</select>
+           ${z[0] === 0 && z[1] === 24 ? '<span class="mk-note">cały dzień</span>' : ''}`
+        : `<span class="mk-note">${g ? 'Wolne' : 'brak grafiku'}</span>`}</div>
+    </div>`;
+  }).join('');
+  const opcjeRep = S.reps.map((x) => `<option value="${x.user}" ${x.user === r.user ? 'selected' : ''}>${esc(x.imie)}</option>`).join('');
+  return `<div class="drawer">
+    <div class="dh"><span class="t">Grafik dostępności</span><button class="btn ghost" data-panel-zamknij title="Zamknij">${IKONY.x}</button></div>
+    <div class="db">
+      <div class="flabel">Handlowiec</div>
+      <select class="sel" data-panel-rep style="width:100%;height:32px">${opcjeRep}</select>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:14px 0 4px">
+        <div class="arrows"><button type="button" data-nav>${IKONY.l}</button><button type="button" data-nav>${IKONY.r}</button></div>
+        <span style="font-size:13px;color:var(--ink7)">${ZAKRES_TYG}</span>
+      </div>
+      ${wiersze}
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:12px">
+        <button class="btn sm outline" data-kopiuj="${r.user}">${IKONY.copy} Kopiuj z poprzedniego tygodnia</button>
+        <button class="btn sm outline" data-jakpon>Pon do pt jak poniedziałek</button>
+      </div>
+      <div class="flabel" style="margin-top:16px">Obowiązuje</div>
+      <div style="display:flex;flex-direction:column;gap:6px;font-size:13px">
+        <label class="radio"><input type="radio" name="zakresB" value="tydzien" ${P.zakres === 'tydzien' ? 'checked' : ''}> tylko ten tydzień</label>
+        <label class="radio"><input type="radio" name="zakresB" value="staly" ${P.zakres === 'staly' ? 'checked' : ''}> co tydzień, aż do zmiany</label>
+      </div>
+    </div>
+    <div class="df"><button class="btn" data-panel-anuluj>Anuluj</button><button class="btn solid" data-panel-zapisz>Zapisz</button></div>
+  </div>`;
+}
+
+/* ----- c. Tabela zespołu ----- */
+function miniBar(g) {
+  const czesci = [];
+  const chce = S.wariant === 'c';
+  let start = null;
+  for (let h = OS.od; h <= OS.do; h++) {
+    const dost = h < OS.do ? (g ? !!g[h] : S.brak === 'dostepny') : !chce;
+    const ok = h < OS.do && dost === chce;
+    if (ok && start === null) start = h;
+    if (!ok && start !== null) { czesci.push([start, h]); start = null; }
+  }
+  return czesci.map(([a, b]) => `<i style="left:${pct(a)}%;width:${pct(b) - pct(a)}%"></i>`).join('');
+}
+function tabelaHTML() {
+  const naglowki = DNI.map((dz, d) => `<th class="${d === DZIS ? 'td' : ''}">${dz.skrot} ${dz.nr}</th>`).join('');
+  const wiersze = S.reps.map((r) => {
+    const komorki = DNI.map((_, d) => {
+      const g = r.grafik ? r.grafik[d] : null;
+      const chg = S.tabela.zmiany.has(r.user + ':' + d);
+      return `<td><button type="button" class="tcell ${chg ? 'chg' : ''}" data-tc="${r.user}:${d}"><div class="mini">${miniBar(g)}</div><span class="lbl ${g ? '' : 'none'}">${krotkiOpis(g)}</span></button></td>`;
+    }).join('');
+    return `<tr><td><div class="rep"><span class="av" style="background:${KOLORY[r.kolor]}">${inicjaly(r.imie)}</span><b>${esc(r.imie)}</b></div></td>${komorki}
+      <td><button class="btn sm ghost" data-kopiuj="${r.user}" title="Kopiuj z poprzedniego tygodnia">${IKONY.copy}</button></td></tr>`;
+  }).join('');
+  const n = S.tabela.zmiany.size;
+  return `<div class="card v-${S.wariant}" style="margin-bottom:16px" id="tz">
+    <div class="chead">
+      <div class="who"><div class="n">Grafik zespołu</div><div class="d">${ZAKRES_TYG}, kliknij komórkę, żeby zmienić dzień</div></div>
+      <div class="arrows"><button type="button" data-nav>${IKONY.l}</button><button type="button" data-nav>${IKONY.r}</button></div>
+    </div>
+    <div class="tzwrap" style="margin-top:10px"><table class="tz"><thead><tr><th>Handlowiec</th>${naglowki}<th></th></tr></thead><tbody>${wiersze}</tbody></table></div>
+    <div class="efoot">
+      <button class="btn sm outline" data-kopiuj-wszystko>${IKONY.copy} Kopiuj cały zespół z poprzedniego tygodnia</button>
+      <label class="radio"><input type="checkbox" checked style="accent-color:var(--blue6)"> powtarzaj co tydzień</label>
+      <span style="flex:1"></span>
+      <span class="mk-note">${n ? 'Zmienione dni: ' + n : 'Brak zmian'}</span>
+      <button class="btn" data-tz-anuluj>Anuluj</button>
+      <button class="btn solid" data-tz-zapisz ${n ? '' : 'disabled'}>Zapisz zmiany</button>
+    </div>
+  </div>`;
+}
+function pokazPop() {
+  const [u, d] = S.tabela.pop.split(':');
+  const btn = document.querySelector(`[data-tc="${u}:${d}"]`);
+  if (!btn) return;
+  const r = rep(u);
+  const host = $('#app2 .content');
+  const a = btn.getBoundingClientRect(), b = host.getBoundingClientRect();
+  const el = document.createElement('div');
+  el.className = 'pop';
+  let left = a.left - b.left;
+  if (left + 236 > b.width) left = b.width - 244;
+  el.style.left = Math.max(8, left) + 'px';
+  el.style.top = (a.bottom - b.top + 4) + 'px';
+  let opcje = '';
+  for (let h = 0; h <= 24; h++) opcje += `<option value="${h}">${String(h).padStart(2, '0')}:00</option>`;
+  el.innerHTML = `<div class="ttl">${esc(r.imie)}, ${DNI[+d].pelna}</div>
+    <button class="opt" data-ust="caly">Cały dzień <span>0 do 24</span></button>
+    <button class="opt" data-ust="rano">Rano <span>8 do 14</span></button>
+    <button class="opt" data-ust="popo">Popołudnie <span>14 do 22</span></button>
+    <button class="opt" data-ust="wolne">Wolne <span></span></button>
+    <div class="own">Własne <select class="sel" data-own-od>${opcje}</select> do <select class="sel" data-own-do>${opcje}</select><button class="btn sm solid" data-own>OK</button></div>`;
+  host.appendChild(el);
+  el.querySelector('[data-own-od]').value = '10';
+  el.querySelector('[data-own-do]').value = '18';
+}
+
+/* ================= Szablony ================= */
+const SZABLONY = { caly: CALY, rano: RANO, popo: POPO, wolne: WOLNE };
+function kopiujPoprzedni(r) { r.grafik = r.poprzedni.map((g) => g.slice()); }
+function klon(r) { return r.grafik ? r.grafik.map((g) => g.slice()) : null; }
+
+/* ================= Modal Nowe spotkanie ================= */
+function modalSpotkania(u, d, godz) {
+  const r = rep(u);
+  const h = godz;
+  const wolnyStart = dostepnyGodz(r, d, h);
+  const wolnyCaly = wolnyStart && dostepnyGodz(r, d, h + 1) && dostepnyGodz(r, d, h + 1.5);
+  const g = r.grafik ? r.grafik[d] : null;
+  const opisG = !g ? 'nie ma jeszcze grafiku' : opisDnia(g) === 'wolne' ? 'ma wolne' : 'jest dostępny ' + opisDnia(g);
+  let komunikat = '';
+  let zapisz = '<button class="btn solid" data-m-zapisz>Zapisz</button>';
+  const tegoDnia = r.spotkania.filter((s) => s.d === d).map((s) => g2(s.h));
+  if (tegoDnia.length) komunikat += `<p class="warn" style="margin:0">${esc(r.imie)} ma tego dnia ${tegoDnia.length} ${tegoDnia.length === 1 ? 'spotkanie' : 'spotkania'}: ${tegoDnia.join(', ')}</p>`;
+  if (!wolnyCaly) {
+    if (S.polityka === 'blokada') {
+      komunikat += `<div class="err"><b>Termin poza grafikiem.</b> ${esc(r.imie)} w ${DNI[d].pelna} ${opisG}. Wybierz inną godzinę albo innego handlowca.</div>`;
+      zapisz = '<button class="btn solid" disabled>Zapisz</button>';
+    } else {
+      komunikat += `<p class="warn" style="margin:0"><b>Uwaga: termin poza grafikiem.</b> ${esc(r.imie)} w ${DNI[d].pelna} ${opisG}. Umów tylko, jeśli handlowiec to potwierdził.</p>`;
+      zapisz = '<button class="btn solid" data-m-zapisz>Zapisz mimo to</button>';
+    }
+  }
+  const opcje = S.reps.map((x) => `<option ${x.user === u ? 'selected' : ''}>${esc(x.imie)}</option>`).join('');
+  $('#modal').innerHTML = `<div class="ovl" data-m-zamknij><div class="dlg" onclick="event.stopPropagation()">
+    <h3>Nowe spotkanie</h3>
+    <div class="st">
+      <div><div class="fl">Lead</div><div class="fc ph">Szukaj leada</div></div>
+      <div class="g2">
+        <div><div class="fl">Dzień spotkania</div><div class="fc">${DNI[d].iso.split('-').reverse().join('.')}</div></div>
+        <div><div class="fl">Godzina</div><div class="fc">${g2(h)}</div></div>
+      </div>
+      <div><div class="fl">Handlowiec</div><select class="sel" style="width:100%;height:32px;background:var(--g2);border:0">${opcje}</select></div>
+      ${komunikat}
+    </div>
+    <div class="acts"><button class="btn" data-m-zamknij>Anuluj</button>${zapisz}</div>
+  </div></div>`;
+}
+
+/* ================= Pytania ================= */
+const PYTANIA = [
+  { k: 'wariant', t: 'Który wariant zacienienia?', p: 'Zakładka 1, porównanie trzech kart.', o: [['a', 'A. Ciemne wypełnienie', true], ['b', 'B. Ciemne z paskami'], ['c', 'C. Jasne okna']] },
+  { k: 'wejscie', t: 'Który sposób wpisywania grafiku?', p: 'Zakładka 2. Można też połączyć, np. tabela zespołu do szybkiego wpisu i malowanie na karcie do poprawek.', o: [['a', 'a. Malowanie na karcie'], ['b', 'b. Panel boczny z godzinami'], ['c', 'c. Tabela całego zespołu', true], ['ac', 'a i c razem']] },
+  { k: 'brak', t: 'Handlowiec bez wpisanego grafiku: jak go pokazać?', p: 'Np. nowy handlowiec albo ktoś, kto nie zadzwonił.', o: [['dostepny', 'Cały dostępny (jasny) plus żółty chip "brak grafiku"', true], ['niedostepny', 'Cały niedostępny (ciemny), dopóki ktoś nie wpisze']] },
+  { k: 'kto', t: 'Kto widzi zacienienie?', p: 'Wpisywać mogą tylko administratorzy i backoffice.', o: [['wszyscy', 'Wszyscy: backoffice, call center i handlowiec na swoim kalendarzu', true], ['bez', 'Backoffice i call center, handlowiec nie'], ['bo', 'Tylko backoffice i administracja']] },
+  { k: 'samodzielnie', t: 'Czy handlowiec może sam wpisać swój grafik?', p: 'Dziś zgłasza dostępność telefonicznie do backoffice.', o: [['nie', 'Nie, tylko backoffice', true], ['tak', 'Tak, na swoim kalendarzu'], ['prosba', 'Tak, ale backoffice zatwierdza']] },
+  { k: 'polityka', t: 'Umawianie w niedostępnym terminie', p: 'Kliknij ciemne pole na tablicy, żeby zobaczyć oba warianty.', o: [['ostrzezenie', 'Ostrzeżenie, można zapisać ("Zapisz mimo to")', true], ['blokada', 'Blokada, nie da się zapisać'], ['blokada-cc', 'Blokada dla call center, ostrzeżenie dla backoffice']] },
+  { k: 'powtarzanie', t: 'Grafik stały czy na każdy tydzień?', p: '', o: [['staly', 'Stały wzór tygodniowy plus zmiany na konkretne dni', true], ['tydzien', 'Wpisywany osobno na każdy tydzień (z kopiowaniem poprzedniego)']] },
+  { k: 'krok', t: 'Dokładność godzin', p: '', o: [['1h', 'Pełne godziny', true], ['30', 'Co 30 minut (jak godziny spotkań)']] },
+  { k: 'konflikt', t: 'Spotkanie umówione, a potem grafik się zmienił', p: 'Np. Henryk Pawlak u Marka w piątek, który teraz jest wolny.', o: [['ramka', 'Czerwona obwódka na pasku spotkania, nic więcej', true], ['ramka-lista', 'Obwódka plus lista takich spotkań do przełożenia'], ['nic', 'Bez oznaczenia']] },
+  { k: 'lista', t: 'Lista handlowców w "Nowe spotkanie"', p: '', o: [['tak', 'Dostępni w wybranym terminie na górze listy', true], ['nie', 'Bez zmian']] },
+];
+function renderPytania() {
+  const html = PYTANIA.map((q, i) => {
+    const wart = S.odp[q.k] !== undefined ? S.odp[q.k] : (q.k === 'wariant' ? S.wariant : q.k === 'wejscie' ? S.wejscie : q.k === 'brak' ? S.brak : q.k === 'polityka' ? S.polityka : null);
+    return `<div class="q"><h3>${i + 1}. ${q.t}</h3>${q.p ? `<p class="mk-note">${q.p}</p>` : ''}<div class="opts">${q.o.map(([v, t, rec]) => `<label class="radio"><input type="radio" name="q-${q.k}" value="${v}" ${wart === v ? 'checked' : ''}> ${t}${rec ? '<span class="rec">propozycja</span>' : ''}</label>`).join('')}</div></div>`;
+  }).join('');
+  $('#pytania').innerHTML = `<h2>Pytania otwarte</h2>
+    <p>Zaznacz odpowiedzi i kliknij "Kopiuj odpowiedzi", a potem wklej je w rozmowie. "propozycja" to to, co zrobiłbym domyślnie. Odpowiedzi 1, 2, 3 i 6 przełączają też makietę.</p>
+    ${html}
+    <div class="q"><h3>Uwagi</h3><textarea class="inp" id="uwagi" placeholder="Cokolwiek jeszcze"></textarea></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button class="btn solid" id="kopiujOdp">${IKONY.copy} Kopiuj odpowiedzi</button><span class="mk-note" id="kopiujInfo"></span></div>`;
+}
+function tekstOdpowiedzi() {
+  const linie = PYTANIA.map((q, i) => {
+    const el = document.querySelector(`input[name="q-${q.k}"]:checked`);
+    const opt = el ? q.o.find(([v]) => v === el.value) : null;
+    return `${i + 1}. ${q.t} ${opt ? opt[1] : '(bez odpowiedzi)'}`;
+  });
+  const u = $('#uwagi').value.trim();
+  if (u) linie.push('Uwagi: ' + u);
+  return 'Grafik dostępności, decyzje:\n' + linie.join('\n');
+}
+
+/* ================= Render i zdarzenia ================= */
+function render() {
+  document.documentElement.dataset.theme = S.theme;
+  document.querySelectorAll('.mk-tab').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === S.tab)));
+  document.querySelectorAll('[data-pane]').forEach((p) => (p.hidden = p.dataset.pane !== S.tab));
+  for (const [id, val] of [['theme', S.theme], ['wariant', S.wariant], ['brak', S.brak], ['polityka', S.polityka], ['wejscie', S.wejscie]]) {
+    document.querySelectorAll(`#${id} button`).forEach((b) => b.classList.toggle('on', b.dataset.v === val));
+  }
+  if (S.tab === 'tablica') renderTablica();
+  if (S.tab === 'wpisywanie') renderWpisywanie();
+  if (S.tab === 'pytania' && !$('#pytania').innerHTML) renderPytania();
+}
+
+let toastT = null;
+function toast(t) {
+  const el = $('#toast');
+  el.textContent = t; el.hidden = false;
+  clearTimeout(toastT); toastT = setTimeout(() => (el.hidden = true), 2600);
+}
+
+function godzinaZKlikniecia(e, track) {
+  const p = track.getBoundingClientRect();
+  const x = Math.min(1, Math.max(0, (e.clientX - p.left) / p.width));
+  let min = Math.round((OS.od + x * (OS.do - OS.od)) * 2) / 2;
+  return Math.min(Math.max(min, OS.od), OS.do - 0.5);
+}
+
+document.addEventListener('click', (e) => {
+  const t = e.target;
+  const c = (s) => t.closest(s);
+  let el;
+
+  if ((el = c('.mk-tab'))) { S.tab = el.dataset.tab; S.tabela.pop = null; return render(); }
+  if ((el = c('#theme button'))) { S.theme = el.dataset.v; return render(); }
+  if ((el = c('#wariant button'))) { S.wariant = el.dataset.v; S.odp.wariant = S.wariant; return render(); }
+  if ((el = c('#brak button'))) { S.brak = el.dataset.v; S.odp.brak = S.brak; return render(); }
+  if ((el = c('#polityka button'))) { S.polityka = el.dataset.v; S.odp.polityka = S.polityka; return render(); }
+  if ((el = c('#wejscie button'))) {
+    S.wejscie = el.dataset.v; S.odp.wejscie = S.wejscie;
+    S.edycja = null; S.panel = null; S.tabela = { kopia: null, zmiany: new Set(), pop: null };
+    return render();
+  }
+  if (c('#reset')) { S.reps = przyklad(); S.edycja = null; S.panel = null; S.tabela = { kopia: null, zmiany: new Set(), pop: null }; toast('Przywrócono dane przykładowe'); return render(); }
+  if ((el = c('[data-pick]'))) { S.wariant = el.dataset.pick; S.odp.wariant = S.wariant; return render(); }
+
+  // Kontrolki aplikacji
+  const v = S.tab === 'wpisywanie' ? S.v2 : S.v1;
+  if ((el = c('[data-ctl="widok"] button'))) { v.widok = el.dataset.v; return render(); }
+  if ((el = c('[data-ctl="tryb"] button'))) { v.tryb = el.dataset.v; return render(); }
+  if (c('[data-pion]')) return toast('Widok pionowy dostanie to samo zacienienie; w makiecie tylko poziomy.');
+  if (c('[data-nav]')) return toast('W makiecie jest jeden tydzień: 2 do 8 lis 2026.');
+  if (c('.msel')) return toast('Filtr handlowców działa jak dziś.');
+  if (c('[data-nowe]')) return modalSpotkania(S.reps[0].user, DZIS, 10);
+  if ((el = c('.bar'))) { e.stopPropagation(); return toast('Otwiera leada: ' + el.dataset.lead); }
+
+  // Modal
+  if (c('[data-m-zapisz]')) { $('#modal').innerHTML = ''; return toast('W makiecie nic się nie zapisuje.'); }
+  if (t.matches('[data-m-zamknij]') || c('button[data-m-zamknij]')) { $('#modal').innerHTML = ''; return; }
+
+  // a. Malowanie
+  if ((el = c('[data-edit]'))) {
+    const r = rep(el.dataset.edit);
+    S.edycja = { user: r.user, kopia: klon(r), wybrane: new Set(), zakres: 'staly' };
+    if (S.v2.tryb === 'tablica') S.v2.tryb = 'tablica';
+    return render();
+  }
+  if ((el = c('[data-sel]'))) { const d = +el.dataset.sel; S.edycja.wybrane.has(d) ? S.edycja.wybrane.delete(d) : S.edycja.wybrane.add(d); return render(); }
+  if ((el = c('[data-zaznacz]'))) { S.edycja.wybrane = el.dataset.zaznacz === 'robocze' ? new Set([0, 1, 2, 3, 4]) : new Set(); return render(); }
+  if ((el = c('[data-szablon]'))) {
+    const r = rep(S.edycja.user); zapewnijGrafik(r);
+    S.edycja.wybrane.forEach((d) => (r.grafik[d] = SZABLONY[el.dataset.szablon]()));
+    return render();
+  }
+  if (c('[data-edit-anuluj]')) { const r = rep(S.edycja.user); r.grafik = S.edycja.kopia; S.edycja = null; return render(); }
+  if (c('[data-edit-zapisz]')) { const r = rep(S.edycja.user); S.edycja = null; toast('Zapisano grafik: ' + r.imie); return render(); }
+
+  // b. Panel
+  if ((el = c('[data-panel]'))) {
+    if (S.panel) { /* przełączenie na innego handlowca zachowuje zmiany poprzedniego */ }
+    const r = rep(el.dataset.panel);
+    S.panel = { user: r.user, kopia: klon(r), zakres: 'staly' };
+    return render();
+  }
+  if ((el = c('[data-tog]'))) {
+    const r = rep(S.panel.user); zapewnijGrafik(r);
+    const d = +el.dataset.tog;
+    r.grafik[d] = zakresDnia(r.grafik[d]) ? WOLNE() : okno(8, 22);
+    return render();
+  }
+  if (c('[data-jakpon]')) {
+    const r = rep(S.panel.user); zapewnijGrafik(r);
+    for (let d = 1; d < 5; d++) r.grafik[d] = r.grafik[0].slice();
+    return render();
+  }
+  if (c('[data-panel-zamknij]') || c('[data-panel-anuluj]')) { const r = rep(S.panel.user); r.grafik = S.panel.kopia; S.panel = null; return render(); }
+  if (c('[data-panel-zapisz]')) { const r = rep(S.panel.user); S.panel = null; toast('Zapisano grafik: ' + r.imie); return render(); }
+
+  // c. Tabela
+  if (c('[data-tz-open]')) {
+    if (S.tabela.kopia) return;
+    S.tabela.kopia = S.reps.map((r) => klon(r)); S.tabela.zmiany = new Set();
+    return render();
+  }
+  if ((el = c('[data-tc]'))) { S.tabela.pop = S.tabela.pop === el.dataset.tc ? null : el.dataset.tc; return render(); }
+  if ((el = c('[data-ust]')) || (el = c('[data-own]'))) {
+    const [u, d] = S.tabela.pop.split(':');
+    const r = rep(u); zapewnijGrafik(r);
+    if (el.dataset.ust) r.grafik[+d] = SZABLONY[el.dataset.ust]();
+    else {
+      const a = +$('[data-own-od]').value, b = +$('[data-own-do]').value;
+      if (b <= a) return toast('Godzina "do" musi być późniejsza niż "od".');
+      r.grafik[+d] = okno(a, b);
+    }
+    S.tabela.zmiany.add(S.tabela.pop); S.tabela.pop = null;
+    return render();
+  }
+  if (c('[data-kopiuj-wszystko]')) {
+    S.reps.forEach((r) => { kopiujPoprzedni(r); for (let d = 0; d < 7; d++) S.tabela.zmiany.add(r.user + ':' + d); });
+    toast('Skopiowano grafik zespołu z tygodnia 26 paź do 1 lis');
+    return render();
+  }
+  if (c('[data-tz-anuluj]')) { S.reps.forEach((r, i) => (r.grafik = S.tabela.kopia[i])); S.tabela = { kopia: null, zmiany: new Set(), pop: null }; return render(); }
+  if (c('[data-tz-zapisz]')) { const n = S.tabela.zmiany.size; S.tabela = { kopia: null, zmiany: new Set(), pop: null }; toast('Zapisano ' + n + ' zmienionych dni'); return render(); }
+
+  if ((el = c('[data-kopiuj]'))) {
+    const r = rep(el.dataset.kopiuj); kopiujPoprzedni(r);
+    if (S.tab === 'wpisywanie' && S.wejscie === 'c' && S.tabela.kopia) for (let d = 0; d < 7; d++) S.tabela.zmiany.add(r.user + ':' + d);
+    toast('Skopiowano grafik z tygodnia 26 paź do 1 lis: ' + r.imie);
+    return render();
+  }
+
+  // Pytania
+  if (c('#kopiujOdp')) {
+    const tekst = tekstOdpowiedzi();
+    const ok = () => ($('#kopiujInfo').textContent = 'Skopiowano do schowka.');
+    if (navigator.clipboard) navigator.clipboard.writeText(tekst).then(ok, () => window.prompt('Skopiuj:', tekst));
+    else window.prompt('Skopiuj:', tekst);
+    return;
+  }
+
+  // Zamknij dymek tabeli przy kliknięciu obok
+  if (S.tabela.pop && !c('.pop')) { S.tabela.pop = null; return render(); }
+
+  // Klik w pusty termin na karcie
+  if ((el = c('.track')) && !c('.editing')) {
+    return modalSpotkania(el.dataset.user, +el.dataset.d, godzinaZKlikniecia(e, el));
+  }
+});
+
+document.addEventListener('change', (e) => {
+  const t = e.target;
+  if (t.matches('[data-ctl="jeden"]')) { (S.tab === 'wpisywanie' ? S.v2 : S.v1).jeden = t.value; return render(); }
+  if (t.name === 'zakresA') S.edycja.zakres = t.value;
+  if (t.name === 'zakresB') S.panel.zakres = t.value;
+  if (t.matches('[data-panel-rep]')) { const r = rep(t.value); S.panel = { user: r.user, kopia: klon(r), zakres: 'staly' }; return render(); }
+  if (t.matches('[data-od]') || t.matches('[data-do]')) {
+    const r = rep(S.panel.user); const d = +(t.dataset.od || t.dataset.do);
+    const z = zakresDnia(r.grafik[d]) || [8, 22];
+    let a = t.dataset.od !== undefined ? +t.value : z[0];
+    let b = t.dataset.do !== undefined ? +t.value : z[1];
+    if (b <= a) { if (t.dataset.od !== undefined) b = Math.min(24, a + 1); else a = Math.max(0, b - 1); }
+    r.grafik[d] = okno(a, b);
+    return render();
+  }
+  if (t.name && t.name.startsWith('q-')) {
+    const k = t.name.slice(2);
+    S.odp[k] = t.value;
+    if (k === 'wariant') S.wariant = t.value;
+    if (k === 'wejscie' && ['a', 'b', 'c'].includes(t.value)) S.wejscie = t.value;
+    if (k === 'brak') S.brak = t.value;
+    if (k === 'polityka') S.polityka = t.value === 'blokada' ? 'blokada' : 'ostrzezenie';
+    render();
+  }
+});
+
+// Malowanie przeciąganiem (wariant a)
+document.addEventListener('pointerdown', (e) => {
+  const cell = e.target.closest('.cell');
+  if (!cell || !S.edycja) return;
+  e.preventDefault();
+  malowanie = { wartosc: !cell.classList.contains('on') };
+  ustawKratke(cell);
+});
+document.addEventListener('pointermove', (e) => {
+  if (!malowanie) return;
+  ustawKratke(document.elementFromPoint(e.clientX, e.clientY));
+});
+document.addEventListener('pointerup', () => {
+  if (malowanie) { malowanie = null; render(); }
+});
+
+render();
+</script>
+</body>
+</html>
