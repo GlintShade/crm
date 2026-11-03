@@ -15,6 +15,7 @@ from crm.fcrm.doctype.crm_status_change_log.crm_status_change_log import (
 )
 from crm.fcrm.doctype.utils import add_or_remove_lost_reason_section_in_sidepanel
 from crm.permissions.org_hierarchy import ma_flage_zmiany_statusu_cc
+from crm.permissions.poprzedni_wlasciciel import odbierz_dostep_poprzedniemu_wlascicielowi
 from crm.volteo_leady_kontakt import waliduj_czas_do_kontaktu, waliduj_proby_kontaktu
 from crm.volteo_leady_status import czy_moze_zmienic_status_cc
 from crm.volteo_lista_szans import FILTER_FIELDS_LEAD, SORT_FIELDS_LEAD
@@ -131,6 +132,10 @@ class CRMLead(Document):
 		# tym samym zdarzeniu). Funkcja sama wychodzi po cichu, gdy nic sie nie
 		# zmienilo albo gdy to wlasnie pierwszy przydzial (patrz jej docstring).
 		powiadom_o_zmianie_terminu(self)
+		# VOLTEO (b82): po zmianie lead_owner z A na B (albo wyczyszczeniu) A traci
+		# ToDo i DocShare na tym leadzie, inaczej dalej widzi go przez galaz ToDo w
+		# org_hierarchy._permission_query_conditions. custom_cc jest chroniony.
+		odbierz_dostep_poprzedniemu_wlascicielowi(self, "lead_owner", chronieni=[self.get("custom_cc")])
 
 	def validate_status(self):
 		if self.is_new() and not self.status:

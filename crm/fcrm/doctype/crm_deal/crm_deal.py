@@ -11,6 +11,7 @@ from crm.fcrm.doctype.crm_service_level_agreement.utils import get_sla
 from crm.fcrm.doctype.crm_status_change_log.crm_status_change_log import add_status_change_log
 from crm.fcrm.doctype.utils import add_or_remove_lost_reason_section_in_sidepanel
 from crm.permissions.org_hierarchy import BYPASS_ROLES
+from crm.permissions.poprzedni_wlasciciel import odbierz_dostep_poprzedniemu_wlascicielowi
 from crm.volteo_lista_szans import FILTER_FIELDS_DEAL, SORT_FIELDS_DEAL
 from crm.volteo_pipeline import etap_nr, grupa_for, pipeline_for
 from crm.volteo_zestaw import POLA_CENY, POLE_ZESTAWU, czy_moze_edytowac_zestaw, zmienione_pola_chronione
@@ -126,6 +127,11 @@ class CRMDeal(Document):
 
 	def before_save(self):
 		self.apply_sla()
+
+	def on_update(self):
+		# VOLTEO (b82): ten sam mechanizm co CRMLead.on_update, po zmianie
+		# deal_owner poprzedni wlasciciel traci ToDo i DocShare na szansie.
+		odbierz_dostep_poprzedniemu_wlascicielowi(self, "deal_owner")
 
 	def guard_zestaw_i_ceny(self):
 		"""Zestaw (`custom_zestaw`) i pola ceny zmienia tylko administrator (ops#269).
