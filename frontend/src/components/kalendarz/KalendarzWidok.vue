@@ -7,7 +7,10 @@
   "wlasny" (handlowiec): od razu własny kalendarz. O zakresie decyduje
   odpowiedź serwera (crm.api.kalendarz.spotkania), front tylko ukrywa
   kontrolki. Kalendarz nie używa filtrów listy leadów. Daty i pozycje liczy
-  utils/kalendarz.js, zero logiki dat tutaj.
+  utils/kalendarz.js, zero logiki dat tutaj. Grafik dostępności (b82): ciemne
+  odcinki na kartach z `dostepnosc` z serwera, przycisk "Grafik" (backoffice,
+  widok tygodnia) zamienia kartę w EdycjaGrafiku, "Grafik zespołu" pokazuje
+  podgląd całego zespołu.
 -->
 <template>
   <div>
@@ -58,7 +61,31 @@
         :pusty="__('Wszyscy handlowcy')"
         class="w-52 text-xs"
       />
+      <Button
+        v-if="zakres === 'wszyscy' && grafikWlaczony"
+        size="sm"
+        :variant="zespolOtwarty ? 'subtle' : 'outline'"
+        data-testid="kalendarz-zespol"
+        @click="zespolOtwarty = !zespolOtwarty"
+      >
+        <template #prefix
+          ><FeatherIcon name="users" class="h-3.5 w-3.5"
+        /></template>
+        {{ __('Grafik zespołu') }}
+      </Button>
     </div>
+
+    <GrafikZespolu
+      v-if="zespolOtwarty && zakres === 'wszyscy' && grafikWlaczony"
+      class="mb-4"
+      :handlowcy="widoczni"
+      :dostepnosc="dostepnosc"
+      :dni="dni"
+      :teraz="teraz"
+      :moze-edytowac="mozeEdytowac"
+      :indeks-koloru="(u) => indeksKoloru(u)"
+      @zamknij="zespolOtwarty = false"
+    />
 
     <ErrorMessage v-if="blad" :message="blad" class="mb-3" />
     <div
@@ -83,17 +110,31 @@
         data-testid="kalendarz-tablica"
       >
         <template v-for="h in widoczni" :key="h.user">
+          <EdycjaGrafiku
+            v-if="edytowany === h.user"
+            class="lg:col-span-2"
+            :handlowiec="h"
+            :kolor-index="indeksKoloru(h.user)"
+            :dni="dni"
+            :dostepnosc="dostepnoscDla(h.user) || null"
+            :zmiany="zmianyGrafiku[h.user] || []"
+            @anuluj="edytowany = ''"
+            @zapisano="poZapisieGrafiku"
+          />
           <KartaHandlowca
-            v-if="stan.orientacja === 'poziomo'"
+            v-else-if="stan.orientacja === 'poziomo'"
             :handlowiec="h"
             :kolor-index="indeksKoloru(h.user)"
             :spotkania="spotkania[h.user] || []"
             :dni="dni"
             :teraz="teraz"
             :os-zewnetrzna="osTablicy"
+            :dostepnosc="dostepnoscDla(h.user)"
+            :edycja="edycjaMozliwa"
             @otworz="otworzLeada"
             @nowe="otworzModal"
             @przesun="przesun"
+            @grafik="edytowany = h.user"
           />
           <KalendarzPionowy
             v-else
@@ -105,27 +146,43 @@
             kompakt
             naglowek
             :os-zewnetrzna="osTablicy"
+            :dostepnosc="dostepnoscDla(h.user)"
+            :edycja="edycjaMozliwa"
             @otworz="otworzLeada"
             @nowe="otworzModal"
             @przesun="przesun"
+            @grafik="edytowany = h.user"
           />
         </template>
       </div>
 
       <!-- Jeden handlowiec / własny -->
       <template v-else>
+        <EdycjaGrafiku
+          v-if="edytowany === widoczni[0].user"
+          :handlowiec="widoczni[0]"
+          :kolor-index="indeksKoloru(widoczni[0].user)"
+          :dni="dni"
+          :dostepnosc="dostepnoscDla(widoczni[0].user) || null"
+          :zmiany="zmianyGrafiku[widoczni[0].user] || []"
+          @anuluj="edytowany = ''"
+          @zapisano="poZapisieGrafiku"
+        />
         <KartaHandlowca
-          v-if="stan.orientacja === 'poziomo'"
+          v-else-if="stan.orientacja === 'poziomo'"
           :handlowiec="widoczni[0]"
           :kolor-index="indeksKoloru(widoczni[0].user)"
           :spotkania="spotkania[widoczni[0].user] || []"
           :dni="dni"
           :teraz="teraz"
           duzy
+          :dostepnosc="dostepnoscDla(widoczni[0].user)"
+          :edycja="edycjaMozliwa && zakres === 'wszyscy'"
           data-testid="kalendarz-jeden-poziomo"
           @otworz="otworzLeada"
           @nowe="otworzModal"
           @przesun="przesun"
+          @grafik="edytowany = widoczni[0].user"
         />
         <KalendarzPionowy
           v-else
@@ -134,6 +191,7 @@
           :spotkania="spotkania[widoczni[0].user] || []"
           :dni="dni"
           :teraz="teraz"
+          :dostepnosc="dostepnoscDla(widoczni[0].user)"
           data-testid="kalendarz-jeden-pionowo"
           @otworz="otworzLeada"
           @nowe="otworzModal"
@@ -147,6 +205,7 @@
       :zakres="zakres || 'wszyscy'"
       :handlowcy="handlowcy"
       :spotkania="spotkania"
+      :dostepnosc="dostepnosc"
       @zapisano="wczytaj"
     />
   </div>
@@ -155,12 +214,14 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ErrorMessage, FormControl, call } from 'frappe-ui'
+import { Button, ErrorMessage, FeatherIcon, FormControl, call } from 'frappe-ui'
 import KalendarzPasek from '@/components/kalendarz/KalendarzPasek.vue'
 import MultiWyborProsty from '@/components/rozliczenia/MultiWyborProsty.vue'
 import KartaHandlowca from '@/components/kalendarz/KartaHandlowca.vue'
 import KalendarzPionowy from '@/components/kalendarz/KalendarzPionowy.vue'
 import NoweSpotkanieModal from '@/components/kalendarz/NoweSpotkanieModal.vue'
+import EdycjaGrafiku from '@/components/kalendarz/EdycjaGrafiku.vue'
+import GrafikZespolu from '@/components/kalendarz/GrafikZespolu.vue'
 import PrzelacznikSegmentowy from '@/components/kalendarz/PrzelacznikSegmentowy.vue'
 import { sessionStore } from '@/stores/session'
 import {
@@ -214,6 +275,12 @@ const ladowanie = ref(false)
 const blad = ref('')
 const modalOtwarty = ref(false)
 const modalDane = ref({})
+// Grafik dostępności (b82): null = doctype jeszcze nie istnieje na serwerze.
+const dostepnosc = ref(null)
+const zmianyGrafiku = ref({})
+const mozeEdytowac = ref(false)
+const edytowany = ref('')
+const zespolOtwarty = ref(false)
 let numerZapytania = 0
 let zegar = null
 
@@ -251,6 +318,23 @@ const osTablicy = computed(() =>
   ),
 )
 
+const grafikWlaczony = computed(() => dostepnosc.value !== null)
+// Edycja grafiku tylko w widoku tygodnia (zapis dotyczy całego tygodnia).
+const edycjaMozliwa = computed(
+  () => mozeEdytowac.value && grafikWlaczony.value && stan.widok === 'tydzien',
+)
+
+/** Mapa dostępności handlowca; undefined, gdy grafik wyłączony. */
+function dostepnoscDla(userName) {
+  if (!grafikWlaczony.value) return undefined
+  return dostepnosc.value[userName] ?? null
+}
+
+function poZapisieGrafiku() {
+  edytowany.value = ''
+  wczytaj()
+}
+
 function indeksKoloru(userName) {
   return Math.max(
     0,
@@ -272,6 +356,9 @@ async function wczytaj() {
     zakres.value = odp.zakres
     handlowcy.value = odp.handlowcy || []
     spotkania.value = odp.spotkania || {}
+    dostepnosc.value = odp.dostepnosc ?? null
+    zmianyGrafiku.value = odp.zmiany_grafiku || {}
+    mozeEdytowac.value = !!odp.moze_edytowac_grafik
     if (pierwszy && odp.zakres === 'wlasny' && !surowyStan)
       stan.orientacja = 'pionowo'
   } catch (e) {
@@ -308,7 +395,11 @@ function otworzModal(dane) {
   modalOtwarty.value = true
 }
 
-watch([() => okres.value.od, () => okres.value.do], wczytaj)
+watch([() => okres.value.od, () => okres.value.do], () => {
+  // Edytor dotyczy jednego tygodnia; zmiana tygodnia albo widoku go zamyka.
+  edytowany.value = ''
+  wczytaj()
+})
 
 watch(
   stan,

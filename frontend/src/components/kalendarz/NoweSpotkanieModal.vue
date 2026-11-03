@@ -2,6 +2,9 @@
   Nowe spotkanie (kalendarz, ops#318): wybór leada (tylko widoczne dla
   wołającego, zwykłe uprawnienia), data, godzina co 30 min i, dla zakresu
   "wszyscy", handlowiec. Zapis przez crm.api.kalendarz.ustaw_termin.
+  Grafik dostępności (b82): dostępni w wybranym terminie na górze listy
+  (decyzja 10), termin poza grafikiem daje ostrzeżenie i "Zapisz mimo to"
+  (decyzja 6, bez blokady).
 -->
 <template>
   <Dialog v-model:open="otwarte" :title="__('Nowe spotkanie')" size="md">
@@ -41,6 +44,14 @@
         <p v-if="podpowiedz" class="text-xs text-ink-amber-8">
           {{ podpowiedz }}
         </p>
+        <p
+          v-if="ostrzezenie"
+          class="text-xs text-ink-amber-8"
+          data-testid="kalendarz-poza-grafikiem"
+        >
+          <span class="font-semibold">{{ __('Uwaga:') }}</span>
+          {{ ostrzezenie }}
+        </p>
         <ErrorMessage :message="blad" />
       </div>
     </template>
@@ -49,7 +60,7 @@
         <Button :label="__('Anuluj')" @click="otwarte = false" />
         <Button
           variant="solid"
-          :label="__('Zapisz')"
+          :label="ostrzezenie ? __('Zapisz mimo to') : __('Zapisz')"
           :loading="zapisuje"
           @click="zapisz"
         />
@@ -69,7 +80,13 @@ import {
   toast,
 } from 'frappe-ui'
 import Link from '@/components/Controls/Link.vue'
-import { opcjeGodzin, podpowiedzDnia, terminDoApi } from '@/utils/kalendarz'
+import {
+  opcjeGodzin,
+  ostrzezenieGrafiku,
+  podpowiedzDnia,
+  posortujWgDostepnosci,
+  terminDoApi,
+} from '@/utils/kalendarz'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -78,6 +95,8 @@ const props = defineProps({
   zakres: { type: String, default: 'wszyscy' },
   handlowcy: { type: Array, default: () => [] },
   spotkania: { type: Object, default: () => ({}) },
+  // Grafik dostępności { user: { data: okna } | null }; null = wyłączony.
+  dostepnosc: { type: Object, default: null },
 })
 const emit = defineEmits(['update:modelValue', 'zapisano'])
 
@@ -96,8 +115,37 @@ const blad = ref('')
 const opcjeGodzinSelect = opcjeGodzin().map((g) => ({ label: g, value: g }))
 const opcjeHandlowcow = computed(() => [
   { label: __('Bez zmiany handlowca'), value: '' },
-  ...props.handlowcy.map((h) => ({ label: h.full_name, value: h.user })),
+  ...posortujWgDostepnosci(
+    props.handlowcy,
+    props.dostepnosc,
+    data.value,
+    godzina.value,
+  ).map((h) => ({
+    label: h.dostepny
+      ? h.full_name
+      : `${h.full_name} (${__('poza grafikiem')})`,
+    value: h.user,
+  })),
 ])
+
+// Handlowiec, którego dotyczy termin: wybrany, a handlowiec na własnym
+// kalendarzu (zakres "wlasny") to zawsze on sam.
+const handlowiecTerminu = computed(() => {
+  if (handlowiec.value)
+    return props.handlowcy.find((x) => x.user === handlowiec.value)
+  return props.zakres === 'wlasny' ? props.handlowcy[0] : null
+})
+
+const ostrzezenie = computed(() => {
+  const h = handlowiecTerminu.value
+  if (!h || !props.dostepnosc) return ''
+  return ostrzezenieGrafiku(
+    h.full_name,
+    props.dostepnosc[h.user],
+    data.value,
+    godzina.value,
+  )
+})
 
 watch(
   () => props.modelValue,

@@ -682,3 +682,153 @@ export function dlugosciBlokowPion(listaDnia, dlugoscH = DLUGOSC_SPOTKANIA_H) {
 export function czyJednaLiniaBloku(pxNaH, dlugoscH) {
   return czyJednaLinia(pxNaH) || pxNaH * dlugoscH < PROG_WYSOKOSC_DWIE_LINIE_PX
 }
+
+// ---------------------------------------------------------------------------
+// Grafik dostępności handlowców (b82). Dane z crm.api.kalendarz.spotkania:
+// `dostepnosc[user]` to { 'RRRR-MM-DD': [[od, do], ...] } (pełne godziny,
+// pusta lista = wolne, null dnia = brak wzoru na ten dzień) albo null (brak
+// grafiku). Brak grafiku = cały dzień dostępny (decyzja 3).
+// ---------------------------------------------------------------------------
+
+/** Szablony edytora grafiku (pełne godziny). "Cały dzień" to cała doba. */
+export const SZABLONY_GRAFIKU = {
+  caly: [[0, 24]],
+  rano: [[8, 14]],
+  popoludnie: [[14, 22]],
+  wolne: [],
+}
+
+/** Okna dnia z mapy dostępności handlowca; null, gdy brak grafiku (dnia lub całości). */
+export function oknaDnia(dostepnoscHandlowca, dataIso) {
+  if (!dostepnoscHandlowca || typeof dostepnoscHandlowca !== 'object')
+    return null
+  const okna = dostepnoscHandlowca[dataIso]
+  return Array.isArray(okna) ? okna : null
+}
+
+/**
+ * Czy przedział `startH`..`startH + dlugoscH` mieści się w jednym oknie.
+ * Brak grafiku (okna null) = dostępny.
+ */
+export function czyDostepnyW(okna, startH, dlugoscH = DLUGOSC_SPOTKANIA_H) {
+  if (!Array.isArray(okna)) return true
+  if (typeof startH !== 'number' || Number.isNaN(startH)) return true
+  const koniec = startH + dlugoscH
+  return okna.some(([od, doH]) => od <= startH && koniec <= doH)
+}
+
+/**
+ * Niedostępne odcinki [od, do] na osi `od`..`doGodziny` (dopełnienie okien).
+ * Brak grafiku = brak odcinków (cały dzień jasny).
+ */
+export function odcinkiNiedostepne(okna, od = OS_OD, doGodziny = OS_DO) {
+  if (!Array.isArray(okna)) return []
+  const wynik = []
+  let kursor = od
+  const posortowane = [...okna].sort((a, b) => a[0] - b[0])
+  for (const [a, b] of posortowane) {
+    if (kursor >= doGodziny) break
+    if (b <= kursor) continue
+    if (a > kursor) wynik.push([kursor, Math.min(a, doGodziny)])
+    kursor = Math.max(kursor, b)
+  }
+  if (kursor < doGodziny) wynik.push([kursor, doGodziny])
+  return wynik.filter(([a, b]) => b > a)
+}
+
+/** Styl poziomego odcinka (left, width w %) na osi `od`..`doGodziny`. */
+export function stylOdcinkaPoziomo(a, b, od, doGodziny) {
+  const left = pozycjaGodzinyPct(a, od, doGodziny)
+  return {
+    left: `${left}%`,
+    width: `${pozycjaGodzinyPct(b, od, doGodziny) - left}%`,
+  }
+}
+
+/** Styl pionowego odcinka (top, height w px) w siatce od godziny `od`. */
+export function stylOdcinkaPion(a, b, od, pxNaH) {
+  return { top: `${(a - od) * pxNaH}px`, height: `${(b - a) * pxNaH}px` }
+}
+
+/** Czy spotkanie wypada (choć częściowo) poza grafikiem handlowca (decyzja 9). */
+export function czyPozaGrafikiem(spotkanie, dostepnoscHandlowca) {
+  const start = poczatekWGodzinach(spotkanie?.termin)
+  if (start === null) return false
+  const okna = oknaDnia(dostepnoscHandlowca, dataTerminu(spotkanie.termin))
+  return !czyDostepnyW(okna, start)
+}
+
+/** Opis okien dnia: "brak grafiku", "wolne", "cały dzień", "8 do 12, 14 do 18". */
+export function opisOkien(okna) {
+  if (!Array.isArray(okna)) return 'brak grafiku'
+  if (!okna.length) return 'wolne'
+  if (okna.length === 1 && okna[0][0] === 0 && okna[0][1] === 24)
+    return 'cały dzień'
+  return okna.map(([a, b]) => `${a} do ${b}`).join(', ')
+}
+
+/** 24 wartości true/false (pełne godziny) z okien; null = wszystko false. */
+export function godzinyZOkien(okna) {
+  const wynik = Array(24).fill(false)
+  for (const [a, b] of Array.isArray(okna) ? okna : []) {
+    for (let h = Math.max(0, a); h < Math.min(24, b); h++) wynik[h] = true
+  }
+  return wynik
+}
+
+/** Okna [od, do] z 24 wartości true/false (sąsiednie godziny łączone). */
+export function oknaZGodzin(godziny) {
+  const wynik = []
+  let start = null
+  for (let h = 0; h <= 24; h++) {
+    const jest = h < 24 && !!godziny[h]
+    if (jest && start === null) start = h
+    if (!jest && start !== null) {
+      wynik.push([start, h])
+      start = null
+    }
+  }
+  return wynik
+}
+
+/** "HH:MM" na godziny (10:30 => 10.5); null dla niepoprawnej wartości. */
+export function godzinaNaLiczbe(godzina) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(godzina || ''))
+  if (!m) return null
+  return Number(m[1]) + Number(m[2]) / 60
+}
+
+/**
+ * Handlowcy z flagą `dostepny` w terminie `dataIso` `godzina`, dostępni na
+ * górze listy (decyzja 10), kolejność w grupach bez zmian. Bez danych
+ * grafiku (`dostepnosc` null/undefined) wszyscy są dostępni.
+ */
+export function posortujWgDostepnosci(handlowcy, dostepnosc, dataIso, godzina) {
+  const start = godzinaNaLiczbe(godzina)
+  const z = (handlowcy || []).map((h) => ({
+    ...h,
+    dostepny:
+      !dostepnosc || start === null || !dataIso
+        ? true
+        : czyDostepnyW(oknaDnia(dostepnosc[h.user], dataIso), start),
+  }))
+  return [...z.filter((h) => h.dostepny), ...z.filter((h) => !h.dostepny)]
+}
+
+/**
+ * Ostrzeżenie w "Nowe spotkanie" (decyzja 6: można zapisać mimo to); '' gdy
+ * termin mieści się w grafiku albo handlowiec nie ma grafiku.
+ */
+export function ostrzezenieGrafiku(
+  imie,
+  dostepnoscHandlowca,
+  dataIso,
+  godzina,
+) {
+  const start = godzinaNaLiczbe(godzina)
+  if (start === null || !dataIso) return ''
+  const okna = oknaDnia(dostepnoscHandlowca, dataIso)
+  if (czyDostepnyW(okna, start)) return ''
+  const stan = okna.length ? `jest dostępny ${opisOkien(okna)}` : 'ma wolne'
+  return `Termin poza grafikiem: ${imie} w tym dniu ${stan}. Umów tylko, jeśli handlowiec to potwierdził.`
+}

@@ -5,7 +5,9 @@
   etykieta każdej godziny jest wyśrodkowana na swojej linii (top: Ypx,
   translateY(-50%)), razem z ostatnią. Bloki mają ten sam układ współrzędnych.
   Prop `kompakt` = mniejsza skala (karta w tablicy), `naglowek` = karta z
-  nagłówkiem handlowca (NaglowekKarty).
+  nagłówkiem handlowca (NaglowekKarty). Grafik dostępności (b82): props
+  `dostepnosc` i `edycja` jak w KartaHandlowca (ciemne odcinki w paski,
+  obwódka spotkań poza grafikiem, chip "brak grafiku", przycisk "Grafik").
 -->
 <template>
   <div
@@ -21,8 +23,23 @@
       :kolor="kolor"
       :etykieta-zakresu="etykietaZakresu"
       :chip="chip"
+      :brak-grafiku="grafikWlaczony && dostepnosc === null"
       @przesun="(k) => $emit('przesun', k)"
-    />
+    >
+      <template v-if="edycja" #akcje>
+        <Button
+          size="sm"
+          variant="outline"
+          data-testid="kalendarz-grafik"
+          @click="$emit('grafik')"
+        >
+          <template #prefix
+            ><FeatherIcon name="edit-2" class="h-3.5 w-3.5"
+          /></template>
+          {{ __('Grafik') }}
+        </Button>
+      </template>
+    </NaglowekKarty>
     <div :class="kompakt ? '' : 'min-w-[640px]'">
       <!-- Nagłówek dni: osobny wiersz, nie jest częścią skali godzin -->
       <div
@@ -86,6 +103,13 @@
             class="pointer-events-none absolute left-0 right-0 border-t border-outline-gray-2"
             :style="{ top: (g - os.od) * pxNaH + 'px' }"
           ></span>
+          <span
+            v-for="[a, b] in niedostepne[dzien] || []"
+            :key="'n' + a"
+            class="kalendarz-niedostepny pointer-events-none absolute left-0.5 right-0.5 z-[1] rounded-md"
+            :style="stylOdcinkaPion(a, b, os.od, pxNaH)"
+            data-testid="kalendarz-niedostepny"
+          ></span>
           <DymekSpotkania
             v-for="s in poDniach[dzien] || []"
             :key="s.name"
@@ -100,6 +124,7 @@
                   : 'left-1 right-1 px-1.5 py-0.5',
                 kolor.pelny,
                 czyUmowiony(s.status) ? '' : 'opacity-[0.7]',
+                pozaGrafikiem(s) ? 'kalendarz-poza-grafikiem' : '',
               ]"
               :style="stylBloku(s)"
               :data-lead="s.name"
@@ -140,11 +165,13 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { Button, FeatherIcon } from 'frappe-ui'
 import NaglowekKarty from '@/components/kalendarz/NaglowekKarty.vue'
 import DymekSpotkania from '@/components/kalendarz/DymekSpotkania.vue'
 import {
   WYSOKOSC_NAGLOWKA_DNI_PX,
   czyDzis,
+  czyPozaGrafikiem,
   czyUmowiony,
   czyWeekend,
   etykietaChipa,
@@ -161,11 +188,14 @@ import {
   pxNaGodzineZSzerokosci,
   kolorHandlowca,
   nazwisko,
+  odcinkiNiedostepne,
+  oknaDnia,
   osGodzin,
   pogrupujPoDniach,
   pozycjaBlokuPx,
   pozycjaTeraz,
   skalaPionowa,
+  stylOdcinkaPion,
   wysokoscSiatkiPion,
 } from '@/utils/kalendarz'
 
@@ -179,9 +209,30 @@ const props = defineProps({
   naglowek: { type: Boolean, default: false },
   // Wspólna oś godzin tablicy ({ od, do }); bez niej oś liczona z własnych spotkań.
   osZewnetrzna: { type: Object, default: null },
+  // Grafik dostępności, jak w KartaHandlowca.
+  dostepnosc: { type: Object, default: undefined },
+  edycja: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['otworz', 'nowe', 'przesun'])
+const emit = defineEmits(['otworz', 'nowe', 'przesun', 'grafik'])
+
+const grafikWlaczony = computed(() => props.dostepnosc !== undefined)
+const niedostepne = computed(() => {
+  const wynik = {}
+  if (!grafikWlaczony.value) return wynik
+  for (const dzien of props.dni) {
+    wynik[dzien] = odcinkiNiedostepne(
+      oknaDnia(props.dostepnosc, dzien),
+      os.value.od,
+      os.value.do,
+    )
+  }
+  return wynik
+})
+
+function pozaGrafikiem(s) {
+  return grafikWlaczony.value && czyPozaGrafikiem(s, props.dostepnosc)
+}
 
 const kolor = computed(() => kolorHandlowca(props.kolorIndex))
 const os = computed(() => props.osZewnetrzna || osGodzin(props.spotkania))

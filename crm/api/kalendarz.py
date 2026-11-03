@@ -9,6 +9,12 @@ Backend, Volteo Call Center) pokazuje spotkania wszystkich aktywnych handlowcow
 D2D, handlowiec widzi tylko wlasne. Logika zakresu i dat zyje w frappe-free
 `crm/volteo_kalendarz.py`; ten plik to cienki adapter.
 
+Grafik dostepnosci (b82): `spotkania` zwraca tez `dostepnosc` (wzor tygodniowy
+plus zmiany na dni, rozwiniete na kazdy dzien zakresu), `ustaw_dostepnosc`
+zapisuje tydzien z edytora na karcie handlowca. Doctype `Volteo Dostepnosc`
+tworzy skrypt ops (wzor w docs/ops/crm-dostepnosc.py); dopoki go nie ma,
+`dostepnosc` jest None, a front nie pokazuje cieniowania.
+
 Frontend wola te metody PELNA sciezka kropkowana `crm.api.kalendarz.<metoda>`.
 """
 
@@ -17,15 +23,26 @@ from frappe import _
 
 from crm.api.volteo_leady import _aktywni_d2d_reprezentanci
 from crm.volteo_kalendarz import (
+	DNI_TYGODNIA,
+	DOCTYPE_DOSTEPNOSCI,
 	ZAKRES_WLASNY,
 	ZAKRES_WSZYSCY,
+	dni_zakresu,
+	dostepnosc_handlowcow,
 	granice_czasu,
+	moze_edytowac_grafik,
 	normalizuj_handlowcow,
 	normalizuj_termin,
+	normalizuj_tydzien,
+	plan_zapisu,
 	pogrupuj_spotkania,
 	przetnij_handlowcow,
+	rozdziel_wiersze,
+	waliduj_wiersz_dostepnosci,
 	waliduj_zakres_dat,
+	wiersze_dnia,
 	zakres_kalendarza,
+	zakres_tygodnia,
 )
 
 # Minimalna projekcja: nigdy `custom_cc` ani pola permlevel 2/3.
@@ -47,6 +64,50 @@ def _zakres_wolajacego() -> str:
 	return zakres
 
 
+POLA_DOSTEPNOSCI = ["name", "handlowiec", "dzien_tygodnia", "data", "wolne", "od", "do"]
+
+
+def _grafik_wlaczony() -> bool:
+	return bool(frappe.db.exists("DocType", DOCTYPE_DOSTEPNOSCI))
+
+
+def _wiersze_dostepnosci(maile: list[str], od: str | None = None, do: str | None = None) -> list:
+	"""Wiersze wzoru oraz zmian z datami `od`..`do` (bez zakresu: wszystkie zmiany).
+
+	get_all celowo (jak przy spotkaniach): CC i handlowiec nie maja DocPerm na
+	doctype, a cieniowanie widza wszyscy z kalendarza (decyzja 4). Zakres
+	handlowcow wyznacza `spotkania`.
+	"""
+	if not maile:
+		return []
+	or_filters = [["data", "is", "not set"]]
+	if od and do:
+		or_filters.append(["data", "between", [od, do]])
+	else:
+		or_filters.append(["data", "is", "set"])
+	return frappe.get_all(
+		DOCTYPE_DOSTEPNOSCI,
+		filters={"handlowiec": ["in", maile]},
+		or_filters=or_filters,
+		fields=POLA_DOSTEPNOSCI,
+		limit_page_length=0,
+	)
+
+
+def validate_dostepnosc(doc, method: str | None = None) -> None:
+	"""Hook `validate` na `Volteo Dostepnosc` (dziala tez przy zapisie z Desk)."""
+	komunikat = waliduj_wiersz_dostepnosci(
+		doc.get("dzien_tygodnia"), doc.get("data"), doc.get("wolne"), doc.get("od"), doc.get("do")
+	)
+	if komunikat:
+		frappe.throw(_(komunikat))
+	if doc.get("data"):
+		doc.dzien_tygodnia = ""
+	if doc.get("wolne"):
+		doc.od = None
+		doc.do = None
+
+
 def _spotkanie(wiersz) -> dict:
 	return {
 		"name": wiersz.name,
@@ -63,7 +124,11 @@ def _spotkanie(wiersz) -> dict:
 def spotkania(od: str, do: str, handlowcy: str | list | None = None) -> dict:
 	"""Spotkania handlowcow w zakresie dat `od`..`do` (RRRR-MM-DD, max 62 dni).
 
-	Zwraca `{"zakres", "handlowcy": [{user, full_name}], "spotkania": {user: [...]}}`.
+	Zwraca `{"zakres", "handlowcy": [{user, full_name}], "spotkania": {user: [...]},
+	"dostepnosc": {user: {data: [[od, do], ...]} | None} | None,
+	"zmiany_grafiku": {user: [data, ...]}, "moze_edytowac_grafik": bool}`.
+	W `dostepnosc` pusta lista to dzien wolny, None dnia to brak wzoru na ten
+	dzien, None handlowca to brak grafiku; `dostepnosc` None = brak doctype.
 	Dla zakresu "wlasny" parametr `handlowcy` jest ignorowany.
 	"""
 	zakres = _zakres_wolajacego()
@@ -105,11 +170,79 @@ def spotkania(od: str, do: str, handlowcy: str | list | None = None) -> dict:
 		],
 		maile,
 	)
+	dostepnosc, zmiany_grafiku = None, {}
+	if _grafik_wlaczony():
+		dostepnosc, zmiany_grafiku = dostepnosc_handlowcow(
+			_wiersze_dostepnosci(maile, od, do), maile, dni_zakresu(od, do)
+		)
 	return {
 		"zakres": zakres,
 		"handlowcy": handlowcy_wiersze,
 		"spotkania": {user: [_spotkanie(w["wiersz"]) for w in lista] for user, lista in pogrupowane.items()},
+		"dostepnosc": dostepnosc,
+		"zmiany_grafiku": zmiany_grafiku,
+		"moze_edytowac_grafik": moze_edytowac_grafik(frappe.session.user, frappe.get_roles())
+		and _grafik_wlaczony(),
 	}
+
+
+@frappe.whitelist(methods=["POST"])
+def ustaw_dostepnosc(handlowiec: str, dni: str | list, zakres: str, tydzien_od: str) -> dict:
+	"""Zapisuje grafik tygodnia `tydzien_od` (poniedzialek) jednego handlowca.
+
+	`dni`: 7 list okien `[od, do]` w pelnych godzinach (pon..niedz), pusta lista
+	= wolne. `zakres` "staly" (tydzien staje sie stalym wzorem) albo "tydzien"
+	(zmiana tylko dla dni rozniacych sie od wzoru); szczegoly w
+	`crm.volteo_kalendarz.plan_zapisu`. Tylko role `ROLE_GRAFIKU`; wiersze
+	przez `insert()`/`delete_doc` bez `ignore_permissions` (DocPerm doctype).
+	"""
+	if not moze_edytowac_grafik(frappe.session.user, frappe.get_roles()):
+		frappe.throw(_("Grafik wpisuje tylko administracja i backoffice."), frappe.PermissionError)
+	if not _grafik_wlaczony():
+		frappe.throw(_("Grafik dostępności nie jest jeszcze włączony na tym serwerze."))
+	dozwoleni = {r["name"] for r in _aktywni_d2d_reprezentanci()}
+	if handlowiec not in dozwoleni:
+		frappe.throw(_("Wskazany handlowiec nie jest aktywnym handlowcem z dostępem do modułu Leady."))
+	try:
+		poniedzialek, niedziela = zakres_tygodnia(tydzien_od)
+		if poniedzialek != str(tydzien_od)[:10]:
+			raise ValueError("Tydzień musi zaczynać się od poniedziałku.")
+		tydzien = normalizuj_tydzien(dni)
+		wzor_obecny, _zmiany = rozdziel_wiersze(_wiersze_dostepnosci([handlowiec]))
+		plan = plan_zapisu(tydzien, zakres, poniedzialek, wzor_obecny)
+	except ValueError as exc:
+		frappe.throw(_(str(exc)))
+
+	def _usun(filtry):
+		for name in frappe.get_all(DOCTYPE_DOSTEPNOSCI, filters=filtry, pluck="name", limit_page_length=0):
+			frappe.delete_doc(DOCTYPE_DOSTEPNOSCI, name)
+
+	def _wstaw(okna, dzien_tygodnia="", data=None):
+		for w in wiersze_dnia(okna):
+			frappe.get_doc(
+				{
+					"doctype": DOCTYPE_DOSTEPNOSCI,
+					"handlowiec": handlowiec,
+					"dzien_tygodnia": dzien_tygodnia,
+					"data": data,
+					**w,
+				}
+			).insert()
+
+	if plan["wzor"] is not None:
+		_usun({"handlowiec": handlowiec, "data": ["is", "not set"]})
+		for i, okna in enumerate(plan["wzor"]):
+			_wstaw(okna, dzien_tygodnia=DNI_TYGODNIA[i])
+	_usun({"handlowiec": handlowiec, "data": ["in", plan["usun_zmiany"]]})
+	for data, okna in plan["zmiany"].items():
+		_wstaw(okna, data=data)
+
+	dostepnosc, zmiany = dostepnosc_handlowcow(
+		_wiersze_dostepnosci([handlowiec], poniedzialek, niedziela),
+		[handlowiec],
+		dni_zakresu(poniedzialek, niedziela),
+	)
+	return {"dostepnosc": dostepnosc[handlowiec], "zmiany_grafiku": zmiany[handlowiec]}
 
 
 @frappe.whitelist()
