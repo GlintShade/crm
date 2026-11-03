@@ -1,7 +1,12 @@
 <template>
-  <div class="sections flex flex-col overflow-y-auto">
+  <div
+    :class="[
+      'sections flex flex-col overflow-y-auto',
+      karty && 'sections-karty gap-2 px-3 pb-3 pt-0',
+    ]"
+  >
     <div
-      v-if="!preview && _sections.length"
+      v-if="!preview && !karty && _sections.length"
       class="flex items-center justify-end gap-2 px-3 py-1.5"
     >
       <div class="text-sm text-ink-gray-5">{{ __('Ukryj puste pola') }}</div>
@@ -10,16 +15,13 @@
     <template v-for="(section, i) in _sections" :key="section.name">
       <div v-if="section.visible" class="section flex flex-col">
         <div
-          v-if="i !== firstVisibleIndex()"
+          v-if="!karty && i !== firstVisibleIndex()"
           class="w-full section-border h-px border-t"
         />
-        <div class="p-1 sm:p-3">
-          <Section
-            labelClass="px-2 font-semibold"
-            headerClass="h-8"
-            :label="section.label"
-            :hideLabel="!section.label"
-            :opened="section.opened"
+        <div :class="karty ? '' : 'p-1 sm:p-3'">
+          <component
+            :is="karty ? KartaSekcji : Section"
+            v-bind="opakowanieSekcji(section)"
           >
             <template v-if="!preview" #actions>
               <slot name="actions" v-bind="{ section }">
@@ -33,9 +35,14 @@
               </slot>
             </template>
             <slot v-bind="{ section }">
-              <FadedScrollableDiv
+              <component
+                :is="karty ? 'div' : FadedScrollableDiv"
                 v-if="section.columns?.[0].fields.length"
-                class="column flex flex-col gap-1.5 overflow-y-auto"
+                :class="
+                  karty
+                    ? 'column grid grid-cols-2 gap-x-3 gap-y-2.5'
+                    : 'column flex flex-col gap-1.5 overflow-y-auto'
+                "
               >
                 <template
                   v-for="field in section.columns[0].fields || []"
@@ -43,12 +50,23 @@
                 >
                   <div
                     v-if="field.visible && czyPoleTekstowe(field)"
-                    class="field flex flex-col gap-1 px-3 py-1.5 leading-5 first:mt-3"
+                    :class="
+                      karty
+                        ? 'field col-span-2 flex min-w-0 flex-col gap-1 leading-5'
+                        : 'field flex flex-col gap-1 px-3 py-1.5 leading-5 first:mt-3'
+                    "
                     :ref="(el) => setTextareaRef(field.fieldname, el)"
+                    @focusout="onUwagiFocusout(field)"
+                    @focusin="onUwagiFocusin(field)"
                   >
                     <Tooltip :text="__(field.label)" :hoverDelay="1">
-                      <div class="flex items-center gap-0.5">
-                        <div class="truncate text-sm text-ink-gray-5">
+                      <div class="flex items-center gap-0.5" :class="karty && 'px-2'">
+                        <div
+                          :class="[
+                            'text-sm text-ink-gray-5',
+                            karty ? 'break-words' : 'truncate',
+                          ]"
+                        >
                           {{ __(field.label) }}
                         </div>
                         <div
@@ -57,14 +75,34 @@
                             (field.mandatory_depends_on &&
                               field.mandatory_via_depends_on)
                           "
-                          class="text-ink-red-5"
+                          :class="karty ? 'text-ink-gray-5' : 'text-ink-red-5'"
                         >
                           *
                         </div>
                       </div>
                     </Tooltip>
                     <div
-                      v-if="field.read_only"
+                      v-if="
+                        karty &&
+                        czyUwagiImport(field) &&
+                        !edytujeUwagi &&
+                        liniaUwag(field).length
+                      "
+                      data-testid="uwagi-odczyt"
+                      class="grid cursor-text grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded px-2 py-1 text-sm hover:bg-surface-gray-1"
+                      @click="rozpocznijEdycjeUwag"
+                    >
+                      <template v-for="(l, li) in liniaUwag(field)" :key="li">
+                        <div class="whitespace-nowrap text-ink-gray-5">
+                          {{ l.klucz ? l.klucz + ':' : '' }}
+                        </div>
+                        <div class="break-words text-ink-gray-9">
+                          {{ l.wartosc }}
+                        </div>
+                      </template>
+                    </div>
+                    <div
+                      v-else-if="field.read_only"
                       class="whitespace-pre-wrap break-words px-2 py-1 text-base text-ink-gray-5"
                     >
                       {{ doc[field.fieldname] }}
@@ -83,7 +121,14 @@
                   </div>
                   <div
                     v-else-if="field.visible"
-                    class="field flex items-center gap-2 px-3 leading-5 first:mt-3"
+                    :class="
+                      karty
+                        ? [
+                            'field flex min-w-0 flex-col gap-1 leading-5',
+                            czySzerokiePole(field) && 'col-span-2',
+                          ]
+                        : 'field flex items-center gap-2 px-3 leading-5 first:mt-3'
+                    "
                   >
                     <Tooltip
                       v-if="!['Button', 'HTML'].includes(field.fieldtype)"
@@ -91,9 +136,18 @@
                       :hoverDelay="1"
                     >
                       <div
-                        class="w-[35%] min-w-20 shrink-0 flex items-center gap-0.5"
+                        :class="
+                          karty
+                            ? 'flex w-full items-center gap-0.5 px-2'
+                            : 'w-[35%] min-w-20 shrink-0 flex items-center gap-0.5'
+                        "
                       >
-                        <div class="truncate text-sm text-ink-gray-5">
+                        <div
+                          :class="[
+                            'text-sm text-ink-gray-5',
+                            karty ? 'break-words' : 'truncate',
+                          ]"
+                        >
                           {{ __(field.label) }}
                         </div>
                         <div
@@ -102,7 +156,7 @@
                             (field.mandatory_depends_on &&
                               field.mandatory_via_depends_on)
                           "
-                          class="text-ink-red-5"
+                          :class="karty ? 'text-ink-gray-5' : 'text-ink-red-5'"
                         >
                           *
                         </div>
@@ -111,7 +165,7 @@
                     <div
                       :class="[
                         'flex items-center justify-between',
-                        ['Button', 'HTML'].includes(field.fieldtype)
+                        karty || ['Button', 'HTML'].includes(field.fieldtype)
                           ? 'w-full'
                           : 'w-[65%]',
                       ]"
@@ -144,7 +198,9 @@
                           class="flex h-7 cursor-pointer items-center px-2 py-1 text-ink-gray-5"
                         >
                           <Tooltip :text="__(field.tooltip)">
-                            <div>{{ doc[field.fieldname] }}</div>
+                            <div :class="karty && 'break-words'">
+                              {{ wartoscReadOnly(field) }}
+                            </div>
                           </Tooltip>
                         </div>
                         <PrimaryDropdown
@@ -208,7 +264,9 @@
                           doctype="User"
                           :filters="field.filters"
                           :placeholder="
-                            __('Select') + ' ' + field.label + '...'
+                            karty
+                              ? field.placeholder
+                              : __('Select') + ' ' + field.label + '...'
                           "
                           :hideMe="true"
                           :disabled="Boolean(field.read_only)"
@@ -269,7 +327,7 @@
                         >
                           <DateTimePickerSiatka
                             :value="doc[field.fieldname]"
-                            :format="getFormat('', '', true, true, false)"
+                            :format="karty ? 'DD.MM.YYYY HH:mm' : getFormat('', '', true, true, false)"
                             :placeholder="field.placeholder"
                             :placement="isMobileView ? 'bottom-start' : 'left-start'"
                             @change="(v) => fieldChange(v, field)"
@@ -281,7 +339,7 @@
                         >
                           <DatePicker
                             :value="doc[field.fieldname]"
-                            :format="getFormat('', '', true, false, false)"
+                            :format="karty ? 'DD.MM.YYYY' : getFormat('', '', true, false, false)"
                             :placeholder="field.placeholder"
                             :placement="isMobileView ? 'bottom-start' : 'left-start'"
                             @change="(v) => fieldChange(v, field)"
@@ -454,9 +512,9 @@
                     </div>
                   </div>
                 </template>
-              </FadedScrollableDiv>
+              </component>
             </slot>
-          </Section>
+          </component>
         </div>
       </div>
     </template>
@@ -484,6 +542,7 @@ import ButtonControl, {
   getButtonVariant,
 } from '@/components/Controls/ButtonControl.vue'
 import Section from '@/components/CollapsibleSection.vue'
+import KartaSekcji from '@/components/KartaSekcji.vue'
 import PrimaryDropdown from '@/components/PrimaryDropdown.vue'
 import FadedScrollableDiv from '@/components/FadedScrollableDiv.vue'
 import ArrowUpRightIcon from '@/components/Icons/ArrowUpRightIcon.vue'
@@ -498,6 +557,16 @@ import { parseLinkFilters } from '@/utils/fieldTransforms'
 import { czyPoleTagow } from '@/utils/tagiProduktow'
 import { czyPoleTekstowe, liczWierszeTekstu } from '@/utils/panelTekst'
 import { czyUkrycPole } from '@/utils/panelPuste'
+import {
+  podsumowanieSekcji,
+  czyWygenerowanyPlaceholder,
+  rozbijUwagi,
+  formatTelefon,
+  formatData,
+  formatDataCzas,
+  wczytajOtwartaSekcje,
+  zapiszOtwartaSekcje,
+} from '@/utils/panelBoczny'
 import { useUkryjPustePola } from '@/composables/useUkryjPustePola'
 import { usersStore } from '@/stores/users'
 import { isMobileView } from '@/composables/settings'
@@ -513,6 +582,7 @@ import { useDocument } from '@/data/document'
 import { probyKontaktuDoWyswietlenia } from '@/utils/leadyInline'
 import {
   ref,
+  reactive,
   computed,
   getCurrentInstance,
   watch,
@@ -526,6 +596,10 @@ const props = defineProps({
   docname: { type: String, required: true },
   preview: { type: Boolean, default: false },
   addContact: { type: Function, default: null },
+  // Opt-in wariant wygladu: 'karty' (tylko Deal i Lead, ops#326). Domyslnie
+  // panel renderuje sie dokladnie jak dotad (kontakty, organizacje, ...).
+  wariant: { type: String, default: '' },
+  liczbaKontaktow: { type: Number, default: null },
 })
 
 const emit = defineEmits(['beforeFieldChange', 'afterFieldChange', 'reload'])
@@ -538,6 +612,125 @@ const { users, isManager, getUser } = usersStore()
 const { ukryjPuste } = useUkryjPustePola()
 
 const showSidePanelModal = ref(false)
+
+const karty = computed(() => props.wariant === 'karty')
+
+// Stan otwarcia kart per sekcja (wariant karty): reaktywna nakladka na
+// zapis w localStorage. Brak zapisu: otwarta tylko pierwsza widoczna sekcja.
+const otwarteSekcje = reactive({})
+
+function czyOtwarta(section) {
+  if (section.name in otwarteSekcje) return otwarteSekcje[section.name]
+  const zapisana = wczytajOtwartaSekcje(props.doctype, section.name)
+  if (zapisana !== null) return zapisana
+  const idx = _sections.value.findIndex((s) => s.name === section.name)
+  return idx === firstVisibleIndex()
+}
+
+function przelaczSekcje(section) {
+  const nowy = !czyOtwarta(section)
+  otwarteSekcje[section.name] = nowy
+  zapiszOtwartaSekcje(props.doctype, section.name, nowy)
+}
+
+function rozwiazWartosc(pole, wartosc) {
+  if (pole?.fieldtype === 'User') return getUser(wartosc)?.full_name
+  return null
+}
+
+function opakowanieSekcji(section) {
+  if (!karty.value) {
+    return {
+      labelClass: 'px-2 font-semibold',
+      headerClass: 'h-8',
+      label: section.label,
+      hideLabel: !section.label,
+      opened: section.opened,
+    }
+  }
+  return {
+    label: section.label,
+    nazwa: section.name,
+    opened: czyOtwarta(section),
+    summary: podsumowanieSekcji(section, doc.value, {
+      rozwiaz: rozwiazWartosc,
+      liczbaKontaktow: props.liczbaKontaktow,
+      t: (tekst) => __(tekst),
+    }),
+    onToggle: () => przelaczSekcje(section),
+  }
+}
+
+const TYPY_SZEROKIE = [
+  'Text Editor',
+  'Code',
+  'HTML',
+  'Attach',
+  'Attach Image',
+  'Geolocation',
+  'Button',
+  'Table',
+]
+
+function czySzerokiePole(field) {
+  return TYPY_SZEROKIE.includes(field.fieldtype) || czyPoleTagow(field)
+}
+
+function placeholderKarty(field) {
+  // Wybor i daty: jednolite napisy zamiast "Dodaj <etykieta>" z ukladu.
+  if (['Select', 'Link', 'User', 'Dynamic Link'].includes(field.fieldtype)) {
+    return __('Wybierz')
+  }
+  if (['Date', 'Datetime'].includes(field.fieldtype)) return 'DD.MM.RRRR'
+  if (field.placeholder && !czyWygenerowanyPlaceholder(field.placeholder)) {
+    return field.placeholder
+  }
+  return __('Wpisz')
+}
+
+function wartoscReadOnly(field) {
+  const v = doc.value[field.fieldname]
+  if (!karty.value) return v
+  if (field.fieldtype === 'Date') return formatData(v) || v
+  if (field.fieldtype === 'Datetime') return formatDataCzas(v) || v
+  if (field.fieldname === 'mobile_no' || field.fieldname === 'phone') {
+    return formatTelefon(v) || v
+  }
+  return v
+}
+
+// Uwagi (import): w trybie odczytu linie "Klucz: wartosc", klik przelacza na
+// dotychczasowy textarea. Zapisany tekst nigdy nie jest przepisywany.
+const edytujeUwagi = ref(false)
+let uwagiTimer = null
+
+function czyUwagiImport(field) {
+  return field.fieldname === 'custom_uwagi_import'
+}
+
+function liniaUwag(field) {
+  return rozbijUwagi(doc.value[field.fieldname])
+}
+
+function rozpocznijEdycjeUwag() {
+  edytujeUwagi.value = true
+  nextTick(() =>
+    nextTick(() => textareaEls['custom_uwagi_import']?.focus?.()),
+  )
+}
+
+function onUwagiFocusin(field) {
+  if (!czyUwagiImport(field)) return
+  clearTimeout(uwagiTimer)
+}
+
+// Opoznienie > debounce FormControl (500 ms), zeby nie odmontowac pola przed
+// wyslaniem zmiany.
+function onUwagiFocusout(field) {
+  if (!czyUwagiImport(field) || !karty.value) return
+  clearTimeout(uwagiTimer)
+  uwagiTimer = setTimeout(() => (edytujeUwagi.value = false), 800)
+}
 
 let document = { doc: {} }
 let triggerOnChange
@@ -632,7 +825,9 @@ function parsedField(field) {
   let _field = {
     ...field,
     filters: parseLinkFilters(field.link_filters),
-    placeholder: field.placeholder || field.label,
+    placeholder: karty.value
+      ? placeholderKarty(field)
+      : field.placeholder || field.label,
     display_via_depends_on: evaluateDependsOnValue(field.depends_on, doc.value),
     mandatory_via_depends_on: evaluateDependsOnValue(
       field.mandatory_depends_on,
@@ -747,6 +942,7 @@ async function handleButtonClick(field) {
 // tez dla galezi read_only (bez textarea w ogole), ktora po prostu nic nie
 // znajduje i wychodzi bez efektu.
 const textareaWatchStops = {}
+const textareaEls = {}
 
 function autoGrow(el) {
   if (!el || !el.style) return
@@ -760,6 +956,9 @@ function onTekstoweInput(event) {
 
 function setTextareaRef(fieldname, wrapper) {
   const ta = wrapper?.querySelector?.('textarea')
+
+  if (ta instanceof HTMLTextAreaElement) textareaEls[fieldname] = ta
+  else delete textareaEls[fieldname]
 
   if (!(ta instanceof HTMLTextAreaElement)) {
     // Galaz read_only (bez textarea) albo pole odmontowane -- zatrzymaj
@@ -783,6 +982,7 @@ function setTextareaRef(fieldname, wrapper) {
 
 onBeforeUnmount(() => {
   Object.values(textareaWatchStops).forEach((stop) => stop())
+  clearTimeout(uwagiTimer)
 })
 
 function firstVisibleIndex() {
@@ -831,6 +1031,12 @@ function firstVisibleIndex() {
      --sidepanel-column-max-height na dowolnym przodku (np. LeadSzybkiPodglad.vue),
      bez dotykania tego pliku ani zmiany wygladu istniejacych stron. */
   max-height: var(--sidepanel-column-max-height, 300px);
+}
+.sections-karty .form-control {
+  margin: 0;
+}
+.sections-karty .section .column {
+  max-height: none;
 }
 .sections .section:last-of-type .column {
   max-height: none;

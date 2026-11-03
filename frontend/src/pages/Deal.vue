@@ -107,23 +107,27 @@
         v-show="!isSidePanelCollapsed"
         class="flex min-h-0 flex-1 flex-col overflow-hidden"
       >
-        <div
-          class="flex h-[45px] cursor-copy items-center border-b px-5 py-2.5 text-lg-medium text-ink-gray-9"
-          @click="copyToClipboard(dealId)"
-        >
-          {{ __(dealId) }}
-        </div>
+        <PanelNaglowek
+          :imie="kontaktPodstawowy?.full_name || ''"
+          :telefon="kontaktPodstawowy?.mobile_no || ''"
+          :email="kontaktPodstawowy?.email || ''"
+          :rekord="dealId"
+          :mozeOtworzyc="Boolean(primaryContactName)"
+          @otworz-klienta="goToClient"
+          @zwin="isSidePanelCollapsed = true"
+        />
         <DealNextStepNote
           :deal-id="dealId"
           :status="doc.status"
           :rodzaj="doc.custom_rodzaj_umowy"
+          karty
         />
         <SLASection
           v-if="doc.sla_status"
           v-model="doc"
           @updateField="updateField"
         />
-        <TasksSection doctype="CRM Deal" :docname="dealId" />
+        <TasksSection doctype="CRM Deal" :docname="dealId" karty />
         <div
           v-if="sections.data"
           class="flex flex-1 flex-col justify-between overflow-hidden"
@@ -131,6 +135,8 @@
           <SidePanelLayout
             :sections="sections.data"
             :addContact="addContact"
+            wariant="karty"
+            :liczbaKontaktow="dealContacts.data?.length ?? null"
             doctype="CRM Deal"
             :docname="dealId"
             @reload="sections.reload"
@@ -379,6 +385,7 @@ import ContactModal from '@/components/Modals/ContactModal.vue'
 import Link from '@/components/Controls/Link.vue'
 import Section from '@/components/CollapsibleSection.vue'
 import SidePanelLayout from '@/components/SidePanelLayout.vue'
+import PanelNaglowek from '@/components/PanelNaglowek.vue'
 import SLASection from '@/components/SLASection.vue'
 import TasksSection from '@/components/TasksSection.vue'
 import CustomActions from '@/components/CustomActions.vue'
@@ -823,10 +830,11 @@ const dealContacts = createResource({
 if (!dealContacts.data) dealContacts.fetch()
 
 // "Przejdź do klienta" — route to the deal's primary (or first) contact.
-const primaryContactName = computed(() => {
+const kontaktPodstawowy = computed(() => {
   const list = dealContacts.data || []
-  return (list.find((c) => c.is_primary) || list[0])?.name || null
+  return list.find((c) => c.is_primary) || list[0] || null
 })
+const primaryContactName = computed(() => kontaktPodstawowy.value?.name || null)
 
 function goToClient() {
   if (!primaryContactName.value) return
