@@ -377,6 +377,8 @@ html[data-theme="dark"] .cell.on.c0, html[data-theme="dark"] .cell.on.c1, html[d
 .q h3 { margin: 0 0 4px; font-size: 14px; color: var(--ink9); }
 .q p { margin: 0 0 8px; }
 .q .opts { display: flex; flex-direction: column; gap: 6px; }
+.q .inna { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.q .inna .inp { flex: 1; min-width: 0; max-width: 560px; height: 30px; }
 .q .rec { font-size: 11px; color: var(--green-ink); background: var(--green-bg); border-radius: 4px; padding: 1px 5px; margin-left: 6px; }
 textarea.inp { height: 72px; width: 100%; padding: 8px; resize: vertical; }
 .dm table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
@@ -1060,10 +1062,12 @@ const PYTANIA = [
 function renderPytania() {
   const html = PYTANIA.map((q, i) => {
     const wart = S.odp[q.k] !== undefined ? S.odp[q.k] : (q.k === 'wariant' ? S.wariant : q.k === 'wejscie' ? S.wejscie : q.k === 'brak' ? S.brak : q.k === 'polityka' ? S.polityka : null);
-    return `<div class="q"><h3>${i + 1}. ${q.t}</h3>${q.p ? `<p class="mk-note">${q.p}</p>` : ''}<div class="opts">${q.o.map(([v, t, rec]) => `<label class="radio"><input type="radio" name="q-${q.k}" value="${v}" ${wart === v ? 'checked' : ''}> ${t}${rec ? '<span class="rec">propozycja</span>' : ''}</label>`).join('')}</div></div>`;
+    return `<div class="q"><h3>${i + 1}. ${q.t}</h3>${q.p ? `<p class="mk-note">${q.p}</p>` : ''}<div class="opts">${q.o.map(([v, t, rec]) => `<label class="radio"><input type="radio" name="q-${q.k}" value="${v}" ${wart === v ? 'checked' : ''}> ${t}${rec ? '<span class="rec">propozycja</span>' : ''}</label>`).join('')}
+      <div class="inna"><label class="radio"><input type="radio" name="q-${q.k}" value="inna" ${wart === 'inna' ? 'checked' : ''}> Inna odpowiedź</label>
+      <input type="text" class="inp q-inna" id="inna-${q.k}" data-q="${q.k}" placeholder="Wpisz swoją odpowiedź albo dopisek do zaznaczonej"></div></div></div>`;
   }).join('');
   $('#pytania').innerHTML = `<h2>Pytania otwarte</h2>
-    <p>Zaznacz odpowiedzi i kliknij "Kopiuj odpowiedzi", a potem wklej je w rozmowie. "propozycja" to to, co zrobiłbym domyślnie. Odpowiedzi 1, 2, 3 i 6 przełączają też makietę.</p>
+    <p>Zaznacz odpowiedzi albo wpisz własne w polu pod każdym pytaniem, potem kliknij "Kopiuj odpowiedzi" i wklej je w rozmowie. "propozycja" to to, co zrobiłbym domyślnie. Odpowiedzi 1, 2, 3 i 6 przełączają też makietę.</p>
     ${html}
     <div class="q"><h3>Uwagi</h3><textarea class="inp" id="uwagi" placeholder="Cokolwiek jeszcze"></textarea></div>
     <div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button class="btn solid" id="kopiujOdp">${IKONY.copy} Kopiuj odpowiedzi</button><span class="mk-note" id="kopiujInfo"></span></div>
@@ -1073,7 +1077,11 @@ function tekstOdpowiedzi() {
   const linie = PYTANIA.map((q, i) => {
     const el = document.querySelector(`input[name="q-${q.k}"]:checked`);
     const opt = el ? q.o.find(([v]) => v === el.value) : null;
-    return `${i + 1}. ${q.t} ${opt ? opt[1] : '(bez odpowiedzi)'}`;
+    const wlasna = ($('#inna-' + q.k).value || '').trim();
+    let odp = '(bez odpowiedzi)';
+    if (opt) odp = opt[1] + (wlasna ? '. Dopisek: ' + wlasna : '');
+    else if (wlasna) odp = wlasna;
+    return `${i + 1}. ${q.t} ${odp}`;
   });
   const u = $('#uwagi').value.trim();
   if (u) linie.push('Uwagi: ' + u);
@@ -1254,12 +1262,21 @@ document.addEventListener('change', (e) => {
   if (t.name && t.name.startsWith('q-')) {
     const k = t.name.slice(2);
     S.odp[k] = t.value;
-    if (k === 'wariant') S.wariant = t.value;
+    if (k === 'wariant' && ['a', 'b', 'c'].includes(t.value)) S.wariant = t.value;
     if (k === 'wejscie' && ['a', 'b', 'c'].includes(t.value)) S.wejscie = t.value;
-    if (k === 'brak') S.brak = t.value;
-    if (k === 'polityka') S.polityka = t.value === 'blokada' ? 'blokada' : 'ostrzezenie';
+    if (k === 'brak' && ['dostepny', 'niedostepny'].includes(t.value)) S.brak = t.value;
+    if (k === 'polityka' && t.value !== 'inna') S.polityka = t.value === 'blokada' ? 'blokada' : 'ostrzezenie';
     render();
   }
+});
+
+// Własna odpowiedź: pisanie zaznacza "Inna odpowiedź", gdy nic innego nie jest zaznaczone.
+document.addEventListener('input', (e) => {
+  const t = e.target;
+  if (!t.matches('.q-inna') || !t.value.trim()) return;
+  const k = t.dataset.q;
+  const zazn = document.querySelector(`input[name="q-${k}"]:checked`);
+  if (!zazn) { document.querySelector(`input[name="q-${k}"][value="inna"]`).checked = true; S.odp[k] = 'inna'; }
 });
 
 // Malowanie przeciąganiem (wariant a)
