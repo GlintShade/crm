@@ -390,6 +390,18 @@ class TestSlownikOdpowiedzi(unittest.TestCase):
 		self.assertIn("Posiada PV: Nie mam jeszcze fotowoltaiki", uwagi(w))
 		self.assertIn("System rozliczen (klient bez PV): Stare zasady", uwagi(w))
 
+	def test_brak_odpowiedzi_o_pv(self):
+		w = zbuduj_leada_z_webhooka(
+			{"telefon": "604932720", "facebook_lead_id": "1", "system_rozliczen": "stare_zasady"}, DZIS
+		)
+		self.assertIn("System rozliczen (brak odpowiedzi o PV): Stare zasady", uwagi(w))
+		self.assertNotIn("custom_zasady_dotacji", w)
+		self.assertNotIn("custom_posiadane_produkty", w)
+
+	def test_nie_daje_klient_bez_pv(self):
+		w = zbuduj_leada_z_webhooka(ladunek(posiada_pv="Nie", system_rozliczen="stare_zasady"), DZIS)
+		self.assertIn("System rozliczen (klient bez PV): Stare zasady", uwagi(w))
+
 	def test_pv_nierozpoznane_ze_starymi_zasadami(self):
 		w = zbuduj_leada_z_webhooka(ladunek(posiada_pv="moze", system_rozliczen="stare_zasady"), DZIS)
 		self.assertNotIn("custom_zasady_dotacji", w)

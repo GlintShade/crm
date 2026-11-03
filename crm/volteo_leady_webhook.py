@@ -335,7 +335,9 @@ def zbuduj_leada_z_webhooka(ladunek: Mapping[str, Any], dzisiaj: str) -> dict[st
 	zasady = ""
 	if system_surowy:
 		rozpoznane, etykieta_sys = rozpoznaj_system_rozliczen(system_surowy)
-		if posiada is None:
+		if not posiada_surowe:
+			linie_odpowiedzi.append("System rozliczen (brak odpowiedzi o PV): %s" % etykieta_sys)
+		elif posiada is None:
 			linie_odpowiedzi.append("System rozliczen (PV nierozpoznane): %s" % etykieta_sys)
 		elif "PV" in posiada.split("+"):
 			if rozpoznane is None:
