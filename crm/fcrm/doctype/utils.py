@@ -2,6 +2,8 @@ import json
 
 import frappe
 
+from crm.volteo_panel_boczny import plan_sekcji_utraty
+
 
 def add_or_remove_lost_reason_section_in_sidepanel(doc):
 	doctype = doc.doctype
@@ -18,28 +20,9 @@ def add_or_remove_lost_reason_section_in_sidepanel(doc):
 	layout_doc = frappe.get_doc("CRM Fields Layout", f"{doctype}-Side Panel")
 	sections = json.loads(layout_doc.layout)
 
-	lost_reason_section = {
-		"name": "lost_reason_section",
-		"label": "Lost Reason",
-		"opened": True,
-		"columns": [
-			{
-				"name": "lost_reason_column",
-				"fields": ["lost_reason", "lost_notes"],
-			}
-		],
-	}
-
-	section_exists = any(section.get("name") == "lost_reason_section" for section in sections)
-
-	if is_lost and not section_exists:
-		if sections and sections[0].get("name") == "contacts_section":
-			sections = [*sections[:1], lost_reason_section, *sections[1:]]
-		else:
-			sections = [lost_reason_section, *sections]
-		layout_doc.layout = json.dumps(sections)
-		layout_doc.save(ignore_permissions=True)
-	elif not is_lost and section_exists:
-		sections = [section for section in sections if section.get("name") != "lost_reason_section"]
-		layout_doc.layout = json.dumps(sections)
+	# ops#326: gdy uklad ma wlasna sekcje z lost_reason/lost_notes, upstream nie
+	# doklada drugiej karty "Lost Reason" (logika w crm/volteo_panel_boczny.py).
+	nowe_sekcje = plan_sekcji_utraty(sections, bool(is_lost))
+	if nowe_sekcje is not None:
+		layout_doc.layout = json.dumps(nowe_sekcje)
 		layout_doc.save(ignore_permissions=True)
