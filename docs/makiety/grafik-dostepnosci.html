@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Grafik dostępności</title>
+<meta name="claude:viewport-fit-sides" content="cover" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -99,6 +100,7 @@ html[data-theme="dark"] {
   --slot-c-line: #5e5e5e;
   --edit-on: #4a4a4a;
   --edit-off: #050505;
+  color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
@@ -116,12 +118,13 @@ button { cursor: pointer; }
 
 /* ---------- Rama makiety (poza aplikacją) ---------- */
 .mk-top {
-  position: sticky; top: 0; z-index: 50;
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 50;
   background: var(--base);
   border-bottom: 1px solid var(--line2);
 }
 .mk-top-in {
-  max-width: 1440px; margin: 0 auto; padding: 12px 16px;
+  max-width: 1440px; margin: 0 auto; padding-block: 12px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
   display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px;
 }
 .mk-title { font-weight: 600; color: var(--ink9); font-size: 15px; }
@@ -133,7 +136,7 @@ button { cursor: pointer; }
 }
 .mk-tab[aria-selected="true"] { background: var(--solid); color: var(--solid-ink); border-color: var(--solid); }
 .mk-spacer { flex: 1; }
-.mk-wrap { max-width: 1440px; margin: 0 auto; padding: 16px; }
+.mk-wrap { max-width: 1440px; margin: 0 auto; padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 .mk-panel {
   background: var(--base); border: 1px solid var(--line2); border-radius: 12px;
   padding: 14px 16px; margin-bottom: 14px;
@@ -568,7 +571,11 @@ function przyklad() {
 /* ================= Stan makiety ================= */
 const S = {
   tab: 'tablica',
-  theme: 'light',
+  theme: (() => {
+    const t = document.documentElement.dataset.theme;
+    if (t === 'dark' || t === 'light') return t;
+    try { return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; } catch (e) { return 'light'; }
+  })(),
   wariant: 'a',
   brak: 'dostepny',
   polityka: 'ostrzezenie',
@@ -1059,7 +1066,8 @@ function renderPytania() {
     <p>Zaznacz odpowiedzi i kliknij "Kopiuj odpowiedzi", a potem wklej je w rozmowie. "propozycja" to to, co zrobiłbym domyślnie. Odpowiedzi 1, 2, 3 i 6 przełączają też makietę.</p>
     ${html}
     <div class="q"><h3>Uwagi</h3><textarea class="inp" id="uwagi" placeholder="Cokolwiek jeszcze"></textarea></div>
-    <div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button class="btn solid" id="kopiujOdp">${IKONY.copy} Kopiuj odpowiedzi</button><span class="mk-note" id="kopiujInfo"></span></div>`;
+    <div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button class="btn solid" id="kopiujOdp">${IKONY.copy} Kopiuj odpowiedzi</button><span class="mk-note" id="kopiujInfo"></span></div>
+    <textarea class="inp" id="odpTekst" hidden readonly style="margin-top:8px;height:160px"></textarea>`;
 }
 function tekstOdpowiedzi() {
   const linie = PYTANIA.map((q, i) => {
@@ -1207,8 +1215,15 @@ document.addEventListener('click', (e) => {
   if (c('#kopiujOdp')) {
     const tekst = tekstOdpowiedzi();
     const ok = () => ($('#kopiujInfo').textContent = 'Skopiowano do schowka.');
-    if (navigator.clipboard) navigator.clipboard.writeText(tekst).then(ok, () => window.prompt('Skopiuj:', tekst));
-    else window.prompt('Skopiuj:', tekst);
+    const recznie = () => {
+      const pole = $('#odpTekst');
+      pole.hidden = false; pole.value = tekst; pole.focus(); pole.select();
+      $('#kopiujInfo').textContent = 'Zaznaczone poniżej, skopiuj skrótem Cmd+C lub Ctrl+C.';
+    };
+    try {
+      if (navigator.clipboard) navigator.clipboard.writeText(tekst).then(ok, recznie);
+      else recznie();
+    } catch (err) { recznie(); }
     return;
   }
 
@@ -1262,6 +1277,12 @@ document.addEventListener('pointermove', (e) => {
 document.addEventListener('pointerup', () => {
   if (malowanie) { malowanie = null; render(); }
 });
+
+// Motyw przeglądarki makiety: jeśli otoczenie zmieni data-theme, przyjmij go.
+new MutationObserver(() => {
+  const t = document.documentElement.dataset.theme;
+  if ((t === 'dark' || t === 'light') && t !== S.theme) { S.theme = t; render(); }
+}).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
 render();
 </script>
