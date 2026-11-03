@@ -13,6 +13,7 @@
       >
         {{ imie || __('Brak klienta') }}
       </div>
+      <slot name="akcje" />
       <Button
         v-if="mozeOtworzyc"
         variant="ghost"
@@ -26,7 +27,14 @@
       <span class="lucide-phone size-3.5 shrink-0 text-ink-gray-5" aria-hidden="true" />
       <span class="min-w-0 flex-1 truncate">{{ telefonWyswietlany }}</span>
       <Button
-        v-if="href"
+        v-if="href && wlasneZadzwon"
+        size="sm"
+        variant="subtle"
+        :label="__('Zadzwoń')"
+        @click="emit('zadzwon')"
+      />
+      <Button
+        v-else-if="href"
         size="sm"
         variant="subtle"
         :link="href"
@@ -76,8 +84,9 @@ const props = defineProps({
   email: { type: String, default: '' },
   rekord: { type: String, required: true },
   mozeOtworzyc: { type: Boolean, default: false },
+  wlasneZadzwon: { type: Boolean, default: false },
 })
-const emit = defineEmits(['otworz-klienta', 'zwin'])
+const emit = defineEmits(['otworz-klienta', 'zwin', 'zadzwon'])
 
 const { ukryjPuste } = useUkryjPustePola()
 const href = computed(() => telHref(props.telefon))
