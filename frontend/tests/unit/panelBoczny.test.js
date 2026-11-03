@@ -11,6 +11,7 @@ import {
   zapiszOtwartaSekcje,
   podsumowanieSekcji,
   podsumowanieZadan,
+  czyWygenerowanyPlaceholder,
 } from '@/utils/panelBoczny'
 
 const sek = (label, fields, name = 'x') => ({
@@ -153,5 +154,14 @@ describe('podsumowanieZadan', () => {
     expect(podsumowanieZadan(3, 2)).toBe('3 zadania, otwartych: 2')
     expect(podsumowanieZadan(5)).toBe('5 zadań')
     expect(podsumowanieZadan(12)).toBe('12 zadań')
+  })
+})
+
+describe('czyWygenerowanyPlaceholder', () => {
+  it('rozpoznaje wzorce generowane przez serwer', () => {
+    expect(czyWygenerowanyPlaceholder('Dodaj Produkt (zainteresowanie)...')).toBe(true)
+    expect(czyWygenerowanyPlaceholder('Add Foo...')).toBe(true)
+    expect(czyWygenerowanyPlaceholder('np. 600 123 456')).toBe(false)
+    expect(czyWygenerowanyPlaceholder('')).toBe(false)
   })
 })

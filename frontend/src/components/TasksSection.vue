@@ -1,7 +1,7 @@
 <template>
   <!-- Wariant kart (panel szansy i leada, ops#326): brak zadan to jeden wiersz
        karty, z zadaniami karta z podsumowaniem i lista. -->
-  <div v-if="karty" class="px-3 pt-3">
+  <div v-if="karty" class="shrink-0 px-3 pb-2 pt-3">
     <div
       v-if="!tasks.data?.length"
       class="flex min-w-0 items-center gap-2 rounded-lg border border-outline-gray-1 bg-surface-white py-2 pl-3 pr-2"

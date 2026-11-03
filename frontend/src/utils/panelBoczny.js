@@ -295,3 +295,11 @@ export function podsumowanieZadan(liczba, otwarte = null) {
   const baza = `${liczba} ${slowo}`
   return Number.isInteger(otwarte) ? `${baza}, otwartych: ${otwarte}` : baza
 }
+
+/**
+ * Czy placeholder jest wygenerowany przez serwer ("Dodaj {etykieta}...",
+ * "Add {label}...", "Wybierz {etykieta}...") zamiast ustawiony jawnie.
+ */
+export function czyWygenerowanyPlaceholder(tekst) {
+  return /^(Dodaj|Add|Wybierz|Select)\s/i.test(String(tekst ?? '').trim())
+}

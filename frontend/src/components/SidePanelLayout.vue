@@ -2,7 +2,7 @@
   <div
     :class="[
       'sections flex flex-col overflow-y-auto',
-      karty && 'sections-karty gap-2 p-3',
+      karty && 'sections-karty gap-2 px-3 pb-3 pt-0',
     ]"
   >
     <div
@@ -559,6 +559,7 @@ import { czyPoleTekstowe, liczWierszeTekstu } from '@/utils/panelTekst'
 import { czyUkrycPole } from '@/utils/panelPuste'
 import {
   podsumowanieSekcji,
+  czyWygenerowanyPlaceholder,
   rozbijUwagi,
   formatTelefon,
   formatData,
@@ -681,7 +682,10 @@ function placeholderKarty(field) {
     return __('Wybierz')
   }
   if (['Date', 'Datetime'].includes(field.fieldtype)) return 'DD.MM.RRRR'
-  return field.placeholder || __('Wpisz')
+  if (field.placeholder && !czyWygenerowanyPlaceholder(field.placeholder)) {
+    return field.placeholder
+  }
+  return __('Wpisz')
 }
 
 function wartoscReadOnly(field) {
