@@ -3,6 +3,8 @@ import {
   formatujDateUtworzenia,
   podpowiedzGgMm,
   podpowiedzCzasuKontaktu,
+  czesciPodpowiedzi,
+  czyPokazacPodpowiedz,
   MAKS_SEKUND_POLA,
 } from '../../src/utils/podpowiedzKontaktu'
 import { parsujGgMm } from '../../src/utils/czasKontaktu'
@@ -80,4 +82,38 @@ describe('podpowiedzCzasuKontaktu', () => {
     ))
   it('brak creation daje null', () =>
     expect(podpowiedzCzasuKontaktu(undefined, T)).toBe(null))
+})
+
+describe('czesciPodpowiedzi', () => {
+  it('opis i gg:mm osobno', () =>
+    expect(czesciPodpowiedzi(T - (2 * godz + 40 * min), T)).toEqual({
+      opis: 'utworzono 02 h 40 m temu',
+      ggmm: '02:40',
+      pelny: 'utworzono 02 h 40 m temu (02:40)',
+    }))
+  it('ponad 999:59: ggmm null', () =>
+    expect(czesciPodpowiedzi(new Date(2026, 7, 1, 9, 15).getTime(), T)).toEqual(
+      {
+        opis: 'utworzono 01.08.2026, 09:15',
+        ggmm: null,
+        pelny: 'utworzono 01.08.2026, 09:15',
+      },
+    ))
+  it('brak creation daje null', () =>
+    expect(czesciPodpowiedzi(null, T)).toBe(null))
+})
+
+describe('czyPokazacPodpowiedz', () => {
+  it('puste i edytowalne: tak', () => {
+    expect(czyPokazacPodpowiedz(0, false)).toBe(true)
+    expect(czyPokazacPodpowiedz(null, false)).toBe(true)
+    expect(czyPokazacPodpowiedz(undefined, false)).toBe(true)
+    expect(czyPokazacPodpowiedz('', false)).toBe(true)
+  })
+  it('wpisana wartosc: nie', () =>
+    expect(czyPokazacPodpowiedz(9600, false)).toBe(false))
+  it('tylko do odczytu: nie, nawet puste', () => {
+    expect(czyPokazacPodpowiedz(0, true)).toBe(false)
+    expect(czyPokazacPodpowiedz(9600, 1)).toBe(false)
+  })
 })

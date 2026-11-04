@@ -37,6 +37,19 @@ export function podpowiedzGgMm(createdMs, nowMs) {
   return formatujGgMm(sekundy) || null
 }
 
+// Czesci podpowiedzi osobno: `opis` moze byc w UI obciety (waska kolumna
+// siatki kart), `ggmm` nigdy, bo to wartosc do przepisania; `pelny` to
+// calosc (np. do `title`). null gdy brak `creation`. `ggmm` null ponizej
+// minuty i powyzej 999:59.
+export function czesciPodpowiedzi(createdMs, nowMs) {
+  const wiek = formatujWiekLeada(createdMs, nowMs)
+  const data = wiek || formatujDateUtworzenia(createdMs)
+  if (!data) return null
+  const opis = `utworzono ${data}`
+  const ggmm = podpowiedzGgMm(createdMs, nowMs)
+  return { opis, ggmm, pelny: ggmm ? `${opis} (${ggmm})` : opis }
+}
+
 // Pelny tekst podpowiedzi, np.
 //   "utworzono 02 h 40 m temu (02:40)"
 //   "utworzono 01.11.2026, 09:15 (75:20)"
@@ -44,9 +57,13 @@ export function podpowiedzGgMm(createdMs, nowMs) {
 // Do 48 h wiek z formatujWiekLeada (ten sam format co na liscie leadow),
 // starszy lead: data i godzina utworzenia. null gdy brak `creation`.
 export function podpowiedzCzasuKontaktu(createdMs, nowMs) {
-  const wiek = formatujWiekLeada(createdMs, nowMs)
-  const opis = wiek || formatujDateUtworzenia(createdMs)
-  if (!opis) return null
-  const ggmm = podpowiedzGgMm(createdMs, nowMs)
-  return ggmm ? `utworzono ${opis} (${ggmm})` : `utworzono ${opis}`
+  return czesciPodpowiedzi(createdMs, nowMs)?.pelny ?? null
+}
+
+// Podpowiedz tylko dla pustego i edytowalnego pola (decyzja koordynatora
+// b83): po wpisaniu wartosci albo przy polu tylko do odczytu chowamy.
+export function czyPokazacPodpowiedz(wartosc, tylkoOdczyt) {
+  if (tylkoOdczyt) return false
+  const liczba = Number(wartosc)
+  return !wartosc || !Number.isFinite(liczba) || liczba <= 0
 }
