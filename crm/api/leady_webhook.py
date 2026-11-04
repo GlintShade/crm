@@ -36,7 +36,7 @@ Idempotencja i odrzucenia
 - Ten sam numer telefonu, inny `facebook_lead_id` (ops#324): NIE zakładamy drugiego
   leada. Szukamy istniejącego `CRM Lead` o tym samym `mobile_no` (najnowszy wg
   `creation`, każde źródło, bez okna czasowego) i scalamy: dopisujemy linię
-  "Ponowne zgłoszenie FB ..." do `custom_uwagi_import`, uzupełniamy tylko puste pola
+  "Ponowne zgłoszenie DD.MM: ... (lead FB <id>)" do `custom_uwagi_import`, uzupełniamy tylko puste pola
   tagów (`custom_posiadane_produkty`, `custom_zasady_dotacji`, `custom_produkt_procesu`),
   zostawiamy komentarz `Info` w Aktywności. Status, właściciel, CC, adres, imię i
   `facebook_lead_id` zostają bez zmian. Odpowiedź: HTTP 200 `{"status": "scalony",
