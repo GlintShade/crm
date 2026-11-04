@@ -6,6 +6,8 @@ import {
   wczytajStanSekcji,
   zapiszStanSekcji,
   rozstrzygnijOtwarcie,
+  domyslnieOtwartaKarta,
+  SEKCJA_ZADANIA,
 } from '@/utils/stanSekcjiPanelu'
 
 // Magazyn w pamieci z interfejsem localStorage (getItem/setItem/key/length).
@@ -135,5 +137,28 @@ describe('rozstrzygnijOtwarcie', () => {
   })
   it('sekcja bez nazwy zawsze z ukladu', () => {
     expect(rozstrzygnijOtwarcie({ '': false }, '', true)).toBe(true)
+  })
+})
+
+describe('domyslnieOtwartaKarta', () => {
+  it('lead: otwarta tylko pierwsza widoczna', () => {
+    expect(domyslnieOtwartaKarta({ pierwszaWidoczna: true })).toBe(true)
+    expect(domyslnieOtwartaKarta({ pierwszaWidoczna: false })).toBe(false)
+  })
+  it('szansa (startZwiniete): wszystkie zwiniete', () => {
+    expect(
+      domyslnieOtwartaKarta({ startZwiniete: true, pierwszaWidoczna: true }),
+    ).toBe(false)
+  })
+  it('szansa: zapis uzytkownika wygrywa ze startZwiniete', () => {
+    const domyslny = domyslnieOtwartaKarta({ startZwiniete: true, pierwszaWidoczna: true })
+    expect(rozstrzygnijOtwarcie({ handlowe: true }, 'handlowe', domyslny)).toBe(true)
+    expect(rozstrzygnijOtwarcie({}, 'handlowe', domyslny)).toBe(false)
+  })
+})
+
+describe('SEKCJA_ZADANIA', () => {
+  it('klucz karty Zadania nie wyglada jak nazwa sekcji z ukladu', () => {
+    expect(SEKCJA_ZADANIA.startsWith('__')).toBe(true)
   })
 })

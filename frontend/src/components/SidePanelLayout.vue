@@ -616,6 +616,7 @@ import {
 } from '@/utils/panelBoczny'
 import { useUkryjPustePola } from '@/composables/useUkryjPustePola'
 import { useStanSekcjiPanelu } from '@/composables/useStanSekcjiPanelu'
+import { domyslnieOtwartaKarta } from '@/utils/stanSekcjiPanelu'
 import { usersStore } from '@/stores/users'
 import { isMobileView } from '@/composables/settings'
 import {
@@ -634,7 +635,6 @@ import {
 } from '@/utils/podpowiedzKontaktu'
 import {
   ref,
-  reactive,
   computed,
   getCurrentInstance,
   watch,
@@ -653,8 +653,8 @@ const props = defineProps({
   // panel renderuje sie dokladnie jak dotad (kontakty, organizacje, ...).
   wariant: { type: String, default: '' },
   liczbaKontaktow: { type: Number, default: null },
-  // Wariant karty: wszystkie sekcje zwiniete przy kazdym wejsciu na rekord
-  // (bez odczytu i zapisu pamieci w localStorage).
+  // Wariant karty: sekcje bez zapamietanego stanu startuja zwiniete
+  // (zapis uzytkownika wygrywa, ops#330).
   startZwiniete: { type: Boolean, default: false },
 })
 
@@ -673,21 +673,23 @@ const karty = computed(() => props.wariant === 'karty')
 
 // Stan otwarcia sekcji zapamietany per uzytkownik i doctype (ops#330),
 // wspolny dla wszystkich paneli tego doctype. Brak zapisu: karty otwieraja
-// tylko pierwsza widoczna sekcje, zwykly panel bierze `opened` z ukladu.
-// startZwiniete: lokalna nakladka bez pamieci, zerowana przy zmianie rekordu.
+// tylko pierwsza widoczna sekcje (ze startZwiniete zadnej), zwykly panel
+// bierze `opened` z ukladu.
 const stanSekcji = useStanSekcjiPanelu(() => props.doctype)
-const otwarteSekcje = reactive({})
 
 function czyOtwarta(section) {
-  if (props.startZwiniete) return otwarteSekcje[section.name] ?? false
   const idx = _sections.value.findIndex((s) => s.name === section.name)
-  return stanSekcji.czyOtwarta(section.name, idx === firstVisibleIndex())
+  return stanSekcji.czyOtwarta(
+    section.name,
+    domyslnieOtwartaKarta({
+      startZwiniete: props.startZwiniete,
+      pierwszaWidoczna: idx === firstVisibleIndex(),
+    }),
+  )
 }
 
 function przelaczSekcje(section) {
-  const nowy = !czyOtwarta(section)
-  if (props.startZwiniete) otwarteSekcje[section.name] = nowy
-  else stanSekcji.ustaw(section.name, nowy)
+  stanSekcji.ustaw(section.name, !czyOtwarta(section))
 }
 
 function czyOtwartaZwykla(section) {
@@ -696,15 +698,6 @@ function czyOtwartaZwykla(section) {
   if (props.preview || !section.label) return zUkladu
   return stanSekcji.czyOtwarta(section.name, zUkladu)
 }
-
-watch(
-  () => props.docname,
-  () => {
-    if (props.startZwiniete) {
-      Object.keys(otwarteSekcje).forEach((k) => delete otwarteSekcje[k])
-    }
-  },
-)
 
 function rozwiazWartosc(pole, wartosc) {
   if (pole?.fieldtype === 'User') return getUser(wartosc)?.full_name

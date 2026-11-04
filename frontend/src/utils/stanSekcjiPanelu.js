@@ -85,6 +85,19 @@ export function zapiszStanSekcji(user, doctype, stan, magazyn = domyslnyMagazyn(
   }
 }
 
+/**
+ * Stan karty panelu (wariant karty, ops#326) bez zapisu uzytkownika:
+ * otwarta tylko pierwsza widoczna; ze `startZwiniete` (szansa) wszystkie
+ * zwiniete. Zapis uzytkownika zawsze wygrywa (rozstrzygnijOtwarcie).
+ */
+export function domyslnieOtwartaKarta({ startZwiniete = false, pierwszaWidoczna = false } = {}) {
+  return !startZwiniete && !!pierwszaWidoczna
+}
+
+// Klucz karty Zadania (TasksSection) w tym samym zapisie co sekcje ukladu;
+// prefiks "__" nie koliduje z nazwami sekcji z CRM Fields Layout.
+export const SEKCJA_ZADANIA = '__zadania'
+
 /** Czy sekcja ma byc otwarta: zapis uzytkownika, a bez zapisu `domyslny`. */
 export function rozstrzygnijOtwarcie(stan, nazwa, domyslny) {
   if (stan && nazwa && typeof stan[nazwa] === 'boolean') return stan[nazwa]
