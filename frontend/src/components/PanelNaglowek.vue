@@ -5,23 +5,29 @@
   samym numerem rekordu.
 -->
 <template>
-  <div class="flex shrink-0 flex-col gap-2 border-b px-4 py-3" data-testid="panel-naglowek">
-    <div class="flex min-w-0 items-center gap-1.5">
+  <div class="flex shrink-0 flex-col gap-1 border-b px-4 py-3" data-testid="panel-naglowek">
+    <div class="mb-1 flex min-w-0 items-center gap-1.5">
+      <button
+        v-if="mozeOtworzyc"
+        type="button"
+        class="grid h-7 shrink-0 place-items-center pl-2 pr-1 text-ink-gray-5 hover:text-ink-gray-8"
+        :title="__('Otwórz klienta')"
+        :aria-label="__('Otwórz klienta')"
+        data-testid="panel-klient-ikona"
+        @click="emit('otworz-klienta')"
+      >
+        <span class="lucide-user size-3.5" aria-hidden="true" />
+      </button>
       <div
         class="min-w-0 flex-1 truncate text-[15px] font-semibold text-ink-gray-9"
+        :class="mozeOtworzyc ? 'cursor-pointer hover:underline' : ''"
         :title="imie"
+        data-testid="panel-klient-imie"
+        @click="mozeOtworzyc && emit('otworz-klienta')"
       >
         {{ imie || __('Brak klienta') }}
       </div>
       <slot name="akcje" />
-      <Button
-        v-if="mozeOtworzyc"
-        variant="ghost"
-        size="sm"
-        icon="lucide-user"
-        :tooltip="__('Otwórz klienta')"
-        @click="emit('otworz-klienta')"
-      />
     </div>
     <div class="flex flex-col items-start gap-1">
       <div v-if="telefon" :class="wiersz" data-testid="panel-telefon-wiersz">
@@ -81,7 +87,7 @@
         </button>
       </div>
     </div>
-    <div class="flex min-w-0 items-center gap-2">
+    <div class="flex h-7 min-w-0 items-center gap-2">
       <div :class="wiersz" data-testid="panel-rekord-wiersz">
         <button
           type="button"
@@ -90,7 +96,7 @@
           data-testid="panel-rekord"
           @click="copyToClipboard(rekord)"
         >
-          <span :class="ikona" class="lucide-hash" aria-hidden="true" />
+          <UmowaIcon :class="ikona" aria-hidden="true" />
           <span class="truncate">{{ __(rekord) }}</span>
         </button>
         <button
@@ -114,6 +120,7 @@
 <script setup>
 import { computed } from 'vue'
 import { Button, Switch } from 'frappe-ui'
+import UmowaIcon from '@/components/Icons/UmowaIcon.vue'
 import { copyToClipboard } from '@/utils'
 import { telHref } from '@/utils/telefon'
 import { formatTelefon } from '@/utils/panelBoczny'
