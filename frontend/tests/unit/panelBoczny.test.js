@@ -31,6 +31,16 @@ describe('formaty', () => {
     expect(formatKwota(null)).toBe('')
     expect(formatKwota(1234567.891, { jednostka: false })).toBe('1 234 567,89')
   })
+  it('kwota bez waluty w panelu', () => {
+    const f = (v) => formatKwota(v, { jednostka: false }).replace(/\s/g, ' ')
+    expect(f(0)).toBe('0,00')
+    expect(f(623.36)).toBe('623,36')
+    expect(f(43448.4)).toBe('43 448,40')
+    expect(f(-1234.5)).toBe('-1 234,50')
+    expect(f('1234.5')).toBe('1 234,50')
+    expect(f(null)).toBe('')
+    expect(f('')).toBe('')
+  })
   it('liczba obcina zbedne zera', () => {
     expect(formatLiczba(8.5)).toBe('8,5')
     expect(formatLiczba(8)).toBe('8')

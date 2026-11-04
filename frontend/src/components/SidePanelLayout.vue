@@ -406,7 +406,7 @@
                           v-else-if="field.fieldtype === 'Currency'"
                           class="form-control"
                           type="text"
-                          :value="getFormattedCurrency(field.fieldname, doc)"
+                          :value="formatKwota(doc[field.fieldname], { jednostka: false })"
                           :placeholder="field.placeholder"
                           :debounce="500"
                           :disabled="Boolean(field.read_only)"
@@ -577,6 +577,7 @@ import {
   czyWygenerowanyPlaceholder,
   rozbijUwagi,
   formatTelefon,
+  formatKwota,
   formatData,
   formatDataCzas,
   wczytajOtwartaSekcje,
