@@ -52,7 +52,7 @@
             @click="() => attrs.onCreate(v, close)"
           />
         </div>
-        <div>
+        <div v-if="!hideClear">
           <Button
             variant="ghost"
             class="w-full !justify-start"
@@ -101,6 +101,10 @@ const props = defineProps({
   // LostReasonModal.vue) musi byc wymuszona tutaj. `null` (domyslnie) =
   // bez zmiany istniejacego zachowania dla kazdego innego wywolania Linka.
   sortComparator: { type: Function, default: null },
+  // b83: ukrywa przycisk "Clear" w stopce listy. Dla handlowca na liscie
+  // leadow (LeadInlineCell.vue) zapis idzie przez przekaz_handlowcowi, ktore
+  // nie obsluguje pustej wartosci. Domyslnie false, jak dotychczas.
+  hideClear: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['update:modelValue', 'change'])

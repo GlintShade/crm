@@ -9,8 +9,10 @@ import {
   szerokoscKolumnyZMinimum,
   KOLUMNY_TEKSTOWE_INLINE,
   WOJEWODZTWA,
-  ROLE_PRZYPISANIA_HANDLOWCA,
+  ROLE_BYPASS_HANDLOWCA,
+  ROLA_CC,
   mozePrzypisywacHandlowca,
+  emailUzytkownikaZKomorki,
   normalizujKodPocztowy,
   wartoscTekstuDoZapisu,
   czyWartoscSieZmienila,
@@ -240,33 +242,72 @@ describe('b83: kolumny adresu i handlowca', () => {
   })
 })
 
-describe('mozePrzypisywacHandlowca', () => {
-  it('admin, backoffice i CC moga, handlowiec D2D nie', () => {
-    expect(mozePrzypisywacHandlowca(['System Manager'])).toBe(true)
-    expect(mozePrzypisywacHandlowca(['Volteo Core Admin'])).toBe(true)
-    expect(mozePrzypisywacHandlowca(['Volteo Backend'])).toBe(true)
-    expect(mozePrzypisywacHandlowca(['Volteo Call Center'])).toBe(true)
-    expect(mozePrzypisywacHandlowca(['Volteo D2D Sales'])).toBe(false)
-    expect(mozePrzypisywacHandlowca(['Sales User'])).toBe(false)
+describe('mozePrzypisywacHandlowca (ta sama bramka co przekaz_handlowcowi)', () => {
+  const CC = 'cc@volteo.pl'
+  const INNY_CC = 'inny.cc@volteo.pl'
+
+  it('Administrator zawsze, nawet bez rol', () => {
+    expect(mozePrzypisywacHandlowca({ uzytkownik: 'Administrator', role: [] })).toBe(true)
   })
 
-  it('flaga admina wygrywa niezaleznie od rol', () => {
-    expect(mozePrzypisywacHandlowca([], true)).toBe(true)
-    expect(mozePrzypisywacHandlowca(['Volteo D2D Sales'], true)).toBe(true)
+  it('role BYPASS zawsze, bez wzgledu na custom_cc leada', () => {
+    for (const rola of ['System Manager', 'Volteo Core Admin', 'Volteo Backend']) {
+      expect(
+        mozePrzypisywacHandlowca({ uzytkownik: 'a@volteo.pl', role: [rola], ccLeada: '' }),
+      ).toBe(true)
+      expect(
+        mozePrzypisywacHandlowca({ uzytkownik: 'a@volteo.pl', role: [rola], ccLeada: INNY_CC }),
+      ).toBe(true)
+    }
   })
 
-  it('D2D z dodatkowa rola CC moze (wystarczy jedna dozwolona rola)', () => {
-    expect(mozePrzypisywacHandlowca(['Volteo D2D Sales', 'Volteo Call Center'])).toBe(true)
+  it('CC tylko na leadzie z wlasnym custom_cc', () => {
+    expect(mozePrzypisywacHandlowca({ uzytkownik: CC, role: [ROLA_CC], ccLeada: CC })).toBe(true)
+    expect(mozePrzypisywacHandlowca({ uzytkownik: CC, role: [ROLA_CC], ccLeada: INNY_CC })).toBe(
+      false,
+    )
+    expect(mozePrzypisywacHandlowca({ uzytkownik: CC, role: [ROLA_CC], ccLeada: '' })).toBe(false)
+    expect(mozePrzypisywacHandlowca({ uzytkownik: CC, role: [ROLA_CC] })).toBe(false)
   })
 
-  it('brak rol albo zly typ daje false', () => {
-    expect(mozePrzypisywacHandlowca(undefined)).toBe(false)
-    expect(mozePrzypisywacHandlowca(null)).toBe(false)
-    expect(mozePrzypisywacHandlowca('System Manager')).toBe(false)
+  it('custom_cc rowny uzytkownikowi bez roli CC nie wystarcza', () => {
+    expect(
+      mozePrzypisywacHandlowca({ uzytkownik: CC, role: ['Volteo D2D Sales'], ccLeada: CC }),
+    ).toBe(false)
   })
 
-  it('lista rol jest stala i nie zawiera D2D', () => {
-    expect(ROLE_PRZYPISANIA_HANDLOWCA).not.toContain('Volteo D2D Sales')
+  it('handlowiec D2D nigdy', () => {
+    const rep = 'rep@volteo.pl'
+    expect(mozePrzypisywacHandlowca({ uzytkownik: rep, role: ['Volteo D2D Sales'] })).toBe(false)
+    expect(
+      mozePrzypisywacHandlowca({ uzytkownik: rep, role: ['Volteo D2D Sales'], ccLeada: CC }),
+    ).toBe(false)
+    expect(mozePrzypisywacHandlowca({ uzytkownik: rep, role: ['Sales User'] })).toBe(false)
+  })
+
+  it('brak danych albo zly typ rol daje false', () => {
+    expect(mozePrzypisywacHandlowca()).toBe(false)
+    expect(mozePrzypisywacHandlowca({ uzytkownik: CC, role: null, ccLeada: CC })).toBe(false)
+    expect(mozePrzypisywacHandlowca({ uzytkownik: CC, role: 'System Manager' })).toBe(false)
+    expect(mozePrzypisywacHandlowca({ uzytkownik: '', role: [ROLA_CC], ccLeada: '' })).toBe(false)
+  })
+
+  it('lista BYPASS zgadza sie z serwerem i nie zawiera CC ani D2D', () => {
+    expect([...ROLE_BYPASS_HANDLOWCA].sort()).toEqual(
+      ['System Manager', 'Volteo Backend', 'Volteo Core Admin'].sort(),
+    )
+    expect(ROLE_BYPASS_HANDLOWCA).not.toContain(ROLA_CC)
+    expect(ROLE_BYPASS_HANDLOWCA).not.toContain('Volteo D2D Sales')
+  })
+})
+
+describe('emailUzytkownikaZKomorki', () => {
+  it('obiekt z parseRows, goly e-mail i pustka', () => {
+    expect(emailUzytkownikaZKomorki({ label: 'CC', name: 'cc@volteo.pl' })).toBe('cc@volteo.pl')
+    expect(emailUzytkownikaZKomorki({ label: '' })).toBe('')
+    expect(emailUzytkownikaZKomorki('cc@volteo.pl')).toBe('cc@volteo.pl')
+    expect(emailUzytkownikaZKomorki(null)).toBe('')
+    expect(emailUzytkownikaZKomorki(undefined)).toBe('')
   })
 })
 

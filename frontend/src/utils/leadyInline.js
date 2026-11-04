@@ -8,10 +8,11 @@
 // Kolumny listy leadow obslugiwane inline (LeadsListView.vue renderuje dla
 // nich LeadInlineCell.vue zamiast generycznej etykiety). custom_cc celowo
 // nie jest tutaj: przypisanie CC idzie osobna akcja (przydziel_cc).
-// lead_owner jest od b83 (prosba wlasciciela): zapis idzie ta sama sciezka co
-// panel boczny (frappe.client.set_value -> doc.save -> CRMLead.validate /
-// on_update), wiec mail o przydziale i odebranie widocznosci poprzedniemu
-// handlowcowi odpalaja sie bez zmian. Kto moze edytowac w UI: patrz
+// lead_owner jest od b83 (prosba wlasciciela): zapis idzie przez
+// crm.api.volteo_leady.przekaz_handlowcowi (ten sam co przycisk "Przekaz
+// handlowcowi"), ktore robi doc.save -> CRMLead.validate / on_update, wiec
+// mail o przydziale i odebranie widocznosci poprzedniemu handlowcowi
+// odpalaja sie bez zmian, a w Aktywnosci zostaje slad przekazania. Kto moze edytowac w UI: patrz
 // mozePrzypisywacHandlowca nizej; serwer i tak decyduje.
 export const KOLUMNY_INLINE = new Set([
   'status',
@@ -64,20 +65,35 @@ export const WOJEWODZTWA = [
   'zachodniopomorskie',
 ]
 
-// Role, ktore moga przypisywac handlowca z listy (decyzja wlasciciela b83:
-// administracja, backoffice i CC). Handlowiec D2D widzi komorke tylko do
-// odczytu. To jest wylacznie decyzja UI: serwer sprawdza uprawnienia sam.
-export const ROLE_PRZYPISANIA_HANDLOWCA = [
+// Kto moze zmienic handlowca z listy. Ta sama bramka co serwerowe
+// crm.api.volteo_leady.przekaz_handlowcowi, przez ktore idzie zapis:
+// Administrator albo rola z BYPASS_ROLES (crm/permissions/org_hierarchy.py)
+// zawsze, CC (Volteo Call Center) tylko na leadzie, ktorego custom_cc to on
+// sam. Handlowiec D2D i wszyscy inni: komorka tylko do odczytu. Zwykly
+// set_value na lead_owner nie wchodzi w gre: pole ma permlevel 1, a D2D, CC
+// i Backend nie maja na nim write (sonda produkcji 2026-11-04). To jest
+// wylacznie decyzja UI, serwer sprawdza to samo jeszcze raz.
+export const ROLE_BYPASS_HANDLOWCA = [
   'System Manager',
   'Volteo Core Admin',
   'Volteo Backend',
-  'Volteo Call Center',
 ]
+export const ROLA_CC = 'Volteo Call Center'
 
-export function mozePrzypisywacHandlowca(role, czyAdmin = false) {
-  if (czyAdmin) return true
+export function mozePrzypisywacHandlowca({ uzytkownik, role, ccLeada } = {}) {
+  if (uzytkownik === 'Administrator') return true
   const lista = Array.isArray(role) ? role : []
-  return ROLE_PRZYPISANIA_HANDLOWCA.some((r) => lista.includes(r))
+  if (ROLE_BYPASS_HANDLOWCA.some((r) => lista.includes(r))) return true
+  return Boolean(
+    uzytkownik && lista.includes(ROLA_CC) && ccLeada && ccLeada === uzytkownik,
+  )
+}
+
+// CC leada z wiersza listy: parseRows daje dla custom_cc ten sam ksztalt co
+// dla lead_owner ({label, ...getUser(email)}), surowy wiersz ma goly e-mail.
+export function emailUzytkownikaZKomorki(item) {
+  if (item && typeof item === 'object') return item.name || ''
+  return typeof item === 'string' ? item : ''
 }
 
 // Kod pocztowy: pusty wpis czysci pole, "NN-NNN" przechodzi, piec cyfr
@@ -137,10 +153,7 @@ export function surowaWartoscKomorki(column, item) {
 
   // lead_owner: parseRows daje {label, ...getUser(email)}, getUser trzyma
   // e-mail w `name`. Pusty wlasciciel to {label: ''} bez `name`.
-  if (column.key === 'lead_owner') {
-    if (item && typeof item === 'object') return item.name || ''
-    return item ?? ''
-  }
+  if (column.key === 'lead_owner') return emailUzytkownikaZKomorki(item)
 
   if (column.key === 'status') {
     if (item && typeof item === 'object') return item.label ?? ''

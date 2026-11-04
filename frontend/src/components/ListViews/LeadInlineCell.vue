@@ -54,12 +54,16 @@
   - lead_owner ("Przypisany handlowiec"): Link do User z tym samym zakresem
     co panel boczny (znacznik volteo_scope_handlowcy -> crm.api.volteo_leady.
     handlowcy, userScope -> crm.api.volteo_uzytkownicy.widoczni_uzytkownicy).
-    Handlowiec D2D widzi sama nazwe, bez edycji (utils/leadyInline.js::
-    mozePrzypisywacHandlowca). Zapis to zwykly set_value, czyli ta sama
-    sciezka co panel boczny (document.save.submit w frappe-ui tez wola
-    frappe.client.set_value ze slownikiem zmienionych pol), wiec hooki
+    Zapis NIE idzie przez set_value: lead_owner ma permlevel 1 i tylko
+    System Manager ma tam write. Idzie przez crm.api.volteo_leady.
+    przekaz_handlowcowi (ten sam co przycisk "Przekaz handlowcowi"), ktore
+    waliduje handlowca, robi doc.save(ignore_permissions=True), wiec
     CRMLead.validate/on_update (ToDo, DocShare, mail o przydziale, odebranie
-    widocznosci poprzedniemu handlowcowi) odpalaja sie tak samo.
+    widocznosci poprzedniemu handlowcowi) odpalaja sie jak zawsze, i zostawia
+    slad cc_przekazanie. Edytowac moga Administrator i BYPASS_ROLES, CC tylko
+    na leadzie z wlasnym custom_cc (utils/leadyInline.js::
+    mozePrzypisywacHandlowca); reszta widzi sama nazwe. Bez opcji czyszczenia,
+    bo API nie obsluguje pustej wartosci.
   - custom_voivodeship: select 16 wojewodztw.
   - pola tekstowe (KOLUMNY_TEKSTOWE_INLINE): klik w komorke otwiera pole,
     Enter albo opuszczenie pola zatwierdza, Escape anuluje. Kod pocztowy
@@ -190,6 +194,7 @@
       :filters="filtryHandlowca"
       :userScope="true"
       :hideMe="true"
+      :hideClear="true"
       :disabled="zapisywanie"
       :placeholder="__('Wybierz handlowca')"
       @change="zapiszHandlowca"
@@ -274,6 +279,7 @@ import {
   KOLUMNY_TEKSTOWE_INLINE,
   WOJEWODZTWA,
   czyWartoscSieZmienila,
+  emailUzytkownikaZKomorki,
   mozePrzypisywacHandlowca,
   surowaWartoscKomorki,
   wartoscTekstuDoZapisu,
@@ -305,7 +311,7 @@ const props = defineProps({
 const emit = defineEmits(['saved'])
 
 const { getLeadStatus, statusOptions } = statusesStore()
-const { mozeZmieniacStatusCC, users, getUser, isVolteoAdmin } = usersStore()
+const { mozeZmieniacStatusCC, users, getUser } = usersStore()
 const meta = getMeta('CRM Lead')
 
 function statusLabel(status) {
@@ -354,10 +360,18 @@ const zapisywanie = ref(false)
 // (select, input, Link) przerysowaly sie z wartoscia sprzed edycji.
 const wersjaKontrolki = ref(0)
 
-async function zapiszWartosc(fieldname, wartoscDoZapisu) {
+// `wyslij` (opcjonalne) podmienia samo wywolanie serwera, reszta (blokada,
+// emit, toast, rewert po bledzie) jest wspolna. Domyslnie set_value.
+async function zapiszWartosc(fieldname, wartoscDoZapisu, wyslij = null) {
   if (zapisywanie.value) return false
   zapisywanie.value = true
   try {
+    if (wyslij) {
+      await wyslij()
+      emit('saved', { fieldname, value: wartoscDoZapisu ?? '' })
+      toast.success(__('Zapisano'))
+      return true
+    }
     // Pulapka Frappe: frappe/client.py::set_value robi `if not value`, wiec
     // 0 lub '' wyslane pozycyjnie zamieniaja sie w {pole: ""}, co dla pola
     // Duration/liczbowego daje DataError 1366. Dict w `fieldname` omija te galaz.
@@ -385,9 +399,17 @@ function zapiszJesliZmiana(fieldname, nowa) {
 
 // --- b83: Przypisany handlowiec (lead_owner) ---
 
-const mozeEdytowacHandlowca = computed(() =>
-  mozePrzypisywacHandlowca(getUser().roles, isVolteoAdmin()),
-)
+// custom_cc bierzemy z wiersza listy (parseRows: obiekt uzytkownika). Gdy
+// widok nie ma kolumny "Przypisany CC", CC widzi komorke tylko do odczytu;
+// admin i bypass nie potrzebuja tej wartosci.
+const mozeEdytowacHandlowca = computed(() => {
+  const ja = getUser()
+  return mozePrzypisywacHandlowca({
+    uzytkownik: ja.name,
+    role: ja.roles,
+    ccLeada: emailUzytkownikaZKomorki(props.row.custom_cc),
+  })
+})
 
 // Te same filtry co SidePanelLayout.vue::parsedField dla Linku do User:
 // lista crmUsers + ignore_user_type + link_filters pola z meta (Property
@@ -407,7 +429,14 @@ const filtryHandlowca = computed(() => {
 })
 
 function zapiszHandlowca(v) {
-  zapiszJesliZmiana('lead_owner', v || '')
+  const handlowiec = v || ''
+  if (!handlowiec || !czyWartoscSieZmienila(wartosc.value, handlowiec)) return
+  zapiszWartosc('lead_owner', handlowiec, () =>
+    call('crm.api.volteo_leady.przekaz_handlowcowi', {
+      lead: props.row.name,
+      handlowiec,
+    }),
+  )
 }
 
 // --- b83: Wojewodztwo ---
