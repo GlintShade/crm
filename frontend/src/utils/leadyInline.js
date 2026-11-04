@@ -6,10 +6,14 @@
 // zna, wiec kazdy test transzytywnie importujacy '@/utils' by sie wywalil).
 
 // Kolumny listy leadow obslugiwane inline (LeadsListView.vue renderuje dla
-// nich LeadInlineCell.vue zamiast generycznej etykiety). custom_cc i
-// lead_owner celowo nie sa tutaj: przypisanie CC/handlowca idzie osobnymi
-// akcjami (przydziel_cc / przekaz_handlowcowi), nie zwyklym set_value z
-// przegladarki.
+// nich LeadInlineCell.vue zamiast generycznej etykiety). custom_cc celowo
+// nie jest tutaj: przypisanie CC idzie osobna akcja (przydziel_cc).
+// lead_owner jest od b83 (prosba wlasciciela): zapis idzie przez
+// crm.api.volteo_leady.przekaz_handlowcowi (ten sam co przycisk "Przekaz
+// handlowcowi"), ktore robi doc.save -> CRMLead.validate / on_update, wiec
+// mail o przydziale i odebranie widocznosci poprzedniemu handlowcowi
+// odpalaja sie bez zmian, a w Aktywnosci zostaje slad przekazania. Kto moze edytowac w UI: patrz
+// mozePrzypisywacHandlowca nizej; serwer i tak decyduje.
 export const KOLUMNY_INLINE = new Set([
   'status',
   'custom_status_handlowy',
@@ -17,7 +21,112 @@ export const KOLUMNY_INLINE = new Set([
   'custom_termin_spotkania',
   'custom_czas_do_kontaktu',
   'custom_proby_kontaktu',
+  'lead_owner',
+  'custom_install_address',
+  'custom_nr_domu',
+  'custom_install_city',
+  'custom_powiat',
+  'custom_voivodeship',
+  'custom_install_postal_code',
 ])
+
+// b83: kolumny adresu edytowane zwyklym polem tekstowym (klik otwiera
+// edycje, Enter albo opuszczenie pola zatwierdza, Escape anuluje).
+// custom_powiat dostaje dodatkowo podpowiedzi z powiaty_filtra (datalist),
+// ale wartosc nadal jest dowolnym tekstem.
+export const KOLUMNY_TEKSTOWE_INLINE = new Set([
+  'custom_install_address',
+  'custom_nr_domu',
+  'custom_install_city',
+  'custom_powiat',
+  'custom_install_postal_code',
+])
+
+// 16 wojewodztw malymi literami, dokladnie jak opcje Select
+// custom_voivodeship (te same wartosci co KalkulatorTab.vue i
+// crm/volteo_leady_import.py). Uzywane jako zapas, gdy meta pola nie ma
+// jeszcze opcji.
+export const WOJEWODZTWA = [
+  'dolnośląskie',
+  'kujawsko-pomorskie',
+  'lubelskie',
+  'lubuskie',
+  'łódzkie',
+  'małopolskie',
+  'mazowieckie',
+  'opolskie',
+  'podkarpackie',
+  'podlaskie',
+  'pomorskie',
+  'śląskie',
+  'świętokrzyskie',
+  'warmińsko-mazurskie',
+  'wielkopolskie',
+  'zachodniopomorskie',
+]
+
+// Kto moze zmienic handlowca z listy. Ta sama bramka co serwerowe
+// crm.api.volteo_leady.przekaz_handlowcowi, przez ktore idzie zapis:
+// Administrator albo rola z BYPASS_ROLES (crm/permissions/org_hierarchy.py)
+// zawsze, CC (Volteo Call Center) tylko na leadzie, ktorego custom_cc to on
+// sam. Handlowiec D2D i wszyscy inni: komorka tylko do odczytu. Zwykly
+// set_value na lead_owner nie wchodzi w gre: pole ma permlevel 1, a D2D, CC
+// i Backend nie maja na nim write (sonda produkcji 2026-11-04). To jest
+// wylacznie decyzja UI, serwer sprawdza to samo jeszcze raz.
+export const ROLE_BYPASS_HANDLOWCA = [
+  'System Manager',
+  'Volteo Core Admin',
+  'Volteo Backend',
+]
+export const ROLA_CC = 'Volteo Call Center'
+
+export function mozePrzypisywacHandlowca({ uzytkownik, role, ccLeada } = {}) {
+  if (uzytkownik === 'Administrator') return true
+  const lista = Array.isArray(role) ? role : []
+  if (ROLE_BYPASS_HANDLOWCA.some((r) => lista.includes(r))) return true
+  return Boolean(
+    uzytkownik && lista.includes(ROLA_CC) && ccLeada && ccLeada === uzytkownik,
+  )
+}
+
+// CC leada z wiersza listy: parseRows daje dla custom_cc ten sam ksztalt co
+// dla lead_owner ({label, ...getUser(email)}), surowy wiersz ma goly e-mail.
+export function emailUzytkownikaZKomorki(item) {
+  if (item && typeof item === 'object') return item.name || ''
+  return typeof item === 'string' ? item : ''
+}
+
+// Kod pocztowy: pusty wpis czysci pole, "NN-NNN" przechodzi, piec cyfr
+// bez myslnika ("12345") jest dopelniane do "12-345", wszystko inne to
+// blad. Zwraca {ok, wartosc} albo {ok: false, blad}.
+const WZOR_KODU = /^\d{2}-\d{3}$/
+
+export function normalizujKodPocztowy(wpis) {
+  const tekst = String(wpis ?? '').replace(/\s+/g, '')
+  if (tekst === '') return { ok: true, wartosc: '' }
+  if (WZOR_KODU.test(tekst)) return { ok: true, wartosc: tekst }
+  if (/^\d{5}$/.test(tekst)) {
+    return { ok: true, wartosc: `${tekst.slice(0, 2)}-${tekst.slice(2)}` }
+  }
+  return { ok: false, blad: 'Kod pocztowy musi mieć format NN-NNN, np. 00-950.' }
+}
+
+// Wpis z pola tekstowego -> wartosc do zapisu. Obcina spacje na brzegach,
+// kod pocztowy przechodzi przez normalizujKodPocztowy.
+export function wartoscTekstuDoZapisu(fieldname, wpis) {
+  if (fieldname === 'custom_install_postal_code') {
+    return normalizujKodPocztowy(wpis)
+  }
+  return { ok: true, wartosc: String(wpis ?? '').trim() }
+}
+
+// Czy zapis ma sens: null/undefined i '' traktujemy jako ta sama pusta
+// wartosc, zeby opuszczenie pustej komorki nie wysylalo zapytania.
+export function czyWartoscSieZmienila(stara, nowa) {
+  const a = stara === null || stara === undefined ? '' : String(stara)
+  const b = nowa === null || nowa === undefined ? '' : String(nowa)
+  return a !== b
+}
 
 export function czyKolumnaInline(column) {
   return Boolean(column && KOLUMNY_INLINE.has(column.key))
@@ -26,7 +135,7 @@ export function czyKolumnaInline(column) {
 // Wyciaga surowa (edytowalna) wartosc z ksztaltu komorki wyprodukowanego
 // przez Leads.vue::parseRows: status to {label, color}, Date/Datetime to
 // {label, value}, custom_status_handlowy to goly string (Select nie ma
-// specjalnej galezi w parseRows).
+// specjalnej galezi w parseRows), lead_owner to obiekt uzytkownika.
 // Puste Próby kontaktu (null, '', undefined) znaczą "0": pole Select ma opcje
 // 0..5, wiec pusta wartosc nie moze byc osobnym wyborem.
 export function probyKontaktuDoWyswietlenia(wartosc) {
@@ -41,6 +150,10 @@ export function surowaWartoscKomorki(column, item) {
   if (column.key === 'custom_proby_kontaktu') {
     return probyKontaktuDoWyswietlenia(item)
   }
+
+  // lead_owner: parseRows daje {label, ...getUser(email)}, getUser trzyma
+  // e-mail w `name`. Pusty wlasciciel to {label: ''} bez `name`.
+  if (column.key === 'lead_owner') return emailUzytkownikaZKomorki(item)
 
   if (column.key === 'status') {
     if (item && typeof item === 'object') return item.label ?? ''
