@@ -93,6 +93,15 @@ class CRMInvitation(Document):
 		)
 		self.db_set("email_sent_at", frappe.utils.now())
 
+		# Short SMS heads-up that the invitation email is waiting (no link, no key):
+		# only when the inviter typed a phone number. Queued after commit; it never
+		# blocks or fails the invitation. Lazy import keeps the doctype module free
+		# of the SMS stack at import time.
+		if (self.get("mobile_no") or "").strip():
+			from crm.api.sms_zaproszenie import zakolejkuj
+
+			zakolejkuj(self.name)
+
 	@frappe.whitelist()
 	def accept_invitation(self):
 		frappe.only_for(["System Manager", "Sales Manager"], True)

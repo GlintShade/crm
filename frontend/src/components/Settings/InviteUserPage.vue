@@ -45,6 +45,7 @@
           class="mt-4"
           :label="__('Telefon')"
           placeholder="+48 000 000 000"
+          :description="__('Wyślemy tu SMS, że czeka e-mail z zaproszeniem.')"
           :disabled="inviteByEmail.loading"
         />
         <FormControl
