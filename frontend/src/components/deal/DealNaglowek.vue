@@ -65,91 +65,95 @@
     <div v-if="payload && tryb !== 'hidden'" class="mt-3 flex items-start gap-4">
       <div class="min-w-0 flex-1">
         <template v-if="wariant === 'kroki'">
-        <ol ref="kontenerRef" class="flex w-full items-start" data-testid="naglowek-proces">
-          <li
-            v-for="(el, i) in elementy"
-            :key="el.status"
-            class="relative flex min-w-0 flex-1 flex-col items-center"
-            :title="!el.etykieta ? el.nazwa : undefined"
-            :data-stan="el.stan"
+        <!-- Kroki: każde kółko ma pod sobą własną etykietę i licznik podzadań
+             (wyśrodkowane w kolumnie kółka). Gdy kolumna miałaby poniżej ok.
+             80 px, dwa rzędy po 6 kółek (jak w pasku). -->
+        <div ref="kontenerRef" class="flex w-full flex-col gap-3" data-testid="naglowek-proces">
+          <ol
+            v-for="(rzad, r) in rzedyKrokow"
+            :key="r"
+            class="flex w-full items-start"
+            data-testid="kroki-rzad"
           >
-            <span
-              v-if="i > 0"
-              class="absolute left-0 top-[14.5px] h-[3px] w-[calc(50%-20px)] rounded-full"
-              :class="liniaKlasa(i - 1)"
-              aria-hidden="true"
-            />
-            <span
-              v-if="i < elementy.length - 1"
-              class="absolute left-[calc(50%+20px)] right-0 top-[14.5px] h-[3px] rounded-full"
-              :class="liniaKlasa(i)"
-              aria-hidden="true"
-            />
-
-            <!-- Bieżący etap: kółko + etykieta to jedyna klikalna kontrolka (menu etapu) -->
-            <MenuEtapu v-if="el.stan === 'current'" :menu="menu" :wariant="wariant" :wyrownanie="wyrownanie" @wybierz="wybierz" @przelacz="ustawWariant">
-              <template #trigger="{ toggle, otwarte }">
-                <button
-                  type="button"
-                  class="relative flex max-w-full cursor-pointer flex-col items-center gap-1.5 rounded-md px-1 outline-none"
-                  :class="zwarty && el.etykieta ? 'mb-9' : ''"
-                  data-testid="naglowek-pigula"
-                  aria-haspopup="menu"
-                  :aria-expanded="otwarte"
-                  @click="toggle"
-                >
-                  <span :class="[kolkoBaza, kolkoKlasa(el.stan)]">{{ el.numer }}</span>
-                  <!-- W formie zwartej etykieta jest poza przepływem (nie rozpycha
-                       wąskiej kolumny), wyśrodkowana pod kółkiem i dociśnięta do
-                       krawędzi paska przy pierwszym i ostatnim etapie. -->
-                  <span
-                    v-if="el.etykieta"
-                    class="flex items-center gap-0.5 text-center text-[13px] font-semibold leading-tight text-ink-blue-8"
-                    :class="
-                      zwarty
-                        ? [
-                            'absolute top-[calc(100%+6px)] w-max max-w-[9rem]',
-                            i === 0
-                              ? 'left-0'
-                              : i === elementy.length - 1
-                                ? 'right-0'
-                                : 'left-1/2 -translate-x-1/2',
-                          ]
-                        : ''
-                    "
-                  >
-                    <span class="line-clamp-2">{{ el.nazwa }}</span>
-                    <span class="lucide-chevron-down size-3.5 shrink-0" aria-hidden="true" />
-                  </span>
-                  <span v-if="!zwarty" class="text-xs text-ink-blue-8" data-testid="naglowek-teraz">
-                    {{ czas ? `Teraz \u00b7 ${czas}` : 'Teraz' }}
-                  </span>
-                </button>
-              </template>
-            </MenuEtapu>
-
-            <div v-else class="flex max-w-full flex-col items-center gap-1.5 px-1">
-              <span :class="[kolkoBaza, kolkoKlasa(el.stan)]">
-                <span v-if="el.stan === 'done'" class="lucide-check size-4.5" aria-hidden="true" />
-                <template v-else>{{ el.numer }}</template>
-              </span>
+            <li
+              v-for="(el, j) in rzad"
+              :key="el.status"
+              class="relative flex min-w-0 flex-1 flex-col items-center"
+              :title="el.nazwa"
+              :data-stan="el.stan"
+              data-testid="kroki-kolumna"
+            >
               <span
-                v-if="el.etykieta"
-                class="line-clamp-2 text-center text-[13px] leading-tight"
-                :class="etykietaKlasa(el.stan)"
-              >
-                {{ el.nazwa }}
-              </span>
-            </div>
+                v-if="j > 0"
+                class="absolute left-0 top-[14.5px] h-[3px] w-[calc(50%-20px)] rounded-full"
+                :class="liniaKlasa(el.index - 1)"
+                aria-hidden="true"
+              />
+              <span
+                v-if="j < rzad.length - 1"
+                class="absolute left-[calc(50%+20px)] right-0 top-[14.5px] h-[3px] rounded-full"
+                :class="liniaKlasa(el.index)"
+                aria-hidden="true"
+              />
 
-            <PodControl
-              v-if="maPodzadania(el.status)"
-              :otwarty="etapOtwarty === el.status"
-              :licznik="licznik(el.status)"
-              @toggle="przelaczEtap(el.status)"
-            />
-          </li>
-        </ol>
+              <!-- Bieżący etap: kółko + etykieta to jedyna klikalna kontrolka (menu etapu) -->
+              <MenuEtapu
+                v-if="el.stan === 'current'"
+                class="w-full"
+                :menu="menu"
+                :wariant="wariant"
+                :wyrownanie="wyrownanie"
+                @wybierz="wybierz"
+                @przelacz="ustawWariant"
+              >
+                <template #trigger="{ toggle, otwarte }">
+                  <button
+                    type="button"
+                    class="flex w-full min-w-0 cursor-pointer flex-col items-center gap-1.5 rounded-md px-0.5 outline-none"
+                    data-testid="naglowek-pigula"
+                    aria-haspopup="menu"
+                    :aria-expanded="otwarte"
+                    @click="toggle"
+                  >
+                    <span :class="[kolkoBaza, kolkoKlasa(el.stan)]">{{ el.numer }}</span>
+                    <span
+                      data-testid="kroki-etykieta"
+                      class="w-full text-center font-semibold leading-tight text-ink-blue-8"
+                      :class="zwarty ? 'line-clamp-3 break-words text-[11.5px]' : 'line-clamp-2 text-[13px]'"
+                    >
+                      {{ el.nazwa }}<span class="lucide-chevron-down ml-0.5 inline-block size-3.5 align-text-bottom" aria-hidden="true" />
+                    </span>
+                    <span v-if="!zwarty" class="text-xs text-ink-blue-8" data-testid="naglowek-teraz">
+                      {{ czas ? `Teraz \u00b7 ${czas}` : 'Teraz' }}
+                    </span>
+                  </button>
+                </template>
+              </MenuEtapu>
+
+              <div v-else class="flex w-full min-w-0 flex-col items-center gap-1.5 px-1">
+                <span :class="[kolkoBaza, kolkoKlasa(el.stan)]">
+                  <span v-if="el.stan === 'done'" class="lucide-check size-4.5" aria-hidden="true" />
+                  <template v-else>{{ el.numer }}</template>
+                </span>
+                <span
+                  data-testid="kroki-etykieta"
+                  class="w-full break-words text-center leading-tight"
+                  :class="[etykietaKlasa(el.stan), zwarty ? 'line-clamp-3 text-[11px]' : 'line-clamp-2 text-[13px]']"
+                >
+                  {{ el.nazwa }}
+                </span>
+              </div>
+
+              <PodControl
+                v-if="maPodzadania(el.status)"
+                class="self-center"
+                :otwarty="etapOtwarty === el.status"
+                :licznik="licznik(el.status)"
+                @toggle="przelaczEtap(el.status)"
+              />
+            </li>
+          </ol>
+        </div>
 
         <!-- Forma zwarta: pełny tekst stanu pod paskiem -->
         <div
@@ -371,7 +375,6 @@ import {
   segmentKlasa,
   tekstNumeruEtapu,
   etykietaStatusu,
-  etykietaWidoczna,
   tekstDalej,
   tekstEtapu,
 } from '@/utils/dealNaglowek'
@@ -476,13 +479,22 @@ const rzedyPaska = computed(() =>
   ),
 )
 
+const rzedyKrokow = computed(() =>
+  podzielNaRzedy(
+    elementy.value,
+    zwarty.value
+      ? liczbaRzedowPaska(liczbaEtapow.value, szerokosc.value, { mnoznik: 1, odstep: 0 })
+      : 1,
+  ),
+)
+
 const elementy = computed(() =>
   (payload.value?.steps || []).map((s) => ({
     status: s.status,
     nazwa: __(s.status),
     numer: s.index + 1,
+    index: s.index,
     stan: nodeStateForMode(tryb.value, s.index, biezacy.value),
-    etykieta: etykietaWidoczna(s.index, biezacy.value, zwarty.value),
   })),
 )
 

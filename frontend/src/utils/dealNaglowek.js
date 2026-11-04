@@ -107,22 +107,6 @@ export function czyZwarty(liczba, szerokosc, minNaEtap = 90, maxEtapow = 6) {
 }
 
 /**
- * Czy pokazać etykietę pod kółkiem etapu `indeks`. W formie pełnej zawsze; w
- * zwartej tylko bieżący etap (następny jest w linii "Dalej" pod paskiem; przy
- * statusie poza procesem żaden).
- *
- * @param {number} indeks
- * @param {number} biezacy - indeks bieżącego etapu (-1 poza procesem)
- * @param {boolean} zwarty
- * @returns {boolean}
- */
-export function etykietaWidoczna(indeks, biezacy, zwarty) {
-  if (!zwarty) return true
-  if (biezacy < 0) return false
-  return indeks === biezacy
-}
-
-/**
  * "od dziś", "od 1 dnia", "od N dni"; pusty tekst, gdy czas nieznany.
  *
  * @param {string|null|undefined} czas - wynik formatCzasWEtapie

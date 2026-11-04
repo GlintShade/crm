@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
   czyZwarty,
-  etykietaWidoczna,
   czasOd,
   tekstEtapu,
   tekstDalej,
@@ -153,14 +152,6 @@ describe('pasek etapów', () => {
     expect(czyZwarty(5, 800)).toBe(false)
     expect(czyZwarty(5, 400)).toBe(true)
     expect(czyZwarty(5, 0)).toBe(false)
-  })
-  it('etykieta w formie zwartej tylko dla bieżącego etapu', () => {
-    expect(etykietaWidoczna(3, 2, false)).toBe(true)
-    expect(etykietaWidoczna(2, 2, true)).toBe(true)
-    expect(etykietaWidoczna(3, 2, true)).toBe(false)
-    expect(etykietaWidoczna(4, 2, true)).toBe(false)
-    expect(etykietaWidoczna(1, 2, true)).toBe(false)
-    expect(etykietaWidoczna(0, -1, true)).toBe(false)
   })
   it('teksty stanu', () => {
     expect(czasOd('dziś')).toBe('od dziś')
