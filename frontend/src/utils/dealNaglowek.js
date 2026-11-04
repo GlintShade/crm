@@ -1,56 +1,5 @@
-// Czysta logika nagłówka szansy v2 (DealNaglowek.vue): linia meta pod tytułem,
-// czas w etapie, odmiana "etapy". Bez importów frappe/Vue, testowalna wprost.
-
-const SKROTY_PRODUKTU = {
-  Fotowoltaika: 'PV',
-  'Fotowoltaika + Magazyn': 'PV + ME',
-  'Magazyn energii': 'ME',
-  'Czyste Powietrze': 'Czyste Powietrze',
-}
-
-/**
- * Krótka etykieta produktu z `custom_rodzaj_umowy`; nieznane rodzaje bez zmian.
- *
- * @param {string|null|undefined} rodzaj
- * @returns {string}
- */
-export function skrotProduktu(rodzaj) {
-  if (!rodzaj) return ''
-  return SKROTY_PRODUKTU[rodzaj] ?? rodzaj
-}
-
-function liczba(wartosc) {
-  const n = typeof wartosc === 'string' ? Number(wartosc.replace(',', '.')) : Number(wartosc)
-  return Number.isFinite(n) && n > 0 ? n : null
-}
-
-function formatLiczby(n) {
-  // do dwóch miejsc po przecinku, polski przecinek, bez zbędnych zer
-  const tekst = String(Math.round(n * 100) / 100)
-  return tekst.replace('.', ',')
-}
-
-/**
- * Linia meta pod tytułem: "PV + ME · 5,5 kWp · 33 kWh · Suchy Las".
- * Puste części są pomijane; zero w polach liczbowych oznacza brak.
- *
- * @param {Object|null|undefined} doc - szansa (CRM Deal)
- * @returns {string}
- */
-export function metaSzansy(doc) {
-  if (!doc) return ''
-  const moc = liczba(doc.custom_pv_power_kwp)
-  const pojemnosc = liczba(doc.custom_pojemnosc_kwh)
-  const miasto = typeof doc.custom_install_city === 'string' ? doc.custom_install_city.trim() : ''
-  return [
-    skrotProduktu(doc.custom_rodzaj_umowy),
-    moc !== null ? `${formatLiczby(moc)} kWp` : '',
-    pojemnosc !== null ? `${formatLiczby(pojemnosc)} kWh` : '',
-    miasto,
-  ]
-    .filter(Boolean)
-    .join(' · ')
-}
+// Czysta logika nagłówka szansy (DealNaglowek.vue): czas w etapie, odmiana
+// "etapy", teksty paska etapów. Bez importów frappe/Vue, testowalna wprost.
 
 /**
  * Polska odmiana "N etap/etapy/etapów".
@@ -138,4 +87,75 @@ export function czasWEtapie(log, status, teraz = new Date()) {
  */
 export function etykietaStatusu(nazwa) {
   return String(nazwa ?? '').replace(/[\u2013\u2014]/g, '-')
+}
+
+/**
+ * Czy pasek etapów ma przejść w formę zwartą (etykiety tylko przy bieżącym i
+ * następnym etapie, resztę mówi linia tekstu pod paskiem): za dużo etapów
+ * (Czyste Powietrze, 12) albo na jeden etap przypada za mało szerokości.
+ *
+ * @param {number} liczba - liczba etapów procesu
+ * @param {number} szerokosc - szerokość kontenera paska w px (0 = jeszcze nieznana)
+ * @param {number} [minNaEtap]
+ * @param {number} [maxEtapow]
+ * @returns {boolean}
+ */
+export function czyZwarty(liczba, szerokosc, minNaEtap = 90, maxEtapow = 6) {
+  if (liczba > maxEtapow) return true
+  if (!szerokosc || liczba <= 0) return false
+  return szerokosc / liczba < minNaEtap
+}
+
+/**
+ * Czy pokazać etykietę pod kółkiem etapu `indeks`. W formie pełnej zawsze; w
+ * zwartej tylko bieżący i następny etap (przy statusie poza procesem żaden).
+ *
+ * @param {number} indeks
+ * @param {number} biezacy - indeks bieżącego etapu (-1 poza procesem)
+ * @param {boolean} zwarty
+ * @returns {boolean}
+ */
+export function etykietaWidoczna(indeks, biezacy, zwarty) {
+  if (!zwarty) return true
+  if (biezacy < 0) return false
+  return indeks === biezacy || indeks === biezacy + 1
+}
+
+/**
+ * "od dziś", "od 1 dnia", "od N dni"; pusty tekst, gdy czas nieznany.
+ *
+ * @param {string|null|undefined} czas - wynik formatCzasWEtapie
+ * @returns {string}
+ */
+export function czasOd(czas) {
+  if (!czas) return ''
+  if (czas === 'dziś') return 'od dziś'
+  if (czas === '1 dzień') return 'od 1 dnia'
+  return `od ${czas}`
+}
+
+/**
+ * Linia stanu pod paskiem: "Etap 5 z 12: Wniosek o dotację · od 6 dni".
+ *
+ * @param {number} biezacy - indeks bieżącego etapu
+ * @param {number} liczba - liczba etapów
+ * @param {string} nazwa
+ * @param {string|null|undefined} czas
+ * @returns {string}
+ */
+export function tekstEtapu(biezacy, liczba, nazwa, czas) {
+  const od = czasOd(czas)
+  return `Etap ${biezacy + 1} z ${liczba}: ${nazwa}${od ? ` \u00b7 ${od}` : ''}`
+}
+
+/**
+ * "Dalej: nazwa następnego etapu"; pusty tekst przy ostatnim etapie.
+ *
+ * @param {Array<{status: string, index: number}>} steps
+ * @param {number} biezacy
+ * @returns {string}
+ */
+export function tekstDalej(steps, biezacy) {
+  const nast = Array.isArray(steps) ? steps[biezacy + 1] : null
+  return nast ? `Dalej: ${nast.status}` : ''
 }

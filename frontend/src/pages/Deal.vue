@@ -16,11 +16,8 @@
       :deal-id="dealId"
       :doc="doc"
       :okruszki="breadcrumbs"
-      :tytul="tytulKlienta"
-      :ma-klienta="Boolean(primaryContactName)"
       :tabs="tabs"
       :opcje-statusow="statuses"
-      @klient="goToClient"
     >
       <template #akcje>
         <CustomActions
@@ -793,9 +790,6 @@ const kontaktPodstawowy = computed(() => {
   return list.find((c) => c.is_primary) || list[0] || null
 })
 const primaryContactName = computed(() => kontaktPodstawowy.value?.name || null)
-
-// Tytuł nagłówka: pełna nazwa klienta, a bez klienta numer szansy.
-const tytulKlienta = computed(() => kontaktPodstawowy.value?.full_name || title.value)
 
 function goToClient() {
   if (!primaryContactName.value) return

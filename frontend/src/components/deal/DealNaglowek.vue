@@ -66,136 +66,125 @@
       </div>
     </div>
 
-    <!-- Wiersz 2 -->
-    <div class="mt-1.5 flex min-w-0 items-baseline gap-3">
-      <button
-        v-if="maKlienta"
-        type="button"
-        class="group flex min-w-0 items-center gap-1.5 text-left"
-        data-testid="naglowek-tytul"
-        :title="__('Przejdź do klienta')"
-        @click="emit('klient')"
-      >
-        <span class="truncate text-xl font-semibold text-ink-gray-9 group-hover:underline">
-          {{ tytul }}
-        </span>
-        <span class="lucide-arrow-right size-3.5 shrink-0 text-ink-gray-4" aria-hidden="true" />
-      </button>
-      <h1 v-else class="truncate text-xl font-semibold text-ink-gray-9" data-testid="naglowek-tytul">
-        {{ tytul }}
-      </h1>
-      <span v-if="meta" class="truncate text-sm text-ink-gray-5" data-testid="naglowek-meta">
-        {{ meta }}
-      </span>
-    </div>
-
-    <!-- Wiersz 3 -->
-    <div v-if="payload && tryb !== 'hidden'" class="mt-2.5 flex items-center gap-4">
-      <div ref="kontenerRef" class="relative min-w-0 flex-1 [overflow-x:clip]" data-testid="naglowek-proces">
-        <!-- Pełna linia: zawsze w DOM (służy też do pomiaru szerokości). W formie
-             zwartej jest niewidoczna i nieaktywna (inert). -->
-        <div
-          ref="liniaPelnaRef"
-          class="flex w-max items-center gap-1.5 whitespace-nowrap text-sm"
-          :class="zwarty ? 'invisible absolute left-0 top-0 h-0 overflow-hidden' : ''"
-          :inert="zwarty ? '' : undefined"
-          :aria-hidden="zwarty"
-        >
-          <template v-for="(el, i) in elementyPelne" :key="el.status">
-            <span v-if="i > 0" class="lucide-chevron-right size-3.5 shrink-0 text-ink-gray-4" aria-hidden="true" />
-            <EtapElement :el="el" :czas="czas" :ma-podzadania="maPodzadania(el.status)" :panel-otwarty="panelOtwarty">
-              <template #pigula="{ klasy }">
-                <MenuEtapu :klasy="klasy" :el="el" :czas="czas" :menu="menu" @wybierz="wybierz" />
-              </template>
-              <template #panel>
-                <button
-                  v-if="maPodzadania(el.status)"
-                  type="button"
-                  class="flex size-6 items-center justify-center rounded-full text-ink-gray-5 hover:bg-surface-gray-2"
-                  :title="__('Pokaż zadania etapu')"
-                  :aria-expanded="panelOtwarty"
-                  @click="panelOtwarty = !panelOtwarty"
-                >
-                  <span
-                    class="lucide-chevron-down size-3.5 transition-transform"
-                    :class="{ 'rotate-180': panelOtwarty }"
-                    aria-hidden="true"
-                  />
-                </button>
-              </template>
-            </EtapElement>
-          </template>
-          <template v-if="odznaka">
-            <span class="lucide-chevron-right size-3.5 shrink-0 text-ink-gray-4" aria-hidden="true" />
-            <MenuEtapu
-              :klasy="odznakaKlasy"
-              :el="{ stan: 'odznaka', nazwa: odznaka }"
-              :czas="null"
-              :menu="menu"
-              @wybierz="wybierz"
-            />
-          </template>
-        </div>
-
-        <!-- Forma zwarta -->
-        <div v-if="zwarty" class="flex items-center gap-1.5 whitespace-nowrap text-sm" data-testid="naglowek-zwarty">
-          <template v-if="zwartyElementy.zrobione > 0">
-            <span class="flex items-center gap-1 text-ink-gray-8">
-              <span class="lucide-check size-4 text-ink-green-3" aria-hidden="true" />
-              {{ etapyLiczba(zwartyElementy.zrobione) }}
-            </span>
-            <span class="lucide-chevron-right size-3.5 shrink-0 text-ink-gray-4" aria-hidden="true" />
-          </template>
-          <template v-if="zwartyElementy.biezacy">
-            <EtapElement
-              :el="zwartyElementy.biezacy"
-              :czas="czas"
-              :ma-podzadania="maPodzadania(zwartyElementy.biezacy.status)"
-              :panel-otwarty="panelOtwarty"
-            >
-              <template #pigula="{ klasy }">
-                <MenuEtapu :klasy="klasy" :el="zwartyElementy.biezacy" :czas="czas" :menu="menu" @wybierz="wybierz" />
-              </template>
-              <template #panel>
-                <button
-                  v-if="maPodzadania(zwartyElementy.biezacy.status)"
-                  type="button"
-                  class="flex size-6 items-center justify-center rounded-full text-ink-gray-5 hover:bg-surface-gray-2"
-                  :title="__('Pokaż zadania etapu')"
-                  @click="panelOtwarty = !panelOtwarty"
-                >
-                  <span class="lucide-chevron-down size-3.5" aria-hidden="true" />
-                </button>
-              </template>
-            </EtapElement>
-          </template>
-          <MenuEtapu
-            v-else-if="odznaka"
-            :klasy="odznakaKlasy"
-            :el="{ stan: 'odznaka', nazwa: odznaka }"
-            :czas="null"
-            :menu="menu"
-            @wybierz="wybierz"
-          />
-          <template v-if="zwartyElementy.nastepny">
-            <span class="lucide-chevron-right size-3.5 shrink-0 text-ink-gray-4" aria-hidden="true" />
-            <EtapElement :el="zwartyElementy.nastepny" :czas="null" />
-          </template>
-          <Tooltip v-if="zwartyElementy.reszta.length" :text="zwartyElementy.reszta.join(', ')">
+    <!-- Pasek etapów + następny krok -->
+    <div v-if="payload && tryb !== 'hidden'" class="mt-3 flex items-start gap-4">
+      <div class="min-w-0 flex-1">
+        <ol ref="kontenerRef" class="flex w-full items-start" data-testid="naglowek-proces">
+          <li
+            v-for="(el, i) in elementy"
+            :key="el.status"
+            class="relative flex min-w-0 flex-1 flex-col items-center"
+            :title="!el.etykieta ? el.nazwa : undefined"
+            :data-stan="el.stan"
+          >
             <span
-              class="rounded-full bg-surface-gray-2 px-2 py-0.5 text-xs text-ink-gray-6"
-              data-testid="naglowek-reszta"
+              v-if="i > 0"
+              class="absolute left-0 top-[14.5px] h-[3px] w-[calc(50%-20px)] rounded-full"
+              :class="liniaKlasa(i - 1)"
+              aria-hidden="true"
+            />
+            <span
+              v-if="i < elementy.length - 1"
+              class="absolute left-[calc(50%+20px)] right-0 top-[14.5px] h-[3px] rounded-full"
+              :class="liniaKlasa(i)"
+              aria-hidden="true"
+            />
+
+            <!-- Bieżący etap: kółko + etykieta to jedyna klikalna kontrolka (menu etapu) -->
+            <MenuEtapu v-if="el.stan === 'current'" :menu="menu" :wyrownanie="wyrownanie" @wybierz="wybierz">
+              <template #trigger="{ toggle, otwarte }">
+                <button
+                  type="button"
+                  class="flex max-w-full cursor-pointer flex-col items-center gap-1.5 rounded-md px-1 outline-none"
+                  data-testid="naglowek-pigula"
+                  aria-haspopup="menu"
+                  :aria-expanded="otwarte"
+                  @click="toggle"
+                >
+                  <span :class="[kolkoBaza, kolkoKlasa(el.stan)]">{{ el.numer }}</span>
+                  <span
+                    v-if="el.etykieta"
+                    class="flex items-center gap-0.5 text-center text-[13px] font-semibold leading-tight text-ink-blue-8"
+                  >
+                    <span class="line-clamp-2">{{ el.nazwa }}</span>
+                    <span class="lucide-chevron-down size-3.5 shrink-0" aria-hidden="true" />
+                  </span>
+                  <span v-if="!zwarty" class="text-xs text-ink-blue-8" data-testid="naglowek-teraz">
+                    {{ czas ? `Teraz \u00b7 ${czas}` : 'Teraz' }}
+                  </span>
+                </button>
+              </template>
+            </MenuEtapu>
+
+            <div v-else class="flex max-w-full flex-col items-center gap-1.5 px-1">
+              <span :class="[kolkoBaza, kolkoKlasa(el.stan)]">
+                <span v-if="el.stan === 'done'" class="lucide-check size-4.5" aria-hidden="true" />
+                <template v-else>{{ el.numer }}</template>
+              </span>
+              <span
+                v-if="el.etykieta"
+                class="line-clamp-2 text-center text-[13px] leading-tight"
+                :class="etykietaKlasa(el.stan)"
+              >
+                {{ el.nazwa }}
+              </span>
+            </div>
+
+            <button
+              v-if="!zwarty && el.stan === 'current' && maPodzadania(el.status)"
+              type="button"
+              class="mt-1 flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-ink-gray-6 hover:bg-surface-gray-2"
+              :aria-expanded="panelOtwarty"
+              @click="panelOtwarty = !panelOtwarty"
             >
-              +{{ zwartyElementy.reszta.length }}
-            </span>
-          </Tooltip>
+              {{ __('Zadania etapu') }}
+              <span class="lucide-chevron-down size-3.5 transition-transform" :class="{ 'rotate-180': panelOtwarty }" aria-hidden="true" />
+            </button>
+          </li>
+        </ol>
+
+        <!-- Forma zwarta: pełny tekst stanu pod paskiem -->
+        <div
+          v-if="zwarty && biezacy >= 0"
+          class="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"
+          data-testid="naglowek-etap-tekst"
+        >
+          <span class="font-medium text-ink-gray-9">{{ tekstStanu }}</span>
+          <span v-if="tekstNastepnego" class="text-ink-gray-5">{{ tekstNastepnego }}</span>
+          <button
+            v-if="maPodzadania(status)"
+            type="button"
+            class="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-ink-gray-6 hover:bg-surface-gray-2"
+            :aria-expanded="panelOtwarty"
+            :title="__('Pokaż zadania etapu')"
+            @click="panelOtwarty = !panelOtwarty"
+          >
+            {{ __('Zadania etapu') }}
+            <span class="lucide-chevron-down size-3.5 transition-transform" :class="{ 'rotate-180': panelOtwarty }" aria-hidden="true" />
+          </button>
         </div>
       </div>
 
-      <!-- Następny krok: JEDYNY przycisk główny -->
-      <div class="shrink-0">
+      <!-- Następny krok albo wynik terminalny: JEDYNY przycisk główny -->
+      <div class="shrink-0 pt-0.5">
+        <MenuEtapu v-if="odznaka" :menu="menu" wyrownanie="prawo" @wybierz="wybierz">
+          <template #trigger="{ toggle, otwarte }">
+            <button
+              type="button"
+              class="flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-sm font-semibold"
+              :class="odznakaKlasy"
+              data-testid="naglowek-odznaka"
+              aria-haspopup="menu"
+              :aria-expanded="otwarte"
+              @click="toggle"
+            >
+              {{ etykietaStatusu(odznaka) }}
+              <span class="lucide-chevron-down size-3.5" aria-hidden="true" />
+            </button>
+          </template>
+        </MenuEtapu>
         <Button
-          v-if="przyciskNastepnego"
+          v-else-if="przyciskNastepnego"
           variant="solid"
           theme="blue"
           :label="przyciskNastepnego.etykieta"
@@ -204,10 +193,10 @@
         />
         <span
           v-else-if="nastepny?.tekst"
-          class="flex items-center gap-1.5 text-sm text-ink-gray-5"
+          class="flex max-w-xs items-center gap-1.5 text-sm text-ink-gray-5"
           data-testid="naglowek-nastepny-tekst"
         >
-          <span v-if="nastepny.ikona" :class="'lucide-' + nastepny.ikona" class="size-4" aria-hidden="true" />
+          <span v-if="nastepny.ikona" :class="'lucide-' + nastepny.ikona" class="size-4 shrink-0" aria-hidden="true" />
           {{ nastepny.tekst }}
         </span>
       </div>
@@ -261,19 +250,24 @@ import {
   rodzajZmianyEtapu,
   terminalneStatusy,
 } from '@/utils/dealPipeline'
-import { czasWEtapie, etapyLiczba, etykietaStatusu, metaSzansy } from '@/utils/dealNaglowek'
+import {
+  czasWEtapie,
+  czyZwarty,
+  etykietaStatusu,
+  etykietaWidoczna,
+  tekstDalej,
+  tekstEtapu,
+} from '@/utils/dealNaglowek'
 
 const props = defineProps({
   dealId: { type: String, required: true },
   doc: { type: Object, required: true },
   okruszki: { type: Array, default: () => [] },
-  tytul: { type: String, default: '' },
-  maKlienta: { type: Boolean, default: false },
   tabs: { type: Array, default: () => [] },
   opcjeStatusow: { type: Array, default: () => [] },
   assignees: { type: Array, default: () => [] },
 })
-const emit = defineEmits(['klient', 'update:assignees'])
+const emit = defineEmits(['update:assignees'])
 const tabIndex = defineModel('tabIndex', { type: Number, default: 0 })
 
 const { getDealStatus } = statusesStore()
@@ -295,9 +289,13 @@ const statusType = computed(() => getDealStatus?.(status.value)?.type)
 const tryb = computed(() => bandMode(payload.value, status.value, statusType.value))
 const biezacy = computed(() => currentIndexFor(payload.value?.steps, status.value))
 const proces = computed(() => procesDlaRodzaju(props.doc.custom_rodzaj_umowy))
-const odznaka = computed(() => offPipelineBadge(payload.value, status.value, statusType.value))
+// Odznaka wyniku: status poza procesem albo ukończony proces (CP "Projekt rozliczony").
+const odznaka = computed(
+  () =>
+    offPipelineBadge(payload.value, status.value, statusType.value) ||
+    (tryb.value === 'won' ? status.value : null),
+)
 
-const meta = computed(() => metaSzansy(props.doc))
 const czas = computed(() => czasWEtapie(props.doc.status_change_log, status.value))
 
 const doradca = computed(() => {
@@ -320,21 +318,58 @@ const inicjaly = computed(() => {
     .join('')
 })
 
-// --- Elementy linii ---------------------------------------------------------
-const elementyPelne = computed(() =>
-  (payload.value?.steps || []).map((s) => {
-    const stan = nodeStateForMode(tryb.value, s.index, biezacy.value)
-    return {
-      status: s.status,
-      nazwa: __(s.status),
-      numer: s.index + 1,
-      stan,
-      // pigułka bieżącego etapu: tylko gdy status jest w procesie
-      pigula: s.index === biezacy.value,
-      wygrana: s.index === biezacy.value && tryb.value === 'won',
-    }
-  }),
+// --- Elementy paska ------------------------------------------------------------
+const kontenerRef = ref(null)
+const szerokosc = ref(0)
+let obserwator = null
+onMounted(() => {
+  obserwator = new ResizeObserver(([wpis]) => {
+    szerokosc.value = wpis?.contentRect?.width ?? 0
+  })
+  watch(
+    kontenerRef,
+    (el) => {
+      obserwator.disconnect()
+      if (el) {
+        szerokosc.value = el.clientWidth
+        obserwator.observe(el)
+      }
+    },
+    { immediate: true },
+  )
+})
+onBeforeUnmount(() => obserwator?.disconnect())
+
+const liczbaEtapow = computed(() => payload.value?.steps?.length || 0)
+const zwarty = computed(() => czyZwarty(liczbaEtapow.value, szerokosc.value))
+
+const elementy = computed(() =>
+  (payload.value?.steps || []).map((s) => ({
+    status: s.status,
+    nazwa: __(s.status),
+    numer: s.index + 1,
+    stan: nodeStateForMode(tryb.value, s.index, biezacy.value),
+    etykieta: etykietaWidoczna(s.index, biezacy.value, zwarty.value),
+  })),
 )
+
+const kolkoBaza =
+  'flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold'
+function kolkoKlasa(stan) {
+  if (stan === 'done') return 'bg-green-500 text-white'
+  if (stan === 'current') return 'bg-blue-500 text-white ring-4 ring-surface-blue-3'
+  if (stan === 'future') return 'border-2 border-outline-gray-3 bg-surface-base text-ink-gray-5'
+  return 'border-2 border-outline-gray-2 bg-surface-gray-2 text-ink-gray-4'
+}
+function etykietaKlasa(stan) {
+  if (stan === 'done') return 'text-ink-gray-8'
+  if (stan === 'future') return 'text-ink-gray-5'
+  return 'text-ink-gray-4'
+}
+// Odcinek za etapem i: zielony, gdy ten etap jest ukończony.
+function liniaKlasa(i) {
+  return elementy.value[i]?.stan === 'done' ? 'bg-green-500' : 'bg-surface-gray-3'
+}
 
 const odznakaKlasy = computed(() =>
   tryb.value === 'lost'
@@ -344,50 +379,16 @@ const odznakaKlasy = computed(() =>
       : 'border-outline-gray-2 bg-surface-gray-2 text-ink-gray-6',
 )
 
-const zwartyElementy = computed(() => {
-  const els = elementyPelne.value
-  const i = biezacy.value
-  if (i < 0) {
-    return { zrobione: tryb.value === 'won' ? els.length : 0, biezacy: null, nastepny: null, reszta: [] }
-  }
-  const nast = els[i + 1] || null
-  return {
-    zrobione: els.slice(0, i).length,
-    biezacy: els[i],
-    nastepny: nast ? { ...nast, stan: 'future' } : null,
-    reszta: els.slice(i + 2).map((e) => e.nazwa),
-  }
+const tekstStanu = computed(() =>
+  biezacy.value >= 0
+    ? tekstEtapu(biezacy.value, liczbaEtapow.value, __(status.value), czas.value)
+    : '',
+)
+const tekstNastepnego = computed(() => {
+  const t = tekstDalej(payload.value?.steps, biezacy.value)
+  return t ? `${__('Dalej')}: ${__(t.slice('Dalej: '.length))}` : ''
 })
-
-// --- Pomiar: forma zwarta, gdy pełna linia się nie mieści --------------------
-const kontenerRef = ref(null)
-const liniaPelnaRef = ref(null)
-const zwarty = ref(false)
-let obserwator = null
-
-function zmierz() {
-  const kontener = kontenerRef.value
-  const linia = liniaPelnaRef.value
-  if (!kontener || !linia) return
-  zwarty.value = linia.scrollWidth > kontener.clientWidth + 1
-}
-
-onMounted(() => {
-  obserwator = new ResizeObserver(zmierz)
-  watch(
-    [kontenerRef, liniaPelnaRef],
-    ([k, l]) => {
-      obserwator.disconnect()
-      if (k) obserwator.observe(k)
-      if (l) obserwator.observe(l)
-      nextTick(zmierz)
-    },
-    { immediate: true },
-  )
-})
-onBeforeUnmount(() => obserwator?.disconnect())
-// treść linii zmienia się (status, czas, payload): zmierz po aktualizacji DOM
-watch([elementyPelne, czas, odznaka], () => nextTick(zmierz))
+const wyrownanie = computed(() => (biezacy.value > liczbaEtapow.value / 2 ? 'prawo' : 'lewo'))
 
 // --- Podzadania (CP) ---------------------------------------------------------
 const panelOtwarty = ref(false)
@@ -428,7 +429,7 @@ const terminalne = computed(() =>
 )
 
 const menu = computed(() => ({
-  etapy: elementyPelne.value.map((e) => ({
+  etapy: elementy.value.map((e) => ({
     ...e,
     podpowiedz: podpowiedzEtapu(proces.value, e.status),
     biezacy: e.status === status.value,
@@ -502,60 +503,16 @@ function wybierz(wybor) {
   potwierdzenie.otwarte = true
 }
 
-// --- Małe komponenty renderujące ---------------------------------------------
-// Element linii: ukończony (ptaszek + nazwa), bieżący (pigułka z menu) albo
-// przyszły (kółko z numerem + nazwa).
-const EtapElement = defineComponent({
-  props: {
-    el: { type: Object, required: true },
-    czas: { type: String, default: null },
-    maPodzadania: { type: Boolean, default: false },
-    panelOtwarty: { type: Boolean, default: false },
-  },
-  setup(p, { slots }) {
-    return () => {
-      const el = p.el
-      if (el.pigula && slots.pigula) {
-        const klasy = el.wygrana
-          ? 'border-outline-green-3 bg-surface-green-2 text-ink-green-8'
-          : 'border-outline-blue-3 bg-surface-blue-2 text-ink-blue-8'
-        return h('span', { class: 'flex items-center gap-1' }, [
-          slots.pigula({ klasy }),
-          slots.panel?.(),
-        ])
-      }
-      if (el.stan === 'done') {
-        return h('span', { class: 'flex items-center gap-1 text-ink-gray-8' }, [
-          h('span', { class: 'lucide-check size-4 text-ink-green-3', 'aria-hidden': 'true' }),
-          el.nazwa,
-        ])
-      }
-      return h('span', { class: 'flex items-center gap-1.5 text-ink-gray-5' }, [
-        h(
-          'span',
-          {
-            class:
-              'flex size-5 shrink-0 items-center justify-center rounded-full border border-outline-gray-3 text-[11px]',
-          },
-          String(el.numer),
-        ),
-        el.nazwa,
-      ])
-    }
-  },
-})
-
-// Pigułka bieżącego etapu z menu (Popover frappe-ui nie jest potrzebny: menu to
-// zwykły panel pod przyciskiem, zamykany klikiem poza nim).
+// --- Menu etapu ----------------------------------------------------------------
+// Wyzwalacz dostarcza wołający (slot `trigger`); panel menu to zwykły blok pod
+// nim, zamykany klikiem poza nim.
 const MenuEtapu = defineComponent({
   props: {
-    klasy: { type: String, default: '' },
-    el: { type: Object, required: true },
-    czas: { type: String, default: null },
     menu: { type: Object, required: true },
+    wyrownanie: { type: String, default: 'lewo' },
   },
   emits: ['wybierz'],
-  setup(p, { emit: emitMenu }) {
+  setup(p, { emit: emitMenu, slots }) {
     const otwarte = ref(false)
     const korzen = ref(null)
     function poza(e) {
@@ -593,30 +550,16 @@ const MenuEtapu = defineComponent({
                 String(e.numer),
               ),
           h('span', { class: 'flex flex-col' }, [
-            h('span', null, [e.nazwa, e.biezacy && p.czas ? ` · ${p.czas}` : '']),
+            h('span', null, [e.nazwa, e.biezacy && czas.value ? ` \u00b7 ${czas.value}` : '']),
             e.podpowiedz ? h('span', { class: 'text-xs font-normal text-ink-gray-5' }, e.podpowiedz) : null,
           ]),
         ],
       )
     }
 
-    return () => {
-      const el = p.el
-      const etykieta = el.stan === 'odznaka' ? etykietaStatusu(el.nazwa) : el.nazwa
-      const tekst = el.stan === 'odznaka' || !p.czas ? etykieta : `${etykieta} · ${p.czas}`
-      return h('span', { class: 'relative inline-flex', ref: korzen }, [
-        h(
-          'button',
-          {
-            type: 'button',
-            'data-testid': 'naglowek-pigula',
-            class: `flex items-center gap-1 rounded-full border px-3 py-1 text-sm font-semibold ${p.klasy}`,
-            'aria-haspopup': 'menu',
-            'aria-expanded': otwarte.value,
-            onClick: () => (otwarte.value = !otwarte.value),
-          },
-          [tekst, h('span', { class: 'lucide-chevron-down size-3.5', 'aria-hidden': 'true' })],
-        ),
+    return () =>
+      h('div', { class: 'relative inline-flex max-w-full', ref: korzen }, [
+        slots.trigger?.({ toggle: () => (otwarte.value = !otwarte.value), otwarte: otwarte.value }),
         otwarte.value
           ? h(
               'div',
@@ -624,7 +567,8 @@ const MenuEtapu = defineComponent({
                 role: 'menu',
                 'data-testid': 'menu-etapu',
                 class:
-                  'absolute left-0 top-full z-50 mt-1.5 w-72 rounded-lg bg-surface-elevation-2 p-1.5 shadow-2xl ring-1 ring-black ring-opacity-5',
+                  'absolute top-full z-50 mt-1.5 w-72 rounded-lg bg-surface-elevation-2 p-1.5 shadow-2xl ring-1 ring-black ring-opacity-5 ' +
+                  (p.wyrownanie === 'prawo' ? 'right-0' : 'left-0'),
               },
               [
                 h('div', { class: 'px-2 pb-1 pt-1 text-xs font-medium text-ink-gray-5' }, __('Etap szansy')),
@@ -648,7 +592,6 @@ const MenuEtapu = defineComponent({
             )
           : null,
       ])
-    }
   },
 })
 </script>

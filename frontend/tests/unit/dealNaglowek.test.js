@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import {
-  skrotProduktu,
-  metaSzansy,
+  czyZwarty,
+  etykietaWidoczna,
+  czasOd,
+  tekstEtapu,
+  tekstDalej,
   etapyLiczba,
   poczatekEtapu,
   dniWEtapie,
@@ -17,47 +20,6 @@ import {
   pominieteEtapy,
   terminalneStatusy,
 } from '@/utils/dealPipeline'
-
-describe('skrotProduktu', () => {
-  it('skraca znane rodzaje', () => {
-    expect(skrotProduktu('Fotowoltaika')).toBe('PV')
-    expect(skrotProduktu('Fotowoltaika + Magazyn')).toBe('PV + ME')
-    expect(skrotProduktu('Magazyn energii')).toBe('ME')
-    expect(skrotProduktu('Czyste Powietrze')).toBe('Czyste Powietrze')
-  })
-  it('zostawia inne i puste', () => {
-    expect(skrotProduktu('Pompa ciepła')).toBe('Pompa ciepła')
-    expect(skrotProduktu('')).toBe('')
-    expect(skrotProduktu(null)).toBe('')
-  })
-})
-
-describe('metaSzansy', () => {
-  it('buduje pełną linię', () => {
-    expect(
-      metaSzansy({
-        custom_rodzaj_umowy: 'Fotowoltaika + Magazyn',
-        custom_pv_power_kwp: 5.5,
-        custom_pojemnosc_kwh: 33,
-        custom_install_city: 'Suchy Las',
-      }),
-    ).toBe('PV + ME · 5,5 kWp · 33 kWh · Suchy Las')
-  })
-  it('pomija puste i zerowe części', () => {
-    expect(
-      metaSzansy({
-        custom_rodzaj_umowy: 'Fotowoltaika',
-        custom_pv_power_kwp: '8.2',
-        custom_pojemnosc_kwh: 0,
-        custom_install_city: '  ',
-      }),
-    ).toBe('PV · 8,2 kWp')
-  })
-  it('puste dla braku dokumentu', () => {
-    expect(metaSzansy(null)).toBe('')
-    expect(metaSzansy({})).toBe('')
-  })
-})
 
 describe('etapyLiczba', () => {
   it('odmienia po polsku', () => {
@@ -177,5 +139,35 @@ describe('menu etapu', () => {
     }
     expect(terminalneStatusy(payload)).toEqual(['Wygrana', 'Przegrana'])
     expect(terminalneStatusy(null)).toEqual([])
+  })
+})
+
+describe('pasek etapów', () => {
+  it('forma zwarta dla długich procesów i wąskiego okna', () => {
+    expect(czyZwarty(12, 2000)).toBe(true)
+    expect(czyZwarty(5, 800)).toBe(false)
+    expect(czyZwarty(5, 400)).toBe(true)
+    expect(czyZwarty(5, 0)).toBe(false)
+  })
+  it('etykiety w formie zwartej tylko dla bieżącego i następnego', () => {
+    expect(etykietaWidoczna(3, 2, false)).toBe(true)
+    expect(etykietaWidoczna(2, 2, true)).toBe(true)
+    expect(etykietaWidoczna(3, 2, true)).toBe(true)
+    expect(etykietaWidoczna(4, 2, true)).toBe(false)
+    expect(etykietaWidoczna(1, 2, true)).toBe(false)
+    expect(etykietaWidoczna(0, -1, true)).toBe(false)
+  })
+  it('teksty stanu', () => {
+    expect(czasOd('dziś')).toBe('od dziś')
+    expect(czasOd('1 dzień')).toBe('od 1 dnia')
+    expect(czasOd('6 dni')).toBe('od 6 dni')
+    expect(czasOd(null)).toBe('')
+    expect(tekstEtapu(4, 12, 'Wniosek o dotację', '6 dni')).toBe(
+      'Etap 5 z 12: Wniosek o dotację \u00b7 od 6 dni',
+    )
+    expect(tekstEtapu(0, 5, 'Lead', null)).toBe('Etap 1 z 5: Lead')
+    const steps = [{ status: 'A', index: 0 }, { status: 'B', index: 1 }]
+    expect(tekstDalej(steps, 0)).toBe('Dalej: B')
+    expect(tekstDalej(steps, 1)).toBe('')
   })
 })
