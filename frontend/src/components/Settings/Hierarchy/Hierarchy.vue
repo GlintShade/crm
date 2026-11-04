@@ -313,7 +313,8 @@ const nodes = createListResource({
   doctype: DOCTYPE,
   fields: ['name', 'user', 'full_name', 'reports_to', 'is_group'],
   orderBy: 'lft asc',
-  pageLength: 0,
+  // frappe-ui zamienia pageLength 0 na 20, wiec drzewo widzialoby tylko 20 wezlow
+  pageLength: 10000,
   auto: true,
 })
 
