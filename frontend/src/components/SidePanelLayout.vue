@@ -174,7 +174,7 @@
                       ]"
                     >
                       <div
-                        class="valor-pola grid min-h-[28px] flex-1 items-center overflow-hidden text-base"
+                        class="wartosc-pola grid min-h-[28px] flex-1 items-center overflow-hidden text-base"
                       >
                         <div
                           v-if="
@@ -1064,18 +1064,22 @@ function firstVisibleIndex() {
    edytowalne), takze dla pol tylko do odczytu (disabled) i dla Select/Link.
    Etykiety zostaja szare (text-ink-gray-5), a placeholdery pustych pol
    (Wpisz/Wybierz, text-ink-gray-4) pozostaja szare. */
-.sections-karty :deep(.valor-pola),
-.sections-karty :deep(.valor-pola input),
-.sections-karty :deep(.valor-pola textarea),
-.sections-karty :deep(.valor-pola select),
-.sections-karty :deep(.valor-pola button),
-.sections-karty :deep(.valor-pola [class*='text-ink-gray-']:not(.text-ink-gray-4)) {
+.sections-karty :deep(.wartosc-pola),
+.sections-karty :deep(.wartosc-pola input),
+.sections-karty :deep(.wartosc-pola textarea),
+.sections-karty :deep(.wartosc-pola select),
+.sections-karty :deep(.wartosc-pola button),
+.sections-karty
+  :deep(
+    .wartosc-pola
+      [class*='text-ink-gray-']:not(.text-ink-gray-4):not([class*='lucide-']):not(svg)
+  ) {
   @apply text-ink-gray-8;
   -webkit-text-fill-color: currentColor;
   opacity: 1;
 }
-.sections-karty :deep(.valor-pola input::placeholder),
-.sections-karty :deep(.valor-pola textarea::placeholder) {
+.sections-karty :deep(.wartosc-pola input::placeholder),
+.sections-karty :deep(.wartosc-pola textarea::placeholder) {
   @apply text-ink-gray-4;
   -webkit-text-fill-color: currentColor;
 }
