@@ -138,7 +138,12 @@
                             'field flex min-w-0 flex-col gap-1 leading-5',
                             czySzerokiePole(field) && 'col-span-2',
                           ]
-                        : 'field flex items-center gap-2 px-3 leading-5 first:mt-3'
+                        : [
+                            'field flex gap-2 px-3 leading-5 first:mt-3',
+                            podpowiedzDlaPola(field)
+                              ? 'items-start'
+                              : 'items-center',
+                          ]
                     "
                   >
                     <Tooltip
@@ -150,7 +155,10 @@
                         :class="
                           karty
                             ? 'flex w-full items-center gap-0.5 px-2'
-                            : 'w-[35%] min-w-20 shrink-0 flex items-center gap-0.5'
+                            : [
+                                'w-[35%] min-w-20 shrink-0 flex items-center gap-0.5',
+                                podpowiedzDlaPola(field) && 'min-h-[28px]',
+                              ]
                         "
                       >
                         <div
@@ -414,13 +422,38 @@
                             fieldChange(flt($event.target.value), field)
                           "
                         />
-                        <CzasGgMmInput
+                        <div
                           v-else-if="field.fieldname === 'custom_czas_do_kontaktu'"
-                          class="form-control"
-                          :value="doc[field.fieldname]"
-                          :disabled="Boolean(field.read_only)"
-                          @change="(v) => fieldChange(v, field)"
-                        />
+                          class="flex min-w-0 flex-col"
+                        >
+                          <CzasGgMmInput
+                            class="form-control"
+                            :value="doc[field.fieldname]"
+                            :disabled="Boolean(field.read_only)"
+                            @change="(v) => fieldChange(v, field)"
+                          />
+                          <!-- b83: wiek leada do przepisania przez CC, tylko
+                               przy pustym i edytowalnym polu. Jedna linia o
+                               stalej wysokosci: opis moze sie obciac (waska
+                               kolumna siatki kart), gg:mm nigdy. Odswiezanie
+                               co minute nie przesuwa ukladu. Nic nie wpisuje
+                               do pola. -->
+                          <div
+                            v-if="podpowiedzDlaPola(field)"
+                            class="flex h-4 min-w-0 gap-1 whitespace-nowrap px-2 text-xs leading-4 tabular-nums text-ink-gray-5"
+                            :title="podpowiedzDlaPola(field).pelny"
+                          >
+                            <span class="truncate">
+                              {{ podpowiedzDlaPola(field).opis }}
+                            </span>
+                            <span
+                              v-if="podpowiedzDlaPola(field).ggmm"
+                              class="shrink-0"
+                            >
+                              ({{ podpowiedzDlaPola(field).ggmm }})
+                            </span>
+                          </div>
+                        </div>
                         <DurationInput
                           v-else-if="field.fieldtype === 'Duration'"
                           class="form-control"
@@ -593,9 +626,13 @@ import {
   interpolateTemplate,
 } from '@/utils'
 import { flt } from '@/utils/numberFormat.js'
-import { Tooltip, DatePicker, TimePicker, Switch } from 'frappe-ui'
+import { Tooltip, DatePicker, TimePicker, Switch, dayjsLocal } from 'frappe-ui'
 import { useDocument } from '@/data/document'
 import { probyKontaktuDoWyswietlenia } from '@/utils/leadyInline'
+import {
+  czesciPodpowiedzi,
+  czyPokazacPodpowiedz,
+} from '@/utils/podpowiedzKontaktu'
 import {
   ref,
   reactive,
@@ -603,6 +640,7 @@ import {
   getCurrentInstance,
   watch,
   nextTick,
+  onMounted,
   onBeforeUnmount,
 } from 'vue'
 
@@ -785,6 +823,36 @@ if (props.docname) {
 }
 
 const doc = computed(() => document.doc || {})
+
+// b83: wiek leada przy "Czas do pierwszego kontaktu". Tylko CRM Lead, poza
+// podgladem ukladu, tylko przy pustym i edytowalnym polu. Podpowiedz siedzi
+// w galezi pola, wiec kto nie widzi pola (permlevel 3), nie widzi tez
+// podpowiedzi. `creation` przychodzi w strefie systemu; dayjsLocal przelicza
+// na strefe przegladarki, tak samo jak lista leadow (Leads.vue).
+const teraz = ref(Date.now())
+let zegarPodpowiedzi = null
+
+onMounted(() => {
+  if (props.doctype !== 'CRM Lead' || props.preview) return
+  zegarPodpowiedzi = setInterval(() => (teraz.value = Date.now()), 60000)
+})
+
+onBeforeUnmount(() => clearInterval(zegarPodpowiedzi))
+
+const podpowiedzKontaktu = computed(() => {
+  if (props.doctype !== 'CRM Lead' || props.preview) return null
+  const creation = doc.value?.creation
+  if (!creation) return null
+  return czesciPodpowiedzi(dayjsLocal(creation).valueOf(), teraz.value)
+})
+
+function podpowiedzDlaPola(field) {
+  if (field.fieldname !== 'custom_czas_do_kontaktu') return null
+  if (!czyPokazacPodpowiedz(doc.value?.[field.fieldname], field.read_only)) {
+    return null
+  }
+  return podpowiedzKontaktu.value
+}
 
 const _sections = computed(() => {
   if (!props.sections?.length) return []
