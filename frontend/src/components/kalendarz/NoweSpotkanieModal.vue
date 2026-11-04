@@ -5,6 +5,9 @@
   Grafik dostępności (b82): dostępni w wybranym terminie na górze listy
   (decyzja 10), termin poza grafikiem daje ostrzeżenie i "Zapisz mimo to"
   (decyzja 6, bez blokady).
+  b84 (ops#332): lista leadów z crm.api.kalendarz.leady_do_spotkania (bez
+  leadów innego handlowca, przełącznik "Tylko leady z Facebooka") i pole
+  "Notatka", zapisywane jako komentarz leada razem z terminem.
 -->
 <template>
   <Dialog v-model:open="otwarte" :title="__('Nowe spotkanie')" size="md">
@@ -14,12 +17,35 @@
           <label class="mb-1 block text-xs text-ink-gray-5">{{
             __('Lead')
           }}</label>
-          <Link
-            doctype="CRM Lead"
+          <FormControl
+            v-model="tylkoFb"
+            type="checkbox"
+            class="mb-2"
+            :label="__('Tylko leady z Facebooka')"
+            data-testid="kalendarz-tylko-fb"
+          />
+          <Autocomplete
             :model-value="lead"
+            :options="opcjeLeadowLista"
+            :filterable="false"
             :placeholder="__('Szukaj leada')"
             @update:model-value="zmienLead"
-          />
+            @update:query="zmienTekst"
+          >
+            <template #item-label="{ option }">
+              <div class="flex flex-col gap-1">
+                <div class="flex-1 truncate font-semibold text-ink-gray-7">
+                  {{ option.label }}
+                </div>
+                <div
+                  v-if="option.description"
+                  class="flex-1 truncate text-sm text-ink-gray-5"
+                >
+                  {{ option.description }}
+                </div>
+              </div>
+            </template>
+          </Autocomplete>
         </div>
         <div class="grid grid-cols-2 gap-3">
           <FormControl
@@ -40,6 +66,14 @@
           type="select"
           :label="__('Handlowiec')"
           :options="opcjeHandlowcow"
+        />
+        <FormControl
+          v-model="notatka"
+          type="textarea"
+          :rows="3"
+          :label="__('Notatka')"
+          :placeholder="__('Opcjonalnie, trafi do komentarzy leada')"
+          data-testid="kalendarz-notatka"
         />
         <p v-if="podpowiedz" class="text-xs text-ink-amber-8">
           {{ podpowiedz }}
@@ -79,7 +113,9 @@ import {
   call,
   toast,
 } from 'frappe-ui'
-import Link from '@/components/Controls/Link.vue'
+import Autocomplete from '@/components/frappe-ui/Autocomplete.vue'
+import { watchDebounced } from '@vueuse/core'
+import { leadDozwolony, opcjeLeadow } from '@/utils/kalendarzLeady'
 import {
   opcjeGodzin,
   ostrzezenieGrafiku,
@@ -111,6 +147,16 @@ const godzina = ref('10:00')
 const handlowiec = ref('')
 const zapisuje = ref(false)
 const blad = ref('')
+const notatka = ref('')
+const tylkoFb = ref(true)
+const tekst = ref('')
+const wierszeLeadow = ref([])
+// Wybrana opcja (label, lead_owner): pole pokazuje nazwę także wtedy, gdy
+// lead wypadnie z bieżącego wyniku wyszukiwania.
+const wybranaOpcja = ref(null)
+const opcjeLeadowLista = computed(() =>
+  opcjeLeadow(wierszeLeadow.value, wybranaOpcja.value),
+)
 
 const opcjeGodzinSelect = opcjeGodzin().map((g) => ({ label: g, value: g }))
 const opcjeHandlowcow = computed(() => [
@@ -156,8 +202,57 @@ watch(
     data.value = props.poczatkowe.data || ''
     godzina.value = props.poczatkowe.godzina || '10:00'
     handlowiec.value = props.poczatkowe.handlowiec || ''
+    notatka.value = ''
+    tylkoFb.value = true
+    tekst.value = ''
+    wybranaOpcja.value = null
+    wierszeLeadow.value = []
+    zaladujLeady()
   },
 )
+
+// Handlowiec, po którym serwer filtruje listę (zakres "wlasny": serwer sam
+// bierze zalogowanego).
+const handlowiecFiltra = computed(() =>
+  props.zakres === 'wszyscy' ? handlowiec.value : '',
+)
+
+let numerZapytania = 0
+async function zaladujLeady() {
+  const numer = ++numerZapytania
+  try {
+    const wynik = await call('crm.api.kalendarz.leady_do_spotkania', {
+      tekst: tekst.value,
+      handlowiec: handlowiecFiltra.value || null,
+      tylko_fb: tylkoFb.value ? 1 : 0,
+    })
+    if (numer === numerZapytania) wierszeLeadow.value = wynik || []
+  } catch {
+    if (numer === numerZapytania) wierszeLeadow.value = []
+  }
+}
+
+function zmienTekst(wartosc) {
+  tekst.value = wartosc || ''
+}
+
+watchDebounced(tekst, () => props.modelValue && zaladujLeady(), {
+  debounce: 300,
+})
+
+// Zmiana handlowca lub przełącznika: odśwież listę; wybrany lead innego
+// handlowca przestaje być dozwolony, więc wybór jest czyszczony.
+watch([handlowiecFiltra, tylkoFb], () => {
+  if (!props.modelValue) return
+  if (
+    wybranaOpcja.value &&
+    !leadDozwolony(wybranaOpcja.value.lead_owner, handlowiecFiltra.value)
+  ) {
+    lead.value = ''
+    wybranaOpcja.value = null
+  }
+  zaladujLeady()
+})
 
 const podpowiedz = computed(() => {
   const h = props.handlowcy.find((x) => x.user === handlowiec.value)
@@ -165,25 +260,19 @@ const podpowiedz = computed(() => {
   return podpowiedzDnia(h.full_name, props.spotkania[h.user], data.value)
 })
 
-async function zmienLead(wartosc) {
-  lead.value = wartosc || ''
+function zmienLead(wartosc) {
+  // Autocomplete oddaje całą opcję albo null (przycisk czyszczenia).
+  const nazwa = typeof wartosc === 'string' ? wartosc : wartosc?.value || ''
+  lead.value = nazwa
+  wybranaOpcja.value = !nazwa
+    ? null
+    : typeof wartosc === 'object'
+      ? wartosc
+      : opcjeLeadowLista.value.find((o) => o.value === nazwa) || null
   if (!lead.value || handlowiec.value || props.zakres !== 'wszyscy') return
-  try {
-    const odp = await call('frappe.client.get_value', {
-      doctype: 'CRM Lead',
-      filters: { name: lead.value },
-      fieldname: 'lead_owner',
-    })
-    const wlasciciel = odp?.lead_owner
-    if (
-      wlasciciel &&
-      props.handlowcy.some((h) => h.user === wlasciciel) &&
-      !handlowiec.value
-    ) {
-      handlowiec.value = wlasciciel
-    }
-  } catch (e) {
-    // Podpowiedź właściciela jest opcjonalna, błąd odczytu nie blokuje formularza.
+  const wlasciciel = wybranaOpcja.value?.lead_owner
+  if (wlasciciel && props.handlowcy.some((h) => h.user === wlasciciel)) {
+    handlowiec.value = wlasciciel
   }
 }
 
@@ -207,6 +296,7 @@ async function zapisz() {
         props.zakres === 'wszyscy' && handlowiec.value
           ? handlowiec.value
           : null,
+      notatka: notatka.value.trim() ? notatka.value : null,
     })
     toast.success(__('Spotkanie zapisane'))
     otwarte.value = false
