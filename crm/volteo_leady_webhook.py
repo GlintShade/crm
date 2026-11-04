@@ -176,6 +176,10 @@ def normalizuj_system_rozliczen(tekst: str) -> str | None:
 def normalizuj_produkt_reklamy(tekst: str) -> str | None:
 	"""Mapuje produkt z reklamy na token `KOLEJNOSC_PRODUKTOW_PROCESU`.
 
+	WYLACZONE z webhooka decyzja wlasciciela 2026-11-04: `zbuduj_leada_z_webhooka` juz tego nie
+	wywoluje (wartosc `produkt` od agencji jest per formularz, nie per klient). Funkcja zostaje
+	wraz z testami (polityka: wygaszaj, nie usuwaj).
+
 	PV + magazyn / `pvme` -> `PVME`, sam magazyn / `me` -> `ME`, sam `pv` -> `PV`,
 	pompa ciepla / `pc` -> `PC`, czyste powietrze / `cp` -> `CP`. Kazde nieznane
 	slowo albo mieszanka rodzin (np. PV i pompa) -> `None` (surowy tekst idzie do Uwag)."""
@@ -349,15 +353,9 @@ def zbuduj_leada_z_webhooka(ladunek: Mapping[str, Any], dzisiaj: str) -> dict[st
 			linie_odpowiedzi.append("System rozliczen (klient bez PV): %s" % etykieta_sys)
 	posiada = posiada or ""
 
-	# Produkt z reklamy
-	produkt_surowy = _tekst(dane.get("produkt"))
-	produkt = ""
-	if produkt_surowy:
-		rozpoznany = normalizuj_produkt_reklamy(produkt_surowy)
-		if rozpoznany is None:
-			linie_odpowiedzi.append("Produkt (nierozpoznany): %s" % produkt_surowy)
-		else:
-			produkt = rozpoznany
+	# Produkt z reklamy: klucz `produkt` jest CELOWO ignorowany (decyzja wlasciciela 2026-11-04).
+	# Agencja ustawia go per formularz w scenariuszu Make, nie per klient, wiec wprowadzal
+	# call center w blad. Wartosc nie trafia ani do `custom_produkt_procesu`, ani do Uwag.
 
 	# Data zgloszenia
 	data_surowa = _tekst(dane.get("data_zgloszenia"))
@@ -407,7 +405,6 @@ def zbuduj_leada_z_webhooka(ladunek: Mapping[str, Any], dzisiaj: str) -> dict[st
 		"custom_install_postal_code": kod,
 		"custom_posiadane_produkty": posiada,
 		"custom_zasady_dotacji": zasady,
-		"custom_produkt_procesu": produkt,
 		"facebook_form_id": _tekst(dane.get("facebook_form_id")),
 	}
 	return {**wynik, **{k: v for k, v in opcjonalne.items() if v}}

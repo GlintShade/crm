@@ -221,7 +221,6 @@ class TestPelnyLadunek(unittest.TestCase):
 				"custom_install_city": "Poznań",
 				"custom_posiadane_produkty": "PV",
 				"custom_zasady_dotacji": "Nowe zasady",
-				"custom_produkt_procesu": "PVME",
 				"custom_uwagi_import": SEPARATOR_UWAG.join(
 					[
 						"Zrodlo: Facebook Lead Ads",
@@ -476,10 +475,13 @@ class TestPolaLadunku(unittest.TestCase):
 		self.assertNotIn("custom_posiadane_produkty", w)
 		self.assertIn("Posiada PV (nierozpoznane): moze", uwagi(w))
 
-	def test_produkt_nierozpoznany(self):
-		w = zbuduj_leada_z_webhooka(ladunek(produkt="klimatyzacja"), DZIS)
-		self.assertNotIn("custom_produkt_procesu", w)
-		self.assertIn("Produkt (nierozpoznany): klimatyzacja", uwagi(w))
+	def test_produkt_z_reklamy_ignorowany(self):
+		for surowy in ("MAG", "PV + magazyn", "klimatyzacja", "x y"):
+			with self.subTest(surowy=surowy):
+				w = zbuduj_leada_z_webhooka(ladunek(produkt=surowy), DZIS)
+				self.assertNotIn("custom_produkt_procesu", w)
+				self.assertNotIn(surowy, w["custom_uwagi_import"])
+				self.assertNotIn("Produkt", w["custom_uwagi_import"])
 
 	def test_pusta_data_to_dzisiaj(self):
 		w = zbuduj_leada_z_webhooka(ladunek(data_zgloszenia=""), DZIS)
@@ -498,10 +500,9 @@ class TestPolaLadunku(unittest.TestCase):
 		)
 
 	def test_odpowiedzi_slownik_na_koncu(self):
-		w = zbuduj_leada_z_webhooka(ladunek(produkt="x y", odpowiedzi={"Rachunek": "400 zł"}), DZIS)
+		w = zbuduj_leada_z_webhooka(ladunek(odpowiedzi={"Rachunek": "400 zł"}), DZIS)
 		linie = uwagi(w)
 		self.assertEqual(linie[-1], "Rachunek: 400 zł")
-		self.assertLess(linie.index("Produkt (nierozpoznany): x y"), len(linie) - 1)
 
 	def test_odpowiedzi_lista_facebookowa(self):
 		w = zbuduj_leada_z_webhooka(ladunek(odpowiedzi=[{"name": "Dach", "values": ["skośny"]}]), DZIS)
@@ -746,7 +747,7 @@ class TestPonowneZgloszenie(unittest.TestCase):
 		wynik = pola_do_scalenia(ist, self.nowy)
 		self.assertEqual(wynik["custom_posiadane_produkty"], "PV")
 		self.assertEqual(wynik["custom_zasady_dotacji"], "Nowe zasady")
-		self.assertEqual(wynik["custom_produkt_procesu"], "PV")
+		self.assertNotIn("custom_produkt_procesu", wynik)
 
 	def test_tagi_wypelnione_zostaja(self):
 		ist = {
