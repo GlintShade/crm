@@ -179,7 +179,7 @@
 
         <!-- Wariant "pasek": blok z numerem i nazwą etapu + segmenty -->
         <div v-else class="flex items-start gap-6" data-testid="naglowek-pasek">
-          <div class="w-56 shrink-0 xl:w-72">
+          <div class="w-52 shrink-0 xl:w-60">
             <div class="text-[13px] text-ink-gray-5">
               {{ biezacy >= 0 ? tekstNumeruEtapu(biezacy, liczbaEtapow) : __('Status') }}
             </div>
@@ -214,30 +214,33 @@
             >
               {{ etykietaStatusu(__(status)) }}
             </div>
-            <div v-if="tryb === 'progress' && czas" class="mt-0.5 text-[13px] text-ink-gray-7">
-              {{ czasOd(czas) }}
+            <div class="mt-0.5 min-h-[18px] text-[13px] text-ink-gray-7">
+              {{ tryb === 'progress' && czas ? czasOd(czas) : '' }}
             </div>
           </div>
           <div
             ref="segmentyRef"
             class="flex min-w-0 flex-1 items-start"
-            :class="zwarty ? 'gap-1.5 pb-7' : 'gap-2'"
+            :class="zwarty ? 'mt-[28px] gap-1.5 pb-[66px]' : 'max-w-[480px] gap-2 self-center'"
             data-testid="naglowek-segmenty"
           >
             <div
               v-for="(el, i) in elementy"
               :key="el.status"
-              class="relative flex min-w-0 flex-1 flex-col gap-1.5"
-              :title="el.etykieta ? undefined : el.nazwa"
+              class="relative flex min-w-0 flex-col gap-1.5"
+              :class="zwarty && el.stan === 'current' ? 'flex-[2.75]' : 'flex-1'"
+              :title="el.nazwa"
               :data-stan="el.stan"
             >
-              <span class="h-2.5 w-full rounded-full" :class="segmentKlasa(el.stan)" />
-              <!-- W formie zwartej etykieta bieżącego etapu jest poza przepływem
-                   (nie dławi wąskiego segmentu), dociśnięta do krawędzi paska
-                   przy ostatnich etapach. -->
+              <span class="h-2 w-full rounded-full" :class="segmentKlasa(el.stan)" />
+              <!-- Etykiety: w formie pełnej pod własnym segmentem (do 2 linii);
+                   w zwartej (12 etapów) każda pod swoim segmentem, ale w dwóch
+                   naprzemiennych rzędach (nieparzyste wyżej, parzyste niżej),
+                   każda wyśrodkowana i szersza niż segment, żeby żadna nie
+                   zachodziła na sąsiadkę z tego samego rzędu. -->
               <span
-                v-if="el.etykieta"
-                class="text-left text-[13px] leading-tight"
+                data-testid="pasek-etykieta"
+                class="leading-tight"
                 :class="[
                   el.stan === 'current'
                     ? 'font-semibold text-ink-gray-9'
@@ -246,10 +249,18 @@
                       : 'text-ink-gray-4',
                   zwarty
                     ? [
-                        'absolute top-[calc(100%+6px)] w-max max-w-[10rem]',
-                        i > elementy.length * 0.7 ? 'right-0 text-right' : 'left-0',
+                        'absolute',
+                        el.stan === 'current' ? 'text-[13px]' : 'text-[11px]',
+                        i % 2 === 0 ? 'top-[calc(100%+6px)]' : 'top-[calc(100%+37px)]',
+                        el.stan === 'current'
+                          ? 'left-0 w-full text-center'
+                          : i === 0
+                            ? 'left-0 w-[calc(150%+3px)] text-left'
+                            : i === elementy.length - 1
+                              ? 'right-0 w-[calc(150%+3px)] text-right'
+                              : 'left-1/2 w-[calc(200%+3px)] -translate-x-1/2 text-center',
                       ]
-                    : 'line-clamp-2',
+                    : 'line-clamp-2 text-left text-[12px]',
                 ]"
               >
                 {{ el.nazwa }}
@@ -262,6 +273,9 @@
           class="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"
           data-testid="naglowek-etap-tekst"
         >
+          <span v-if="nastepny?.tekst && zwarty" class="text-ink-gray-5" data-testid="naglowek-nastepny-tekst-dol">
+            {{ nastepny.tekst }}
+          </span>
           <span v-if="tekstNastepnego" class="text-ink-gray-5">{{ tekstNastepnego }}</span>
           <button
             v-if="maPodzadania(status)"
@@ -278,7 +292,7 @@
       </div>
 
       <!-- Następny krok albo wynik terminalny: JEDYNY przycisk główny -->
-      <div class="shrink-0 pt-0.5">
+      <div class="shrink-0" :class="wariant === 'pasek' ? 'pt-[18px]' : 'pt-0.5'">
         <MenuEtapu v-if="odznaka" :menu="menu" :wariant="wariant" wyrownanie="prawo" @wybierz="wybierz" @przelacz="ustawWariant">
           <template #trigger="{ toggle, otwarte }">
             <button
@@ -305,7 +319,7 @@
           @click="przejdzDoZakladki(przyciskNastepnego.indeks)"
         />
         <span
-          v-else-if="nastepny?.tekst"
+          v-else-if="nastepny?.tekst && !(wariant === 'pasek' && zwarty)"
           class="flex max-w-xs items-center gap-1.5 text-sm text-ink-gray-5"
           data-testid="naglowek-nastepny-tekst"
         >
