@@ -21,7 +21,7 @@
       :licznik="licznikOtwartych"
       :licznikMotyw="motywLicznika"
       :opened="otwarte"
-      @toggle="otwarte = !otwarte"
+      @toggle="przelaczOtwarte"
     >
       <template #actions>
         <Button variant="ghost" class="w-7" icon="lucide-plus" @click="showTask()" />
@@ -109,17 +109,27 @@ import { createResource, call, Button } from 'frappe-ui'
 import KartaSekcji from '@/components/KartaSekcji.vue'
 import ZakonczoneZadania from '@/components/ZakonczoneZadania.vue'
 import { motywLicznikaZadan, podsumowanieZadan, podzielZadania } from '@/utils/panelBoczny'
+import { useStanSekcjiPanelu } from '@/composables/useStanSekcjiPanelu'
+import { SEKCJA_ZADANIA } from '@/utils/stanSekcjiPanelu'
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 
 const props = defineProps({
   doctype: { type: String, required: true },
   docname: { type: String, required: true },
   karty: { type: Boolean, default: false },
-  // Karta zadan startuje zwinieta przy kazdym wejsciu na rekord.
+  // Karta zadan bez zapamietanego stanu startuje zwinieta (zapis
+  // uzytkownika wygrywa, ops#330).
   startZwiniete: { type: Boolean, default: false },
 })
 
-const otwarte = ref(!props.startZwiniete)
+// Stan karty w tej samej pamieci co sekcje panelu (ops#330).
+const stanSekcji = useStanSekcjiPanelu(() => props.doctype)
+const otwarte = computed(() =>
+  stanSekcji.czyOtwarta(SEKCJA_ZADANIA, !props.startZwiniete),
+)
+function przelaczOtwarte() {
+  stanSekcji.ustaw(SEKCJA_ZADANIA, !otwarte.value)
+}
 const pokazZakonczone = ref(false)
 
 // Stan przejsciowy (5 s) po oznaczeniu zadania jako zakonczone: wiersz zostaje
@@ -186,7 +196,6 @@ const tasks = createResource({
 watch(
   () => props.docname,
   () => {
-    if (props.startZwiniete) otwarte.value = false
     pokazZakonczone.value = false
     wyczyscWszystkiePrzejsciowe()
     tasks.reload()
