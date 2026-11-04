@@ -23,47 +23,87 @@
         @click="emit('otworz-klienta')"
       />
     </div>
-    <div v-if="telefon && href" class="flex min-w-0">
-      <Button
-        v-if="wlasneZadzwon"
-        size="sm"
-        variant="subtle"
-        iconLeft="lucide-phone"
-        :label="telefonWyswietlany"
-        :tooltip="__('Zadzwoń')"
-        data-testid="panel-telefon"
-        @click="emit('zadzwon')"
-      />
-      <Button
-        v-else
-        size="sm"
-        variant="subtle"
-        iconLeft="lucide-phone"
-        :link="href"
-        :label="telefonWyswietlany"
-        :tooltip="__('Zadzwoń')"
-        data-testid="panel-telefon"
-      />
+    <div class="flex flex-col items-start gap-1">
+      <div v-if="telefon" :class="wiersz" data-testid="panel-telefon-wiersz">
+        <button
+          v-if="href && wlasneZadzwon"
+          type="button"
+          :class="glowny"
+          :title="__('Zadzwoń')"
+          data-testid="panel-telefon"
+          @click="emit('zadzwon')"
+        >
+          <span :class="ikona" class="lucide-phone" aria-hidden="true" />
+          <span class="truncate">{{ telefonWyswietlany }}</span>
+        </button>
+        <a
+          v-else-if="href"
+          :href="href"
+          :class="glowny"
+          :title="__('Zadzwoń')"
+          data-testid="panel-telefon"
+        >
+          <span :class="ikona" class="lucide-phone" aria-hidden="true" />
+          <span class="truncate">{{ telefonWyswietlany }}</span>
+        </a>
+        <span v-else :class="glowny" data-testid="panel-telefon">
+          <span :class="ikona" class="lucide-phone" aria-hidden="true" />
+          <span class="truncate">{{ telefonWyswietlany }}</span>
+        </span>
+        <button
+          type="button"
+          :class="kopiuj"
+          :title="__('Kopiuj numer telefonu')"
+          data-testid="panel-telefon-kopiuj"
+          @click.stop.prevent="copyToClipboard(telefonSurowy)"
+        >
+          <span class="lucide-copy size-3.5" aria-hidden="true" />
+        </button>
+      </div>
+      <div v-if="email" :class="wiersz" data-testid="panel-email-wiersz">
+        <a
+          :href="'mailto:' + email"
+          :class="glowny"
+          :title="__('Napisz e-mail')"
+          data-testid="panel-email"
+        >
+          <span :class="ikona" class="lucide-mail" aria-hidden="true" />
+          <span class="truncate">{{ email }}</span>
+        </a>
+        <button
+          type="button"
+          :class="kopiuj"
+          :title="__('Kopiuj e-mail')"
+          data-testid="panel-email-kopiuj"
+          @click.stop.prevent="copyToClipboard(email)"
+        >
+          <span class="lucide-copy size-3.5" aria-hidden="true" />
+        </button>
+      </div>
     </div>
-    <div v-else-if="telefon" class="flex min-w-0 items-center gap-2 text-[12.5px] text-ink-gray-8">
-      <span class="lucide-phone size-3.5 shrink-0 text-ink-gray-5" aria-hidden="true" />
-      <span class="min-w-0 flex-1 truncate">{{ telefonWyswietlany }}</span>
-    </div>
-    <div v-if="email" class="flex min-w-0 items-center gap-2 text-[12.5px] text-ink-gray-8">
-      <span class="lucide-mail size-3.5 shrink-0 text-ink-gray-5" aria-hidden="true" />
-      <span class="min-w-0 flex-1 truncate" :title="email">{{ email }}</span>
-    </div>
-    <div class="flex min-w-0 items-center gap-2 text-xs text-ink-gray-5">
-      <button
-        type="button"
-        class="flex min-w-0 items-center gap-1.5 rounded-full bg-surface-gray-2 px-2 py-0.5 hover:bg-surface-gray-3"
-        :title="__('Kopiuj numer rekordu')"
-        @click="copyToClipboard(rekord)"
-      >
-        <span class="truncate">{{ __(rekord) }}</span>
-        <span class="lucide-copy size-3 shrink-0" aria-hidden="true" />
-      </button>
-      <div class="ml-auto flex shrink-0 items-center gap-1.5">
+    <div class="flex min-w-0 items-center gap-2">
+      <div :class="wiersz" data-testid="panel-rekord-wiersz">
+        <button
+          type="button"
+          :class="glowny"
+          :title="__('Kopiuj numer')"
+          data-testid="panel-rekord"
+          @click="copyToClipboard(rekord)"
+        >
+          <span :class="ikona" class="lucide-hash" aria-hidden="true" />
+          <span class="truncate">{{ __(rekord) }}</span>
+        </button>
+        <button
+          type="button"
+          :class="kopiuj"
+          :title="__('Kopiuj numer')"
+          data-testid="panel-rekord-kopiuj"
+          @click.stop.prevent="copyToClipboard(rekord)"
+        >
+          <span class="lucide-copy size-3.5" aria-hidden="true" />
+        </button>
+      </div>
+      <div class="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-ink-gray-5">
         <span>{{ __('Ukryj puste') }}</span>
         <Switch size="sm" v-model="ukryjPuste" />
       </div>
@@ -88,6 +128,19 @@ const props = defineProps({
   wlasneZadzwon: { type: Boolean, default: false },
 })
 const emit = defineEmits(['otworz-klienta', 'zadzwon'])
+
+// Jeden format dla telefonu, e-maila i numeru rekordu.
+const wiersz =
+  'flex h-7 min-w-0 max-w-full items-center gap-1 rounded-md bg-surface-gray-2 pl-2 pr-1 text-[13px] text-ink-gray-8 hover:bg-surface-gray-3'
+const glowny = 'flex h-full min-w-0 items-center gap-1.5'
+const ikona = 'size-3.5 shrink-0 text-ink-gray-5'
+const kopiuj =
+  'grid size-5 shrink-0 place-items-center rounded text-ink-gray-5 hover:text-ink-gray-8'
+// Do schowka idzie numer bez spacji, z plusem, jesli byl.
+const telefonSurowy = computed(() => {
+  const t = (props.telefon || '').trim()
+  return (t.startsWith('+') ? '+' : '') + t.replace(/\D/g, '')
+})
 
 const { ukryjPuste } = useUkryjPustePola()
 const href = computed(() => telHref(props.telefon))
