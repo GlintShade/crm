@@ -4,8 +4,8 @@
 // data/kodPocztowy.js (pobierzDaneKodu, uzupelnijAdresLeadaZKodu).
 //
 // API: crm.api.kod_pocztowy.wyszukaj -> { found, wojewodztwo, powiat, gmina,
-// miejscowosc, cities } (ten sam ksztalt co Server Script volteo_postal_lookup
-// uzywany przez ContactModal.vue).
+// miejscowosc, cities } (ten sam ksztalt co dawny Server Script volteo_postal_lookup;
+// od ops#329 wolaja to tez ContactModal.vue i DaneKlientaTab.vue).
 
 export const WZOR_KODU_POCZTOWEGO = /^\d{2}-\d{3}$/
 
@@ -61,13 +61,28 @@ export function latkaAdresuZKodu(doc, wynik) {
   return latka
 }
 
+// "Ukryj puste pola" (ops#329): pusta, edytowalna Miejscowosc leada zostaje
+// widoczna, gdy kod leada ma liste miejscowosci do wyboru (wtedy jest
+// najbardziej potrzebna). Bez listy ukrywa sie jak kazde puste pole.
+// `listaDlaKodu` to funkcja: wolana dopiero dla pola Miejscowosc leada, zeby
+// inne puste pola nie uruchamialy lookupu.
+export function czyPokazacPustaMiejscowosc(doctype, field, listaDlaKodu) {
+  if (doctype !== 'CRM Lead' || field?.fieldname !== POLE_MIEJSCOWOSCI) {
+    return false
+  }
+  if (field.read_only) return false
+  const lista = listaDlaKodu()
+  return Array.isArray(lista) && lista.length > 0
+}
+
 export const BRAK_WYNIKU = Object.freeze({ found: false, cities: [] })
 
 // Lookup z pamiecia per kod: wspolna obietnica dla wszystkich instancji
 // panelu (Lead.vue renderuje dwa SidePanelLayout na tym samym leadzie).
 // Blad API nie zostaje w pamieci (kolejna proba pyta ponownie) i nigdy nie
-// wychodzi na zewnatrz: wynik to BRAK_WYNIKU.
-export function utworzLookup(wywolaj) {
+// wychodzi na zewnatrz: wynik to BRAK_WYNIKU. `poWyniku(kod, wynik)` (opcja)
+// dostaje kazdy udany wynik, raz na kod (np. do reaktywnej pamieci list).
+export function utworzLookup(wywolaj, poWyniku = null) {
   const pamiec = new Map()
   return function pobierz(kod) {
     const k = tekst(kod)
@@ -75,7 +90,11 @@ export function utworzLookup(wywolaj) {
     if (!pamiec.has(k)) {
       const obietnica = Promise.resolve()
         .then(() => wywolaj(k))
-        .then((w) => w || BRAK_WYNIKU)
+        .then((w) => {
+          const wynik = w || BRAK_WYNIKU
+          if (poWyniku) poWyniku(k, wynik)
+          return wynik
+        })
         .catch(() => {
           pamiec.delete(k)
           return BRAK_WYNIKU

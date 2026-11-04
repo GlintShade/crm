@@ -628,7 +628,11 @@ import {
   zapiszOtwartaSekcje,
 } from '@/utils/panelBoczny'
 import { useUkryjPustePola } from '@/composables/useUkryjPustePola'
-import { uzupelnijAdresLeadaZKodu } from '@/data/kodPocztowy'
+import {
+  miejscowosciKodu,
+  uzupelnijAdresLeadaZKodu,
+} from '@/data/kodPocztowy'
+import { czyPokazacPustaMiejscowosc } from '@/utils/kodPocztowy'
 import { usersStore } from '@/stores/users'
 import { isMobileView } from '@/composables/settings'
 import {
@@ -960,7 +964,10 @@ function parsedField(field) {
   _field.visible = isFieldVisible(_field, overrides?.hidden)
   _field.visible =
     _field.visible &&
-    !czyUkrycPole(_field, doc.value?.[_field.fieldname], ukryjPuste.value && !props.preview)
+    (!czyUkrycPole(_field, doc.value?.[_field.fieldname], ukryjPuste.value && !props.preview) ||
+      czyPokazacPustaMiejscowosc(props.doctype, _field, () =>
+        miejscowosciKodu(doc.value?.custom_install_postal_code),
+      ))
   return _field
 }
 

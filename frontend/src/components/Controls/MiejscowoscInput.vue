@@ -8,7 +8,9 @@
 
   Lookup po ZMIANIE kodu (uzupelnienie wojewodztwa, powiatu, gminy) robi
   SidePanelLayout.vue przy zapisie kodu; ten komponent tylko czyta liste
-  (wspolna pamiec per kod w data/kodPocztowy.js, bez podwojnych zapytan).
+  (wspolna reaktywna pamiec per kod w data/kodPocztowy.js, bez podwojnych
+  zapytan). Przy "Ukryj puste pola" pusta Miejscowosc z lista zostaje
+  widoczna (SidePanelLayout.vue, czyPokazacPustaMiejscowosc).
 -->
 <template>
   <div class="flex min-w-0 items-center gap-0.5">
@@ -41,13 +43,9 @@
 
 <script setup>
 import { Dropdown } from 'frappe-ui'
-import { computed, ref, watch } from 'vue'
-import { pobierzDaneKodu } from '@/data/kodPocztowy'
-import {
-  czyKodPocztowy,
-  czyPokazacListe,
-  listaMiejscowosci,
-} from '@/utils/kodPocztowy'
+import { computed } from 'vue'
+import { miejscowosciKodu } from '@/data/kodPocztowy'
+import { czyPokazacListe } from '@/utils/kodPocztowy'
 
 const props = defineProps({
   value: { type: String, default: '' },
@@ -58,18 +56,9 @@ const props = defineProps({
 
 const emit = defineEmits(['change'])
 
-const lista = ref([])
-
-watch(
-  () => props.kod,
-  async (kod) => {
-    lista.value = []
-    if (props.disabled || !czyKodPocztowy(kod)) return
-    const wynik = await pobierzDaneKodu(kod)
-    if (props.kod !== kod) return
-    lista.value = listaMiejscowosci(wynik)
-  },
-  { immediate: true },
+// Reaktywna lista dla kodu leada; pierwszy odczyt uruchamia lookup w tle.
+const lista = computed(() =>
+  props.disabled ? [] : miejscowosciKodu(props.kod),
 )
 
 const opcje = computed(() =>

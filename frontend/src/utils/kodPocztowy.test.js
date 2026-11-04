@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   BRAK_WYNIKU,
   czyKodPocztowy,
+  czyPokazacPustaMiejscowosc,
   czyPokazacListe,
   latkaAdresuZKodu,
   listaMiejscowosci,
@@ -175,5 +176,61 @@ describe('uzupelnijAdresZKodu', () => {
       ),
     ).toEqual({})
     expect(pobierz).not.toHaveBeenCalled()
+  })
+})
+
+describe('czyPokazacPustaMiejscowosc', () => {
+  const pole = { fieldname: 'custom_install_city' }
+
+  it('pusta miejscowosc leada z lista zostaje widoczna', () => {
+    expect(czyPokazacPustaMiejscowosc('CRM Lead', pole, () => ['A'])).toBe(true)
+  })
+
+  it('bez listy, read-only, inne pole albo doctype: ukrywanie jak zwykle', () => {
+    expect(czyPokazacPustaMiejscowosc('CRM Lead', pole, () => [])).toBe(false)
+    expect(
+      czyPokazacPustaMiejscowosc('CRM Lead', { ...pole, read_only: 1 }, () => [
+        'A',
+      ]),
+    ).toBe(false)
+    expect(czyPokazacPustaMiejscowosc('CRM Deal', pole, () => ['A'])).toBe(
+      false,
+    )
+    expect(
+      czyPokazacPustaMiejscowosc(
+        'CRM Lead',
+        { fieldname: 'custom_powiat' },
+        () => ['A'],
+      ),
+    ).toBe(false)
+  })
+
+  it('lista pobierana tylko dla pola Miejscowosc leada', () => {
+    const lista = vi.fn(() => ['A'])
+    czyPokazacPustaMiejscowosc(
+      'CRM Lead',
+      { fieldname: 'custom_powiat' },
+      lista,
+    )
+    czyPokazacPustaMiejscowosc('CRM Deal', pole, lista)
+    czyPokazacPustaMiejscowosc('CRM Lead', { ...pole, read_only: true }, lista)
+    expect(lista).not.toHaveBeenCalled()
+  })
+})
+
+describe('utworzLookup poWyniku', () => {
+  it('raz na kod, tylko dla udanego wyniku', async () => {
+    const poWyniku = vi.fn()
+    const wywolaj = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('siec'))
+      .mockResolvedValue(WYNIK)
+    const pobierz = utworzLookup(wywolaj, poWyniku)
+    await pobierz('64-000')
+    expect(poWyniku).not.toHaveBeenCalled()
+    await pobierz('64-000')
+    await pobierz('64-000')
+    expect(poWyniku).toHaveBeenCalledTimes(1)
+    expect(poWyniku).toHaveBeenCalledWith('64-000', WYNIK)
   })
 })
