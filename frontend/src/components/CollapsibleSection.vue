@@ -52,7 +52,7 @@
 </template>
 <script setup>
 import { Badge } from 'frappe-ui'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 
 const props = defineProps({
   label: { type: String, default: '' },
@@ -67,19 +67,34 @@ const props = defineProps({
   headerClass: { type: [String, Object, Array], default: '' },
 })
 
+const emit = defineEmits(['update:opened'])
+
 const hide = ref(props.hideLabel)
 const opened = ref(props.opened)
 
+// VOLTEO ops#330: rodzic moze trzymac stan (pamiec sekcji panelu bocznego),
+// wiec zmiana propsa nadpisuje stan lokalny, a kazde przelaczenie jest
+// zglaszane przez update:opened. Bez nasluchu dziala jak dotad.
+watch(
+  () => props.opened,
+  (v) => (opened.value = v),
+)
+
+function ustaw(v) {
+  opened.value = v
+  emit('update:opened', v)
+}
+
 function toggle() {
-  opened.value = !opened.value
+  ustaw(!opened.value)
 }
 
 function open() {
-  opened.value = true
+  ustaw(true)
 }
 
 function close() {
-  opened.value = false
+  ustaw(false)
 }
 </script>
 <script>

@@ -613,10 +613,9 @@ import {
   formatKwota,
   formatData,
   formatDataCzas,
-  wczytajOtwartaSekcje,
-  zapiszOtwartaSekcje,
 } from '@/utils/panelBoczny'
 import { useUkryjPustePola } from '@/composables/useUkryjPustePola'
+import { useStanSekcjiPanelu } from '@/composables/useStanSekcjiPanelu'
 import { usersStore } from '@/stores/users'
 import { isMobileView } from '@/composables/settings'
 import {
@@ -672,23 +671,30 @@ const showSidePanelModal = ref(false)
 
 const karty = computed(() => props.wariant === 'karty')
 
-// Stan otwarcia kart per sekcja (wariant karty): reaktywna nakladka na
-// zapis w localStorage. Brak zapisu: otwarta tylko pierwsza widoczna sekcja.
+// Stan otwarcia sekcji zapamietany per uzytkownik i doctype (ops#330),
+// wspolny dla wszystkich paneli tego doctype. Brak zapisu: karty otwieraja
+// tylko pierwsza widoczna sekcje, zwykly panel bierze `opened` z ukladu.
+// startZwiniete: lokalna nakladka bez pamieci, zerowana przy zmianie rekordu.
+const stanSekcji = useStanSekcjiPanelu(() => props.doctype)
 const otwarteSekcje = reactive({})
 
 function czyOtwarta(section) {
-  if (section.name in otwarteSekcje) return otwarteSekcje[section.name]
-  if (props.startZwiniete) return false
-  const zapisana = wczytajOtwartaSekcje(props.doctype, section.name)
-  if (zapisana !== null) return zapisana
+  if (props.startZwiniete) return otwarteSekcje[section.name] ?? false
   const idx = _sections.value.findIndex((s) => s.name === section.name)
-  return idx === firstVisibleIndex()
+  return stanSekcji.czyOtwarta(section.name, idx === firstVisibleIndex())
 }
 
 function przelaczSekcje(section) {
   const nowy = !czyOtwarta(section)
-  otwarteSekcje[section.name] = nowy
-  if (!props.startZwiniete) zapiszOtwartaSekcje(props.doctype, section.name, nowy)
+  if (props.startZwiniete) otwarteSekcje[section.name] = nowy
+  else stanSekcji.ustaw(section.name, nowy)
+}
+
+function czyOtwartaZwykla(section) {
+  const zUkladu = section.opened ?? true
+  // Podglad ukladu i sekcja bez naglowka (nie da sie jej zwinac): sam uklad.
+  if (props.preview || !section.label) return zUkladu
+  return stanSekcji.czyOtwarta(section.name, zUkladu)
 }
 
 watch(
@@ -712,7 +718,8 @@ function opakowanieSekcji(section) {
       headerClass: 'h-8',
       label: section.label,
       hideLabel: !section.label,
-      opened: section.opened,
+      opened: czyOtwartaZwykla(section),
+      'onUpdate:opened': (v) => !props.preview && stanSekcji.ustaw(section.name, v),
     }
   }
   return {
