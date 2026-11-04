@@ -1,18 +1,23 @@
 <!--
   VOLTEO (ops#328): sekcja "Notatki" w prawym panelu leada (Lead.vue) i w
   "Szybkim podgladzie" na mapie (LeadSzybkiPodglad.vue). Handlowiec i CC
-  dodaja notatke i widza ostatnie bez przelaczania na zakladke "Komentarze".
+  widza ostatnie notatki bez przelaczania na zakladke "Komentarze".
+  "Dodaj notatke" otwiera istniejacy popup komentarzy (KomentarzeLeadaModal,
+  ten sam co przycisk "Komentarze": edytor, @wzmianki, zalaczniki), decyzja
+  Jana zamiast osobnego pola tekstowego w karcie.
 
   Notatka to zwykly `Comment` leada, ten sam magazyn co zakladka
   "Komentarze", pseudokolumna na liscie i KomentarzeLeadaModal.vue:
   - odczyt: crm.api.volteo_leady.komentarze (has_permission na leadzie +
     maskowanie tozsamosci CC przed Volteo D2D Sales po stronie serwera),
-  - zapis: crm.api.comment.add_comment (ta sama sciezka co zakladka).
+  - zapis: w popupie, crm.api.comment.add_comment (ta sama sciezka co
+    zakladka).
   Uprawnienia sa wiec dokladnie te same co przy komentarzach dzis.
 
-  Po dodaniu podbijamy wspolny sygnal (utils/notatkiLeada.js), ktory
-  obserwuje ten panel; zakladka "Komentarze" (CommunicationArea.vue) i
-  modal podbijaja go tez, wiec obie strony sa zgodne bez odswiezania strony.
+  Po zamknieciu popupu lista sie przeladowuje (lapie tez edycje i usuniecia
+  zrobione w popupie). Dodanie komentarza w zakladce "Komentarze"
+  (CommunicationArea.vue) podbija wspolny sygnal (utils/notatkiLeada.js),
+  ktory ten panel obserwuje, wiec obie strony sa zgodne bez odswiezania.
   Logika zyje tu, w SidePanelLayout.vue nie ma zadnego wpiecia (rownolegle
   zmiany innych sesji w tym pliku).
 -->
@@ -27,28 +32,13 @@
       :opened="otwarte"
       @toggle="otwarte = !otwarte"
     >
-      <div class="flex flex-col gap-1.5">
-        <textarea
-          v-model="tekst"
-          rows="2"
-          class="w-full resize-y rounded border border-outline-gray-2 bg-surface-base px-2 py-1.5 text-[13px] text-ink-gray-8 placeholder:text-ink-gray-4 focus:border-outline-gray-4 focus:outline-none"
-          :placeholder="__('Dodaj notatkę…')"
-          data-testid="notatki-pole"
-          @keydown="onKeydown"
-        ></textarea>
-        <div class="flex items-center justify-between gap-2">
-          <span class="text-[11px] text-ink-gray-4">{{ skrotPodpowiedz }}</span>
-          <Button
-            variant="solid"
-            size="sm"
-            :label="__('Dodaj')"
-            :disabled="pusta || zapisywanie"
-            :loading="zapisywanie"
-            data-testid="notatki-dodaj"
-            @click="dodaj"
-          />
-        </div>
-      </div>
+      <Button
+        class="w-full"
+        :label="__('Dodaj notatkę')"
+        icon-left="lucide-message-square-plus"
+        data-testid="notatki-dodaj"
+        @click="otworzPopup"
+      />
 
       <div class="mt-2.5 flex flex-col">
         <div
@@ -118,24 +108,27 @@
       </div>
     </KartaSekcji>
   </div>
+  <KomentarzeLeadaModal
+    v-model="pokazPopup"
+    :docname="docname"
+    :doctype="doctype"
+    @commentAdded="emit('dodano')"
+  />
 </template>
 
 <script setup>
 import KartaSekcji from '@/components/KartaSekcji.vue'
+import KomentarzeLeadaModal from '@/components/Modals/KomentarzeLeadaModal.vue'
 import { sanitizeHTML } from '@/utils'
 import { formatDataCzas } from '@/utils/panelBoczny'
 import {
   LIMIT_ZWINIETYCH,
   autorNotatki,
-  czyPustaNotatka,
-  czySkrotZapisu,
   posortujNotatki,
-  tekstNaHtml,
   wersjaKomentarzy,
   widoczneNotatki,
-  zglosZmianeKomentarzy,
 } from '@/utils/notatkiLeada'
-import { Button, call, createResource, toast } from 'frappe-ui'
+import { Button, createResource } from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
 
 const props = defineProps({
@@ -144,23 +137,14 @@ const props = defineProps({
 })
 
 // `liczba`: aktualna liczba notatek po kazdym wczytaniu (np. etykieta
-// przycisku "Komentarze (N)" w LeadSzybkiPodglad.vue). `dodano`: po zapisie
-// notatki (Lead.vue przeladowuje wtedy zakladke Aktywnosci/Komentarze).
+// przycisku "Komentarze (N)" w LeadSzybkiPodglad.vue). `dodano`: po dodaniu
+// komentarza w popupie (Lead.vue przeladowuje wtedy zakladke
+// Aktywnosci/Komentarze).
 const emit = defineEmits(['liczba', 'dodano'])
 
 const otwarte = ref(true)
 const rozwiniete = ref(false)
-const tekst = ref('')
-const zapisywanie = ref(false)
-
-const pusta = computed(() => czyPustaNotatka(tekst.value))
-
-const czyMac =
-  typeof navigator !== 'undefined' &&
-  /Mac|iPhone|iPad/.test(navigator.platform || '')
-const skrotPodpowiedz = czyMac
-  ? __('Cmd+Enter zapisuje')
-  : __('Ctrl+Enter zapisuje')
+const pokazPopup = ref(false)
 
 const zasob = createResource({
   url: 'crm.api.volteo_leady.komentarze',
@@ -180,43 +164,26 @@ const podsumowanie = computed(() => {
   return __('Ostatnia: {0}', [formatDataCzas(ostatnia.creation)])
 })
 
+function otworzPopup() {
+  pokazPopup.value = true
+}
+
 // Zmiana leada (Lead.vue nie montuje panelu od nowa przy przejsciu na inny
-// lead) i zmiany z innych miejsc (zakladka, modal) przeladowuja liste.
+// lead), zamkniecie popupu (dodanie, edycja, usuniecie) i dodanie w zakladce
+// "Komentarze" (sygnal) przeladowuja liste.
 watch(
   () => props.docname,
   () => {
     rozwiniete.value = false
-    tekst.value = ''
+    pokazPopup.value = false
     zasob.reload()
   },
 )
+watch(pokazPopup, (teraz, wczesniej) => {
+  if (wczesniej && !teraz) zasob.reload()
+})
 watch(
   () => wersjaKomentarzy(props.doctype, props.docname),
   () => zasob.reload(),
 )
-
-function onKeydown(e) {
-  if (!czySkrotZapisu(e)) return
-  e.preventDefault()
-  dodaj()
-}
-
-async function dodaj() {
-  if (pusta.value || zapisywanie.value) return
-  zapisywanie.value = true
-  try {
-    await call('crm.api.comment.add_comment', {
-      reference_doctype: props.doctype,
-      reference_name: props.docname,
-      content: tekstNaHtml(tekst.value),
-    })
-    tekst.value = ''
-    zglosZmianeKomentarzy(props.doctype, props.docname)
-    emit('dodano')
-  } catch (err) {
-    toast.error(err?.messages?.[0] || __('Nie udało się dodać notatki'))
-  } finally {
-    zapisywanie.value = false
-  }
-}
 </script>
