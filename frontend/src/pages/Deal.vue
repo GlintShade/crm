@@ -324,7 +324,6 @@ import DetailsIcon from '@/components/Icons/DetailsIcon.vue'
 import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
 import NoteIcon from '@/components/Icons/NoteIcon.vue'
 import WhatsAppIcon from '@/components/Icons/WhatsAppIcon.vue'
-import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
 import LinkIcon from '@/components/Icons/LinkIcon.vue'
 import ArrowUpRightIcon from '@/components/Icons/ArrowUpRightIcon.vue'
 import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
@@ -370,7 +369,6 @@ import {
   openWebsite,
   setupCustomizations,
   copyToClipboard,
-  isTranslatable,
 } from '@/utils'
 import { getView } from '@/utils/view'
 import { getSettings } from '@/stores/settings'
@@ -379,7 +377,6 @@ import { statusesStore } from '@/stores/statuses'
 import { usersStore } from '@/stores/users'
 import { grupaForRodzaj, filterKnown } from '@/utils/dealPipeline'
 import { czyOze, zakladkiSzansy } from '@/utils/rodzajUmowy'
-import { statusButtonClass } from '@/utils/statusColors'
 import { getMeta } from '@/stores/meta'
 import { useDocument } from '@/data/document'
 import { whatsappEnabled } from '@/composables/whatsapp'
@@ -443,19 +440,6 @@ const {
 const canDelete = computed(() => permissions.data?.permissions?.delete || false)
 
 const doc = computed(() => document.doc || {})
-
-// Zimne wejście na stronę szansy (refresh na /crm/deals/:dealId) uruchamia dwa
-// niezależne zasoby: dokument szansy (document/doc, szybki) i globalną listę
-// statusów w store Pinia (dealStatuses, auto:true, osobne zapytanie CRM Deal Status).
-// Nie ma między nimi żadnej kolejności — jeśli dokument dotrze pierwszy,
-// getDealStatus(doc.status) trafia w dealStatusesByName zanim ten słownik się
-// wypełni i zwraca undefined; odczyt .color na undefined wywala render (patrz
-// nagłówek szansy niżej) i w skrajnym przypadku daje pustą stronę. Ten computed
-// jest null, dopóki store realnie ma wpis dla bieżącego statusu — v-if w
-// szablonie czeka na niego zamiast zakładać, że coś jest gotowe.
-const dealStatus = computed(() =>
-  doc.value.status ? getDealStatus(doc.value.status) : null,
-)
 
 watch(error, (err) => {
   if (err) {
@@ -539,7 +523,7 @@ const title = computed(() => {
 })
 
 // Grupa statusów (proces + terminalne) per `custom_rodzaj_umowy`, jeden
-// współdzielony fetch (cache klucz jak w DealPipelineBar.vue/DealNextStepNote.vue
+// współdzielony fetch (cache klucz jak w DealNaglowek.vue/DealPipelineBar.vue
 // dla `volteo_pipeline_get`) — sam config nie zależy od konkretnej szansy, więc
 // `auto: true` bez `params` i bez odświeżania po zmianie rodzaju wystarczy.
 const grupyStatusow = createResource({
@@ -879,11 +863,6 @@ function openEmailBox() {
     activities.value.changeTabTo('emails')
   }
   nextTick(() => (activities.value.emailBox.show = true))
-}
-
-function statusLabel(status) {
-  if (isTranslatable('CRM Deal Status')) return __(status)
-  return status
 }
 
 const showLostReasonModal = ref(false)

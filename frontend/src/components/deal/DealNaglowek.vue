@@ -197,6 +197,7 @@
         <Button
           v-if="przyciskNastepnego"
           variant="solid"
+          theme="blue"
           :label="przyciskNastepnego.etykieta"
           data-testid="naglowek-nastepny"
           @click="przejdzDoZakladki(przyciskNastepnego.indeks)"
