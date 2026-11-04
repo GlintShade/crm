@@ -239,3 +239,118 @@ export function filtrujOpcjeRodzajuUmowy(options, { oze, cp } = {}) {
     })
     .join('\n')
 }
+
+// ---------------------------------------------------------------------------
+// Nagłówek szansy v2 (przycisk "następny krok", menu etapu).
+// ---------------------------------------------------------------------------
+
+/**
+ * Do którego procesu należy rodzaj umowy: 'OZE' (siedem rodzajów), 'CP'
+ * (Czyste Powietrze) albo null (rodzaj pusty/nierozpoznany).
+ *
+ * @param {string|null|undefined} rodzaj
+ * @returns {'OZE'|'CP'|null}
+ */
+export function procesDlaRodzaju(rodzaj) {
+  if (!rodzaj) return null
+  if (RODZAJE_OZE.has(rodzaj)) return 'OZE'
+  if (rodzaj === RODZAJ_UMOWY_CP) return 'CP'
+  return null
+}
+
+// JEDNA konfiguracja następnego kroku: etykieta przycisku i zakładka, na którą
+// przycisk przełącza, żyją w tym samym wpisie, więc nie mogą się rozjechać.
+// `zakladka` to nazwa LOGICZNA (Umowa/Kredyt/Audyt); komponent mapuje ją na
+// realną zakładkę szansy (Umowa albo UmowaCP itd.). `tekst` bez zakładki to
+// wpis informacyjny (bez przycisku), `ikona` wskazuje ikonę lucide.
+const NASTEPNY_KROK_OZE = {
+  Lead: { etykieta: 'Wygeneruj umowę', zakladka: 'Umowa' },
+  'Umowa Wygenerowana': { etykieta: 'Wyślij do podpisu', zakladka: 'Umowa' },
+  'Umowa Podpisana': { etykieta: 'Uzupełnij wniosek kredytowy', zakladka: 'Kredyt' },
+  Finansowanie: { etykieta: 'Prześlij audyt', zakladka: 'Audyt' },
+  'Weryfikacja Backoffice': {
+    tekst: 'Czeka na weryfikację backoffice',
+    ikona: 'clock',
+  },
+}
+
+/**
+ * Następny krok dla procesu i statusu: `{ etykieta, zakladka }` (przycisk),
+ * `{ tekst, ikona? }` (informacja bez przycisku) albo null.
+ * CP nie ma przycisku; pokazuje tylko notatkę serwera dla bieżącego statusu.
+ *
+ * @param {'OZE'|'CP'|null|undefined} proces
+ * @param {string|null|undefined} status
+ * @param {Object<string,string>|null|undefined} notes - `payload.notes` (dla CP)
+ * @returns {{etykieta: string, zakladka: string}|{tekst: string, ikona?: string}|null}
+ */
+export function nastepnyKrok(proces, status, notes) {
+  if (!proces || !status) return null
+  if (proces === 'OZE') {
+    return Object.hasOwn(NASTEPNY_KROK_OZE, status) ? NASTEPNY_KROK_OZE[status] : null
+  }
+  if (proces === 'CP') {
+    const note = notes?.[status]
+    if (typeof note === 'string' && note.trim() !== '') return { tekst: note }
+  }
+  return null
+}
+
+// Etapy, które zwykle zmieniają się same (automatyzacje); wskazówka pod nazwą
+// w menu etapu. Klucz: proces, potem status.
+const PODPOWIEDZI_ETAPOW = {
+  OZE: {
+    'Umowa Podpisana': 'zwykle sam, po podpisie w Autenti',
+    'Weryfikacja Backoffice': 'sam, po przesłaniu audytu',
+  },
+}
+
+/**
+ * @param {'OZE'|'CP'|null|undefined} proces
+ * @param {string} status
+ * @returns {string|null}
+ */
+export function podpowiedzEtapu(proces, status) {
+  return PODPOWIEDZI_ETAPOW[proces]?.[status] ?? null
+}
+
+/**
+ * Jak traktować wybór etapu w menu względem bieżącego.
+ * 'dalej' (dokładnie o jeden do przodu: zmiana od razu), 'przeskok' (dalej niż
+ * o jeden), 'wstecz', 'terminal' (wynik spoza procesu) albo 'ten-sam'.
+ *
+ * @param {number} biezacy - indeks bieżącego etapu (-1, gdy status poza procesem)
+ * @param {number|null} cel - indeks wybranego etapu; null dla wyniku terminalnego
+ * @returns {'dalej'|'przeskok'|'wstecz'|'terminal'|'ten-sam'}
+ */
+export function rodzajZmianyEtapu(biezacy, cel) {
+  if (cel === null || cel === undefined) return 'terminal'
+  if (cel === biezacy) return 'ten-sam'
+  if (biezacy < 0) return 'przeskok'
+  if (cel === biezacy + 1) return 'dalej'
+  return cel > biezacy ? 'przeskok' : 'wstecz'
+}
+
+/**
+ * Nazwy etapów pominiętych przy skoku z `biezacy` do `cel` (bez obu końców).
+ *
+ * @param {Array<{status: string, index: number}>} steps
+ * @param {number} biezacy
+ * @param {number} cel
+ * @returns {string[]}
+ */
+export function pominieteEtapy(steps, biezacy, cel) {
+  if (!Array.isArray(steps)) return []
+  return steps.filter((s) => s.index > biezacy && s.index < cel).map((s) => s.status)
+}
+
+/**
+ * Statusy terminalne procesu: elementy grupy spoza kroków.
+ *
+ * @param {{steps?: Array, group?: string[]}|null|undefined} payload
+ * @returns {string[]}
+ */
+export function terminalneStatusy(payload) {
+  const kroki = new Set((payload?.steps || []).map((s) => s.status))
+  return (payload?.group || []).filter((nazwa) => !kroki.has(nazwa))
+}

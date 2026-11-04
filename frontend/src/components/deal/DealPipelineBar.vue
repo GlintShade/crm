@@ -33,15 +33,23 @@
 -->
 <template>
   <div
-    v-if="!resource.loading && mode !== 'hidden'"
-    class="w-full border-b px-5 py-3"
-    :class="mode === 'lost' ? 'bg-surface-red-2' : 'bg-surface-base'"
+    v-if="!resource.loading && mode !== 'hidden' && (!tylkoPanel || rozwinietyEtap)"
+    class="w-full"
+    :class="
+      tylkoPanel
+        ? 'pb-3'
+        : [
+            'border-b px-5 py-3',
+            mode === 'lost' ? 'bg-surface-red-2' : 'bg-surface-base',
+          ]
+    "
   >
     <!-- Zawartość ograniczona do ~80% szerokości kontenera i wyśrodkowana
          TYLKO gdy proces ma niewiele węzłów (OZE, 5 kroków) — przy 12
          węzłach CP ograniczenie do 80% zostawiłoby za mało miejsca, więc tam
          zawartość zajmuje pełną szerokość i polega na overflow-x-auto niżej. -->
     <div
+      v-if="!tylkoPanel"
       class="mx-auto flex w-full max-w-full flex-wrap items-center gap-4"
       :class="capWidth ? 'sm:max-w-[80%]' : ''"
     >
@@ -366,6 +374,10 @@ const props = defineProps({
   dealId: { type: String, required: true },
   status: { type: String, default: '' },
   rodzaj: { type: String, default: '' },
+  // Tryb nagłówka v2: komponent renderuje WYŁĄCZNIE panel podzadań etapu
+  // `etap` (sterowany z zewnątrz, DealNaglowek.vue), bez paska węzłów.
+  tylkoPanel: { type: Boolean, default: false },
+  etap: { type: String, default: '' },
 })
 
 const { getDealStatus } = statusesStore()
@@ -444,10 +456,13 @@ function nodeLabelClass(index) {
 // pas jest zwinięty. Jawny stan `null`/string zamiast obecności klucza —
 // patrz pułapka projektu: hasOwnProperty na reactive() nie rejestruje
 // zależności i zamraża computed (KalkulatorCPTab.vue miało ten błąd).
-const rozwinietyEtap = ref(null)
+const rozwinietyLokalnie = ref(null)
+const rozwinietyEtap = computed(() =>
+  props.tylkoPanel ? props.etap || null : rozwinietyLokalnie.value,
+)
 
 function toggleEtap(status) {
-  rozwinietyEtap.value = rozwinietyEtap.value === status ? null : status
+  rozwinietyLokalnie.value = rozwinietyLokalnie.value === status ? null : status
 }
 
 // -----------------------------------------------------------------------

@@ -1,5 +1,5 @@
 <template>
-  <LayoutHeader>
+  <LayoutHeader v-if="errorTitle">
     <template #left-header>
       <Breadcrumbs :items="breadcrumbs">
         <template #prefix="{ item }">
@@ -7,61 +7,42 @@
         </template>
       </Breadcrumbs>
     </template>
-    <template v-if="!errorTitle" #right-header>
-      <CustomActions
-        v-if="document._actions?.length"
-        :actions="document._actions"
-      />
-      <CustomActions
-        v-if="document.actions?.length"
-        :actions="document.actions"
-      />
-      <Button
-        :label="__('Przejdź do klienta')"
-        iconLeft="user"
-        :disabled="!primaryContactName"
-        :tooltip="
-          primaryContactName ? '' : __('Ta szansa nie ma przypisanego klienta')
-        "
-        @click="goToClient"
-      />
-      <AssignTo v-model="assignees.data" doctype="CRM Deal" :docname="dealId" />
-      <Dropdown
-        v-if="doc && document.statuses"
-        :options="statuses"
-        placement="right"
-      >
-        <template #default="{ open }">
-          <Button
-            v-if="dealStatus"
-            :label="statusLabel(doc.status)"
-            :iconRight="open ? 'chevron-up' : 'chevron-down'"
-            :class="statusButtonClass(dealStatus.color)"
-          >
-            <template #prefix>
-              <IndicatorIcon :class="dealStatus.color" />
-            </template>
-          </Button>
-        </template>
-      </Dropdown>
-      <Button
-        v-if="isVolteoAdmin() && doc.custom_rozliczenie_status"
-        variant="subtle"
-        class="border-outline-amber-3 bg-surface-amber-2 text-ink-amber-8 hover:bg-surface-amber-2"
-        :label="__('Rozliczenie') + ' ' + (doc.custom_rozliczenie_licznik || '')"
-        :title="__('Przejdź do zakładki Rozliczenia')"
-        @click="otworzRozliczenia"
-      >
-        <template #prefix><FeatherIcon name="lock" class="h-4" /></template>
-      </Button>
-    </template>
   </LayoutHeader>
   <div v-if="doc.name" class="flex h-full flex-col overflow-hidden">
-    <DealPipelineBar
+    <DealNaglowek
+      v-if="!errorTitle"
+      v-model:tabIndex="tabIndex"
+      v-model:assignees="assignees.data"
       :deal-id="dealId"
-      :status="doc.status"
-      :rodzaj="doc.custom_rodzaj_umowy"
-    />
+      :doc="doc"
+      :okruszki="breadcrumbs"
+      :tytul="tytulKlienta"
+      :ma-klienta="Boolean(primaryContactName)"
+      :tabs="tabs"
+      :opcje-statusow="statuses"
+      @klient="goToClient"
+    >
+      <template #akcje>
+        <CustomActions
+          v-if="document._actions?.length"
+          :actions="document._actions"
+        />
+        <CustomActions
+          v-if="document.actions?.length"
+          :actions="document.actions"
+        />
+        <Button
+          v-if="isVolteoAdmin() && doc.custom_rozliczenie_status"
+          variant="subtle"
+          class="border-outline-amber-3 bg-surface-amber-2 text-ink-amber-8 hover:bg-surface-amber-2"
+          :label="__('Rozliczenie') + ' ' + (doc.custom_rozliczenie_licznik || '')"
+          :title="__('Przejdź do zakładki Rozliczenia')"
+          @click="otworzRozliczenia"
+        >
+          <template #prefix><FeatherIcon name="lock" class="h-4" /></template>
+        </Button>
+      </template>
+    </DealNaglowek>
     <!-- Siatka: Tabs ma display:contents, więc pasek zakładek zajmuje pełną szerokość (wiersz 1), a treść zakładki i panel boczny leżą w wierszu 2. -->
     <div class="grid flex-1 min-h-0 overflow-hidden grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_minmax(0,1fr)]">
     <Tabs
@@ -115,12 +96,6 @@
           :rekord="dealId"
           :mozeOtworzyc="Boolean(primaryContactName)"
           @otworz-klienta="goToClient"
-        />
-        <DealNextStepNote
-          :deal-id="dealId"
-          :status="doc.status"
-          :rodzaj="doc.custom_rodzaj_umowy"
-          karty
         />
         <SLASection
           v-if="doc.sla_status"
@@ -378,8 +353,7 @@ import NotatkiTab from '@/components/deal/NotatkiTab.vue'
 import OsdDotacjaTab from '@/components/deal/OsdDotacjaTab.vue'
 import PlikiTab from '@/components/deal/PlikiTab.vue'
 import { MONTAZ, TRIFY } from '@/utils/aktualizacje'
-import DealPipelineBar from '@/components/deal/DealPipelineBar.vue'
-import DealNextStepNote from '@/components/deal/DealNextStepNote.vue'
+import DealNaglowek from '@/components/deal/DealNaglowek.vue'
 import OrganizationModal from '@/components/Modals/OrganizationModal.vue'
 import LostReasonModal from '@/components/Modals/LostReasonModal.vue'
 import AssignTo from '@/components/AssignTo.vue'
@@ -413,7 +387,6 @@ import { callEnabled } from '@/composables/telephony'
 import { useBroadcast } from '@/composables/useBroadcast'
 import {
   createResource,
-  Dropdown,
   FeatherIcon,
   Avatar,
   Tabs,
@@ -536,7 +509,7 @@ const showOrganizationModal = ref(false)
 const _organization = ref({})
 
 const breadcrumbs = computed(() => {
-  let items = [{ label: __('Deals'), route: { name: 'Deals' } }]
+  let items = [{ label: __('Szanse'), route: { name: 'Deals' } }]
 
   if (route.query.view || route.query.viewType) {
     let view = getView(route.query.view, route.query.viewType, 'CRM Deal')
@@ -836,6 +809,9 @@ const kontaktPodstawowy = computed(() => {
   return list.find((c) => c.is_primary) || list[0] || null
 })
 const primaryContactName = computed(() => kontaktPodstawowy.value?.name || null)
+
+// Tytuł nagłówka: pełna nazwa klienta, a bez klienta numer szansy.
+const tytulKlienta = computed(() => kontaktPodstawowy.value?.full_name || title.value)
 
 function goToClient() {
   if (!primaryContactName.value) return
