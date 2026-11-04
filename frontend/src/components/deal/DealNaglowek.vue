@@ -52,11 +52,6 @@
               data-testid="naglowek-doradca"
               @click="togglePopover"
             >
-              <span
-                class="flex size-6 shrink-0 items-center justify-center rounded-full bg-surface-gray-3 text-[11px] font-medium uppercase text-ink-gray-8"
-              >
-                {{ inicjaly }}
-              </span>
               <span class="text-xs text-ink-gray-5">{{ __('Doradca') }}</span>
               <span class="text-ink-gray-9">{{ doradca || __('Przypisz') }}</span>
               <span class="lucide-chevron-down size-3.5 text-ink-gray-5" aria-hidden="true" />
@@ -69,6 +64,7 @@
     <!-- Pasek etapów + następny krok -->
     <div v-if="payload && tryb !== 'hidden'" class="mt-3 flex items-start gap-4">
       <div class="min-w-0 flex-1">
+        <template v-if="wariant === 'kroki'">
         <ol ref="kontenerRef" class="flex w-full items-start" data-testid="naglowek-proces">
           <li
             v-for="(el, i) in elementy"
@@ -91,7 +87,7 @@
             />
 
             <!-- Bieżący etap: kółko + etykieta to jedyna klikalna kontrolka (menu etapu) -->
-            <MenuEtapu v-if="el.stan === 'current'" :menu="menu" :wyrownanie="wyrownanie" @wybierz="wybierz">
+            <MenuEtapu v-if="el.stan === 'current'" :menu="menu" :wariant="wariant" :wyrownanie="wyrownanie" @wybierz="wybierz" @przelacz="ustawWariant">
               <template #trigger="{ toggle, otwarte }">
                 <button
                   type="button"
@@ -179,11 +175,111 @@
             <span class="lucide-chevron-down size-3.5 transition-transform" :class="{ 'rotate-180': panelOtwarty }" aria-hidden="true" />
           </button>
         </div>
+        </template>
+
+        <!-- Wariant "pasek": blok z numerem i nazwą etapu + segmenty -->
+        <div v-else class="flex items-start gap-6" data-testid="naglowek-pasek">
+          <div class="w-56 shrink-0 xl:w-72">
+            <div class="text-[13px] text-ink-gray-5">
+              {{ biezacy >= 0 ? tekstNumeruEtapu(biezacy, liczbaEtapow) : __('Status') }}
+            </div>
+            <MenuEtapu
+              v-if="tryb === 'progress'"
+              :menu="menu"
+              :wariant="wariant"
+              :wyrownanie="'lewo'"
+              @wybierz="wybierz"
+              @przelacz="ustawWariant"
+            >
+              <template #trigger="{ toggle, otwarte }">
+                <button
+                  type="button"
+                  class="flex max-w-full cursor-pointer items-center gap-1 rounded-md text-left outline-none"
+                  data-testid="naglowek-pigula"
+                  aria-haspopup="menu"
+                  :aria-expanded="otwarte"
+                  @click="toggle"
+                >
+                  <span class="truncate text-[22px] font-semibold leading-tight text-ink-blue-8">
+                    {{ __(status) }}
+                  </span>
+                  <span class="lucide-chevron-down size-4 shrink-0 text-ink-blue-8" aria-hidden="true" />
+                </button>
+              </template>
+            </MenuEtapu>
+            <div
+              v-else
+              class="truncate text-[22px] font-semibold leading-tight"
+              :class="tryb === 'won' ? 'text-ink-green-8' : tryb === 'lost' ? 'text-ink-red-8' : 'text-ink-gray-7'"
+            >
+              {{ etykietaStatusu(__(status)) }}
+            </div>
+            <div v-if="tryb === 'progress' && czas" class="mt-0.5 text-[13px] text-ink-gray-7">
+              {{ czasOd(czas) }}
+            </div>
+          </div>
+          <div
+            ref="segmentyRef"
+            class="flex min-w-0 flex-1 items-start"
+            :class="zwarty ? 'gap-1.5 pb-7' : 'gap-2'"
+            data-testid="naglowek-segmenty"
+          >
+            <div
+              v-for="(el, i) in elementy"
+              :key="el.status"
+              class="relative flex min-w-0 flex-1 flex-col gap-1.5"
+              :title="el.etykieta ? undefined : el.nazwa"
+              :data-stan="el.stan"
+            >
+              <span class="h-2.5 w-full rounded-full" :class="segmentKlasa(el.stan)" />
+              <!-- W formie zwartej etykieta bieżącego etapu jest poza przepływem
+                   (nie dławi wąskiego segmentu), dociśnięta do krawędzi paska
+                   przy ostatnich etapach. -->
+              <span
+                v-if="el.etykieta"
+                class="text-left text-[13px] leading-tight"
+                :class="[
+                  el.stan === 'current'
+                    ? 'font-semibold text-ink-gray-9'
+                    : el.stan === 'done'
+                      ? 'text-ink-gray-6'
+                      : 'text-ink-gray-4',
+                  zwarty
+                    ? [
+                        'absolute top-[calc(100%+6px)] w-max max-w-[10rem]',
+                        i > elementy.length * 0.7 ? 'right-0 text-right' : 'left-0',
+                      ]
+                    : 'line-clamp-2',
+                ]"
+              >
+                {{ el.nazwa }}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div
+          v-if="wariant === 'pasek' && biezacy >= 0 && (liczbaEtapow > 6 || maPodzadania(status))"
+          class="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"
+          data-testid="naglowek-etap-tekst"
+        >
+          <span v-if="tekstNastepnego" class="text-ink-gray-5">{{ tekstNastepnego }}</span>
+          <button
+            v-if="maPodzadania(status)"
+            type="button"
+            class="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-ink-gray-6 hover:bg-surface-gray-2"
+            :aria-expanded="panelOtwarty"
+            :title="__('Pokaż zadania etapu')"
+            @click="panelOtwarty = !panelOtwarty"
+          >
+            {{ __('Zadania etapu') }}
+            <span class="lucide-chevron-down size-3.5 transition-transform" :class="{ 'rotate-180': panelOtwarty }" aria-hidden="true" />
+          </button>
+        </div>
       </div>
 
       <!-- Następny krok albo wynik terminalny: JEDYNY przycisk główny -->
       <div class="shrink-0 pt-0.5">
-        <MenuEtapu v-if="odznaka" :menu="menu" wyrownanie="prawo" @wybierz="wybierz">
+        <MenuEtapu v-if="odznaka" :menu="menu" :wariant="wariant" wyrownanie="prawo" @wybierz="wybierz" @przelacz="ustawWariant">
           <template #trigger="{ toggle, otwarte }">
             <button
               type="button"
@@ -203,6 +299,7 @@
           v-else-if="przyciskNastepnego"
           variant="solid"
           theme="blue"
+          class="!text-white hover:!bg-blue-600 active:!bg-blue-700"
           :label="przyciskNastepnego.etykieta"
           data-testid="naglowek-nastepny"
           @click="przejdzDoZakladki(przyciskNastepnego.indeks)"
@@ -267,8 +364,12 @@ import {
   terminalneStatusy,
 } from '@/utils/dealPipeline'
 import {
+  czasOd,
   czasWEtapie,
   czyZwarty,
+  normalizujWariant,
+  segmentKlasa,
+  tekstNumeruEtapu,
   etykietaStatusu,
   etykietaWidoczna,
   tekstDalej,
@@ -322,20 +423,28 @@ const doradca = computed(() => {
   const wiecej = Math.max(0, (props.assignees?.length || 0) - 1)
   return wiecej ? `${nazwa} +${wiecej}` : nazwa
 })
-const inicjaly = computed(() => {
-  const owner = props.doc.deal_owner
-  if (!owner) return '?'
-  const nazwa = getUser(owner)?.full_name || owner
-  return nazwa
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((c) => c[0])
-    .join('')
-})
+// --- Wariant widoku etapów (Kroki / Pasek), pamiętany w localStorage ---------------
+const KLUCZ_WARIANTU = 'volteo.naglowek.wariant'
+function odczytajWariant() {
+  try {
+    return normalizujWariant(window.localStorage.getItem(KLUCZ_WARIANTU))
+  } catch (e) {
+    return normalizujWariant(null)
+  }
+}
+const wariant = ref(odczytajWariant())
+function ustawWariant(w) {
+  wariant.value = normalizujWariant(w)
+  try {
+    window.localStorage.setItem(KLUCZ_WARIANTU, wariant.value)
+  } catch (e) {
+    /* localStorage niedostępny: wariant zostaje tylko na tę sesję */
+  }
+}
 
 // --- Elementy paska ------------------------------------------------------------
 const kontenerRef = ref(null)
+const segmentyRef = ref(null)
 const szerokosc = ref(0)
 let obserwator = null
 onMounted(() => {
@@ -343,9 +452,10 @@ onMounted(() => {
     szerokosc.value = wpis?.contentRect?.width ?? 0
   })
   watch(
-    kontenerRef,
-    (el) => {
+    [kontenerRef, segmentyRef],
+    ([kroki, pasek]) => {
       obserwator.disconnect()
+      const el = kroki || pasek
       if (el) {
         szerokosc.value = el.clientWidth
         obserwator.observe(el)
@@ -526,8 +636,9 @@ const MenuEtapu = defineComponent({
   props: {
     menu: { type: Object, required: true },
     wyrownanie: { type: String, default: 'lewo' },
+    wariant: { type: String, default: 'pasek' },
   },
-  emits: ['wybierz'],
+  emits: ['wybierz', 'przelacz'],
   setup(p, { emit: emitMenu, slots }) {
     const otwarte = ref(false)
     const korzen = ref(null)
@@ -603,6 +714,26 @@ const MenuEtapu = defineComponent({
                     },
                     __('Oznacz jako {0}', [t.etykieta]),
                   ),
+                ),
+                h('div', { class: 'my-1 h-px bg-outline-gray-2' }),
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    'data-testid': 'menu-wariant',
+                    class:
+                      'flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-xs text-ink-gray-5 hover:bg-surface-gray-2',
+                    onClick: () => {
+                      otwarte.value = false
+                      emitMenu('przelacz', p.wariant === 'pasek' ? 'kroki' : 'pasek')
+                    },
+                  },
+                  [
+                    __('Widok etapów') + ': ',
+                    h('span', { class: p.wariant === 'kroki' ? 'font-semibold text-ink-gray-8' : '' }, __('Kroki')),
+                    ' / ',
+                    h('span', { class: p.wariant === 'pasek' ? 'font-semibold text-ink-gray-8' : '' }, __('Pasek')),
+                  ],
                 ),
               ],
             )

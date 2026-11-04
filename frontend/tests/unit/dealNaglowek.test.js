@@ -5,6 +5,9 @@ import {
   czasOd,
   tekstEtapu,
   tekstDalej,
+  normalizujWariant,
+  segmentKlasa,
+  tekstNumeruEtapu,
   etapyLiczba,
   poczatekEtapu,
   dniWEtapie,
@@ -169,5 +172,21 @@ describe('pasek etapów', () => {
     const steps = [{ status: 'A', index: 0 }, { status: 'B', index: 1 }]
     expect(tekstDalej(steps, 0)).toBe('Dalej: B')
     expect(tekstDalej(steps, 1)).toBe('')
+  })
+})
+
+describe('wariant paska', () => {
+  it('normalizuje wariant widoku etapów', () => {
+    expect(normalizujWariant('kroki')).toBe('kroki')
+    expect(normalizujWariant('pasek')).toBe('pasek')
+    expect(normalizujWariant('x')).toBe('pasek')
+    expect(normalizujWariant(null)).toBe('pasek')
+  })
+  it('klasy segmentów i numer etapu', () => {
+    expect(segmentKlasa('done')).toBe('bg-green-500')
+    expect(segmentKlasa('current')).toBe('bg-blue-500')
+    expect(segmentKlasa('future')).toBe('bg-surface-gray-3')
+    expect(segmentKlasa('muted')).toBe('bg-surface-gray-3')
+    expect(tekstNumeruEtapu(2, 5)).toBe('Etap 3 z 5')
   })
 })

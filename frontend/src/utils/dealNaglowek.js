@@ -160,3 +160,42 @@ export function tekstDalej(steps, biezacy) {
   const nast = Array.isArray(steps) ? steps[biezacy + 1] : null
   return nast ? `Dalej: ${nast.status}` : ''
 }
+
+export const WARIANTY_ETAPOW = ['kroki', 'pasek']
+export const WARIANT_DOMYSLNY = 'pasek'
+
+/**
+ * Wariant widoku etapów z zapisanej wartości; nieznana lub pusta daje domyślny.
+ *
+ * @param {string|null|undefined} wartosc
+ * @returns {'kroki'|'pasek'}
+ */
+export function normalizujWariant(wartosc) {
+  return WARIANTY_ETAPOW.includes(wartosc) ? wartosc : WARIANT_DOMYSLNY
+}
+
+/**
+ * Klasa wypełnienia segmentu paska etapów według stanu etapu.
+ * Kolory jak w pasku listy szans (PasekEtapu.vue): niewypełniony to
+ * `bg-surface-gray-3`; wypełnione (zielony dla ukończonych, ten sam niebieski
+ * co przycisk dla bieżącego) jak przy kółkach kroków.
+ *
+ * @param {'done'|'current'|'future'|'muted'} stan
+ * @returns {string}
+ */
+export function segmentKlasa(stan) {
+  if (stan === 'done') return 'bg-green-500'
+  if (stan === 'current') return 'bg-blue-500'
+  return 'bg-surface-gray-3'
+}
+
+/**
+ * "Etap 3 z 5" (bez nazwy), do lewego bloku wariantu paska.
+ *
+ * @param {number} biezacy - indeks bieżącego etapu
+ * @param {number} liczba
+ * @returns {string}
+ */
+export function tekstNumeruEtapu(biezacy, liczba) {
+  return `Etap ${biezacy + 1} z ${liczba}`
+}
