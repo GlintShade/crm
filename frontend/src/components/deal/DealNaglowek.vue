@@ -95,16 +95,32 @@
               <template #trigger="{ toggle, otwarte }">
                 <button
                   type="button"
-                  class="flex max-w-full cursor-pointer flex-col items-center gap-1.5 rounded-md px-1 outline-none"
+                  class="relative flex max-w-full cursor-pointer flex-col items-center gap-1.5 rounded-md px-1 outline-none"
+                  :class="zwarty && el.etykieta ? 'mb-9' : ''"
                   data-testid="naglowek-pigula"
                   aria-haspopup="menu"
                   :aria-expanded="otwarte"
                   @click="toggle"
                 >
                   <span :class="[kolkoBaza, kolkoKlasa(el.stan)]">{{ el.numer }}</span>
+                  <!-- W formie zwartej etykieta jest poza przepływem (nie rozpycha
+                       wąskiej kolumny), wyśrodkowana pod kółkiem i dociśnięta do
+                       krawędzi paska przy pierwszym i ostatnim etapie. -->
                   <span
                     v-if="el.etykieta"
                     class="flex items-center gap-0.5 text-center text-[13px] font-semibold leading-tight text-ink-blue-8"
+                    :class="
+                      zwarty
+                        ? [
+                            'absolute top-[calc(100%+6px)] w-max max-w-[9rem]',
+                            i === 0
+                              ? 'left-0'
+                              : i === elementy.length - 1
+                                ? 'right-0'
+                                : 'left-1/2 -translate-x-1/2',
+                          ]
+                        : ''
+                    "
                   >
                     <span class="line-clamp-2">{{ el.nazwa }}</span>
                     <span class="lucide-chevron-down size-3.5 shrink-0" aria-hidden="true" />

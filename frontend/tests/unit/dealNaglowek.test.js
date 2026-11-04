@@ -149,10 +149,10 @@ describe('pasek etapów', () => {
     expect(czyZwarty(5, 400)).toBe(true)
     expect(czyZwarty(5, 0)).toBe(false)
   })
-  it('etykiety w formie zwartej tylko dla bieżącego i następnego', () => {
+  it('etykieta w formie zwartej tylko dla bieżącego etapu', () => {
     expect(etykietaWidoczna(3, 2, false)).toBe(true)
     expect(etykietaWidoczna(2, 2, true)).toBe(true)
-    expect(etykietaWidoczna(3, 2, true)).toBe(true)
+    expect(etykietaWidoczna(3, 2, true)).toBe(false)
     expect(etykietaWidoczna(4, 2, true)).toBe(false)
     expect(etykietaWidoczna(1, 2, true)).toBe(false)
     expect(etykietaWidoczna(0, -1, true)).toBe(false)
