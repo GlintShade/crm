@@ -175,6 +175,7 @@
           @updateField="updateField"
         />
         <TasksSection doctype="CRM Lead" :docname="leadId" karty />
+        <NotatkiLeadaPanel :docname="leadId" @dodano="reload = true" />
         <div
           v-if="sections.data"
           class="flex flex-1 flex-col justify-between overflow-hidden"
@@ -273,6 +274,7 @@ import SidePanelLayout from '@/components/SidePanelLayout.vue'
 import PanelNaglowek from '@/components/PanelNaglowek.vue'
 import SLASection from '@/components/SLASection.vue'
 import TasksSection from '@/components/TasksSection.vue'
+import NotatkiLeadaPanel from '@/components/NotatkiLeadaPanel.vue'
 import CustomActions from '@/components/CustomActions.vue'
 import SidebarLink from '@/components/SidebarLink.vue'
 import {

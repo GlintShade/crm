@@ -173,6 +173,12 @@
       class="min-h-0 flex-1 overflow-y-auto"
       style="--sidepanel-column-max-height: none"
     >
+      <!-- VOLTEO (ops#328): notatki (komentarze leada) nad szczegolami,
+           ten sam magazyn co przycisk "Komentarze" w stopce. -->
+      <NotatkiLeadaPanel
+        :docname="lead.name"
+        @liczba="onCommentAdded({ count: $event })"
+      />
       <SidePanelLayout
         v-if="sections.data"
         :sections="sectionsPanel"
@@ -214,6 +220,7 @@ import SidePanelLayout from '@/components/SidePanelLayout.vue'
 import TelefonLink from '@/components/TelefonLink.vue'
 import PrzekazHandlowcowi from '@/components/PrzekazHandlowcowi.vue'
 import KomentarzeLeadaModal from '@/components/Modals/KomentarzeLeadaModal.vue'
+import NotatkiLeadaPanel from '@/components/NotatkiLeadaPanel.vue'
 import LostReasonModal from '@/components/Modals/LostReasonModal.vue'
 import { useDocument } from '@/data/document'
 import { globalStore } from '@/stores/global'

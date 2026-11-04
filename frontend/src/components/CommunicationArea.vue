@@ -88,6 +88,7 @@ import CommentBox from '@/components/CommentBox.vue'
 import CommentIcon from '@/components/Icons/CommentIcon.vue'
 import Email2Icon from '@/components/Icons/Email2Icon.vue'
 import { usersStore } from '@/stores/users'
+import { zglosZmianeKomentarzy } from '@/utils/notatkiLeada'
 import { useStorage } from '@vueuse/core'
 import { useOnboarding, useTelemetry } from 'frappe-ui/frappe'
 import { call, createResource, toast } from 'frappe-ui'
@@ -226,6 +227,7 @@ async function sendComment() {
     content: newComment.value,
     attachments: _attachments,
   })
+  zglosZmianeKomentarzy(props.doctype, doc.value.name)
 
   if (comment && attachments.value.length) {
     capture('comment_attachments_added')

@@ -65,6 +65,7 @@
 <script setup>
 import CommentArea from '@/components/Activities/CommentArea.vue'
 import CommentBox from '@/components/CommentBox.vue'
+import { zglosZmianeKomentarzy } from '@/utils/notatkiLeada'
 import { Button, Dialog, call, createResource, toast } from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
 
@@ -155,6 +156,7 @@ async function postComment() {
     newCommentContent.value = ''
     newCommentAttachments.value = []
     await reloadComments()
+    zglosZmianeKomentarzy(props.doctype, props.docname)
     emit('commentAdded', { docname: props.docname, count: comments.value.length })
   } catch (err) {
     toast.error(err?.messages?.[0] || __('Nie udało się dodać komentarza'))
