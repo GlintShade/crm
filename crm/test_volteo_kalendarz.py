@@ -495,3 +495,198 @@ class TestPlanZapisu(unittest.TestCase):
 	def test_zly_zakres(self):
 		with self.assertRaises(ValueError):
 			plan_zapisu(self.TYDZ, "zawsze", "2026-11-02", {})
+
+
+# ---------------------------------------------------------------------------
+# Okno "Nowe spotkanie" (b84, ops#332)
+# ---------------------------------------------------------------------------
+
+from crm.volteo_kalendarz import (
+	LIMIT_LEADOW_SPOTKANIA,
+	POLA_LEADA_SPOTKANIA,
+	POLA_WYSZUKIWANIA_LEADA,
+	czy_tak,
+	filtr_wlasciciela_spotkania,
+	notatka_do_html,
+	scal_leady_spotkania,
+	tekst_wyszukiwania,
+	warianty_filtra_fb,
+	warunki_wyszukiwania_leada,
+	zapytania_leadow_spotkania,
+)
+
+
+def _pasuje(wiersz, warunek) -> bool:
+	"""Minimalny interpreter warunku Frappe (=, in z ifnull, like) do testow."""
+	pole, op, wartosc = warunek
+	v = wiersz.get(pole)
+	if op == "=":
+		return v == wartosc
+	if op == "in":
+		return (v if v is not None else "") in wartosc
+	if op == "like":
+		import re
+
+		wzor = "".join(".*" if c == "%" else re.escape(c) for c in wartosc)
+		return v is not None and re.fullmatch(wzor, str(v)) is not None
+	raise AssertionError(op)
+
+
+def _widoczny(wiersz, tekst, handlowiec, tylko_fb, tylko_wlasne=False) -> bool:
+	for z in zapytania_leadow_spotkania(tekst, handlowiec, tylko_fb, tylko_wlasne):
+		if all(_pasuje(wiersz, f) for f in z["filters"]) and (
+			not z["or_filters"] or any(_pasuje(wiersz, f) for f in z["or_filters"])
+		):
+			return True
+	return False
+
+
+class TestFiltrWlascicielaSpotkania(unittest.TestCase):
+	def test_brak_handlowca_bez_warunku(self):
+		self.assertIsNone(filtr_wlasciciela_spotkania(None))
+		self.assertIsNone(filtr_wlasciciela_spotkania(""))
+		self.assertIsNone(filtr_wlasciciela_spotkania("   "))
+
+	def test_handlowiec_lub_pusty(self):
+		self.assertEqual(filtr_wlasciciela_spotkania(" h@x.pl "), ["lead_owner", "in", ["", "h@x.pl"]])
+
+	def test_tylko_wlasne(self):
+		self.assertEqual(
+			filtr_wlasciciela_spotkania("h@x.pl", tylko_wlasne=True), ["lead_owner", "=", "h@x.pl"]
+		)
+
+	def test_widocznosc_wg_wlasciciela(self):
+		wlasny = {"lead_owner": "h@x.pl", "converted": 0}
+		pusty = {"lead_owner": None, "converted": 0}
+		pusty_str = {"lead_owner": "", "converted": 0}
+		cudzy = {"lead_owner": "inny@x.pl", "converted": 0}
+		self.assertTrue(_widoczny(wlasny, "", "h@x.pl", False))
+		self.assertTrue(_widoczny(pusty, "", "h@x.pl", False))
+		self.assertTrue(_widoczny(pusty_str, "", "h@x.pl", False))
+		self.assertFalse(_widoczny(cudzy, "", "h@x.pl", False))
+
+	def test_bez_handlowca_widac_wszystkie(self):
+		self.assertTrue(_widoczny({"lead_owner": "inny@x.pl", "converted": 0}, "", "", False))
+
+	def test_zakres_wlasny_bez_nieprzypisanych(self):
+		self.assertFalse(_widoczny({"lead_owner": None, "converted": 0}, "", "h@x.pl", False, True))
+		self.assertTrue(_widoczny({"lead_owner": "h@x.pl", "converted": 0}, "", "h@x.pl", False, True))
+
+	def test_skonwertowany_ukryty(self):
+		self.assertFalse(_widoczny({"lead_owner": "h@x.pl", "converted": 1}, "", "h@x.pl", False))
+
+
+class TestFiltrFacebooka(unittest.TestCase):
+	def test_warianty(self):
+		w = warianty_filtra_fb()
+		self.assertIn(["source", "=", "Facebook"], w)
+		self.assertIn(["custom_import_source", "=", "FB"], w)
+		self.assertEqual(len(w), 5)
+
+	def _lead(self, **kw):
+		return {"lead_owner": "", "converted": 0, "source": None, "custom_import_source": None, **kw}
+
+	def test_token_fb(self):
+		for wartosc in ("FB", "FB+CC", "ARG+FB", "ARG+FB+CC"):
+			self.assertTrue(_widoczny(self._lead(custom_import_source=wartosc), "", "", True), wartosc)
+
+	def test_token_podobny_nie_pasuje(self):
+		for wartosc in ("FBX", "XFB", "ARG+FBX", "CC", None, ""):
+			self.assertFalse(_widoczny(self._lead(custom_import_source=wartosc), "", "", True), wartosc)
+
+	def test_zrodlo_facebook(self):
+		self.assertTrue(_widoczny(self._lead(source="Facebook"), "", "", True))
+		self.assertFalse(_widoczny(self._lead(source="Google"), "", "", True))
+
+	def test_odznaczone_pokazuje_wszystkie_z_filtrem_wlasciciela(self):
+		self.assertTrue(_widoczny(self._lead(source="Google"), "", "", False))
+		self.assertFalse(
+			_widoczny(self._lead(source="Facebook", lead_owner="inny@x.pl"), "", "h@x.pl", False)
+		)
+		self.assertFalse(_widoczny(self._lead(source="Facebook", lead_owner="inny@x.pl"), "", "h@x.pl", True))
+
+	def test_kazde_zapytanie_fb_ma_wspolne_filtry_i_wyszukiwanie(self):
+		zapytania = zapytania_leadow_spotkania("Kow", "h@x.pl", True)
+		self.assertEqual(len(zapytania), 5)
+		for z in zapytania:
+			self.assertIn(["converted", "=", 0], z["filters"])
+			self.assertIn(["lead_owner", "in", ["", "h@x.pl"]], z["filters"])
+			self.assertEqual(len(z["or_filters"]), len(POLA_WYSZUKIWANIA_LEADA))
+
+	def test_bez_fb_jedno_zapytanie(self):
+		self.assertEqual(len(zapytania_leadow_spotkania("", "", False)), 1)
+
+
+class TestWyszukiwanieLeada(unittest.TestCase):
+	def test_pusty_tekst(self):
+		self.assertEqual(warunki_wyszukiwania_leada(""), [])
+		self.assertEqual(warunki_wyszukiwania_leada("  "), [])
+		self.assertEqual(warunki_wyszukiwania_leada(None), [])
+
+	def test_pola(self):
+		w = warunki_wyszukiwania_leada(" Kowal ")
+		self.assertEqual([x[0] for x in w], list(POLA_WYSZUKIWANIA_LEADA))
+		self.assertTrue(all(x[1:] == ["like", "%Kowal%"] for x in w))
+
+	def test_escapowanie_wzorca(self):
+		w = warunki_wyszukiwania_leada("50%_a")
+		self.assertEqual(w[0][2], "%50\\%\\_a%")
+
+	def test_po_telefonie_i_nazwisku(self):
+		lead = {"lead_owner": "", "converted": 0, "lead_name": "Jan Kowalski", "mobile_no": "+48600111222"}
+		self.assertTrue(_widoczny(lead, "Kowal", "", False))
+		self.assertTrue(_widoczny(lead, "600111", "", False))
+		self.assertFalse(_widoczny(lead, "Nowak", "", False))
+
+	def test_tekst_wyszukiwania(self):
+		self.assertEqual(tekst_wyszukiwania(" a "), "a")
+		self.assertEqual(tekst_wyszukiwania(5), "")
+
+
+class TestScalLeadySpotkania(unittest.TestCase):
+	def test_bez_duplikatow_najnowsze_pierwsze(self):
+		a = {"name": "L1", "modified": "2026-11-01 10:00:00"}
+		b = {"name": "L2", "modified": "2026-11-03 10:00:00"}
+		c = {"name": "L3", "modified": "2026-11-02 10:00:00"}
+		wynik = scal_leady_spotkania([[a, b], [b, c], []])
+		self.assertEqual([w["name"] for w in wynik], ["L2", "L3", "L1"])
+
+	def test_limit(self):
+		lista = [{"name": f"L{i}", "modified": f"2026-11-01 10:{i:02d}:00"} for i in range(30)]
+		self.assertEqual(len(scal_leady_spotkania([lista])), LIMIT_LEADOW_SPOTKANIA)
+		self.assertEqual(len(scal_leady_spotkania([lista], limit=3)), 3)
+
+	def test_puste(self):
+		self.assertEqual(scal_leady_spotkania(None), [])
+		self.assertEqual(scal_leady_spotkania([None, [{"name": None}]]), [])
+
+	def test_projekcja_bez_cc(self):
+		self.assertNotIn("custom_cc", POLA_LEADA_SPOTKANIA)
+
+
+class TestCzyTak(unittest.TestCase):
+	def test_wartosci(self):
+		for v in (True, 1, "1", "true", "True", " tak "):
+			self.assertTrue(czy_tak(v), v)
+		for v in (False, 0, "0", "false", "nie"):
+			self.assertFalse(czy_tak(v), v)
+
+	def test_domyslnie(self):
+		self.assertTrue(czy_tak(None, domyslnie=True))
+		self.assertTrue(czy_tak("", domyslnie=True))
+		self.assertFalse(czy_tak(None))
+
+
+class TestNotatkaDoHtml(unittest.TestCase):
+	def test_pusta(self):
+		for v in (None, "", "   ", "\n\t ", 5):
+			self.assertIsNone(notatka_do_html(v), repr(v))
+
+	def test_zwykla(self):
+		self.assertEqual(notatka_do_html("  Dzwonić po 16  "), "<p>Dzwonić po 16</p>")
+
+	def test_wiele_linii(self):
+		self.assertEqual(notatka_do_html("a\r\nb\n\nc"), "<p>a<br>b<br><br>c</p>")
+
+	def test_escapowanie(self):
+		self.assertEqual(notatka_do_html("<b>x</b> & y"), "<p>&lt;b&gt;x&lt;/b&gt; &amp; y</p>")

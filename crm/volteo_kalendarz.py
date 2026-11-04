@@ -402,3 +402,136 @@ def plan_zapisu(tydzien, zakres: str, poniedzialek: str, wzor_obecny: dict) -> d
 		if wzor_dnia is None or normalizuj_okna(wzor_dnia) != okna:
 			zmiany[daty[i]] = okna
 	return {"wzor": None, "usun_zmiany": daty, "zmiany": zmiany}
+
+
+# ---------------------------------------------------------------------------
+# Okno "Nowe spotkanie" (b84, ops#332): lista leadow do wyboru i notatka.
+# Lead przypisany do INNEGO handlowca nie jest pokazywany; przelacznik
+# "Tylko leady z Facebooka" zaweza liste do leadow z webhooka Make.
+# ---------------------------------------------------------------------------
+
+LIMIT_LEADOW_SPOTKANIA: int = 20
+"""Ile leadow zwraca wyszukiwarka w oknie (jak lista podpowiedzi Linka)."""
+
+POLA_WYSZUKIWANIA_LEADA: tuple[str, ...] = (
+	"name",
+	"lead_name",
+	"first_name",
+	"last_name",
+	"mobile_no",
+	"phone",
+)
+"""Pola, po ktorych szuka okno: identyfikator, imie i nazwisko, telefony."""
+
+POLA_LEADA_SPOTKANIA: tuple[str, ...] = ("name", "lead_name", "mobile_no", "lead_owner", "modified")
+"""Minimalna projekcja listy w oknie: nigdy `custom_cc`."""
+
+
+def tekst_wyszukiwania(tekst) -> str:
+	"""Tekst z pola wyszukiwania bez spacji na brzegach; nie-string => ""."""
+	if not isinstance(tekst, str):
+		return ""
+	return tekst.strip()
+
+
+def warunki_wyszukiwania_leada(tekst) -> list[list]:
+	"""`or_filters` dla `frappe.get_list`: `tekst` zawarty w ktoryms z pol wyszukiwania.
+
+	Pusty tekst = brak warunku (pusta lista). Znaki `%` i `_` sa escapowane,
+	zeby wpisany tekst nie dzialal jak wzorzec LIKE.
+	"""
+	tekst = tekst_wyszukiwania(tekst)
+	if not tekst:
+		return []
+	bez_wzorca = tekst.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+	return [[pole, "like", f"%{bez_wzorca}%"] for pole in POLA_WYSZUKIWANIA_LEADA]
+
+
+def filtr_wlasciciela_spotkania(handlowiec, tylko_wlasne: bool = False) -> list | None:
+	"""Warunek `lead_owner` dla listy leadow w oknie.
+
+	Lead z pustym `lead_owner` albo rownym `handlowiec` jest widoczny, lead
+	innego handlowca nie. `in` z pustym stringiem Frappe zamienia na
+	`ifnull(lead_owner, '') in (...)`, wiec NULL tez przechodzi. Brak
+	handlowca (zakres "wszyscy", "Bez zmiany handlowca") = brak warunku (None).
+	`tylko_wlasne` (zakres "wlasny"): tylko `lead_owner == handlowiec`, bo
+	`ustaw_termin` i tak odrzuca tam lead bez wlasciciela.
+	"""
+	if not isinstance(handlowiec, str) or not handlowiec.strip():
+		return None
+	if tylko_wlasne:
+		return ["lead_owner", "=", handlowiec.strip()]
+	return ["lead_owner", "in", ["", handlowiec.strip()]]
+
+
+def warianty_filtra_fb() -> list[list]:
+	"""Warunki "lead z webhooka Make" (laczone LUB, kazdy osobnym zapytaniem).
+
+	`source = "Facebook"` albo token `FB` w `custom_import_source` (tokeny
+	laczone "+", dopasowanie dokladne przez `wzory_tagu`, jak filtr tagow
+	na liscie). Osobne zapytania, bo `frappe.get_list` ma tylko jedna
+	grupe `or_filters`, a ta jest zajeta przez wyszukiwanie.
+	"""
+	from crm.volteo_leady_webhook import TOKEN_ZRODLA_FB, ZRODLO_LEADA
+	from crm.volteo_lista_szans import wzory_tagu
+
+	return [["source", "=", ZRODLO_LEADA], *wzory_tagu("custom_import_source", TOKEN_ZRODLA_FB)]
+
+
+def zapytania_leadow_spotkania(tekst, handlowiec, tylko_fb, tylko_wlasne: bool = False) -> list[dict]:
+	"""Lista zapytan `{"filters", "or_filters"}` dla wyszukiwarki w oknie.
+
+	Kazde zapytanie ma wspolne `filters` (nieskonwertowany lead, filtr
+	wlasciciela) i `or_filters` wyszukiwania; przy `tylko_fb` jedno zapytanie
+	na kazdy wariant z `warianty_filtra_fb` (wynik to suma zbiorow).
+	"""
+	baza: list[list] = [["converted", "=", 0]]
+	wlasciciel = filtr_wlasciciela_spotkania(handlowiec, tylko_wlasne)
+	if wlasciciel:
+		baza.append(wlasciciel)
+	or_filters = warunki_wyszukiwania_leada(tekst)
+	if not tylko_fb:
+		return [{"filters": baza, "or_filters": or_filters}]
+	return [{"filters": [*baza, wariant], "or_filters": or_filters} for wariant in warianty_filtra_fb()]
+
+
+def scal_leady_spotkania(listy, limit: int = LIMIT_LEADOW_SPOTKANIA) -> list[dict]:
+	"""Suma wynikow kilku zapytan bez duplikatow, najnowsze (`modified`) pierwsze, max `limit`."""
+	po_nazwie: dict[str, dict] = {}
+	for lista in listy or []:
+		for w in lista or []:
+			nazwa = w.get("name")
+			if nazwa and nazwa not in po_nazwie:
+				po_nazwie[nazwa] = w
+	wynik = sorted(po_nazwie.values(), key=lambda w: str(w.get("modified") or ""), reverse=True)
+	return wynik[: max(0, limit)]
+
+
+def czy_tak(wartosc, domyslnie: bool = False) -> bool:
+	"""Flaga z zapytania HTTP ("1", "true", 1, True) na bool; None => `domyslnie`."""
+	if wartosc is None or wartosc == "":
+		return domyslnie
+	if isinstance(wartosc, bool):
+		return wartosc
+	if isinstance(wartosc, (int, float)):
+		return wartosc != 0
+	if isinstance(wartosc, str):
+		return wartosc.strip().lower() in ("1", "true", "tak", "yes", "on")
+	return domyslnie
+
+
+def notatka_do_html(notatka) -> str | None:
+	"""Tresc komentarza leada z notatki okna; pusta lub same spacje => None.
+
+	Tekst jest escapowany (bez HTML od uzytkownika), linie rozdzielone `<br>`,
+	calosc w `<p>` (format jak z `CommentBox`).
+	"""
+	import html
+
+	if not isinstance(notatka, str):
+		return None
+	tekst = notatka.replace("\r\n", "\n").replace("\r", "\n").strip()
+	if not tekst:
+		return None
+	linie = [html.escape(linia.rstrip()) for linia in tekst.split("\n")]
+	return "<p>" + "<br>".join(linie) + "</p>"

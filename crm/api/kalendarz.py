@@ -246,8 +246,14 @@ def ustaw_dostepnosc(handlowiec: str, dni: str | list, zakres: str, tydzien_od: 
 
 
 @frappe.whitelist()
-def ustaw_termin(lead: str, termin: str | None = None, handlowiec: str | None = None) -> dict:
+def ustaw_termin(
+	lead: str, termin: str | None = None, handlowiec: str | None = None, notatka: str | None = None
+) -> dict:
 	"""Ustawia (albo czyści, gdy `termin` pusty) termin spotkania na leadzie.
+
+	`notatka` (b84, ops#332): niepusta dodaje komentarz do leada (zakładka
+	"Komentarze", `crm.api.comment.add_comment`, te same uprawnienia) w tej
+	samej transakcji co zapis terminu; pusta albo same spacje = bez komentarza.
 
 	`handlowiec` (tylko zakres "wszyscy") zmienia `lead_owner` na wskazanego
 	aktywnego handlowca D2D. Zapis przez `doc.save()` BEZ `ignore_permissions`:
@@ -276,8 +282,78 @@ def ustaw_termin(lead: str, termin: str | None = None, handlowiec: str | None = 
 
 	doc.custom_termin_spotkania = termin_norm
 	doc.save()
+	_dodaj_notatke_spotkania(doc.name, notatka)
 	return {
 		"lead": doc.name,
 		"termin": str(doc.custom_termin_spotkania) if doc.custom_termin_spotkania else None,
 		"lead_owner": doc.lead_owner,
 	}
+
+
+# ---------------------------------------------------------------------------
+# Okno "Nowe spotkanie" (b84, ops#332): lista leadow i notatka. Logika
+# warunkow w frappe-free `crm.volteo_kalendarz`.
+# ---------------------------------------------------------------------------
+
+
+def _dodaj_notatke_spotkania(lead: str, notatka: str | None) -> None:
+	"""Komentarz do leada z notatki okna (bez komentarza, gdy notatka pusta).
+
+	Przez `crm.api.comment.add_comment`, jak zakładka "Komentarze": autor to
+	zalogowany użytkownik, `check_permission` na leadzie jak dziś. Błąd
+	przerywa żądanie, więc Frappe wycofuje też zapis terminu.
+	"""
+	from crm.api.comment import add_comment
+	from crm.volteo_kalendarz import notatka_do_html
+
+	tresc = notatka_do_html(notatka)
+	if tresc:
+		add_comment("CRM Lead", lead, tresc)
+
+
+@frappe.whitelist()
+def leady_do_spotkania(
+	tekst: str | None = None, handlowiec: str | None = None, tylko_fb: str | int | bool | None = None
+) -> list[dict]:
+	"""Leady do wyboru w oknie "Nowe spotkanie" (b84, ops#332).
+
+	Ukrywa leady przypisane do innego handlowca niż `handlowiec` (pusty
+	`lead_owner` przechodzi); zakres "wlasny" pokazuje tylko leady
+	zalogowanego (`ustaw_termin` odrzuca tam cudze i nieprzypisane).
+	`tylko_fb` (domyślnie tak) zawęża do leadów z webhooka Make. Odczyt przez
+	`frappe.get_list` (uprawnienia wołającego, jak dziś), projekcja bez
+	`custom_cc`. Zwraca `[{name, lead_name, mobile_no, lead_owner}]`.
+	"""
+	from crm.volteo_kalendarz import (
+		LIMIT_LEADOW_SPOTKANIA,
+		POLA_LEADA_SPOTKANIA,
+		czy_tak,
+		scal_leady_spotkania,
+		zapytania_leadow_spotkania,
+	)
+
+	zakres = _zakres_wolajacego()
+	if zakres == ZAKRES_WLASNY:
+		handlowiec = frappe.session.user
+	wyniki = [
+		frappe.get_list(
+			"CRM Lead",
+			filters=z["filters"],
+			or_filters=z["or_filters"],
+			fields=list(POLA_LEADA_SPOTKANIA),
+			order_by="modified desc",
+			limit_page_length=LIMIT_LEADOW_SPOTKANIA,
+		)
+		for z in zapytania_leadow_spotkania(
+			tekst, handlowiec, czy_tak(tylko_fb, domyslnie=True), tylko_wlasne=zakres == ZAKRES_WLASNY
+		)
+	]
+	return [
+		{
+			"name": w.get("name"),
+			"lead_name": w.get("lead_name"),
+			"mobile_no": w.get("mobile_no"),
+			"lead_owner": w.get("lead_owner"),
+		}
+		for w in scal_leady_spotkania(wyniki)
+	]
