@@ -62,12 +62,13 @@
       :status="doc.status"
       :rodzaj="doc.custom_rodzaj_umowy"
     />
-    <div class="flex flex-1 min-h-0 overflow-hidden">
+    <!-- Siatka: Tabs ma display:contents, więc pasek zakładek zajmuje pełną szerokość (wiersz 1), a treść zakładki i panel boczny leżą w wierszu 2. -->
+    <div class="grid flex-1 min-h-0 overflow-hidden grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_minmax(0,1fr)]">
     <Tabs
       v-model="tabIndex"
       as="div"
       :tabs="tabs"
-      class="flex flex-1 overflow-hidden flex-col [&_[role='tab']]:px-0 [&_[role='tab']]:shrink-0 [&_[role='tablist']]:px-5 [&_[role='tablist']::-webkit-scrollbar]:h-0 [&_[role='tablist']]:min-h-[45px] [&_[role='tablist']]:gap-7.5 [&_[role='tabpanel']:not([hidden])]:flex [&_[role='tabpanel']:not([hidden])]:grow"
+      class="contents [&_[role='tablist']]:col-span-2 [&_[role='tablist']]:row-start-1 [&_[role='tabpanel']]:col-start-1 [&_[role='tabpanel']]:row-start-2 [&_[role='tabpanel']]:min-h-0 [&_[role='tab']]:px-0 [&_[role='tab']]:shrink-0 [&_[role='tablist']]:px-5 [&_[role='tablist']::-webkit-scrollbar]:h-0 [&_[role='tablist']]:min-h-[45px] [&_[role='tablist']]:gap-7.5 [&_[role='tabpanel']:not([hidden])]:flex [&_[role='tabpanel']:not([hidden])]:grow"
     >
       <template #tab-panel="{ tab }">
         <Activities
@@ -100,7 +101,7 @@
     </Tabs>
     <Resizer
       side="right"
-      class="flex flex-col border-l"
+      class="col-start-2 row-start-2 min-h-0 flex flex-col border-l"
       :collapsed="isSidePanelCollapsed"
     >
       <div
