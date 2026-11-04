@@ -30,13 +30,16 @@ describe('formatujDateUtworzenia', () => {
 })
 
 describe('podpowiedzGgMm', () => {
-  it('2 h 40 m', () => expect(podpowiedzGgMm(T - (2 * godz + 40 * min), T)).toBe('02:40'))
+  it('2 h 40 m', () =>
+    expect(podpowiedzGgMm(T - (2 * godz + 40 * min), T)).toBe('02:40'))
   it('sekundy obcinane w dol', () =>
     expect(podpowiedzGgMm(T - (5 * min + 59000), T)).toBe('00:05'))
   it('ponad 24 h dozwolone', () =>
     expect(podpowiedzGgMm(T - (75 * godz + 20 * min), T)).toBe('75:20'))
   it('dokladnie 999:59 jeszcze jest', () =>
-    expect(podpowiedzGgMm(T - MAKS_SEKUND_POLA * 1000 - 30000, T)).toBe('999:59'))
+    expect(podpowiedzGgMm(T - MAKS_SEKUND_POLA * 1000 - 30000, T)).toBe(
+      '999:59',
+    ))
   it('1000:00 juz nie', () =>
     expect(podpowiedzGgMm(T - 1000 * godz, T)).toBe(null))
   it('ponizej minuty brak podpowiedzi', () =>
@@ -63,14 +66,18 @@ describe('podpowiedzCzasuKontaktu', () => {
     ))
   it('starszy lead: data i godzina plus gg:mm', () => {
     const c = new Date(2026, 10, 1, 8, 40).getTime()
-    expect(podpowiedzCzasuKontaktu(c, T)).toBe('utworzono 01.11.2026, 08:40 (75:20)')
+    expect(podpowiedzCzasuKontaktu(c, T)).toBe(
+      'utworzono 01.11.2026, 08:40 (75:20)',
+    )
   })
   it('ponad 999:59: sama data', () => {
     const c = new Date(2026, 7, 1, 9, 15).getTime()
     expect(podpowiedzCzasuKontaktu(c, T)).toBe('utworzono 01.08.2026, 09:15')
   })
   it('swiezy lead (ponizej minuty): bez gg:mm', () =>
-    expect(podpowiedzCzasuKontaktu(T - 20000, T)).toBe('utworzono 00 h 00 m temu'))
+    expect(podpowiedzCzasuKontaktu(T - 20000, T)).toBe(
+      'utworzono 00 h 00 m temu',
+    ))
   it('brak creation daje null', () =>
     expect(podpowiedzCzasuKontaktu(undefined, T)).toBe(null))
 })
