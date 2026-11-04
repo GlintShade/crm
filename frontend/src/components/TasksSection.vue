@@ -18,6 +18,7 @@
       :label="__('Zadania')"
       nazwa="zadania"
       :summary="podsumowanie"
+      :licznik="licznikOtwartych"
       :opened="otwarte"
       @toggle="otwarte = !otwarte"
     >
@@ -138,8 +139,17 @@ function wyczyscWszystkiePrzejsciowe() {
 const podzial = computed(() =>
   podzielZadania(tasks.data || [], new Set(Object.keys(przejsciowe))),
 )
+// Badge i podsumowanie liczone tak samo: wiersze w 5-sekundowym stanie
+// przejsciowym traktujemy jak zakonczone.
+const licznikOtwartych = computed(
+  () => podzial.value.otwarte.filter((t) => !przejsciowe[t.name]).length,
+)
 const podsumowanie = computed(() =>
-  podsumowanieZadan(podzial.value.otwarte.length, podzial.value.zakonczone.length),
+  podsumowanieZadan(
+    licznikOtwartych.value,
+    podzial.value.zakonczone.length +
+      (podzial.value.otwarte.length - licznikOtwartych.value),
+  ),
 )
 
 const { showModal } = useDoctypeModal()

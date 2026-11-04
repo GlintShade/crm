@@ -21,8 +21,18 @@
         aria-hidden="true"
       />
       <div class="flex min-w-0 flex-1 flex-col gap-px">
-        <div class="truncate text-[13px] font-semibold text-ink-gray-9">
-          {{ __(label) || __('Untitled') }}
+        <div class="flex min-w-0 items-center gap-1.5">
+          <span class="truncate text-[13px] font-semibold text-ink-gray-9">
+            {{ __(label) || __('Untitled') }}
+          </span>
+          <Badge
+            v-if="licznik > 0"
+            :label="String(licznik)"
+            theme="blue"
+            variant="solid"
+            class="min-w-[18px] shrink-0 justify-center !rounded-full"
+            data-testid="karta-licznik"
+          />
         </div>
         <div
           v-if="summary"
@@ -43,11 +53,14 @@
 </template>
 
 <script setup>
+import { Badge } from 'frappe-ui'
 defineProps({
   label: { type: String, default: '' },
   nazwa: { type: String, default: '' },
   summary: { type: String, default: '' },
   opened: { type: Boolean, default: true },
+  // Opcjonalny licznik (np. otwarte zadania) obok tytulu; 0/null = brak.
+  licznik: { type: Number, default: null },
 })
 defineEmits(['toggle'])
 </script>
