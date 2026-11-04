@@ -215,7 +215,7 @@
           >
            <div
             class="flex min-w-0 flex-col"
-            :class="liczbaEtapow > 6 ? 'w-full gap-2.5' : 'w-4/5 gap-1.5'"
+            :class="liczbaEtapow > 6 ? 'w-full gap-2.5' : 'w-[90%] gap-1.5'"
             data-testid="pasek-grupa"
            >
             <!-- Każda etykieta stoi bezpośrednio pod własnym paskiem (ta sama
@@ -238,7 +238,7 @@
                 :data-stan="el.stan"
                 data-testid="pasek-segment"
               >
-                <span class="w-full rounded-full" :class="[segmentKlasa(el.stan), liczbaEtapow > 6 ? 'h-2' : 'h-[6px]']" />
+                <span class="h-2 w-full rounded-full" :class="segmentKlasa(el.stan)" />
                 <span
                   data-testid="pasek-etykieta"
                   class="break-words text-left leading-tight"
