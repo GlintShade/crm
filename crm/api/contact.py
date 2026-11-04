@@ -188,8 +188,45 @@ def _contact_has_references(contact_name):
 	return incomplete_check
 
 
+def skip_user_shadow_contact(doc, method=None):
+	"""Nie zakladaj kontaktu-cienia uzytkownika systemowego (ops#327).
+
+	Frappe ``User.on_update`` kolejkuje ``create_contact``, ktory wstawia Contact z
+	``user`` i lapie TYLKO ``frappe.DuplicateEntryError``. Dlatego to jest wlasciwy
+	sygnal: rzucony tutaj konczy ``create_contact`` po cichu, bez wpisu w Error Log.
+
+	Hook dziala w ``before_insert``, czyli przed ``db_insert``: nie powstaje wiersz ani
+	blokada, wiec dwa rownolegle zadania (dwa workery kolejki ``default``) oba koncza
+	sie czysto zamiast zderzyc sie na MariaDB (blad 1020).
+
+	Kontakt celowy mozna wymusic flaga ``doc.flags.volteo_kontakt_uzytkownika = True``.
+	Decyzja zyje w ``crm.volteo_kontakt_cien`` (frappe-free).
+	"""
+	from crm.volteo_kontakt_cien import czy_pominac_kontakt_cien
+
+	if not doc.user:
+		return
+	if doc.user in ("Administrator", "Guest"):
+		return
+	dane = frappe.db.get_value("User", doc.user, ["user_type", "enabled"], as_dict=True)
+	if not dane:
+		return
+	if czy_pominac_kontakt_cien(
+		user=doc.user,
+		user_type=dane.user_type,
+		enabled=dane.enabled,
+		ma_linki=bool(doc.get("links")),
+		wymuszony=bool(doc.flags.get("volteo_kontakt_uzytkownika")),
+	):
+		raise frappe.DuplicateEntryError(_("Kontakt użytkownika systemowego nie jest tworzony (kontakt-cień)."))
+
+
 def remove_user_shadow_contact(doc, method=None):
 	"""Queue removal of an unreferenced Contact automatically created for a System User.
+
+	Safety net since ops#327: ``skip_user_shadow_contact`` (before_insert) normally stops
+	such a Contact from being created at all; this still catches one inserted by a path
+	that bypasses it.
 
 	This hook runs on ``Contact.after_insert`` rather than ``User.on_update`` because
 	Frappe enqueues ``create_contact`` with ``enqueue_after_commit=True`` from
@@ -230,6 +267,8 @@ def remove_user_shadow_contact(doc, method=None):
 
 def delete_shadow_contact(contact):
 	"""Delete a shadow Contact created for a System User, re-verifying every guard.
+
+	Safety net since ops#327 (see ``skip_user_shadow_contact``).
 
 	This is the deferred worker enqueued by ``remove_user_shadow_contact`` -- see that
 	function's docstring for why the deletion must be deferred out of the ``insert()``
