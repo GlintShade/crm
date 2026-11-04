@@ -96,14 +96,17 @@
                         <div class="whitespace-nowrap text-ink-gray-5">
                           {{ l.klucz ? l.klucz + ':' : '' }}
                         </div>
-                        <div class="break-words text-ink-gray-9">
+                        <div class="break-words text-ink-gray-8">
                           {{ l.wartosc }}
                         </div>
                       </template>
                     </div>
                     <div
                       v-else-if="field.read_only"
-                      class="whitespace-pre-wrap break-words px-2 py-1 text-base text-ink-gray-5"
+                      :class="[
+                        'whitespace-pre-wrap break-words px-2 py-1 text-base',
+                        karty ? 'text-ink-gray-8' : 'text-ink-gray-5',
+                      ]"
                     >
                       {{ doc[field.fieldname] }}
                     </div>
@@ -171,7 +174,7 @@
                       ]"
                     >
                       <div
-                        class="grid min-h-[28px] flex-1 items-center overflow-hidden text-base"
+                        class="valor-pola grid min-h-[28px] flex-1 items-center overflow-hidden text-base"
                       >
                         <div
                           v-if="
@@ -195,7 +198,10 @@
                               'User',
                             ].includes(field.fieldtype)
                           "
-                          class="flex h-7 cursor-pointer items-center px-2 py-1 text-ink-gray-5"
+                          :class="[
+                            'flex h-7 cursor-pointer items-center px-2 py-1',
+                            karty ? 'text-ink-gray-8' : 'text-ink-gray-5',
+                          ]"
                         >
                           <Tooltip :text="__(field.tooltip)">
                             <div :class="karty && 'break-words'">
@@ -1053,6 +1059,25 @@ function firstVisibleIndex() {
 }
 .sections-karty .form-control {
   margin: 0;
+}
+/* Wariant karty: wartosci pol zawsze czarne (ink-gray-8, jak dotad pola
+   edytowalne), takze dla pol tylko do odczytu (disabled) i dla Select/Link.
+   Etykiety zostaja szare (text-ink-gray-5), a placeholdery pustych pol
+   (Wpisz/Wybierz, text-ink-gray-4) pozostaja szare. */
+.sections-karty :deep(.valor-pola),
+.sections-karty :deep(.valor-pola input),
+.sections-karty :deep(.valor-pola textarea),
+.sections-karty :deep(.valor-pola select),
+.sections-karty :deep(.valor-pola button),
+.sections-karty :deep(.valor-pola [class*='text-ink-gray-']:not(.text-ink-gray-4)) {
+  @apply text-ink-gray-8;
+  -webkit-text-fill-color: currentColor;
+  opacity: 1;
+}
+.sections-karty :deep(.valor-pola input::placeholder),
+.sections-karty :deep(.valor-pola textarea::placeholder) {
+  @apply text-ink-gray-4;
+  -webkit-text-fill-color: currentColor;
 }
 .sections-karty .section .column {
   max-height: none;
