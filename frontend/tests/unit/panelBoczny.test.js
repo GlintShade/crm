@@ -11,6 +11,9 @@ import {
   zapiszOtwartaSekcje,
   podsumowanieSekcji,
   podsumowanieZadan,
+  podzielZadania,
+  liczbaOtwartych,
+  liczbaZakonczonych,
   czyWygenerowanyPlaceholder,
 } from '@/utils/panelBoczny'
 
@@ -148,12 +151,82 @@ describe('podsumowanieSekcji', () => {
 })
 
 describe('podsumowanieZadan', () => {
-  it('odmiana i licznik otwartych', () => {
-    expect(podsumowanieZadan(0)).toBe('Brak zadań')
-    expect(podsumowanieZadan(1)).toBe('1 zadanie')
-    expect(podsumowanieZadan(3, 2)).toBe('3 zadania, otwartych: 2')
-    expect(podsumowanieZadan(5)).toBe('5 zadań')
-    expect(podsumowanieZadan(12)).toBe('12 zadań')
+  it('brak, tylko otwarte, tylko zakonczone, oba', () => {
+    expect(podsumowanieZadan(0, 0)).toBe('Brak zadań')
+    expect(podsumowanieZadan(2, 0)).toBe('2 otwarte')
+    expect(podsumowanieZadan(0, 6)).toBe('Wszystko zrobione · 6 zakończonych')
+    expect(podsumowanieZadan(3, 3)).toBe('3 otwarte · 3 zakończone')
+    expect(podsumowanieZadan(1, 1)).toBe('1 otwarte · 1 zakończone')
+  })
+  it('odmiana 1, 2, 5, 12, 22', () => {
+    expect([1, 2, 5, 12, 14, 22, 25].map(liczbaOtwartych)).toEqual([
+      '1 otwarte', '2 otwarte', '5 otwartych', '12 otwartych', '14 otwartych',
+      '22 otwarte', '25 otwartych',
+    ])
+    expect([1, 2, 5, 12, 22].map(liczbaZakonczonych)).toEqual([
+      '1 zakończone', '2 zakończone', '5 zakończonych', '12 zakończonych',
+      '22 zakończone',
+    ])
+  })
+})
+
+describe('podzielZadania', () => {
+  const teraz = new Date(2026, 10, 4, 12, 0)
+  const z = (name, status, due_date, modified = '2026-11-01 10:00:00') => ({
+    name, status, due_date, modified,
+  })
+  it('dzieli po statusie, Backlog/Todo/In Progress sa otwarte', () => {
+    const r = podzielZadania(
+      [z('a', 'Backlog'), z('b', 'Todo'), z('c', 'In Progress'), z('d', 'Done'), z('e', 'Canceled')],
+      teraz,
+    )
+    expect(r.otwarte.map((t) => t.name).sort()).toEqual(['a', 'b', 'c'])
+    expect(r.zakonczone.map((t) => t.name).sort()).toEqual(['d', 'e'])
+  })
+  it('sortuje: przeterminowane, najblizsze, bez terminu na koncu', () => {
+    const r = podzielZadania(
+      [
+        z('brak', 'Todo', null),
+        z('daleko', 'Todo', '2026-12-01'),
+        z('stare', 'Todo', '2026-10-01'),
+        z('dzis', 'Todo', '2026-11-04'),
+        z('wczoraj', 'Todo', '2026-11-03'),
+      ],
+      teraz,
+    )
+    expect(r.otwarte.map((t) => t.name)).toEqual(['stare', 'wczoraj', 'dzis', 'daleko', 'brak'])
+  })
+  it('remis terminu rozstrzyga modified malejaco, takze bez terminu', () => {
+    const r = podzielZadania(
+      [
+        z('s', 'Todo', '2026-11-10', '2026-11-01 08:00:00'),
+        z('n', 'Todo', '2026-11-10', '2026-11-02 08:00:00'),
+        z('b1', 'Todo', null, '2026-10-01 08:00:00'),
+        z('b2', 'Todo', null, '2026-10-02 08:00:00'),
+      ],
+      teraz,
+    )
+    expect(r.otwarte.map((t) => t.name)).toEqual(['n', 's', 'b2', 'b1'])
+  })
+  it('zakonczone: najnowsze pierwsze', () => {
+    const r = podzielZadania(
+      [z('a', 'Done', null, '2026-10-30 10:00:00'), z('b', 'Canceled', null, '2026-11-01 10:00:00')],
+      teraz,
+    )
+    expect(r.zakonczone.map((t) => t.name)).toEqual(['b', 'a'])
+  })
+  it('zostajaOtwarte trzyma zakonczone zadanie na liscie otwartych', () => {
+    const r = podzielZadania([z('a', 'Done'), z('b', 'Done')], teraz, new Set(['a']))
+    expect(r.otwarte.map((t) => t.name)).toEqual(['a'])
+    expect(r.zakonczone.map((t) => t.name)).toEqual(['b'])
+  })
+  it('zostajaOtwarte dziala tez dla numerycznych nazw (CRM Task ma name Int)', () => {
+    const r = podzielZadania([z(24, 'Done')], teraz, new Set(['24']))
+    expect(r.otwarte).toHaveLength(1)
+  })
+  it('puste i niepoprawne wejscie', () => {
+    expect(podzielZadania([], teraz)).toEqual({ otwarte: [], zakonczone: [] })
+    expect(podzielZadania(null, teraz)).toEqual({ otwarte: [], zakonczone: [] })
   })
 })
 

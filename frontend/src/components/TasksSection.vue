@@ -24,9 +24,47 @@
       <template #actions>
         <Button variant="ghost" class="w-7" icon="lucide-plus" @click="showTask()" />
       </template>
-      <div class="max-h-72 overflow-y-auto">
-        <TaskArea :tasks="tasks.data" :modalRef="taskHandlers" />
+      <div
+        v-if="!podzial.otwarte.length"
+        class="flex items-center gap-1.5 py-1 text-[12.5px] text-ink-gray-5"
+        data-testid="zadania-wszystkie-zakonczone"
+      >
+        <span class="lucide-check size-4 shrink-0 text-ink-green-3" aria-hidden="true" />
+        {{ __('Wszystkie zadania zakończone.') }}
       </div>
+      <div v-else class="max-h-72 overflow-y-auto">
+        <TaskArea
+          :tasks="podzial.otwarte"
+          :modalRef="taskHandlers"
+          :przejsciowe="przejsciowe"
+        />
+      </div>
+      <template v-if="podzial.zakonczone.length">
+        <button
+          type="button"
+          class="mt-1 flex w-full items-center gap-1 border-t border-dashed border-outline-gray-2 pt-1.5 text-left text-[12px] text-ink-gray-5 hover:text-ink-gray-8"
+          data-testid="pokaz-zakonczone"
+          @click="pokazZakonczone = !pokazZakonczone"
+        >
+          <span
+            :class="[
+              pokazZakonczone ? 'lucide-chevron-down' : 'lucide-chevron-right',
+              'size-3.5 shrink-0',
+            ]"
+            aria-hidden="true"
+          />
+          {{
+            pokazZakonczone
+              ? __('Ukryj zakończone') + ` (${podzial.zakonczone.length})`
+              : __('Pokaż zakończone') + ` (${podzial.zakonczone.length})`
+          }}
+        </button>
+        <ZakonczoneZadania
+          v-if="pokazZakonczone"
+          :tasks="podzial.zakonczone"
+          :modalRef="taskHandlers"
+        />
+      </template>
     </KartaSekcji>
   </div>
   <div v-else class="section flex flex-col">
@@ -66,8 +104,9 @@ import CollapsibleSection from '@/components/CollapsibleSection.vue'
 import { useDoctypeModal } from '@/composables/doctypeModal'
 import { createResource, call, Button } from 'frappe-ui'
 import KartaSekcji from '@/components/KartaSekcji.vue'
-import { podsumowanieZadan } from '@/utils/panelBoczny'
-import { computed, ref, watch } from 'vue'
+import ZakonczoneZadania from '@/components/ZakonczoneZadania.vue'
+import { podsumowanieZadan, podzielZadania } from '@/utils/panelBoczny'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 
 const props = defineProps({
   doctype: { type: String, required: true },
@@ -78,13 +117,29 @@ const props = defineProps({
 })
 
 const otwarte = ref(!props.startZwiniete)
-const podsumowanie = computed(() => {
-  const lista = tasks.data || []
-  const otwartych = lista.filter(
-    (t) => !['Done', 'Canceled'].includes(t.status),
-  ).length
-  return podsumowanieZadan(lista.length, otwartych)
-})
+const pokazZakonczone = ref(false)
+
+// Stan przejsciowy (5 s) po oznaczeniu zadania jako zakonczone: wiersz zostaje
+// na liscie otwartych z linkiem "Cofnij". nazwa -> { poprzedni }.
+const CZAS_COFNIECIA_MS = 5000
+const przejsciowe = reactive({})
+const timery = {}
+
+function wyczyscPrzejsciowe(name) {
+  clearTimeout(timery[name])
+  delete timery[name]
+  delete przejsciowe[name]
+}
+function wyczyscWszystkiePrzejsciowe() {
+  Object.keys(timery).forEach(wyczyscPrzejsciowe)
+}
+
+const podzial = computed(() =>
+  podzielZadania(tasks.data || [], new Date(), new Set(Object.keys(przejsciowe))),
+)
+const podsumowanie = computed(() =>
+  podsumowanieZadan(podzial.value.otwarte.length, podzial.value.zakonczone.length),
+)
 
 const { showModal } = useDoctypeModal()
 
@@ -116,6 +171,8 @@ watch(
   () => props.docname,
   () => {
     if (props.startZwiniete) otwarte.value = false
+    pokazZakonczone.value = false
+    wyczyscWszystkiePrzejsciowe()
     tasks.reload()
   },
 )
@@ -144,16 +201,51 @@ async function deleteTask(name) {
   tasks.reload()
 }
 
-function updateTaskStatus(status, task) {
-  call('frappe.client.set_value', {
+function zapiszStatus(task, status) {
+  return call('frappe.client.set_value', {
     doctype: 'CRM Task',
     name: task.name,
     fieldname: 'status',
     value: status,
-  }).then(() => {
+  })
+}
+
+function updateTaskStatus(status, task) {
+  const koniec = ['Done', 'Canceled'].includes(status)
+  const bylOtwarty = !['Done', 'Canceled'].includes(task.status)
+  const poprzedni = task.status
+  zapiszStatus(task, status).then(() => {
+    if (koniec && bylOtwarty) {
+      wyczyscPrzejsciowe(task.name)
+      przejsciowe[task.name] = { poprzedni }
+      timery[task.name] = setTimeout(
+        () => wyczyscPrzejsciowe(task.name),
+        CZAS_COFNIECIA_MS,
+      )
+    } else {
+      wyczyscPrzejsciowe(task.name)
+    }
     tasks.reload()
   })
 }
 
-const taskHandlers = { showTask, deleteTask, updateTaskStatus }
+function cofnijStatus(task) {
+  const poprzedni = przejsciowe[task.name]?.poprzedni || 'Todo'
+  wyczyscPrzejsciowe(task.name)
+  zapiszStatus(task, poprzedni).then(() => tasks.reload())
+}
+
+function przywrocZadanie(task) {
+  zapiszStatus(task, 'Todo').then(() => tasks.reload())
+}
+
+onBeforeUnmount(wyczyscWszystkiePrzejsciowe)
+
+const taskHandlers = {
+  showTask,
+  deleteTask,
+  updateTaskStatus,
+  cofnijStatus,
+  przywrocZadanie,
+}
 </script>

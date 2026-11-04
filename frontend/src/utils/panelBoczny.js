@@ -292,19 +292,75 @@ export function podsumowanieSekcji(sekcja, doc, opcje = {}) {
   return wartosci.length ? wartosci.join(' · ') : t(BRAK_DANYCH)
 }
 
-/** Podsumowanie karty Zadania: "3 zadania, w toku: 2" / "Brak zadań". */
-export function podsumowanieZadan(liczba, otwarte = null) {
-  if (!liczba) return 'Brak zadań'
-  const d = liczba % 100
-  const j = liczba % 10
-  const slowo =
-    liczba === 1
-      ? 'zadanie'
-      : j >= 2 && j <= 4 && !(d >= 12 && d <= 14)
-        ? 'zadania'
-        : 'zadań'
-  const baza = `${liczba} ${slowo}`
-  return Number.isInteger(otwarte) ? `${baza}, otwartych: ${otwarte}` : baza
+const STATUSY_ZAKONCZONE = ['Done', 'Canceled']
+
+/** Polska odmiana: forma dla 1, dla 2-4 (poza 12-14) i dla reszty. */
+function odmien(n, jeden, kilka, wiele) {
+  const d = n % 100
+  const j = n % 10
+  if (n === 1) return jeden
+  return j >= 2 && j <= 4 && !(d >= 12 && d <= 14) ? kilka : wiele
+}
+
+/** "1 otwarte" / "2 otwarte" / "5 otwartych". */
+export function liczbaOtwartych(n) {
+  return `${n} ${odmien(n, 'otwarte', 'otwarte', 'otwartych')}`
+}
+
+/** "1 zakończone" / "2 zakończone" / "5 zakończonych". */
+export function liczbaZakonczonych(n) {
+  return `${n} ${odmien(n, 'zakończone', 'zakończone', 'zakończonych')}`
+}
+
+/**
+ * Podsumowanie karty Zadania: "3 otwarte · 3 zakończone", "2 otwarte",
+ * "Wszystko zrobione · 6 zakończonych", "Brak zadań".
+ */
+export function podsumowanieZadan(otwarte, zakonczone = 0) {
+  if (!otwarte && !zakonczone) return 'Brak zadań'
+  if (!otwarte) return `Wszystko zrobione · ${liczbaZakonczonych(zakonczone)}`
+  if (!zakonczone) return liczbaOtwartych(otwarte)
+  return `${liczbaOtwartych(otwarte)} · ${liczbaZakonczonych(zakonczone)}`
+}
+
+function dzienKalendarzowy(v) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v ?? ''))
+  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) : null
+}
+
+/**
+ * Dzieli zadania na otwarte (Backlog/Todo/In Progress) i zakonczone
+ * (Done/Canceled). Otwarte: przeterminowane pierwsze, potem najblizszy
+ * termin rosnaco, bez terminu na koncu, remisy po `modified` malejaco.
+ * Zakonczone: najnowsze (`modified`) pierwsze. `zostajaOtwarte` to zbior
+ * nazw zadan, ktore maja zostac na liscie otwartych mimo statusu zakonczonego
+ * (przejsciowy stan "Cofnij").
+ */
+export function podzielZadania(lista, teraz = new Date(), zostajaOtwarte = null) {
+  const dzis = Date.UTC(teraz.getFullYear(), teraz.getMonth(), teraz.getDate())
+  const otwarte = []
+  const zakonczone = []
+  for (const t of lista || []) {
+    const koniec = STATUSY_ZAKONCZONE.includes(t.status)
+    if (koniec && !zostajaOtwarte?.has(String(t.name))) zakonczone.push(t)
+    else otwarte.push(t)
+  }
+  const modMalejaco = (a, b) =>
+    String(b.modified || '').localeCompare(String(a.modified || ''))
+  otwarte.sort((a, b) => {
+    const da = dzienKalendarzowy(a.due_date)
+    const db = dzienKalendarzowy(b.due_date)
+    if (da === null && db === null) return modMalejaco(a, b)
+    if (da === null) return 1
+    if (db === null) return -1
+    const pa = da < dzis
+    const pb = db < dzis
+    if (pa !== pb) return pa ? -1 : 1
+    if (da !== db) return da - db
+    return modMalejaco(a, b)
+  })
+  zakonczone.sort(modMalejaco)
+  return { otwarte, zakonczone }
 }
 
 /**

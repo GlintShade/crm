@@ -155,6 +155,15 @@ export function formatujTerminKrotko(dataCzas) {
 }
 
 /**
+ * Krotka data bez godziny: "1 lis", "30 paź". Pusta/niepoprawna wartosc daje ''.
+ */
+export function formatujDzienMiesiac(dataCzas) {
+  const czesci = rozbierzDataCzas(dataCzas)
+  if (!czesci) return ''
+  return `${czesci.dzien} ${MIESIACE_SKROT[czesci.miesiac - 1]}`
+}
+
+/**
  * Tekst względny terminu (panel właściwości TaskModal.vue, issue
  * GlintShade/proenergy-crm-ops#208): "dziś", "jutro", "za N dni" dla
  * terminów w przyszłości, "Termin minął N dni temu" dla przeszłych,

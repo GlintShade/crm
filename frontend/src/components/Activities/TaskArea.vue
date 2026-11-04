@@ -3,14 +3,47 @@
     <div v-for="(task, i) in tasks" :key="task.name">
       <div
         class="activity flex cursor-pointer gap-3 rounded p-2.5 duration-300 ease-in-out hover:bg-surface-gray-1"
+        :class="przejsciowe[task.name] ? '!bg-surface-green-1' : ''"
+        :data-testid="przejsciowe[task.name] ? 'zadanie-przejsciowe' : undefined"
         @click="modalRef.showTask(task)"
       >
         <div class="flex min-w-0 flex-1 flex-col gap-1 text-base">
-          <div class="truncate font-medium text-ink-gray-9" :title="task.title">
+          <div
+            class="truncate font-medium"
+            :class="przejsciowe[task.name] ? 'text-ink-gray-5 line-through' : 'text-ink-gray-9'"
+            :title="task.title"
+          >
             {{ task.title }}
           </div>
           <div
-            v-if="task.assigned_to"
+            v-if="przejsciowe[task.name]"
+            class="flex min-w-0 items-center gap-1.5 text-[12.5px] text-ink-gray-8"
+          >
+            <span
+              :class="[
+                task.status === 'Canceled'
+                  ? 'lucide-x text-ink-gray-5'
+                  : 'lucide-check text-ink-green-3',
+                'size-3.5 shrink-0',
+              ]"
+              aria-hidden="true"
+            />
+            <span class="min-w-0 flex-1 truncate">{{
+              task.status === 'Canceled'
+                ? __('Anulowane. Za chwilę trafi do zakończonych.')
+                : __('Zrobione. Za chwilę trafi do zakończonych.')
+            }}</span>
+            <button
+              type="button"
+              class="shrink-0 font-medium text-ink-gray-9 underline"
+              data-testid="zadanie-cofnij"
+              @click.stop="modalRef.cofnijStatus(task)"
+            >
+              {{ __('Cofnij') }}
+            </button>
+          </div>
+          <div
+            v-else-if="task.assigned_to"
             class="flex min-w-0 items-center gap-1.5 text-ink-gray-8"
           >
             <UserAvatar :user="task.assigned_to" size="xs" />
@@ -100,6 +133,9 @@ import { Dropdown } from 'frappe-ui'
 defineProps({
   tasks: { type: Array, default: () => [] },
   modalRef: { type: Object, default: () => ({}) },
+  // Opt-in (karta Zadania w panelu bocznym): nazwy zadan w 5-sekundowym stanie
+  // przejsciowym po oznaczeniu jako zakonczone. Domyslnie pusty = bez zmian.
+  przejsciowe: { type: Object, default: () => ({}) },
 })
 
 const { getUser } = usersStore()
