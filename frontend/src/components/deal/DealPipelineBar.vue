@@ -380,6 +380,8 @@ const props = defineProps({
   etap: { type: String, default: '' },
 })
 
+const emit = defineEmits(['liczniki'])
+
 const { getDealStatus } = statusesStore()
 
 const resource = createResource({
@@ -630,6 +632,19 @@ watch(
 // (nie w callbacku, więc kolejność deklaracji ma tu znaczenie, w
 // przeciwieństwie do funkcji niżej wołanych dopiero z handlerów).
 const etapPodsumowanie = computed(() => stageSummary(etapZadania.value, mapaZadan.value))
+
+// Liczniki zrobione/wszystkie dla KAŻDEGO etapu z katalogu podzadań, dla
+// nagłówka szansy (DealNaglowek.vue), który pokazuje je pod etapami.
+const liczniki = computed(() => {
+  const katalog = payload.value?.subtasks || {}
+  return Object.fromEntries(
+    Object.keys(katalog).map((etap) => [
+      etap,
+      stageSummary(tasksForStage(katalog, etap), mapaZadan.value),
+    ]),
+  )
+})
+watch(liczniki, (v) => emit('liczniki', v), { immediate: true, deep: true })
 
 // Edytowalność: serwer jest prawdą PO załadowaniu (`stanResource.data.editable`,
 // wyliczone z ról wywołującego — `BYPASS_ROLES`, ten sam zestaw co backoffice/

@@ -142,38 +142,23 @@
               </span>
             </div>
 
-            <button
-              v-if="!zwarty && el.stan === 'current' && maPodzadania(el.status)"
-              type="button"
-              class="mt-1 flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-ink-gray-6 hover:bg-surface-gray-2"
-              :aria-expanded="panelOtwarty"
-              @click="panelOtwarty = !panelOtwarty"
-            >
-              {{ __('Zadania etapu') }}
-              <span class="lucide-chevron-down size-3.5 transition-transform" :class="{ 'rotate-180': panelOtwarty }" aria-hidden="true" />
-            </button>
+            <PodControl
+              v-if="maPodzadania(el.status)"
+              :otwarty="etapOtwarty === el.status"
+              :licznik="licznik(el.status)"
+              @toggle="przelaczEtap(el.status)"
+            />
           </li>
         </ol>
 
         <!-- Forma zwarta: pełny tekst stanu pod paskiem -->
         <div
           v-if="zwarty && biezacy >= 0"
-          class="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"
+          class="mt-2.5 mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"
           data-testid="naglowek-etap-tekst"
         >
           <span class="font-medium text-ink-gray-9">{{ tekstStanu }}</span>
           <span v-if="tekstNastepnego" class="text-ink-gray-5">{{ tekstNastepnego }}</span>
-          <button
-            v-if="maPodzadania(status)"
-            type="button"
-            class="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-ink-gray-6 hover:bg-surface-gray-2"
-            :aria-expanded="panelOtwarty"
-            :title="__('Pokaż zadania etapu')"
-            @click="panelOtwarty = !panelOtwarty"
-          >
-            {{ __('Zadania etapu') }}
-            <span class="lucide-chevron-down size-3.5 transition-transform" :class="{ 'rotate-180': panelOtwarty }" aria-hidden="true" />
-          </button>
         </div>
         </template>
 
@@ -266,31 +251,26 @@
                 >
                   {{ el.nazwa }}
                 </span>
+                <PodControl
+                  v-if="maPodzadania(el.status)"
+                  :otwarty="etapOtwarty === el.status"
+                  :licznik="licznik(el.status)"
+                  @toggle="przelaczEtap(el.status)"
+                />
               </div>
             </div>
            </div>
           </div>
         </div>
         <div
-          v-if="wariant === 'pasek' && biezacy >= 0 && (liczbaEtapow > 6 || maPodzadania(status))"
-          class="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"
+          v-if="wariant === 'pasek' && biezacy >= 0 && liczbaEtapow > 6"
+          class="mt-2.5 mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"
           data-testid="naglowek-etap-tekst"
         >
           <span v-if="nastepny?.tekst && zwarty" class="text-ink-gray-5" data-testid="naglowek-nastepny-tekst-dol">
             {{ nastepny.tekst }}
           </span>
           <span v-if="tekstNastepnego" class="text-ink-gray-5">{{ tekstNastepnego }}</span>
-          <button
-            v-if="maPodzadania(status)"
-            type="button"
-            class="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-ink-gray-6 hover:bg-surface-gray-2"
-            :aria-expanded="panelOtwarty"
-            :title="__('Pokaż zadania etapu')"
-            @click="panelOtwarty = !panelOtwarty"
-          >
-            {{ __('Zadania etapu') }}
-            <span class="lucide-chevron-down size-3.5 transition-transform" :class="{ 'rotate-180': panelOtwarty }" aria-hidden="true" />
-          </button>
         </div>
       </div>
 
@@ -337,7 +317,8 @@
       :deal-id="dealId"
       :status="doc.status"
       :rodzaj="doc.custom_rodzaj_umowy"
-      :etap="panelOtwarty ? doc.status : ''"
+      :etap="etapOtwarty"
+      @liczniki="(v) => (liczniki = v)"
     />
 
     <Dialog v-model:open="potwierdzenie.otwarte" :title="potwierdzenie.tytul">
@@ -543,10 +524,20 @@ const tekstNastepnego = computed(() => {
 const wyrownanie = computed(() => (biezacy.value > liczbaEtapow.value / 2 ? 'prawo' : 'lewo'))
 
 // --- Podzadania (CP) ---------------------------------------------------------
-const panelOtwarty = ref(false)
-watch(status, () => (panelOtwarty.value = false))
+// Panel podzadań dowolnego etapu, który ma katalog podzadań (CP): nazwa
+// otwartego etapu albo '' (wszystko zamknięte, jak po załadowaniu strony).
+const etapOtwarty = ref('')
+const liczniki = ref({})
+watch(status, () => (etapOtwarty.value = ''))
+function przelaczEtap(nazwa) {
+  etapOtwarty.value = etapOtwarty.value === nazwa ? '' : nazwa
+}
 function maPodzadania(nazwa) {
-  return nazwa === status.value && Boolean(payload.value?.subtasks?.[nazwa]?.length)
+  return Boolean(payload.value?.subtasks?.[nazwa]?.length)
+}
+function licznik(nazwa) {
+  const l = liczniki.value?.[nazwa]
+  return l ? `${l.zrobione}/${l.wszystkie}` : ''
 }
 
 // --- Następny krok -----------------------------------------------------------
@@ -654,6 +645,41 @@ function wybierz(wybor) {
   }
   potwierdzenie.otwarte = true
 }
+
+// --- Przycisk podzadań etapu: licznik zrobione/wszystkie + strzałka ---------------
+const PodControl = defineComponent({
+  props: {
+    otwarty: { type: Boolean, default: false },
+    licznik: { type: String, default: '' },
+  },
+  emits: ['toggle'],
+  setup(p, { emit: emitCtl }) {
+    return () =>
+      h(
+        'button',
+        {
+          type: 'button',
+          'data-testid': 'etap-podzadania',
+          'aria-expanded': p.otwarty,
+          'aria-label': __('Pokaż zadania etapu'),
+          title: __('Pokaż zadania etapu'),
+          class:
+            'mt-0.5 flex shrink-0 cursor-pointer items-center gap-0.5 self-start rounded px-1 text-[11px] leading-4 ' +
+            (p.otwarty
+              ? 'bg-surface-gray-3 text-ink-gray-9'
+              : 'text-ink-gray-5 hover:bg-surface-gray-2'),
+          onClick: () => emitCtl('toggle'),
+        },
+        [
+          p.licznik,
+          h('span', {
+            class: 'lucide-chevron-down size-3 transition-transform ' + (p.otwarty ? 'rotate-180' : ''),
+            'aria-hidden': 'true',
+          }),
+        ],
+      )
+  },
+})
 
 // --- Menu etapu ----------------------------------------------------------------
 // Wyzwalacz dostarcza wołający (slot `trigger`); panel menu to zwykły blok pod
