@@ -704,6 +704,54 @@ class TestDaneZKoduPocztowego(unittest.TestCase):
 		dane_z_kodu_pocztowego(dane, None)
 		self.assertEqual(dane, kopia)
 
+	# ops#329: wynik lookupu z gmina i lista miejscowosci (cache + Adresy.app)
+
+	def test_jedna_miejscowosc_wpisana(self):
+		wynik = dane_z_kodu_pocztowego({}, self._wiersz(cities=["Kościan"], miejscowosc="Kościan"))
+		self.assertEqual(wynik["custom_install_city"], "Kościan")
+
+	def test_wiele_miejscowosci_puste_pole(self):
+		wynik = dane_z_kodu_pocztowego({}, self._wiersz(cities=["Kościan", "Racot"], miejscowosc="Kościan"))
+		self.assertNotIn("custom_install_city", wynik)
+
+	def test_miejscowosc_geonames_bez_listy_nie_kopiowana(self):
+		wynik = dane_z_kodu_pocztowego({}, self._wiersz(miejscowosc="Wrocław"))
+		self.assertNotIn("custom_install_city", wynik)
+
+	def test_cities_jako_tekst_z_cache(self):
+		wynik = dane_z_kodu_pocztowego({}, self._wiersz(cities="Kościan\n"))
+		self.assertEqual(wynik["custom_install_city"], "Kościan")
+
+	def test_miasto_z_ladunku_nie_nadpisane(self):
+		wynik = dane_z_kodu_pocztowego({"custom_install_city": "Racot"}, self._wiersz(cities=["Kościan"]))
+		self.assertEqual(wynik["custom_install_city"], "Racot")
+
+	def test_gmina_tylko_gdy_pole_istnieje(self):
+		wiersz = self._wiersz(gmina="Kościan")
+		self.assertNotIn("custom_gmina", dane_z_kodu_pocztowego({}, wiersz))
+		self.assertEqual(dane_z_kodu_pocztowego({}, wiersz, "custom_gmina")["custom_gmina"], "Kościan")
+
+	def test_pusta_gmina_nie_ustawia_pola(self):
+		wynik = dane_z_kodu_pocztowego({}, self._wiersz(gmina=""), "custom_gmina")
+		self.assertNotIn("custom_gmina", wynik)
+
+	def test_found_false_jak_brak_wiersza(self):
+		wynik = dane_z_kodu_pocztowego({}, {"found": False, "wojewodztwo": "", "cities": []})
+		self.assertEqual(wynik["custom_uwagi_import"], UWAGA_KOD_SPOZA_BAZY)
+		self.assertNotIn("custom_voivodeship", wynik)
+
+	def test_kod_tylko_z_adresy_bez_centroidu(self):
+		wiersz = {"found": True, "wojewodztwo": "wielkopolskie", "powiat": "kościański", "cities": ["Racot"]}
+		wynik = dane_z_kodu_pocztowego({}, wiersz)
+		self.assertEqual(wynik["custom_voivodeship"], "wielkopolskie")
+		self.assertEqual(wynik["custom_install_city"], "Racot")
+		self.assertNotIn("custom_lat", wynik)
+		self.assertEqual(wynik["custom_uwagi_import"], UWAGA_KOD_SPOZA_BAZY)
+
+	def test_z_centroidem_bez_notki(self):
+		wynik = dane_z_kodu_pocztowego({}, self._wiersz())
+		self.assertNotIn("custom_uwagi_import", wynik)
+
 
 class TestKluczLimitu(unittest.TestCase):
 	def test_format(self):
