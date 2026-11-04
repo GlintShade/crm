@@ -350,6 +350,18 @@ export function podzielZadania(lista, zostajaOtwarte = null) {
 }
 
 /**
+ * Motyw licznika otwartych zadan wg najwyzszego priorytetu otwartych:
+ * High -> 'red', Medium -> 'amber', w pozostalych przypadkach 'blue'
+ * (kolory jak kropki TaskPriorityIcon: czerwony, zolty, niebieski).
+ */
+export function motywLicznikaZadan(otwarte) {
+  const lista = otwarte || []
+  if (lista.some((t) => t.priority === 'High')) return 'red'
+  if (lista.some((t) => t.priority === 'Medium')) return 'amber'
+  return 'blue'
+}
+
+/**
  * Czy placeholder jest wygenerowany przez serwer ("Dodaj {etykieta}...",
  * "Add {label}...", "Wybierz {etykieta}...") zamiast ustawiony jawnie.
  */

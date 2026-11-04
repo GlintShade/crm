@@ -28,7 +28,7 @@
           <Badge
             v-if="licznik > 0"
             :label="String(licznik)"
-            theme="blue"
+            :theme="licznikMotyw"
             variant="solid"
             class="min-w-[18px] shrink-0 justify-center !rounded-full"
             data-testid="karta-licznik"
@@ -61,6 +61,7 @@ defineProps({
   opened: { type: Boolean, default: true },
   // Opcjonalny licznik (np. otwarte zadania) obok tytulu; 0/null = brak.
   licznik: { type: Number, default: null },
+  licznikMotyw: { type: String, default: 'blue' },
 })
 defineEmits(['toggle'])
 </script>

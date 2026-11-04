@@ -19,6 +19,7 @@
       nazwa="zadania"
       :summary="podsumowanie"
       :licznik="licznikOtwartych"
+      :licznikMotyw="motywLicznika"
       :opened="otwarte"
       @toggle="otwarte = !otwarte"
     >
@@ -107,7 +108,7 @@ import { useDoctypeModal } from '@/composables/doctypeModal'
 import { createResource, call, Button } from 'frappe-ui'
 import KartaSekcji from '@/components/KartaSekcji.vue'
 import ZakonczoneZadania from '@/components/ZakonczoneZadania.vue'
-import { podsumowanieZadan, podzielZadania } from '@/utils/panelBoczny'
+import { motywLicznikaZadan, podsumowanieZadan, podzielZadania } from '@/utils/panelBoczny'
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 
 const props = defineProps({
@@ -143,6 +144,9 @@ const podzial = computed(() =>
 // przejsciowym traktujemy jak zakonczone.
 const licznikOtwartych = computed(
   () => podzial.value.otwarte.filter((t) => !przejsciowe[t.name]).length,
+)
+const motywLicznika = computed(() =>
+  motywLicznikaZadan(podzial.value.otwarte.filter((t) => !przejsciowe[t.name])),
 )
 const podsumowanie = computed(() =>
   podsumowanieZadan(

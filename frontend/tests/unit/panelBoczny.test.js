@@ -12,6 +12,7 @@ import {
   podsumowanieSekcji,
   podsumowanieZadan,
   podzielZadania,
+  motywLicznikaZadan,
   liczbaOtwartych,
   liczbaZakonczonych,
   czyWygenerowanyPlaceholder,
@@ -234,5 +235,19 @@ describe('podsumowanie: typy pol', () => {
   it('same "Nie" daje Brak danych', () => {
     const s = sek('Zestaw i dodatki', [{ fieldname: 'a', fieldtype: 'Select' }])
     expect(podsumowanieSekcji(s, { a: 'Nie' })).toBe('Brak danych')
+  })
+})
+
+describe('motywLicznikaZadan', () => {
+  const t = (priority) => ({ priority })
+  it('najwyzszy priorytet wygrywa niezaleznie od liczby', () => {
+    expect(motywLicznikaZadan([t('Low'), t('Medium'), t('High'), t('Low')])).toBe('red')
+    expect(motywLicznikaZadan([t('Medium'), t('Low'), t('Medium')])).toBe('amber')
+  })
+  it('tylko Low, brak priorytetu lub pusta lista to niebieski', () => {
+    expect(motywLicznikaZadan([t('Low'), t('Low')])).toBe('blue')
+    expect(motywLicznikaZadan([{}, t(null)])).toBe('blue')
+    expect(motywLicznikaZadan([])).toBe('blue')
+    expect(motywLicznikaZadan(null)).toBe('blue')
   })
 })
