@@ -115,7 +115,6 @@
           :rekord="dealId"
           :mozeOtworzyc="Boolean(primaryContactName)"
           @otworz-klienta="goToClient"
-          @zwin="isSidePanelCollapsed = true"
         />
         <DealNextStepNote
           :deal-id="dealId"
@@ -128,7 +127,7 @@
           v-model="doc"
           @updateField="updateField"
         />
-        <TasksSection doctype="CRM Deal" :docname="dealId" karty />
+        <TasksSection doctype="CRM Deal" :docname="dealId" karty startZwiniete />
         <div
           v-if="sections.data"
           class="flex flex-1 flex-col justify-between overflow-hidden"
@@ -137,6 +136,7 @@
             :sections="sections.data"
             :addContact="addContact"
             wariant="karty"
+            startZwiniete
             :liczbaKontaktow="dealContacts.data?.length ?? null"
             doctype="CRM Deal"
             :docname="dealId"
@@ -285,9 +285,10 @@
         >
           <template #icon>
             <span class="grid h-4 w-4 flex-shrink-0 place-items-center">
-              <CollapseSidebar
-                class="h-4 w-4 text-ink-gray-7 duration-300 ease-in-out"
-                :class="{ '[transform:rotateY(180deg)]': !isSidePanelCollapsed }"
+              <span
+                class="size-4 text-ink-gray-7"
+                :class="isSidePanelCollapsed ? 'lucide-panel-right-open' : 'lucide-panel-right-close'"
+                aria-hidden="true"
               />
             </span>
           </template>
@@ -391,7 +392,6 @@ import SLASection from '@/components/SLASection.vue'
 import TasksSection from '@/components/TasksSection.vue'
 import CustomActions from '@/components/CustomActions.vue'
 import SidebarLink from '@/components/SidebarLink.vue'
-import CollapseSidebar from '@/components/Icons/CollapseSidebar.vue'
 import {
   openWebsite,
   setupCustomizations,

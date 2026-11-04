@@ -601,6 +601,9 @@ const props = defineProps({
   // panel renderuje sie dokladnie jak dotad (kontakty, organizacje, ...).
   wariant: { type: String, default: '' },
   liczbaKontaktow: { type: Number, default: null },
+  // Wariant karty: wszystkie sekcje zwiniete przy kazdym wejsciu na rekord
+  // (bez odczytu i zapisu pamieci w localStorage).
+  startZwiniete: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['beforeFieldChange', 'afterFieldChange', 'reload'])
@@ -622,6 +625,7 @@ const otwarteSekcje = reactive({})
 
 function czyOtwarta(section) {
   if (section.name in otwarteSekcje) return otwarteSekcje[section.name]
+  if (props.startZwiniete) return false
   const zapisana = wczytajOtwartaSekcje(props.doctype, section.name)
   if (zapisana !== null) return zapisana
   const idx = _sections.value.findIndex((s) => s.name === section.name)
@@ -631,8 +635,17 @@ function czyOtwarta(section) {
 function przelaczSekcje(section) {
   const nowy = !czyOtwarta(section)
   otwarteSekcje[section.name] = nowy
-  zapiszOtwartaSekcje(props.doctype, section.name, nowy)
+  if (!props.startZwiniete) zapiszOtwartaSekcje(props.doctype, section.name, nowy)
 }
+
+watch(
+  () => props.docname,
+  () => {
+    if (props.startZwiniete) {
+      Object.keys(otwarteSekcje).forEach((k) => delete otwarteSekcje[k])
+    }
+  },
+)
 
 function rozwiazWartosc(pole, wartosc) {
   if (pole?.fieldtype === 'User') return getUser(wartosc)?.full_name

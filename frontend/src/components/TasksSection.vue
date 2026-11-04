@@ -73,9 +73,11 @@ const props = defineProps({
   doctype: { type: String, required: true },
   docname: { type: String, required: true },
   karty: { type: Boolean, default: false },
+  // Karta zadan startuje zwinieta przy kazdym wejsciu na rekord.
+  startZwiniete: { type: Boolean, default: false },
 })
 
-const otwarte = ref(true)
+const otwarte = ref(!props.startZwiniete)
 const podsumowanie = computed(() => {
   const lista = tasks.data || []
   const otwartych = lista.filter(
@@ -112,7 +114,10 @@ const tasks = createResource({
 
 watch(
   () => props.docname,
-  () => tasks.reload(),
+  () => {
+    if (props.startZwiniete) otwarte.value = false
+    tasks.reload()
+  },
 )
 
 function showTask(task) {

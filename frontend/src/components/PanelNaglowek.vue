@@ -1,7 +1,7 @@
 <!--
   Naglowek panelu bocznego szansy i leada (ops#326): imie klienta, telefon z
   przyciskiem Zadzwon, e-mail, numer rekordu jako chip z kopiowaniem,
-  przelacznik "Ukryj puste" i zwijanie panelu. Zastepuje dawny 45 px pasek z
+  przelacznik "Ukryj puste". Zwijanie panelu to dolna kontrolka strony. Zastepuje dawny 45 px pasek z
   samym numerem rekordu.
 -->
 <template>
@@ -18,28 +18,36 @@
         v-if="mozeOtworzyc"
         variant="ghost"
         size="sm"
-        icon="lucide-arrow-up-right"
+        icon="lucide-user"
         :tooltip="__('Otwórz klienta')"
         @click="emit('otworz-klienta')"
       />
     </div>
-    <div v-if="telefon" class="flex min-w-0 items-center gap-2 text-[12.5px] text-ink-gray-8">
-      <span class="lucide-phone size-3.5 shrink-0 text-ink-gray-5" aria-hidden="true" />
-      <span class="min-w-0 flex-1 truncate">{{ telefonWyswietlany }}</span>
+    <div v-if="telefon && href" class="flex min-w-0">
       <Button
-        v-if="href && wlasneZadzwon"
+        v-if="wlasneZadzwon"
         size="sm"
         variant="subtle"
-        :label="__('Zadzwoń')"
+        iconLeft="lucide-phone"
+        :label="telefonWyswietlany"
+        :tooltip="__('Zadzwoń')"
+        data-testid="panel-telefon"
         @click="emit('zadzwon')"
       />
       <Button
-        v-else-if="href"
+        v-else
         size="sm"
         variant="subtle"
+        iconLeft="lucide-phone"
         :link="href"
-        :label="__('Zadzwoń')"
+        :label="telefonWyswietlany"
+        :tooltip="__('Zadzwoń')"
+        data-testid="panel-telefon"
       />
+    </div>
+    <div v-else-if="telefon" class="flex min-w-0 items-center gap-2 text-[12.5px] text-ink-gray-8">
+      <span class="lucide-phone size-3.5 shrink-0 text-ink-gray-5" aria-hidden="true" />
+      <span class="min-w-0 flex-1 truncate">{{ telefonWyswietlany }}</span>
     </div>
     <div v-if="email" class="flex min-w-0 items-center gap-2 text-[12.5px] text-ink-gray-8">
       <span class="lucide-mail size-3.5 shrink-0 text-ink-gray-5" aria-hidden="true" />
@@ -59,13 +67,6 @@
         <span>{{ __('Ukryj puste') }}</span>
         <Switch size="sm" v-model="ukryjPuste" />
       </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        icon="lucide-panel-right-close"
-        :tooltip="__('Zwiń panel')"
-        @click="emit('zwin')"
-      />
     </div>
   </div>
 </template>
@@ -86,7 +87,7 @@ const props = defineProps({
   mozeOtworzyc: { type: Boolean, default: false },
   wlasneZadzwon: { type: Boolean, default: false },
 })
-const emit = defineEmits(['otworz-klienta', 'zwin', 'zadzwon'])
+const emit = defineEmits(['otworz-klienta', 'zadzwon'])
 
 const { ukryjPuste } = useUkryjPustePola()
 const href = computed(() => telHref(props.telefon))
