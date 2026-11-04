@@ -517,6 +517,24 @@ class TestFormatery(unittest.TestCase):
 		self.assertEqual(reszta_uwag("Zrodlo: Facebook Lead Ads"), "")
 		self.assertEqual(reszta_uwag(None), "")
 
+	def test_reszta_uwag_bez_dubli_pv_i_zasad(self):
+		nowe = (
+			"Kampania: Wrocław, 27.10 | Ma PV z magazynem | System rozliczeń: nowe zasady (net-billing) | "
+			"Dach: skos | Ponowne zgłoszenie 02.11: Szczecin, 27.10; Ma PV bez magazynu (lead FB 1)"
+		)
+		self.assertEqual(
+			reszta_uwag(nowe),
+			"Dach: skos; Ponowne zgłoszenie 02.11: Szczecin, 27.10; Ma PV bez magazynu (lead FB 1)",
+		)
+		self.assertEqual(
+			reszta_uwag("Nie ma PV | System rozliczeń (klient bez PV): stare zasady"),
+			"System rozliczeń (klient bez PV): stare zasady",
+		)
+		self.assertEqual(
+			reszta_uwag("Posiada PV: Tak | System rozliczen: Stare zasady | Dach: skos"), "Dach: skos"
+		)
+		self.assertEqual(reszta_uwag("Posiada PV (nierozpoznane): moze"), "Posiada PV (nierozpoznane): moze")
+
 	def test_reszta_uwag_przycina(self):
 		wynik = reszta_uwag("Zrodlo: x | " + " | ".join(f"Pytanie {i}: odpowiedz dluga" for i in range(20)))
 		self.assertEqual(len(wynik), 120)
@@ -602,6 +620,13 @@ class TestOkregZKampanii(unittest.TestCase):
 
 	def test_bez_nawiasow(self):
 		self.assertEqual(okreg_z_kampanii("Kampania Wroclaw 2026"), "")
+
+	def test_czytelny_skrot_z_uwag(self):
+		self.assertEqual(okreg_z_kampanii("Wrocław, 27.10"), "Wrocław")
+		self.assertEqual(okreg_z_kampanii("Trójmiasto, 27.10"), "Trójmiasto")
+		self.assertEqual(okreg_z_kampanii("Gorzów, 1.11"), "Gorzów")
+		self.assertEqual(okreg_z_kampanii("Łódź, 27.10"), "")
+		self.assertEqual(okreg_z_kampanii("Wrocław 27.10"), "")
 
 	def test_pierwsze_trafienie_wygrywa(self):
 		self.assertEqual(okreg_z_kampanii("[WROCLAW][SZCZECIN]"), "Wrocław")

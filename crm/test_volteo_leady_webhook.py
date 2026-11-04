@@ -15,6 +15,7 @@ from crm.volteo_leady_webhook import (
 	LadunekOdrzucony,
 	dane_z_kodu_pocztowego,
 	juz_scalone,
+	kampania_czytelna,
 	kampania_z_uwag,
 	klucz_limitu,
 	limit_przekroczony,
@@ -24,6 +25,7 @@ from crm.volteo_leady_webhook import (
 	normalizuj_posiada_pv,
 	normalizuj_produkt_reklamy,
 	normalizuj_system_rozliczen,
+	opis_posiada_pv,
 	pola_do_scalenia,
 	rozpoznaj_posiada_pv,
 	rozpoznaj_system_rozliczen,
@@ -223,10 +225,9 @@ class TestPelnyLadunek(unittest.TestCase):
 				"custom_zasady_dotacji": "Nowe zasady",
 				"custom_uwagi_import": SEPARATOR_UWAG.join(
 					[
-						"Zrodlo: Facebook Lead Ads",
 						"Formularz: Formularz PV",
-						"Posiada PV: Tak",
-						"System rozliczen: Net-billing",
+						"Ma PV",
+						"System rozliczeń: nowe zasady (net-billing)",
 					]
 				),
 			},
@@ -356,24 +357,27 @@ class TestRozpoznaj(unittest.TestCase):
 
 class TestSlownikOdpowiedzi(unittest.TestCase):
 	def test_wszystkie_odpowiedzi_pv(self):
-		for klucz, (wartosc, etykieta) in ODPOWIEDZI_POSIADA_PV.items():
+		opisy = {"PV": "Ma PV bez magazynu", "PV+ME": "Ma PV z magazynem", "": "Nie ma PV"}
+		for klucz, (wartosc, _etykieta) in ODPOWIEDZI_POSIADA_PV.items():
 			with self.subTest(klucz=klucz):
 				w = zbuduj_leada_z_webhooka(ladunek(posiada_pv=klucz, system_rozliczen=""), DZIS)
 				if wartosc:
 					self.assertEqual(w["custom_posiadane_produkty"], wartosc)
 				else:
 					self.assertNotIn("custom_posiadane_produkty", w)
-				self.assertIn("Posiada PV: %s" % etykieta, uwagi(w))
+				self.assertIn(opisy[wartosc], uwagi(w))
 				self.assertNotIn("nierozpoznane", w["custom_uwagi_import"])
+				self.assertNotIn("Posiada PV", w["custom_uwagi_import"])
 
 	def test_wszystkie_odpowiedzi_system(self):
-		for klucz, (wartosc, etykieta) in ODPOWIEDZI_SYSTEM_ROZLICZEN.items():
+		opisy = {"Stare zasady": "stare zasady", "Nowe zasady": "nowe zasady (net-billing)"}
+		for klucz, (wartosc, _etykieta) in ODPOWIEDZI_SYSTEM_ROZLICZEN.items():
 			with self.subTest(klucz=klucz):
 				w = zbuduj_leada_z_webhooka(
 					ladunek(posiada_pv="tak,_bez_magazynu", system_rozliczen=klucz), DZIS
 				)
 				self.assertEqual(w["custom_zasady_dotacji"], wartosc)
-				self.assertIn("System rozliczen: %s" % etykieta, uwagi(w))
+				self.assertIn("System rozliczeń: %s" % opisy[wartosc], uwagi(w))
 				self.assertNotIn("nierozpoznane", w["custom_uwagi_import"])
 
 	def test_aktualny_formularz(self):
@@ -382,8 +386,8 @@ class TestSlownikOdpowiedzi(unittest.TestCase):
 		)
 		self.assertEqual(w["custom_posiadane_produkty"], "PV+ME")
 		self.assertEqual(w["custom_zasady_dotacji"], "Nowe zasady")
-		self.assertIn("Posiada PV: Tak, z magazynem", uwagi(w))
-		self.assertIn("System rozliczen: Nowe zasady (net-billing)", uwagi(w))
+		self.assertIn("Ma PV z magazynem", uwagi(w))
+		self.assertIn("System rozliczeń: nowe zasady (net-billing)", uwagi(w))
 
 	def test_bez_pv_ze_starymi_zasadami(self):
 		w = zbuduj_leada_z_webhooka(
@@ -391,26 +395,27 @@ class TestSlownikOdpowiedzi(unittest.TestCase):
 		)
 		self.assertNotIn("custom_posiadane_produkty", w)
 		self.assertNotIn("custom_zasady_dotacji", w)
-		self.assertIn("Posiada PV: Nie mam jeszcze fotowoltaiki", uwagi(w))
-		self.assertIn("System rozliczen (klient bez PV): Stare zasady", uwagi(w))
+		self.assertIn("Nie ma PV", uwagi(w))
+		self.assertIn("System rozliczeń (klient bez PV): stare zasady", uwagi(w))
 
 	def test_brak_odpowiedzi_o_pv(self):
 		w = zbuduj_leada_z_webhooka(
 			{"telefon": "604932720", "facebook_lead_id": "1", "system_rozliczen": "stare_zasady"}, DZIS
 		)
-		self.assertIn("System rozliczen (brak odpowiedzi o PV): Stare zasady", uwagi(w))
+		self.assertIn("System rozliczeń (brak odpowiedzi o PV): stare zasady", uwagi(w))
 		self.assertNotIn("custom_zasady_dotacji", w)
 		self.assertNotIn("custom_posiadane_produkty", w)
 
 	def test_nie_daje_klient_bez_pv(self):
 		w = zbuduj_leada_z_webhooka(ladunek(posiada_pv="Nie", system_rozliczen="stare_zasady"), DZIS)
-		self.assertIn("System rozliczen (klient bez PV): Stare zasady", uwagi(w))
+		self.assertIn("Nie ma PV", uwagi(w))
+		self.assertIn("System rozliczeń (klient bez PV): stare zasady", uwagi(w))
 
 	def test_pv_nierozpoznane_ze_starymi_zasadami(self):
 		w = zbuduj_leada_z_webhooka(ladunek(posiada_pv="moze", system_rozliczen="stare_zasady"), DZIS)
 		self.assertNotIn("custom_zasady_dotacji", w)
 		self.assertIn("Posiada PV (nierozpoznane): moze", uwagi(w))
-		self.assertIn("System rozliczen (PV nierozpoznane): Stare zasady", uwagi(w))
+		self.assertIn("System rozliczeń (PV nierozpoznane): stare zasady", uwagi(w))
 
 
 class TestOdpowiedziOpisowe(unittest.TestCase):
@@ -444,7 +449,7 @@ class TestOdpowiedziOpisowe(unittest.TestCase):
 		)
 		self.assertNotIn("custom_posiadane_produkty", w)
 		self.assertNotIn("custom_zasady_dotacji", w)
-		self.assertIn("System rozliczen (klient bez PV): Stare zasady", uwagi(w))
+		self.assertIn("System rozliczeń (klient bez PV): stare zasady", uwagi(w))
 		self.assertNotIn("nierozpoznane", w["custom_uwagi_import"])
 
 
@@ -463,12 +468,12 @@ class TestPolaLadunku(unittest.TestCase):
 		w = zbuduj_leada_z_webhooka(ladunek(posiada_pv="Nie", system_rozliczen="net-billing"), DZIS)
 		self.assertNotIn("custom_zasady_dotacji", w)
 		self.assertNotIn("custom_posiadane_produkty", w)
-		self.assertIn("System rozliczen (klient bez PV): net-billing", uwagi(w))
+		self.assertIn("System rozliczeń (klient bez PV): nowe zasady (net-billing)", uwagi(w))
 
 	def test_system_nierozpoznany_z_pv(self):
 		w = zbuduj_leada_z_webhooka(ladunek(system_rozliczen="nie wiem"), DZIS)
 		self.assertNotIn("custom_zasady_dotacji", w)
-		self.assertIn("System rozliczen (nierozpoznane): nie wiem", uwagi(w))
+		self.assertIn("System rozliczeń (nierozpoznane): nie wiem", uwagi(w))
 
 	def test_posiada_pv_nierozpoznane(self):
 		w = zbuduj_leada_z_webhooka(ladunek(posiada_pv="moze", system_rozliczen=""), DZIS)
@@ -484,20 +489,31 @@ class TestPolaLadunku(unittest.TestCase):
 				self.assertNotIn("Produkt", w["custom_uwagi_import"])
 
 	def test_pusta_data_to_dzisiaj(self):
+		# Szum techniczny (decyzja wlasciciela 2026-11-04): brak daty nie zostawia linii w Uwagach.
 		w = zbuduj_leada_z_webhooka(ladunek(data_zgloszenia=""), DZIS)
 		self.assertEqual(w["custom_import_date"], DZIS)
-		self.assertTrue(any(l.startswith("Data zgloszenia") for l in uwagi(w)))
+		self.assertFalse(any(l.startswith("Data zg") for l in uwagi(w)))
 
 	def test_zla_data_to_dzisiaj_z_surowa_w_uwagach(self):
 		w = zbuduj_leada_z_webhooka(ladunek(data_zgloszenia="wczoraj"), DZIS)
 		self.assertEqual(w["custom_import_date"], DZIS)
-		self.assertIn("Data zgloszenia (nierozpoznana): wczoraj", uwagi(w))
+		self.assertIn("Data zgłoszenia (nierozpoznana): wczoraj", uwagi(w))
 
 	def test_kampania_i_formularz_w_kolejnosci(self):
 		w = zbuduj_leada_z_webhooka(ladunek(kampania="Jesien 2026"), DZIS)
-		self.assertEqual(
-			uwagi(w)[:3], ["Zrodlo: Facebook Lead Ads", "Formularz: Formularz PV", "Kampania: Jesien 2026"]
+		self.assertEqual(uwagi(w)[:2], ["Kampania: Jesien 2026", "Formularz: Formularz PV"])
+
+	def test_bez_linii_zrodla(self):
+		w = zbuduj_leada_z_webhooka(ladunek(kampania="[S][KAMPANIA LEADOWA][WROCŁAW][27.10.2026]"), DZIS)
+		self.assertNotIn("Zrodlo", w["custom_uwagi_import"])
+		self.assertEqual(uwagi(w)[0], "Kampania: Wrocław, 27.10")
+
+	def test_odpowiedzi_slugi_po_ludzku(self):
+		w = zbuduj_leada_z_webhooka(
+			ladunek(odpowiedzi={"jaki_jest_twój_rachunek_za_prąd?": "300-500_zł", "_": "x"}), DZIS
 		)
+		self.assertIn("Jaki jest twój rachunek za prąd: 300-500 zł", uwagi(w))
+		self.assertEqual(uwagi(w)[-1], "x")
 
 	def test_odpowiedzi_slownik_na_koncu(self):
 		w = zbuduj_leada_z_webhooka(ladunek(odpowiedzi={"Rachunek": "400 zł"}), DZIS)
@@ -508,12 +524,46 @@ class TestPolaLadunku(unittest.TestCase):
 		w = zbuduj_leada_z_webhooka(ladunek(odpowiedzi=[{"name": "Dach", "values": ["skośny"]}]), DZIS)
 		self.assertIn("Dach: skośny", uwagi(w))
 
-	def test_pusta_lista_linii_nie_istnieje(self):
-		# zawsze jest linia zrodla, wiec pole Uwagi nigdy nie jest puste
+	def test_bez_linii_brak_pola_uwag(self):
+		# bez linii "Zrodlo" (decyzja wlasciciela 2026-11-04) puste Uwagi nie trafiaja do wyniku
 		w = zbuduj_leada_z_webhooka(
 			{"telefon": "604932720", "facebook_lead_id": "1", "data_zgloszenia": DZIS}, DZIS
 		)
-		self.assertEqual(w["custom_uwagi_import"], "Zrodlo: Facebook Lead Ads")
+		self.assertNotIn("custom_uwagi_import", w)
+
+
+class TestKampaniaCzytelna(unittest.TestCase):
+	def test_przyklady_z_produkcji(self):
+		for surowa, oczekiwana in (
+			("[S][KAMPANIA LEADOWA][WROCŁAW][27.10.2026]", "Wrocław, 27.10"),
+			("[S][KAMPANIA LEADOWA][ŁÓDŹ][27.10.2026]", "Łódź, 27.10"),
+			("[S][KAMPANIA LEADOWA][TRÓJMIASTO][27.10.2026]", "Trójmiasto, 27.10"),
+			("[S][KAMPANIA LEADOWA][GORZÓW][30.10.2026]", "Gorzów, 30.10"),
+			("[S][KAMPANIA LEADOWA][SZCZECIN][27.10.2026]", "Szczecin, 27.10"),
+		):
+			with self.subTest(surowa=surowa):
+				self.assertEqual(kampania_czytelna(surowa), oczekiwana)
+
+	def test_bez_nawiasow_i_idempotencja(self):
+		self.assertEqual(kampania_czytelna("Jesien 2026"), "Jesien 2026")
+		self.assertEqual(kampania_czytelna("Wrocław, 27.10"), "Wrocław, 27.10")
+		self.assertEqual(kampania_czytelna(""), "")
+		self.assertEqual(kampania_czytelna(None), "")
+
+	def test_mieszana_wielkosc_i_krotka_data(self):
+		self.assertEqual(kampania_czytelna("[S][Kampania][Gorzów Wlkp.][1.11.2026]"), "Gorzów Wlkp., 01.11")
+
+	def test_same_segmenty_techniczne_bez_zmian(self):
+		self.assertEqual(kampania_czytelna("[S][KAMPANIA LEADOWA]"), "[S][KAMPANIA LEADOWA]")
+
+
+class TestOpisPosiadaPv(unittest.TestCase):
+	def test_opisy(self):
+		self.assertEqual(opis_posiada_pv(""), "Nie ma PV")
+		self.assertEqual(opis_posiada_pv("PV+ME", "Tak, z magazynem"), "Ma PV z magazynem")
+		self.assertEqual(opis_posiada_pv("PV", "Tak, bez magazynu"), "Ma PV bez magazynu")
+		self.assertEqual(opis_posiada_pv("PV", "mam_fotowoltaikę_bez_magazynu_energii"), "Ma PV bez magazynu")
+		self.assertEqual(opis_posiada_pv("PV", "Tak"), "Ma PV")
 
 
 class TestNormalizujKodTolerancyjnie(unittest.TestCase):
@@ -559,12 +609,12 @@ class TestKodPocztowy(unittest.TestCase):
 	def test_niepoprawny(self):
 		w = zbuduj_leada_z_webhooka(ladunek(kod_pocztowy="6100"), DZIS)
 		self.assertNotIn("custom_install_postal_code", w)
-		self.assertIn("Kod pocztowy (nierozpoznany): 6100", uwagi(w))
+		self.assertIn("Kod pocztowy (do sprawdzenia): 6100", uwagi(w))
 
 	def test_dwa_kody_to_nierozpoznany(self):
 		w = zbuduj_leada_z_webhooka(ladunek(kod_pocztowy="64-000 i 61-001"), DZIS)
 		self.assertNotIn("custom_install_postal_code", w)
-		self.assertIn("Kod pocztowy (nierozpoznany): 64-000 i 61-001", uwagi(w))
+		self.assertIn("Kod pocztowy (do sprawdzenia): 64-000 i 61-001", uwagi(w))
 
 	def test_brak(self):
 		w = zbuduj_leada_z_webhooka(ladunek(), DZIS)
@@ -593,7 +643,7 @@ class TestKodPocztowy(unittest.TestCase):
 	def test_nierozpoznany_kod_nie_zjada_miasta(self):
 		w = zbuduj_leada_z_webhooka(ladunek(miasto="Poznań", kod_pocztowy="abc"), DZIS)
 		self.assertEqual(w["custom_install_city"], "Poznań")
-		self.assertIn("Kod pocztowy (nierozpoznany): abc", uwagi(w))
+		self.assertIn("Kod pocztowy (do sprawdzenia): abc", uwagi(w))
 
 
 class TestDaneZKoduPocztowego(unittest.TestCase):
@@ -703,8 +753,40 @@ class TestPonowneZgloszenie(unittest.TestCase):
 
 	def test_format_linii(self):
 		linia = linia_ponownego_zgloszenia(self.nowy)
-		self.assertTrue(linia.startswith("Ponowne zgłoszenie FB 2026-10-20 (lead FB B22): "))
-		self.assertTrue(linia.endswith(self.nowy["custom_uwagi_import"]))
+		self.assertEqual(
+			linia,
+			"Ponowne zgłoszenie 20.10: GORZÓW; Formularz: Formularz PV; Ma PV; "
+			"System rozliczeń: nowe zasady (net-billing) (lead FB B22)",
+		)
+		self.assertNotIn(SEPARATOR_UWAG, linia)
+
+	def test_pv_i_zasady_zgodne_z_leadem_pominiete(self):
+		nowy = zbuduj_leada_z_webhooka(
+			ladunek(
+				kampania="[S][KAMPANIA LEADOWA][SZCZECIN][27.10.2026]",
+				facebook_lead_id="1504878391499306",
+				data_zgloszenia="2026-11-02",
+				formularz="",
+				posiada_pv="tak,_bez_magazynu",
+				system_rozliczen="stare_zasady",
+			),
+			DZIS,
+		)
+		ist = {"custom_posiadane_produkty": "PV", "custom_zasady_dotacji": "Stare zasady"}
+		self.assertEqual(
+			linia_ponownego_zgloszenia(nowy, ist),
+			"Ponowne zgłoszenie 02.11: Szczecin, 27.10 (lead FB 1504878391499306)",
+		)
+		inny = {"custom_posiadane_produkty": "PV+ME", "custom_zasady_dotacji": "Stare zasady"}
+		self.assertEqual(
+			linia_ponownego_zgloszenia(nowy, inny),
+			"Ponowne zgłoszenie 02.11: Szczecin, 27.10; Ma PV bez magazynu (lead FB 1504878391499306)",
+		)
+
+	def test_pusta_tresc(self):
+		nowy = {"facebook_lead_id": "9", "custom_import_date": "2026-11-02"}
+		self.assertEqual(linia_ponownego_zgloszenia(nowy), "Ponowne zgłoszenie 02.11 (lead FB 9)")
+		self.assertTrue(juz_scalone(linia_ponownego_zgloszenia(nowy), "9"))
 
 	def test_juz_scalone_trafienie_i_pudlo(self):
 		uwagi_ist = "stare | " + linia_ponownego_zgloszenia(self.nowy)
@@ -720,6 +802,7 @@ class TestPonowneZgloszenie(unittest.TestCase):
 	def test_kampania_z_uwag(self):
 		self.assertEqual(kampania_z_uwag(self.nowy["custom_uwagi_import"]), "GORZÓW")
 		self.assertEqual(kampania_z_uwag("Zrodlo: Facebook Lead Ads"), "")
+		self.assertEqual(kampania_z_uwag("Kampania: Wrocław, 27.10 | Ma PV"), "Wrocław, 27.10")
 		self.assertEqual(kampania_z_uwag(None), "")
 
 	def test_tresc_sladu(self):
@@ -735,7 +818,9 @@ class TestPonowneZgloszenie(unittest.TestCase):
 		wynik = pola_do_scalenia({"custom_uwagi_import": "stare uwagi"}, self.nowy)
 		czesci = wynik["custom_uwagi_import"].split(SEPARATOR_UWAG, 1)
 		self.assertEqual(czesci[0], "stare uwagi")
-		self.assertEqual(czesci[1], linia_ponownego_zgloszenia(self.nowy))
+		self.assertEqual(
+			czesci[1], linia_ponownego_zgloszenia(self.nowy, {"custom_uwagi_import": "stare uwagi"})
+		)
 
 	def test_puste_uwagi_istniejace(self):
 		for puste in ("", None):

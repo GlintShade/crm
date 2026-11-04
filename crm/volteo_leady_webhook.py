@@ -290,6 +290,84 @@ def rozpoznaj_system_rozliczen(surowe: Any) -> tuple[str | None, str]:
 	return normalizuj_system_rozliczen(tekst), tekst
 
 
+PREFIKS_KAMPANII: str = "Kampania: "
+"""Prefiks linii z kampania w `custom_uwagi_import` (patrz `zbuduj_leada_z_webhooka`).
+Czytaja go `kampania_z_uwag` i SMS dyzurny (`crm.volteo_dyzury.wyciagnij_z_uwag`)."""
+
+_SEGMENT_KAMPANII = re.compile(r"\[([^\]]*)\]")
+_DATA_KAMPANII = re.compile(r"^(\d{1,2})\.(\d{1,2})(?:\.\d{2,4})?$")
+_SEGMENTY_KAMPANII_POMIJANE = frozenset({"S"})
+
+
+def kampania_czytelna(kampania: Any) -> str:
+	"""Skraca nazwe kampanii FB do `<Miasto>, <DD.MM>` dla call center.
+
+	`[S][KAMPANIA LEADOWA][WROCŁAW][27.10.2026]` -> `Wrocław, 27.10`. Segmenty `[S]` i
+	zawierajace slowo `KAMPANIA` odpadaja, data traci rok, miasto pisane WIELKIMI
+	literami dostaje wielka litere tylko na poczatku slow (polskie znaki zostaja).
+	Tekst bez nawiasow albo bez zadnego segmentu do pokazania wraca bez zmian, wiec
+	funkcja jest idempotentna (`Wrocław, 27.10` -> `Wrocław, 27.10`)."""
+	tekst = _tekst(kampania)
+	segmenty = [s.strip() for s in _SEGMENT_KAMPANII.findall(tekst)]
+	if not segmenty:
+		return tekst
+	miejsca: list[str] = []
+	daty: list[str] = []
+	for segment in segmenty:
+		wielkie = segment.upper()
+		if not segment or wielkie in _SEGMENTY_KAMPANII_POMIJANE or "KAMPANIA" in wielkie:
+			continue
+		data = _DATA_KAMPANII.match(segment)
+		if data:
+			daty.append("%02d.%02d" % (int(data.group(1)), int(data.group(2))))
+		else:
+			miejsca.append(segment.title() if segment == wielkie else segment)
+	czesci = miejsca + daty
+	return ", ".join(czesci) if czesci else tekst
+
+
+def opis_posiada_pv(wartosc: str, surowe: Any = "") -> str:
+	"""Czytelna linia Uwag dla rozpoznanej odpowiedzi o PV (`wartosc` z `rozpoznaj_posiada_pv`).
+
+	`""` -> `Nie ma PV`, z magazynem -> `Ma PV z magazynem`, samo PV -> `Ma PV bez
+	magazynu`, gdy odpowiedz mowila "bez" (np. "Tak, bez magazynu"), inaczej `Ma PV`
+	(golym "Tak" klient nie powiedzial nic o magazynie)."""
+	tokeny = set((wartosc or "").split("+"))
+	if "PV" not in tokeny:
+		return "Nie ma PV"
+	if "ME" in tokeny:
+		return "Ma PV z magazynem"
+	slowa = set(_WZOR_SLOW.findall(_bez_diakrytykow(_tekst(surowe).lower())))
+	return "Ma PV bez magazynu" if "bez" in slowa else "Ma PV"
+
+
+OPISY_ZASAD: dict[str, str] = {
+	"Stare zasady": "stare zasady",
+	"Nowe zasady": "nowe zasady (net-billing)",
+}
+"""Literal `custom_zasady_dotacji` -> tekst w linii `System rozliczeń: ...`."""
+
+PREFIKS_SYSTEMU: str = "System rozliczeń: "
+"""Prefiks linii Uwag z rozpoznanym systemem rozliczen (klient z PV)."""
+
+PREFIKSY_PV: tuple[str, ...] = ("Ma PV", "Nie ma PV")
+"""Poczatki czytelnych linii Uwag o PV (patrz `opis_posiada_pv`)."""
+
+
+def tekst_formularza(tekst: Any) -> str:
+	"""Pytanie albo odpowiedz z `odpowiedzi` po ludzku: podkreslniki na spacje.
+
+	Slugi Meta (`jaki_jest_twój_rachunek?`, `300-500_zł`) dostaja spacje; pytanie traci
+	koncowe `?`/`:` i dostaje wielka litere w `pytanie_formularza`. Polskie znaki zostaja."""
+	return " ".join(_tekst(tekst).replace("_", " ").split())
+
+
+def pytanie_formularza(pytanie: Any) -> str:
+	"""Pytanie z `odpowiedzi` jako etykieta linii Uwag (bez `?`/`:` na koncu, wielka litera)."""
+	tekst = tekst_formularza(pytanie).rstrip("?: ").strip()
+	return tekst[:1].upper() + tekst[1:]
+
+
 def zbuduj_leada_z_webhooka(ladunek: Mapping[str, Any], dzisiaj: str) -> dict[str, Any]:
 	"""Zamienia ladunek webhooka na slownik pol `CRM Lead` (bez `doctype`).
 
@@ -328,29 +406,30 @@ def zbuduj_leada_z_webhooka(ladunek: Mapping[str, Any], dzisiaj: str) -> dict[st
 	posiada_surowe = _tekst(dane.get("posiada_pv"))
 	posiada: str | None = ""
 	if posiada_surowe:
-		posiada, etykieta_pv = rozpoznaj_posiada_pv(posiada_surowe)
+		posiada, _etykieta_pv = rozpoznaj_posiada_pv(posiada_surowe)
 		if posiada is None:
 			linie_odpowiedzi.append("Posiada PV (nierozpoznane): %s" % posiada_surowe)
 		else:
-			linie_odpowiedzi.append("Posiada PV: %s" % etykieta_pv)
+			linie_odpowiedzi.append(opis_posiada_pv(posiada, posiada_surowe))
 
 	# System rozliczen: pole tylko gdy klient ma PV
 	system_surowy = _tekst(dane.get("system_rozliczen"))
 	zasady = ""
 	if system_surowy:
 		rozpoznane, etykieta_sys = rozpoznaj_system_rozliczen(system_surowy)
+		opis_sys = OPISY_ZASAD.get(rozpoznane or "", etykieta_sys)
 		if not posiada_surowe:
-			linie_odpowiedzi.append("System rozliczen (brak odpowiedzi o PV): %s" % etykieta_sys)
+			linie_odpowiedzi.append("System rozliczeń (brak odpowiedzi o PV): %s" % opis_sys)
 		elif posiada is None:
-			linie_odpowiedzi.append("System rozliczen (PV nierozpoznane): %s" % etykieta_sys)
+			linie_odpowiedzi.append("System rozliczeń (PV nierozpoznane): %s" % opis_sys)
 		elif "PV" in posiada.split("+"):
 			if rozpoznane is None:
-				linie_odpowiedzi.append("System rozliczen (nierozpoznane): %s" % system_surowy)
+				linie_odpowiedzi.append("System rozliczeń (nierozpoznane): %s" % system_surowy)
 			else:
 				zasady = rozpoznane
-				linie_odpowiedzi.append("System rozliczen: %s" % etykieta_sys)
+				linie_odpowiedzi.append(PREFIKS_SYSTEMU + opis_sys)
 		else:
-			linie_odpowiedzi.append("System rozliczen (klient bez PV): %s" % etykieta_sys)
+			linie_odpowiedzi.append("System rozliczeń (klient bez PV): %s" % opis_sys)
 	posiada = posiada or ""
 
 	# Produkt z reklamy: klucz `produkt` jest CELOWO ignorowany (decyzja wlasciciela 2026-11-04).
@@ -363,9 +442,7 @@ def zbuduj_leada_z_webhooka(ladunek: Mapping[str, Any], dzisiaj: str) -> dict[st
 	if data is None:
 		data = dzisiaj
 		if data_surowa:
-			linie_odpowiedzi.append("Data zgloszenia (nierozpoznana): %s" % data_surowa)
-		else:
-			linie_odpowiedzi.append("Data zgloszenia (brak): ustawiono date przyjecia")
+			linie_odpowiedzi.append("Data zgłoszenia (nierozpoznana): %s" % data_surowa)
 
 	# Kod pocztowy: klucz `kod_pocztowy`; wsteczna zgodnosc, gdy kod przyszedl pod `miasto`
 	kod_surowy = _tekst(dane.get("kod_pocztowy"))
@@ -374,21 +451,27 @@ def zbuduj_leada_z_webhooka(ladunek: Mapping[str, Any], dzisiaj: str) -> dict[st
 	if kod_surowy:
 		kod = normalizuj_kod_tolerancyjnie(kod_surowy) or ""
 		if not kod:
-			linie_odpowiedzi.append("Kod pocztowy (nierozpoznany): %s" % kod_surowy)
+			linie_odpowiedzi.append("Kod pocztowy (do sprawdzenia): %s" % kod_surowy)
 	elif miasto:
 		kod_z_miasta = normalizuj_kod_tolerancyjnie(miasto)
 		if kod_z_miasta:
 			kod, miasto = kod_z_miasta, ""
 
-	linie = ["Zrodlo: Facebook Lead Ads"]
+	# Kolejnosc linii (decyzja wlasciciela 2026-11-04): kampania pierwsza, bo lista leadow
+	# pokazuje tylko pierwsza linie, a z niej call center widzi okreg. Bez linii "Zrodlo"
+	# (dubel pola Zrodlo).
+	linie: list[str] = []
+	kampania = kampania_czytelna(dane.get("kampania"))
+	if kampania:
+		linie.append(PREFIKS_KAMPANII + kampania)
 	formularz = _tekst(dane.get("formularz"))
 	if formularz:
 		linie.append("Formularz: %s" % formularz)
-	kampania = _tekst(dane.get("kampania"))
-	if kampania:
-		linie.append("Kampania: %s" % kampania)
 	linie.extend(linie_odpowiedzi)
-	linie.extend("%s: %s" % (p, o) for p, o in splaszcz_odpowiedzi(dane.get("odpowiedzi")))
+	for pytanie, odpowiedz in splaszcz_odpowiedzi(dane.get("odpowiedzi")):
+		etykieta = pytanie_formularza(pytanie)
+		tresc = tekst_formularza(odpowiedz)
+		linie.append("%s: %s" % (etykieta, tresc) if etykieta else tresc)
 
 	wynik: dict[str, Any] = {
 		"first_name": imie,
@@ -397,9 +480,9 @@ def zbuduj_leada_z_webhooka(ladunek: Mapping[str, Any], dzisiaj: str) -> dict[st
 		"custom_import_source": TOKEN_ZRODLA_FB,
 		"custom_import_date": data,
 		"facebook_lead_id": id_leada,
-		"custom_uwagi_import": SEPARATOR_UWAG.join(linie),
 	}
 	opcjonalne = {
+		"custom_uwagi_import": SEPARATOR_UWAG.join(linie),
 		"last_name": nazwisko,
 		"custom_install_city": miasto,
 		"custom_install_postal_code": kod,
@@ -410,7 +493,7 @@ def zbuduj_leada_z_webhooka(ladunek: Mapping[str, Any], dzisiaj: str) -> dict[st
 	return {**wynik, **{k: v for k, v in opcjonalne.items() if v}}
 
 
-UWAGA_KOD_SPOZA_BAZY: str = "Kod pocztowy spoza bazy kodów, brak pinezki na mapie"
+UWAGA_KOD_SPOZA_BAZY: str = "Kod spoza bazy, brak pinezki na mapie"
 """Notka w Uwagach, gdy kod pocztowy leada nie istnieje w tabeli `Postal Code`."""
 
 
@@ -452,23 +535,73 @@ POLA_TAGOW_DO_UZUPELNIENIA: tuple[str, ...] = (
 )
 """Pola, ktore ponowne zgloszenie FB uzupelnia na istniejacym leadzie, wylacznie gdy sa puste (ops#324)."""
 
-PREFIKS_KAMPANII: str = "Kampania: "
-"""Prefiks linii z kampania w `custom_uwagi_import` (patrz `zbuduj_leada_z_webhooka`)."""
-
 
 def _znacznik_zgloszenia(facebook_lead_id: str) -> str:
 	"""Fragment linii Uwag identyfikujacy zgloszenie; z nawiasem, by id 123 nie pasowalo do 1234."""
 	return "lead FB %s)" % facebook_lead_id
 
 
-def linia_ponownego_zgloszenia(dane: Mapping[str, Any]) -> str:
+def _dzien_miesiac(data_iso: Any) -> str:
+	"""`2026-11-02` -> `02.11`; inny tekst bez zmian."""
+	tekst = _tekst(data_iso)
+	dopasowanie = _WZOR_DATY.match(tekst)
+	if not dopasowanie:
+		return tekst
+	_rok, miesiac, dzien = dopasowanie.group(1).split("-")
+	return "%s.%s" % (dzien, miesiac)
+
+
+def zloz_linie_ponownego_zgloszenia(
+	data_iso: Any,
+	facebook_lead_id: str,
+	segmenty: list[str],
+	posiadane: str | None,
+	zasady: str | None,
+	istniejacy: Mapping[str, Any] | None = None,
+) -> str:
+	"""Jedna linia Uwag dla ponownego zgloszenia (ops#324), bez wewnetrznego `SEPARATOR_UWAG`.
+
+	`Ponowne zgłoszenie 02.11: Szczecin, 27.10; Ma PV bez magazynu (lead FB <id>)`.
+	`segmenty` to linie Uwag nowego zgloszenia w obecnym formacie: z linii kampanii zostaje
+	sama wartosc, czytelne linie PV i `System rozliczeń: ...` odpadaja, gdy `posiadane` /
+	`zasady` zgadzaja sie z polami `istniejacy` (scalanie pol nie nadpisuje, wiec rozna
+	odpowiedz musi zostac w tekscie). Reszta linii zostaje, laczona "; ".
+	Znacznik `lead FB <id>)` zostaje doslownie: na nim stoi `juz_scalone`."""
+	ist = istniejacy or {}
+	pv_zgodne = istniejacy is not None and (posiadane or "") == (ist.get("custom_posiadane_produkty") or "")
+	zasady_zgodne = istniejacy is not None and (zasady or "") == (ist.get("custom_zasady_dotacji") or "")
+	czesci: list[str] = []
+	for segment in segmenty:
+		segment = segment.strip()
+		if not segment:
+			continue
+		if segment.startswith(PREFIKS_KAMPANII):
+			segment = segment[len(PREFIKS_KAMPANII) :].strip()
+		elif pv_zgodne and segment.startswith(PREFIKSY_PV):
+			continue
+		elif zasady_zgodne and segment.startswith(PREFIKS_SYSTEMU):
+			continue
+		if segment:
+			czesci.append(segment)
+	naglowek = "Ponowne zgłoszenie %s" % _dzien_miesiac(data_iso)
+	tresc = "; ".join(czesci)
+	znacznik = "(%s" % _znacznik_zgloszenia(facebook_lead_id)
+	return "%s: %s %s" % (naglowek, tresc, znacznik) if tresc else "%s %s" % (naglowek, znacznik)
+
+
+def linia_ponownego_zgloszenia(dane: Mapping[str, Any], istniejacy: Mapping[str, Any] | None = None) -> str:
 	"""Linia dopisywana do Uwag istniejacego leada (ops#324).
 
-	`dane` to wynik `zbuduj_leada_z_webhooka` dla NOWEGO zgloszenia."""
-	return "Ponowne zgłoszenie FB %s (%s: %s" % (
-		dane.get("custom_import_date") or "",
-		_znacznik_zgloszenia(dane["facebook_lead_id"]),
-		dane.get("custom_uwagi_import") or "",
+	`dane` to wynik `zbuduj_leada_z_webhooka` dla NOWEGO zgloszenia, `istniejacy` to pola
+	leada, do ktorego scalamy (PV i zasady zgodne z nimi nie sa powtarzane)."""
+	uwagi = dane.get("custom_uwagi_import") or ""
+	return zloz_linie_ponownego_zgloszenia(
+		dane.get("custom_import_date"),
+		dane["facebook_lead_id"],
+		uwagi.split(SEPARATOR_UWAG) if uwagi else [],
+		dane.get("custom_posiadane_produkty"),
+		dane.get("custom_zasady_dotacji"),
+		istniejacy,
 	)
 
 
@@ -498,7 +631,9 @@ def pola_do_scalenia(istniejacy: Mapping[str, Any], nowy: Mapping[str, Any]) -> 
 	tagow tylko gdy puste u istniejacego, a niepuste w nowym. Status, wlasciciel, CC, adres,
 	imie i `facebook_lead_id` nigdy nie wchodza do wyniku. Nie mutuje argumentow."""
 	uwagi = SEPARATOR_UWAG.join(
-		filter(None, [istniejacy.get("custom_uwagi_import") or "", linia_ponownego_zgloszenia(nowy)])
+		filter(
+			None, [istniejacy.get("custom_uwagi_import") or "", linia_ponownego_zgloszenia(nowy, istniejacy)]
+		)
 	)
 	wynik = {"custom_uwagi_import": uwagi}
 	for pole in POLA_TAGOW_DO_UZUPELNIENIA:
