@@ -70,6 +70,14 @@ według grafiku `Volteo Dyzur SMS` ma teraz dyżur. Własny przełącznik `dyzur
 Idzie przy `utworzony` oraz przy pierwszym `scalony` (klient ponownie zgłasza
 zainteresowanie, SMS dotyczy istniejącego leada); powtórka scalenia go nie wysyła.
 
+Dane adresowe z kodu pocztowego (ops#329)
+-----------------------------------------
+Nowy lead z poprawnym kodem dostaje województwo, powiat, gminę (gdy na leadzie jest
+pole `custom_gmina`) i centroid z `crm.api.kod_pocztowy.dane_kodu` (cache `Postal Code`
+uzupełniany z Adresy.app, timeout 5 s). Miejscowość tylko, gdy kod ma JEDNĄ; przy
+kilku pole zostaje puste, a CC wybiera z listy w panelu leada. Błąd lookupu nie
+blokuje leada: lead bez tych pól, notka w Uwagach, wpis w Error Log.
+
 Cała logika mapowania jest w `crm/volteo_leady_webhook.py` (bez `frappe`).
 """
 
@@ -78,9 +86,11 @@ import json
 import frappe
 from frappe import _
 
+from crm.api.kod_pocztowy import dane_kodu
 from crm.volteo_aktywnosc import zapisz_slad
 from crm.volteo_leady_webhook import (
 	LIMIT_ZADAN_NA_MINUTE,
+	POLE_GMINY_LEADA,
 	ROLA_INTEGRACJI,
 	LadunekOdrzucony,
 	dane_z_kodu_pocztowego,
@@ -132,17 +142,23 @@ def _zapisz_odrzucenie(ladunek: dict, powod: str) -> None:
 
 
 def _z_centroidem_kodu(dane: dict) -> dict:
-	"""Nowy słownik z danymi `Postal Code`: centroid, województwo i powiat.
+	"""Nowy słownik z danymi lookupu kodu (ops#329): centroid, województwo, powiat, gmina
+	i miejscowość, gdy kod ma jedną.
 
-	Miejscowości z tabeli NIE przenosimy (GeoNames trzyma jedną na kod, często
-	nie tę). Kod spoza bazy zostaje zapisany bez współrzędnych, z notką w Uwagach."""
+	Lookup to `crm.api.kod_pocztowy.dane_kodu` (cache `Postal Code`, przy braku `cities`
+	albo `gmina` Adresy.app z timeoutem 5 s). Każdy błąd lookupu daje leada bez tych pól,
+	z notką w Uwagach jak przy nieznanym kodzie, nigdy wyjątek (wpis w Error Log).
+	Gmina trafia na leada tylko, gdy istnieje pole `POLE_GMINY_LEADA`."""
 	kod = dane.get("custom_install_postal_code")
 	if not kod:
 		return dane
-	wiersz = frappe.db.get_value(
-		"Postal Code", {"kod": kod}, ["lat", "lng", "wojewodztwo", "powiat"], as_dict=True
-	)
-	return dane_z_kodu_pocztowego(dane, wiersz)
+	try:
+		wiersz = dane_kodu(kod)
+	except Exception:
+		frappe.log_error(title="Webhook leadów: kod pocztowy", message=frappe.get_traceback())
+		wiersz = None
+	pole_gminy = POLE_GMINY_LEADA if frappe.get_meta("CRM Lead").has_field(POLE_GMINY_LEADA) else None
+	return dane_z_kodu_pocztowego(dane, wiersz, pole_gminy)
 
 
 def _zakolejkuj_sms_powitalny(lead: str) -> None:

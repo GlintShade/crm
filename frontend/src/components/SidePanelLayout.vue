@@ -527,6 +527,16 @@
                           :doctype="doctype"
                           @change="(v) => fieldChange(v, field)"
                         />
+                        <MiejscowoscInput
+                          v-else-if="
+                            doctype === 'CRM Lead' &&
+                            field.fieldname === 'custom_install_city'
+                          "
+                          :value="doc[field.fieldname]"
+                          :kod="doc.custom_install_postal_code"
+                          :placeholder="field.placeholder"
+                          @change="(v) => fieldChange(v, field)"
+                        />
                         <FormControl
                           v-else
                           class="form-control"
@@ -597,6 +607,7 @@ import ArrowUpRightIcon from '@/components/Icons/ArrowUpRightIcon.vue'
 import EditIcon from '@/components/Icons/EditIcon.vue'
 import Link from '@/components/Controls/Link.vue'
 import TagiProduktowInput from '@/components/Controls/TagiProduktowInput.vue'
+import MiejscowoscInput from '@/components/Controls/MiejscowoscInput.vue'
 import DateTimePickerSiatka from '@/components/Controls/DateTimePickerSiatka.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import SidePanelModal from '@/components/Modals/SidePanelModal.vue'
@@ -617,6 +628,11 @@ import {
 import { useUkryjPustePola } from '@/composables/useUkryjPustePola'
 import { useStanSekcjiPanelu } from '@/composables/useStanSekcjiPanelu'
 import { domyslnieOtwartaKarta } from '@/utils/stanSekcjiPanelu'
+import {
+  miejscowosciKodu,
+  uzupelnijAdresLeadaZKodu,
+} from '@/data/kodPocztowy'
+import { czyPokazacPustaMiejscowosc } from '@/utils/kodPocztowy'
 import { usersStore } from '@/stores/users'
 import { isMobileView } from '@/composables/settings'
 import {
@@ -948,7 +964,10 @@ function parsedField(field) {
   _field.visible = isFieldVisible(_field, overrides?.hidden)
   _field.visible =
     _field.visible &&
-    !czyUkrycPole(_field, doc.value?.[_field.fieldname], ukryjPuste.value && !props.preview)
+    (!czyUkrycPole(_field, doc.value?.[_field.fieldname], ukryjPuste.value && !props.preview) ||
+      czyPokazacPustaMiejscowosc(props.doctype, _field, () =>
+        miejscowosciKodu(doc.value?.custom_install_postal_code),
+      ))
   return _field
 }
 
@@ -959,6 +978,14 @@ async function fieldChange(value, df) {
   if (props.preview) return
 
   await triggerOnChange(df.fieldname, value)
+  // ops#329: nowy kod leada uzupelnia wojewodztwo/powiat/gmine (i jedyna
+  // miejscowosc) przed zapisem; blad lookupu jest cichy.
+  if (
+    props.doctype === 'CRM Lead' &&
+    df.fieldname === 'custom_install_postal_code'
+  ) {
+    await uzupelnijAdresLeadaZKodu(document.doc)
+  }
 
   const hasListener = attrs['onBeforeFieldChange'] !== undefined
 

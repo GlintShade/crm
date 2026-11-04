@@ -23,6 +23,7 @@ from collections.abc import Mapping
 from datetime import date, datetime
 from typing import Any
 
+from crm.volteo_kod_pocztowy import jedyna_miejscowosc
 from crm.volteo_leady_import import (
 	SEPARATOR_UWAG,
 	normalizuj_pisownie_osoby,
@@ -494,37 +495,51 @@ def zbuduj_leada_z_webhooka(ladunek: Mapping[str, Any], dzisiaj: str) -> dict[st
 
 
 UWAGA_KOD_SPOZA_BAZY: str = "Kod spoza bazy, brak pinezki na mapie"
-"""Notka w Uwagach, gdy kod pocztowy leada nie istnieje w tabeli `Postal Code`."""
+"""Notka w Uwagach, gdy kod pocztowy leada nie ma centroidu (brak w `Postal Code` i w Adresy.app,
+albo wiersz bez wspolrzednych) lub gdy lookup sie nie udal."""
+
+POLE_GMINY_LEADA: str = "custom_gmina"
+"""Pole gminy na `CRM Lead` (Custom Field ze skryptu ops#329); adapter podaje je tylko, gdy istnieje."""
 
 
-def dane_z_kodu_pocztowego(dane: dict, wiersz: Mapping[str, Any] | None) -> dict:
-	"""Nowy słownik z danymi wiersza `Postal Code`: centroid, województwo i powiat.
+def dane_z_kodu_pocztowego(
+	dane: dict, wiersz: Mapping[str, Any] | None, pole_gminy: str | None = None
+) -> dict:
+	"""Nowy słownik z danymi lookupu kodu: centroid, województwo, powiat, gmina, miejscowość.
 
-	`wiersz` to wynik zapytania o kod (lub `None`, gdy kodu nie ma w tabeli).
-	Miejscowości z tabeli NIE przenosimy (GeoNames trzyma jedną na kod, często nie
-	tę). Kod spoza bazy zostaje zapisany bez współrzędnych, z notką w Uwagach.
+	`wiersz` to wynik `crm.api.kod_pocztowy.dane_kodu` (cache `Postal Code` uzupełniony
+	z Adresy.app), stary kształt samego wiersza `Postal Code` też przechodzi; `None` albo
+	`found: False` oznacza kod nieznany. Miejscowość (`custom_install_city`) wpisujemy
+	TYLKO, gdy lista `cities` ma dokładnie jedną pozycję i lead nie ma już miasta z
+	ładunku; przy kilku albo nieznanej liście pole zostaje puste (wybór z listy w panelu),
+	bo `miejscowosc` GeoNames to jedna na kod, często nie ta (ops#306, ops#329).
+	Gmina tylko do `pole_gminy`, gdy adapter je poda (pole istnieje na leadzie).
 	Województwo przechodzi przez `normalizuj_wojewodztwo` (w tabeli bywa WIELKIMI
 	literami, a `custom_voivodeship` to Select z małymi): wartość spoza kanonu jest
-	pomijana, nigdy nie wywala insertu (ops#322). Nie mutuje `dane`."""
-	if not wiersz:
-		uwagi = dane.get("custom_uwagi_import") or ""
-		return {
-			**dane,
-			"custom_uwagi_import": SEPARATOR_UWAG.join(filter(None, [uwagi, UWAGA_KOD_SPOZA_BAZY])),
-		}
+	pomijana, nigdy nie wywala insertu (ops#322). Brak centroidu: notka w Uwagach.
+	Nie mutuje `dane`."""
 	wynik = dict(dane)
-	wojewodztwo = normalizuj_wojewodztwo(wiersz.get("wojewodztwo") or "")
-	if wojewodztwo:
-		wynik["custom_voivodeship"] = wojewodztwo
-	if wiersz.get("powiat"):
-		wynik["custom_powiat"] = wiersz["powiat"]
-	if wiersz.get("lat") and wiersz.get("lng"):
-		wynik.update(
-			custom_lat=wiersz["lat"],
-			custom_lng=wiersz["lng"],
-			custom_geo_dokladnosc="kod",
-			custom_geo_zrodlo="kod",
-		)
+	if wiersz and wiersz.get("found", True):
+		wojewodztwo = normalizuj_wojewodztwo(_tekst(wiersz.get("wojewodztwo")))
+		if wojewodztwo:
+			wynik["custom_voivodeship"] = wojewodztwo
+		if _tekst(wiersz.get("powiat")):
+			wynik["custom_powiat"] = _tekst(wiersz.get("powiat"))
+		if pole_gminy and _tekst(wiersz.get("gmina")):
+			wynik[pole_gminy] = _tekst(wiersz.get("gmina"))
+		miejscowosc = jedyna_miejscowosc(wiersz)
+		if miejscowosc and not wynik.get("custom_install_city"):
+			wynik["custom_install_city"] = miejscowosc
+		if wiersz.get("lat") and wiersz.get("lng"):
+			wynik.update(
+				custom_lat=wiersz["lat"],
+				custom_lng=wiersz["lng"],
+				custom_geo_dokladnosc="kod",
+				custom_geo_zrodlo="kod",
+			)
+			return wynik
+	uwagi = wynik.get("custom_uwagi_import") or ""
+	wynik["custom_uwagi_import"] = SEPARATOR_UWAG.join(filter(None, [uwagi, UWAGA_KOD_SPOZA_BAZY]))
 	return wynik
 
 
