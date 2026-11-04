@@ -5,10 +5,11 @@
 Lookup kodu pocztowego (ops#329)
 ==================================
 
-Następca Server Scriptu `volteo_postal_lookup` w forku, wspólny dla panelu leada
-(`crm.api.kod_pocztowy.wyszukaj`) i webhooka leadów (`dane_kodu`, import w
-`crm.api.leady_webhook`). Server Script zostaje bez zmian (woła go jeszcze
-`ContactModal.vue` i `DaneKlientaTab.vue`); odpowiedź ma ten sam kształt:
+Następca Server Scriptu `volteo_postal_lookup` w forku: jeden lookup w całej
+aplikacji. Front (panel leada, `ContactModal.vue`, `DaneKlientaTab.vue`) woła
+`crm.api.kod_pocztowy.wyszukaj`, webhook leadów `dane_kodu` (import w
+`crm.api.leady_webhook`). Server Script zostaje na razie w bazie, nikt z forka go
+już nie woła; odpowiedź ma ten sam kształt:
 `{found, wojewodztwo, powiat, gmina, miejscowosc, cities}`.
 
 Dwa stopnie:

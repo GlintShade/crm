@@ -10,7 +10,8 @@
   `volteo_contact_duplicate_check` Server Script API, mirroring the
   `call(name, params)` convention used by KalkulatorTab.vue / AudytTab.vue.
   Kod pocztowy autofills Miasto/gmina/powiat/województwo on blur via the
-  `volteo_postal_lookup` API (silent on failure); the derived gmina/powiat/
+  shared `crm.api.kod_pocztowy.wyszukaj` lookup (data/kodPocztowy.js, ops#329;
+  silent on failure); the derived gmina/powiat/
   województwo fields are not rendered — the After-Save sync hook persists
   everything into a linked Address record from these Contact fields. When a
   postal code covers several localities, Miasto switches from free text to a
@@ -193,6 +194,7 @@
 
 <script setup>
 import { useDocument } from '@/data/document'
+import { pobierzDaneKodu } from '@/data/kodPocztowy'
 import { useTelemetry } from 'frappe-ui/frappe'
 import { call, createResource } from 'frappe-ui'
 import { useDebounceFn } from '@vueuse/core'
@@ -291,7 +293,7 @@ const dupCheckedValue = reactive({
   mobile_no: null,
 })
 
-// Localities returned by the last successful `volteo_postal_lookup` when a
+// Localities returned by the last successful postal-code lookup when a
 // postal code covers more than one city — drives Miasto's text-vs-select
 // switch below. Cleared on any postal-code edit so a stale list never
 // survives a code change.
@@ -414,9 +416,7 @@ async function onBlur(field) {
     // previous code must never survive into this one, success or not.
     cityOptions.value = []
     try {
-      const r = await call('volteo_postal_lookup', {
-        pincode: _contact.doc.custom_kod_pocztowy.trim(),
-      })
+      const r = await pobierzDaneKodu(_contact.doc.custom_kod_pocztowy.trim())
       if (r && r.found) {
         const cities = r.cities && r.cities.length
           ? r.cities

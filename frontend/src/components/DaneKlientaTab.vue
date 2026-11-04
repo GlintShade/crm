@@ -273,6 +273,7 @@ import { useDocument } from '@/data/document'
 import { usersStore } from '@/stores/users.js'
 import { telHref, czyTelefon } from '@/utils/telefon'
 import { call } from 'frappe-ui'
+import { pobierzDaneKodu } from '@/data/kodPocztowy'
 import { computed, reactive, ref, watch } from 'vue'
 import {
   validateFirstName,
@@ -599,7 +600,7 @@ async function onBlurKodPocztowy() {
   const kod = String(contact.doc?.custom_kod_pocztowy ?? '').trim()
   if (/^\d{2}-\d{3}$/.test(kod)) {
     try {
-      const r = await call('volteo_postal_lookup', { pincode: kod })
+      const r = await pobierzDaneKodu(kod)
       if (r && r.found) {
         const cities = r.cities && r.cities.length ? r.cities : r.miejscowosc ? [r.miejscowosc] : []
         if (cities.length > 1) {
