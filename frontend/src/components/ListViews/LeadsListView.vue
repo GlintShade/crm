@@ -88,15 +88,9 @@
               size="sm"
             />
           </div>
-          <div v-else-if="column.key === 'lead_owner'">
-            <Avatar
-              v-if="item.full_name"
-              class="flex items-center"
-              :image="item.user_image"
-              :label="item.full_name"
-              size="sm"
-            />
-          </div>
+          <!-- b83: lead_owner jest w KOLUMNY_INLINE, awatar handlowca
+               rysuje teraz LeadInlineCell.vue (prefix Linku albo widok
+               tylko do odczytu dla D2D), stad brak osobnej galezi tutaj. -->
           <div v-else-if="column.key === 'custom_cc'">
             <Avatar
               v-if="item.full_name"
@@ -411,7 +405,7 @@ function getLabel(label, column) {
 // nawigacji ani filtrowania po kliknieciu w wiersz/komorke. ListView nie
 // dostaje juz "getRowRoute" w opcjach (patrz szablon), wiec caly wiersz
 // przestal byc linkiem, a klikniecie w dowolna komorke poza dozwolonymi
-// wyjatkami (checkbox, "Szczegoly", "Komentarze", cztery pola edytowane
+// wyjatkami (checkbox, "Szczegoly", "Komentarze", pola edytowane
 // inline) nic juz nie robi. Jedyne miejsce, ktore nadal otwiera leada, to
 // przycisk "Szczegoly" (patrz goToLead nizej), wiec ta funkcja zostaje
 // jedynym zrodlem trasy leada.
