@@ -219,6 +219,11 @@ doc_events = {
 		"validate": ["crm.api.whatsapp.validate"],
 		"on_update": ["crm.api.whatsapp.on_update"],
 	},
+	# ops#331: kalendarz spotkan na zywo; sygnal bez danych leada, jeden na request.
+	"CRM Lead": {
+		"on_update": ["crm.api.kalendarz_live.po_zapisie_leada"],
+		"on_trash": ["crm.api.kalendarz_live.po_zapisie_leada"],
+	},
 	"CRM Deal": {
 		"on_update": [
 			"crm.fcrm.doctype.erpnext_crm_settings.erpnext_crm_settings.create_customer_in_erpnext"
@@ -309,7 +314,12 @@ doc_events = {
 	# (wzor skryptu w docs/ops/crm-dostepnosc.py); na swiezym/lokalnym site go
 	# nie ma. Hook na nieistniejacym doctype jest bezpieczny, patrz komentarz
 	# przy "Volteo Audyt CP".
-	"Volteo Dostepnosc": {"validate": ["crm.api.kalendarz.validate_dostepnosc"]},
+	"Volteo Dostepnosc": {
+		"validate": ["crm.api.kalendarz.validate_dostepnosc"],
+		# ops#331: sygnal realtime "kalendarz zmieniony" (jeden na request, po commicie).
+		"on_update": ["crm.api.kalendarz_live.po_zapisie_dostepnosci"],
+		"on_trash": ["crm.api.kalendarz_live.po_zapisie_dostepnosci"],
+	},
 	"Volteo Trify Update": {
 		"validate": ["crm.api.trify.validate"],
 		"after_insert": ["crm.api.trify.after_insert"],

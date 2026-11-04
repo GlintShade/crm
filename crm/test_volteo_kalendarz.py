@@ -690,3 +690,190 @@ class TestNotatkaDoHtml(unittest.TestCase):
 
 	def test_escapowanie(self):
 		self.assertEqual(notatka_do_html("<b>x</b> & y"), "<p>&lt;b&gt;x&lt;/b&gt; &amp; y</p>")
+
+# --- Kalendarz na zywo (ops#331) ---------------------------------------------
+# Osobny blok importow na koncu pliku: rownolegla sesja zmienia liste importow
+# na gorze, a tak scalenie nie ma konfliktu.
+from datetime import date as _date
+from datetime import datetime as _datetime
+
+from crm.volteo_kalendarz import (
+	MAKS_DAT_SYGNALU,
+	POLA_KALENDARZA_LEADA,
+	polacz_daty,
+	tresc_sygnalu,
+	zmiana_dostepnosci,
+	zmiana_kalendarza_leada,
+)
+
+
+def _lead(**nadpisz):
+	stan = {
+		"custom_termin_spotkania": _datetime(2026, 11, 5, 10, 0),
+		"lead_owner": "jan@x.pl",
+		"status": "Umówione",
+		"converted": 0,
+		"lead_name": "Anna Nowak",
+		"custom_install_city": "Kraków",
+		"mobile_no": "+48 600 000 000",
+	}
+	stan.update(nadpisz)
+	return stan
+
+
+class TestZmianaKalendarzaLeada(unittest.TestCase):
+	def test_bez_zmian(self):
+		self.assertIsNone(zmiana_kalendarza_leada(_lead(), _lead()))
+
+	def test_zmiana_pola_spoza_kalendarza_nie_dotyczy(self):
+		przed = _lead()
+		po = dict(_lead(), custom_cc="cc@x.pl", email="a@b.pl")
+		przed["custom_cc"] = "inny@x.pl"
+		self.assertIsNone(zmiana_kalendarza_leada(przed, po))
+
+	def test_lead_bez_terminu_nie_dotyczy(self):
+		przed = _lead(custom_termin_spotkania=None)
+		po = _lead(custom_termin_spotkania=None, status="Nowy")
+		self.assertIsNone(zmiana_kalendarza_leada(przed, po))
+
+	def test_przesuniecie_terminu_daje_obie_daty(self):
+		po = _lead(custom_termin_spotkania="2026-11-07 12:00:00")
+		self.assertEqual(zmiana_kalendarza_leada(_lead(), po), ["2026-11-05", "2026-11-07"])
+
+	def test_zmiana_godziny_tego_samego_dnia(self):
+		po = _lead(custom_termin_spotkania="2026-11-05 14:30:00")
+		self.assertEqual(zmiana_kalendarza_leada(_lead(), po), ["2026-11-05"])
+
+	def test_ustawienie_terminu(self):
+		przed = _lead(custom_termin_spotkania=None)
+		self.assertEqual(zmiana_kalendarza_leada(przed, _lead()), ["2026-11-05"])
+
+	def test_wyczyszczenie_terminu(self):
+		po = _lead(custom_termin_spotkania="")
+		self.assertEqual(zmiana_kalendarza_leada(_lead(), po), ["2026-11-05"])
+
+	def test_kazde_pole_kalendarza_jest_istotne(self):
+		zmienione = {
+			"lead_owner": "ola@x.pl",
+			"status": "Stracony",
+			"converted": 1,
+			"lead_name": "Anna Kowalska",
+			"custom_install_city": "Tarnów",
+			"mobile_no": "+48 600 000 001",
+		}
+		for pole in POLA_KALENDARZA_LEADA:
+			if pole == "custom_termin_spotkania":
+				continue
+			with self.subTest(pole=pole):
+				po = _lead(**{pole: zmienione[pole]})
+				self.assertEqual(zmiana_kalendarza_leada(_lead(), po), ["2026-11-05"])
+
+	def test_ten_sam_termin_w_innym_formacie_to_brak_zmiany(self):
+		for wartosc in ("2026-11-05 10:00:00", "2026-11-05T10:00", "2026-11-05 10:00:00.000000"):
+			with self.subTest(wartosc=wartosc):
+				po = _lead(custom_termin_spotkania=wartosc)
+				self.assertIsNone(zmiana_kalendarza_leada(_lead(), po))
+
+	def test_converted_liczba_i_tekst_to_brak_zmiany(self):
+		self.assertIsNone(zmiana_kalendarza_leada(_lead(converted=0), _lead(converted="0")))
+		self.assertIsNone(zmiana_kalendarza_leada(_lead(converted=False), _lead(converted=0)))
+
+	def test_nowy_lead_z_terminem(self):
+		self.assertEqual(zmiana_kalendarza_leada(None, _lead()), ["2026-11-05"])
+
+	def test_nowy_lead_bez_terminu(self):
+		self.assertIsNone(zmiana_kalendarza_leada(None, _lead(custom_termin_spotkania=None)))
+
+	def test_usuniecie_leada_z_terminem(self):
+		self.assertEqual(zmiana_kalendarza_leada(_lead(), None), ["2026-11-05"])
+
+	def test_usuniecie_leada_bez_terminu(self):
+		self.assertIsNone(zmiana_kalendarza_leada(_lead(custom_termin_spotkania=None), None))
+
+	def test_zly_termin_ignorowany(self):
+		po = _lead(custom_termin_spotkania="jutro")
+		self.assertEqual(zmiana_kalendarza_leada(_lead(), po), ["2026-11-05"])
+
+
+def _wiersz(**nadpisz):
+	stan = {
+		"handlowiec": "jan@x.pl",
+		"dzien_tygodnia": "",
+		"data": _date(2026, 11, 6),
+		"wolne": 0,
+		"od": 8,
+		"do": 16,
+	}
+	stan.update(nadpisz)
+	return stan
+
+
+class TestZmianaDostepnosci(unittest.TestCase):
+	def test_nowa_zmiana_na_dzien(self):
+		self.assertEqual(zmiana_dostepnosci(None, _wiersz()), ["2026-11-06"])
+
+	def test_usuniecie_zmiany_na_dzien(self):
+		self.assertEqual(zmiana_dostepnosci(_wiersz(), None), ["2026-11-06"])
+
+	def test_przeniesienie_zmiany_na_inny_dzien(self):
+		po = _wiersz(data="2026-11-09")
+		self.assertEqual(zmiana_dostepnosci(_wiersz(), po), ["2026-11-06", "2026-11-09"])
+
+	def test_wzor_tygodniowy_dotyczy_wszystkich_dat(self):
+		wzor = _wiersz(dzien_tygodnia="Poniedziałek", data=None)
+		self.assertEqual(zmiana_dostepnosci(None, wzor), [])
+		self.assertEqual(zmiana_dostepnosci(wzor, None), [])
+
+	def test_zmiana_wzoru_na_dzien_dotyczy_wszystkich_dat(self):
+		wzor = _wiersz(dzien_tygodnia="Poniedziałek", data=None)
+		self.assertEqual(zmiana_dostepnosci(wzor, _wiersz()), [])
+
+	def test_zapis_bez_zmian(self):
+		self.assertIsNone(zmiana_dostepnosci(_wiersz(), _wiersz(data="2026-11-06")))
+
+	def test_zmiana_godzin(self):
+		self.assertEqual(zmiana_dostepnosci(_wiersz(), _wiersz(do=18)), ["2026-11-06"])
+
+	def test_brak_stanow(self):
+		self.assertIsNone(zmiana_dostepnosci(None, None))
+
+
+class TestPolaczDaty(unittest.TestCase):
+	def test_brak_zmian(self):
+		self.assertIsNone(polacz_daty(None, None))
+
+	def test_pierwsza_zmiana(self):
+		self.assertEqual(polacz_daty(None, ["2026-11-06", "2026-11-05"]), ["2026-11-05", "2026-11-06"])
+
+	def test_nowe_none_nie_zmienia(self):
+		self.assertEqual(polacz_daty(["2026-11-05"], None), ["2026-11-05"])
+
+	def test_suma_bez_duplikatow(self):
+		self.assertEqual(
+			polacz_daty(["2026-11-05", "2026-11-06"], ["2026-11-06", "2026-11-07"]),
+			["2026-11-05", "2026-11-06", "2026-11-07"],
+		)
+
+	def test_wszystkie_pochlaniaja(self):
+		self.assertEqual(polacz_daty([], ["2026-11-05"]), [])
+		self.assertEqual(polacz_daty(["2026-11-05"], []), [])
+
+	def test_za_duzo_dat_zwija_do_wszystkich(self):
+		daty = [f"2026-12-{d:02d}" for d in range(1, MAKS_DAT_SYGNALU + 1)]
+		self.assertEqual(len(polacz_daty(None, daty)), MAKS_DAT_SYGNALU)
+		self.assertEqual(polacz_daty(daty, ["2027-01-01"]), [])
+
+	def test_masowy_przydzial_jeden_sygnal(self):
+		zebrane = None
+		for dzien in (5, 5, 6, 5, 7):
+			zebrane = polacz_daty(zebrane, [f"2026-11-{dzien:02d}"])
+		self.assertEqual(zebrane, ["2026-11-05", "2026-11-06", "2026-11-07"])
+
+
+class TestTrescSygnalu(unittest.TestCase):
+	def test_tylko_daty(self):
+		self.assertEqual(tresc_sygnalu(["2026-11-05"]), {"daty": ["2026-11-05"]})
+
+	def test_wszystkie(self):
+		self.assertEqual(tresc_sygnalu([]), {"daty": []})
+		self.assertEqual(tresc_sygnalu(None), {"daty": []})

@@ -535,3 +535,131 @@ def notatka_do_html(notatka) -> str | None:
 		return None
 	linie = [html.escape(linia.rstrip()) for linia in tekst.split("\n")]
 	return "<p>" + "<br>".join(linie) + "</p>"
+
+# --- Kalendarz na zywo (ops#331) ---------------------------------------------
+# Decyzja "czy zapis dotyczy kalendarza" i sklejanie dat w jeden sygnal na
+# request. Adapter z `frappe` mieszka w `crm/api/kalendarz_live.py`. Sygnal
+# NIE niesie danych leada, tylko daty (RRRR-MM-DD), ktorych dotyczy zmiana;
+# pusta lista dat znaczy "nie wiadomo ktore / wszystkie" (front odswieza zawsze).
+
+ZDARZENIE_KALENDARZA = "volteo_kalendarz"
+
+POLA_KALENDARZA_LEADA: tuple[str, ...] = (
+	"custom_termin_spotkania",
+	"lead_owner",
+	"status",
+	"converted",
+	"lead_name",
+	"custom_install_city",
+	"mobile_no",
+)
+"""Pola `CRM Lead` widoczne w kalendarzu (kafelek, dymek, filtr `converted`)."""
+
+POLA_KALENDARZA_DOSTEPNOSCI: tuple[str, ...] = ("handlowiec", "dzien_tygodnia", "data", "wolne", "od", "do")
+
+MAKS_DAT_SYGNALU: int = 31
+"""Powyzej tylu dat sygnal zwija sie do "wszystkie daty" (pusta lista)."""
+
+
+def _wartosc_porownania(wartosc) -> str:
+	"""Wartosc pola do porownania przed/po: daty, liczby i None jako tekst."""
+	if wartosc is None:
+		return ""
+	if isinstance(wartosc, datetime):
+		return wartosc.strftime("%Y-%m-%d %H:%M:%S")
+	if isinstance(wartosc, date):
+		return wartosc.isoformat()
+	if isinstance(wartosc, bool):
+		return str(int(wartosc))
+	if isinstance(wartosc, float) and wartosc.is_integer():
+		return str(int(wartosc))
+	tekst = str(wartosc).strip()
+	if len(tekst) >= 16 and tekst[4:5] == "-" and tekst[10:11] in ("T", " "):
+		try:
+			return normalizuj_termin(tekst.split(".")[0]) or ""
+		except ValueError:
+			return tekst
+	return tekst
+
+
+def _data_terminu(wartosc) -> str | None:
+	"""Data RRRR-MM-DD z wartosci Datetime/Date/tekstu; None, gdy pusta lub zla."""
+	if wartosc in (None, ""):
+		return None
+	try:
+		return _parsuj_date(wartosc).isoformat()
+	except ValueError:
+		return None
+
+
+def _rozne(przed: dict, po: dict, pola) -> bool:
+	return any(_wartosc_porownania(przed.get(p)) != _wartosc_porownania(po.get(p)) for p in pola)
+
+
+def zmiana_kalendarza_leada(przed: dict | None, po: dict | None) -> list[str] | None:
+	"""Daty kalendarza, ktorych dotyczy zapis (albo usuniecie) leada; None = nie dotyczy.
+
+	`przed` to stan sprzed zapisu (None przy nowym leadzie), `po` stan po zapisie
+	(None przy usunieciu). Lead jest w kalendarzu, gdy ma termin spotkania.
+	Zmiana dotyczy kalendarza, gdy lead ma termin przed albo po i zmienilo sie
+	ktores z `POLA_KALENDARZA_LEADA`. Zwraca posortowane daty starego i nowego
+	terminu (zawsze niepusta lista, bo co najmniej jeden termin istnieje).
+	"""
+	przed = przed or {}
+	po = po or {}
+	daty = {
+		d
+		for d in (
+			_data_terminu(przed.get("custom_termin_spotkania")),
+			_data_terminu(po.get("custom_termin_spotkania")),
+		)
+		if d
+	}
+	if not daty:
+		return None
+	if przed and po and not _rozne(przed, po, POLA_KALENDARZA_LEADA):
+		return None
+	return sorted(daty)
+
+
+def zmiana_dostepnosci(przed: dict | None, po: dict | None) -> list[str] | None:
+	"""Daty, ktorych dotyczy zapis (albo usuniecie) wiersza `Volteo Dostepnosc`.
+
+	Wiersz zmiany na dzien (`data`) dotyczy tej daty (i starej, gdy data sie
+	zmienila); wiersz wzoru tygodniowego (bez `data`) dotyczy kazdego tygodnia,
+	wiec zwraca pusta liste ("wszystkie daty"). Zapis bez zmiany pol: None.
+	"""
+	przed = przed or {}
+	po = po or {}
+	if not przed and not po:
+		return None
+	if przed and po and not _rozne(przed, po, POLA_KALENDARZA_DOSTEPNOSCI):
+		return None
+	stany = [s for s in (przed, po) if s]
+	if any(not _data_terminu(s.get("data")) for s in stany):
+		return []
+	return sorted({_data_terminu(s.get("data")) for s in stany})
+
+
+def polacz_daty(
+	zebrane: list[str] | None, nowe: list[str] | None, maks: int = MAKS_DAT_SYGNALU
+) -> list[str] | None:
+	"""Skleja daty kolejnych zapisow jednego requestu w jeden sygnal.
+
+	None = brak zmian; pusta lista = wszystkie daty (pochlania wszystko).
+	Ponad `maks` dat zwija sie do pustej listy, zeby sygnal byl maly.
+	"""
+	if nowe is None:
+		return zebrane
+	if zebrane is None:
+		wynik = list(nowe)
+	elif not zebrane or not nowe:
+		return []
+	else:
+		wynik = sorted(set(zebrane) | set(nowe))
+	return [] if len(wynik) > maks else sorted(wynik)
+
+
+def tresc_sygnalu(daty: list[str] | None) -> dict:
+	"""Ladunek zdarzenia `ZDARZENIE_KALENDARZA`: wylacznie daty, zadnych danych leada."""
+	return {"daty": list(daty or [])}

@@ -224,6 +224,7 @@ import EdycjaGrafiku from '@/components/kalendarz/EdycjaGrafiku.vue'
 import GrafikZespolu from '@/components/kalendarz/GrafikZespolu.vue'
 import PrzelacznikSegmentowy from '@/components/kalendarz/PrzelacznikSegmentowy.vue'
 import { sessionStore } from '@/stores/session'
+import { useKalendarzLive } from '@/composables/useKalendarzLive'
 import {
   dniTygodnia,
   dzisIso,
@@ -421,6 +422,9 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (zegar) window.clearInterval(zegar)
 })
+
+// ops#331: odświeżanie na żywo (sygnał socketu, powrót na kartę, polling 60 s).
+useKalendarzLive({ okres: () => okres.value, odswiez: wczytaj })
 
 defineExpose({ stan, etykieta, przesun, dzis, otworzModal })
 </script>
