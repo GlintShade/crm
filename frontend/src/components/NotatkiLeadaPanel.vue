@@ -30,7 +30,7 @@
       :licznik="notatki.length || null"
       licznikMotyw="gray"
       :opened="otwarte"
-      @toggle="otwarte = !otwarte"
+      @toggle="przelaczOtwarte"
     >
       <Button
         class="w-full"
@@ -121,6 +121,8 @@ import KartaSekcji from '@/components/KartaSekcji.vue'
 import KomentarzeLeadaModal from '@/components/Modals/KomentarzeLeadaModal.vue'
 import { sanitizeHTML } from '@/utils'
 import { formatDataCzas } from '@/utils/panelBoczny'
+import { useStanSekcjiPanelu } from '@/composables/useStanSekcjiPanelu'
+import { SEKCJA_NOTATKI } from '@/utils/stanSekcjiPanelu'
 import {
   LIMIT_ZWINIETYCH,
   autorNotatki,
@@ -142,7 +144,12 @@ const props = defineProps({
 // Aktywnosci/Komentarze).
 const emit = defineEmits(['liczba', 'dodano'])
 
-const otwarte = ref(true)
+// Stan karty w pamieci sekcji panelu (ops#330); bez zapisu domyslnie otwarta.
+const stanSekcji = useStanSekcjiPanelu(() => props.doctype)
+const otwarte = computed(() => stanSekcji.czyOtwarta(SEKCJA_NOTATKI, true))
+function przelaczOtwarte() {
+  stanSekcji.ustaw(SEKCJA_NOTATKI, !otwarte.value)
+}
 const rozwiniete = ref(false)
 const pokazPopup = ref(false)
 

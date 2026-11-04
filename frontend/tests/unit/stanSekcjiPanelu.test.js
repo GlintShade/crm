@@ -8,6 +8,7 @@ import {
   rozstrzygnijOtwarcie,
   domyslnieOtwartaKarta,
   SEKCJA_ZADANIA,
+  SEKCJA_NOTATKI,
 } from '@/utils/stanSekcjiPanelu'
 
 // Magazyn w pamieci z interfejsem localStorage (getItem/setItem/key/length).
@@ -160,5 +161,12 @@ describe('domyslnieOtwartaKarta', () => {
 describe('SEKCJA_ZADANIA', () => {
   it('klucz karty Zadania nie wyglada jak nazwa sekcji z ukladu', () => {
     expect(SEKCJA_ZADANIA.startsWith('__')).toBe(true)
+  })
+})
+
+describe('SEKCJA_NOTATKI', () => {
+  it('rozny od klucza Zadan i z prefiksem "__"', () => {
+    expect(SEKCJA_NOTATKI).not.toBe(SEKCJA_ZADANIA)
+    expect(SEKCJA_NOTATKI.startsWith('__')).toBe(true)
   })
 })
