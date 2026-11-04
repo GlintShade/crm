@@ -65,7 +65,7 @@ DANE_PRZYKLADOWE_DYZUR: Mapping[str, str] = {
 	"produkt": "PV + magazyn",
 	"ma_pv": "ma PV bez magazynu",
 	"zasady": "nowe zasady",
-	"kampania": "[S][KAMPANIA LEADOWA][WROCLAW][27.10.2026]",
+	"kampania": "Wrocław, 27.10",
 	"okreg": "Wrocław",
 	"formularz": "Formularz PV 2026",
 	"data_zgloszenia": "01.11",
@@ -87,6 +87,17 @@ _PRODUKTY_OPIS: Mapping[str, str] = {
 	"CP": "Czyste Powietrze",
 }
 _ETYKIETY_WYLACZONE_Z_UWAG: tuple[str, ...] = ("Zrodlo", "Formularz", "Kampania")
+
+_PREFIKSY_DUBLI_W_UWAGACH: tuple[str, ...] = (
+	"Ma PV",
+	"Nie ma PV",
+	"System rozliczeń: ",
+	"Posiada PV: ",
+	"System rozliczen: ",
+)
+"""Linie Uwag powtarzajace `{ma_pv}` i `{zasady}` (decyzja wlasciciela 2026-11-04): nie ida
+do `{uwagi}`. Warianty w nawiasach ("nierozpoznane", "klient bez PV") zostaja, bo tej
+informacji nie ma w polach. Dwa ostatnie prefiksy to stary format webhooka (do b83)."""
 
 PREFIKS_KLUCZA_LICZNIKA: str = "volteo:sms_dyzur:"
 TTL_LICZNIKA_SEK: int = 2 * 24 * 3600
@@ -306,10 +317,10 @@ def wyciagnij_z_uwag(uwagi: Any, etykieta: str) -> str:
 
 
 def reszta_uwag(uwagi: Any) -> str:
-	"""Linie Uwag bez Zrodlo/Formularz/Kampania, łączone "; ", do `LIMIT_UWAG_W_SMS` znaków."""
-	linie = [
-		l for l in _linie_uwag(uwagi) if not l.startswith(tuple(f"{e}:" for e in _ETYKIETY_WYLACZONE_Z_UWAG))
-	]
+	"""Linie Uwag bez Zrodlo/Formularz/Kampania i bez dubli PV i zasad, łączone "; ",
+	do `LIMIT_UWAG_W_SMS` znaków."""
+	wylaczone = tuple(f"{e}:" for e in _ETYKIETY_WYLACZONE_Z_UWAG) + _PREFIKSY_DUBLI_W_UWAGACH
+	linie = [l for l in _linie_uwag(uwagi) if not l.startswith(wylaczone)]
 	tekst = "; ".join(linie)
 	if len(tekst) > LIMIT_UWAG_W_SMS:
 		return tekst[: LIMIT_UWAG_W_SMS - 3].rstrip() + "..."
@@ -333,20 +344,26 @@ OKREGI_KAMPANII: tuple[tuple[str, str], ...] = (
 
 _ODWZOROWANIE_POLSKICH_ZNAKOW = str.maketrans("ĄĆĘŁŃÓŚŹŻąćęłńóśźż", "ACELNOSZZACELNOSZZ")
 _SEGMENT_KAMPANII = re.compile(r"\[([^\]]*)\]")
+_KAMPANIA_CZYTELNA = re.compile(r"^(.+?),\s*\d{1,2}\.\d{1,2}$")
 
 
 def okreg_z_kampanii(kampania: Any) -> str:
-	"""Okręg z nazwy kampanii w układzie `[S][KAMPANIA LEADOWA][WROCŁAW][27.10.2026]`.
+	"""Okręg z nazwy kampanii w układzie `[S][KAMPANIA LEADOWA][WROCŁAW][27.10.2026]`
+	albo w czytelnym skrócie z Uwag od b83 (`Wrocław, 27.10`, patrz
+	`crm.volteo_leady_webhook.kampania_czytelna`).
 
 	Nazwa jest normalizowana (bez polskich znaków, wielkie litery), a okręg rozpoznany,
-	gdy któryś segment w nawiasach kwadratowych zawiera jego słowo. Inna wartość, brak
-	nawiasów albo brak kampanii daje pusty string. Bez transliteracji GSM-7 (robi ją SMS).
+	gdy któryś segment w nawiasach kwadratowych (albo miasto przed ", DD.MM") zawiera jego
+	słowo. Inna wartość, wolny tekst bez nawiasów albo brak kampanii daje pusty string.
+	Bez transliteracji GSM-7 (robi ją SMS).
 	"""
 	if not isinstance(kampania, str):
 		return ""
-	segmenty = [
-		s.translate(_ODWZOROWANIE_POLSKICH_ZNAKOW).upper() for s in _SEGMENT_KAMPANII.findall(kampania)
-	]
+	surowe = _SEGMENT_KAMPANII.findall(kampania)
+	if not surowe:
+		czytelna = _KAMPANIA_CZYTELNA.match(kampania.strip())
+		surowe = [czytelna.group(1)] if czytelna else []
+	segmenty = [s.translate(_ODWZOROWANIE_POLSKICH_ZNAKOW).upper() for s in surowe]
 	for slowo, nazwa in OKREGI_KAMPANII:
 		if any(slowo in s for s in segmenty):
 			return nazwa
