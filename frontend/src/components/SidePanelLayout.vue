@@ -89,14 +89,22 @@
                         liniaUwag(field).length
                       "
                       data-testid="uwagi-odczyt"
-                      class="grid cursor-text grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded px-2 py-1 text-sm hover:bg-surface-gray-1"
+                      class="grid cursor-text grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-x-3 gap-y-1 rounded px-2 py-1 text-sm hover:bg-surface-gray-1"
                       @click="rozpocznijEdycjeUwag"
                     >
                       <template v-for="(l, li) in liniaUwag(field)" :key="li">
-                        <div class="whitespace-nowrap text-ink-gray-5">
+                        <div
+                          v-if="!l.calaSzerokosc"
+                          class="min-w-0 break-words text-ink-gray-5"
+                        >
                           {{ l.klucz ? l.klucz + ':' : '' }}
                         </div>
-                        <div class="break-words text-ink-gray-8">
+                        <div
+                          :class="[
+                            'min-w-0 whitespace-pre-wrap break-words text-ink-gray-8',
+                            l.calaSzerokosc && 'col-span-2',
+                          ]"
+                        >
                           {{ l.wartosc }}
                         </div>
                       </template>
@@ -733,8 +741,15 @@ function czyUwagiImport(field) {
   return field.fieldname === 'custom_uwagi_import'
 }
 
+// Dlugi "klucz" (zdanie z dwukropkiem w srodku) to nie etykieta: caly
+// segment jest wartoscia na pelna szerokosc, czarna i zawijana.
+const MAKS_DLUGOSC_KLUCZA_UWAG = 30
 function liniaUwag(field) {
-  return rozbijUwagi(doc.value[field.fieldname])
+  return rozbijUwagi(doc.value[field.fieldname]).map((l) =>
+    l.klucz.length > MAKS_DLUGOSC_KLUCZA_UWAG
+      ? { klucz: '', wartosc: l.klucz + ': ' + l.wartosc, calaSzerokosc: true }
+      : l,
+  )
 }
 
 function rozpocznijEdycjeUwag() {
