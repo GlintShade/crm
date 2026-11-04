@@ -8,6 +8,8 @@ import {
   normalizujWariant,
   segmentKlasa,
   tekstNumeruEtapu,
+  liczbaRzedowPaska,
+  podzielNaRzedy,
   etapyLiczba,
   poczatekEtapu,
   dniWEtapie,
@@ -188,5 +190,19 @@ describe('wariant paska', () => {
     expect(segmentKlasa('future')).toBe('bg-surface-gray-3')
     expect(segmentKlasa('muted')).toBe('bg-surface-gray-3')
     expect(tekstNumeruEtapu(2, 5)).toBe('Etap 3 z 5')
+  })
+})
+
+describe('rzędy paska', () => {
+  it('jeden rząd tylko gdy nieaktywny segment ma dość miejsca', () => {
+    expect(liczbaRzedowPaska(5, 100)).toBe(1)
+    expect(liczbaRzedowPaska(12, 1400)).toBe(1)
+    expect(liczbaRzedowPaska(12, 790)).toBe(2)
+    expect(liczbaRzedowPaska(12, 0)).toBe(1)
+  })
+  it('dzieli na połowy', () => {
+    expect(podzielNaRzedy([1, 2, 3, 4], 1)).toEqual([[1, 2, 3, 4]])
+    expect(podzielNaRzedy([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], 2).map((r) => r.length)).toEqual([6, 6])
+    expect(podzielNaRzedy([1, 2, 3], 2)).toEqual([[1, 2], [3]])
   })
 })

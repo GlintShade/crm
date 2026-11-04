@@ -199,3 +199,36 @@ export function segmentKlasa(stan) {
 export function tekstNumeruEtapu(biezacy, liczba) {
   return `Etap ${biezacy + 1} z ${liczba}`
 }
+
+/**
+ * Ile rzędów segmentów ma mieć pasek etapów w formie zwartej: jeden, gdy
+ * nieaktywny segment ma co najmniej `minSegment` px (przy aktywnym
+ * `mnoznik` razy szerszym), inaczej dwa (pierwsza i druga połowa etapów).
+ * Procesy do 6 etapów zawsze w jednym rzędzie.
+ *
+ * @param {number} liczba - liczba etapów
+ * @param {number} szerokosc - szerokość obszaru segmentów w px (0 = nieznana)
+ * @param {{odstep?: number, mnoznik?: number, minSegment?: number}} [opcje]
+ * @returns {1|2}
+ */
+export function liczbaRzedowPaska(liczba, szerokosc, opcje = {}) {
+  const { odstep = 6, mnoznik = 1.5, minSegment = 80 } = opcje
+  if (liczba <= 6 || !szerokosc) return 1
+  const nieaktywny = (szerokosc - (liczba - 1) * odstep) / (liczba - 1 + mnoznik)
+  return nieaktywny >= minSegment ? 1 : 2
+}
+
+/**
+ * Dzieli etapy na rzędy: jeden rząd albo dwie równe połowy (pierwszy rząd
+ * większy przy nieparzystej liczbie).
+ *
+ * @template T
+ * @param {T[]} elementy
+ * @param {1|2} rzedy
+ * @returns {T[][]}
+ */
+export function podzielNaRzedy(elementy, rzedy) {
+  if (rzedy <= 1) return [elementy]
+  const polowa = Math.ceil(elementy.length / 2)
+  return [elementy.slice(0, polowa), elementy.slice(polowa)]
+}

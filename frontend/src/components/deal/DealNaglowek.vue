@@ -179,7 +179,7 @@
 
         <!-- Wariant "pasek": blok z numerem i nazwą etapu + segmenty -->
         <div v-else class="flex items-start gap-6" data-testid="naglowek-pasek">
-          <div class="w-52 shrink-0 xl:w-60">
+          <div class="w-52 shrink-0 xl:w-64">
             <div class="text-[13px] text-ink-gray-5">
               {{ biezacy >= 0 ? tekstNumeruEtapu(biezacy, liczbaEtapow) : __('Status') }}
             </div>
@@ -220,52 +220,55 @@
           </div>
           <div
             ref="segmentyRef"
-            class="flex min-w-0 flex-1 items-start"
-            :class="zwarty ? 'mt-[28px] gap-1.5 pb-[66px]' : 'max-w-[480px] gap-2 self-center'"
+            class="flex min-w-0 flex-1"
+            :class="zwarty ? 'mt-[28px]' : 'self-center'"
             data-testid="naglowek-segmenty"
           >
+           <div
+            class="flex min-w-0 flex-col"
+            :class="zwarty ? 'w-full gap-2.5' : 'w-full gap-1.5'"
+            data-testid="pasek-grupa"
+           >
+            <!-- Każda etykieta stoi bezpośrednio pod własnym paskiem (ta sama
+                 szerokość, wyrównana do lewej). W formie zwartej (12 etapów) jeden
+                 rząd, a gdy nieaktywny pasek miałby poniżej ok. 80 px, dwa rzędy
+                 po 6 pasków; aktywny pasek jest 1,5 raza szerszy w swoim rzędzie. -->
             <div
-              v-for="(el, i) in elementy"
-              :key="el.status"
-              class="relative flex min-w-0 flex-col gap-1.5"
-              :class="zwarty && el.stan === 'current' ? 'flex-[2.75]' : 'flex-1'"
-              :title="el.nazwa"
-              :data-stan="el.stan"
+              v-for="(rzad, r) in rzedyPaska"
+              :key="r"
+              class="flex min-w-0 items-start"
+              :class="'gap-1.5'"
+              data-testid="pasek-rzad"
             >
-              <span class="h-2 w-full rounded-full" :class="segmentKlasa(el.stan)" />
-              <!-- Etykiety: w formie pełnej pod własnym segmentem (do 2 linii);
-                   w zwartej (12 etapów) każda pod swoim segmentem, ale w dwóch
-                   naprzemiennych rzędach (nieparzyste wyżej, parzyste niżej),
-                   każda wyśrodkowana i szersza niż segment, żeby żadna nie
-                   zachodziła na sąsiadkę z tego samego rzędu. -->
-              <span
-                data-testid="pasek-etykieta"
-                class="leading-tight"
-                :class="[
-                  el.stan === 'current'
-                    ? 'font-semibold text-ink-gray-9'
-                    : el.stan === 'done'
-                      ? 'text-ink-gray-6'
-                      : 'text-ink-gray-4',
-                  zwarty
-                    ? [
-                        'absolute',
-                        el.stan === 'current' ? 'text-[13px]' : 'text-[11px]',
-                        i % 2 === 0 ? 'top-[calc(100%+6px)]' : 'top-[calc(100%+37px)]',
-                        el.stan === 'current'
-                          ? 'left-0 w-full text-center'
-                          : i === 0
-                            ? 'left-0 w-[calc(150%+3px)] text-left'
-                            : i === elementy.length - 1
-                              ? 'right-0 w-[calc(150%+3px)] text-right'
-                              : 'left-1/2 w-[calc(200%+3px)] -translate-x-1/2 text-center',
-                      ]
-                    : 'line-clamp-2 text-left text-[12px]',
-                ]"
+              <div
+                v-for="el in rzad"
+                :key="el.status"
+                class="flex min-w-0 flex-col gap-1.5"
+                :class="zwarty && el.stan === 'current' ? 'flex-[1.5]' : 'flex-1'"
+                :title="el.nazwa"
+                :data-stan="el.stan"
+                data-testid="pasek-segment"
               >
-                {{ el.nazwa }}
-              </span>
+                <span class="h-2 w-full rounded-full" :class="segmentKlasa(el.stan)" />
+                <span
+                  data-testid="pasek-etykieta"
+                  class="break-words text-left leading-tight"
+                  :class="[
+                    el.stan === 'current'
+                      ? 'font-semibold text-ink-gray-9'
+                      : el.stan === 'done'
+                        ? 'text-ink-gray-6'
+                        : 'text-ink-gray-4',
+                    zwarty
+                      ? [el.stan === 'current' ? 'text-xs' : 'text-[11px]', 'line-clamp-3']
+                      : 'line-clamp-2 text-[12px]',
+                  ]"
+                >
+                  {{ el.nazwa }}
+                </span>
+              </div>
             </div>
+           </div>
           </div>
         </div>
         <div
@@ -381,7 +384,9 @@ import {
   czasOd,
   czasWEtapie,
   czyZwarty,
+  liczbaRzedowPaska,
   normalizujWariant,
+  podzielNaRzedy,
   segmentKlasa,
   tekstNumeruEtapu,
   etykietaStatusu,
@@ -482,6 +487,13 @@ onBeforeUnmount(() => obserwator?.disconnect())
 
 const liczbaEtapow = computed(() => payload.value?.steps?.length || 0)
 const zwarty = computed(() => czyZwarty(liczbaEtapow.value, szerokosc.value))
+
+const rzedyPaska = computed(() =>
+  podzielNaRzedy(
+    elementy.value,
+    zwarty.value ? liczbaRzedowPaska(liczbaEtapow.value, szerokosc.value) : 1,
+  ),
+)
 
 const elementy = computed(() =>
   (payload.value?.steps || []).map((s) => ({
