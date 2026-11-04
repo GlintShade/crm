@@ -37,6 +37,7 @@
           :tasks="podzial.otwarte"
           :modalRef="taskHandlers"
           :przejsciowe="przejsciowe"
+          :dataZalozenia="true"
         />
       </div>
       <template v-if="podzial.zakonczone.length">
@@ -135,7 +136,7 @@ function wyczyscWszystkiePrzejsciowe() {
 }
 
 const podzial = computed(() =>
-  podzielZadania(tasks.data || [], new Date(), new Set(Object.keys(przejsciowe))),
+  podzielZadania(tasks.data || [], new Set(Object.keys(przejsciowe))),
 )
 const podsumowanie = computed(() =>
   podsumowanieZadan(podzial.value.otwarte.length, podzial.value.zakonczone.length),
@@ -160,6 +161,7 @@ const tasks = createResource({
       'priority',
       'status',
       'modified',
+      'creation',
     ],
     order_by: 'modified desc',
     limit_page_length: 0,

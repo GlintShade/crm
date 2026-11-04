@@ -171,62 +171,41 @@ describe('podsumowanieZadan', () => {
 })
 
 describe('podzielZadania', () => {
-  const teraz = new Date(2026, 10, 4, 12, 0)
-  const z = (name, status, due_date, modified = '2026-11-01 10:00:00') => ({
-    name, status, due_date, modified,
+  const z = (name, status, creation = '2026-11-01 10:00:00', modified = '2026-11-01 10:00:00') => ({
+    name, status, creation, modified,
   })
   it('dzieli po statusie, Backlog/Todo/In Progress sa otwarte', () => {
-    const r = podzielZadania(
-      [z('a', 'Backlog'), z('b', 'Todo'), z('c', 'In Progress'), z('d', 'Done'), z('e', 'Canceled')],
-      teraz,
-    )
+    const r = podzielZadania([z('a', 'Backlog'), z('b', 'Todo'), z('c', 'In Progress'), z('d', 'Done'), z('e', 'Canceled')])
     expect(r.otwarte.map((t) => t.name).sort()).toEqual(['a', 'b', 'c'])
     expect(r.zakonczone.map((t) => t.name).sort()).toEqual(['d', 'e'])
   })
-  it('sortuje: przeterminowane, najblizsze, bez terminu na koncu', () => {
-    const r = podzielZadania(
-      [
-        z('brak', 'Todo', null),
-        z('daleko', 'Todo', '2026-12-01'),
-        z('stare', 'Todo', '2026-10-01'),
-        z('dzis', 'Todo', '2026-11-04'),
-        z('wczoraj', 'Todo', '2026-11-03'),
-      ],
-      teraz,
-    )
-    expect(r.otwarte.map((t) => t.name)).toEqual(['stare', 'wczoraj', 'dzis', 'daleko', 'brak'])
+  it('otwarte: najstarsze zalozone pierwsze, termin nie ma znaczenia', () => {
+    const r = podzielZadania([
+      { ...z('nowe', 'Todo', '2026-11-03 10:00:00'), due_date: '2026-10-01' },
+      { ...z('stare', 'Todo', '2026-10-01 10:00:00'), due_date: '2026-12-01' },
+      z('srednie', 'Todo', '2026-10-20 10:00:00'),
+    ])
+    expect(r.otwarte.map((t) => t.name)).toEqual(['stare', 'srednie', 'nowe'])
   })
-  it('remis terminu rozstrzyga modified malejaco, takze bez terminu', () => {
-    const r = podzielZadania(
-      [
-        z('s', 'Todo', '2026-11-10', '2026-11-01 08:00:00'),
-        z('n', 'Todo', '2026-11-10', '2026-11-02 08:00:00'),
-        z('b1', 'Todo', null, '2026-10-01 08:00:00'),
-        z('b2', 'Todo', null, '2026-10-02 08:00:00'),
-      ],
-      teraz,
-    )
-    expect(r.otwarte.map((t) => t.name)).toEqual(['n', 's', 'b2', 'b1'])
+  it('remis creation rozstrzyga nazwa (numerycznie)', () => {
+    const r = podzielZadania([z(10, 'Todo'), z(9, 'Todo'), z(2, 'Todo')])
+    expect(r.otwarte.map((t) => t.name)).toEqual([2, 9, 10])
   })
-  it('zakonczone: najnowsze pierwsze', () => {
-    const r = podzielZadania(
-      [z('a', 'Done', null, '2026-10-30 10:00:00'), z('b', 'Canceled', null, '2026-11-01 10:00:00')],
-      teraz,
-    )
+  it('zakonczone: najnowsze modified pierwsze', () => {
+    const r = podzielZadania([
+      z('a', 'Done', undefined, '2026-10-30 10:00:00'),
+      z('b', 'Canceled', undefined, '2026-11-01 10:00:00'),
+    ])
     expect(r.zakonczone.map((t) => t.name)).toEqual(['b', 'a'])
   })
-  it('zostajaOtwarte trzyma zakonczone zadanie na liscie otwartych', () => {
-    const r = podzielZadania([z('a', 'Done'), z('b', 'Done')], teraz, new Set(['a']))
-    expect(r.otwarte.map((t) => t.name)).toEqual(['a'])
-    expect(r.zakonczone.map((t) => t.name)).toEqual(['b'])
-  })
-  it('zostajaOtwarte dziala tez dla numerycznych nazw (CRM Task ma name Int)', () => {
-    const r = podzielZadania([z(24, 'Done')], teraz, new Set(['24']))
-    expect(r.otwarte).toHaveLength(1)
+  it('zostajaOtwarte trzyma zakonczone zadanie na liscie otwartych (takze numeryczne nazwy)', () => {
+    const r = podzielZadania([z(24, 'Done'), z(25, 'Done')], new Set(['24']))
+    expect(r.otwarte.map((t) => t.name)).toEqual([24])
+    expect(r.zakonczone.map((t) => t.name)).toEqual([25])
   })
   it('puste i niepoprawne wejscie', () => {
-    expect(podzielZadania([], teraz)).toEqual({ otwarte: [], zakonczone: [] })
-    expect(podzielZadania(null, teraz)).toEqual({ otwarte: [], zakonczone: [] })
+    expect(podzielZadania([])).toEqual({ otwarte: [], zakonczone: [] })
+    expect(podzielZadania(null)).toEqual({ otwarte: [], zakonczone: [] })
   })
 })
 

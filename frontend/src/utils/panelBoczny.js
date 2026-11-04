@@ -323,21 +323,14 @@ export function podsumowanieZadan(otwarte, zakonczone = 0) {
   return `${liczbaOtwartych(otwarte)} · ${liczbaZakonczonych(zakonczone)}`
 }
 
-function dzienKalendarzowy(v) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v ?? ''))
-  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) : null
-}
-
 /**
  * Dzieli zadania na otwarte (Backlog/Todo/In Progress) i zakonczone
- * (Done/Canceled). Otwarte: przeterminowane pierwsze, potem najblizszy
- * termin rosnaco, bez terminu na koncu, remisy po `modified` malejaco.
- * Zakonczone: najnowsze (`modified`) pierwsze. `zostajaOtwarte` to zbior
- * nazw zadan, ktore maja zostac na liscie otwartych mimo statusu zakonczonego
- * (przejsciowy stan "Cofnij").
+ * (Done/Canceled). Otwarte: najdluzej czekajace (najstarsze `creation`)
+ * pierwsze, remisy po nazwie. Zakonczone: najnowsze (`modified`) pierwsze.
+ * `zostajaOtwarte` to zbior nazw (jako stringi) zadan, ktore maja zostac na
+ * liscie otwartych mimo statusu zakonczonego (przejsciowy stan "Cofnij").
  */
-export function podzielZadania(lista, teraz = new Date(), zostajaOtwarte = null) {
-  const dzis = Date.UTC(teraz.getFullYear(), teraz.getMonth(), teraz.getDate())
+export function podzielZadania(lista, zostajaOtwarte = null) {
   const otwarte = []
   const zakonczone = []
   for (const t of lista || []) {
@@ -345,21 +338,14 @@ export function podzielZadania(lista, teraz = new Date(), zostajaOtwarte = null)
     if (koniec && !zostajaOtwarte?.has(String(t.name))) zakonczone.push(t)
     else otwarte.push(t)
   }
-  const modMalejaco = (a, b) =>
-    String(b.modified || '').localeCompare(String(a.modified || ''))
   otwarte.sort((a, b) => {
-    const da = dzienKalendarzowy(a.due_date)
-    const db = dzienKalendarzowy(b.due_date)
-    if (da === null && db === null) return modMalejaco(a, b)
-    if (da === null) return 1
-    if (db === null) return -1
-    const pa = da < dzis
-    const pb = db < dzis
-    if (pa !== pb) return pa ? -1 : 1
-    if (da !== db) return da - db
-    return modMalejaco(a, b)
+    const c = String(a.creation || '').localeCompare(String(b.creation || ''))
+    if (c) return c
+    return String(a.name).localeCompare(String(b.name), undefined, { numeric: true })
   })
-  zakonczone.sort(modMalejaco)
+  zakonczone.sort((a, b) =>
+    String(b.modified || '').localeCompare(String(a.modified || '')),
+  )
   return { otwarte, zakonczone }
 }
 

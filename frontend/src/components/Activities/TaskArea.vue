@@ -30,8 +30,8 @@
             />
             <span class="min-w-0 flex-1 truncate">{{
               task.status === 'Canceled'
-                ? __('Anulowane. Za chwilę trafi do zakończonych.')
-                : __('Zrobione. Za chwilę trafi do zakończonych.')
+                ? __('Anulowane')
+                : __('Zrobione')
             }}</span>
             <button
               type="button"
@@ -51,7 +51,16 @@
           </div>
           <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-gray-5">
             <div
-              v-if="task.due_date"
+              v-if="dataZalozenia && wiekZadania(task.creation)"
+              class="flex items-center gap-1.5"
+              :title="zalozoneZadanie(task.creation)"
+              data-testid="zadanie-wiek"
+            >
+              <span class="lucide-clock h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              {{ wiekZadania(task.creation) }}
+            </div>
+            <div
+              v-else-if="!dataZalozenia && task.due_date"
               class="flex items-center gap-1.5"
               :class="terminPrzeterminowany(task) ? 'text-ink-red-4' : ''"
               :title="formatujTermin(task.due_date)"
@@ -125,7 +134,7 @@ import TaskStatusIcon from '@/components/Icons/TaskStatusIcon.vue'
 import TaskPriorityIcon from '@/components/Icons/TaskPriorityIcon.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { taskStatusOptions } from '@/utils'
-import { formatujTermin, formatujTerminKrotko, terminWzgledny } from '@/utils/dataPolska'
+import { formatujTermin, formatujTerminKrotko, terminWzgledny, wiekZadania, zalozoneZadanie } from '@/utils/dataPolska'
 import { usersStore } from '@/stores/users'
 import { globalStore } from '@/stores/global'
 import { Dropdown } from 'frappe-ui'
@@ -136,6 +145,8 @@ defineProps({
   // Opt-in (karta Zadania w panelu bocznym): nazwy zadan w 5-sekundowym stanie
   // przejsciowym po oznaczeniu jako zakonczone. Domyslnie pusty = bez zmian.
   przejsciowe: { type: Object, default: () => ({}) },
+  // Opt-in (karta Zadania): zamiast terminu pokazuje wiek zadania (od `creation`).
+  dataZalozenia: { type: Boolean, default: false },
 })
 
 const { getUser } = usersStore()

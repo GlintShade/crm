@@ -164,6 +164,33 @@ export function formatujDzienMiesiac(dataCzas) {
 }
 
 /**
+ * Wiek zadania wzgledem dnia kalendarzowego (lokalny czas): "dziś",
+ * "wczoraj", "N dni temu" (N >= 2). Pusta/niepoprawna wartosc lub data z
+ * przyszlosci daje ''.
+ */
+export function wiekZadania(creation, teraz = new Date()) {
+  const c = rozbierzDataCzas(creation)
+  if (!c) return ''
+  const dni = Math.round(
+    (Date.UTC(teraz.getFullYear(), teraz.getMonth(), teraz.getDate()) -
+      Date.UTC(c.rok, c.miesiac - 1, c.dzien)) /
+      86400000,
+  )
+  if (dni < 0) return ''
+  if (dni === 0) return 'dziś'
+  if (dni === 1) return 'wczoraj'
+  return `${dni} dni temu`
+}
+
+/** Tooltip wieku zadania: "Założone 1 lis 2026, 09:12" ('' dla niepoprawnej daty). */
+export function zalozoneZadanie(creation) {
+  const c = rozbierzDataCzas(creation)
+  if (!c) return ''
+  const d2 = (n) => String(n).padStart(2, '0')
+  return `Założone ${c.dzien} ${MIESIACE_SKROT[c.miesiac - 1]} ${c.rok}, ${d2(c.godzina)}:${d2(c.minuta)}`
+}
+
+/**
  * Tekst względny terminu (panel właściwości TaskModal.vue, issue
  * GlintShade/proenergy-crm-ops#208): "dziś", "jutro", "za N dni" dla
  * terminów w przyszłości, "Termin minął N dni temu" dla przeszłych,
