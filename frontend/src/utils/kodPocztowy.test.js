@@ -4,6 +4,7 @@ import {
   WARTOSC_RECZNIE,
   czyKodPocztowy,
   czyPokazacPustaMiejscowosc,
+  czyWyczyscicMiejscowosc,
   etykietaRecznie,
   latkaAdresuZKodu,
   listaMiejscowosci,
@@ -143,6 +144,71 @@ describe('latkaAdresuZKodu', () => {
   })
 })
 
+describe('czyWyczyscicMiejscowosc (Zadanie N: czyszczenie po zmianie kodu)', () => {
+  it('biezaca miejscowosc nie na liscie nowego kodu -> czysci', () => {
+    expect(czyWyczyscicMiejscowosc('Stara', ['Kościan', 'Racot'])).toBe(true)
+  })
+
+  it('biezaca miejscowosc na liscie nowego kodu -> zostaje', () => {
+    expect(czyWyczyscicMiejscowosc('Racot', ['Kościan', 'Racot'])).toBe(false)
+  })
+
+  it('nowy kod bez listy -> zostaje (nic nie wiadomo)', () => {
+    expect(czyWyczyscicMiejscowosc('Stara', [])).toBe(false)
+    expect(czyWyczyscicMiejscowosc('Stara', null)).toBe(false)
+  })
+
+  it('pusta biezaca miejscowosc -> bez zmian', () => {
+    expect(czyWyczyscicMiejscowosc('', ['Kościan'])).toBe(false)
+    expect(czyWyczyscicMiejscowosc(null, ['Kościan'])).toBe(false)
+    expect(czyWyczyscicMiejscowosc(undefined, [])).toBe(false)
+  })
+})
+
+describe('latkaAdresuZKodu z poleMiejscowosci (Zadanie N)', () => {
+  it('bez trzeciego argumentu: miejscowosc nietknieta, nawet gdy nie pasuje do listy', () => {
+    const doc = { custom_install_city: 'Stara' }
+    expect(latkaAdresuZKodu(doc, WYNIK)).not.toHaveProperty(
+      'custom_install_city',
+    )
+  })
+
+  it('z poleMiejscowosci: wartosc spoza listy nowego kodu -> czyszczona do pustej', () => {
+    const doc = { custom_install_city: 'Stara' }
+    expect(
+      latkaAdresuZKodu(doc, WYNIK, 'custom_install_city'),
+    ).toMatchObject({ custom_install_city: '' })
+  })
+
+  it('z poleMiejscowosci: wartosc juz na liscie nowego kodu -> zostaje (brak w latce)', () => {
+    const doc = { custom_install_city: 'Racot' }
+    expect(
+      latkaAdresuZKodu(doc, WYNIK, 'custom_install_city'),
+    ).not.toHaveProperty('custom_install_city')
+  })
+
+  it('z poleMiejscowosci: nowy kod bez listy -> zostaje (brak w latce)', () => {
+    const doc = { custom_install_city: 'Stara' }
+    expect(
+      latkaAdresuZKodu(doc, { ...WYNIK, cities: [] }, 'custom_install_city'),
+    ).not.toHaveProperty('custom_install_city')
+  })
+
+  it('z poleMiejscowosci: pusta miejscowosc -> bez zmian (brak w latce)', () => {
+    const doc = { custom_install_city: '' }
+    expect(
+      latkaAdresuZKodu(doc, WYNIK, 'custom_install_city'),
+    ).not.toHaveProperty('custom_install_city')
+  })
+
+  it('z poleMiejscowosci: dziala tez dla innej nazwy pola (kontakt)', () => {
+    const doc = { custom_miasto: 'Stara' }
+    expect(
+      latkaAdresuZKodu(doc, WYNIK, 'custom_miasto'),
+    ).toMatchObject({ custom_miasto: '' })
+  })
+})
+
 describe('utworzLookup', () => {
   it('jedno zapytanie na kod', async () => {
     const wywolaj = vi.fn().mockResolvedValue(WYNIK)
@@ -215,6 +281,34 @@ describe('uzupelnijAdresZKodu', () => {
       ),
     ).toEqual({})
     expect(pobierz).not.toHaveBeenCalled()
+  })
+
+  it('z poleMiejscowosci (Zadanie N): czysci miejscowosc spoza nowej listy', async () => {
+    const doc = {
+      custom_install_postal_code: '64-000',
+      custom_install_city: 'Stara',
+    }
+    const latka = await uzupelnijAdresZKodu(
+      doc,
+      async () => WYNIK,
+      'custom_install_city',
+    )
+    expect(latka).toMatchObject({ custom_install_city: '' })
+    expect(doc.custom_install_city).toBe('')
+  })
+
+  it('z poleMiejscowosci (Zadanie N): zostawia miejscowosc juz na liscie', async () => {
+    const doc = {
+      custom_install_postal_code: '64-000',
+      custom_install_city: 'Racot',
+    }
+    const latka = await uzupelnijAdresZKodu(
+      doc,
+      async () => WYNIK,
+      'custom_install_city',
+    )
+    expect(latka).not.toHaveProperty('custom_install_city')
+    expect(doc.custom_install_city).toBe('Racot')
   })
 })
 

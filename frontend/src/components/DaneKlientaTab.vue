@@ -287,6 +287,8 @@ import { call } from 'frappe-ui'
 import { pobierzDaneKodu } from '@/data/kodPocztowy'
 import {
   WARTOSC_RECZNIE,
+  czyWyczyscicMiejscowosc,
+  listaMiejscowosci,
   opcjeMiejscowosci,
   trybPolaMiejscowosci,
 } from '@/utils/kodPocztowy'
@@ -591,14 +593,27 @@ async function onBlurTelefonGlowny() {
 }
 
 // --- Kod pocztowy → autofill Województwo/Powiat/Gmina ----------------------
-// Mirrors ContactModal.vue's onBlur handler exactly (same API, same guard,
-// same silent-failure contract) — the only difference is that here the
-// autofilled fields are written straight onto the shared `contact.doc`,
-// so the immediately-following zapiszPole() call persists them together
-// with the postal code in one whole-document save. Miasto NEVER autofills
-// itself (owner decision, ops#329, even for a single-locality code): see
-// `trybMiasto`/`opcjeMiastSelect` below (shared pure helpers,
-// utils/kodPocztowy.js) for the select-plus-"Ręcznie" field behaviour.
+// Mirrors ContactModal.vue's lookup exactly (same API, same guard, same
+// silent-failure contract), the only difference is that here the autofilled
+// fields are written straight onto the shared `contact.doc`, so the
+// following zapiszPole() call persists them together with the postal code
+// in one whole-document save. Miasto NEVER autofills itself (owner decision,
+// ops#329, even for a single-locality code): see `trybMiasto`/
+// `opcjeMiastSelect` below (shared pure helpers, utils/kodPocztowy.js) for
+// the select-plus-"Ręcznie" field behaviour.
+//
+// Zadanie N (owner click-test, ops#329): the lookup used to run only on
+// `onBlurKodPocztowy`, racing the very click that moves focus from Kod
+// pocztowy into Miasto, see ContactModal.vue's module docblock for the
+// exact mechanism (FormControl dispatches `select` vs `text` to a different
+// component; a click landing right as the lookup resolves only ever focuses
+// a field that then gets replaced, needing a second click to open the
+// list). Fix: `wykonajLookupKodu` now also runs from an IMMEDIATE watcher on
+// the postal-code value itself, not just from blur, `pobierzDaneKodu`
+// memoizes per code, so `onBlurKodPocztowy` re-awaiting it for the same
+// value is a cache hit, not a second request; it still awaits it before
+// `zapiszPole` so the postal code, wojewodztwo/powiat/gmina (and, when
+// applicable, a cleared Miasto) always land in the SAME whole-document save.
 const opcjeMiast = ref([])
 // Decision owner ops#329: reset to false whenever `opcjeMiast` is cleared
 // (new/edited postal code) so a fresh lookup always starts back at the
@@ -620,33 +635,47 @@ function onZmianaMiasta(wartosc) {
   if (trybMiasto.value === 'lista') zapiszPole('custom_miasto', wartosc)
 }
 
+async function wykonajLookupKodu(kodSurowy) {
+  const kod = String(kodSurowy ?? '').trim()
+  // Every attempt starts from a clean slate, stale options from a previous
+  // code must never survive into this one, success or not.
+  opcjeMiast.value = []
+  miastoRecznie.value = false
+  if (!/^\d{2}-\d{3}$/.test(kod)) return
+  try {
+    const r = await pobierzDaneKodu(kod)
+    // The field may have changed again while the request was in flight, a
+    // stale result must never overwrite whatever is in it now.
+    if (String(contact.doc?.custom_kod_pocztowy ?? '').trim() !== kod) return
+    if (r && r.found) {
+      // Owner decision ops#329: Miasto never picks itself, not even for a
+      // single-locality code, just expose the list (plus "Ręcznie"), the
+      // select in the template handles the rest.
+      const cities = listaMiejscowosci(r)
+      opcjeMiast.value = cities
+      if (r.wojewodztwo) contact.doc.custom_wojewodztwo = r.wojewodztwo
+      if (r.powiat) contact.doc.custom_powiat = r.powiat
+      if (r.gmina) contact.doc.custom_gmina = r.gmina
+      // Zadanie N: the new code's list doesn't carry the already-typed
+      // Miasto anymore, clear it (never auto-FILL, only clear a now-stale
+      // choice, same rule as the lead panel/list).
+      if (czyWyczyscicMiejscowosc(contact.doc?.custom_miasto, cities)) {
+        contact.doc.custom_miasto = ''
+      }
+    }
+  } catch (e) {
+    /* cichy błąd, nieudany lookup nie może blokować użytkownika */
+  }
+}
+
 watch(
   () => contact.doc?.custom_kod_pocztowy,
-  () => {
-    opcjeMiast.value = []
-    miastoRecznie.value = false
-  },
+  (kod) => wykonajLookupKodu(kod),
+  { immediate: true },
 )
 
 async function onBlurKodPocztowy() {
-  const kod = String(contact.doc?.custom_kod_pocztowy ?? '').trim()
-  if (/^\d{2}-\d{3}$/.test(kod)) {
-    try {
-      const r = await pobierzDaneKodu(kod)
-      if (r && r.found) {
-        const cities = r.cities && r.cities.length ? r.cities : r.miejscowosc ? [r.miejscowosc] : []
-        // Owner decision ops#329: Miasto never picks itself, not even for a
-        // single-locality code, just expose the list (plus "Ręcznie"), the
-        // select in the template handles the rest.
-        opcjeMiast.value = cities
-        if (r.wojewodztwo) contact.doc.custom_wojewodztwo = r.wojewodztwo
-        if (r.powiat) contact.doc.custom_powiat = r.powiat
-        if (r.gmina) contact.doc.custom_gmina = r.gmina
-      }
-    } catch (e) {
-      /* cichy błąd — nieudany lookup nie może blokować użytkownika */
-    }
-  }
+  await wykonajLookupKodu(contact.doc?.custom_kod_pocztowy)
   zapiszPole('custom_kod_pocztowy', contact.doc.custom_kod_pocztowy)
 }
 

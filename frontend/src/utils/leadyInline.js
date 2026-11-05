@@ -7,7 +7,13 @@
 // Import z './kodPocztowy' (plik siostrzany, nie barel) jest bezpieczny: ten
 // modul tez nie dotyka '@/utils' ani Vue.
 
-import { POLE_GMINY, POLE_KODU, czyKodPocztowy, latkaAdresuZKodu } from './kodPocztowy'
+import {
+  POLE_GMINY,
+  POLE_KODU,
+  POLE_MIEJSCOWOSCI,
+  czyKodPocztowy,
+  latkaAdresuZKodu,
+} from './kodPocztowy'
 
 // Kolumny listy leadow obslugiwane inline (LeadsListView.vue renderuje dla
 // nich LeadInlineCell.vue zamiast generycznej etykiety). custom_cc celowo
@@ -147,8 +153,15 @@ export function wartoscTekstuDoZapisu(fieldname, wpis) {
 // przeszedl przez normalizujKodPocztowy) trzeba dociagnac wojewodztwo, powiat
 // i gmine tak samo jak w panelu leada -- ta sama funkcja czysta
 // `latkaAdresuZKodu` (utils/kodPocztowy.js), tylko zbudowana z surowego
-// wiersza listy zamiast z document.doc. Miejscowosc NIGDY nie wchodzi do
-// latki (decyzja wlasciciela, latkaAdresuZKodu juz to gwarantuje).
+// wiersza listy zamiast z document.doc. Miejscowosc NIGDY nie jest wpisywana
+// sama (latkaAdresuZKodu juz to gwarantuje), ale od Zadania N (ops#329,
+// "czyszczenie po zmianie kodu") MOZE zostac wyczyszczona: wolamy
+// latkaAdresuZKodu z trzecim argumentem (POLE_MIEJSCOWOSCI), wiec gdy
+// biezaca custom_install_city wiersza nie pasuje do listy miejscowosci
+// nowego kodu, latka dostaje to pole wyczyszczone do '' -- ten sam
+// pojedynczy `frappe.client.set_value` ze slownikiem w LeadInlineCell.vue
+// zapisuje to razem z reszta latki, wiec komorka Miejscowosc odswieza sie
+// tak samo jak wojewodztwo/powiat/gmina.
 //
 // `row` to surowy wiersz listy (leads.data.data z backendu): moze nie miec
 // klucza custom_gmina wcale, jesli ta kolumna nie jest w widoku -- to NIE
@@ -157,15 +170,17 @@ export function wartoscTekstuDoZapisu(fieldname, wpis) {
 // Object.hasOwn na pelnym document.doc). Dlatego obecnosc pola dostaje
 // wolajacy jako osobny argument `maPoleGminy` (z meta doctype'u CRM Lead,
 // LeadInlineCell.vue), niezaleznie od tego, czy wiersz akurat ma ta kolumne
-// zaladowana.
+// zaladowana. custom_install_city jest w kazdym widoku (kolumna stala listy
+// leadow), wiec dla niej taki osobny argument nie jest potrzebny.
 export function polaAdresuZKoduWiersza(row, wynik, maPoleGminy) {
   const doc = {
     [POLE_KODU]: row?.custom_install_postal_code ?? '',
     custom_voivodeship: row?.custom_voivodeship ?? '',
     custom_powiat: row?.custom_powiat ?? '',
+    [POLE_MIEJSCOWOSCI]: row?.custom_install_city ?? '',
   }
   if (maPoleGminy) doc[POLE_GMINY] = row?.custom_gmina ?? ''
-  return latkaAdresuZKodu(doc, wynik)
+  return latkaAdresuZKodu(doc, wynik, POLE_MIEJSCOWOSCI)
 }
 
 // Czy zapis ma sens: null/undefined i '' traktujemy jako ta sama pusta

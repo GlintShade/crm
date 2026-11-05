@@ -9,17 +9,35 @@
   format validators; duplicate checks for PESEL/E-mail/Telefon go through the
   `volteo_contact_duplicate_check` Server Script API, mirroring the
   `call(name, params)` convention used by KalkulatorTab.vue / AudytTab.vue.
-  Kod pocztowy autofills gmina/powiat/województwo on blur via the shared
+  Kod pocztowy autofills gmina/powiat/województwo via the shared
   `crm.api.kod_pocztowy.wyszukaj` lookup (data/kodPocztowy.js, ops#329;
   silent on failure); the derived gmina/powiat/województwo fields are not
   rendered, the After-Save sync hook persists everything into a linked
-  Address record from these Contact fields. Miasto NEVER autofills itself
+  Address record from these Contact fields. Miasto NEVER autofills ITSELF
   (owner decision, ops#329, even for a single-locality code): when the
   postal code has a locality list, Miasto becomes a select (placeholder
   "Wybierz") of those cities plus an always-present "Ręcznie" option that
   switches it to free text (see `cityOptions`/`miastoTryb`, shared pure
   helpers in utils/kodPocztowy.js); without a list it stays a plain text
   field as before.
+
+  Zadanie N (owner click-test, ops#329): the lookup used to run only on the
+  postal-code field's `blur`, racing the very click that moves focus from
+  Kod pocztowy into Miasto, if the async lookup resolved WHILE Miasto was
+  already focused as a plain text input, Vue swapped the underlying
+  `<component :is>` (frappe-ui FormControl dispatches `select` vs `text` to
+  a completely different component) out from under the user, so the first
+  click only ever focused a field that then got replaced; opening the list
+  needed a second click. Fix: the lookup now fires from an IMMEDIATE watcher
+  on the postal-code value itself (as soon as it matches NN-NNN), not from
+  `blur`, by the time a real click can land on Miasto (the user has to
+  physically move the pointer there), the lookup has essentially always
+  already settled, so Miasto is already the correct component type.
+  `onBlur('custom_kod_pocztowy')` now only marks the field `touched` for
+  validation display. The same watcher also clears Miasto when the new
+  code's locality list no longer contains the current value (shared pure
+  `czyWyczyscicMiejscowosc`, utils/kodPocztowy.js), never auto-FILLS it,
+  only clears a now-stale choice, same rule as the lead panel/list.
 -->
 <template>
   <Dialog v-model:open="show" :size="'xl'">
@@ -212,6 +230,8 @@ import { useDocument } from '@/data/document'
 import { pobierzDaneKodu } from '@/data/kodPocztowy'
 import {
   WARTOSC_RECZNIE,
+  czyWyczyscicMiejscowosc,
+  listaMiejscowosci,
   opcjeMiejscowosci,
   trybPolaMiejscowosci,
 } from '@/utils/kodPocztowy'
@@ -425,7 +445,7 @@ const debouncedDupCheck = {
   mobile_no: useDebounceFn(() => performDuplicateCheck('mobile_no'), 400),
 }
 
-async function onBlur(field) {
+function onBlur(field) {
   touched[field] = true
   serverFieldError[field] = null
 
@@ -439,36 +459,9 @@ async function onBlur(field) {
     _contact.doc.mobile_no = formatPhone(_contact.doc.mobile_no)
   }
 
-  // Postal-code autofill — mirrors the existing CRM Form Script. A failed or
-  // no-match lookup must never block the user, so all errors are silent.
-  if (
-    field === 'custom_kod_pocztowy' &&
-    /^\d{2}-\d{3}$/.test(String(_contact.doc.custom_kod_pocztowy ?? '').trim())
-  ) {
-    // Every lookup attempt starts from a clean slate — stale options from a
-    // previous code must never survive into this one, success or not.
-    cityOptions.value = []
-    miastoRecznie.value = false
-    try {
-      const r = await pobierzDaneKodu(_contact.doc.custom_kod_pocztowy.trim())
-      if (r && r.found) {
-        const cities = r.cities && r.cities.length
-          ? r.cities
-          : r.miejscowosc
-            ? [r.miejscowosc]
-            : []
-        // Owner decision ops#329: Miasto never picks itself, not even for a
-        // single-locality code, just expose the list (plus "Ręcznie"),
-        // the select in the template handles the rest.
-        cityOptions.value = cities
-        if (r.wojewodztwo) _contact.doc.custom_wojewodztwo = r.wojewodztwo
-        if (r.powiat) _contact.doc.custom_powiat = r.powiat
-        if (r.gmina) _contact.doc.custom_gmina = r.gmina
-      }
-    } catch (e) {
-      /* silent — lookup failure must not block the user */
-    }
-  }
+  // Postal-code autofill moved to an immediate watcher below (Zadanie N,
+  // ops#329: firing from blur raced the click that moves focus into Miasto)
+  //, blur only marks the field touched for validation display now.
 
   if (!DUP_BACKEND_FIELD[field]) return
   if (formatErrors.value[field] || isEmpty(_contact.doc[field])) {
@@ -479,16 +472,54 @@ async function onBlur(field) {
 }
 
 // Any edit invalidates a previously-resolved duplicate-check result for that
-// field — it needs to be re-checked against the new value on the next blur.
+// field, it needs to be re-checked against the new value on the next blur.
 watch(() => _contact.doc.custom_pesel, () => resetDupStatus('custom_pesel'))
 watch(() => _contact.doc.email_id, () => resetDupStatus('email_id'))
 watch(() => _contact.doc.mobile_no, () => resetDupStatus('mobile_no'))
-// A postal-code edit invalidates the previous lookup's city list — otherwise
-// a mid-typing edit could leave Miasto showing options for a stale code.
-watch(() => _contact.doc.custom_kod_pocztowy, () => {
-  cityOptions.value = []
-  miastoRecznie.value = false
-})
+// Zadanie N (ops#329, click-test): postal-code autofill moved HERE from
+// `onBlur`, as an IMMEDIATE watcher on the value itself, see module
+// docblock for why `blur` raced the click that focuses Miasto. Runs on
+// every edit (not debounced): a transiently-invalid in-progress value just
+// clears the stale list below and returns; a failed or no-match lookup must
+// never block the user, so all errors are silent, same as before.
+watch(
+  () => _contact.doc.custom_kod_pocztowy,
+  async (kod) => {
+    const wartosc = String(kod ?? '').trim()
+    // Every attempt starts from a clean slate, stale options from a
+    // previous code must never survive into this one, success or not.
+    cityOptions.value = []
+    miastoRecznie.value = false
+    if (!/^\d{2}-\d{3}$/.test(wartosc)) return
+    try {
+      const r = await pobierzDaneKodu(wartosc)
+      // The field may have changed again while the request was in flight,
+      // a stale result must never overwrite whatever is in it now.
+      if (String(_contact.doc.custom_kod_pocztowy ?? '').trim() !== wartosc) {
+        return
+      }
+      if (r && r.found) {
+        // Owner decision ops#329: Miasto never picks itself, not even for a
+        // single-locality code, just expose the list (plus "Ręcznie"),
+        // the select in the template handles the rest.
+        const cities = listaMiejscowosci(r)
+        cityOptions.value = cities
+        if (r.wojewodztwo) _contact.doc.custom_wojewodztwo = r.wojewodztwo
+        if (r.powiat) _contact.doc.custom_powiat = r.powiat
+        if (r.gmina) _contact.doc.custom_gmina = r.gmina
+        // Zadanie N: the new code's list doesn't carry the already-typed
+        // Miasto anymore, clear it (never auto-FILL, only clear a now-stale
+        // choice, same rule as the lead panel/list).
+        if (czyWyczyscicMiejscowosc(_contact.doc.custom_miasto, cities)) {
+          _contact.doc.custom_miasto = ''
+        }
+      }
+    } catch (e) {
+      /* silent — lookup failure must not block the user */
+    }
+  },
+  { immediate: true },
+)
 
 const hasMissingRequired = computed(() =>
   [...FIELDS, ...ADDRESS_REQUIRED].some((f) => isEmpty(_contact.doc[f])),

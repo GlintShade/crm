@@ -105,6 +105,30 @@
   (utils/leadyInline.js) patrzy wylacznie na FORMAT kodu w wierszu -- zero
   lookupu przy renderze/przewijaniu listy, dokladnie jak dotad. Bez
   poprawnego kodu komorka zostaje zwyklym polem tekstowym jak dzis.
+
+  Zadanie N (klik-test wlasciciela, ops#329): "pigulka" z Zadania K byla
+  TYLKO wygladem -- pierwszy klik dopiero ustawial `edytujeTekst`, co
+  montowalo prawdziwy MiejscowoscInput/select; otwarcie listy wymagalo wiec
+  DRUGIEGO klikniecia (ten sam mechanizm co "dropdown po dropdownie" z
+  klik-testu). Naprawa: komorka Miejscowosc PREFETCHUJE liste miejscowosci
+  dla kodu tego wiersza na `mouseenter`/`focusin` (prefetchMiejscowosci
+  nizej) -- `pobierzDaneKodu` ma wlasna pamiec per kod (data/kodPocztowy.js),
+  wiec to jedno zapytanie na kod niezaleznie od tego, ile razy mysz wjedzie w
+  komorke, i ten sam cache, z ktorego korzysta juz MiejscowoscInput w panelu.
+  Gdy lista jest JUZ znana (`pokazMiejscowoscSelect`, czyta
+  `listaMiejscowosciZnanaDlaKodu` -- czysty odczyt cache, bez triggerowania
+  nowego zapytania), komorka W SPOCZYNKU renderuje MiejscowoscInput WPROST
+  (dokladnie jak custom_voivodeship/custom_status_handlowy ponizej -- bez
+  osobnego stanu "spoczynek" vs "edycja" dla tej kolumny), wiec pierwszy klik
+  trafia od razu w prawdziwy select i go otwiera. Atrapa "pigulki" z
+  Zadania K zostaje jako wyglad WYLACZNIE, dopoki lista sie nie wczyta (zwykle
+  mysz zdazy najechac przed kliknieciem) -- klikniecie w nia w tym stanie
+  spada do starej sciezki (`rozpocznijEdycjeTekstu` -> `edytujeTekst` ->
+  MiejscowoscInput, ktory sam doczeka na lookup), bo to jedyny rozsadny
+  fallback bez blokowania UI. Ten sam `zatwierdzTekst` obsluguje obie
+  sciezki: strazniczka `wartoscWpisana === undefined` pozwala wywolac go
+  WPROST z trybu "zawsze select" (MiejscowoscInput zawsze emituje gotowa
+  wartosc, nigdy undefined) bez wymogu uprzedniego `edytujeTekst`.
 -->
 <template>
   <div
@@ -112,6 +136,8 @@
     :class="{ 'w-full min-w-0': wypelnijKomorke }"
     @click.stop.prevent
     @dblclick.stop
+    @mouseenter="prefetchMiejscowosci"
+    @focusin="prefetchMiejscowosci"
   >
     <Button
       v-if="column.key === 'status' && !mozeZmieniacStatusCC()"
@@ -254,7 +280,17 @@
 
     <template v-else-if="KOLUMNY_TEKSTOWE_INLINE.has(column.key)">
       <MiejscowoscInput
-        v-if="edytujeTekst && column.key === 'custom_install_city'"
+        v-if="!edytujeTekst && pokazMiejscowoscSelect"
+        :key="`miejscowosc-spoczynek-${wersjaKontrolki}`"
+        class="w-full"
+        :value="wyswietlanyTekst"
+        :kod="row.custom_install_postal_code"
+        :placeholder="placeholderTekstu"
+        :disabled="zapisywanie"
+        @change="zatwierdzTekst"
+      />
+      <MiejscowoscInput
+        v-else-if="edytujeTekst && column.key === 'custom_install_city'"
         :key="`miejscowosc-${wersjaKontrolki}`"
         class="w-full"
         :value="szkic"
@@ -285,7 +321,7 @@
         <option v-for="p in podpowiedziPowiatow" :key="p" :value="p" />
       </datalist>
       <div
-        v-if="!edytujeTekst && pokazWyborMiejscowosci"
+        v-if="!edytujeTekst && !pokazMiejscowoscSelect && pokazWyborMiejscowosci"
         data-testid="miejscowosc-wybor-spoczynek"
         class="relative flex min-h-7 w-full min-w-0 cursor-pointer items-center gap-2 truncate rounded border border-outline-gray-2 bg-surface-base px-2 text-base hover:border-outline-gray-3"
         :class="{ 'opacity-60': zapisywanie }"
@@ -301,7 +337,7 @@
         />
       </div>
       <div
-        v-else-if="!edytujeTekst"
+        v-else-if="!edytujeTekst && !pokazMiejscowoscSelect"
         data-testid="komorka-tekst"
         class="flex h-7 w-full min-w-0 cursor-text items-center truncate rounded px-1 text-base hover:bg-surface-gray-2"
         :class="{ 'opacity-60': zapisywanie }"
@@ -344,8 +380,11 @@ import {
   wartoscTekstuDoZapisu,
   wygladKomorkiMiejscowosci,
 } from '@/utils/leadyInline'
-import { POLE_GMINY } from '@/utils/kodPocztowy'
-import { pobierzDaneKodu } from '@/data/kodPocztowy'
+import { POLE_GMINY, czyKodPocztowy } from '@/utils/kodPocztowy'
+import {
+  listaMiejscowosciZnanaDlaKodu,
+  pobierzDaneKodu,
+} from '@/data/kodPocztowy'
 import { parseLinkFilters } from '@/utils/fieldTransforms'
 import { isTranslatable, getFormat } from '@/utils'
 import {
@@ -539,14 +578,43 @@ const placeholderTekstu = computed(() =>
 // tego pliku (szara "pigulka" z placeholderem "Wybierz opcję" i chevronem --
 // patrz czysta `wygladKomorkiMiejscowosci`). Decyzja patrzy tylko na FORMAT
 // kodu w tym wierszu: sam lookup listy miejscowosci (MiejscowoscInput) nadal
-// rusza dopiero po kliknieciu, pod `v-if="edytujeTekst"` ponizej -- ten
-// computed niczego nie odpytuje.
+// rusza dopiero po kliknieciu/prefetchu, ten computed niczego nie odpytuje.
+// Widoczna tylko dopoki `pokazMiejscowoscSelect` ponizej jest false (patrz
+// `v-if` w template) -- gdy lista jest juz znana, pigulka ustepuje miejsca
+// prawdziwemu selectowi, zeby pierwszy klik od razu go otwieral.
 const pokazWyborMiejscowosci = computed(
   () =>
     props.column.key === 'custom_install_city' &&
     wygladKomorkiMiejscowosci(wartosc.value, props.row.custom_install_postal_code) ===
       'wybor',
 )
+
+// Zadanie N (ops#329): lista miejscowosci dla kodu tego wiersza jest JUZ
+// znana (prefetchMiejscowosci nizej, odpalany na mouseenter/focusin komorki)
+// -- czysty odczyt reaktywnego cache w data/kodPocztowy.js, BEZ triggerowania
+// nowego zapytania. Gdy true, komorka Miejscowosc w spoczynku renderuje
+// MiejscowoscInput WPROST (patrz template), zamiast atrapy "pigulki", zeby
+// pierwszy klik trafial od razu w prawdziwy select.
+const pokazMiejscowoscSelect = computed(
+  () =>
+    props.column.key === 'custom_install_city' &&
+    listaMiejscowosciZnanaDlaKodu(props.row.custom_install_postal_code),
+)
+
+// Zadanie N: odpalany na `mouseenter`/`focusin` calej komorki (patrz
+// wrapper w template) -- rozgrzewa wspolny cache listy miejscowosci dla
+// kodu TEGO wiersza, zanim uzytkownik zdazy kliknac. `pobierzDaneKodu` sam
+// pamieta wynik per kod (data/kodPocztowy.js), wiec powtorne najechanie na
+// te sama komorke (albo na inna komorke z tym samym kodem) nie odpytuje
+// serwera ponownie. Tylko dla kolumny custom_install_city -- inne kolumny
+// nie maja z tego pozytku, a nie chcemy odpytywac kodu przy kazdym
+// najechaniu na dowolna komorke wiersza.
+function prefetchMiejscowosci() {
+  if (props.column.key !== 'custom_install_city') return
+  const kod = props.row.custom_install_postal_code
+  if (!czyKodPocztowy(kod)) return
+  pobierzDaneKodu(kod)
+}
 
 async function rozpocznijEdycjeTekstu() {
   if (zapisywanie.value) return
@@ -562,9 +630,15 @@ async function rozpocznijEdycjeTekstu() {
 // `wartoscWpisana` (opcjonalny): MiejscowoscInput emituje @change z gotowa
 // wartoscia string (wybor z listy albo zatwierdzony reczny wpis), wiec
 // wolamy ta funkcje wprost z jej wartoscia; TextInput i Enter/blur nie
-// podaja argumentu, wiec spada do `szkic.value` jak dotad.
+// podaja argumentu, wiec spada do `szkic.value` jak dotad. Zadanie N: gdy
+// `pokazMiejscowoscSelect` jest true, komorka Miejscowosc woła ta funkcje
+// BEZ uprzedniego `edytujeTekst` (nie ma tam osobnego stanu "edycja", tak
+// jak custom_voivodeship nie ma) -- strazniczka nizej wiec sprawdza
+// `edytujeTekst` tylko dla wywolan BEZ wartosci (blur/Enter z TextInput);
+// wywolanie z gotowa wartoscia (nawet pustym stringiem z "Recznie") zawsze
+// przechodzi dalej.
 async function zatwierdzTekst(wartoscWpisana) {
-  if (!edytujeTekst.value) return
+  if (wartoscWpisana === undefined && !edytujeTekst.value) return
   edytujeTekst.value = false
   const surowa = wartoscWpisana === undefined ? szkic.value : wartoscWpisana
   const wynik = wartoscTekstuDoZapisu(props.column.key, surowa)

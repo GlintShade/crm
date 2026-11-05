@@ -410,10 +410,30 @@ describe('polaAdresuZKoduWiersza (b84/ops#329: adres po edycji kodu w komorce li
     })
   })
 
-  it('miejscowosc nigdy nie wchodzi do latki, nawet z jedna miejscowoscia na liscie', () => {
+  it('miejscowosc nigdy nie jest wpisywana sama, nawet z jedna miejscowoscia na liscie', () => {
     const jedna = { ...WYNIK, cities: ['Radzikowice'] }
     const latka = polaAdresuZKoduWiersza({}, jedna, true)
     expect(latka).not.toHaveProperty('custom_install_city')
+  })
+
+  it('Zadanie N: biezaca miejscowosc wiersza spoza nowej listy -> czyszczona', () => {
+    const row = {
+      custom_install_postal_code: '48-300',
+      custom_install_city: 'Stara',
+    }
+    expect(polaAdresuZKoduWiersza(row, WYNIK, false)).toMatchObject({
+      custom_install_city: '',
+    })
+  })
+
+  it('Zadanie N: biezaca miejscowosc wiersza juz na nowej liscie -> zostaje', () => {
+    const row = {
+      custom_install_postal_code: '48-300',
+      custom_install_city: 'Nysa',
+    }
+    expect(polaAdresuZKoduWiersza(row, WYNIK, false)).not.toHaveProperty(
+      'custom_install_city',
+    )
   })
 
   it('brak wyniku (nie znaleziono kodu) daje pusty obiekt', () => {

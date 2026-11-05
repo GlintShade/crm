@@ -75,12 +75,38 @@ export function trybPolaMiejscowosci(lista, recznieWybrane) {
   return lista?.length && !recznieWybrane ? 'lista' : 'tekst'
 }
 
+// Zadanie N (ops#329): czy po zmianie kodu miejscowosc powinna zostac
+// wyczyszczona. Czysta funkcja, patrzy wylacznie na biezaca wartosc pola i
+// liste miejscowosci NOWEGO kodu (juz po listaMiejscowosci, nie surowy
+// wynik API) -- zero zaleznosci od ksztaltu `wynik`, wiec ta sama funkcja
+// sluzy leadowi (przez latkaAdresuZKodu nizej) i kontaktowi (ContactModal.vue
+// / DaneKlientaTab.vue woluja ja wprost, bo tam pole wojewodztwa ma inna
+// nazwe niz w leadzie, wiec cala latkaAdresuZKodu nie pasuje). Reguly
+// wlasciciela z klik-testu: nowy kod ma liste i biezacej miejscowosci NIE MA
+// na niej -> true (czysci); jest na liscie -> false (zostaje); kod bez
+// listy -> false (zostaje, nowy kod niczego nie podpowiada, wiec stara
+// wartosc zostaje jak przy recznym wpisie); pusta miejscowosc -> false (nie
+// ma czego czyscic).
+export function czyWyczyscicMiejscowosc(biezaca, listaNowegoKodu) {
+  const t = tekst(biezaca)
+  if (!t) return false
+  const lista = Array.isArray(listaNowegoKodu) ? listaNowegoKodu : []
+  return lista.length > 0 && !lista.includes(t)
+}
+
 // Zmiany pol leada po lookupie kodu. Wojewodztwo, powiat i gmina zawsze z
-// kodu (gmina tylko, gdy dokument ma takie pole). Miejscowosc NIGDY (decyzja
-// wlasciciela, ops#329): nawet kod z dokladnie jedna miejscowoscia na liscie
-// zostawiamy do recznego wyboru w panelu (lista + "Recznie"), zeby pole
-// nigdy nie wybralo samo. Zwraca tylko pola, ktore sie zmieniaja.
-export function latkaAdresuZKodu(doc, wynik) {
+// kodu (gmina tylko, gdy dokument ma takie pole). Miejscowosc NIGDY nie jest
+// WPISYWANA samemu (decyzja wlasciciela, ops#329): nawet kod z dokladnie
+// jedna miejscowoscia na liscie zostawiamy do recznego wyboru w panelu
+// (lista + "Recznie"). Zadanie N (ops#329, "czyszczenie po zmianie kodu"):
+// gdy wolajacy poda `poleMiejscowosci` (nazwa pola, np. POLE_MIEJSCOWOSCI
+// dla leada), a biezaca wartosc tego pola nie pasuje do listy nowego kodu
+// (czyWyczyscicMiejscowosc powyzej), latka dostaje to pole wyczyszczone do
+// ''. Bez trzeciego argumentu miejscowosc zostaje calkowicie nietknieta
+// (zachowanie sprzed Zadania N, dalej uzywane tam, gdzie nazwa pola
+// wojewodztwa/powiatu zaszyta ponizej nie pasuje do doctype'u). Zwraca
+// tylko pola, ktore sie zmieniaja.
+export function latkaAdresuZKodu(doc, wynik, poleMiejscowosci) {
   if (!doc || !wynik?.found) return {}
   const latka = {}
   const ustaw = (pole, wartosc) => {
@@ -90,6 +116,12 @@ export function latkaAdresuZKodu(doc, wynik) {
   ustaw('custom_voivodeship', wynik.wojewodztwo)
   ustaw('custom_powiat', wynik.powiat)
   if (Object.hasOwn(doc, POLE_GMINY)) ustaw(POLE_GMINY, wynik.gmina)
+  if (
+    poleMiejscowosci &&
+    czyWyczyscicMiejscowosc(doc[poleMiejscowosci], listaMiejscowosci(wynik))
+  ) {
+    latka[poleMiejscowosci] = ''
+  }
   return latka
 }
 
@@ -139,12 +171,14 @@ export function utworzLookup(wywolaj, poWyniku = null) {
 
 // Po zmianie kodu w panelu: lookup i uzupelnienie dokumentu w miejscu (zapis
 // robi wolajacy). Gdy kod zmienil sie w trakcie zapytania, nic nie zmienia.
-export async function uzupelnijAdresZKodu(doc, pobierz) {
+// `poleMiejscowosci` (opcjonalny) przechodzi wprost do latkaAdresuZKodu
+// (Zadanie N): podany, wyczysci miejscowosc, gdy nie pasuje do nowej listy.
+export async function uzupelnijAdresZKodu(doc, pobierz, poleMiejscowosci) {
   const kod = tekst(doc?.[POLE_KODU])
   if (!czyKodPocztowy(kod)) return {}
   const wynik = await pobierz(kod)
   if (tekst(doc[POLE_KODU]) !== kod) return {}
-  const latka = latkaAdresuZKodu(doc, wynik)
+  const latka = latkaAdresuZKodu(doc, wynik, poleMiejscowosci)
   Object.assign(doc, latka)
   return latka
 }
