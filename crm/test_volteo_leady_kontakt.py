@@ -7,6 +7,7 @@ import unittest
 from crm.volteo_leady_kontakt import (
 	PROBY_KONTAKTU_OPCJE,
 	ROLE_AUTOMATYCZNEGO_CZASU,
+	czy_lead_z_webhooka,
 	czy_uzupelnic_czas_kontaktu,
 	formatuj_gg_mm,
 	parsuj_gg_mm,
@@ -94,38 +95,75 @@ class TestParsuj(unittest.TestCase):
 			self.assertEqual(parsuj_gg_mm(formatuj_gg_mm(s)), s)
 
 
+class TestCzyLeadZWebhooka(unittest.TestCase):
+	def test_source_facebook_tak(self):
+		self.assertTrue(czy_lead_z_webhooka("Facebook", None))
+		self.assertTrue(czy_lead_z_webhooka("Facebook", ""))
+		self.assertTrue(czy_lead_z_webhooka("Facebook", "ARG"))
+
+	def test_token_fb_sam_tak(self):
+		self.assertTrue(czy_lead_z_webhooka(None, "FB"))
+		self.assertTrue(czy_lead_z_webhooka("", "FB"))
+
+	def test_token_fb_w_zlozeniu_tak(self):
+		self.assertTrue(czy_lead_z_webhooka(None, "PV+FB"))
+		self.assertTrue(czy_lead_z_webhooka(None, "FB+PV"))
+		self.assertTrue(czy_lead_z_webhooka(None, "PV+FB+ME"))
+
+	def test_podciag_fbx_nie(self):
+		self.assertFalse(czy_lead_z_webhooka(None, "FBX"))
+		self.assertFalse(czy_lead_z_webhooka(None, "PV+FBX"))
+
+	def test_inne_zrodlo_nie(self):
+		self.assertFalse(czy_lead_z_webhooka(None, "ARG"))
+		self.assertFalse(czy_lead_z_webhooka("Arkusz", "ARG"))
+
+	def test_puste_nie(self):
+		self.assertFalse(czy_lead_z_webhooka(None, None))
+		self.assertFalse(czy_lead_z_webhooka("", ""))
+		self.assertFalse(czy_lead_z_webhooka(None, ""))
+
+
 class TestCzyUzupelnicCzasKontaktu(unittest.TestCase):
 	def test_stala_rol(self):
 		self.assertEqual(ROLE_AUTOMATYCZNEGO_CZASU, ("Volteo Call Center", "Volteo Backend"))
 
 	def test_rola_cc_tak(self):
-		self.assertTrue(czy_uzupelnic_czas_kontaktu(None, ["Volteo Call Center"], True))
+		self.assertTrue(czy_uzupelnic_czas_kontaktu(None, ["Volteo Call Center"], True, True))
 
 	def test_rola_backend_tak(self):
-		self.assertTrue(czy_uzupelnic_czas_kontaktu(0, ["Volteo Backend"], True))
+		self.assertTrue(czy_uzupelnic_czas_kontaktu(0, ["Volteo Backend"], True, True))
 
 	def test_rola_d2d_nie(self):
-		self.assertFalse(czy_uzupelnic_czas_kontaktu(None, ["Volteo D2D Sales"], True))
+		self.assertFalse(czy_uzupelnic_czas_kontaktu(None, ["Volteo D2D Sales"], True, True))
 
 	def test_administrator_bez_roli_cc_nie(self):
-		self.assertFalse(czy_uzupelnic_czas_kontaktu(None, ["Administrator"], True))
+		self.assertFalse(czy_uzupelnic_czas_kontaktu(None, ["Administrator"], True, True))
 
 	def test_system_manager_bez_roli_cc_nie(self):
-		self.assertFalse(czy_uzupelnic_czas_kontaktu(None, ["System Manager"], True))
+		self.assertFalse(czy_uzupelnic_czas_kontaktu(None, ["System Manager"], True, True))
 
 	def test_system_manager_z_rola_cc_tak(self):
-		self.assertTrue(czy_uzupelnic_czas_kontaktu(None, ["System Manager", "Volteo Call Center"], True))
+		self.assertTrue(
+			czy_uzupelnic_czas_kontaktu(None, ["System Manager", "Volteo Call Center"], True, True)
+		)
 
 	def test_pole_wypelnione_nie(self):
-		self.assertFalse(czy_uzupelnic_czas_kontaktu(60, ["Volteo Call Center"], True))
-		self.assertFalse(czy_uzupelnic_czas_kontaktu("3600", ["Volteo Backend"], True))
+		self.assertFalse(czy_uzupelnic_czas_kontaktu(60, ["Volteo Call Center"], True, True))
+		self.assertFalse(czy_uzupelnic_czas_kontaktu("3600", ["Volteo Backend"], True, True))
 
 	def test_pole_puste_warianty_tak(self):
 		for wartosc in (None, 0, "", "0", 0.0):
-			self.assertTrue(czy_uzupelnic_czas_kontaktu(wartosc, ["Volteo Call Center"], True), wartosc)
+			self.assertTrue(
+				czy_uzupelnic_czas_kontaktu(wartosc, ["Volteo Call Center"], True, True), wartosc
+			)
 
 	def test_wylaczona_nie(self):
-		self.assertFalse(czy_uzupelnic_czas_kontaktu(None, ["Volteo Call Center"], False))
+		self.assertFalse(czy_uzupelnic_czas_kontaktu(None, ["Volteo Call Center"], False, True))
+
+	def test_nie_z_webhooka_nie(self):
+		self.assertFalse(czy_uzupelnic_czas_kontaktu(None, ["Volteo Call Center"], True, False))
+		self.assertFalse(czy_uzupelnic_czas_kontaktu(0, ["Volteo Backend"], True, False))
 
 
 class TestSekundyDoPierwszegoKontaktu(unittest.TestCase):

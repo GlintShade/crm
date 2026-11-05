@@ -19,10 +19,17 @@ z PIERWSZEJ notatki (komentarza) CC/backoffice na leadzie, gdy pole jest jeszcze
 puste/0. Warstwe frappe-owa (hook `Comment.after_insert`, odczyt reguly
 `Volteo Automatyzacja`, zapis pola, slad w Aktywnosci) niesie
 `crm/api/czas_kontaktu.py`.
+
+Zadanie L (2026-11-05): `czy_lead_z_webhooka` zawiera dodatkowy warunek -
+automatyzacja dziala WYLACZNIE dla leadow, ktore wpadly webhookiem Make
+(Facebook Lead Ads), rozpoznawanych tak samo jak filtr "Wyswietl tylko leady
+z reklam" w kalendarzu (`warianty_filtra_fb` w `crm.volteo_kalendarz`).
 """
 
 import datetime
 import re
+
+from crm.volteo_leady_webhook import TOKEN_ZRODLA_FB, ZRODLO_LEADA
 
 PROBY_KONTAKTU_OPCJE: tuple[str, ...] = ("0", "1", "2", "3", "4", "5")
 """Dozwolone wartosci Select `custom_proby_kontaktu`."""
@@ -115,7 +122,25 @@ wlasciciela 2026-11-05) - wszystkie inne role (w tym Administrator/System
 Manager bez ktorejs z tych dwoch rol) nie uruchamiaja automatyzacji."""
 
 
-def czy_uzupelnic_czas_kontaktu(obecna_wartosc, role_autora, wlaczona: bool) -> bool:
+def czy_lead_z_webhooka(source, import_source) -> bool:
+	"""Czy lead wpadl webhookiem Make (Facebook Lead Ads) - decyzja wlasciciela
+	2026-11-05, Zadanie L: automatyzacja czasu do pierwszego kontaktu ma
+	dzialac WYLACZNIE dla takich leadow.
+
+	Rozpoznanie identyczne jak filtr "Wyswietl tylko leady z reklam" w
+	kalendarzu (`warianty_filtra_fb` w `crm.volteo_kalendarz`):
+	`source == "Facebook"` (stala `ZRODLO_LEADA`) LUB token `FB` (stala
+	`TOKEN_ZRODLA_FB`) w `import_source` (`CRM Lead.custom_import_source`,
+	tokeny laczone "+"). Dopasowanie tokenu jest DOKLADNE (caly token miedzy
+	"+" rowny "FB"), nie podciag - "FBX" czy "ARG" nie pasuja, "FB", "PV+FB"
+	tak.
+	"""
+	if source == ZRODLO_LEADA:
+		return True
+	return TOKEN_ZRODLA_FB in (import_source or "").split("+")
+
+
+def czy_uzupelnic_czas_kontaktu(obecna_wartosc, role_autora, wlaczona: bool, z_webhooka: bool) -> bool:
 	"""Czy nowa notatka (komentarz) na leadzie ma automatycznie uzupelnic
 	`custom_czas_do_kontaktu`.
 
@@ -130,8 +155,15 @@ def czy_uzupelnic_czas_kontaktu(obecna_wartosc, role_autora, wlaczona: bool) -> 
 	`wlaczona` to flaga reguly automatyzacji `Volteo Automatyzacja` (klucz
 	`czas_kontaktu_z_notatki`) juz rozstrzygnieta przez wolajacego (brak wiersza
 	w bazie ma byc tam potraktowany jako `True` - domyslnie wlaczona).
+
+	`z_webhooka` to wynik `czy_lead_z_webhooka` juz rozstrzygniety przez
+	wolajacego (decyzja wlasciciela 2026-11-05, Zadanie L): automatyzacja
+	dziala WYLACZNIE dla leadow z webhooka Make (Facebook Lead Ads), lead
+	zalozony recznie albo z arkusza nigdy nie dostaje automatycznego czasu.
 	"""
 	if not wlaczona:
+		return False
+	if not z_webhooka:
 		return False
 	if _na_liczbe(obecna_wartosc):
 		return False

@@ -4,6 +4,10 @@
 """Automatyczne uzupelnianie `CRM Lead.custom_czas_do_kontaktu` z PIERWSZEJ
 notatki CC/backoffice na leadzie (Zadanie H, decyzja wlasciciela 2026-11-05).
 
+Zadanie L (2026-11-05): automatyzacja dziala WYLACZNIE dla leadow, ktore
+wpadly webhookiem Make (Facebook Lead Ads) - patrz `czy_lead_z_webhooka` w
+`crm.volteo_leady_kontakt`.
+
 Hook: `Comment.after_insert` (patrz `crm/hooks.py`), rownolegle do
 istniejacego `crm.utils.on_comment_insert` - ten modul go nie zmienia ani nie
 zastepuje, oba sa wpisane obok siebie na liscie `after_insert` tego samego
@@ -56,6 +60,7 @@ from frappe.utils import cint
 
 from crm.volteo_aktywnosc import ZNACZNIK_D2D_UKRYTY, tekst_sladu, zapisz_slad
 from crm.volteo_leady_kontakt import (
+	czy_lead_z_webhooka,
 	czy_uzupelnic_czas_kontaktu,
 	formatuj_gg_mm,
 	sekundy_do_pierwszego_kontaktu,
@@ -103,22 +108,30 @@ def _uzupelnij(doc: Comment) -> None:
 	role_autora = frappe.get_roles(doc.owner)
 	wlaczona = _regula_wlaczona()
 
-	obecna_wartosc = frappe.db.get_value("CRM Lead", doc.reference_name, "custom_czas_do_kontaktu")
-	if not czy_uzupelnic_czas_kontaktu(obecna_wartosc, role_autora, wlaczona):
+	lead = frappe.db.get_value(
+		"CRM Lead",
+		doc.reference_name,
+		["custom_czas_do_kontaktu", "creation", "source", "custom_import_source"],
+		as_dict=True,
+	)
+	if not lead:
+		return
+	z_webhooka = czy_lead_z_webhooka(lead.source, lead.custom_import_source)
+	if not czy_uzupelnic_czas_kontaktu(lead.custom_czas_do_kontaktu, role_autora, wlaczona, z_webhooka):
 		return
 
-	creation_leada = frappe.db.get_value("CRM Lead", doc.reference_name, "creation")
+	creation_leada = lead.creation
 	if not creation_leada:
 		return
 
 	sekundy = sekundy_do_pierwszego_kontaktu(creation_leada, doc.creation)
 
 	# Druga, "swieza" kontrola tuz przed zapisem - minimalizuje okno wyscigu
-	# dwoch rownoleglych notatek na tym samym leadzie (rola autora i flaga
-	# `wlaczona` nie zmieniaja sie w trakcie jednego zadania, wiec powtarzamy
-	# tylko kontrole pustego pola).
+	# dwoch rownoleglych notatek na tym samym leadzie (rola autora, flaga
+	# `wlaczona` i `z_webhooka` nie zmieniaja sie w trakcie jednego zadania,
+	# wiec powtarzamy tylko kontrole pustego pola).
 	swiezo = frappe.db.get_value("CRM Lead", doc.reference_name, "custom_czas_do_kontaktu")
-	if not czy_uzupelnic_czas_kontaktu(swiezo, role_autora, wlaczona):
+	if not czy_uzupelnic_czas_kontaktu(swiezo, role_autora, wlaczona, z_webhooka):
 		return
 
 	frappe.db.set_value("CRM Lead", doc.reference_name, "custom_czas_do_kontaktu", sekundy)
