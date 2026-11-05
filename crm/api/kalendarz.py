@@ -281,12 +281,27 @@ def ustaw_termin(
 		doc.lead_owner = handlowiec
 
 	doc.custom_termin_spotkania = termin_norm
+	# Termin ustawiony => status CC "Umówiony", o ile wolno wołającemu zmieniać
+	# status (ta sama zasada co strażnik w `CRMLead.validate`, ops#265/#308).
+	from crm.permissions.org_hierarchy import ma_flage_zmiany_statusu_cc
+	from crm.volteo_kalendarz import czy_ustawic_status_umowiony
+	from crm.volteo_leady_status import czy_moze_zmienic_status_cc
+
+	if czy_ustawic_status_umowiony(
+		termin_norm,
+		doc.status,
+		czy_moze_zmienic_status_cc(
+			frappe.session.user, frappe.get_roles(), ma_flage_zmiany_statusu_cc(frappe.session.user)
+		),
+	):
+		doc.status = "Umówiony"
 	doc.save()
 	_dodaj_notatke_spotkania(doc.name, notatka)
 	return {
 		"lead": doc.name,
 		"termin": str(doc.custom_termin_spotkania) if doc.custom_termin_spotkania else None,
 		"lead_owner": doc.lead_owner,
+		"status": doc.status,
 	}
 
 

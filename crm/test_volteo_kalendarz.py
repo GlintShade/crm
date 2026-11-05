@@ -5,6 +5,7 @@ import unittest
 
 from crm.volteo_kalendarz import (
 	DNI_TYGODNIA,
+	czy_ustawic_status_umowiony,
 	dni_zakresu,
 	dostepnosc_handlowcow,
 	granice_czasu,
@@ -877,3 +878,18 @@ class TestTrescSygnalu(unittest.TestCase):
 	def test_wszystkie(self):
 		self.assertEqual(tresc_sygnalu([]), {"daty": []})
 		self.assertEqual(tresc_sygnalu(None), {"daty": []})
+
+
+class TestCzyUstawicStatusUmowiony(unittest.TestCase):
+	def test_termin_i_wolno(self):
+		self.assertTrue(czy_ustawic_status_umowiony("2026-11-21 10:00:00", "Nowy", True))
+
+	def test_pusty_termin(self):
+		self.assertFalse(czy_ustawic_status_umowiony(None, "Nowy", True))
+		self.assertFalse(czy_ustawic_status_umowiony("", "Nowy", True))
+
+	def test_nie_wolno(self):
+		self.assertFalse(czy_ustawic_status_umowiony("2026-11-21 10:00:00", "Nowy", False))
+
+	def test_juz_umowiony(self):
+		self.assertFalse(czy_ustawic_status_umowiony("2026-11-21 10:00:00", "Umówiony", True))

@@ -663,3 +663,12 @@ def polacz_daty(
 def tresc_sygnalu(daty: list[str] | None) -> dict:
 	"""Ladunek zdarzenia `ZDARZENIE_KALENDARZA`: wylacznie daty, zadnych danych leada."""
 	return {"daty": list(daty or [])}
+
+
+def czy_ustawic_status_umowiony(termin, status_obecny: str | None, moze_zmienic_status: bool) -> bool:
+	"""True, gdy zapis terminu ma ustawic status CC "Umówiony" (ops#332).
+
+	Tylko gdy termin jest niepusty, wolno zmieniac status CC i status nie jest
+	juz "Umówiony".
+	"""
+	return bool(termin) and bool(moze_zmienic_status) and status_obecny != "Umówiony"
