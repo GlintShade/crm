@@ -79,7 +79,11 @@ def _uzupelnij(doc: Comment) -> None:
 	if doc.reference_doctype != "CRM Lead" or not doc.reference_name:
 		return
 
-	role_autora = frappe.get_roles(doc.owner) if doc.owner else []
+	# Administrator dostaje z frappe.get_roles WSZYSTKIE role (takze CC), wiec
+	# jawnie go pomijamy: jego notatki nie sa kontaktem call center.
+	if not doc.owner or doc.owner == "Administrator":
+		return
+	role_autora = frappe.get_roles(doc.owner)
 	wlaczona = _regula_wlaczona()
 
 	obecna_wartosc = frappe.db.get_value("CRM Lead", doc.reference_name, "custom_czas_do_kontaktu")
