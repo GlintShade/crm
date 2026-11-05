@@ -12,8 +12,16 @@ lokalnie. `throw` mieszka w `CRMLead.validate()`.
 - `CRM Lead.custom_proby_kontaktu` (Select "0".."5"): licznik prob polaczenia.
 
 Frontendowe lustro formatowania i parsowania: `frontend/src/utils/czasKontaktu.js`.
+
+Zadanie H (2026-11-05): `czy_uzupelnic_czas_kontaktu`/`sekundy_do_pierwszego_kontaktu`
+nizej niosa czysta logike automatycznego uzupelniania `custom_czas_do_kontaktu`
+z PIERWSZEJ notatki (komentarza) CC/backoffice na leadzie, gdy pole jest jeszcze
+puste/0. Warstwe frappe-owa (hook `Comment.after_insert`, odczyt reguly
+`Volteo Automatyzacja`, zapis pola, slad w Aktywnosci) niesie
+`crm/api/czas_kontaktu.py`.
 """
 
+import datetime
 import re
 
 PROBY_KONTAKTU_OPCJE: tuple[str, ...] = ("0", "1", "2", "3", "4", "5")
@@ -98,3 +106,65 @@ def parsuj_gg_mm(tekst) -> int | None:
 	if minuty > 59:
 		return None
 	return godziny * 3600 + minuty * 60
+
+
+ROLE_AUTOMATYCZNEGO_CZASU: tuple[str, ...] = ("Volteo Call Center", "Volteo Backend")
+"""Role autora notatki (komentarza), ktorych PIERWSZA notatka na leadzie moze
+automatycznie uzupelnic `custom_czas_do_kontaktu` (Zadanie H, decyzja
+wlasciciela 2026-11-05) - wszystkie inne role (w tym Administrator/System
+Manager bez ktorejs z tych dwoch rol) nie uruchamiaja automatyzacji."""
+
+
+def czy_uzupelnic_czas_kontaktu(obecna_wartosc, role_autora, wlaczona: bool) -> bool:
+	"""Czy nowa notatka (komentarz) na leadzie ma automatycznie uzupelnic
+	`custom_czas_do_kontaktu`.
+
+	`obecna_wartosc` to DZISIEJSZA wartosc pola (sekundy, dowolny typ przyjmowany
+	przez `waliduj_czas_do_kontaktu`): puste/0 oznacza "jeszcze nie wpisano" i
+	jest jedynym przypadkiem, kiedy automatyzacja moze zadzialac - juz wypelnione
+	pole (reczny wpis albo wczesniejsza notatka) nigdy nie jest nadpisywane.
+
+	`role_autora` to role autora notatki (dowolny iterable stringow, np.
+	`frappe.get_roles(user)`) - wymagana czesc wspolna z `ROLE_AUTOMATYCZNEGO_CZASU`.
+
+	`wlaczona` to flaga reguly automatyzacji `Volteo Automatyzacja` (klucz
+	`czas_kontaktu_z_notatki`) juz rozstrzygnieta przez wolajacego (brak wiersza
+	w bazie ma byc tam potraktowany jako `True` - domyslnie wlaczona).
+	"""
+	if not wlaczona:
+		return False
+	if _na_liczbe(obecna_wartosc):
+		return False
+	if not set(role_autora or ()) & set(ROLE_AUTOMATYCZNEGO_CZASU):
+		return False
+	return True
+
+
+def _parsuj_creation_kontaktu(creation) -> datetime.datetime:
+	"""Parsuje `creation` na `datetime.datetime` - akceptuje `datetime.datetime`
+	albo string ISO `"YYYY-MM-DD HH:MM:SS"` / `"YYYY-MM-DD HH:MM:SS.ffffff"`."""
+	if isinstance(creation, datetime.datetime):
+		return creation
+	for wzorzec in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):
+		try:
+			return datetime.datetime.strptime(str(creation), wzorzec)
+		except (TypeError, ValueError):
+			continue
+	raise ValueError(f"Nieobslugiwany format creation: {creation!r}")
+
+
+def sekundy_do_pierwszego_kontaktu(creation_leada, creation_notatki) -> int:
+	"""Liczba sekund od utworzenia leada (`CRM Lead.creation`) do utworzenia
+	notatki (`Comment.creation`), zaokraglona W DOL do pelnej minuty (pole jest
+	wyswietlane jako `gg:mm`, patrz `formatuj_gg_mm`), minimum 0 (roznica ujemna,
+	np. zegar/kolejnosc danych niespojne, nigdy nie daje wartosci ujemnej).
+
+	Oba argumenty przyjmuja `datetime.datetime` albo string
+	`"YYYY-MM-DD HH:MM:SS"` / `"YYYY-MM-DD HH:MM:SS.ffffff"`.
+	"""
+	poczatek = _parsuj_creation_kontaktu(creation_leada)
+	koniec = _parsuj_creation_kontaktu(creation_notatki)
+	roznica_s = (koniec - poczatek).total_seconds()
+	if roznica_s <= 0:
+		return 0
+	return (int(roznica_s) // 60) * 60

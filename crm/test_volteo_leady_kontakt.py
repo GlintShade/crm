@@ -1,12 +1,16 @@
 # Copyright (c) 2026, ProEnergy and contributors
 # For license information, please see license.txt
 
+import datetime
 import unittest
 
 from crm.volteo_leady_kontakt import (
 	PROBY_KONTAKTU_OPCJE,
+	ROLE_AUTOMATYCZNEGO_CZASU,
+	czy_uzupelnic_czas_kontaktu,
 	formatuj_gg_mm,
 	parsuj_gg_mm,
+	sekundy_do_pierwszego_kontaktu,
 	waliduj_czas_do_kontaktu,
 	waliduj_proby_kontaktu,
 )
@@ -88,6 +92,73 @@ class TestParsuj(unittest.TestCase):
 	def test_roundtrip(self):
 		for s in (60, 5400, 86400):
 			self.assertEqual(parsuj_gg_mm(formatuj_gg_mm(s)), s)
+
+
+class TestCzyUzupelnicCzasKontaktu(unittest.TestCase):
+	def test_stala_rol(self):
+		self.assertEqual(ROLE_AUTOMATYCZNEGO_CZASU, ("Volteo Call Center", "Volteo Backend"))
+
+	def test_rola_cc_tak(self):
+		self.assertTrue(czy_uzupelnic_czas_kontaktu(None, ["Volteo Call Center"], True))
+
+	def test_rola_backend_tak(self):
+		self.assertTrue(czy_uzupelnic_czas_kontaktu(0, ["Volteo Backend"], True))
+
+	def test_rola_d2d_nie(self):
+		self.assertFalse(czy_uzupelnic_czas_kontaktu(None, ["Volteo D2D Sales"], True))
+
+	def test_administrator_bez_roli_cc_nie(self):
+		self.assertFalse(czy_uzupelnic_czas_kontaktu(None, ["Administrator"], True))
+
+	def test_system_manager_bez_roli_cc_nie(self):
+		self.assertFalse(czy_uzupelnic_czas_kontaktu(None, ["System Manager"], True))
+
+	def test_system_manager_z_rola_cc_tak(self):
+		self.assertTrue(czy_uzupelnic_czas_kontaktu(None, ["System Manager", "Volteo Call Center"], True))
+
+	def test_pole_wypelnione_nie(self):
+		self.assertFalse(czy_uzupelnic_czas_kontaktu(60, ["Volteo Call Center"], True))
+		self.assertFalse(czy_uzupelnic_czas_kontaktu("3600", ["Volteo Backend"], True))
+
+	def test_pole_puste_warianty_tak(self):
+		for wartosc in (None, 0, "", "0", 0.0):
+			self.assertTrue(czy_uzupelnic_czas_kontaktu(wartosc, ["Volteo Call Center"], True), wartosc)
+
+	def test_wylaczona_nie(self):
+		self.assertFalse(czy_uzupelnic_czas_kontaktu(None, ["Volteo Call Center"], False))
+
+
+class TestSekundyDoPierwszegoKontaktu(unittest.TestCase):
+	def test_roznica_zero(self):
+		self.assertEqual(sekundy_do_pierwszego_kontaktu("2026-01-01 10:00:00", "2026-01-01 10:00:00"), 0)
+
+	def test_59_sekund_daje_zero(self):
+		self.assertEqual(sekundy_do_pierwszego_kontaktu("2026-01-01 10:00:00", "2026-01-01 10:00:59"), 0)
+
+	def test_61_sekunda_daje_minute(self):
+		self.assertEqual(sekundy_do_pierwszego_kontaktu("2026-01-01 10:00:00", "2026-01-01 10:01:01"), 60)
+
+	def test_ponad_24h(self):
+		self.assertEqual(
+			sekundy_do_pierwszego_kontaktu("2026-01-01 10:00:00", "2026-01-02 12:30:00"),
+			26 * 3600 + 30 * 60,
+		)
+
+	def test_string_z_mikrosekundami(self):
+		self.assertEqual(
+			sekundy_do_pierwszego_kontaktu(
+				"2026-01-01 10:00:00.123456", "2026-01-01 10:05:00.654321"
+			),
+			300,
+		)
+
+	def test_ujemne_daje_zero(self):
+		self.assertEqual(sekundy_do_pierwszego_kontaktu("2026-01-01 10:05:00", "2026-01-01 10:00:00"), 0)
+
+	def test_przyjmuje_obiekty_datetime(self):
+		poczatek = datetime.datetime(2026, 1, 1, 10, 0, 0)
+		koniec = datetime.datetime(2026, 1, 1, 10, 2, 30)
+		self.assertEqual(sekundy_do_pierwszego_kontaktu(poczatek, koniec), 120)
 
 
 if __name__ == "__main__":
