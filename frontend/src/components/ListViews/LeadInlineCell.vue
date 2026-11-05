@@ -96,6 +96,15 @@
   odpytuja dwa razy tego samego kodu. Miejscowosc NIGDY nie jest ustawiana
   automatycznie. Blad lookupu albo tego zapisu jest cichy (bez toasta) --
   sam kod pocztowy juz dostal swoj "Zapisano" przez zwykly `zapiszWartosc`.
+
+  Zadanie K (prosba wlasciciela, follow-up b84): sama komorka Miejscowosc W
+  SPOCZYNKU (przed kliknieciem) tez ma wygladac jak kolumny-wybory z tego
+  pliku, nie jak pusta komorka tekstowa -- ale TYLKO gdy wiersz ma poprawny
+  kod pocztowy (NN-NNN), bo wtedy klik faktycznie otworzy liste miejscowosci
+  z MiejscowoscInput (patrz wyzej). Czysta decyzja `wygladKomorkiMiejscowosci`
+  (utils/leadyInline.js) patrzy wylacznie na FORMAT kodu w wierszu -- zero
+  lookupu przy renderze/przewijaniu listy, dokladnie jak dotad. Bez
+  poprawnego kodu komorka zostaje zwyklym polem tekstowym jak dzis.
 -->
 <template>
   <div
@@ -276,7 +285,23 @@
         <option v-for="p in podpowiedziPowiatow" :key="p" :value="p" />
       </datalist>
       <div
-        v-if="!edytujeTekst"
+        v-if="!edytujeTekst && pokazWyborMiejscowosci"
+        data-testid="miejscowosc-wybor-spoczynek"
+        class="relative flex min-h-7 w-full min-w-0 cursor-pointer items-center gap-2 truncate rounded border border-outline-gray-2 bg-surface-base px-2 text-base hover:border-outline-gray-3"
+        :class="{ 'opacity-60': zapisywanie }"
+        @click="rozpocznijEdycjeTekstu"
+      >
+        <span
+          class="truncate"
+          :class="{ 'text-ink-gray-4': !wyswietlanyTekst }"
+        >{{ wyswietlanyTekst || __('Wybierz opcję') }}</span>
+        <span
+          class="lucide-chevron-down ml-auto size-4 shrink-0 text-ink-gray-4"
+          aria-hidden="true"
+        />
+      </div>
+      <div
+        v-else-if="!edytujeTekst"
         data-testid="komorka-tekst"
         class="flex h-7 w-full min-w-0 cursor-text items-center truncate rounded px-1 text-base hover:bg-surface-gray-2"
         :class="{ 'opacity-60': zapisywanie }"
@@ -317,6 +342,7 @@ import {
   polaAdresuZKoduWiersza,
   surowaWartoscKomorki,
   wartoscTekstuDoZapisu,
+  wygladKomorkiMiejscowosci,
 } from '@/utils/leadyInline'
 import { POLE_GMINY } from '@/utils/kodPocztowy'
 import { pobierzDaneKodu } from '@/data/kodPocztowy'
@@ -506,6 +532,20 @@ const wyswietlanyTekst = computed(() =>
 
 const placeholderTekstu = computed(() =>
   props.column.key === 'custom_install_postal_code' ? 'NN-NNN' : '',
+)
+
+// Zadanie K: komorka Miejscowosc (custom_install_city) w spoczynku, gdy
+// wiersz ma poprawny kod pocztowy, ma wygladac jak inne kolumny-wybory z
+// tego pliku (szara "pigulka" z placeholderem "Wybierz opcję" i chevronem --
+// patrz czysta `wygladKomorkiMiejscowosci`). Decyzja patrzy tylko na FORMAT
+// kodu w tym wierszu: sam lookup listy miejscowosci (MiejscowoscInput) nadal
+// rusza dopiero po kliknieciu, pod `v-if="edytujeTekst"` ponizej -- ten
+// computed niczego nie odpytuje.
+const pokazWyborMiejscowosci = computed(
+  () =>
+    props.column.key === 'custom_install_city' &&
+    wygladKomorkiMiejscowosci(wartosc.value, props.row.custom_install_postal_code) ===
+      'wybor',
 )
 
 async function rozpocznijEdycjeTekstu() {

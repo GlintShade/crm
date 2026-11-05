@@ -17,6 +17,7 @@ import {
   wartoscTekstuDoZapisu,
   czyWartoscSieZmienila,
   polaAdresuZKoduWiersza,
+  wygladKomorkiMiejscowosci,
 } from './leadyInline'
 
 describe('KOLUMNY_INLINE / czyKolumnaInline', () => {
@@ -439,6 +440,26 @@ describe('polaAdresuZKoduWiersza (b84/ops#329: adres po edycji kodu w komorce li
     expect(polaAdresuZKoduWiersza(undefined, WYNIK, true)).toMatchObject({
       custom_gmina: 'Nysa',
     })
+  })
+})
+
+describe('wygladKomorkiMiejscowosci (Zadanie K: wyglad komorki Miejscowosc w spoczynku)', () => {
+  it('poprawny kod NN-NNN daje wyglad wyboru, niezaleznie od wartosci', () => {
+    expect(wygladKomorkiMiejscowosci('', '48-300')).toBe('wybor')
+    expect(wygladKomorkiMiejscowosci('Nysa', '48-300')).toBe('wybor')
+  })
+
+  it('brak kodu albo niepoprawny format zostaje wygladem pola tekstowego', () => {
+    expect(wygladKomorkiMiejscowosci('', '')).toBe('tekst')
+    expect(wygladKomorkiMiejscowosci('', null)).toBe('tekst')
+    expect(wygladKomorkiMiejscowosci('', undefined)).toBe('tekst')
+    expect(wygladKomorkiMiejscowosci('Nysa', '483 00')).toBe('tekst')
+    expect(wygladKomorkiMiejscowosci('Nysa', '48300')).toBe('tekst')
+    expect(wygladKomorkiMiejscowosci('Nysa', '48-3000')).toBe('tekst')
+  })
+
+  it('kod z bialymi znakami na brzegach dalej liczy sie jako poprawny (jak czyKodPocztowy)', () => {
+    expect(wygladKomorkiMiejscowosci('', ' 48-300 ')).toBe('wybor')
   })
 })
 

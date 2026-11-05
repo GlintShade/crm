@@ -7,7 +7,7 @@
 // Import z './kodPocztowy' (plik siostrzany, nie barel) jest bezpieczny: ten
 // modul tez nie dotyka '@/utils' ani Vue.
 
-import { POLE_GMINY, POLE_KODU, latkaAdresuZKodu } from './kodPocztowy'
+import { POLE_GMINY, POLE_KODU, czyKodPocztowy, latkaAdresuZKodu } from './kodPocztowy'
 
 // Kolumny listy leadow obslugiwane inline (LeadsListView.vue renderuje dla
 // nich LeadInlineCell.vue zamiast generycznej etykiety). custom_cc celowo
@@ -45,6 +45,25 @@ export const KOLUMNY_TEKSTOWE_INLINE = new Set([
   'custom_powiat',
   'custom_install_postal_code',
 ])
+
+// Zadanie K (prosba wlasciciela): wyglad komorki Miejscowosc (custom_install_
+// city) na liscie leadow PRZED kliknieciem. Z poprawnym kodem pocztowym w
+// tym wierszu (NN-NNN) komorka w spoczynku ma wygladac dokladnie jak inne
+// kolumny-wybory z tego pliku (np. custom_status_handlowy): szara "pigulka"
+// z placeholderem "Wybierz opcję" i chevronem, albo wartosc + chevron.
+// Funkcja patrzy WYLACZNIE na format kodu pocztowego w wierszu -- nie na
+// wynik lookupu listy miejscowosci (crm.api.kod_pocztowy.wyszukaj), ktory
+// LeadInlineCell.vue nadal uruchamia dopiero po kliknieciu (montuje
+// MiejscowoscInput pod `v-if="edytujeTekst"`, wydajnosc listy). `wartosc`
+// biezacej komorki nie wplywa na decyzje (pusta i wypelniona komorka z
+// poprawnym kodem obie dostaja wyglad 'wybor') -- parametr zostaje w
+// sygnaturze, zeby wolajacy mial jedno miejsce decyzji z pelnym kontekstem
+// komorki, tak jak surowaWartoscKomorki(column, item) powyzej. Bez
+// poprawnego kodu komorka zostaje zwyklym polem tekstowym jak dotad: pusta
+// w spoczynku, edycja po kliknieciu.
+export function wygladKomorkiMiejscowosci(wartosc, kod) {
+  return czyKodPocztowy(kod) ? 'wybor' : 'tekst'
+}
 
 // 16 wojewodztw malymi literami, dokladnie jak opcje Select
 // custom_voivodeship (te same wartosci co KalkulatorTab.vue i
