@@ -256,6 +256,27 @@
           </div>
         </div>
       </div>
+
+      <div v-if="pokazKreskePrzedPola" class="border-t mx-2" />
+
+      <!-- Field rules (wlacznik bez odbiorcow/kanalow) -->
+      <div v-if="regulyPola.length" class="flex flex-col gap-4 px-2">
+        <div class="text-base-semibold">{{ __('Pola') }}</div>
+        <div class="flex flex-col gap-2 max-w-2xl">
+          <div
+            v-for="row in regulyPola"
+            :key="row.klucz"
+            class="flex items-center justify-between gap-4 rounded-lg border p-4"
+          >
+            <p class="text-p-base text-ink-gray-8">{{ row.opis }}</p>
+            <Switch
+              :modelValue="Boolean(row.wlaczona)"
+              :disabled="isSaving(row.klucz)"
+              @update:modelValue="(val) => persist(row, { wlaczona: val ? 1 : 0 })"
+            />
+          </div>
+        </div>
+      </div>
     </template>
   </div>
 </template>
@@ -304,6 +325,16 @@ const listResource = createResource({
 const regulyStatusu = computed(() => state.reguly.filter((row) => row.typ === 'Status'))
 const regulyPowiadomien = computed(() => state.reguly.filter((row) => row.typ === 'Powiadomienie'))
 const regulyZadan = computed(() => state.reguly.filter((row) => row.typ === 'Zadanie'))
+// Typ "Pole": automatyzacja wlacz/wylacz bez odbiorcow i kanalow (np. czas do
+// pierwszego kontaktu z pierwszej notatki, b84) - sekcja renderowana na
+// koncu listy, zeby nie trzeba bylo przeplatac warunkow kreski miedzy
+// pozostalymi (juz niepelnymi) sekcjami wyzej.
+const regulyPola = computed(() => state.reguly.filter((row) => row.typ === 'Pole'))
+const pokazKreskePrzedPola = computed(
+  () =>
+    Boolean(regulyStatusu.value.length || regulyPowiadomien.value.length || regulyZadan.value.length) &&
+    regulyPola.value.length > 0,
+)
 
 // Draft values for the "Termin (dni)" number input, keyed by `klucz`.
 // Persisted only on blur/change, never per keystroke. Read/written by
