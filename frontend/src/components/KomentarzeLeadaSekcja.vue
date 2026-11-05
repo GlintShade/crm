@@ -1,10 +1,16 @@
 <!--
-  VOLTEO (b84): komentarze leada jako zwijana sekcja zakladki "Szczegoly"
-  (Lead.vue, MobileLead.vue), zamiast osobnej zakladki "Komentarze".
-  Dane i zapis te same co w KomentarzeLeadaModal.vue: odczyt przez
-  crm.api.volteo_leady.komentarze (has_permission na leadzie + maskowanie
-  CC), zapis przez crm.api.comment.add_comment, lista przez CommentArea,
-  edytor z @wzmiankami i zalacznikami przez CommentBox.
+  VOLTEO (b84): notatki leada (dawne "Komentarze") jako zwijana sekcja
+  zakladki "Szczegoly" (Lead.vue, MobileLead.vue), zamiast osobnej zakladki
+  "Komentarze". Nazwa sekcji to "Notatki" (spojnie z karta w prawym
+  panelu, NotatkiLeadaPanel.vue) -- to tylko etykieta w tym widoku, dane
+  pod spodem to nadal ten sam `Comment` co dotad (patrz docstring
+  NotatkiLeadaPanel.vue), wiec reszta kodu (zmienne, API, testy) zostaje
+  przy nazwie "komentarze". Dane i zapis te same co w
+  KomentarzeLeadaModal.vue: odczyt przez crm.api.volteo_leady.komentarze
+  (has_permission na leadzie + maskowanie CC), zapis przez
+  crm.api.comment.add_comment, lista przez CommentArea, edytor z
+  @wzmiankami i zalacznikami przez CommentBox (`card` -- jedno spojne pole
+  z tlem panelu, patrz CommentBox.vue).
 
   Stan otwarcia jest WSPOLNY z karta "Notatki" w prawym panelu: ten sam
   composable i ten sam klucz (SEKCJA_NOTATKI), wiec przelaczenie jednego
@@ -17,7 +23,7 @@
     <div class="w-full section-border h-px border-t" />
     <div class="p-1 sm:p-3">
       <CollapsibleSection
-        :label="__('Komentarze')"
+        :label="__('Notatki')"
         labelClass="px-2 font-semibold"
         headerClass="h-8"
         :count="comments.length || ''"
@@ -25,12 +31,12 @@
         @update:opened="(v) => stanSekcji.ustaw(SEKCJA_NOTATKI, v)"
       >
         <div class="px-2 pb-2 pt-2">
-          <div class="flex max-h-[26rem] flex-col gap-3 overflow-y-auto pr-1">
+          <div class="mb-3 flex max-h-[26rem] flex-col gap-3 overflow-y-auto pr-1">
             <div v-if="zasob.loading && !zasob.data" class="text-sm text-ink-gray-5">
               {{ __('Ładowanie…') }}
             </div>
             <div v-else-if="!comments.length" class="text-sm text-ink-gray-5">
-              {{ __('Brak komentarzy.') }}
+              {{ __('Brak notatek.') }}
             </div>
             <template v-else>
               <div v-for="activity in comments" :key="activity.name">
@@ -38,23 +44,24 @@
               </div>
             </template>
           </div>
-          <div class="mt-4 border-t pt-4">
-            <CommentBox
-              v-model="commentDoc"
-              v-model:content="nowaTresc"
-              v-model:attachments="noweZalaczniki"
-              :editable="true"
-              :doctype="doctype"
-              :placeholder="__('@Jan, czy możesz to sprawdzić?')"
-              :submitButtonProps="{
-                variant: 'solid',
-                onClick: dodaj,
-                disabled: pusty || wysylanie,
-                loading: wysylanie,
-              }"
-              :discardButtonProps="{ onClick: odrzuc }"
-            />
-          </div>
+          <CommentBox
+            v-model="commentDoc"
+            v-model:content="nowaTresc"
+            v-model:attachments="noweZalaczniki"
+            :editable="true"
+            :doctype="doctype"
+            card
+            :placeholder="__('Napisz notatkę, @ oznacza osobę')"
+            :submitLabel="__('Dodaj notatkę')"
+            :discardLabel="__('Anuluj')"
+            :submitButtonProps="{
+              variant: 'solid',
+              onClick: dodaj,
+              disabled: pusty || wysylanie,
+              loading: wysylanie,
+            }"
+            :discardButtonProps="{ onClick: odrzuc }"
+          />
         </div>
       </CollapsibleSection>
     </div>

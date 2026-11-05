@@ -36,7 +36,7 @@
             </template>
             <slot v-bind="{ section }">
               <component
-                :is="karty ? 'div' : FadedScrollableDiv"
+                :is="karty || bezWiniety ? 'div' : FadedScrollableDiv"
                 v-if="section.columns?.[0].fields.length"
                 :class="
                   karty
@@ -682,6 +682,16 @@ const props = defineProps({
   // Wariant karty: sekcje bez zapamietanego stanu startuja zwiniete
   // (zapis uzytkownika wygrywa, ops#330).
   startZwiniete: { type: Boolean, default: false },
+  // VOLTEO (b84): kolumna pola bez FadedScrollableDiv (zrodlo bialej
+  // "winiety" na dole -- blaknacy mask-image, gdy kolumna ma wlasny
+  // wewnetrzny scroll). Uzywane tam, gdzie rodzic juz zdejmuje limit
+  // wysokosci kolumny przez --sidepanel-column-max-height: none (zakladka
+  // "Szczegoly" leada ma wlasny scroll strony), wiec kolumna i tak nigdy
+  // sie nie przewija -- maska bywa tam falszywie aktywna przy granicznych
+  // (podpikselowych) wysokosciach i przeslania ostatnie pole sekcji. Inni
+  // konsumenci tego komponentu (np. domyslny panel kontaktu/organizacji z
+  // limitem 300px) zachowuja dotychczasowa maske bez zmian.
+  bezWiniety: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['beforeFieldChange', 'afterFieldChange', 'reload'])

@@ -7,20 +7,23 @@
     :placeholder="placeholder"
     :editable="editable"
     :mentions="mentionsKonfig"
+    :class="card && editable && 'rounded-lg border border-outline-gray-2 bg-surface-gray-2'"
     @change="editable ? (content = $event) : null"
   >
     <template #editor="{ editor: _editor }">
       <EditorContent
         :class="[
           editable &&
-            'sm:mx-10 mx-4 max-h-[50vh] overflow-y-auto border-t py-3',
+            (card
+              ? 'px-3 pt-3 max-h-[50vh] overflow-y-auto'
+              : 'sm:mx-10 mx-4 max-h-[50vh] overflow-y-auto border-t py-3'),
         ]"
         :editor="_editor"
       />
     </template>
     <template #bottom>
       <div v-if="editable" class="flex flex-col gap-2">
-        <div class="flex flex-wrap gap-2 sm:px-10 px-4">
+        <div :class="['flex flex-wrap gap-2', card ? 'px-3' : 'sm:px-10 px-4']">
           <AttachmentItem
             v-for="a in attachments"
             :key="a.file_url"
@@ -36,7 +39,12 @@
           </AttachmentItem>
         </div>
         <div
-          class="flex justify-between gap-2 overflow-hidden border-t sm:px-10 px-4 py-2.5"
+          :class="[
+            'flex justify-between gap-2 overflow-hidden py-2.5',
+            card
+              ? 'border-t border-outline-gray-2 px-3'
+              : 'border-t sm:px-10 px-4',
+          ]"
         >
           <div class="flex gap-1 items-center overflow-x-auto">
             <TextEditorBubbleMenu :buttons="textEditorMenuButtons" />
@@ -71,11 +79,14 @@
             </FileUploader>
           </div>
           <div class="mt-2 flex items-center justify-end space-x-2 sm:mt-0">
-            <Button v-bind="discardButtonProps || {}" :label="__('Discard')" />
+            <Button
+              v-bind="discardButtonProps || {}"
+              :label="discardLabel || __('Discard')"
+            />
             <Button
               variant="solid"
               v-bind="submitButtonProps || {}"
-              :label="__('Comment')"
+              :label="submitLabel || __('Comment')"
             />
           </div>
         </div>
@@ -107,6 +118,21 @@ defineProps({
   editorProps: { type: Object, default: () => ({}) },
   submitButtonProps: { type: Object, default: () => ({}) },
   discardButtonProps: { type: Object, default: () => ({}) },
+  // VOLTEO (b84): opcjonalne etykiety przyciskow, domyslnie bez zmian
+  // ("Comment"/"Discard"). Sekcja "Notatki" w zakladce Szczegoly leada
+  // (KomentarzeLeadaSekcja.vue) podaje polskie etykiety spojne z karta
+  // "Notatki" w prawym panelu, bez zmiany domyslnego zachowania w innych
+  // miejscach, ktore uzywaja tego komponentu (CommunicationArea.vue,
+  // AktualizacjeTab.vue, TaskModal.vue, KomentarzeLeadaModal.vue).
+  submitLabel: { type: String, default: null },
+  discardLabel: { type: String, default: null },
+  // VOLTEO (b84): wariant "jedno pole" -- cale okienko (tekst + pasek
+  // emoji/zalacznikow + przyciski) jako jedna karta z tlem/ramka pola
+  // panelu (bg-surface-gray-2, rounded, border), bez wewnetrznych marginesow
+  // i gornej kreski nad tekstem (domyslny wyglad bez zmian poza ta sekcja).
+  // Uzywane przez sekcje "Notatki" w zakladce Szczegoly leada
+  // (KomentarzeLeadaSekcja.vue).
+  card: { type: Boolean, default: false },
 })
 
 const modelValue = defineModel({ type: Object })

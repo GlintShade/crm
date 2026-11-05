@@ -103,11 +103,16 @@
                  poza ostatnia nie byla ucieta gradientem/scrollem -- ta
                  zakladka ma wlasny scroll strony (overflow-y-auto na
                  nadrzednym .sections w SidePanelLayout.vue), wiec brak
-                 wewnetrznego limitu nie psuje wygladu. -->
+                 wewnetrznego limitu nie psuje wygladu. `bezWiniety`: skoro
+                 kolumna nigdy sie tu nie przewija (limit zdjety), kolumna
+                 renderuje sie jako zwykly div zamiast FadedScrollableDiv,
+                 zeby podpikselowa roznica scrollHeight/clientHeight nie
+                 wlaczala bialej maski na ostatnim polu sekcji (b84). -->
             <SidePanelLayout
               :sections="sectionsPanel"
               doctype="CRM Lead"
               :docname="leadId"
+              bezWiniety
               @reload="sections.reload"
               @beforeFieldChange="beforeStatusChange"
               @afterFieldChange="reloadResources"

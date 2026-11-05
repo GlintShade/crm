@@ -102,11 +102,15 @@
                  wg osobnego issue ops zamiast jednej plaskiej sekcji z #122),
                  patrz analogiczny komentarz w Lead.vue -- zdejmujemy
                  wewnetrzny limit 300px, zeby zadna sekcja poza ostatnia nie
-                 byla ucinana. -->
+                 byla ucinana. `bezWiniety`: kolumna jako zwykly div zamiast
+                 FadedScrollableDiv, zeby podpikselowa roznica
+                 scrollHeight/clientHeight nie wlaczala bialej maski na
+                 ostatnim polu sekcji (b84). -->
             <SidePanelLayout
               :sections="sectionsPanel"
               doctype="CRM Lead"
               :docname="leadId"
+              bezWiniety
               @reload="sections.reload"
               @beforeFieldChange="beforeStatusChange"
               @afterFieldChange="reloadAssignees"
