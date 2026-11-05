@@ -180,7 +180,7 @@ import {
   przewinDoKomentarzy,
 } from '@/utils/komentarzeSekcja'
 import { useStanSekcjiPanelu } from '@/composables/useStanSekcjiPanelu'
-import { SEKCJA_NOTATKI } from '@/utils/stanSekcjiPanelu'
+import { SEKCJA_NOTATKI, WIDOK_SZCZEGOLY } from '@/utils/stanSekcjiPanelu'
 import SLASection from '@/components/SLASection.vue'
 import CustomActions from '@/components/CustomActions.vue'
 import { setupCustomizations, isTranslatable } from '@/utils'
@@ -386,9 +386,10 @@ const { tabIndex } = useActiveTabManager(tabs, 'lastLeadTab')
 
 // VOLTEO (b84): komentarze sa sekcja zakladki Szczegoly. Dawny adres
 // #comments i hash komentarza z powiadomienia o wzmiance (#<komentarz>)
-// otwieraja te sekcje i przewijaja do niej (stan otwarcia wspolny z karta
-// Notatki, SEKCJA_NOTATKI).
-const stanSekcjiKomentarzy = useStanSekcjiPanelu('CRM Lead')
+// otwieraja te sekcje i przewijaja do niej (stan otwarcia domyslnie wspolny
+// z karta Notatki w prawym panelu, SEKCJA_NOTATKI -- WIDOK_SZCZEGOLY, bo
+// KomentarzeLeadaSekcja.vue zawsze bierze ten zakres, patrz Lead.vue).
+const stanSekcjiKomentarzy = useStanSekcjiPanelu('CRM Lead', WIDOK_SZCZEGOLY)
 watch(
   () => route.hash,
   (hash) => {

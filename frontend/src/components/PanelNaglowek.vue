@@ -110,6 +110,10 @@
         </button>
       </div>
       <div class="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-ink-gray-5">
+        <template v-if="pokazSynchronizacjeSekcji">
+          <span>{{ __('Synchronizuj') }}</span>
+          <Switch size="sm" v-model="synchronizujSekcje" />
+        </template>
         <span>{{ __('Ukryj puste') }}</span>
         <Switch size="sm" v-model="ukryjPuste" />
       </div>
@@ -125,6 +129,7 @@ import { copyToClipboard } from '@/utils'
 import { telHref } from '@/utils/telefon'
 import { formatTelefon } from '@/utils/panelBoczny'
 import { useUkryjPustePola } from '@/composables/useUkryjPustePola'
+import { useSynchronizujSekcje } from '@/composables/useSynchronizujSekcje'
 
 const props = defineProps({
   imie: { type: String, default: '' },
@@ -133,6 +138,11 @@ const props = defineProps({
   rekord: { type: String, required: true },
   mozeOtworzyc: { type: Boolean, default: false },
   wlasneZadzwon: { type: Boolean, default: false },
+  // VOLTEO (b84): przelacznik "Synchronizuj" (sekcje tego panelu vs zakladka
+  // "Szczegoly") -- tylko tam, gdzie ten drugi widok istnieje (dzis: lead).
+  // Szansa (Deal.vue) tez uzywa tego naglowka, ale bez zakladki "Szczegoly"
+  // z wlasnym SidePanelLayout, wiec tam przelacznik zostaje ukryty.
+  pokazSynchronizacjeSekcji: { type: Boolean, default: false },
 })
 const emit = defineEmits(['otworz-klienta', 'zadzwon'])
 
@@ -150,6 +160,7 @@ const telefonSurowy = computed(() => {
 })
 
 const { ukryjPuste } = useUkryjPustePola()
+const { synchronizujSekcje } = useSynchronizujSekcje()
 const href = computed(() => telHref(props.telefon))
 const telefonWyswietlany = computed(() => formatTelefon(props.telefon))
 </script>

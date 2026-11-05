@@ -12,11 +12,15 @@
   @wzmiankami i zalacznikami przez CommentBox (`card` -- jedno spojne pole
   z tlem panelu, patrz CommentBox.vue).
 
-  Stan otwarcia jest WSPOLNY z karta "Notatki" w prawym panelu: ten sam
-  composable i ten sam klucz (SEKCJA_NOTATKI), wiec przelaczenie jednego
-  przelacza drugie i stan przezywa odswiezenie strony. Lista przeladowuje
-  sie na wspolny sygnal z utils/notatkiLeada.js (dodanie komentarza w
-  prawym panelu, w popupie albo w zakladce Aktywnosc).
+  Stan otwarcia jest domyslnie WSPOLNY z karta "Notatki" w prawym panelu: ten
+  sam klucz (SEKCJA_NOTATKI), wiec przelaczenie jednego przelacza drugie i
+  stan przezywa odswiezenie strony. Przelacznik "Synchronizuj sekcje" (b84,
+  zadanie F) moze to rozdzielic -- ta sekcja zawsze bierze zakres widoku
+  "Szczegoly" (WIDOK_SZCZEGOLY), wiec przy wylaczonej synchronizacji ma
+  wlasny zapis, niezalezny od karty w prawym panelu (ta zostaje bez zakresu,
+  patrz NotatkiLeadaPanel.vue). Lista przeladowuje sie na wspolny sygnal z
+  utils/notatkiLeada.js (dodanie komentarza w prawym panelu, w popupie albo
+  w zakladce Aktywnosc).
 -->
 <template>
   <div ref="korzen" class="section flex flex-col" data-testid="komentarze-leada-sekcja">
@@ -40,7 +44,11 @@
             </div>
             <template v-else>
               <div v-for="activity in comments" :key="activity.name">
-                <CommentArea :activity="activity" @reload="przeladuj" />
+                <CommentArea
+                  :activity="activity"
+                  :rzeczownikWpisu="__('notatkę')"
+                  @reload="przeladuj"
+                />
               </div>
             </template>
           </div>
@@ -73,7 +81,7 @@ import CommentArea from '@/components/Activities/CommentArea.vue'
 import CommentBox from '@/components/CommentBox.vue'
 import CollapsibleSection from '@/components/CollapsibleSection.vue'
 import { useStanSekcjiPanelu } from '@/composables/useStanSekcjiPanelu'
-import { SEKCJA_NOTATKI } from '@/utils/stanSekcjiPanelu'
+import { SEKCJA_NOTATKI, WIDOK_SZCZEGOLY } from '@/utils/stanSekcjiPanelu'
 import { wersjaKomentarzy, zglosZmianeKomentarzy } from '@/utils/notatkiLeada'
 import { call, createResource, toast } from 'frappe-ui'
 import { przewinDoKomentarzy } from '@/utils/komentarzeSekcja'
@@ -84,7 +92,7 @@ const props = defineProps({
   doctype: { type: String, default: 'CRM Lead' },
 })
 
-const stanSekcji = useStanSekcjiPanelu(() => props.doctype)
+const stanSekcji = useStanSekcjiPanelu(() => props.doctype, WIDOK_SZCZEGOLY)
 const otwarte = computed(() => stanSekcji.czyOtwarta(SEKCJA_NOTATKI, true))
 
 const korzen = ref(null)

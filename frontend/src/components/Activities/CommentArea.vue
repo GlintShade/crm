@@ -8,7 +8,7 @@
         </span>
         <span>{{ __('added a') }}</span>
         <span class="max-w-xs truncate font-medium text-ink-gray-8">
-          {{ __('comment') }}
+          {{ rzeczownikWpisu || __('comment') }}
         </span>
       </div>
       <div class="ml-auto flex items-center gap-1 whitespace-nowrap">
@@ -76,6 +76,10 @@ import { computed, ref } from 'vue'
 
 const props = defineProps({
   activity: { type: Object, default: () => ({}) },
+  // VOLTEO (b84): sekcja Notatki leada (KomentarzeLeadaSekcja.vue) pokazuje
+  // "dodał(a) notatkę" zamiast domyslnego "dodał(a) komentarz" -- te same
+  // dane (Comment), inna etykieta w naglowku wpisu. Puste = bez zmian.
+  rzeczownikWpisu: { type: String, default: '' },
 })
 
 const emit = defineEmits(['reload'])

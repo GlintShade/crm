@@ -9,6 +9,10 @@ import {
   domyslnieOtwartaKarta,
   SEKCJA_ZADANIA,
   SEKCJA_NOTATKI,
+  WIDOK_SZCZEGOLY,
+  doctypeDlaWidoku,
+  wczytajSynchronizujSekcje,
+  zapiszSynchronizujSekcje,
 } from '@/utils/stanSekcjiPanelu'
 
 // Magazyn w pamieci z interfejsem localStorage (getItem/setItem/key/length).
@@ -168,5 +172,70 @@ describe('SEKCJA_NOTATKI', () => {
   it('rozny od klucza Zadan i z prefiksem "__"', () => {
     expect(SEKCJA_NOTATKI).not.toBe(SEKCJA_ZADANIA)
     expect(SEKCJA_NOTATKI.startsWith('__')).toBe(true)
+  })
+})
+
+// Przelacznik "Synchronizuj sekcje" (b84, zadanie F): prawy panel leada
+// (bez widoku) i zakladka "Szczegoly" (WIDOK_SZCZEGOLY) dziela dzis jeden
+// klucz; wylaczona synchronizacja ma dac kazdemu z nich osobny.
+describe('doctypeDlaWidoku', () => {
+  it('synchronizacja wlaczona: ten sam klucz dla obu widokow', () => {
+    const bazowy = kluczStanuSekcji('jan@x.pl', 'CRM Lead')
+    const prawyPanel = kluczStanuSekcji(
+      'jan@x.pl',
+      doctypeDlaWidoku('CRM Lead', '', true),
+    )
+    const szczegoly = kluczStanuSekcji(
+      'jan@x.pl',
+      doctypeDlaWidoku('CRM Lead', WIDOK_SZCZEGOLY, true),
+    )
+    expect(prawyPanel).toBe(bazowy)
+    expect(szczegoly).toBe(bazowy)
+  })
+
+  it('domyslnie (bez podania synchronizuj) tak samo jak wlaczona', () => {
+    expect(doctypeDlaWidoku('CRM Lead', WIDOK_SZCZEGOLY)).toBe('CRM Lead')
+  })
+
+  it('synchronizacja wylaczona: rozne klucze dla prawego panelu i Szczegolow', () => {
+    const prawyPanel = kluczStanuSekcji(
+      'jan@x.pl',
+      doctypeDlaWidoku('CRM Lead', '', false),
+    )
+    const szczegoly = kluczStanuSekcji(
+      'jan@x.pl',
+      doctypeDlaWidoku('CRM Lead', WIDOK_SZCZEGOLY, false),
+    )
+    expect(szczegoly).not.toBe(prawyPanel)
+    expect(prawyPanel).toBe(kluczStanuSekcji('jan@x.pl', 'CRM Lead'))
+  })
+
+  it('wylaczona, ale bez widoku (prawy panel): zostaje na dotychczasowym kluczu', () => {
+    expect(doctypeDlaWidoku('CRM Lead', '', false)).toBe('CRM Lead')
+    expect(doctypeDlaWidoku('CRM Lead', undefined, false)).toBe('CRM Lead')
+  })
+})
+
+describe('wczytajSynchronizujSekcje / zapiszSynchronizujSekcje', () => {
+  let m
+  beforeEach(() => {
+    m = magazynTestowy()
+  })
+
+  it('brak zapisu (i brak magazynu) daje domyslnie wlaczony', () => {
+    expect(wczytajSynchronizujSekcje('jan@x.pl', m)).toBe(true)
+    expect(wczytajSynchronizujSekcje('jan@x.pl', null)).toBe(true)
+  })
+
+  it('zapis i odczyt per uzytkownik', () => {
+    expect(zapiszSynchronizujSekcje('jan@x.pl', false, m)).toBe(true)
+    expect(wczytajSynchronizujSekcje('jan@x.pl', m)).toBe(false)
+    expect(wczytajSynchronizujSekcje('ola@x.pl', m)).toBe(true)
+  })
+
+  it('magazyn rzucajacy wyjatkiem (tryb prywatny) nie psuje widoku', () => {
+    const r = magazynRzucajacy()
+    expect(wczytajSynchronizujSekcje('jan@x.pl', r)).toBe(true)
+    expect(zapiszSynchronizujSekcje('jan@x.pl', false, r)).toBe(false)
   })
 })

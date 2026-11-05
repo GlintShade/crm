@@ -5,7 +5,8 @@ const sesja = vi.hoisted(() => ({ user: 'jan@x.pl' }))
 vi.mock('@/stores/session', () => ({ sessionStore: () => sesja }))
 
 import { useStanSekcjiPanelu } from '@/composables/useStanSekcjiPanelu'
-import { kluczStanuSekcji } from '@/utils/stanSekcjiPanelu'
+import { useSynchronizujSekcje } from '@/composables/useSynchronizujSekcje'
+import { kluczStanuSekcji, WIDOK_SZCZEGOLY } from '@/utils/stanSekcjiPanelu'
 
 // Kazdy test na innym doctype: pamiec composable zyje w zasiegu modulu.
 let nr = 0
@@ -60,5 +61,45 @@ describe('useStanSekcjiPanelu', () => {
   it('ustaw bez nazwy sekcji nic nie zapisuje', () => {
     useStanSekcjiPanelu(doctype).ustaw('', true)
     expect(localStorage.getItem(kluczStanuSekcji('jan@x.pl', doctype))).toBeNull()
+  })
+
+  // Przelacznik "Synchronizuj sekcje" (b84, zadanie F).
+  describe('widok (Synchronizuj sekcje)', () => {
+    it('synchronizacja wlaczona (domyslnie): prawy panel i widok Szczegoly dziela stan', () => {
+      const prawyPanel = useStanSekcjiPanelu(doctype)
+      const szczegoly = useStanSekcjiPanelu(doctype, WIDOK_SZCZEGOLY)
+      prawyPanel.ustaw('zrodlo', true)
+      expect(szczegoly.czyOtwarta('zrodlo', false)).toBe(true)
+    })
+
+    it('synchronizacja wylaczona: kazdy widok ma wlasny, niezalezny stan', () => {
+      useSynchronizujSekcje().synchronizujSekcje.value = false
+      const prawyPanel = useStanSekcjiPanelu(doctype)
+      const szczegoly = useStanSekcjiPanelu(doctype, WIDOK_SZCZEGOLY)
+      prawyPanel.ustaw('zrodlo', true)
+      expect(szczegoly.czyOtwarta('zrodlo', false)).toBe(false)
+      szczegoly.ustaw('zrodlo', true)
+      expect(
+        JSON.parse(
+          localStorage.getItem(kluczStanuSekcji('jan@x.pl', `${doctype}::${WIDOK_SZCZEGOLY}`)),
+        ),
+      ).toEqual({ zrodlo: true })
+      // Prawy panel (bez widoku) zostaje na dotychczasowym kluczu.
+      expect(
+        JSON.parse(localStorage.getItem(kluczStanuSekcji('jan@x.pl', doctype))),
+      ).toEqual({ zrodlo: true })
+      useSynchronizujSekcje().synchronizujSekcje.value = true
+    })
+
+    it('ponowne wlaczenie synchronizacji wraca do wspolnego (dotychczasowego) stanu', () => {
+      const prawyPanel = useStanSekcjiPanelu(doctype)
+      const szczegoly = useStanSekcjiPanelu(doctype, WIDOK_SZCZEGOLY)
+      prawyPanel.ustaw('handlowe', true)
+      useSynchronizujSekcje().synchronizujSekcje.value = false
+      szczegoly.ustaw('handlowe', false)
+      expect(prawyPanel.czyOtwarta('handlowe', true)).toBe(true)
+      useSynchronizujSekcje().synchronizujSekcje.value = true
+      expect(szczegoly.czyOtwarta('handlowe', true)).toBe(true)
+    })
   })
 })

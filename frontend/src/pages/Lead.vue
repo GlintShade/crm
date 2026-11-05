@@ -113,6 +113,7 @@
               doctype="CRM Lead"
               :docname="leadId"
               bezWiniety
+              :widokSekcji="WIDOK_SZCZEGOLY"
               @reload="sections.reload"
               @beforeFieldChange="beforeStatusChange"
               @afterFieldChange="reloadResources"
@@ -153,6 +154,7 @@
           :telefon="doc.mobile_no || ''"
           :rekord="leadId"
           :wlasneZadzwon="callEnabled"
+          pokazSynchronizacjeSekcji
           @zadzwon="doc.mobile_no && makeCall(doc.mobile_no)"
         >
           <template #akcje>
@@ -290,7 +292,7 @@ import {
   przewinDoKomentarzy,
 } from '@/utils/komentarzeSekcja'
 import { useStanSekcjiPanelu } from '@/composables/useStanSekcjiPanelu'
-import { SEKCJA_NOTATKI } from '@/utils/stanSekcjiPanelu'
+import { SEKCJA_NOTATKI, WIDOK_SZCZEGOLY } from '@/utils/stanSekcjiPanelu'
 import PanelNaglowek from '@/components/PanelNaglowek.vue'
 import SLASection from '@/components/SLASection.vue'
 import TasksSection from '@/components/TasksSection.vue'
@@ -520,9 +522,12 @@ const { tabIndex, changeTabTo } = useActiveTabManager(
 
 // VOLTEO (b84): komentarze sa sekcja zakladki Szczegoly. Dawny adres
 // #comments i hash komentarza z powiadomienia o wzmiance (#<komentarz>)
-// otwieraja te sekcje i przewijaja do niej (stan otwarcia wspolny z karta
-// Notatki, SEKCJA_NOTATKI).
-const stanSekcjiKomentarzy = useStanSekcjiPanelu('CRM Lead')
+// otwieraja te sekcje i przewijaja do niej (stan otwarcia domyslnie wspolny
+// z karta Notatki w prawym panelu, SEKCJA_NOTATKI -- WIDOK_SZCZEGOLY, bo to
+// ta sama instancja co KomentarzeLeadaSekcja.vue, wiec przelacznik
+// "Synchronizuj sekcje" musi trafic w ten sam zapis co ona, nie w prawy
+// panel).
+const stanSekcjiKomentarzy = useStanSekcjiPanelu('CRM Lead', WIDOK_SZCZEGOLY)
 watch(
   () => route.hash,
   (hash) => {

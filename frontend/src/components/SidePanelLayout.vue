@@ -9,6 +9,10 @@
       v-if="!preview && !karty && _sections.length"
       class="flex items-center justify-end gap-2 px-3 py-1.5"
     >
+      <template v-if="widokSekcji">
+        <div class="text-sm text-ink-gray-5">{{ __('Synchronizuj sekcje') }}</div>
+        <Switch size="sm" v-model="synchronizujSekcje" />
+      </template>
       <div class="text-sm text-ink-gray-5">{{ __('Ukryj puste pola') }}</div>
       <Switch size="sm" v-model="ukryjPuste" />
     </div>
@@ -356,7 +360,7 @@
                         >
                           <DateTimePickerSiatka
                             :value="doc[field.fieldname]"
-                            :format="karty ? 'DD.MM.YYYY HH:mm' : getFormat('', '', true, true, false)"
+                            format="DD.MM.YYYY HH:mm"
                             :placeholder="field.placeholder"
                             :placement="isMobileView ? 'bottom-start' : 'left-start'"
                             @change="(v) => fieldChange(v, field)"
@@ -368,7 +372,7 @@
                         >
                           <DatePicker
                             :value="doc[field.fieldname]"
-                            :format="karty ? 'DD.MM.YYYY' : getFormat('', '', true, false, false)"
+                            format="DD.MM.YYYY"
                             :placeholder="field.placeholder"
                             :placement="isMobileView ? 'bottom-start' : 'left-start'"
                             @change="(v) => fieldChange(v, field)"
@@ -636,6 +640,7 @@ import {
   formatDataCzas,
 } from '@/utils/panelBoczny'
 import { useUkryjPustePola } from '@/composables/useUkryjPustePola'
+import { useSynchronizujSekcje } from '@/composables/useSynchronizujSekcje'
 import { useStanSekcjiPanelu } from '@/composables/useStanSekcjiPanelu'
 import { domyslnieOtwartaKarta } from '@/utils/stanSekcjiPanelu'
 import {
@@ -692,6 +697,15 @@ const props = defineProps({
   // konsumenci tego komponentu (np. domyslny panel kontaktu/organizacji z
   // limitem 300px) zachowuja dotychczasowa maske bez zmian.
   bezWiniety: { type: Boolean, default: false },
+  // VOLTEO (b84): nazwa widoku dla przelacznika "Synchronizuj sekcje" --
+  // pusta (domyslnie) = ta instancja zawsze dzieli stan z innymi panelami
+  // tego doctype (dotychczasowe zachowanie, np. prawy panel leada). Niepusta
+  // (np. "szczegoly") = ta instancja ma wlasny, niezalezny stan zwiniecia
+  // sekcji, gdy uzytkownik wylaczy "Synchronizuj sekcje"; wlaczony
+  // przelacznik (domyslnie) nadal daje wspolny stan. Sam przelacznik
+  // pokazuje sie w naglowku tylko, gdy ta instancja ma widok (inne strony:
+  // Kontakt, Organizacja, Szansa -- bez zmian).
+  widokSekcji: { type: String, default: '' },
 })
 
 const emit = defineEmits(['beforeFieldChange', 'afterFieldChange', 'reload'])
@@ -702,6 +716,7 @@ const { getFormattedPercent, getFormattedFloat, getFormattedCurrency } =
 const { users, isManager, getUser } = usersStore()
 
 const { ukryjPuste } = useUkryjPustePola()
+const { synchronizujSekcje } = useSynchronizujSekcje()
 
 const showSidePanelModal = ref(false)
 
@@ -711,7 +726,7 @@ const karty = computed(() => props.wariant === 'karty')
 // wspolny dla wszystkich paneli tego doctype. Brak zapisu: karty otwieraja
 // tylko pierwsza widoczna sekcje (ze startZwiniete zadnej), zwykly panel
 // bierze `opened` z ukladu.
-const stanSekcji = useStanSekcjiPanelu(() => props.doctype)
+const stanSekcji = useStanSekcjiPanelu(() => props.doctype, () => props.widokSekcji)
 
 function czyOtwarta(section) {
   const idx = _sections.value.findIndex((s) => s.name === section.name)

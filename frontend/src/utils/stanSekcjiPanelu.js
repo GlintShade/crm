@@ -105,3 +105,62 @@ export function rozstrzygnijOtwarcie(stan, nazwa, domyslny) {
   if (stan && nazwa && typeof stan[nazwa] === 'boolean') return stan[nazwa]
   return !!domyslny
 }
+
+// --- Przelacznik "Synchronizuj sekcje" (b84, zadanie F) ---------------------
+//
+// Prawy panel leada (wariant karty) i zakladka "Szczegoly" (plus sekcja
+// Notatek w tej zakladce) dziela dzis jeden stan zwiniecia sekcji -- ten sam
+// klucz localStorage (kluczStanuSekcji wyzej). Przelacznik pozwala to
+// rozdzielic: kazdy widok dostaje wtedy WLASNY, niezalezny zapis. Prawy
+// panel (bez widoku, parametr pusty) zawsze zostaje na dotychczasowym
+// kluczu, zeby nic nie stracil -- tylko widoki z nazwa (np. "szczegoly")
+// dostaja dopisek przy wylaczonej synchronizacji.
+
+// Widok zakladki "Szczegoly" leada (SidePanelLayout bez wariantu karty) i
+// jej sekcji Notatek (KomentarzeLeadaSekcja.vue).
+export const WIDOK_SZCZEGOLY = 'szczegoly'
+
+/**
+ * Doctype do kluczowania zapisu stanu sekcji (wchodzi do kluczStanuSekcji
+ * jako `doctype`): z dopiskiem widoku, gdy synchronizacja jest wylaczona i
+ * widok podany; w kazdym innym przypadku (synchronizacja wlaczona -- w tym
+ * domyslnie -- albo brak widoku, prawy panel) bez zmian.
+ * @param {string} doctype
+ * @param {string} [widok]
+ * @param {boolean} [synchronizuj] domyslnie true (zachowanie sprzed przelacznika)
+ * @returns {string}
+ */
+export function doctypeDlaWidoku(doctype, widok, synchronizuj = true) {
+  if (synchronizuj || !widok) return doctype
+  return `${doctype}::${widok}`
+}
+
+export const KLUCZ_SYNCHRONIZUJ_SEKCJE = 'volteo.panel.synchronizujSekcje'
+
+function kluczSynchronizacji(user) {
+  return `${KLUCZ_SYNCHRONIZUJ_SEKCJE}::${user || 'Guest'}`
+}
+
+/**
+ * Zapamietany stan przelacznika "Synchronizuj sekcje" per uzytkownik.
+ * @returns {boolean} domyslnie wlaczony (true), gdy brak zapisu lub magazynu
+ */
+export function wczytajSynchronizujSekcje(user, magazyn = domyslnyMagazyn()) {
+  if (!magazyn) return true
+  try {
+    return magazyn.getItem(kluczSynchronizacji(user)) !== '0'
+  } catch (e) {
+    return true
+  }
+}
+
+/** @returns {boolean} false, gdy zapis sie nie udal (stan zyje do odswiezenia) */
+export function zapiszSynchronizujSekcje(user, wartosc, magazyn = domyslnyMagazyn()) {
+  if (!magazyn) return false
+  try {
+    magazyn.setItem(kluczSynchronizacji(user), wartosc ? '1' : '0')
+    return true
+  } catch (e) {
+    return false
+  }
+}

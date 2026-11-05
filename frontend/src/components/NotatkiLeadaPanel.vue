@@ -20,6 +20,13 @@
   ktory ten panel obserwuje, wiec obie strony sa zgodne bez odswiezania.
   Logika zyje tu, w SidePanelLayout.vue nie ma zadnego wpiecia (rownolegle
   zmiany innych sesji w tym pliku).
+
+  Stan otwarcia (SEKCJA_NOTATKI) zyje bez zakresu widoku -- przelacznik
+  "Synchronizuj sekcje" (b84, zadanie F) nigdy go nie przenosi: ta karta
+  prawego panelu zawsze zostaje na dotychczasowym kluczu, zeby nic nie
+  stracic. Odpowiednik w zakladce "Szczegoly" (KomentarzeLeadaSekcja.vue)
+  bierze zakres WIDOK_SZCZEGOLY i przy wylaczonej synchronizacji ma wlasny,
+  niezalezny zapis.
 -->
 <template>
   <div class="shrink-0 px-3 pb-2 pt-1" data-testid="notatki-leada">

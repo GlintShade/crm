@@ -6,11 +6,13 @@
 
 import { reactive, toRaw, toValue } from 'vue'
 import { sessionStore } from '@/stores/session'
+import { useSynchronizujSekcje } from '@/composables/useSynchronizujSekcje'
 import {
   kluczStanuSekcji,
   wczytajStanSekcji,
   zapiszStanSekcji,
   rozstrzygnijOtwarcie,
+  doctypeDlaWidoku,
 } from '@/utils/stanSekcjiPanelu'
 
 // Zwykla Mapa (nie reactive): wpis powstaje przy pierwszym odczycie w
@@ -26,13 +28,30 @@ function stanDla(user, doctype) {
   return pamiec.get(klucz)
 }
 
-/** @param {string|import('vue').Ref<string>|() => string} doctype */
-export function useStanSekcjiPanelu(doctype) {
+/**
+ * @param {string|import('vue').Ref<string>|() => string} doctype
+ * @param {string|import('vue').Ref<string>|() => string} [widok] nazwa
+ *   widoku dla przelacznika "Synchronizuj sekcje" (b84, zadanie F) -- pusty
+ *   (domyslnie) = ta instancja zawsze dzieli stan z innymi panelami tego
+ *   doctype (prawy panel leada). Niepusty (np. "szczegoly") = wlasny,
+ *   niezalezny stan, gdy uzytkownik wylaczy synchronizacje (patrz
+ *   doctypeDlaWidoku).
+ */
+export function useStanSekcjiPanelu(doctype, widok) {
   const session = sessionStore()
+  const { synchronizujSekcje } = useSynchronizujSekcje()
+
+  function doctypeEfektywny() {
+    return doctypeDlaWidoku(
+      toValue(doctype),
+      toValue(widok),
+      synchronizujSekcje.value,
+    )
+  }
 
   function czyOtwarta(nazwa, domyslny) {
     return rozstrzygnijOtwarcie(
-      stanDla(session.user, toValue(doctype)),
+      stanDla(session.user, doctypeEfektywny()),
       nazwa,
       domyslny,
     )
@@ -40,9 +59,10 @@ export function useStanSekcjiPanelu(doctype) {
 
   function ustaw(nazwa, otwarta) {
     if (!nazwa) return
-    const stan = stanDla(session.user, toValue(doctype))
+    const d = doctypeEfektywny()
+    const stan = stanDla(session.user, d)
     stan[nazwa] = !!otwarta
-    zapiszStanSekcji(session.user, toValue(doctype), toRaw(stan))
+    zapiszStanSekcji(session.user, d, toRaw(stan))
   }
 
   return { czyOtwarta, ustaw }
