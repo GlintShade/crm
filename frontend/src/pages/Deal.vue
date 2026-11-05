@@ -40,13 +40,17 @@
         </Button>
       </template>
     </DealNaglowek>
-    <!-- Siatka: Tabs ma display:contents, więc pasek zakładek zajmuje pełną szerokość (wiersz 1), a treść zakładki i panel boczny leżą w wierszu 2. -->
+    <!-- Siatka: Tabs ma display:contents, więc pasek zakładek zajmuje pełną szerokość (wiersz 1), a treść zakładki i panel boczny leżą w wierszu 2.
+         Wszystkie panele zakładek trafiają do tej samej komórki siatki, a reka-ui trzyma nieaktywne panele w DOM z atrybutem hidden.
+         Klasa `flex` z frappe-ui Tabs.vue wygrywa z preflightowym `[hidden]{display:none}`, więc puste "ukryte" panele rozciągałyby się
+         na całą komórkę nad aktywnym panelem i przechwytywały kliknięcia oraz kółko myszy (b85, martwy przycisk "Wygeneruj umowę",
+         brak przewijania na desktopie). `[&_[role='tabpanel'][hidden]]:hidden` wymusza display:none na ukrytych panelach. -->
     <div class="grid flex-1 min-h-0 overflow-hidden grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_minmax(0,1fr)]">
     <Tabs
       v-model="tabIndex"
       as="div"
       :tabs="tabs"
-      class="contents [&_[role='tablist']]:col-span-2 [&_[role='tablist']]:row-start-1 [&_[role='tabpanel']]:col-start-1 [&_[role='tabpanel']]:row-start-2 [&_[role='tabpanel']]:min-h-0 [&_[role='tab']]:px-0 [&_[role='tab']]:shrink-0 [&_[role='tablist']]:px-5 [&_[role='tablist']::-webkit-scrollbar]:h-0 [&_[role='tablist']]:min-h-[45px] [&_[role='tablist']]:gap-7.5 [&_[role='tabpanel']:not([hidden])]:flex [&_[role='tabpanel']:not([hidden])]:grow"
+      class="contents [&_[role='tablist']]:col-span-2 [&_[role='tablist']]:row-start-1 [&_[role='tabpanel']]:col-start-1 [&_[role='tabpanel']]:row-start-2 [&_[role='tabpanel']]:min-h-0 [&_[role='tabpanel'][hidden]]:hidden [&_[role='tab']]:px-0 [&_[role='tab']]:shrink-0 [&_[role='tablist']]:px-5 [&_[role='tablist']::-webkit-scrollbar]:h-0 [&_[role='tablist']]:min-h-[45px] [&_[role='tablist']]:gap-7.5 [&_[role='tabpanel']:not([hidden])]:flex [&_[role='tabpanel']:not([hidden])]:grow"
     >
       <template #tab-panel="{ tab }">
         <Activities
