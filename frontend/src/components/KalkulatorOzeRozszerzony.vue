@@ -296,10 +296,6 @@
 
           <div class="kalk-output self-stretch border-l border-outline-gray-2 pl-5">
             <div class="kalk-sticky sticky top-3">
-              <div v-if="$slots['client-picker']" class="mb-3 w-full min-w-0">
-                <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Klient') }}</div>
-                <slot name="client-picker" />
-              </div>
               <div class="mb-2 text-base font-semibold text-ink-gray-9">{{ __('Wycena') }}</div>
 
               <KalkulatorParagon
@@ -311,6 +307,11 @@
                 :pokaz-ulge="ulgaDotyczyRodzaju"
                 :pokaz-rate="true"
               />
+
+              <div v-if="$slots['client-picker']" class="mt-3 w-full min-w-0">
+                <div class="mb-0.5 text-sm text-ink-gray-5">{{ __('Klient') }}</div>
+                <slot name="client-picker" />
+              </div>
 
               <Button
                 class="mt-3 w-full"
