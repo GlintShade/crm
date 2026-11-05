@@ -26,7 +26,24 @@ Ten modul niesie WYLACZNIE warstwe frappe-owa:
     jak kazda inna aktualizacja pola, nie jak cicha zmiana w tle),
   - slad w Aktywnosci przez `crm.volteo_aktywnosc.zapisz_slad`, oznaczony
     `ZNACZNIK_D2D_UKRYTY` (patrz tamten modul) - widoczny dla wszystkich poza
-    handlowcem (D2D), ktory i tak nie czyta samego pola (permlevel 3).
+    handlowcem (D2D), ktory i tak nie czyta samego pola (permlevel 3),
+  - sygnal realtime (Zadanie J) po udanym zapisie: `frappe.db.set_value` (w
+    przeciwienstwie do `doc.save()`) nie publikuje nic do socketu, wiec bez
+    tego otwarty widok leada (prawy panel, zakladka Szczegoly, szybki
+    podglad na mapie) pokazywal stary, pusty czas do odswiezenia strony.
+    `_powiadom_realtime` wysyla DOKLADNIE te same zdarzenia co
+    `frappe.model.document.Document.notify_update()` przy zwyklym zapisie
+    dokumentu (`doc_update` do pokoju dokumentu, `list_update` do pokoju
+    doctype'u) - front (`frontend/src/data/document.js` ->
+    `useDocument()` -> `createDocumentResource` z pakietu `frappe-ui`,
+    `realtime: true`) juz nasluchuje `list_update` (dokladnie tak samo jak na
+    zwykly zapis dokumentu) i na pasujace `{doctype, name}` sam dociaga caly
+    dokument przez API z pelnym sprawdzeniem uprawnien wywolujacego -
+    zdarzenie nie niesie wiec WARTOSCI pola permlevel 3, tylko sygnal "ten
+    dokument sie zmienil". Lista leadow (`frontend/src/pages/Leads.vue` ->
+    `ViewControls.vue`) nie korzysta z tego mechanizmu frappe-ui (wlasny
+    zasob przez `crm.api.doc.get_data`, bez `realtime`) - jej odswiezanie na
+    zywo to osobny zakres, poza tym modulem.
 
 Nigdy nie wolno mu rzucic wyjatkiem: zapisanie notatki (komentarza) ma sie
 udac zawsze, niezaleznie od tego, czy ta automatyzacja sie powiedzie - stad
@@ -107,6 +124,14 @@ def _uzupelnij(doc: Comment) -> None:
 	frappe.db.set_value("CRM Lead", doc.reference_name, "custom_czas_do_kontaktu", sekundy)
 
 	try:
+		_powiadom_realtime(doc.reference_name)
+	except Exception:
+		frappe.log_error(
+			frappe.get_traceback(),
+			"Volteo: sygnal realtime czasu do pierwszego kontaktu nie powiodl sie",
+		)
+
+	try:
 		zapisz_slad(
 			doc.reference_name,
 			f"{ZNACZNIK_D2D_UKRYTY} " + tekst_sladu("czas_kontaktu_auto", gg_mm=formatuj_gg_mm(sekundy)),
@@ -117,3 +142,33 @@ def _uzupelnij(doc: Comment) -> None:
 			frappe.get_traceback(),
 			"Volteo: slad automatycznego czasu do pierwszego kontaktu nie powiodl sie",
 		)
+
+
+def _powiadom_realtime(lead: str) -> None:
+	"""Po udanym `frappe.db.set_value` - sygnal realtime jak przy `doc.save()`
+	(patrz docstring modulu). Zadnych wartosci pol w payloadzie, wylacznie
+	identyfikacja dokumentu: front dociaga dane sam, przez API z uprawnieniami
+	wywolujacego (handlowiec D2D, ktory nie widzi pola permlevel 3, dostanie z
+	API ten sam dokument bez tego pola - zdarzenie samo w sobie nic nie
+	ujawnia)."""
+	modified = frappe.db.get_value("CRM Lead", lead, "modified")
+
+	# Jak `Document.notify_update()`: pokoj konkretnego dokumentu (front tego
+	# akurat nie subskrybuje, ale to dokladnie ten sam sygnal co przy zwyklym
+	# zapisie, wiec wysylamy oba, gdyby inny klient Frappe na niego czekal).
+	frappe.publish_realtime(
+		"doc_update",
+		{"doctype": "CRM Lead", "name": lead, "modified": modified},
+		doctype="CRM Lead",
+		docname=lead,
+		after_commit=True,
+	)
+	# Pokoj doctype'u (`doctype_subscribe`) - tego nasluchuje
+	# `createDocumentResource`/`createListResource` z `frappe-ui`
+	# (`realtime: true`), zeby odswiezyc otwarty dokument/wiersz listy.
+	frappe.publish_realtime(
+		"list_update",
+		{"doctype": "CRM Lead", "name": lead},
+		doctype="CRM Lead",
+		after_commit=True,
+	)

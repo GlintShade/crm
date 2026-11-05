@@ -313,6 +313,7 @@ import { usersStore } from '@/stores/users'
 import { statusesStore } from '@/stores/statuses'
 import { getMeta } from '@/stores/meta'
 import { useDocument } from '@/data/document'
+import { usePrzeladujPoNotatce } from '@/composables/usePrzeladujPoNotatce'
 import { whatsappEnabled } from '@/composables/whatsapp'
 import { callEnabled } from '@/composables/telephony'
 import { telHref, czyTelefon } from '@/utils/telefon'
@@ -369,6 +370,13 @@ const {
 const canDelete = computed(() => permissions.data?.permissions?.delete || false)
 
 const doc = computed(() => document.doc || {})
+
+// Zadanie J: "Czas do pierwszego kontaktu" na zywo po dodaniu notatki --
+// patrz composables/usePrzeladujPoNotatce.js.
+usePrzeladujPoNotatce({
+  docname: () => props.leadId,
+  reload: () => document.reload(),
+})
 
 const mozePokazacNaMapie = computed(() => czyMoznaPokazacNaMapie(doc.value))
 

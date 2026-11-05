@@ -224,6 +224,7 @@ import KomentarzeLeadaModal from '@/components/Modals/KomentarzeLeadaModal.vue'
 import NotatkiLeadaPanel from '@/components/NotatkiLeadaPanel.vue'
 import LostReasonModal from '@/components/Modals/LostReasonModal.vue'
 import { useDocument } from '@/data/document'
+import { usePrzeladujPoNotatce } from '@/composables/usePrzeladujPoNotatce'
 import { globalStore } from '@/stores/global'
 import { usersStore } from '@/stores/users'
 import { statusesStore } from '@/stores/statuses'
@@ -252,6 +253,13 @@ const { statusOptions, getLeadStatus } = statusesStore()
 const { document, triggerOnChange } = useDocument('CRM Lead', props.lead.name)
 
 const doc = computed(() => document.doc || {})
+
+// Zadanie J: "Czas do pierwszego kontaktu" na zywo po dodaniu notatki --
+// patrz composables/usePrzeladujPoNotatce.js.
+usePrzeladujPoNotatce({
+  docname: () => props.lead.name,
+  reload: () => document.reload(),
+})
 
 const tytul = computed(() => doc.value.lead_name || props.lead.name)
 

@@ -193,6 +193,7 @@ import { sekcjeZeStatusemTylkoDoOdczytu } from '@/utils/statusCC'
 import { czyMoznaPokazacNaMapie, trasaMapyDlaLeada } from '@/utils/mapaCel'
 import { getMeta } from '@/stores/meta'
 import { useDocument } from '@/data/document'
+import { usePrzeladujPoNotatce } from '@/composables/usePrzeladujPoNotatce'
 import { isMobileView } from '@/composables/settings'
 import { whatsappEnabled } from '@/composables/whatsapp'
 import { useActiveTabManager } from '@/composables/useActiveTabManager'
@@ -243,6 +244,13 @@ const {
 } = useDocument('CRM Lead', props.leadId)
 
 const doc = computed(() => document.doc || {})
+
+// Zadanie J: "Czas do pierwszego kontaktu" na zywo po dodaniu notatki --
+// patrz composables/usePrzeladujPoNotatce.js.
+usePrzeladujPoNotatce({
+  docname: () => props.leadId,
+  reload: () => document.reload(),
+})
 
 const mozePokazacNaMapie = computed(() => czyMoznaPokazacNaMapie(doc.value))
 
