@@ -34,16 +34,52 @@ export function listaMiejscowosci(wynik) {
   return lista
 }
 
-// Czy pokazac rozwijana liste: jest z czego wybrac poza obecna wartoscia.
-export function czyPokazacListe(lista, wartosc) {
-  if (!lista?.length) return false
-  return !(lista.length === 1 && lista[0] === tekst(wartosc))
+// Sentinel opcji "Recznie" w liscie miejscowosci (nie moze wystapic jako
+// prawdziwa nazwa miejscowosci -- nie trafia nigdy do pola dokumentu).
+export const WARTOSC_RECZNIE = '__recznie__'
+
+// Etykieta opcji "Recznie": funkcja (nie stala modulu), bo wola `__()`,
+// ktore Vue plugin i18n podpina na `window` dopiero przy starcie aplikacji
+// (PULAPKA eager chunk -- patrz etapFiltr.js); wywolanie wewnatrz funkcji
+// jest bezpieczne, bo funkcja dziala dopiero w trakcie renderu.
+export function etykietaRecznie() {
+  return __('Ręcznie')
+}
+
+// Opcje pola Miejscowosc/Miasto dla kodu pocztowego: miejscowosci z listy
+// kodu (kolejnosc jak w `lista`), do tego biezaca wartosc pola, gdy jest
+// niepusta i nie ma jej na liscie (stara albo recznie wpisana wartosc --
+// dzieki temu select zawsze ma czym pokazac aktualny wpis, patrz
+// ContactModal.vue/DaneKlientaTab.vue, ktore robily to samo osobno przed
+// ops#329), a na samym koncu ZAWSZE opcja "Recznie" (decyzja wlasciciela:
+// pole nigdy nie wybiera miejscowosci samo, wiec zejscie do wolnego tekstu
+// musi byc zawsze dostepne). Pusta `lista` -> pusta lista opcji (kod bez
+// listy miejscowosci: wolajacy pokazuje zwykle pole tekstowe, patrz
+// `trybPolaMiejscowosci`).
+export function opcjeMiejscowosci(lista, wartosc) {
+  if (!lista?.length) return []
+  const biezaca = tekst(wartosc)
+  const miasta = biezaca && !lista.includes(biezaca) ? [...lista, biezaca] : lista
+  return [
+    ...miasta.map((m) => ({ label: m, value: m })),
+    { label: etykietaRecznie(), value: WARTOSC_RECZNIE },
+  ]
+}
+
+// Tryb renderowania pola: 'lista' (rozwijana lista miejscowosci + "Recznie")
+// albo 'tekst' (zwykle pole do wpisania). Bez listy dla kodu zawsze 'tekst'
+// (kod nieznany/pusty, "jak dotad"); z lista domyslnie 'lista', chyba ze
+// uzytkownik wybral "Recznie" (stan `recznieWybrane`, trzyma go wolajacy --
+// to jedyny stan UI w tej funkcji, reszta jest czysto pochodna od `lista`).
+export function trybPolaMiejscowosci(lista, recznieWybrane) {
+  return lista?.length && !recznieWybrane ? 'lista' : 'tekst'
 }
 
 // Zmiany pol leada po lookupie kodu. Wojewodztwo, powiat i gmina zawsze z
-// kodu (gmina tylko, gdy dokument ma takie pole). Miejscowosc tylko, gdy
-// kod ma DOKLADNIE jedna, a pole jest puste: recznie wpisanej (albo
-// wybranej) wartosci nie nadpisujemy. Zwraca tylko pola, ktore sie zmieniaja.
+// kodu (gmina tylko, gdy dokument ma takie pole). Miejscowosc NIGDY (decyzja
+// wlasciciela, ops#329): nawet kod z dokladnie jedna miejscowoscia na liscie
+// zostawiamy do recznego wyboru w panelu (lista + "Recznie"), zeby pole
+// nigdy nie wybralo samo. Zwraca tylko pola, ktore sie zmieniaja.
 export function latkaAdresuZKodu(doc, wynik) {
   if (!doc || !wynik?.found) return {}
   const latka = {}
@@ -54,10 +90,6 @@ export function latkaAdresuZKodu(doc, wynik) {
   ustaw('custom_voivodeship', wynik.wojewodztwo)
   ustaw('custom_powiat', wynik.powiat)
   if (Object.hasOwn(doc, POLE_GMINY)) ustaw(POLE_GMINY, wynik.gmina)
-  const lista = listaMiejscowosci(wynik)
-  if (lista.length === 1 && !tekst(doc[POLE_MIEJSCOWOSCI])) {
-    latka[POLE_MIEJSCOWOSCI] = lista[0]
-  }
   return latka
 }
 

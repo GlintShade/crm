@@ -23,7 +23,6 @@ from collections.abc import Mapping
 from datetime import date, datetime
 from typing import Any
 
-from crm.volteo_kod_pocztowy import jedyna_miejscowosc
 from crm.volteo_leady_import import (
 	SEPARATOR_UWAG,
 	normalizuj_pisownie_osoby,
@@ -505,14 +504,14 @@ POLE_GMINY_LEADA: str = "custom_gmina"
 def dane_z_kodu_pocztowego(
 	dane: dict, wiersz: Mapping[str, Any] | None, pole_gminy: str | None = None
 ) -> dict:
-	"""Nowy słownik z danymi lookupu kodu: centroid, województwo, powiat, gmina, miejscowość.
+	"""Nowy słownik z danymi lookupu kodu: centroid, województwo, powiat, gmina.
 
 	`wiersz` to wynik `crm.api.kod_pocztowy.dane_kodu` (cache `Postal Code` uzupełniony
 	z Adresy.app), stary kształt samego wiersza `Postal Code` też przechodzi; `None` albo
-	`found: False` oznacza kod nieznany. Miejscowość (`custom_install_city`) wpisujemy
-	TYLKO, gdy lista `cities` ma dokładnie jedną pozycję i lead nie ma już miasta z
-	ładunku; przy kilku albo nieznanej liście pole zostaje puste (wybór z listy w panelu),
-	bo `miejscowosc` GeoNames to jedna na kod, często nie ta (ops#306, ops#329).
+	`found: False` oznacza kod nieznany. Miejscowości (`custom_install_city`) NIGDY nie
+	wpisujemy z lookupu kodu, nawet gdy lista `cities` ma dokładnie jedną pozycję: decyzja
+	właściciela ops#329, wybór należy zawsze do człowieka w panelu (lista miejscowości
+	plus "Ręcznie"); miasto podane jawnie w ładunku (klucz `miasto`) zostaje bez zmian.
 	Gmina tylko do `pole_gminy`, gdy adapter je poda (pole istnieje na leadzie).
 	Województwo przechodzi przez `normalizuj_wojewodztwo` (w tabeli bywa WIELKIMI
 	literami, a `custom_voivodeship` to Select z małymi): wartość spoza kanonu jest
@@ -527,9 +526,6 @@ def dane_z_kodu_pocztowego(
 			wynik["custom_powiat"] = _tekst(wiersz.get("powiat"))
 		if pole_gminy and _tekst(wiersz.get("gmina")):
 			wynik[pole_gminy] = _tekst(wiersz.get("gmina"))
-		miejscowosc = jedyna_miejscowosc(wiersz)
-		if miejscowosc and not wynik.get("custom_install_city"):
-			wynik["custom_install_city"] = miejscowosc
 		if wiersz.get("lat") and wiersz.get("lng"):
 			wynik.update(
 				custom_lat=wiersz["lat"],

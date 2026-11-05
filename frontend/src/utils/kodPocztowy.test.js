@@ -1,11 +1,14 @@
 import { describe, it, expect, vi } from 'vitest'
 import {
   BRAK_WYNIKU,
+  WARTOSC_RECZNIE,
   czyKodPocztowy,
   czyPokazacPustaMiejscowosc,
-  czyPokazacListe,
+  etykietaRecznie,
   latkaAdresuZKodu,
   listaMiejscowosci,
+  opcjeMiejscowosci,
+  trybPolaMiejscowosci,
   utworzLookup,
   uzupelnijAdresZKodu,
 } from './kodPocztowy'
@@ -44,15 +47,51 @@ describe('listaMiejscowosci', () => {
   })
 })
 
-describe('czyPokazacListe', () => {
-  it('lista z wyborem', () => {
-    expect(czyPokazacListe(['A', 'B'], 'A')).toBe(true)
-    expect(czyPokazacListe(['A'], '')).toBe(true)
-    expect(czyPokazacListe(['A'], 'Inna')).toBe(true)
+describe('opcjeMiejscowosci', () => {
+  it('pusta lista kodu: brak opcji (nawet z wartoscia)', () => {
+    expect(opcjeMiejscowosci([], 'Cokolwiek')).toEqual([])
+    expect(opcjeMiejscowosci(null, '')).toEqual([])
   })
-  it('nic do wyboru', () => {
-    expect(czyPokazacListe([], '')).toBe(false)
-    expect(czyPokazacListe(['A'], 'A')).toBe(false)
+
+  it('lista miejscowosci plus "Recznie" na koncu', () => {
+    expect(opcjeMiejscowosci(['Kościan', 'Racot'], '')).toEqual([
+      { label: 'Kościan', value: 'Kościan' },
+      { label: 'Racot', value: 'Racot' },
+      { label: etykietaRecznie(), value: WARTOSC_RECZNIE },
+    ])
+  })
+
+  it('wartosc spoza listy (stara albo recznie wpisana) dopisana przed "Recznie"', () => {
+    expect(opcjeMiejscowosci(['Kościan'], 'Stara Wartosc')).toEqual([
+      { label: 'Kościan', value: 'Kościan' },
+      { label: 'Stara Wartosc', value: 'Stara Wartosc' },
+      { label: etykietaRecznie(), value: WARTOSC_RECZNIE },
+    ])
+  })
+
+  it('wartosc juz na liscie: bez duplikatu', () => {
+    const opcje = opcjeMiejscowosci(['Kościan', 'Racot'], 'Racot')
+    expect(opcje.filter((o) => o.value === 'Racot')).toHaveLength(1)
+  })
+
+  it('jedna miejscowosc na liscie: tez dostaje "Recznie", nigdy sama', () => {
+    expect(opcjeMiejscowosci(['Kościan'], '')).toEqual([
+      { label: 'Kościan', value: 'Kościan' },
+      { label: etykietaRecznie(), value: WARTOSC_RECZNIE },
+    ])
+  })
+})
+
+describe('trybPolaMiejscowosci', () => {
+  it('bez listy: zawsze tekst', () => {
+    expect(trybPolaMiejscowosci([], false)).toBe('tekst')
+    expect(trybPolaMiejscowosci(null, false)).toBe('tekst')
+    expect(trybPolaMiejscowosci([], true)).toBe('tekst')
+  })
+
+  it('z lista: domyslnie lista, "Recznie" przelacza na tekst', () => {
+    expect(trybPolaMiejscowosci(['Kościan'], false)).toBe('lista')
+    expect(trybPolaMiejscowosci(['Kościan'], true)).toBe('tekst')
   })
 })
 
@@ -76,11 +115,11 @@ describe('latkaAdresuZKodu', () => {
     ).not.toHaveProperty('custom_install_city')
   })
 
-  it('jedna miejscowosc: wpisana tylko do pustego pola', () => {
+  it('jedna miejscowosc: NIGDY nie wpisana sama, nawet do pustego pola (ops#329)', () => {
     const jedna = { ...WYNIK, cities: ['Racot'] }
-    expect(latkaAdresuZKodu({ custom_install_city: '' }, jedna)).toMatchObject({
-      custom_install_city: 'Racot',
-    })
+    expect(
+      latkaAdresuZKodu({ custom_install_city: '' }, jedna),
+    ).not.toHaveProperty('custom_install_city')
     expect(
       latkaAdresuZKodu({ custom_install_city: 'Wpisana' }, jedna),
     ).not.toHaveProperty('custom_install_city')
@@ -141,7 +180,7 @@ describe('utworzLookup', () => {
 })
 
 describe('uzupelnijAdresZKodu', () => {
-  it('uzupelnia dokument w miejscu', async () => {
+  it('uzupelnia dokument w miejscu, bez miejscowosci (ops#329)', async () => {
     const doc = {
       custom_install_postal_code: '64-000',
       custom_install_city: '',
@@ -153,9 +192,9 @@ describe('uzupelnijAdresZKodu', () => {
     expect(doc).toMatchObject({
       custom_voivodeship: 'wielkopolskie',
       custom_powiat: 'kościański',
-      custom_install_city: 'Kościan',
     })
-    expect(latka.custom_install_city).toBe('Kościan')
+    expect(doc.custom_install_city).toBe('')
+    expect(latka).not.toHaveProperty('custom_install_city')
   })
 
   it('kod zmieniony w trakcie zapytania: bez zmian', async () => {

@@ -157,14 +157,25 @@
             </div>
             <div>
               <FormControl
-                :type="opcjeMiast.length > 1 ? 'select' : 'text'"
-                :options="opcjeMiast.length > 1 ? opcjeMiastSelect : undefined"
+                :type="trybMiasto === 'lista' ? 'select' : 'text'"
+                :options="trybMiasto === 'lista' ? opcjeMiastSelect : undefined"
+                :placeholder="trybMiasto === 'lista' ? __('Wybierz') : undefined"
                 :label="__('Miasto')"
-                v-model="contact.doc.custom_miasto"
+                :model-value="contact.doc.custom_miasto"
                 :disabled="!mozeZapisywac"
-                @blur="opcjeMiast.length <= 1 && zapiszPole('custom_miasto', contact.doc.custom_miasto)"
-                @change="opcjeMiast.length > 1 && zapiszPole('custom_miasto', contact.doc.custom_miasto)"
-              />
+                @update:model-value="onZmianaMiasta"
+                @blur="trybMiasto !== 'lista' && zapiszPole('custom_miasto', contact.doc.custom_miasto)"
+              >
+                <template v-if="trybMiasto !== 'lista' && opcjeMiast.length" #suffix>
+                  <Button
+                    variant="ghost"
+                    class="!size-5"
+                    icon="list"
+                    :tooltip="__('Wybierz z listy')"
+                    @click="miastoRecznie = false"
+                  />
+                </template>
+              </FormControl>
             </div>
             <div>
               <FormControl
@@ -274,6 +285,11 @@ import { usersStore } from '@/stores/users.js'
 import { telHref, czyTelefon } from '@/utils/telefon'
 import { call } from 'frappe-ui'
 import { pobierzDaneKodu } from '@/data/kodPocztowy'
+import {
+  WARTOSC_RECZNIE,
+  opcjeMiejscowosci,
+  trybPolaMiejscowosci,
+} from '@/utils/kodPocztowy'
 import { computed, reactive, ref, watch } from 'vue'
 import {
   validateFirstName,
@@ -574,25 +590,41 @@ async function onBlurTelefonGlowny() {
   }
 }
 
-// --- Kod pocztowy → autofill Miasto/Województwo/Powiat/Gmina --------------
+// --- Kod pocztowy → autofill Województwo/Powiat/Gmina ----------------------
 // Mirrors ContactModal.vue's onBlur handler exactly (same API, same guard,
 // same silent-failure contract) — the only difference is that here the
 // autofilled fields are written straight onto the shared `contact.doc`,
 // so the immediately-following zapiszPole() call persists them together
-// with the postal code in one whole-document save.
+// with the postal code in one whole-document save. Miasto NEVER autofills
+// itself (owner decision, ops#329, even for a single-locality code): see
+// `trybMiasto`/`opcjeMiastSelect` below (shared pure helpers,
+// utils/kodPocztowy.js) for the select-plus-"Ręcznie" field behaviour.
 const opcjeMiast = ref([])
-const opcjeMiastSelect = computed(() => {
-  const current = contact.doc?.custom_miasto
-  if (!jestPuste(current) && !opcjeMiast.value.includes(current)) {
-    return [...opcjeMiast.value, current]
+// Decision owner ops#329: reset to false whenever `opcjeMiast` is cleared
+// (new/edited postal code) so a fresh lookup always starts back at the
+// select, never "stuck" on a previous code's manual choice.
+const miastoRecznie = ref(false)
+const trybMiasto = computed(() =>
+  trybPolaMiejscowosci(opcjeMiast.value, miastoRecznie.value),
+)
+const opcjeMiastSelect = computed(() =>
+  opcjeMiejscowosci(opcjeMiast.value, contact.doc?.custom_miasto),
+)
+
+function onZmianaMiasta(wartosc) {
+  if (wartosc === WARTOSC_RECZNIE) {
+    miastoRecznie.value = true
+    return
   }
-  return opcjeMiast.value
-})
+  contact.doc.custom_miasto = wartosc
+  if (trybMiasto.value === 'lista') zapiszPole('custom_miasto', wartosc)
+}
 
 watch(
   () => contact.doc?.custom_kod_pocztowy,
   () => {
     opcjeMiast.value = []
+    miastoRecznie.value = false
   },
 )
 
@@ -603,12 +635,10 @@ async function onBlurKodPocztowy() {
       const r = await pobierzDaneKodu(kod)
       if (r && r.found) {
         const cities = r.cities && r.cities.length ? r.cities : r.miejscowosc ? [r.miejscowosc] : []
-        if (cities.length > 1) {
-          opcjeMiast.value = cities
-          if (jestPuste(contact.doc.custom_miasto)) contact.doc.custom_miasto = cities[0]
-        } else if (cities.length === 1 && jestPuste(contact.doc.custom_miasto)) {
-          contact.doc.custom_miasto = cities[0]
-        }
+        // Owner decision ops#329: Miasto never picks itself, not even for a
+        // single-locality code, just expose the list (plus "Ręcznie"), the
+        // select in the template handles the rest.
+        opcjeMiast.value = cities
         if (r.wojewodztwo) contact.doc.custom_wojewodztwo = r.wojewodztwo
         if (r.powiat) contact.doc.custom_powiat = r.powiat
         if (r.gmina) contact.doc.custom_gmina = r.gmina

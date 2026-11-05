@@ -9,14 +9,17 @@
   format validators; duplicate checks for PESEL/E-mail/Telefon go through the
   `volteo_contact_duplicate_check` Server Script API, mirroring the
   `call(name, params)` convention used by KalkulatorTab.vue / AudytTab.vue.
-  Kod pocztowy autofills Miasto/gmina/powiat/województwo on blur via the
-  shared `crm.api.kod_pocztowy.wyszukaj` lookup (data/kodPocztowy.js, ops#329;
-  silent on failure); the derived gmina/powiat/
-  województwo fields are not rendered — the After-Save sync hook persists
-  everything into a linked Address record from these Contact fields. When a
-  postal code covers several localities, Miasto switches from free text to a
-  select of the returned cities (see `cityOptions`) instead of silently
-  leaving the field untouched.
+  Kod pocztowy autofills gmina/powiat/województwo on blur via the shared
+  `crm.api.kod_pocztowy.wyszukaj` lookup (data/kodPocztowy.js, ops#329;
+  silent on failure); the derived gmina/powiat/województwo fields are not
+  rendered, the After-Save sync hook persists everything into a linked
+  Address record from these Contact fields. Miasto NEVER autofills itself
+  (owner decision, ops#329, even for a single-locality code): when the
+  postal code has a locality list, Miasto becomes a select (placeholder
+  "Wybierz") of those cities plus an always-present "Ręcznie" option that
+  switches it to free text (see `cityOptions`/`miastoTryb`, shared pure
+  helpers in utils/kodPocztowy.js); without a list it stays a plain text
+  field as before.
 -->
 <template>
   <Dialog v-model:open="show" :size="'xl'">
@@ -130,14 +133,26 @@
 
           <div>
             <FormControl
-              :type="cityOptions.length > 1 ? 'select' : 'text'"
-              :options="cityOptions.length > 1 ? miastoOptions : undefined"
+              :type="miastoTryb === 'lista' ? 'select' : 'text'"
+              :options="miastoTryb === 'lista' ? miastoOpcje : undefined"
+              :placeholder="miastoTryb === 'lista' ? __('Wybierz') : undefined"
               :label="__('Miasto')"
               required
-              v-model="_contact.doc.custom_miasto"
+              :model-value="_contact.doc.custom_miasto"
               :error="fieldError('custom_miasto')"
+              @update:model-value="onZmianaMiasta"
               @blur="onBlur('custom_miasto')"
-            />
+            >
+              <template v-if="miastoTryb !== 'lista' && cityOptions.length" #suffix>
+                <Button
+                  variant="ghost"
+                  class="!size-5"
+                  icon="list"
+                  :tooltip="__('Wybierz z listy')"
+                  @click="miastoRecznie = false"
+                />
+              </template>
+            </FormControl>
           </div>
 
           <div>
@@ -195,6 +210,11 @@
 <script setup>
 import { useDocument } from '@/data/document'
 import { pobierzDaneKodu } from '@/data/kodPocztowy'
+import {
+  WARTOSC_RECZNIE,
+  opcjeMiejscowosci,
+  trybPolaMiejscowosci,
+} from '@/utils/kodPocztowy'
 import { useTelemetry } from 'frappe-ui/frappe'
 import { call, createResource } from 'frappe-ui'
 import { useDebounceFn } from '@vueuse/core'
@@ -293,21 +313,34 @@ const dupCheckedValue = reactive({
   mobile_no: null,
 })
 
-// Localities returned by the last successful postal-code lookup when a
-// postal code covers more than one city — drives Miasto's text-vs-select
-// switch below. Cleared on any postal-code edit so a stale list never
-// survives a code change.
+// Localities returned by the last successful postal-code lookup, drives
+// Miasto's text-vs-select switch below (shared pure helpers,
+// utils/kodPocztowy.js). Cleared on any postal-code edit so a stale list
+// never survives a code change.
 const cityOptions = ref([])
+// Decision owner ops#329: Miasto never picks itself, even for a single-city
+// code, "Ręcznie" (one of `miastoOpcje`) flips this to free text; reset to
+// false whenever `cityOptions` is cleared (new/edited postal code) so a
+// fresh lookup always starts back at the select.
+const miastoRecznie = ref(false)
+const miastoTryb = computed(() =>
+  trybPolaMiejscowosci(cityOptions.value, miastoRecznie.value),
+)
 // Select options for Miasto: the looked-up cities, plus the current value
 // itself if it doesn't match any of them (e.g. carried over from a previous
-// lookup) so the select never has to display an empty/invalid state.
-const miastoOptions = computed(() => {
-  const current = _contact.doc.custom_miasto
-  if (!isEmpty(current) && !cityOptions.value.includes(current)) {
-    return [...cityOptions.value, current]
+// lookup) so the select never has to display an empty/invalid state, plus
+// an always-present "Ręcznie" entry.
+const miastoOpcje = computed(() =>
+  opcjeMiejscowosci(cityOptions.value, _contact.doc.custom_miasto),
+)
+
+function onZmianaMiasta(wartosc) {
+  if (wartosc === WARTOSC_RECZNIE) {
+    miastoRecznie.value = true
+    return
   }
-  return cityOptions.value
-})
+  _contact.doc.custom_miasto = wartosc
+}
 
 function isEmpty(v) {
   return v === null || v === undefined || String(v).trim() === ''
@@ -415,6 +448,7 @@ async function onBlur(field) {
     // Every lookup attempt starts from a clean slate — stale options from a
     // previous code must never survive into this one, success or not.
     cityOptions.value = []
+    miastoRecznie.value = false
     try {
       const r = await pobierzDaneKodu(_contact.doc.custom_kod_pocztowy.trim())
       if (r && r.found) {
@@ -423,16 +457,10 @@ async function onBlur(field) {
           : r.miejscowosc
             ? [r.miejscowosc]
             : []
-        if (cities.length > 1) {
-          // Multiple localities share this code — Miasto becomes a select
-          // (mirrors the old Address Form Script) instead of doing nothing.
-          cityOptions.value = cities
-          if (isEmpty(_contact.doc.custom_miasto)) {
-            _contact.doc.custom_miasto = cities[0]
-          }
-        } else if (cities.length === 1 && isEmpty(_contact.doc.custom_miasto)) {
-          _contact.doc.custom_miasto = cities[0]
-        }
+        // Owner decision ops#329: Miasto never picks itself, not even for a
+        // single-locality code, just expose the list (plus "Ręcznie"),
+        // the select in the template handles the rest.
+        cityOptions.value = cities
         if (r.wojewodztwo) _contact.doc.custom_wojewodztwo = r.wojewodztwo
         if (r.powiat) _contact.doc.custom_powiat = r.powiat
         if (r.gmina) _contact.doc.custom_gmina = r.gmina
@@ -459,6 +487,7 @@ watch(() => _contact.doc.mobile_no, () => resetDupStatus('mobile_no'))
 // a mid-typing edit could leave Miasto showing options for a stale code.
 watch(() => _contact.doc.custom_kod_pocztowy, () => {
   cityOptions.value = []
+  miastoRecznie.value = false
 })
 
 const hasMissingRequired = computed(() =>
