@@ -17,11 +17,11 @@
 -->
 <template>
   <Button
-    :label="__('Przekaż handlowcowi')"
+    :label="etykietaPrzycisku"
     icon-left="lucide-user-check"
     @click="otworz"
   />
-  <Dialog v-model:open="show" :title="__('Przekaż handlowcowi')" size="sm">
+  <Dialog v-model:open="show" :title="tytulOkna" size="sm">
     <template #default>
       <div class="flex flex-col gap-4">
         <FormControl
@@ -42,7 +42,7 @@
           variant="solid"
           :label="__('Przekaż')"
           :loading="wysylanie"
-          :disabled="!wybranyHandlowiec || wysylanie"
+          :disabled="!wybranyHandlowiec || wysylanie || wybranyHandlowiec === props.wlasciciel"
           @click="przekaz"
         />
       </div>
@@ -53,10 +53,25 @@
 <script setup>
 import { call, createResource, toast } from 'frappe-ui'
 import { computed, ref } from 'vue'
+import { usersStore } from '@/stores/users'
 
 const props = defineProps({
   docname: { type: String, required: true },
+  // Aktualny handlowiec leada (lead_owner); pusty = lead bez handlowca.
+  wlasciciel: { type: String, default: '' },
 })
+
+const { getUser } = usersStore()
+
+const etykietaPrzycisku = computed(() => {
+  if (!props.wlasciciel) return __('Przekaż handlowcowi')
+  const u = getUser(props.wlasciciel)
+  return __('Handlowiec: {0}', [u?.full_name || props.wlasciciel])
+})
+
+const tytulOkna = computed(() =>
+  props.wlasciciel ? __('Zmień handlowca') : __('Przekaż handlowcowi'),
+)
 
 const emit = defineEmits(['przekazano'])
 
@@ -80,7 +95,7 @@ const opcjeHandlowcow = computed(() => {
 
 function otworz() {
   blad.value = ''
-  wybranyHandlowiec.value = ''
+  wybranyHandlowiec.value = props.wlasciciel || ''
   show.value = true
   if (!handlowcyResource.data) {
     handlowcyResource.fetch()

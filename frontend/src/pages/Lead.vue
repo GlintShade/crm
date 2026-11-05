@@ -39,6 +39,7 @@
       <PrzekazHandlowcowi
         v-if="isCallCenter() || isVolteoAdmin()"
         :docname="leadId"
+        :wlasciciel="doc.lead_owner || ''"
         @przekazano="onPrzekazano"
       />
       <span

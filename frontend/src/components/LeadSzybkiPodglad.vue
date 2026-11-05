@@ -103,6 +103,7 @@
       <PrzekazHandlowcowi
         v-if="isCallCenter() || isVolteoAdmin()"
         :docname="lead.name"
+        :wlasciciel="doc.lead_owner || ''"
         @przekazano="onPrzekazano"
       />
       <Button
