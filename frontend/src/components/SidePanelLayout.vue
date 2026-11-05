@@ -583,6 +583,9 @@
           </component>
         </div>
       </div>
+      <!-- VOLTEO (b84): miejsce na sekcje dolaczana przez rodzica zaraz po
+           danej sekcji (zakladka Szczegoly leada: Komentarze pod Spotkaniem). -->
+      <slot name="po-sekcji" v-bind="{ section }" />
     </template>
   </div>
   <SidePanelModal

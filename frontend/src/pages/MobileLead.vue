@@ -110,7 +110,14 @@
               @reload="sections.reload"
               @beforeFieldChange="beforeStatusChange"
               @afterFieldChange="reloadAssignees"
-            />
+            >
+              <template #po-sekcji="{ section }">
+                <KomentarzeLeadaSekcja
+                  v-if="czySekcjaSpotkanie(section)"
+                  :docname="leadId"
+                />
+              </template>
+            </SidePanelLayout>
           </div>
         </div>
         <Activities
@@ -152,7 +159,6 @@ import Icon from '@/components/Icon.vue'
 import DetailsIcon from '@/components/Icons/DetailsIcon.vue'
 import ActivityIcon from '@/components/Icons/ActivityIcon.vue'
 import EmailIcon from '@/components/Icons/EmailIcon.vue'
-import CommentIcon from '@/components/Icons/CommentIcon.vue'
 import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
 import TaskIcon from '@/components/Icons/TaskIcon.vue'
 import NoteIcon from '@/components/Icons/NoteIcon.vue'
@@ -163,6 +169,14 @@ import LostReasonModal from '@/components/Modals/LostReasonModal.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import Activities from '@/components/Activities/Activities.vue'
 import SidePanelLayout from '@/components/SidePanelLayout.vue'
+import KomentarzeLeadaSekcja from '@/components/KomentarzeLeadaSekcja.vue'
+import {
+  czySekcjaSpotkanie,
+  hashWskazujeKomentarze,
+  przewinDoKomentarzy,
+} from '@/utils/komentarzeSekcja'
+import { useStanSekcjiPanelu } from '@/composables/useStanSekcjiPanelu'
+import { SEKCJA_NOTATKI } from '@/utils/stanSekcjiPanelu'
 import SLASection from '@/components/SLASection.vue'
 import CustomActions from '@/components/CustomActions.vue'
 import { setupCustomizations, isTranslatable } from '@/utils'
@@ -330,11 +344,6 @@ const tabs = computed(() => {
       icon: EmailIcon,
     },
     {
-      name: 'Comments',
-      label: __('Comments'),
-      icon: CommentIcon,
-    },
-    {
       name: 'Data',
       label: __('Data'),
       icon: DetailsIcon,
@@ -370,6 +379,21 @@ const tabs = computed(() => {
 })
 
 const { tabIndex } = useActiveTabManager(tabs, 'lastLeadTab')
+
+// VOLTEO (b84): komentarze sa sekcja zakladki Szczegoly. Dawny adres
+// #comments i hash komentarza z powiadomienia o wzmiance (#<komentarz>)
+// otwieraja te sekcje i przewijaja do niej (stan otwarcia wspolny z karta
+// Notatki, SEKCJA_NOTATKI).
+const stanSekcjiKomentarzy = useStanSekcjiPanelu('CRM Lead')
+watch(
+  () => route.hash,
+  (hash) => {
+    if (!hashWskazujeKomentarze(hash, tabs.value.map((t) => t.name))) return
+    stanSekcjiKomentarzy.ustaw(SEKCJA_NOTATKI, true)
+    przewinDoKomentarzy.value = true
+  },
+  { immediate: true },
+)
 
 const sections = createResource({
   url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_sidepanel_sections',
