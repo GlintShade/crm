@@ -67,7 +67,24 @@ handlowiec (rola `Volteo D2D Sales`) ma wiedzieć, że doszło do przydziału/pr
 tylko nigdy nie ma poznać tożsamości CC (patrz `tekst_widoczny_dla`). Każda inna rola
 widzi tekst pełny, bez znacznika."""
 
-_ZNACZNIKI_DO_ZDJECIA: frozenset[str] = ZNACZNIKI_ADMIN | frozenset({ZNACZNIK_CC})
+ZNACZNIK_D2D_UKRYTY = "[volteo:d2d-ukryty]"
+"""Znacznik wiodący tekstu śladu widocznego dla WSZYSTKICH ról poza handlowcem
+(rola `Volteo D2D Sales`), w odróżnieniu od `ZNACZNIKI_ADMIN` (ukryte dla
+wszystkich poza administracją): linia oznaczona tym znacznikiem jest ukryta
+WYŁĄCZNIE dla D2D, pozostałe role (w tym Call Center i Backend) widzą ją
+normalnie. Używa go ślad automatycznego uzupełnienia czasu do pierwszego
+kontaktu (Zadanie H, `crm/api/czas_kontaktu.py`): pole
+`CRM Lead.custom_czas_do_kontaktu` ma permlevel 3, którego D2D nie czyta
+(`czy_pole_widoczne` w `crm/api/activities.py` już ukrywa RĘCZNE zmiany tego
+pola przed D2D przez filtr permlevel na Version), ten znacznik daje
+analogiczne ukrycie śladowi zapisanemu jako komentarz `Info`
+(`zapisz_slad`), który filtr permlevel pomija, bo nie niesie nazwy pola.
+Sprawdzenie i zdjęcie znacznika żyje w `crm/api/activities.py::get_lead_activities`
+(reużywa `maskuj_tozsamosc_cc` jako kryterium "to jest D2D, nie
+Administrator/BYPASS"), NIE w `czy_widoczny` (tamten mechanizm ukrywa linię
+przed WSZYSTKIMI poza administracją, tu ma ją widzieć też CC)."""
+
+_ZNACZNIKI_DO_ZDJECIA: frozenset[str] = ZNACZNIKI_ADMIN | frozenset({ZNACZNIK_CC, ZNACZNIK_D2D_UKRYTY})
 """Nadzbiór znaczników wiodących, które `bez_znacznika` potrafi zdjąć z tekstu."""
 
 ROLA_D2D = "Volteo D2D Sales"
@@ -319,6 +336,9 @@ def tekst_sladu(rodzaj: str, **dane: object) -> str:
 
 	if rodzaj == "cc_przydzial":
 		return f"{ZNACZNIK_CC} przydzielono do CC: {dane['cc_full_name']}"
+
+	if rodzaj == "czas_kontaktu_auto":
+		return f"Czas do pierwszego kontaktu uzupełniony automatycznie z notatki: {dane['gg_mm']}"
 
 	if rodzaj == "cc_przekazanie":
 		return (

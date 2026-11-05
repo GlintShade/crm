@@ -212,7 +212,12 @@ doc_events = {
 		"on_update": ["crm.utils.on_communication_update"],
 	},
 	"Comment": {
-		"after_insert": ["crm.utils.on_comment_insert"],
+		# Zadanie H (2026-11-05): crm.api.czas_kontaktu.on_comment_insert jedzie
+		# obok istniejacego crm.utils.on_comment_insert, nie go zastepuje ani nie
+		# modyfikuje - osobna automatyzacja (czas do pierwszego kontaktu z
+		# pierwszej notatki CC/backoffice), wlaczana/wylaczana przez Volteo
+		# Automatyzacja (klucz czas_kontaktu_z_notatki).
+		"after_insert": ["crm.utils.on_comment_insert", "crm.api.czas_kontaktu.on_comment_insert"],
 		"on_update": ["crm.api.comment.on_update"],
 	},
 	"WhatsApp Message": {

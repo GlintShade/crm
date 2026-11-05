@@ -9,6 +9,7 @@ from crm.volteo_aktywnosc import (
 	POLA_WLASNA_LINIA,
 	TEKST_ZASTEPCZY_CC_D2D,
 	ZNACZNIK_CC,
+	ZNACZNIK_D2D_UKRYTY,
 	ZNACZNIK_KOSZTY,
 	ZNACZNIK_ROZLICZENIE,
 	ZNACZNIK_ZESTAW,
@@ -355,6 +356,24 @@ class TestCzyWidocznyIBezZnacznika(unittest.TestCase):
 		text = f"{ZNACZNIK_ZESTAW} Edycja zestawu. Cena: netto 1,00 -> 2,00 zł."
 		self.assertEqual(bez_znacznika(text), "Edycja zestawu. Cena: netto 1,00 -> 2,00 zł.")
 
+	def test_k_znacznik_d2d_ukryty_nie_jest_znacznikiem_admina(self: "TestCzyWidocznyIBezZnacznika") -> None:
+		# ZNACZNIK_D2D_UKRYTY celowo NIE wchodzi do ZNACZNIKI_ADMIN: ma go ukrywac
+		# tylko przed D2D (crm/api/activities.py::get_lead_activities), nie przed
+		# wszystkimi poza administracja, jak robi czy_widoczny/ZNACZNIKI_ADMIN.
+		self.assertNotIn(ZNACZNIK_D2D_UKRYTY, ZNACZNIKI_ADMIN)
+
+	def test_l_czy_widoczny_ignoruje_znacznik_d2d_ukryty(self: "TestCzyWidocznyIBezZnacznika") -> None:
+		text = f"{ZNACZNIK_D2D_UKRYTY} Czas do pierwszego kontaktu uzupełniony automatycznie z notatki: 01:30"
+		self.assertTrue(czy_widoczny(text, ["Volteo D2D Sales"], ["System Manager", "Volteo Core Admin"]))
+		self.assertTrue(czy_widoczny(text, [], ["System Manager"]))
+
+	def test_m_bez_znacznika_zdejmuje_znacznik_d2d_ukryty(self: "TestCzyWidocznyIBezZnacznika") -> None:
+		text = f"{ZNACZNIK_D2D_UKRYTY} Czas do pierwszego kontaktu uzupełniony automatycznie z notatki: 01:30"
+		self.assertEqual(
+			bez_znacznika(text),
+			"Czas do pierwszego kontaktu uzupełniony automatycznie z notatki: 01:30",
+		)
+
 
 class TestTekstWidocznyDlaCC(unittest.TestCase):
 	"""ops#93: linia oznaczona ZNACZNIK_CC pokazuje handlowcowi tekst zastępczy
@@ -683,6 +702,12 @@ class TestTekstSladu(unittest.TestCase):
 			),
 			"zadanie utworzone automatycznie (zadanie audyt przeslany): "
 			"„Audyt OZE: Jan Kowalski”, odbiorcy: 2",
+		)
+
+	def test_m3_czas_kontaktu_auto(self: "TestTekstSladu") -> None:
+		self.assertEqual(
+			tekst_sladu("czas_kontaktu_auto", gg_mm="01:30"),
+			"Czas do pierwszego kontaktu uzupełniony automatycznie z notatki: 01:30",
 		)
 
 	def test_n_kalkulator_oze(self: "TestTekstSladu") -> None:

@@ -15,6 +15,7 @@ from crm.permissions.org_hierarchy import BYPASS_ROLES, czy_autor_ma_role_cc
 from crm.volteo_aktywnosc import (
 	OKNO_GRUPOWANIA_S,
 	ROLA_D2D,
+	ZNACZNIK_D2D_UKRYTY,
 	bez_znacznika,
 	czy_pole_widoczne,
 	czy_widoczny,
@@ -632,6 +633,14 @@ def get_lead_activities(name: str):
 		if not raw_text:
 			continue
 		if not czy_widoczny(raw_text, roles_uzytkownika, ADMIN_ROLE):
+			continue
+		# Zadanie H (2026-11-05): slad automatycznego uzupelnienia czasu do
+		# pierwszego kontaktu (crm.api.czas_kontaktu) niesie ZNACZNIK_D2D_UKRYTY
+		# zamiast byc ukryty przez permlevel (ten slad to komentarz Info, nie
+		# wpis Version, wiec filtr permlevel ponizej go nie dotyczy) - ma byc
+		# niewidoczny WYLACZNIE dla D2D (maskuj_tozsamosc_cc), nie dla CC/
+		# backoffice, ktorzy normalnie widza takie zmiany pola.
+		if maskuj_tozsamosc_cc and raw_text.startswith(ZNACZNIK_D2D_UKRYTY):
 			continue
 		if czy_widoczny_bez_maskowania_cc:
 			tekst_widoczny = bez_znacznika(raw_text)
