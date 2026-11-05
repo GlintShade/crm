@@ -262,10 +262,15 @@ export function zaokraglijDo30(minuty) {
   return Math.round(minuty / 30) * 30
 }
 
+/** Poczatek polgodzinnego slotu, w ktorym lezy `minuty` (z tolerancja na float). */
+export function podlogaDo30(minuty) {
+  return Math.floor(minuty / 30 + 1e-6) * 30
+}
+
 /** Godzina `HH:MM` z kliknięcia w pozycji `xPct` (0..100) na osi `od..do`, co 30 min. */
 export function godzinaZKlikniecia(xPct, od = OS_OD, doGodziny = OS_DO) {
   const wzgledne = Math.min(100, Math.max(0, xPct))
-  const minuty = zaokraglijDo30((od + (wzgledne / 100) * (doGodziny - od)) * 60)
+  const minuty = podlogaDo30((od + (wzgledne / 100) * (doGodziny - od)) * 60)
   const ograniczone = Math.min(
     Math.max(minuty, od * 60),
     Math.max(od * 60, doGodziny * 60 - 30),
@@ -280,7 +285,7 @@ export function godzinaZKliknieciaPion(
   doGodziny = OS_DO,
   pxNaH = PX_NA_GODZINE,
 ) {
-  const minuty = zaokraglijDo30((od + Math.max(0, yPx) / pxNaH) * 60)
+  const minuty = podlogaDo30((od + Math.max(0, yPx) / pxNaH) * 60)
   const ograniczone = Math.min(
     Math.max(minuty, od * 60),
     Math.max(od * 60, doGodziny * 60 - 30),

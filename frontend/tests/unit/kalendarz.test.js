@@ -44,6 +44,7 @@ import {
   godzinaZKlikniecia,
   godzinaZKliknieciaPion,
   blokKlikniecia,
+  podlogaDo30,
   blokKliknieciaPion,
   godzinyOsi,
   indeksDniaTygodnia,
@@ -335,6 +336,22 @@ describe('oś godzin i pozycje', () => {
 })
 
 describe('kliknięcia', () => {
+  it('klik bierze slot pod kursorem (podloga do 30 min)', () => {
+    expect(podlogaDo30(13 * 60 + 50)).toBe(13 * 60 + 30)
+    expect(podlogaDo30(13 * 60 + 29)).toBe(13 * 60)
+    expect(podlogaDo30(13 * 60 + 30)).toBe(13 * 60 + 30)
+    const k = PX_NA_GODZINE_KOMPAKT
+    // 13:50 = 5h50 od 08:00
+    expect(godzinaZKliknieciaPion((5 + 50 / 60) * k, 8, 22, k)).toBe('13:30')
+    expect(godzinaZKliknieciaPion((5 + 29 / 60) * k, 8, 22, k)).toBe('13:00')
+    expect(godzinaZKliknieciaPion(5.5 * k, 8, 22, k)).toBe('13:30')
+    expect(godzinaZKliknieciaPion((13 + 59 / 60) * k, 8, 22, k)).toBe('21:30')
+    expect(godzinaZKlikniecia(((5 + 50 / 60) / 14) * 100)).toBe('13:30')
+    expect(godzinaZKlikniecia(((5 + 29 / 60) / 14) * 100)).toBe('13:00')
+    expect(godzinaZKlikniecia((5.5 / 14) * 100)).toBe('13:30')
+    expect(godzinaZKlikniecia(((13 + 59 / 60) / 14) * 100)).toBe('21:30')
+  })
+
   it('zaokraglijDo30', () => {
     expect(zaokraglijDo30(0)).toBe(0)
     expect(zaokraglijDo30(14)).toBe(0)
@@ -351,10 +368,11 @@ describe('kliknięcia', () => {
     expect(godzinaZKlikniecia(150)).toBe('21:30')
   })
 
-  it('godzinaZKlikniecia zaokrągla do 30 minut', () => {
-    // 8 + 0.08 * 14 = 9.12 h => 9:07 => 9:00 ; 8 + 0.10 * 14 = 9.4 h => 9:24 => 9:30
+  it('godzinaZKlikniecia bierze slot 30 min pod kursorem', () => {
+    // 8 + 0.08 * 14 = 9.12 h => 9:07 => 9:00 ; 8 + 0.10 * 14 = 9.4 h => 9:24 => 9:00
     expect(godzinaZKlikniecia(8)).toBe('09:00')
-    expect(godzinaZKlikniecia(10)).toBe('09:30')
+    expect(godzinaZKlikniecia(10)).toBe('09:00')
+    expect(godzinaZKlikniecia(11)).toBe('09:30')
   })
 
   it('godzinaZKliknieciaPion', () => {
