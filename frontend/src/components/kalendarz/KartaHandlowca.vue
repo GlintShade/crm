@@ -94,7 +94,15 @@
           class="relative h-full min-w-0 flex-1 cursor-pointer"
           :data-dzien="dzien"
           @click="klikPuste($event, dzien)"
+          @mousemove="ruchMyszy($event, dzien)"
+          @mouseleave="najazd = null"
         >
+          <span
+            v-if="najazd && najazd.dzien === dzien"
+            class="pointer-events-none absolute bottom-0.5 top-0.5 z-[1] rounded-[5px] bg-surface-gray-3"
+            :style="{ left: najazd.left, width: najazd.width }"
+            data-testid="kalendarz-podglad-slotu"
+          ></span>
           <div
             class="absolute inset-0 rounded-md"
             :class="[
@@ -192,7 +200,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { Button, FeatherIcon } from 'frappe-ui'
 import NaglowekKarty from '@/components/kalendarz/NaglowekKarty.vue'
 import DymekSpotkania from '@/components/kalendarz/DymekSpotkania.vue'
@@ -203,6 +211,7 @@ import {
   czyWeekend,
   etykietaChipa,
   etykietaZakresu as zbudujEtykieteZakresu,
+  blokKlikniecia,
   godzinaZKlikniecia,
   godzinyEtykiet,
   kolorHandlowca,
@@ -279,6 +288,20 @@ const etykietaZakresu = computed(() =>
 function znacznikTeraz(dzien) {
   if (!czyDzis(dzien, props.teraz)) return null
   return pozycjaTeraz(props.teraz, os.value.od, os.value.do)
+}
+
+const najazd = ref(null)
+
+function ruchMyszy(event, dzien) {
+  if (event.target.closest('[data-lead]')) {
+    najazd.value = null
+    return
+  }
+  const prostokat = event.currentTarget.getBoundingClientRect()
+  if (!prostokat.width) return
+  const xPct = ((event.clientX - prostokat.left) / prostokat.width) * 100
+  const { left, width } = blokKlikniecia(xPct, os.value.od, os.value.do)
+  najazd.value = { dzien, left, width }
 }
 
 function klikPuste(event, dzien) {

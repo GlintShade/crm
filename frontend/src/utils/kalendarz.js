@@ -288,6 +288,37 @@ export function godzinaZKliknieciaPion(
   return `${d2(Math.floor(ograniczone / 60))}:${d2(ograniczone % 60)}`
 }
 
+/** Godziny dziesietne z `HH:MM`. */
+function godzinaDoLiczby(godzina) {
+  const [h, m] = godzina.split(':').map(Number)
+  return h + m / 60
+}
+
+/**
+ * Blok 30 min, ktory przypisze klik w pozycji `xPct` (poziomo). Ta sama
+ * godzina co `godzinaZKlikniecia`, plus left/width w % do podswietlenia.
+ */
+export function blokKlikniecia(xPct, od = OS_OD, doGodziny = OS_DO) {
+  const godzina = godzinaZKlikniecia(xPct, od, doGodziny)
+  const start = godzinaDoLiczby(godzina)
+  return {
+    godzina,
+    ...stylOdcinkaPoziomo(start, start + 0.5, od, doGodziny),
+  }
+}
+
+/** Blok 30 min dla kliku w pionie (`yPx` od gory siatki): top/height w px. */
+export function blokKliknieciaPion(
+  yPx,
+  od = OS_OD,
+  doGodziny = OS_DO,
+  pxNaH = PX_NA_GODZINE,
+) {
+  const godzina = godzinaZKliknieciaPion(yPx, od, doGodziny, pxNaH)
+  const start = godzinaDoLiczby(godzina)
+  return { godzina, ...stylOdcinkaPion(start, start + 0.5, od, pxNaH) }
+}
+
 /** Opcje godzin do modalu: 06:00 do 21:00 co 30 min. */
 export function opcjeGodzin(od = 6, doGodziny = 22) {
   const wynik = []

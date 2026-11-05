@@ -96,7 +96,15 @@
           :style="{ height: wysokosc + 'px' }"
           :data-dzien="dzien"
           @click="klikPuste($event, dzien)"
+          @mousemove="ruchMyszy($event, dzien)"
+          @mouseleave="najazd = null"
         >
+          <span
+            v-if="najazd && najazd.dzien === dzien"
+            class="pointer-events-none absolute inset-x-0.5 z-[1] rounded-[5px] bg-surface-gray-3"
+            :style="{ top: najazd.top, height: najazd.height }"
+            data-testid="kalendarz-podglad-slotu"
+          ></span>
           <span
             v-for="g in godziny"
             :key="g"
@@ -179,6 +187,7 @@ import {
   etykietaDniaZMiesiacem,
   etykietaZakresu as zbudujEtykieteZakresu,
   godzinaTekst,
+  blokKliknieciaPion,
   godzinaZKliknieciaPion,
   DLUGOSC_SPOTKANIA_H,
   czyJednaLiniaBloku,
@@ -318,6 +327,23 @@ function znacznikTeraz(dzien) {
   const pct = pozycjaTeraz(props.teraz, os.value.od, os.value.do)
   if (pct === null) return null
   return (pct / 100) * wysokosc.value
+}
+
+const najazd = ref(null)
+
+function ruchMyszy(event, dzien) {
+  if (event.target.closest('[data-lead]')) {
+    najazd.value = null
+    return
+  }
+  const prostokat = event.currentTarget.getBoundingClientRect()
+  const { top, height } = blokKliknieciaPion(
+    event.clientY - prostokat.top,
+    os.value.od,
+    os.value.do,
+    pxNaH.value,
+  )
+  najazd.value = { dzien, top, height }
 }
 
 function klikPuste(event, dzien) {

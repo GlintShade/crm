@@ -43,6 +43,8 @@ import {
   godzinaTekst,
   godzinaZKlikniecia,
   godzinaZKliknieciaPion,
+  blokKlikniecia,
+  blokKliknieciaPion,
   godzinyOsi,
   indeksDniaTygodnia,
   inicjaly,
@@ -286,6 +288,40 @@ describe('oś godzin i pozycje', () => {
     })
     expect(godzinaZKliknieciaPion(k, 8, 18, k)).toBe('09:00')
     expect(godzinaZKliknieciaPion(2.5 * k, 8, 18, k)).toBe('10:30')
+  })
+
+  it('blokKlikniecia zgadza sie z godzinaZKlikniecia na granicach', () => {
+    const w = 100 / 14
+    for (const x of [0, 1, w / 4, w / 2, w, 1.5 * w, 50, 99, 100]) {
+      expect(blokKlikniecia(x).godzina).toBe(godzinaZKlikniecia(x))
+    }
+    const pierwszy = blokKlikniecia(0)
+    expect(pierwszy.godzina).toBe('08:00')
+    expect(pierwszy.left).toBe('0%')
+    expect(parseFloat(pierwszy.width)).toBeCloseTo((0.5 / 14) * 100, 8)
+    const ost = blokKlikniecia(100)
+    expect(ost.godzina).toBe('21:30')
+    expect(parseFloat(ost.left) + parseFloat(ost.width)).toBeCloseTo(100, 8)
+    const b = blokKlikniecia((0.5 / 14) * 100)
+    expect(b.godzina).toBe('08:30')
+    expect(parseFloat(b.left)).toBeCloseTo((0.5 / 14) * 100, 8)
+  })
+
+  it('blokKliknieciaPion zgadza sie z godzinaZKliknieciaPion', () => {
+    const k = PX_NA_GODZINE_KOMPAKT
+    for (const y of [-5, 0, k / 4, k / 2, k, 1.5 * k, 13.9 * k, 20 * k]) {
+      expect(blokKliknieciaPion(y, 8, 22, k).godzina).toBe(
+        godzinaZKliknieciaPion(y, 8, 22, k),
+      )
+    }
+    const p = blokKliknieciaPion(0, 8, 22, k)
+    expect(p.godzina).toBe('08:00')
+    expect(p.top).toBe('0px')
+    expect(p.height).toBe(`${0.5 * k}px`)
+    const ost = blokKliknieciaPion(20 * k, 8, 22, k)
+    expect(ost.godzina).toBe('21:30')
+    expect(ost.top).toBe(`${13.5 * k}px`)
+    expect(blokKliknieciaPion(0.5 * k, 8, 22, k).godzina).toBe('08:30')
   })
 
   it('pozycjaTeraz w osi i poza nią', () => {
