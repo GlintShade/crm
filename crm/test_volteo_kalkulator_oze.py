@@ -480,6 +480,30 @@ class OblozOfertePompaCieplaTest(unittest.TestCase):
 		self.assertEqual(wynik["ulga"], Decimal("4432.32"))
 		self.assertEqual(wynik["raty"]["brutto"], Decimal("529.92"))
 
+	def test_ulga_32_procent_golden(self) -> None:
+		# Trzecia dozwolona stawka ulgi (b84, obok 12% i 19%): sama liczba
+		# (cena_po_dotacji * ulga_pct / 100) jest identyczna co do wzoru jak
+		# przy 12%/19%, tylko stawka jest inna -- ten test pilnuje, ze 32%
+		# faktycznie przechodzi przez walidacje `0 <= ulga_pct <= 100` i liczy
+		# poprawnie, zaokraglajac do grosza jak reszta kwot.
+		wynik = oblicz_oferte(wejscie_pc(ulga_pct=32), CENNIK, DOBOR, STALE)
+		self.assertEqual(wynik["brutto"], Decimal("36936.00"))
+		self.assertEqual(wynik["ulga"], Decimal("11819.52"))
+		self.assertEqual(wynik["cena_po_uldze"], Decimal("25116.48"))
+		self.assertEqual(wynik["raty"]["po_uldze"], Decimal("360.35"))
+
+	def test_ulga_32_procent_zaokraglenie_do_grosza(self) -> None:
+		# Przypadek, w ktorym podstawa x 0,32 wychodzi z trzecim miejscem po
+		# przecinku rozne od zera (42055.20 * 0.32 = 13457.664) -- pilnuje
+		# ROUND_HALF_UP identycznego jak przy pozostalych stawkach ulgi.
+		wynik = oblicz_oferte(
+			wejscie_pc(pompa={"zapotrzebowanie": "6.5", "cwu": "200", "grzejniki": {"600x800": 2}}, ulga_pct=32),
+			CENNIK, DOBOR, STALE,
+		)
+		self.assertEqual(wynik["brutto"], Decimal("42055.20"))
+		self.assertEqual(wynik["ulga"], Decimal("13457.66"))
+		self.assertEqual(wynik["cena_po_uldze"], Decimal("28597.54"))
+
 	def test_6_5_z_cwu_200_i_grzejnikami(self) -> None:
 		wynik = oblicz_oferte(
 			wejscie_pc(pompa={"zapotrzebowanie": "6.5", "cwu": "200", "grzejniki": {"600x800": 2}}),

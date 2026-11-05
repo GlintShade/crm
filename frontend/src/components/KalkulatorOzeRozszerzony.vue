@@ -275,6 +275,7 @@
                     <select v-model.number="form.ulgaPct" class="kalk-select">
                       <option :value="12">12%</option>
                       <option :value="19">19%</option>
+                      <option :value="32">32%</option>
                     </select>
                   </div>
                   <div>
