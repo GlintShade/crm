@@ -21,7 +21,7 @@
             v-model="tylkoFb"
             type="checkbox"
             class="mb-2"
-            :label="__('Tylko leady z Facebooka')"
+            :label="__('Wyświetl tylko leady z reklam')"
             data-testid="kalendarz-tylko-fb"
           />
           <Autocomplete
@@ -48,11 +48,17 @@
           </Autocomplete>
         </div>
         <div class="grid grid-cols-2 gap-3">
-          <FormControl
-            v-model="data"
-            type="date"
-            :label="__('Dzień spotkania')"
-          />
+          <div>
+            <label class="mb-1 block text-xs text-ink-gray-5">{{
+              __('Dzień spotkania')
+            }}</label>
+            <DatePicker
+              v-model="data"
+              format="DD.MM.YYYY"
+              placeholder="DD.MM.RRRR"
+              data-testid="kalendarz-dzien"
+            />
+          </div>
           <FormControl
             v-model="godzina"
             type="select"
@@ -108,6 +114,7 @@ import { computed, ref, watch } from 'vue'
 import {
   Button,
   Dialog,
+  DatePicker,
   ErrorMessage,
   FormControl,
   call,
