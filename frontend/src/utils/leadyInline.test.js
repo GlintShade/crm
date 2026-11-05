@@ -16,6 +16,7 @@ import {
   normalizujKodPocztowy,
   wartoscTekstuDoZapisu,
   czyWartoscSieZmienila,
+  polaAdresuZKoduWiersza,
 } from './leadyInline'
 
 describe('KOLUMNY_INLINE / czyKolumnaInline', () => {
@@ -363,6 +364,81 @@ describe('wartoscTekstuDoZapisu', () => {
       wartosc: '45-001',
     })
     expect(wartoscTekstuDoZapisu('custom_install_postal_code', '450').ok).toBe(false)
+  })
+})
+
+describe('polaAdresuZKoduWiersza (b84/ops#329: adres po edycji kodu w komorce listy)', () => {
+  const WYNIK = {
+    found: true,
+    wojewodztwo: 'opolskie',
+    powiat: 'nyski',
+    gmina: 'Nysa',
+    miejscowosc: 'Nysa',
+    cities: ['Nysa', 'Radzikowice'],
+  }
+
+  it('uzupelnia wojewodztwo i powiat z wiersza bez custom_gmina', () => {
+    const row = {
+      custom_install_postal_code: '48-300',
+      custom_voivodeship: '',
+      custom_powiat: '',
+    }
+    expect(polaAdresuZKoduWiersza(row, WYNIK, false)).toEqual({
+      custom_voivodeship: 'opolskie',
+      custom_powiat: 'nyski',
+    })
+  })
+
+  it('dokleja gmine tylko gdy CRM Lead ma to pole (maPoleGminy=true)', () => {
+    const row = {
+      custom_install_postal_code: '48-300',
+      custom_voivodeship: '',
+      custom_powiat: '',
+    }
+    expect(polaAdresuZKoduWiersza(row, WYNIK, true)).toEqual({
+      custom_voivodeship: 'opolskie',
+      custom_powiat: 'nyski',
+      custom_gmina: 'Nysa',
+    })
+  })
+
+  it('brak klucza custom_gmina w surowym wierszu nie przeszkadza, gdy maPoleGminy=true', () => {
+    const row = { custom_install_postal_code: '48-300' }
+    expect(polaAdresuZKoduWiersza(row, WYNIK, true)).toMatchObject({
+      custom_gmina: 'Nysa',
+    })
+  })
+
+  it('miejscowosc nigdy nie wchodzi do latki, nawet z jedna miejscowoscia na liscie', () => {
+    const jedna = { ...WYNIK, cities: ['Radzikowice'] }
+    const latka = polaAdresuZKoduWiersza({}, jedna, true)
+    expect(latka).not.toHaveProperty('custom_install_city')
+  })
+
+  it('brak wyniku (nie znaleziono kodu) daje pusty obiekt', () => {
+    expect(
+      polaAdresuZKoduWiersza({}, { found: false, cities: [] }, true),
+    ).toEqual({})
+  })
+
+  it('pola juz zgodne z wynikiem nie trafiaja do latki (pusta latka)', () => {
+    const row = {
+      custom_install_postal_code: '48-300',
+      custom_voivodeship: 'opolskie',
+      custom_powiat: 'nyski',
+      custom_gmina: 'Nysa',
+    }
+    expect(polaAdresuZKoduWiersza(row, WYNIK, true)).toEqual({})
+  })
+
+  it('brakujacy wiersz (null/undefined) nie wywala wyjatku', () => {
+    expect(polaAdresuZKoduWiersza(null, WYNIK, false)).toEqual({
+      custom_voivodeship: 'opolskie',
+      custom_powiat: 'nyski',
+    })
+    expect(polaAdresuZKoduWiersza(undefined, WYNIK, true)).toMatchObject({
+      custom_gmina: 'Nysa',
+    })
   })
 })
 

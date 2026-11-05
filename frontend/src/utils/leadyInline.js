@@ -4,6 +4,10 @@
 // (ten sam pulapka co w utils/aktualizacje.js: barel '@/utils' eagerly
 // laduje unplugin-icons przez ~icons/lucide/*, ktorego vitest.config.js nie
 // zna, wiec kazdy test transzytywnie importujacy '@/utils' by sie wywalil).
+// Import z './kodPocztowy' (plik siostrzany, nie barel) jest bezpieczny: ten
+// modul tez nie dotyka '@/utils' ani Vue.
+
+import { POLE_GMINY, POLE_KODU, latkaAdresuZKodu } from './kodPocztowy'
 
 // Kolumny listy leadow obslugiwane inline (LeadsListView.vue renderuje dla
 // nich LeadInlineCell.vue zamiast generycznej etykiety). custom_cc celowo
@@ -118,6 +122,31 @@ export function wartoscTekstuDoZapisu(fieldname, wpis) {
     return normalizujKodPocztowy(wpis)
   }
   return { ok: true, wartosc: String(wpis ?? '').trim() }
+}
+
+// b84/ops#329: po edycji kodu pocztowego w komorce listy (format NN-NNN juz
+// przeszedl przez normalizujKodPocztowy) trzeba dociagnac wojewodztwo, powiat
+// i gmine tak samo jak w panelu leada -- ta sama funkcja czysta
+// `latkaAdresuZKodu` (utils/kodPocztowy.js), tylko zbudowana z surowego
+// wiersza listy zamiast z document.doc. Miejscowosc NIGDY nie wchodzi do
+// latki (decyzja wlasciciela, latkaAdresuZKodu juz to gwarantuje).
+//
+// `row` to surowy wiersz listy (leads.data.data z backendu): moze nie miec
+// klucza custom_gmina wcale, jesli ta kolumna nie jest w widoku -- to NIE
+// jest to samo co "lead nie ma pola custom_gmina" (patrz
+// czyPokazacPustaMiejscowosc / latkaAdresuZKodu w panelu, ktore sprawdzaja
+// Object.hasOwn na pelnym document.doc). Dlatego obecnosc pola dostaje
+// wolajacy jako osobny argument `maPoleGminy` (z meta doctype'u CRM Lead,
+// LeadInlineCell.vue), niezaleznie od tego, czy wiersz akurat ma ta kolumne
+// zaladowana.
+export function polaAdresuZKoduWiersza(row, wynik, maPoleGminy) {
+  const doc = {
+    [POLE_KODU]: row?.custom_install_postal_code ?? '',
+    custom_voivodeship: row?.custom_voivodeship ?? '',
+    custom_powiat: row?.custom_powiat ?? '',
+  }
+  if (maPoleGminy) doc[POLE_GMINY] = row?.custom_gmina ?? ''
+  return latkaAdresuZKodu(doc, wynik)
 }
 
 // Czy zapis ma sens: null/undefined i '' traktujemy jako ta sama pusta

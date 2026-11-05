@@ -73,6 +73,29 @@
   - "Rewert" przy bledzie: kontrolki natywne (select, input) trzymaja wlasny
     stan DOM, wiec po bledzie podbijamy `wersjaKontrolki` (klucz), co
     przerysowuje kontrolke z wartoscia sprzed edycji.
+
+  b84 (ops#329): custom_install_city (Miejscowosc) w edycji dostaje ten sam
+  widget co panel leada -- MiejscowoscInput.vue (lista miejscowosci dla kodu
+  z tego wiersza + zawsze "Recznie" na koncu, placeholder "Wybierz", nic nie
+  wybiera sie samo). WYDAJNOSC LISTY: komponent (a wiec i lookup kodu w
+  data/kodPocztowy.js) montuje sie dopiero pod `v-if="edytujeTekst"`, czyli
+  tak samo pozno jak zwykle pole tekstowe innych kolumn adresu -- lookup NIE
+  rusza przy renderze/przewijaniu listy, tylko przy kliknieciu w komorke.
+  Dopoki trwa edycja, szkic trzyma biezaca wartosc (jak dla reszty pol
+  tekstowych); samo wybranie miejscowosci albo zatwierdzenie recznego wpisu
+  idzie przez ten sam `zatwierdzTekst`, ktory i tak juz obslugiwal blur z
+  TextInput (tu wywolywany wprost z @change, bo MiejscowoscInput emituje
+  gotowa wartosc, nie zdarzenie DOM).
+
+  Po udanym zapisie custom_install_postal_code (poprawny format NN-NNN) ten
+  sam wiersz dostaje jeszcze jeden cichy zapis: wojewodztwo, powiat i (gdy
+  CRM Lead ma to pole) gmina z lookupu kodu -- ta sama logika czysta co w
+  panelu (`polaAdresuZKoduWiersza` w utils/leadyInline.js, zbudowana na
+  `latkaAdresuZKodu` z utils/kodPocztowy.js), ten sam wspoldzielony cache
+  lookupu (data/kodPocztowy.js::pobierzDaneKodu), wiec panel i lista nie
+  odpytuja dwa razy tego samego kodu. Miejscowosc NIGDY nie jest ustawiana
+  automatycznie. Blad lookupu albo tego zapisu jest cichy (bez toasta) --
+  sam kod pocztowy juz dostal swoj "Zapisano" przez zwykly `zapiszWartosc`.
 -->
 <template>
   <div
@@ -221,8 +244,18 @@
     />
 
     <template v-else-if="KOLUMNY_TEKSTOWE_INLINE.has(column.key)">
+      <MiejscowoscInput
+        v-if="edytujeTekst && column.key === 'custom_install_city'"
+        :key="`miejscowosc-${wersjaKontrolki}`"
+        class="w-full"
+        :value="szkic"
+        :kod="row.custom_install_postal_code"
+        :placeholder="placeholderTekstu"
+        :disabled="zapisywanie"
+        @change="zatwierdzTekst"
+      />
       <TextInput
-        v-if="edytujeTekst"
+        v-else-if="edytujeTekst"
         ref="poleTekstoweRef"
         :key="`tekst-${wersjaKontrolki}`"
         size="sm"
@@ -234,7 +267,7 @@
         :maxlength="column.key === 'custom_install_postal_code' ? 8 : undefined"
         @input="(e) => (szkic = e.target.value)"
         @keydown="onKeydownTekstu"
-        @blur="zatwierdzTekst"
+        @blur="() => zatwierdzTekst()"
       />
       <datalist
         v-if="edytujeTekst && column.key === 'custom_powiat'"
@@ -281,9 +314,12 @@ import {
   czyWartoscSieZmienila,
   emailUzytkownikaZKomorki,
   mozePrzypisywacHandlowca,
+  polaAdresuZKoduWiersza,
   surowaWartoscKomorki,
   wartoscTekstuDoZapisu,
 } from '@/utils/leadyInline'
+import { POLE_GMINY } from '@/utils/kodPocztowy'
+import { pobierzDaneKodu } from '@/data/kodPocztowy'
 import { parseLinkFilters } from '@/utils/fieldTransforms'
 import { isTranslatable, getFormat } from '@/utils'
 import {
@@ -299,6 +335,7 @@ import {
 import CzasGgMmInput from '@/components/Controls/CzasGgMmInput.vue'
 import DateTimePickerSiatka from '@/components/Controls/DateTimePickerSiatka.vue'
 import Link from '@/components/Controls/Link.vue'
+import MiejscowoscInput from '@/components/Controls/MiejscowoscInput.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { computed, nextTick, ref, watch } from 'vue'
 
@@ -482,10 +519,15 @@ async function rozpocznijEdycjeTekstu() {
   el?.select?.()
 }
 
-async function zatwierdzTekst() {
+// `wartoscWpisana` (opcjonalny): MiejscowoscInput emituje @change z gotowa
+// wartoscia string (wybor z listy albo zatwierdzony reczny wpis), wiec
+// wolamy ta funkcje wprost z jej wartoscia; TextInput i Enter/blur nie
+// podaja argumentu, wiec spada do `szkic.value` jak dotad.
+async function zatwierdzTekst(wartoscWpisana) {
   if (!edytujeTekst.value) return
   edytujeTekst.value = false
-  const wynik = wartoscTekstuDoZapisu(props.column.key, szkic.value)
+  const surowa = wartoscWpisana === undefined ? szkic.value : wartoscWpisana
+  const wynik = wartoscTekstuDoZapisu(props.column.key, surowa)
   if (!wynik.ok) {
     toast.error(__(wynik.blad))
     return
@@ -493,9 +535,39 @@ async function zatwierdzTekst() {
   if (!czyWartoscSieZmienila(wartosc.value, wynik.wartosc)) return
   zapisywanyTekst.value = wynik.wartosc
   try {
-    await zapiszWartosc(props.column.key, wynik.wartosc)
+    const zapisano = await zapiszWartosc(props.column.key, wynik.wartosc)
+    if (zapisano && props.column.key === 'custom_install_postal_code') {
+      await uzupelnijAdresPoKodzie(wynik.wartosc)
+    }
   } finally {
     zapisywanyTekst.value = null
+  }
+}
+
+// b84 (ops#329): po zapisanym kodzie pocztowym dociaga wojewodztwo, powiat i
+// (gdy CRM Lead ma to pole) gmine -- ta sama logika i ten sam wspoldzielony
+// cache lookupu co panel leada (data/kodPocztowy.js). Miejscowosc nigdy nie
+// jest ustawiana. Zapis jednym set_value ze slownikiem pol; po sukcesie
+// kazde pole leci do rodzica przez 'saved' (ten sam kontrakt co reszta
+// komorek), zeby wiersz na liscie odswiezyl sie bez przeladowania. Caly blad
+// (lookup albo zapis) jest cichy -- sam kod juz dostal swoj toast sukcesu.
+async function uzupelnijAdresPoKodzie(kod) {
+  try {
+    const wynik = await pobierzDaneKodu(kod)
+    const maPoleGminy = meta.getFields().some((f) => f.fieldname === POLE_GMINY)
+    const latka = polaAdresuZKoduWiersza(props.row, wynik, maPoleGminy)
+    const wpisy = Object.entries(latka)
+    if (!wpisy.length) return
+    await call('frappe.client.set_value', {
+      doctype: 'CRM Lead',
+      name: props.row.name,
+      fieldname: latka,
+    })
+    for (const [fieldname, value] of wpisy) {
+      emit('saved', { fieldname, value })
+    }
+  } catch {
+    // cichy (ops#329): blad lookupu albo zapisu adresu nie przerywa niczego
   }
 }
 
