@@ -113,7 +113,7 @@
                       v-else-if="field.read_only"
                       :class="[
                         'whitespace-pre-wrap break-words px-2 py-1 text-base',
-                        karty ? 'text-ink-gray-8' : 'text-ink-gray-5',
+                        karty ? 'text-ink-gray-7' : 'text-ink-gray-5',
                       ]"
                     >
                       {{ doc[field.fieldname] }}
@@ -190,7 +190,15 @@
                       ]"
                     >
                       <div
-                        class="wartosc-pola grid min-h-[28px] flex-1 items-center overflow-hidden text-base"
+                        :class="[
+                          'wartosc-pola grid min-h-[28px] flex-1 items-center overflow-hidden text-base',
+                          karty &&
+                            (field.read_only
+                              ? 'wartosc-ro'
+                              : ['Check', 'Button', 'HTML', 'Rating', 'Dropdown', 'Attach', 'Attach Image', 'Text Editor', 'Geolocation'].includes(field.fieldtype)
+                                ? 'wartosc-bez-ramki'
+                                : 'wartosc-edyt'),
+                        ]"
                       >
                         <div
                           v-if="
@@ -215,8 +223,8 @@
                             ].includes(field.fieldtype)
                           "
                           :class="[
-                            'flex h-7 cursor-pointer items-center px-2 py-1',
-                            karty ? 'text-ink-gray-8' : 'text-ink-gray-5',
+                            'flex h-7 items-center px-2 py-1',
+                            karty ? 'cursor-default text-ink-gray-7' : 'cursor-pointer text-ink-gray-5',
                           ]"
                         >
                           <Tooltip :text="__(field.tooltip)">
@@ -1192,6 +1200,49 @@ function firstVisibleIndex() {
 .sections-karty :deep(.wartosc-pola input::placeholder),
 .sections-karty :deep(.wartosc-pola textarea::placeholder) {
   @apply text-ink-gray-4;
+  -webkit-text-fill-color: currentColor;
+}
+/* Wariant karty: edytowalne pole = jasnoszare pudelko (bg-surface-gray-2,
+   ciemniejsze na hover, kursor wskazujacy), tylko do odczytu = bez pudelka,
+   zwykly tekst text-ink-gray-7. Pudelko jest na kontenerze .wartosc-pola, a
+   kontrolki w srodku (input/select/przycisk/picker) sa przezroczyste, zeby
+   kazdy typ pola (Link, Date, Datetime, Duration, tagi, Miejscowosc) wygladal
+   tak samo jak Select. Tylko style, zero zmiany zachowania. */
+.sections-karty .wartosc-edyt {
+  @apply cursor-pointer rounded bg-surface-gray-2 transition-colors;
+}
+.sections-karty .wartosc-edyt:hover,
+.sections-karty .wartosc-edyt:focus-within {
+  @apply bg-surface-gray-3;
+}
+.sections-karty .wartosc-edyt :deep(input),
+.sections-karty .wartosc-edyt :deep(textarea),
+.sections-karty .wartosc-edyt :deep(select),
+.sections-karty .wartosc-edyt :deep(button),
+.sections-karty .wartosc-edyt :deep([class*='bg-surface-gray-']),
+.sections-karty .wartosc-edyt :deep([class*='bg-surface-white']) {
+  background: transparent !important;
+  box-shadow: none !important;
+  cursor: pointer;
+}
+.sections-karty .wartosc-edyt :deep(input:not([type='checkbox'])),
+.sections-karty .wartosc-edyt :deep(textarea) {
+  cursor: text;
+}
+.sections-karty .wartosc-ro,
+.sections-karty .wartosc-ro :deep(*) {
+  cursor: default;
+}
+.sections-karty .wartosc-ro.wartosc-pola,
+.sections-karty .wartosc-ro :deep([class*='text-ink-gray-']:not(.text-ink-gray-4):not([class*='lucide-']):not(svg)),
+.sections-karty .wartosc-ro :deep(input),
+.sections-karty .wartosc-ro :deep(textarea),
+.sections-karty .wartosc-ro :deep(select),
+.sections-karty .wartosc-ro :deep(button),
+.sections-karty .wartosc-ro :deep([class*='bg-surface-gray-']) {
+  background: transparent !important;
+  box-shadow: none !important;
+  @apply text-ink-gray-7;
   -webkit-text-fill-color: currentColor;
 }
 .sections-karty .section .column {
