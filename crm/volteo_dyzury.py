@@ -20,7 +20,7 @@ from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from crm.volteo_leady_import import SEPARATOR_UWAG
-from crm.volteo_sms import przygotuj_tresc
+from crm.volteo_sms import waliduj_szablon, wypelnij_szablon
 
 DNI_TYGODNIA: tuple[str, ...] = (
 	"Poniedziałek",
@@ -370,48 +370,20 @@ def okreg_z_kampanii(kampania: Any) -> str:
 	return ""
 
 
-class _SlownikBezBrakow(dict):
-	def __missing__(self, klucz: str) -> str:
-		return ""
-
-
-_PLACEHOLDER = re.compile(r"\{(\w+)\}")
-
-
 def zbuduj_tresc_dyzur(szablon: str, dane: Mapping[str, Any]) -> tuple[str, str | None]:
 	"""Podstawia placeholdery, potem transliteracja GSM-7 (`przygotuj_tresc`).
 
 	Brakujący klucz w `dane` daje pusty string, nieznany placeholder zostaje bez zmian.
-	Zwraca (treść, ostrzeżenie o liczbie części lub None).
+	Zwraca (treść, ostrzeżenie o liczbie części lub None). Nakładka na wspólne
+	`crm.volteo_sms.wypelnij_szablon` ze znanymi `PLACEHOLDERY_DYZUR`.
 	"""
-	znane = set(PLACEHOLDERY_DYZUR)
-
-	def _podstaw(trafienie: re.Match) -> str:
-		klucz = trafienie.group(1)
-		if klucz not in znane:
-			return trafienie.group(0)
-		wartosc = dane.get(klucz)
-		return "" if wartosc is None else str(wartosc)
-
-	surowa = _PLACEHOLDER.sub(_podstaw, szablon or "")
-	surowa = re.sub(r"[ \t]+", " ", surowa)
-	surowa = re.sub(r"\|(?:\s*\|)+", "|", surowa)
-	surowa = re.sub(r"([,;:])(?:\s*[,;:])+", r"\1", surowa)
-	surowa = re.sub(r"^\s*\|\s*|\s*\|\s*$", "", surowa)
-	surowa = re.sub(r"\s+([,.;:])", r"\1", surowa)
-	surowa = re.sub(r"([,;:])\s*(?=[.])", "", surowa)
-	return przygotuj_tresc(surowa)
+	return wypelnij_szablon(szablon, dane, PLACEHOLDERY_DYZUR)
 
 
 def waliduj_tresc_dyzur(szablon: Any) -> str | None:
-	"""Komunikat błędu po polsku albo None, gdy treść szablonu jest poprawna."""
-	if not isinstance(szablon, str) or not szablon.strip():
-		return "Treść SMS nie może być pusta."
-	for nazwa in _PLACEHOLDER.findall(szablon):
-		if nazwa not in PLACEHOLDERY_DYZUR:
-			dozwolone = ", ".join("{" + p + "}" for p in PLACEHOLDERY_DYZUR)
-			return f"Nieznany placeholder {{{nazwa}}}. Dozwolone: {dozwolone}."
-	return None
+	"""Komunikat błędu po polsku albo None, gdy treść szablonu jest poprawna
+	(nakładka na `crm.volteo_sms.waliduj_szablon` z `PLACEHOLDERY_DYZUR`)."""
+	return waliduj_szablon(szablon, PLACEHOLDERY_DYZUR)
 
 
 def waliduj_limit_dyzur(limit: Any) -> str | None:

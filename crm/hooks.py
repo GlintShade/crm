@@ -368,7 +368,11 @@ scheduler_events = {
 			"crm.lead_syncing.background_sync.sync_leads_from_sources_10_minutes",
 			"crm.integrations.autenti.api.poll_autenti_status",
 		],
-		"*/15 * * * *": ["crm.lead_syncing.background_sync.sync_leads_from_sources_15_minutes"],
+		"*/15 * * * *": [
+			"crm.lead_syncing.background_sync.sync_leads_from_sources_15_minutes",
+			# VOLTEO (SMS do handlowca): kolejka SMS odlozonych przez cisze nocna 21:00 do 08:00
+			"crm.api.sms_handlowiec.przetworz_odroczone",
+		],
 	},
 }
 

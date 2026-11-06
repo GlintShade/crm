@@ -576,11 +576,19 @@ def przydziel(
 	)
 
 	przydzielone_nazwy = []
-	for nazwa_leada in kandydaci:
-		doc = frappe.get_doc("CRM Lead", nazwa_leada)
-		doc.lead_owner = handlowiec
-		doc.save(ignore_permissions=True)
-		przydzielone_nazwy.append(nazwa_leada)
+	# VOLTEO (SMS do handlowca): pakiet nie wysyla SMS do handlowca (decyzja D7);
+	# flaga czytana w crm.api.sms_handlowiec.zakolejkuj_sms_handlowca, poprzednia
+	# wartosc przywracana zawsze, takze po wyjatku.
+	poprzednia_flaga_sms = frappe.flags.get("volteo_bez_sms_handlowca")
+	frappe.flags.volteo_bez_sms_handlowca = True
+	try:
+		for nazwa_leada in kandydaci:
+			doc = frappe.get_doc("CRM Lead", nazwa_leada)
+			doc.lead_owner = handlowiec
+			doc.save(ignore_permissions=True)
+			przydzielone_nazwy.append(nazwa_leada)
+	finally:
+		frappe.flags.volteo_bez_sms_handlowca = poprzednia_flaga_sms
 
 	pozostalo_w_puli = frappe.db.sql(
 		f"""

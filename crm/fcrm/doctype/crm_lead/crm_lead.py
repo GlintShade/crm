@@ -9,6 +9,7 @@ from frappe.desk.form.assign_to import _add as assign
 from frappe.model.document import Document
 from frappe.utils import validate_email_address
 
+from crm.api.sms_handlowiec import zakolejkuj_sms_handlowca
 from crm.fcrm.doctype.crm_service_level_agreement.utils import get_sla
 from crm.fcrm.doctype.crm_status_change_log.crm_status_change_log import (
 	add_status_change_log,
@@ -132,6 +133,9 @@ class CRMLead(Document):
 		# tym samym zdarzeniu). Funkcja sama wychodzi po cichu, gdy nic sie nie
 		# zmienilo albo gdy to wlasnie pierwszy przydzial (patrz jej docstring).
 		powiadom_o_zmianie_terminu(self)
+		# VOLTEO (SMS do handlowca): SMS do handlowca o nowym, zmienionym albo odwolanym
+		# spotkaniu; tylko kolejkuje po commicie, sam lapie kazdy wyjatek (zapis zawsze przechodzi).
+		zakolejkuj_sms_handlowca(self)
 		# VOLTEO (b82): po zmianie lead_owner z A na B (albo wyczyszczeniu) A traci
 		# ToDo i DocShare na tym leadzie, inaczej dalej widzi go przez galaz ToDo w
 		# org_hierarchy._permission_query_conditions. custom_cc jest chroniony.
