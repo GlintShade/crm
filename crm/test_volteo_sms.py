@@ -21,6 +21,8 @@ from crm.volteo_sms import (
 	przetworz,
 	przygotuj_tresc,
 	transliteruj_gsm7,
+	waliduj_szablon,
+	wypelnij_szablon,
 	wzor_info_dnia,
 	zbuduj_info,
 	zbuduj_parametry,
@@ -383,6 +385,73 @@ class TestPrzetworz(unittest.TestCase):
 		kopia = list(daty)
 		wywolaj(daty_innych_wyslanych=daty)
 		self.assertEqual(daty, kopia)
+
+
+class TestWypelnijSzablon(unittest.TestCase):
+	ZNANE = ("klient", "telefon", "kod", "link")
+
+	def test_podstawia_i_transliteruje(self):
+		tresc, ostrz = wypelnij_szablon(
+			"Łódź: {klient}, tel. {telefon}", {"klient": "Żaneta", "telefon": "600"}, self.ZNANE
+		)
+		self.assertEqual(tresc, "Lodz: Zaneta, tel. 600")
+		self.assertIsNone(ostrz)
+
+	def test_nieznany_placeholder_zostaje(self):
+		tresc, _ = wypelnij_szablon("{cc} {klient}", {"klient": "Jan", "cc": "Tajna"}, self.ZNANE)
+		self.assertEqual(tresc, "{cc} Jan")
+
+	def test_brakujacy_i_none_daja_pusty(self):
+		tresc, _ = wypelnij_szablon("A {kod} B {klient}!", {"klient": None}, self.ZNANE)
+		self.assertEqual(tresc, "A B !")
+
+	def test_sprzatanie_separatorow(self):
+		tresc, _ = wypelnij_szablon(
+			"{klient}, {kod}, {telefon}. {link}", {"klient": "Jan", "telefon": "600"}, self.ZNANE
+		)
+		self.assertEqual(tresc, "Jan, 600.")
+
+	def test_znane_jako_zbior_i_generator(self):
+		dane = {"klient": "Jan"}
+		self.assertEqual(wypelnij_szablon("{klient}", dane, {"klient"})[0], "Jan")
+		self.assertEqual(wypelnij_szablon("{klient}", dane, (z for z in ["klient"]))[0], "Jan")
+		self.assertEqual(wypelnij_szablon("{klient}", dane, ())[0], "{klient}")
+
+	def test_pusty_szablon(self):
+		self.assertEqual(wypelnij_szablon("", {}, self.ZNANE), ("", None))
+		self.assertEqual(wypelnij_szablon(None, {}, self.ZNANE), ("", None))
+
+	def test_ostrzezenie_dwie_czesci(self):
+		tresc, ostrz = wypelnij_szablon("{klient}", {"klient": "a" * 200}, self.ZNANE)
+		self.assertEqual(liczba_czesci_sms(tresc), 2)
+		self.assertIsNotNone(ostrz)
+
+	def test_nie_mutuje_danych(self):
+		dane = {"klient": "Jan"}
+		wypelnij_szablon("{klient} {kod}", dane, self.ZNANE)
+		self.assertEqual(dane, {"klient": "Jan"})
+
+
+class TestWalidujSzablon(unittest.TestCase):
+	ZNANE = ("klient", "telefon")
+
+	def test_poprawny(self):
+		self.assertIsNone(waliduj_szablon("Lead {klient} {telefon}", self.ZNANE))
+		self.assertIsNone(waliduj_szablon("Bez placeholderow", self.ZNANE))
+
+	def test_pusty(self):
+		for szablon in ("", "   ", None, 5):
+			with self.subTest(szablon=szablon):
+				self.assertEqual(waliduj_szablon(szablon, self.ZNANE), "Treść SMS nie może być pusta.")
+
+	def test_nieznany_z_lista_dozwolonych_w_kolejnosci(self):
+		self.assertEqual(
+			waliduj_szablon("X {klient} {xxx}", self.ZNANE),
+			"Nieznany placeholder {xxx}. Dozwolone: {klient}, {telefon}.",
+		)
+
+	def test_znane_jako_generator(self):
+		self.assertIsNone(waliduj_szablon("{klient}", (z for z in ["klient"])))
 
 
 if __name__ == "__main__":

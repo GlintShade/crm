@@ -19,7 +19,7 @@ zwracanego tekstu, śladu ani logu.
 
 import re
 import unicodedata
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -90,6 +90,50 @@ def przygotuj_tresc(surowa: str) -> tuple[str, str | None]:
 	if czesci > 1:
 		return tresc, f"Treść SMS ma {dlugosc_gsm7(tresc)} znaków, wyjdzie {czesci} części (limit jednej to 160)."
 	return tresc, None
+
+
+_PLACEHOLDER = re.compile(r"\{(\w+)\}")
+
+
+def wypelnij_szablon(
+	szablon: str | None, dane: Mapping[str, Any], znane: Iterable[str]
+) -> tuple[str, str | None]:
+	"""Podstawia placeholdery `{nazwa}` z `znane`, sprząta separatory, potem `przygotuj_tresc`.
+
+	Wspólne dla SMS do dyżurnego (`crm/volteo_dyzury.py`) i SMS do handlowca
+	(`crm/volteo_sms_handlowiec.py`). Brakujący klucz w `dane` (albo None) daje pusty
+	string, placeholder spoza `znane` zostaje bez zmian. Zwraca (treść po transliteracji
+	GSM-7, ostrzeżenie o liczbie części lub None).
+	"""
+	znane_zbior = frozenset(znane)
+
+	def _podstaw(trafienie: re.Match) -> str:
+		klucz = trafienie.group(1)
+		if klucz not in znane_zbior:
+			return trafienie.group(0)
+		wartosc = dane.get(klucz)
+		return "" if wartosc is None else str(wartosc)
+
+	surowa = _PLACEHOLDER.sub(_podstaw, szablon or "")
+	surowa = re.sub(r"[ \t]+", " ", surowa)
+	surowa = re.sub(r"\|(?:\s*\|)+", "|", surowa)
+	surowa = re.sub(r"([,;:])(?:\s*[,;:])+", r"\1", surowa)
+	surowa = re.sub(r"^\s*\|\s*|\s*\|\s*$", "", surowa)
+	surowa = re.sub(r"\s+([,.;:])", r"\1", surowa)
+	surowa = re.sub(r"([,;:])\s*(?=[.])", "", surowa)
+	return przygotuj_tresc(surowa)
+
+
+def waliduj_szablon(szablon: Any, znane: Iterable[str]) -> str | None:
+	"""Komunikat błędu po polsku albo None: szablon niepusty i wyłącznie placeholdery z `znane`."""
+	if not isinstance(szablon, str) or not szablon.strip():
+		return "Treść SMS nie może być pusta."
+	dozwolone_lista = tuple(znane)
+	for nazwa in _PLACEHOLDER.findall(szablon):
+		if nazwa not in dozwolone_lista:
+			dozwolone = ", ".join("{" + p + "}" for p in dozwolone_lista)
+			return f"Nieznany placeholder {{{nazwa}}}. Dozwolone: {dozwolone}."
+	return None
 
 
 def numer_do_smsapi(mobile_no: str | None) -> str | None:

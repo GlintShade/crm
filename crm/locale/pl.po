@@ -10414,3 +10414,179 @@ msgstr "Rozliczenia"
 #: frontend/src/pages/Deal.vue
 msgid "Przejdź do zakładki Rozliczenia"
 msgstr "Przejdź do zakładki Rozliczenia"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "SMS do handlowców"
+msgstr "SMS do handlowców"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Gdy ktoś umówi handlowcowi spotkanie, zmieni jego termin albo je odwoła, CRM wysyła handlowcowi SMS. Token SMSAPI, nadawca i tryb testowy są wspólne z SMS powitalnym i dyżurowym."
+msgstr "Gdy ktoś umówi handlowcowi spotkanie, zmieni jego termin albo je odwoła, CRM wysyła handlowcowi SMS. Token SMSAPI, nadawca i tryb testowy są wspólne z SMS powitalnym i dyżurowym."
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "SMS do handlowców włączony"
+msgstr "SMS do handlowców włączony"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Handlowiec dostaje SMS o nowym spotkaniu i o zmianie terminu. Spotkania umówione przed włączeniem nie dostają SMS wstecz."
+msgstr "Handlowiec dostaje SMS o nowym spotkaniu i o zmianie terminu. Spotkania umówione przed włączeniem nie dostają SMS wstecz."
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "SMS o odwołaniu spotkania"
+msgstr "SMS o odwołaniu spotkania"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Poprzedni handlowiec dostaje SMS, gdy spotkanie zostanie odwołane albo przekazane innej osobie. Działa tylko przy włączonym SMS do handlowców."
+msgstr "Poprzedni handlowiec dostaje SMS, gdy spotkanie zostanie odwołane albo przekazane innej osobie. Działa tylko przy włączonym SMS do handlowców."
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Token SMSAPI: ustawiony."
+msgstr "Token SMSAPI: ustawiony."
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Token SMSAPI: brak. Uzupełnij go w Desk, Volteo SMS Ustawienia (ten sam token co dla SMS powitalnego)."
+msgstr "Token SMSAPI: brak. Uzupełnij go w Desk, Volteo SMS Ustawienia (ten sam token co dla SMS powitalnego)."
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Tryb testowy SMSAPI włączony: żaden SMS nie wychodzi do sieci."
+msgstr "Tryb testowy SMSAPI włączony: żaden SMS nie wychodzi do sieci."
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Tryb testowy SMSAPI wyłączony: SMS-y wychodzą naprawdę."
+msgstr "Tryb testowy SMSAPI wyłączony: SMS-y wychodzą naprawdę."
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Treści SMS do handlowców"
+msgstr "Treści SMS do handlowców"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Pola do wstawienia w treść:"
+msgstr "Pola do wstawienia w treść:"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Polskie znaki zamieniane na łacińskie, 160 miejsc GSM-7 to jedna część SMS. Podgląd pokazuje przykładowe dane."
+msgstr "Polskie znaki zamieniane na łacińskie, 160 miejsc GSM-7 to jedna część SMS. Podgląd pokazuje przykładowe dane."
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Przywróć treść domyślną"
+msgstr "Przywróć treść domyślną"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Podgląd SMS"
+msgstr "Podgląd SMS"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Limit dzienny SMS do handlowców"
+msgstr "Limit dzienny SMS do handlowców"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "0 blokuje wysyłkę"
+msgstr "0 blokuje wysyłkę"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Zapisz treści i limit"
+msgstr "Zapisz treści i limit"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Cofnij zmiany"
+msgstr "Cofnij zmiany"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "SMS testowy do handlowca"
+msgstr "SMS testowy do handlowca"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Którą treść wysłać"
+msgstr "Którą treść wysłać"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Wyślij SMS testowy do mnie"
+msgstr "Wyślij SMS testowy do mnie"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Masz niezapisane zmiany. SMS testowy wysyła zapisaną treść, więc najpierw zapisz albo cofnij zmiany."
+msgstr "Masz niezapisane zmiany. SMS testowy wysyła zapisaną treść, więc najpierw zapisz albo cofnij zmiany."
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Wysyła zapisaną treść z przykładowymi danymi na numer zapisany przy Twoim koncie. Liczy się do limitu dziennego, cisza nocna go nie wstrzymuje."
+msgstr "Wysyła zapisaną treść z przykładowymi danymi na numer zapisany przy Twoim koncie. Liczy się do limitu dziennego, cisza nocna go nie wstrzymuje."
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Numery handlowców"
+msgstr "Numery handlowców"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Numer z profilu użytkownika (pole Mobile No). Handlowiec bez poprawnego numeru nie dostanie SMS, a w Aktywności leada pojawi się wpis o pominięciu. Wpisz 9 cyfr numeru komórkowego, zapisze się jako +48."
+msgstr "Numer z profilu użytkownika (pole Mobile No). Handlowiec bez poprawnego numeru nie dostanie SMS, a w Aktywności leada pojawi się wpis o pominięciu. Wpisz 9 cyfr numeru komórkowego, zapisze się jako +48."
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Bez poprawnego numeru: {0} z {1} handlowców."
+msgstr "Bez poprawnego numeru: {0} z {1} handlowców."
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Brak aktywnych kont z rolą handlowca (Volteo D2D Sales)."
+msgstr "Brak aktywnych kont z rolą handlowca (Volteo D2D Sales)."
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "bez linii Leady"
+msgstr "bez linii Leady"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Brak numeru"
+msgstr "Brak numeru"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Niepoprawny numer"
+msgstr "Niepoprawny numer"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Nie udało się wczytać ustawień SMS do handlowców"
+msgstr "Nie udało się wczytać ustawień SMS do handlowców"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Nie udało się pobrać podglądu SMS"
+msgstr "Nie udało się pobrać podglądu SMS"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Ustawienia SMS do handlowców zapisane"
+msgstr "Ustawienia SMS do handlowców zapisane"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "SMS do handlowców wyłączony"
+msgstr "SMS do handlowców wyłączony"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "SMS o odwołaniu spotkania włączony"
+msgstr "SMS o odwołaniu spotkania włączony"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "SMS o odwołaniu spotkania wyłączony"
+msgstr "SMS o odwołaniu spotkania wyłączony"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Nie udało się zapisać ustawień SMS do handlowców"
+msgstr "Nie udało się zapisać ustawień SMS do handlowców"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Nie udało się wysłać SMS testowego"
+msgstr "Nie udało się wysłać SMS testowego"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Numer telefonu zapisany"
+msgstr "Numer telefonu zapisany"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Nie udało się zapisać numeru"
+msgstr "Nie udało się zapisać numeru"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Nowe spotkanie"
+msgstr "Nowe spotkanie"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Zmiana terminu"
+msgstr "Zmiana terminu"
+
+#: frontend/src/components/Settings/SmsHandlowiec.vue
+msgid "Odwołanie albo przekazanie innej osobie"
+msgstr "Odwołanie albo przekazanie innej osobie"
