@@ -1,5 +1,44 @@
 @import 'frappe-ui/style.css';
 
+/*
+  Tlo pod aplikacja (canvas html/body), czyli to, co widac przy elastycznym
+  odbiciu przewijania (trackpad na Macu). Ten sam token co glowna kolumna
+  w DesktopLayout (bg-surface-base): w ciemnym motywie ciemne, w jasnym
+  jasne. color-scheme idzie za data-theme, ktore frappe-ui ustawia na <html>.
+  color: black zostawia domyslny kolor tekstu dziedziczony z <html> taki sam
+  jak dotad (bez tego color-scheme: dark zmienia go na bialy i elementy bez
+  wlasnej klasy koloru zmienilyby wyglad w ciemnym motywie).
+*/
+@layer base {
+  html,
+  body {
+    @apply bg-surface-base;
+  }
+  html {
+    color: black;
+    color-scheme: light;
+  }
+  html[data-theme='dark'] {
+    color-scheme: dark;
+  }
+}
+
+/*
+  RequiredIndicator z frappe-ui renderuje przy kazdym wymaganym polu
+  <span aria-hidden="true" class="text-ink-red-6 ...">*</span> i zaraz po nim
+  <span class="sr-only">(required)</span>. sr-only to position:absolute bez
+  top/left, a zaden przodek az do <html> nie jest pozycjonowany, wiec span
+  zostaje w swojej statycznej pozycji gleboko w formularzu, nie przycinaja go
+  przewijane panele i wydluza caly dokument ponizej ekranu (przewiniecie
+  trackpadem odslania wtedy pusty pasek, ktory zostaje). Kotwiczymy tylko ten
+  span w lewym gornym rogu jego bloku zawierajacego. Globalnej klasy .sr-only
+  celowo nie ruszamy.
+*/
+[aria-hidden='true'].text-ink-red-6 + .sr-only {
+  top: 0;
+  left: 0;
+}
+
 /* Siatka godzin (DateTimePickerSiatka): popover wyzszy niz miejsce na ekranie
    (telefon) dostaje max-height z reka-ui i przewija sie zamiast wystawac
    poza gorna krawedz. Celowane :has(), zeby nie ograniczac innych popoverow. */
