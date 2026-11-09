@@ -19,12 +19,49 @@ def get_context():
 	if not check_app_permission():
 		frappe.throw(_("You do not have permission to access Frappe CRM"), frappe.PermissionError)
 
+	redirect_to_set_password()
+
 	frappe.db.commit()
 	context = frappe._dict()
 	context.boot = get_boot()
 	if frappe.session.user != "Guest":
 		capture("active_site", "crm")
 	return context
+
+
+def redirect_to_set_password():
+	"""Send a logged in user who has no password to the set password page.
+
+	Issue ops#154, variant B: invited users are logged in straight after
+	accepting the invitation and never get a password, so they are locked out
+	once the session expires. `needs_password_setup` only fires after the NDA
+	is signed (or for users exempt from it), so the NDA screen always comes
+	first; the NDA screen itself does a full load of /crm after signing, which
+	lands here. This is also the safety net for accounts that already exist
+	without a password: every full load of /crm sends them here until they set
+	one. The Frappe page logs them in again and returns the default app
+	(`/crm`) once the password is saved.
+	"""
+	from crm.api.user import needs_password_setup
+
+	if not needs_password_setup():
+		return
+
+	user = frappe.get_doc("User", frappe.session.user)
+	link = user._reset_password()
+
+	# GET requests are rolled back, which would take the reset key with them.
+	frappe.db.commit()  # nosemgrep
+
+	frappe.local.flags.redirect_location = link
+
+	# 302, not the 301 default: a browser may cache a permanent redirect and
+	# keep sending the user to a spent key long after they set a password. Set
+	# on the instance so it works whether or not this Frappe version's
+	# `Redirect` takes the status code as a constructor argument.
+	redirect = frappe.Redirect()
+	redirect.http_status_code = 302
+	raise redirect
 
 
 @frappe.whitelist(methods=["POST"], allow_guest=True)
@@ -36,6 +73,7 @@ def get_context_for_dev():
 
 def get_boot():
 	from crm.api import volteo_ma_linie, volteo_widzi_prowizje
+	from crm.api.user import needs_password_setup
 	from crm.permissions.org_hierarchy import _ma_linie_leady
 
 	return frappe._dict(
@@ -91,6 +129,13 @@ def get_boot():
 			# only drives client-side UI. Fails open on any error (missing schema,
 			# etc.) — see _wymaga_oswiadczenia docstring.
 			"volteo_wymaga_oswiadczenia": _wymaga_oswiadczenia(frappe.session.user),
+			# VOLTEO (ops#154, variant B): True when this user has no password and
+			# will be sent to the set password page as soon as the NDA is signed
+			# (same predicate as redirect_to_set_password, minus the NDA
+			# condition). Oswiadczenie.vue reads it after signing: True means a
+			# full load of /crm so the server can redirect, otherwise a plain
+			# client-side route to Home. UI convenience only.
+			"volteo_wymaga_hasla": needs_password_setup(frappe.session.user, ignore_nda=True),
 			# VOLTEO: per-user product-line access switch (issue #16). Bypass-or-flag
 			# logic mirrors crm.api.volteo_ma_linie; consumed by the frontend to hide
 			# Kalkulator/Dokumenty entries for a line the user is switched off from.

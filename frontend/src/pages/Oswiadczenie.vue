@@ -135,6 +135,14 @@ async function podpisz() {
     // client-side so the guard lets the very next navigation through
     // without waiting for a fresh page boot.
     window.volteo_wymaga_oswiadczenia = false
+    // ops#154 (variant B): a user without a password sets one right after
+    // signing. A full page load of /crm lets the server redirect to the
+    // set password page (crm.www.crm.redirect_to_set_password); everyone
+    // else stays in the SPA.
+    if (window.volteo_wymaga_hasla) {
+      window.location.assign('/crm')
+      return
+    }
     router.replace({ name: 'Home' })
   } catch (err) {
     signError.value = extractErrorMessage(err)

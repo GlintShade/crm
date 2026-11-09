@@ -171,6 +171,12 @@ def accept_invitation(key: str | None = None):
 	if not result:
 		frappe.throw(_("Invalid or expired key"))
 	invitation = frappe.get_doc("CRM Invitation", result[0])
+	# accept() reports whether the User was newly created (ops#154). Unlike
+	# upstream, a new user is NOT sent to /update-password here (variant B):
+	# they stay logged in so they can sign the NDA first, and
+	# crm.www.crm.redirect_to_set_password sends them to the set password
+	# page on the first full /crm load after signing. So the flag is not
+	# needed for routing on this path.
 	invitation.accept()
 	invitation.reload()
 
