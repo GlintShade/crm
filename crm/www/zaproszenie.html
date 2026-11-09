@@ -92,12 +92,12 @@
 						window.location = '/crm';
 					} else {
 						btn.disabled = false;
-						errorMsg.textContent = 'Nie udało się przyjąć zaproszenia — link mógł wygasnąć.';
+						errorMsg.textContent = 'Nie udało się przyjąć zaproszenia, link mógł wygasnąć.';
 						errorMsg.style.display = 'block';
 					}
 				}).catch(function () {
 					btn.disabled = false;
-					errorMsg.textContent = 'Nie udało się przyjąć zaproszenia — link mógł wygasnąć.';
+					errorMsg.textContent = 'Nie udało się przyjąć zaproszenia, link mógł wygasnąć.';
 					errorMsg.style.display = 'block';
 				});
 			});

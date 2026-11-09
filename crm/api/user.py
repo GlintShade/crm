@@ -47,6 +47,94 @@ def change_password(old_password: str, new_password: str):
 	return _("Password Updated Successfully")
 
 
+def needs_password_setup(user: str | None = None, ignore_nda: bool = False) -> bool:
+	"""Whether `user` (default: the session user) has no password and must set one.
+
+	Issue ops#154, variant B: accounts created from a CRM Invitation are logged
+	in without ever getting a password, so once the session expires they are
+	locked out. They are sent to the set password page, but only AFTER the NDA
+	is signed (or when they are exempt from it). Users who sign in via SSO or
+	LDAP, or sites with password login disabled, are left alone: no password is
+	the correct state there. The decision itself is the frappe-free
+	`crm.volteo_haslo.czy_wymusic_haslo`; this function only gathers the facts.
+
+	`ignore_nda=True` answers "would this user be forced to set a password once
+	the NDA is signed" (the `volteo_wymaga_hasla` boot flag).
+
+	Runs on every full /crm page load, so the cheap and discriminating checks
+	go first: technical accounts need no query at all, and `has_password`
+	short-circuits for everyone who already has a password (almost everyone).
+	Fails open (False) on any unexpected error, like the NDA gate: a broken
+	safety net must never lock anyone out of the CRM.
+	"""
+	from crm.api.oswiadczenie import _wymaga_oswiadczenia
+	from crm.volteo_haslo import czy_konto_osobiste, czy_wymusic_haslo
+
+	user = user or frappe.session.user
+	if not czy_konto_osobiste(user):
+		return False
+
+	try:
+		if has_password(user):
+			return False
+
+		return czy_wymusic_haslo(
+			user,
+			ma_haslo=False,
+			wymaga_nda=False if ignore_nda else _wymaga_oswiadczenia(user),
+			logowanie_haslem_wylaczone=bool(frappe.get_system_settings("disable_user_pass_login")),
+			ldap_wlaczone=bool(frappe.db.get_single_value("LDAP Settings", "enabled")),
+			ma_sso=_has_sso_login(user),
+		)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), "Volteo hasło: błąd needs_password_setup (fail-open)")
+		return False
+
+
+def has_password(user: str) -> bool:
+	"""Whether a password is stored for the user.
+
+	User passwords are hashed rows in `__Auth` with `encrypted = 0`, so
+	`get_decrypted_password` (which only looks at encrypted rows) cannot answer
+	this, hence the direct query.
+	"""
+	Auth = frappe.qb.Table("__Auth")
+
+	return bool(
+		(
+			frappe.qb.from_(Auth)
+			.select(Auth.name)
+			.where(
+				(Auth.doctype == "User")
+				& (Auth.name == user)
+				& (Auth.fieldname == "password")
+				& (Auth.encrypted == 0)
+			)
+			.limit(1)
+		).run()
+	)
+
+
+def _has_sso_login(user: str) -> bool:
+	"""Whether the user signs in through an external identity provider.
+
+	Every user carries a `frappe` provider row (Frappe issues one on insert so
+	the site can act as an identity provider), so only other providers with a
+	user id mean the user actually signs in through SSO.
+	"""
+	return bool(
+		frappe.db.exists(
+			"User Social Login",
+			{
+				"parenttype": "User",
+				"parent": user,
+				"provider": ["!=", "frappe"],
+				"userid": ["is", "set"],
+			},
+		)
+	)
+
+
 @frappe.whitelist()
 def add_existing_users(users: str | list, role: str = "Sales User"):
 	"""

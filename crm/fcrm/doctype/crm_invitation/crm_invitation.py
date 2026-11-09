@@ -105,7 +105,11 @@ class CRMInvitation(Document):
 	@frappe.whitelist()
 	def accept_invitation(self):
 		frappe.only_for(["System Manager", "Sales Manager"], True)
-		self.accept()
+		if self.accept():
+			# ops#154: accepted from the Desk by an admin, so the invitee has no
+			# session at all and no password to log in with. Mail them a set
+			# password link (Frappe's standard "Password Reset" mail).
+			frappe.get_doc("User", self.email)._reset_password(send_email=True)
 
 	def _przeterminowane(self) -> bool:
 		"""True if this Pending invitation is older than the configured
@@ -119,7 +123,12 @@ class CRMInvitation(Document):
 		granica = add_days(now(), -waznosc_zaproszenia_dni())
 		return get_datetime(self.creation) < get_datetime(granica)
 
-	def accept(self):
+	def accept(self) -> bool:
+		"""Accept the invitation; return True when the User was newly created.
+
+		A new User has no password yet (ops#154): the caller decides how the
+		invitee gets one (set password page after the NDA, or a mailed link).
+		"""
 		if self.status != "Pending":
 			frappe.throw(_("Invalid or expired key"))
 
@@ -130,7 +139,7 @@ class CRMInvitation(Document):
 			self.db_set("status", "Expired", update_modified=False, commit=True)
 			frappe.throw(_("Invalid or expired key"))
 
-		user = self.create_user_if_not_exists()
+		user, is_new_user = self.create_user_if_not_exists()
 		user.append_roles(self.role)
 		if self.role == "System Manager":
 			user.append_roles("Sales Manager", "Sales User")
@@ -213,6 +222,8 @@ class CRMInvitation(Document):
 		self.key = None
 		self.save(ignore_permissions=True)
 
+		return is_new_user
+
 	def _resolve_linia_flag(self, fieldname, default=1):
 		"""Resolve a product-line/module-access flag (`linia_oze` / `linia_cp` /
 		`linia_leady`) to 0/1.
@@ -245,6 +256,7 @@ class CRMInvitation(Document):
 			user.set("block_modules", block_modules)
 
 	def create_user_if_not_exists(self):
+		"""Return `(user, is_new)`: the invitee's User and whether it was created now."""
 		if not frappe.db.exists("User", self.email):
 			# `first_name`/`last_name` are Custom Fields (issue #14,
 			# ops/crm-invitation-dane.py) supplied by the inviter, not the
@@ -270,12 +282,15 @@ class CRMInvitation(Document):
 				first_name=first_name,
 				last_name=last_name,
 				mobile_no=self.get("mobile_no") or None,
+				# ops#154: after setting a password on /update-password, Frappe
+				# sends a System User to their default app; pin it to the CRM.
+				default_app="crm",
 			).insert(ignore_permissions=True)
-		else:
-			# Existing User: never overwrite an established identity with
-			# whatever the inviter typed this time around.
-			user = frappe.get_doc("User", self.email)
-		return user
+			return user, True
+
+		# Existing User: never overwrite an established identity with
+		# whatever the inviter typed this time around.
+		return frappe.get_doc("User", self.email), False
 
 
 def expire_invitations():

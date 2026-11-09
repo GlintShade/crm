@@ -66,6 +66,70 @@ class TestCRMInvitation(FrappeTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			invitation.accept()
 
+	def _make_existing_user(self, email):
+		return frappe.get_doc(
+			doctype="User",
+			user_type="System User",
+			email=email,
+			send_welcome_email=0,
+			first_name="Already There",
+		).insert(ignore_permissions=True)
+
+	def test_accept_reports_newly_created_user(self):
+		"""ops#154: accept() returns True for a new User, pinned to the CRM app."""
+		invitation = self.make_invitation(email="brand-new@example.com")
+
+		self.assertIs(invitation.accept(), True)
+		self.assertEqual(frappe.db.get_value("User", invitation.email, "default_app"), "crm")
+
+	def test_accept_reports_existing_user(self):
+		"""ops#154: accept() returns False for an existing User and leaves its default_app alone."""
+		self._make_existing_user("already-there@example.com")
+		invitation = self.make_invitation(email="already-there@example.com")
+
+		self.assertIs(invitation.accept(), False)
+		self.assertFalse(frappe.db.get_value("User", invitation.email, "default_app"))
+		self.assertEqual(invitation.status, "Accepted")
+
+	def test_desk_accept_mails_set_password_link_to_new_user(self):
+		"""ops#154: an admin accepting from the Desk leaves the invitee without a
+		session, so a new User is mailed a set password link."""
+		from frappe.core.doctype.user.user import User
+
+		invitation = self.make_invitation(email="desk-new@example.com")
+
+		with patch.object(User, "password_reset_mail") as mail:
+			invitation.accept_invitation()
+
+		mail.assert_called_once()
+		self.assertIn("/update-password?key=", mail.call_args.args[0])
+		self.assertTrue(frappe.db.get_value("User", invitation.email, "reset_password_key"))
+
+	def test_desk_accept_does_not_mail_existing_user(self):
+		from frappe.core.doctype.user.user import User
+
+		self._make_existing_user("desk-existing@example.com")
+		invitation = self.make_invitation(email="desk-existing@example.com")
+
+		with patch.object(User, "password_reset_mail") as mail:
+			invitation.accept_invitation()
+
+		mail.assert_not_called()
+
+	def test_accept_invitation_api_keeps_new_user_logged_in(self):
+		"""ops#154 variant B: unlike upstream, the public accept endpoint logs a
+		new user straight in (they sign the NDA first, then set a password)."""
+		from crm.api import accept_invitation
+
+		invitation = self.make_invitation(email="new-invitee@example.com")
+
+		with patch.object(frappe.local, "login_manager", create=True) as login_manager:
+			accept_invitation(key=invitation.key)
+
+		login_manager.login_as.assert_called_once_with("new-invitee@example.com")
+		self.assertEqual(frappe.local.response["type"], "redirect")
+		self.assertEqual(frappe.local.response["location"], "/crm")
+
 	def test_accept_grants_role_to_user(self):
 		invitation = self.make_invitation(email="manager@example.com", role="Sales Manager")
 
