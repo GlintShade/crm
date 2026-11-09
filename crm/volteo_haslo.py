@@ -16,6 +16,8 @@ się go przetestować lokalnie bez benchu. Zbieranie faktów z bazy (wpis w
 ``crm.api.user.needs_password_setup``.
 """
 
+from urllib.parse import urlsplit
+
 KONTA_TECHNICZNE = ("Guest", "Administrator")
 """Konta, których nigdy nie wysyłamy na stronę ustawienia hasła: gość nie ma
 sesji, a Administrator jest kontem technicznym z własnym hasłem z instalacji."""
@@ -67,3 +69,19 @@ def czy_wymusic_haslo(
 	if ma_sso:
 		return False
 	return True
+
+
+def sciezka_wzgledna(url: str) -> str:
+	"""Względny adres (ścieżka plus query) z pełnego linku.
+
+	Frappe buduje link resetu hasła z `host_name` (`get_url`), co lokalnie gubi
+	port (`http://crm.localhost/update-password?key=...` zamiast `:8080`).
+	Przekierowanie na samą ścieżkę trafia na ten sam host i port, z którego
+	przyszło żądanie. Schemat, host i fragment są odrzucane; pusta ścieżka
+	daje "/".
+	"""
+	czesci = urlsplit(url)
+	sciezka = czesci.path or "/"
+	if czesci.query:
+		return f"{sciezka}?{czesci.query}"
+	return sciezka
