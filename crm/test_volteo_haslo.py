@@ -2,7 +2,12 @@ import ast
 import unittest
 from pathlib import Path
 
-from crm.volteo_haslo import KONTA_TECHNICZNE, czy_konto_osobiste, czy_wymusic_haslo
+from crm.volteo_haslo import (
+	KONTA_TECHNICZNE,
+	czy_konto_osobiste,
+	czy_wymusic_haslo,
+	sciezka_wzgledna,
+)
 
 USER = "handlowiec@example.com"
 
@@ -73,6 +78,37 @@ class TestVolteoHaslo(unittest.TestCase):
 				continue
 			for nazwa in nazwy:
 				self.assertNotEqual(nazwa.split(".")[0], "frappe")
+
+
+class TestSciezkaWzgledna(unittest.TestCase):
+	def test_pelny_link_bez_portu(self: "TestSciezkaWzgledna") -> None:
+		self.assertEqual(
+			sciezka_wzgledna("http://crm.localhost/update-password?key=abc123"),
+			"/update-password?key=abc123",
+		)
+
+	def test_link_z_portem_i_https(self: "TestSciezkaWzgledna") -> None:
+		self.assertEqual(
+			sciezka_wzgledna("https://crm.example.com:8443/update-password?key=x&a=1"),
+			"/update-password?key=x&a=1",
+		)
+
+	def test_fragment_odrzucony(self: "TestSciezkaWzgledna") -> None:
+		self.assertEqual(
+			sciezka_wzgledna("http://h/update-password?key=k#cos"),
+			"/update-password?key=k",
+		)
+
+	def test_bez_query(self: "TestSciezkaWzgledna") -> None:
+		self.assertEqual(sciezka_wzgledna("http://h/update-password"), "/update-password")
+
+	def test_pusta_sciezka(self: "TestSciezkaWzgledna") -> None:
+		self.assertEqual(sciezka_wzgledna("http://h"), "/")
+		self.assertEqual(sciezka_wzgledna(""), "/")
+		self.assertEqual(sciezka_wzgledna("http://h?key=k"), "/?key=k")
+
+	def test_juz_wzgledny(self: "TestSciezkaWzgledna") -> None:
+		self.assertEqual(sciezka_wzgledna("/update-password?key=k"), "/update-password?key=k")
 
 
 if __name__ == "__main__":

@@ -41,8 +41,12 @@ def redirect_to_set_password():
 	without a password: every full load of /crm sends them here until they set
 	one. The Frappe page logs them in again and returns the default app
 	(`/crm`) once the password is saved.
+
+	The redirect uses the relative path of the reset link (`sciezka_wzgledna`):
+	Frappe builds the link from `host_name`, which locally drops the port.
 	"""
 	from crm.api.user import needs_password_setup
+	from crm.volteo_haslo import sciezka_wzgledna
 
 	if not needs_password_setup():
 		return
@@ -53,7 +57,9 @@ def redirect_to_set_password():
 	# GET requests are rolled back, which would take the reset key with them.
 	frappe.db.commit()  # nosemgrep
 
-	frappe.local.flags.redirect_location = link
+	# Relative path plus query: the absolute link from `get_url` may point at
+	# the wrong host or port (locally it drops :8080).
+	frappe.local.flags.redirect_location = sciezka_wzgledna(link)
 
 	# 302, not the 301 default: a browser may cache a permanent redirect and
 	# keep sending the user to a spent key long after they set a password. Set
