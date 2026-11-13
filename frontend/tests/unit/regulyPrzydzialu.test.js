@@ -8,6 +8,7 @@ import {
   opisWynikuKodu,
   kontrolaHandlowca,
   walidujFormularzReguly,
+  punktKodu,
 } from '@/utils/regulyPrzydzialu'
 
 describe('kolorReguly', () => {
@@ -98,5 +99,14 @@ describe('kontrola i walidacja', () => {
     expect(walidujFormularzReguly({ handlowiec: 'a', srodek_kod: '', promien_km: 5 })).toMatch(/środek/)
     expect(walidujFormularzReguly({ handlowiec: 'a', srodek_kod: 'x', promien_km: 0 })).toMatch(/promień/)
     expect(walidujFormularzReguly({ handlowiec: 'a', srodek_kod: 'x', promien_km: 10 })).toBe('')
+  })
+})
+
+describe('punktKodu', () => {
+  it('zwraca punkt tylko dla liczbowych współrzędnych', () => {
+    expect(punktKodu({ kod: '66-200', lat: 52.1, lng: 15.2 })).toEqual({ lat: 52.1, lng: 15.2, kod: '66-200' })
+    expect(punktKodu({ kod: 'x', lat: null, lng: 15 })).toBeNull()
+    expect(punktKodu({ kod: 'x', lat: '52', lng: 15 })).toBeNull()
+    expect(punktKodu(null)).toBeNull()
   })
 })

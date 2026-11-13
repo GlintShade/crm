@@ -22,6 +22,18 @@
 
     <ErrorMessage :message="blad" />
 
+    <div
+      v-if="!stan.smsWlaczony && stan.reguly.some((r) => r.aktywna)"
+      class="rounded-md border p-2 text-xs text-ink-amber-3"
+      data-testid="reguly-sms-wylaczony"
+    >
+      {{
+        __(
+          'SMS do handlowca o nowym leadzie jest wyłączony. Handlowcy dostaną leady bez SMS-a. Włącz go w Ustawieniach, w panelu SMS do handlowców.',
+        )
+      }}
+    </div>
+
     <div v-if="listResource.loading && !stan.reguly.length" class="text-p-sm text-ink-gray-5">
       {{ __('Wczytywanie…') }}
     </div>
@@ -305,6 +317,7 @@ import {
   opisWynikuKodu,
   kontrolaHandlowca,
   walidujFormularzReguly,
+  punktKodu,
   MIN_ZNAKOW_SZUKANIA,
   PROMIEN_DOMYSLNY_KM,
 } from '@/utils/regulyPrzydzialu'
@@ -312,13 +325,15 @@ import {
 const API = 'crm.api.reguly_przydzialu.'
 
 // Pełny kształt stanu od początku, zawsze podmieniany na świeżą wartość.
-const stan = reactive({ reguly: [], handlowcy: [] })
+const stan = reactive({ reguly: [], handlowcy: [], smsWlaczony: true })
 const blad = ref('')
 const zapisuje = ref(false)
 
 function zastosuj(dane) {
   stan.reguly = dane?.reguly || []
   stan.handlowcy = dane?.handlowcy || []
+  // Brak klucza (stary backend) znaczy: nie ostrzegaj.
+  stan.smsWlaczony = dane?.sms_wlaczony !== false
   rysujMape()
 }
 
@@ -515,6 +530,7 @@ async function zapiszRegule() {
 // --- Sprawdzanie kodu ---
 const kodDoSprawdzenia = ref('')
 const wynik = ref(null)
+const surowyWynik = ref(null)
 const bladSprawdzenia = ref('')
 const sprawdzResource = createResource({
   url: API + 'sprawdz_kod',
@@ -522,9 +538,13 @@ const sprawdzResource = createResource({
   onSuccess: (d) => {
     bladSprawdzenia.value = ''
     wynik.value = opisWynikuKodu(d)
+    surowyWynik.value = d
+    rysujMape()
   },
   onError: (err) => {
     wynik.value = null
+    surowyWynik.value = null
+    rysujMape()
     bladSprawdzenia.value = err?.messages?.[0] || __('Nie udało się sprawdzić kodu')
   },
 })
@@ -580,6 +600,19 @@ function rysujMape() {
       .bindTooltip(`${r.kolejnosc}. ${r.handlowiec_nazwa}`)
       .addTo(warstwa)
   })
+  // Punkt sprawdzanego kodu: rysowany w tej samej warstwie, więc nie ginie ani nie dubluje się.
+  const punkt = punktKodu(surowyWynik.value)
+  if (punkt) {
+    L.circleMarker([punkt.lat, punkt.lng], {
+      radius: 7,
+      color: '#ffffff',
+      weight: 2,
+      fillColor: '#111827',
+      fillOpacity: 1,
+    })
+      .bindTooltip(punkt.kod)
+      .addTo(warstwa)
+  }
   const granice = warstwa.getBounds()
   if (granice.isValid()) mapa.fitBounds(granice, { padding: [20, 20], maxZoom: 9 })
 }

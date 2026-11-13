@@ -93,3 +93,11 @@ export function walidujFormularzReguly(f) {
   if (!Number.isFinite(promien) || promien < 1) return 'Podaj promień w km (co najmniej 1).'
   return ''
 }
+
+// Punkt kodu z odpowiedzi `sprawdz_kod` (lat i lng liczbami), inaczej null.
+export function punktKodu(d) {
+  const lat = typeof d?.lat === 'number' ? d.lat : NaN
+  const lng = typeof d?.lng === 'number' ? d.lng : NaN
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+  return { lat, lng, kod: String(d.kod || '') }
+}
