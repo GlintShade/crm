@@ -38,10 +38,36 @@ import { roundPln } from '@/utils/money'
 // any other incomplete row -- see that function's doc comment.
 const DLUGOSC_NAZWY_MAX = 140
 
-// Edycja kosztów PLANOWANYCH (ops#335): lustro `crm/koszty/rdzen.py`
-// (`KLUCZ_KOREKTY_SUMY`, `LINIE_EDYTOWALNE_PLANU`). Tylko snapshoty OZE.
+// Edycja kosztów planowanych i składników marży przeniosła się do wspólnego
+// edytora zestawu (ZestawEdycja.vue); tu zostaje klucz linii korekty sumy, bo
+// panel nadal ją rozpoznaje przy wyświetlaniu i przy zapisie kosztów rzeczywistych.
 export const KLUCZ_KOREKTY_SUMY = 'korekta_sumy_plan'
-export const LINIE_EDYTOWALNE_PLANU = ['pv', 'oze']
+
+// Etykiety do wyświetlenia po kluczu linii kosztów i składników marży. Zapisane
+// dane nie są zmieniane; nieznany klucz zwraca zapisaną etykietę.
+const ETYKIETY_KOSZTOW = {
+  k_montaz_pv: 'Montaż PV',
+  k_montaz_mag: 'Montaż magazynu',
+  kilometrowka: 'Kilometrówka',
+  k_spoldzielnia: 'Spółdzielnia energetyczna',
+  k_ppoz: 'Uzgodnienia PPOŻ',
+  k_ev: 'Dodatek ładowarka EV',
+  marza_proenergy: 'Marża ProEnergy',
+  marza_sps: 'Marża SPS',
+  bonus_liderki: 'Bonus liderski',
+  marza_dodatki: 'Marża dodatki',
+}
+
+/**
+ * Etykieta linii kosztu albo składnika marży do wyświetlenia (mapa po kluczu).
+ * @param {string} klucz - klucz linii w snapshocie
+ * @param {string} [etykieta] - etykieta zapisana w snapshocie (fallback)
+ * @returns {string}
+ */
+export function etykietaKosztu(klucz, etykieta) {
+  return Object.prototype.hasOwnProperty.call(ETYKIETY_KOSZTOW, klucz) ? ETYKIETY_KOSZTOW[klucz] : etykieta || klucz
+}
+
 
 /**
  * Parse a raw cost value typed by the administrator into a finite,
@@ -148,7 +174,7 @@ export function przeliczRzeczywiste(snapshot, edycje, dodatkowe) {
 
   const linie = linieZrodlowe.map((linia) => {
     const klucz = linia.klucz
-    const etykieta = linia.etykieta || klucz
+    const etykieta = etykietaKosztu(klucz, linia.etykieta)
     const netto = liczbaLubNull(linia.netto)
     const prowizjaPlan = liczbaLubNull(linia.prowizja_plan)
     const kosztPlan = liczbaLubZero(linia.koszt_plan)
@@ -299,10 +325,8 @@ export function zbudujPayload(snapshot, edycje, dodatkowe) {
 }
 
 // ---------------------------------------------------------------------------
-// Edycja kosztów PLANOWANYCH (ops#335). Tylko podgląd na żywo; serwer
-// (`crm.api.koszty.volteo_koszty_plan_zapisz`) przelicza autorytatywnie.
-// Arytmetyka w groszach (liczby całkowite), żeby suma na ekranie zgadzała
-// się z serwerowym Decimal co do grosza.
+// Arytmetyka w groszach (liczby całkowite), żeby suma na ekranie zgadzała się
+// z serwerowym Decimal co do grosza.
 // ---------------------------------------------------------------------------
 
 function grosze(wartosc) {
@@ -313,179 +337,11 @@ function zGroszy(g) {
   return g / 100
 }
 
-/** Czy snapshot jest edytowalny w trybie planu (tylko OZE: pv, oze). */
-export function czyEdytowalnyPlan(snapshot) {
-  return !!snapshot && LINIE_EDYTOWALNE_PLANU.includes(snapshot.linia_produktowa)
-}
-
-/** Wartości wejściowe pól planu na starcie edycji: klucz -> zapisany koszt planowany. */
-export function edycjePlanuStart(snapshot) {
-  const wynik = {}
-  for (const linia of snapshot?.linie || []) {
-    if (linia.klucz === KLUCZ_KOREKTY_SUMY) continue
-    wynik[linia.klucz] = linia.koszt_plan != null ? String(linia.koszt_plan) : ''
-  }
-  return wynik
-}
-
-/**
- * Podgląd na żywo edycji kosztów planowanych. Nie mutuje argumentów.
- *
- * @param {object|null} snapshot - sparsowany snapshot
- * @param {Object<string,string>} edycjePlanu - klucz -> wpisany koszt planowany
- * @param {string|null} sumaWpisana - wpisana suma kosztów planowanych albo null (nie ruszana)
- * @param {boolean} usunKorekte - czy usunąć linię korekty sumy
- */
-export function przeliczPlan(snapshot, edycjePlanu, sumaWpisana, usunKorekte = false) {
-  const bledy = []
-  const edycje = edycjePlanu || {}
-  const linieZrodlowe = Array.isArray(snapshot?.linie) ? snapshot.linie : []
-  const sumaPrzed = grosze(snapshot?.podsumowanie?.koszt_plan)
-
-  let delta = 0
-  let korektaStara = 0
-  const linie = []
-  for (const linia of linieZrodlowe) {
-    const klucz = linia.klucz
-    const etykieta = linia.etykieta || klucz
-    const zapisany = grosze(linia.koszt_plan)
-    if (klucz === KLUCZ_KOREKTY_SUMY) {
-      korektaStara = zapisany
-      continue
-    }
-    const surowy = edycje[klucz]
-    const sparsowany = parsujKosztRzeczywisty(surowy)
-    if (sparsowany === null && typeof surowy === 'string' && surowy.trim() !== '') {
-      bledy.push(`Nieprawidłowa wartość kosztu planowanego dla pozycji „${etykieta}”.`)
-    }
-    // Pusty albo błędny wpis = bez zmiany (zostaje zapisana wartość).
-    const nowy = sparsowany === null ? zapisany : Math.round(sparsowany * 100)
-    const pierwotnyZapisany = liczbaLubNull(linia.koszt_plan_pierwotny)
-    const zmieniona = nowy !== zapisany
-    delta += nowy - zapisany
-    linie.push({
-      klucz,
-      etykieta,
-      kosztZapisany: zGroszy(zapisany),
-      kosztNowy: zGroszy(nowy),
-      // Wartość, do której wraca przycisk przywrócenia: zapisana pierwotna albo (przy
-      // niezapisanej zmianie) obecnie zapisany koszt.
-      pierwotny: pierwotnyZapisany !== null ? roundPln(pierwotnyZapisany) : zmieniona ? zGroszy(zapisany) : null,
-      zmieniona,
-    })
-  }
-
-  let korekta = korektaStara
-  if (usunKorekte && korektaStara !== 0) {
-    delta -= korektaStara
-    korekta = 0
-  }
-  const sumaPoLiniach = sumaPrzed + delta
-
-  const sumaSparsowana = parsujKosztRzeczywisty(sumaWpisana)
-  if (sumaSparsowana === null && typeof sumaWpisana === 'string' && sumaWpisana.trim() !== '') {
-    bledy.push('Nieprawidłowa wartość sumy kosztów planowanych.')
-  }
-  let sumaNowa = sumaPoLiniach
-  let roznica = 0
-  if (sumaSparsowana !== null) {
-    sumaNowa = Math.round(sumaSparsowana * 100)
-    roznica = sumaNowa - sumaPoLiniach
-    korekta += roznica
-  }
-
-  const netto = grosze(snapshot?.podsumowanie?.netto)
-  const prowizjaPlan = liczbaLubNull(snapshot?.podsumowanie?.prowizja_plan)
-  const marza = netto - sumaNowa
-  const zysk = marza - (prowizjaPlan !== null ? grosze(prowizjaPlan) : 0)
-
-  return {
-    linie,
-    razem: {
-      netto: zGroszy(netto),
-      kosztPlan: zGroszy(sumaNowa),
-      sumaPoLiniach: zGroszy(sumaPoLiniach),
-      marzaPlan: zGroszy(marza),
-      zyskPlan: zGroszy(zysk),
-      prowizjaPlan: prowizjaPlan !== null ? roundPln(prowizjaPlan) : null,
-    },
-    // `roznica` != 0 oznacza, że różnica między wpisaną sumą a sumą linii trafi do korekty.
-    roznicaSumy: zGroszy(roznica),
-    korekta: zGroszy(korekta),
-    korektaIstnieje: korektaStara !== 0,
-    bledy,
-  }
-}
-
-/**
- * Payload dla `crm.api.koszty.volteo_koszty_plan_zapisz`. Do `koszty_plan` trafiają
- * tylko linie, których wpisana wartość różni się od zapisanej (wartość równa
- * pierwotnej serwer traktuje jak przywrócenie). `suma_plan` (string) tylko gdy
- * wpisana i poprawna; wygrywa nad zmianami linii. Nie mutuje argumentów.
- */
-export function zbudujPayloadPlanu(snapshot, edycjePlanu, sumaWpisana, usunKorekte = false) {
-  const edycje = edycjePlanu || {}
-  const koszty_plan = {}
-  for (const linia of Array.isArray(snapshot?.linie) ? snapshot.linie : []) {
-    if (linia.klucz === KLUCZ_KOREKTY_SUMY) continue
-    const sparsowany = parsujKosztRzeczywisty(edycje[linia.klucz])
-    if (sparsowany === null) continue
-    const nowy = Math.round(sparsowany * 100)
-    if (nowy !== grosze(linia.koszt_plan)) koszty_plan[linia.klucz] = zGroszy(nowy).toFixed(2)
-  }
-  if (usunKorekte) koszty_plan[KLUCZ_KOREKTY_SUMY] = null
-
-  const sumaSparsowana = parsujKosztRzeczywisty(sumaWpisana)
-  const suma_plan = sumaSparsowana !== null ? zGroszy(Math.round(sumaSparsowana * 100)).toFixed(2) : null
-  return { koszty_plan, suma_plan }
-}
-
-/** Czy payload planu niesie jakąkolwiek zmianę (do wyłączania przycisku Zapisz). */
-export function czyPayloadPlanuMaZmiany(payload) {
-  return Object.keys(payload?.koszty_plan || {}).length > 0 || payload?.suma_plan != null
-}
-
-/**
- * Czy administrator ma niezapisane zmiany kosztów RZECZYWISTYCH (edycje linii albo
- * dodatkowe pozycje względem snapshotu). Tryb edycji planu startuje dopiero bez nich:
- * jeden zapis na raz, nic nie ginie po cichu.
- */
-export function czyZmienioneRzeczywiste(snapshot, edycje, dodatkowe) {
-  const bazaEdycji = {}
-  for (const linia of snapshot?.linie || []) {
-    bazaEdycji[linia.klucz] = linia.koszt_rzeczywisty != null ? String(linia.koszt_rzeczywisty) : ''
-  }
-  const bazaDodatkowe = (snapshot?.dodatkowe || []).map((d) => ({
-    id: d.id,
-    nazwa: d.nazwa || '',
-    kwota: d.kwota != null ? String(d.kwota) : '',
-  }))
-  // Surowe dodatkowe (z niepełnymi wierszami) też liczą się jako zmiana.
-  const surowe = (Array.isArray(dodatkowe) ? dodatkowe : []).map((d) => ({
-    id: d?.id,
-    nazwa: String(d?.nazwa ?? ''),
-    kwota: String(d?.kwota ?? ''),
-  }))
-  const a = zbudujPayload(snapshot, edycje, dodatkowe)
-  const b = zbudujPayload(snapshot, bazaEdycji, bazaDodatkowe)
-  return JSON.stringify(a) !== JSON.stringify(b) || JSON.stringify(surowe) !== JSON.stringify(bazaDodatkowe)
-}
-
 // ---------------------------------------------------------------------------
-// Edycja składników marży planowej (ops#339). Tylko podgląd na żywo; serwer
-// (`crm.api.koszty.volteo_koszty_marze_zapisz`) jest autorytatywny. Cena i
-// podsumowanie nie zmieniają się: składniki to wewnętrzny podział marży.
+// Składniki marży planowej (podgląd tylko do odczytu w panelu kosztów; edycja
+// odbywa się we wspólnym edytorze zestawu, backend zapisuje autorytatywnie).
 // Arytmetyka w groszach (liczby całkowite).
 // ---------------------------------------------------------------------------
-
-/** Wartości wejściowe pól składników na starcie edycji: klucz -> zapisana kwota. */
-export function skladnikiMarzyStart(snapshot) {
-  const wynik = {}
-  for (const sk of snapshot?.skladniki_marzy || []) {
-    wynik[sk.klucz] = sk.kwota != null ? String(sk.kwota) : ''
-  }
-  return wynik
-}
 
 /**
  * Podgląd na żywo składników marży. Nie mutuje argumentów. Pusty albo błędny wpis
@@ -505,14 +361,14 @@ export function przeliczSkladnikiMarzy(snapshot, edycjeMarz) {
     const surowy = edycje[sk.klucz]
     const sparsowany = parsujKosztRzeczywisty(surowy)
     if (sparsowany === null && typeof surowy === 'string' && surowy.trim() !== '') {
-      bledy.push(`Nieprawidłowa kwota składnika marży „${sk.etykieta || sk.klucz}”.`)
+      bledy.push(`Nieprawidłowa kwota składnika marży „${etykietaKosztu(sk.klucz, sk.etykieta)}”.`)
     }
     const nowy = sparsowany === null ? zapisany : Math.round(sparsowany * 100)
     const pierwotnyZapisany = liczbaLubNull(sk.kwota_pierwotna)
     sumaG += nowy
     skladniki.push({
       klucz: sk.klucz,
-      etykieta: sk.etykieta || sk.klucz,
+      etykieta: etykietaKosztu(sk.klucz, sk.etykieta),
       kwotaZapisana: zGroszy(zapisany),
       kwotaNowa: zGroszy(nowy),
       // Wartość, do której wraca przywrócenie: zapisana pierwotna albo (przy niezapisanej
@@ -530,19 +386,4 @@ export function przeliczSkladnikiMarzy(snapshot, edycjeMarz) {
     nierozdzielona: zGroszy(marzaG - sumaG),
     bledy,
   }
-}
-
-/** Payload do API: tylko składniki zmienione względem zapisanych; kwota jako wpisany napis. */
-export function zbudujPayloadMarz(snapshot, edycjeMarz) {
-  const podglad = przeliczSkladnikiMarzy(snapshot, edycjeMarz)
-  const skladniki = {}
-  for (const sk of podglad.skladniki) {
-    if (sk.zmieniony) skladniki[sk.klucz] = sk.kwotaNowa.toFixed(2)
-  }
-  return { skladniki }
-}
-
-/** Czy payload marż niesie jakąkolwiek zmianę (do wyłączania przycisku Zapisz). */
-export function czyPayloadMarzMaZmiany(payload) {
-  return Object.keys(payload?.skladniki || {}).length > 0
 }
