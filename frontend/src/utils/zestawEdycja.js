@@ -607,8 +607,7 @@ export const MSG_PROWIZJA_NALICZONA = 'Prowizja handlowca jest już naliczona. P
 
 function kosztyZApi(k, wiersze) {
   if (!k || typeof k !== 'object') return null
-  return {
-    linie: (k.linie || []).map((l) => ({
+  const linie = (k.linie || []).map((l) => ({
       lid: l.klucz ? `l:${l.klucz}` : nowyKlucz(),
       klucz: l.klucz ?? null,
       etykieta: tekst(l.etykieta),
@@ -617,7 +616,15 @@ function kosztyZApi(k, wiersze) {
       reczna: Boolean(l.reczna),
       korekta: Boolean(l.korekta),
       nowa: false,
-    })),
+    }))
+  // Zapisana suma bywa różna od sumy linii (stare snapshoty, delty): trzymamy obie bazy.
+  const sumaLiniiBazowa = linie.reduce((s, l) => s + groszeZPola(l.koszt), 0)
+  const zapisana = k.podsumowanie?.koszt_plan
+  const sumaBazowa = zapisana == null || naGrosze(zapisana) === null ? sumaLiniiBazowa : naGrosze(zapisana)
+  return {
+    linie,
+    sumaBazowa,
+    sumaLiniiBazowa,
     marze: (k.skladniki_marzy || []).map((m) => ({
       klucz: m.klucz,
       etykieta: tekst(m.etykieta),
@@ -738,8 +745,15 @@ export function marzaBylo(m) {
   return groszeZPola(m.kwota) === groszeZPola(baza) ? '' : baza
 }
 
-export function sumaKosztowGrosze(stan) {
+/** Suma linii w groszach (bez korekty o bazę). */
+export function sumaLiniiGrosze(stan) {
   return stan.koszty ? stan.koszty.linie.reduce((s, l) => s + groszeZPola(l.koszt), 0) : 0
+}
+
+/** Zapisana suma plus delta zmian linii (zgodnie z backendem). */
+export function sumaKosztowGrosze(stan) {
+  if (!stan.koszty) return 0
+  return stan.koszty.sumaBazowa + (sumaLiniiGrosze(stan) - stan.koszty.sumaLiniiBazowa)
 }
 
 export function sumaMarzyGrosze(stan) {
@@ -775,9 +789,14 @@ export function kosztyDoWywolania(stan) {
   const indeks = (klucz) => (klucz == null ? -1 : stan.wiersze.findIndex((w) => w.klucz === klucz))
   const linie = stan.koszty.linie.map((l) => {
     const i = indeks(l.wierszKlucz)
+    let etykieta = tekst(l.etykieta).trim()
+    if (l.klucz == null && i >= 0) {
+      const w = stan.wiersze[i]
+      etykieta = tekst(w.nazwa).trim() || tekst(w.typ).trim() || etykieta
+    }
     return {
       klucz: l.klucz,
-      etykieta: tekst(l.etykieta).trim(),
+      etykieta,
       koszt_plan: naTekstKwoty(groszeZPola(l.koszt)),
       wiersz: i >= 0 ? i : null,
     }

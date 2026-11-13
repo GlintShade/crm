@@ -162,17 +162,8 @@
         </tbody>
       </table>
     </div>
-    <div class="mt-2">
+    <div v-if="!maKoszty" class="mt-2">
       <Button :label="__('Dodaj pozycję')" variant="outline" size="sm" data-testid="zestaw-dodaj" @click="stan = dodajWiersz(stan)" />
-      <Button
-        v-if="maKoszty"
-        class="ml-2"
-        :label="__('Dodaj sam koszt')"
-        variant="outline"
-        size="sm"
-        data-testid="zestaw-dodaj-koszt"
-        @click="stan = dodajSamKoszt(stan)"
-      />
     </div>
 
     <!-- Koszty bez pozycji, bilans -->
@@ -212,36 +203,54 @@
         </div>
         <div v-if="!linieBezPozycjiWidoczne.length" class="px-2 py-2 text-sm text-ink-gray-5">{{ __('Brak kosztów bez pozycji.') }}</div>
       </div>
-      <button
-        v-if="liczbaPustych > 0"
-        type="button"
-        class="mt-1 text-xs text-ink-gray-6 underline"
-        data-testid="zestaw-puste-koszty"
-        @click="stan = przelaczPusteKoszty(stan)"
-      >
-        {{ stan.koszty.pokazPuste ? __('Ukryj puste koszty') : __('Pokaż {0} pustych kosztów', [liczbaPustych]) }}
-      </button>
-      <div class="mt-2 flex items-baseline justify-between text-sm text-ink-gray-7" data-testid="zestaw-suma-kosztow">
-        <span>{{ __('Suma kosztów planowanych') }}</span>
-        <span>
-          <span class="font-semibold text-ink-gray-8">{{ pokazGrosze(sumaKosztow) }}</span>
-          <span v-if="sumaKosztow !== sumaZapisana" class="ml-2 text-xs text-ink-gray-5">{{ __('poprzednio') }} {{ pokazGrosze(sumaZapisana) }}</span>
-        </span>
+      <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <Button :label="__('Dodaj pozycję')" variant="outline" size="sm" data-testid="zestaw-dodaj" @click="stan = dodajWiersz(stan)" />
+          <Button :label="__('Dodaj sam koszt')" variant="outline" size="sm" data-testid="zestaw-dodaj-koszt" @click="stan = dodajSamKoszt(stan)" />
+          <button
+            v-if="liczbaPustych > 0"
+            type="button"
+            class="text-xs text-ink-gray-6 underline"
+            data-testid="zestaw-puste-koszty"
+            @click="stan = przelaczPusteKoszty(stan)"
+          >
+            {{ stan.koszty.pokazPuste ? __('Ukryj puste koszty') : __('Pokaż {0} pustych kosztów', [liczbaPustych]) }}
+          </button>
+        </div>
+        <div class="text-sm text-ink-gray-7" data-testid="zestaw-suma-kosztow">
+          <span>{{ __('Suma kosztów planowanych') }}</span>
+          <span class="ml-2 font-semibold text-ink-gray-8">{{ pokazGrosze(sumaKosztow) }}</span>
+          <span v-if="sumaKosztow !== sumaBazowa" class="ml-2 text-xs text-ink-gray-5">{{ __('poprzednio') }} {{ pokazGrosze(sumaBazowa) }}</span>
+        </div>
       </div>
       <div
         v-if="bilansNaZywo"
-        class="mt-2 rounded-md border p-2 text-sm"
-        :class="bilansNaZywo.status === 'zgadza' ? 'border-outline-gray-2 bg-surface-gray-1 text-ink-gray-8' : 'border-outline-amber-3 bg-surface-amber-2 text-ink-amber-8'"
+        class="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-md border border-outline-gray-2 bg-surface-gray-1 p-3"
         data-testid="zestaw-bilans"
       >
-        <div class="flex flex-wrap items-center gap-x-2">
-          <span class="font-medium">{{ __('Cena netto') }} {{ pokazGrosze(bilansNaZywo.netto) }}</span>
-          <span>=</span>
-          <span>{{ __('Koszty planowane') }} {{ pokazGrosze(bilansNaZywo.koszty) }}</span>
-          <span>+</span>
-          <span>{{ __('Marże i narzut') }} {{ pokazGrosze(bilansNaZywo.marze) }}</span>
+        <div class="flex flex-wrap items-end gap-x-3 gap-y-1">
+          <div class="flex flex-col">
+            <span class="text-xs text-ink-gray-5">{{ __('Cena netto') }}</span>
+            <span class="text-base font-semibold text-ink-gray-8">{{ pokazGrosze(bilansNaZywo.netto) }}</span>
+          </div>
+          <span class="pb-0.5 text-ink-gray-5">=</span>
+          <div class="flex flex-col">
+            <span class="text-xs text-ink-gray-5">{{ __('Koszty planowane') }}</span>
+            <span class="text-base font-semibold text-ink-gray-8">{{ pokazGrosze(bilansNaZywo.koszty) }}</span>
+          </div>
+          <span class="pb-0.5 text-ink-gray-5">+</span>
+          <div class="flex flex-col">
+            <span class="text-xs text-ink-gray-5">{{ __('Marże i narzut') }}</span>
+            <span class="text-base font-semibold text-ink-gray-8">{{ pokazGrosze(bilansNaZywo.marze) }}</span>
+          </div>
         </div>
-        <div class="mt-1 font-semibold">{{ opisBilansu }}</div>
+        <span
+          class="rounded-full border px-3 py-1 text-sm font-medium"
+          :class="bilansNaZywo.status === 'zgadza' ? 'border-outline-gray-3 bg-surface-white text-ink-gray-8' : 'border-outline-amber-3 bg-surface-amber-2 text-ink-amber-8'"
+          data-testid="zestaw-bilans-stan"
+        >
+          {{ opisBilansu }}
+        </span>
       </div>
     </template>
 
@@ -294,6 +303,8 @@
 
     <!-- Cena -->
     <template v-if="!jestCp">
+    <div :class="maKoszty ? 'mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2' : ''">
+    <div>
     <div class="mt-4 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Cena') }}</div>
     <div class="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
       <label v-for="pole in poleCenyWejscie" :key="pole.klucz" class="flex flex-col gap-0.5 text-xs text-ink-gray-6">
@@ -321,24 +332,32 @@
       </div>
     </div>
 
-    <template v-if="maKoszty">
+    </div>
+    <div v-if="maKoszty">
       <div class="mt-4 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Marże i narzut') }}</div>
-      <div class="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        <label v-for="m in stan.koszty.marze" :key="m.klucz" class="flex flex-col gap-0.5 text-xs text-ink-gray-6">
-          <span>{{ m.etykieta }}</span>
-          <input
-            class="rounded border border-outline-gray-2 bg-surface-base px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none"
-            type="number"
-            step="0.01"
-            min="0"
-            :value="m.kwota"
-            :data-testid="`zestaw-marza-${m.klucz}`"
-            @input="stan = zmienMarze(stan, m.klucz, $event.target.value)"
-          />
-          <span v-if="marzaBylo(m)" class="text-[11px] text-ink-gray-4">{{ __('było') }} {{ pokazGrosze(groszeZPola(marzaBylo(m))) }}</span>
-        </label>
+      <div class="mt-1 rounded-md border border-outline-gray-2">
+        <div
+          v-for="m in stan.koszty.marze"
+          :key="m.klucz"
+          class="flex items-start justify-between gap-2 border-t border-outline-gray-1 px-2 py-1.5 first:border-t-0"
+        >
+          <span class="pt-1 text-sm text-ink-gray-7">{{ m.etykieta }}</span>
+          <div class="flex flex-col items-end">
+            <input
+              class="w-32 rounded border border-outline-gray-2 bg-surface-base px-2 py-1 text-right text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none"
+              type="number"
+              step="0.01"
+              min="0"
+              :value="m.kwota"
+              :data-testid="`zestaw-marza-${m.klucz}`"
+              @input="stan = zmienMarze(stan, m.klucz, $event.target.value)"
+            />
+            <span v-if="marzaBylo(m)" class="text-[11px] text-ink-gray-4">{{ __('było') }} {{ pokazGrosze(groszeZPola(marzaBylo(m))) }}</span>
+          </div>
+        </div>
       </div>
-    </template>
+    </div>
+    </div>
     </template>
 
     <div
@@ -594,7 +613,7 @@ const maKoszty = computed(() => !jestCp.value && stan.value.koszty != null)
 const linieBezPozycjiWidoczne = computed(() => widoczneLinieBezPozycji(stan.value))
 const liczbaPustych = computed(() => liczbaPustychKosztow(stan.value))
 const sumaKosztow = computed(() => sumaKosztowGrosze(stan.value))
-const sumaZapisana = computed(() => groszeZPola(props.dostep.koszty?.podsumowanie?.koszt_plan))
+const sumaBazowa = computed(() => stan.value.koszty?.sumaBazowa ?? 0)
 const bilansNaZywo = computed(() => bilans(stan.value, podglad.value?.cena?.netto ?? props.dostep.cena?.netto))
 const opisBilansu = computed(() => {
   const b = bilansNaZywo.value
@@ -604,7 +623,7 @@ const opisBilansu = computed(() => {
   return __('Nadwyżka: {0}', [pokazGrosze(b.roznica)])
 })
 const rozniceKoszty = computed(() =>
-  roznicaKosztowDoOkna(stan.value, sumaZapisana.value, Boolean(props.dostep.koszty?.rozliczenie_handlowca?.naliczone)),
+  roznicaKosztowDoOkna(stan.value, sumaBazowa.value, Boolean(props.dostep.koszty?.rozliczenie_handlowca?.naliczone)),
 )
 const mozeZapisac = computed(
   () =>

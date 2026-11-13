@@ -240,6 +240,7 @@ import {
   linieBezPozycjiWidoczne,
   marzaBylo,
   przelaczPusteKoszty,
+  sumaKosztowGrosze,
   przesunWiersz,
   roznicaKosztowDoOkna,
   usunLinieKosztu,
@@ -430,5 +431,33 @@ describe('koszty: marza i okno', () => {
     expect(czyZmieniony(p, przelaczPusteKoszty(p))).toBe(false)
     expect(czyZmieniony(p, zmienMarze(p, 'narzut', '7000'))).toBe(true)
     expect(czyZmieniony(p, zmienKosztPozycji(p, p.wiersze[0].klucz, '1'))).toBe(true)
+  })
+})
+
+describe('koszty: suma z delty i etykieta nowej linii', () => {
+  it('zapisana suma rozna od sumy linii: brak zmiany do edycji, potem dokladnie delta', () => {
+    const o = odpKoszty()
+    o.koszty.podsumowanie.koszt_plan = '9000.00' // linie dają 8180.00
+    let s = stanZOdpowiedzi(o)
+    expect(sumaKosztowGrosze(s)).toBe(900000)
+    expect(sumaKosztowGrosze(s)).toBe(s.koszty.sumaBazowa)
+    const przed = bilans(s)
+    expect(przed.koszty).toBe(900000)
+    s = zmienKosztPozycji(s, s.wiersze[0].klucz, '6251.00') // +3000.00
+    expect(sumaKosztowGrosze(s)).toBe(900000 + 300000)
+    expect(bilans(s).koszty).toBe(1200000)
+    expect(roznicaKosztowDoOkna(s, s.koszty.sumaBazowa, false).koszty).not.toBeNull()
+  })
+  it('brak podsumowania: baza to suma linii', () => {
+    const o = odpKoszty()
+    delete o.koszty.podsumowanie
+    expect(stanZOdpowiedzi(o).koszty.sumaBazowa).toBe(818000)
+  })
+  it('etykieta nowej linii to aktualna nazwa pozycji', () => {
+    let s = stanZOdpowiedzi(odpKoszty())
+    s = dodajWiersz(s, { ...s.wiersze[0], klucz: 'nowy', name: null, typ: 'EMS', nazwa: '' })
+    s = zmienKosztPozycji(s, 'nowy', '3000')
+    s = { ...s, wiersze: s.wiersze.map((w) => (w.klucz === 'nowy' ? { ...w, nazwa: ' EMS z integratorem ' } : w)) }
+    expect(kosztyDoWywolania(s).linie.at(-1).etykieta).toBe('EMS z integratorem')
   })
 })
