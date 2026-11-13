@@ -18,7 +18,7 @@ from crm.fcrm.doctype.utils import add_or_remove_lost_reason_section_in_sidepane
 from crm.permissions.org_hierarchy import ma_flage_zmiany_statusu_cc
 from crm.permissions.poprzedni_wlasciciel import odbierz_dostep_poprzedniemu_wlascicielowi
 from crm.volteo_leady_kontakt import waliduj_czas_do_kontaktu, waliduj_proby_kontaktu
-from crm.volteo_leady_status import czy_moze_zmienic_status_cc
+from crm.volteo_leady_status import czy_moze_zmienic_status_cc, lead_bezposredni_wlasny
 from crm.volteo_lista_szans import FILTER_FIELDS_LEAD, SORT_FIELDS_LEAD
 from crm.volteo_powiadomienia import powiadom_o_zmianie_terminu
 
@@ -102,11 +102,31 @@ class CRMLead(Document):
 				frappe.session.user,
 				frappe.get_roles(),
 				ma_flage_zmiany_statusu_cc(frappe.session.user),
+				self._lead_bezposredni_wlasny_przed_zapisem(),
 			)
 		):
 			frappe.throw(_("Handlowiec nie może zmieniać statusu CC."), frappe.PermissionError)
 		if self.has_value_changed("status"):
 			add_status_change_log(self)
+
+	def _lead_bezposredni_wlasny_przed_zapisem(self) -> bool:
+		"""ops#351: lead z reguly bezposredniej i wlasny, wg wartosci SPRZED zapisu.
+
+		Wartosci bierzemy z dokumentu z bazy, nie z biezacego zapisu, zeby
+		handlowiec nie odblokowal sobie statusu zmieniajac pola w tym samym
+		zapisie. Gdy pola `custom_przydzial_bezposredni` nie ma jeszcze w bazie,
+		wynik to False (blokada jak dotad).
+		"""
+		if not frappe.get_meta("CRM Lead").has_field("custom_przydzial_bezposredni"):
+			return False
+		przed = self.get_doc_before_save()
+		if not przed:
+			return False
+		return lead_bezposredni_wlasny(
+			frappe.session.user,
+			przed.get("custom_przydzial_bezposredni"),
+			przed.get("lead_owner"),
+		)
 
 	def validate_pola_kontaktu(self):
 		# ops#309/#310: walidacja danych, bezwarunkowa (takze pod ignore_permissions).

@@ -78,6 +78,8 @@
               class="flex flex-col gap-3.5 flex-1"
               :delay="isTouchScreenDevice() ? 200 : 0"
               :disabled="Boolean(options.dragDisabled)"
+              :filter="options.dragItemDisabled ? '.kanban-bez-przeciagania' : undefined"
+              :prevent-on-filter="false"
               :data-column="column.column.name"
               @end="updateColumn"
             >
@@ -85,6 +87,10 @@
                 <component
                   :is="options.getRoute ? 'router-link' : 'div'"
                   class="pt-3 px-3.5 pb-2.5 rounded-lg border bg-surface-base text-base flex flex-col text-ink-gray-9"
+                  :class="{
+                    'kanban-bez-przeciagania':
+                      options.dragItemDisabled && options.dragItemDisabled(fields),
+                  }"
                   :data-name="fields.name"
                   v-bind="{
                     to: options.getRoute ? options.getRoute(fields) : undefined,

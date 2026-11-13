@@ -51,7 +51,9 @@
         query: { view: route.query.view, viewType: route.params.viewType },
       }),
       onNewClick: (column) => onNewClick(column),
-      dragDisabled: !mozeZmieniacStatusCC(),
+      // ops#351: przeciaganie (zmiana statusu CC) per karta, bo handlowiec moze
+      // zmieniac status wlasnych leadow z reguly bezposredniej.
+      dragItemDisabled: (lead) => !mozeZmieniacStatusCC(undefined, lead),
     }"
     @update="(data) => viewControls.updateKanbanSettings(data)"
     @loadMore="(columnName) => viewControls.loadMoreKanban(columnName)"

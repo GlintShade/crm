@@ -4,6 +4,7 @@
 import unittest
 
 from crm.volteo_leady_status import czy_moze_zmienic_status_cc as moze
+from crm.volteo_leady_status import lead_bezposredni_wlasny
 
 
 class TestCzyMozeZmienicStatusCC(unittest.TestCase):
@@ -65,3 +66,38 @@ class TestCzyMozeZmienicStatusCC(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+class TestLeadBezposredniWlasny(unittest.TestCase):
+	def test_wlasny_lead_z_reguly(self):
+		self.assertTrue(lead_bezposredni_wlasny("h@x.pl", 1, "h@x.pl"))
+		self.assertTrue(lead_bezposredni_wlasny("h@x.pl", "1", "h@x.pl"))
+
+	def test_cudzy_lead_z_reguly(self):
+		self.assertFalse(lead_bezposredni_wlasny("h@x.pl", 1, "inny@x.pl"))
+
+	def test_lead_bez_znacznika(self):
+		self.assertFalse(lead_bezposredni_wlasny("h@x.pl", 0, "h@x.pl"))
+		self.assertFalse(lead_bezposredni_wlasny("h@x.pl", None, "h@x.pl"))
+		self.assertFalse(lead_bezposredni_wlasny("h@x.pl", "", "h@x.pl"))
+
+	def test_znacznik_bez_wlasciciela(self):
+		self.assertFalse(lead_bezposredni_wlasny("h@x.pl", 1, None))
+		self.assertFalse(lead_bezposredni_wlasny("h@x.pl", 1, ""))
+
+	def test_smieciowa_wartosc_znacznika(self):
+		self.assertFalse(lead_bezposredni_wlasny("h@x.pl", "abc", "h@x.pl"))
+
+	def test_brak_uzytkownika(self):
+		self.assertFalse(lead_bezposredni_wlasny("", 1, ""))
+
+
+class TestMozeZLeademBezposrednim(unittest.TestCase):
+	def test_handlowiec_na_wlasnym_leadzie_z_reguly(self):
+		self.assertTrue(moze("h@x.pl", ["Volteo D2D Sales"], False, True))
+
+	def test_handlowiec_na_cudzym_leadzie_z_reguly(self):
+		self.assertFalse(moze("h@x.pl", ["Volteo D2D Sales"], False, False))
+
+	def test_domyslnie_blokada_zostaje(self):
+		self.assertFalse(moze("h@x.pl", ["Volteo D2D Sales"]))
