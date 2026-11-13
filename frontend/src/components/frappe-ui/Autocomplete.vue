@@ -69,7 +69,7 @@
               </button>
             </div>
             <ComboboxOptions
-              class="my-1 max-h-[12rem] overflow-y-auto p-1.5 pt-0"
+              class="lista-przewijana my-1 max-h-[12rem] overflow-y-auto p-1.5 pt-0"
               static
             >
               <div

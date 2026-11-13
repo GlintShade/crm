@@ -90,8 +90,11 @@
           :key="dzien"
           class="relative min-w-0 flex-1 cursor-pointer border-l border-outline-gray-1"
           :class="[
-            czyWeekend(dzien) ? 'bg-surface-gray-1' : '',
-            czyDzis(dzien, teraz) ? 'bg-surface-blue-1' : '',
+            czyDzis(dzien, teraz)
+              ? 'kalendarz-wolny-dzis'
+              : czyWeekend(dzien)
+                ? 'kalendarz-wolny'
+                : 'dark:bg-[rgb(var(--kalendarz-wolny))]',
           ]"
           :style="{ height: wysokosc + 'px' }"
           :data-dzien="dzien"

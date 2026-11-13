@@ -38,7 +38,7 @@
             @input="(e) => naZmianeWyszukiwania(e.target.value)"
           />
         </div>
-        <div class="max-h-60 overflow-y-auto">
+        <div class="lista-przewijana max-h-60 overflow-y-auto">
           <template v-for="(grupa, i) in grupyWidoczne" :key="grupa.group ?? i">
             <div
               v-if="grupa.group"

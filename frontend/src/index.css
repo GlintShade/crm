@@ -81,11 +81,15 @@
   --kalendarz-niedostepny: 106 106 106;
   --kalendarz-niedostepny-pasek: 255 255 255 / 0.13;
   --kalendarz-poza-grafikiem: 224 54 54;
+  --kalendarz-wolny: 248 248 248;
+  --kalendarz-wolny-dzis: 241 248 254;
 }
 [data-theme='dark'] {
   --kalendarz-niedostepny: 9 9 9;
   --kalendarz-niedostepny-pasek: 255 255 255 / 0.08;
   --kalendarz-poza-grafikiem: 240 75 75;
+  --kalendarz-wolny: 58 58 58;
+  --kalendarz-wolny-dzis: 23 58 90;
 }
 .kalendarz-niedostepny {
   background-color: rgb(var(--kalendarz-niedostepny));
@@ -95,7 +99,39 @@
     transparent 3px 8px
   );
 }
+/* Wolny czas (godziny pracy): w ciemnym motywie wyraźnie jaśniejszy od
+   niedostępnego (makieta grafik-dostepnosci.html), w jasnym jak dotąd. */
+.kalendarz-wolny {
+  background-color: rgb(var(--kalendarz-wolny));
+}
+.kalendarz-wolny-dzis {
+  background-color: rgb(var(--kalendarz-wolny-dzis));
+}
 /* Decyzja 9: spotkanie poza grafikiem dostaje czerwoną obwódkę, nic więcej. */
 .kalendarz-poza-grafikiem {
   box-shadow: 0 0 0 2px rgb(var(--kalendarz-poza-grafikiem));
+}
+
+/*
+  Przewijane listy w rozwijanych panelach (Autocomplete, filtry szybkie,
+  wielokrotny wybór). W ciemnym motywie pasek przewijania ma być ciemny
+  niezależnie od dziedziczenia color-scheme (Safari rysował biały tor).
+  W jasnym motywie zostaje domyślny wygląd przeglądarki.
+*/
+[data-theme='dark'] .lista-przewijana {
+  color-scheme: dark;
+  scrollbar-color: #5c5c5c transparent;
+}
+[data-theme='dark'] .lista-przewijana::-webkit-scrollbar {
+  width: 10px;
+  background: transparent;
+}
+[data-theme='dark'] .lista-przewijana::-webkit-scrollbar-track {
+  background: transparent;
+}
+[data-theme='dark'] .lista-przewijana::-webkit-scrollbar-thumb {
+  background-color: #5c5c5c;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: content-box;
 }

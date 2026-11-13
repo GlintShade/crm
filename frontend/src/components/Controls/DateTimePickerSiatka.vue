@@ -14,7 +14,7 @@
           :key="p.wartosc"
           type="button"
           class="h-6 rounded hover:bg-surface-gray-2"
-          :class="czyWybrane(p, time) ? 'bg-surface-gray-7 text-ink-white' : 'text-ink-gray-8'"
+          :class="czyWybrane(p, time) ? 'bg-surface-gray-7 text-white' : 'text-ink-gray-8'"
           @click="wybierz(p, { selected, setTime, setDate, close })"
         >{{ p.etykieta }}</button>
       </div>

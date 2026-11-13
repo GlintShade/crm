@@ -72,7 +72,7 @@
                 class="min-w-[84px] rounded-lg border border-outline-gray-2 p-1"
               >
                 <div
-                  class="relative h-2.5 overflow-hidden rounded bg-surface-gray-1"
+                  class="relative h-2.5 overflow-hidden rounded kalendarz-wolny"
                 >
                   <span
                     v-for="[a, b] in odcinki(h.user, dzien)"

@@ -91,7 +91,7 @@
             class="flex h-6 items-center gap-1 rounded-md border px-1.5 text-xs font-semibold"
             :class="
               wybrane.has(d)
-                ? 'border-transparent bg-surface-gray-7 text-ink-white'
+                ? 'border-transparent bg-surface-gray-7 text-white'
                 : 'border-outline-gray-2 bg-surface-base text-ink-gray-8'
             "
             :data-dzien="dzien"

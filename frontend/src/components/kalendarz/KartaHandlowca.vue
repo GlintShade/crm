@@ -106,8 +106,8 @@
           <div
             class="absolute inset-0 rounded-md"
             :class="[
-              czyDzis(dzien, teraz) ? 'bg-surface-blue-1' : 'bg-surface-gray-1',
-              czyWeekend(dzien) ? 'opacity-50' : '',
+              czyDzis(dzien, teraz) ? 'kalendarz-wolny-dzis' : 'kalendarz-wolny',
+              czyWeekend(dzien) ? 'opacity-50 dark:opacity-80' : '',
             ]"
           ></div>
           <div
