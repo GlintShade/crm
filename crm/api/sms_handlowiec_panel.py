@@ -30,10 +30,17 @@ from frappe import _
 from frappe.utils import cint, now_datetime
 from frappe.utils.password import get_decrypted_password
 
+from crm import volteo_reguly_przydzialu as reguly
 from crm.api.sms_dyzur import wyslij_sms_do_numeru
 from crm.api.sms_powitalny import DOCTYPE_USTAWIEN
 from crm.volteo_dyzury import normalizuj_numer_pl
-from crm.volteo_sms import dlugosc_gsm7, liczba_czesci_sms, numer_do_smsapi
+from crm.volteo_sms import (
+	dlugosc_gsm7,
+	liczba_czesci_sms,
+	numer_do_smsapi,
+	waliduj_szablon,
+	wypelnij_szablon,
+)
 from crm.volteo_sms_handlowiec import (
 	CISZA_DO,
 	CISZA_OD,
@@ -62,6 +69,7 @@ DOPUSZCZONE_ROLE_WOLAJACEGO = ["Volteo Core Admin", "System Manager"]
 ROLA_HANDLOWCA = "Volteo D2D Sales"
 POLE_LINII_LEADY = "custom_linia_leady"
 TYTUL_BLEDU = "SMS do handlowców (test)"
+TYP_LEAD = "lead"
 
 _CIAG_CYFR = re.compile(r"\+?\d(?:[\s\-.]?\d){4,}")
 
@@ -81,11 +89,14 @@ def _token_ustawiony() -> bool:
 	)
 
 
-def _wyslane_dzis() -> int | None:
-	"""Dzisiejszy licznik SMS do handlowców (bez zwiększania); None, gdy Redis niedostępny."""
+def _wyslane_dzis(klucz_dnia=klucz_licznika_dnia) -> int | None:
+	"""Dzisiejszy licznik SMS (bez zwiększania); None, gdy Redis niedostępny.
+
+	Domyślnie licznik SMS o spotkaniach; `reguly.klucz_licznika_dnia` daje licznik SMS o leadzie.
+	"""
 	cache = frappe.cache()
 	try:
-		wartosc = cache.get(cache.make_key(klucz_licznika_dnia(now_datetime())))
+		wartosc = cache.get(cache.make_key(klucz_dnia(now_datetime())))
 	except redis.exceptions.RedisError:
 		return None
 	if isinstance(wartosc, bytes):
@@ -93,10 +104,10 @@ def _wyslane_dzis() -> int | None:
 	return max(0, cint(wartosc))
 
 
-def _zwieksz_licznik() -> tuple[int | None, str]:
-	"""INCR dziennego licznika SMS do handlowców; (wartość po INCR albo None przy awarii Redis, klucz)."""
+def _zwieksz_licznik(klucz_dnia=klucz_licznika_dnia) -> tuple[int | None, str]:
+	"""INCR dziennego licznika SMS; (wartość po INCR albo None przy awarii Redis, klucz)."""
 	cache = frappe.cache()
-	klucz = cache.make_key(klucz_licznika_dnia(now_datetime()))
+	klucz = cache.make_key(klucz_dnia(now_datetime()))
 	try:
 		wartosc = cint(cache.incr(klucz))
 		cache.expire(klucz, TTL_LICZNIKA_SEK)
@@ -152,6 +163,48 @@ def _handlowcy() -> list[dict[str, Any]]:
 	return handlowcy
 
 
+def _tresc_lead(ustawienia: dict[str, Any]) -> str:
+	"""Zapisana treść SMS o nowym leadzie; pusta albo brak = treść domyślna."""
+	zapisana = ustawienia.get(reguly.POLE_TRESCI)
+	if isinstance(zapisana, str) and zapisana.strip():
+		return zapisana
+	return reguly.TRESC_LEAD_BEZPOSREDNI_DOMYSLNA
+
+
+def _limit_lead(ustawienia: dict[str, Any]) -> int:
+	"""Limit dzienny SMS o leadzie; brak albo nieliczbowy = domyślny, ujemny = 0."""
+	wartosc = ustawienia.get(reguly.POLE_LIMITU)
+	if wartosc in (None, ""):
+		return reguly.LIMIT_DZIENNY_DOMYSLNY
+	try:
+		return max(0, int(float(wartosc)))
+	except (TypeError, ValueError):
+		return reguly.LIMIT_DZIENNY_DOMYSLNY
+
+
+def _tresc_lead_z_danych(szablon: str) -> tuple[str, str | None]:
+	return wypelnij_szablon(
+		szablon, reguly.DANE_PRZYKLADOWE_LEAD_BEZPOSREDNI, reguly.PLACEHOLDERY_LEAD_BEZPOSREDNI
+	)
+
+
+def _stan_lead(ustawienia: dict[str, Any]) -> dict[str, Any]:
+	tresc = _tresc_lead(ustawienia)
+	gotowa, _ostrzezenie = _tresc_lead_z_danych(tresc)
+	return {
+		"wlaczone": 1 if czy_flaga(ustawienia, reguly.POLE_WLACZONE) else 0,
+		"tresc": tresc,
+		"limit": _limit_lead(ustawienia),
+		"wyslane_dzis": _wyslane_dzis(reguly.klucz_licznika_dnia),
+		"placeholdery": list(reguly.PLACEHOLDERY_LEAD_BEZPOSREDNI),
+		"podglad": {
+			"tekst": gotowa,
+			"znaki": dlugosc_gsm7(gotowa),
+			"czesci": liczba_czesci_sms(gotowa),
+		},
+	}
+
+
 def _stan() -> dict[str, Any]:
 	ustawienia = _ustawienia()
 	return {
@@ -168,6 +221,7 @@ def _stan() -> dict[str, Any]:
 		"dane_przykladowe": dict(DANE_PRZYKLADOWE_HANDLOWIEC),
 		"tresci_domyslne": {POLA_SZABLONOW[typ]: tresc for typ, tresc in TRESCI_DOMYSLNE.items()},
 		"handlowcy": _handlowcy(),
+		"lead_bezposredni": _stan_lead(ustawienia),
 	}
 
 
@@ -185,6 +239,9 @@ def volteo_sms_handlowiec_zapisz(
 	tresc_handlowiec_zmiana: str | None = None,
 	tresc_handlowiec_odwolanie: str | None = None,
 	limit_dzienny_handlowiec: int | None = None,
+	lead_bezposredni_wlaczone: int | None = None,
+	tresc_lead_bezposredni: str | None = None,
+	limit_dzienny_lead_bezposredni: int | None = None,
 ) -> dict[str, Any]:
 	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
 	zmiany: dict[str, Any] = {}
@@ -212,6 +269,19 @@ def volteo_sms_handlowiec_zapisz(
 			frappe.throw(_(komunikat))
 		zmiany[POLE_LIMITU] = cint(limit_dzienny_handlowiec)
 
+	if lead_bezposredni_wlaczone is not None:
+		zmiany[reguly.POLE_WLACZONE] = 1 if cint(lead_bezposredni_wlaczone) else 0
+	if tresc_lead_bezposredni is not None:
+		komunikat = waliduj_szablon(tresc_lead_bezposredni, reguly.PLACEHOLDERY_LEAD_BEZPOSREDNI)
+		if komunikat:
+			frappe.throw(_("Szablon SMS (nowy lead z reguły bezpośredniej): {0}").format(_(komunikat)))
+		zmiany[reguly.POLE_TRESCI] = tresc_lead_bezposredni.strip()
+	if limit_dzienny_lead_bezposredni is not None:
+		komunikat = waliduj_limit_handlowiec(limit_dzienny_lead_bezposredni)
+		if komunikat:
+			frappe.throw(_(komunikat))
+		zmiany[reguly.POLE_LIMITU] = cint(limit_dzienny_lead_bezposredni)
+
 	# zapis dopiero po walidacji wszystkich pól: błąd w jednym nie zostawia połowy zmian
 	for pole, wartosc in zmiany.items():
 		frappe.db.set_single_value(DOCTYPE_USTAWIEN, pole, wartosc)
@@ -219,10 +289,14 @@ def volteo_sms_handlowiec_zapisz(
 
 
 @frappe.whitelist()
-def volteo_sms_handlowiec_podglad(tresc: str | None = None) -> dict[str, Any]:
+def volteo_sms_handlowiec_podglad(tresc: str | None = None, typ: str | None = None) -> dict[str, Any]:
 	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
-	blad = waliduj_tresc_handlowiec(tresc)
-	gotowa, ostrzezenie = zbuduj_tresc_handlowiec(tresc or "", DANE_PRZYKLADOWE_HANDLOWIEC)
+	if typ == TYP_LEAD:
+		blad = waliduj_szablon(tresc, reguly.PLACEHOLDERY_LEAD_BEZPOSREDNI)
+		gotowa, ostrzezenie = _tresc_lead_z_danych(tresc or "")
+	else:
+		blad = waliduj_tresc_handlowiec(tresc)
+		gotowa, ostrzezenie = zbuduj_tresc_handlowiec(tresc or "", DANE_PRZYKLADOWE_HANDLOWIEC)
 	return {
 		"tresc": gotowa,
 		"dlugosc": dlugosc_gsm7(gotowa),
@@ -235,8 +309,8 @@ def volteo_sms_handlowiec_podglad(tresc: str | None = None) -> dict[str, Any]:
 @frappe.whitelist()
 def volteo_sms_handlowiec_test(typ: str = TYP_NOWE) -> dict[str, Any]:
 	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
-	if typ not in TYPY:
-		frappe.throw(_("Nieznany rodzaj SMS testowego. Dozwolone: nowe, zmiana, odwolanie."))
+	if typ != TYP_LEAD and typ not in TYPY:
+		frappe.throw(_("Nieznany rodzaj SMS testowego. Dozwolone: nowe, zmiana, odwolanie, lead."))
 	ustawienia = _ustawienia()
 	token = get_decrypted_password(DOCTYPE_USTAWIEN, DOCTYPE_USTAWIEN, "token_api", raise_exception=False)
 	if not token:
@@ -252,11 +326,19 @@ def volteo_sms_handlowiec_test(typ: str = TYP_NOWE) -> dict[str, Any]:
 				" (pole Mobile No)."
 			)
 		)
-	tresc, ostrzezenie = zbuduj_tresc_handlowiec(szablon_dla(typ, ustawienia), DANE_PRZYKLADOWE_HANDLOWIEC)
-	limit = limit_dzienny(ustawienia)
+	if typ == TYP_LEAD:
+		tresc, ostrzezenie = _tresc_lead_z_danych(_tresc_lead(ustawienia))
+		limit = _limit_lead(ustawienia)
+		klucz_dnia = reguly.klucz_licznika_dnia
+	else:
+		tresc, ostrzezenie = zbuduj_tresc_handlowiec(
+			szablon_dla(typ, ustawienia), DANE_PRZYKLADOWE_HANDLOWIEC
+		)
+		limit = limit_dzienny(ustawienia)
+		klucz_dnia = klucz_licznika_dnia
 
 	# cisza nocna celowo pominięta: SMS testowy to jawna akcja administratora
-	licznik, klucz = _zwieksz_licznik()
+	licznik, klucz = _zwieksz_licznik(klucz_dnia)
 	if licznik is not None and licznik - 1 >= limit:
 		_cofnij_licznik(klucz)
 		return {
