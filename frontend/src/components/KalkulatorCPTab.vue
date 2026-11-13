@@ -483,6 +483,7 @@
               <slot name="client-picker" />
             </div>
 
+            <OstrzezenieKontoAdministracyjne rodzaj="szansa" class="mt-2" />
             <Button
               class="mt-2 w-full"
               variant="solid"
@@ -695,6 +696,7 @@ import {
   kosztyPoczatkowe,
 } from '@/utils/cpMarza'
 import { formatPln, formatPlnAmount } from '@/utils/money'
+import OstrzezenieKontoAdministracyjne from '@/components/OstrzezenieKontoAdministracyjne.vue'
 
 const props = defineProps({
   contact: { type: Object, default: () => ({}) },

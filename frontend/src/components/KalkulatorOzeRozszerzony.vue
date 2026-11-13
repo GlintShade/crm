@@ -313,6 +313,7 @@
                 <slot name="client-picker" />
               </div>
 
+              <OstrzezenieKontoAdministracyjne rodzaj="szansa" class="mt-3" />
               <Button
                 class="mt-3 w-full"
                 variant="solid"
@@ -393,6 +394,7 @@ import { call, Button, FeatherIcon } from 'frappe-ui'
 import { VARIANTS, podsumowanieFinansowania, ppozWymuszonyProgiem } from '@/utils/pvForm'
 import { formatPln } from '@/utils/money'
 import KalkulatorParagon from './KalkulatorParagon.vue'
+import OstrzezenieKontoAdministracyjne from '@/components/OstrzezenieKontoAdministracyjne.vue'
 import WyborSegmentowy from './WyborSegmentowy.vue'
 import {
   ETYKIETA_GRUPY_KLIMY,

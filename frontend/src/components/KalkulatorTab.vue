@@ -442,6 +442,7 @@
                 <slot name="client-picker" />
               </div>
 
+              <OstrzezenieKontoAdministracyjne rodzaj="szansa" class="mt-3" />
               <Button
                 class="mt-3 w-full"
                 variant="solid"
@@ -569,6 +570,7 @@ import { formatPln } from '@/utils/money'
 import { grupujBreakdown } from '@/utils/pvBreakdown'
 import { czyNowyRodzaj, RODZAJE_NOWE } from '@/utils/ozeForm'
 import KalkulatorOzeRozszerzony from './KalkulatorOzeRozszerzony.vue'
+import OstrzezenieKontoAdministracyjne from '@/components/OstrzezenieKontoAdministracyjne.vue'
 import KalkulatorParagon from './KalkulatorParagon.vue'
 import WyborSegmentowy from './WyborSegmentowy.vue'
 
