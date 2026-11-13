@@ -299,6 +299,10 @@ def tekst_sladu(rodzaj: str, **dane: object) -> str:
 		sufiks = ", z korektą sumy" if dane.get("suma") else ""
 		return f"{ZNACZNIK_KOSZTY} zaktualizowano koszty planowane ({dane['pozycje']} pozycji{sufiks})"
 
+	if rodzaj == "koszty_marze":
+		# Tylko licznik zmienionych składników, nigdy kwota (model tajemnicy kosztów).
+		return f"{ZNACZNIK_KOSZTY} zaktualizowano składniki marży planowej ({dane['pozycje']} pozycji)"
+
 	if rodzaj == "status_auto":
 		return f"status zmieniony automatycznie ({dane['automatyzacja']}): {dane['stary']} → {dane['nowy']}"
 

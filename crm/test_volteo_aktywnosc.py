@@ -696,6 +696,10 @@ class TestTekstSladu(unittest.TestCase):
 		)
 		self.assertFalse(any(znak.isdigit() for znak in tekst_sladu("koszty_plan", pozycje=0, suma=False).split("(")[0]))
 
+	def test_l3_koszty_marze_bez_kwot(self: "TestTekstSladu") -> None:
+		text = tekst_sladu("koszty_marze", pozycje=2)
+		self.assertEqual(text, f"{ZNACZNIK_KOSZTY} zaktualizowano składniki marży planowej (2 pozycji)")
+
 	def test_m_status_auto(self: "TestTekstSladu") -> None:
 		self.assertEqual(
 			tekst_sladu("status_auto", automatyzacja="Umowa Wygenerowana", stary="Lead", nowy="Umowa Wygenerowana"),

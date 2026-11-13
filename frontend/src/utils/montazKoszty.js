@@ -470,3 +470,79 @@ export function czyZmienioneRzeczywiste(snapshot, edycje, dodatkowe) {
   const b = zbudujPayload(snapshot, bazaEdycji, bazaDodatkowe)
   return JSON.stringify(a) !== JSON.stringify(b) || JSON.stringify(surowe) !== JSON.stringify(bazaDodatkowe)
 }
+
+// ---------------------------------------------------------------------------
+// Edycja składników marży planowej (ops#339). Tylko podgląd na żywo; serwer
+// (`crm.api.koszty.volteo_koszty_marze_zapisz`) jest autorytatywny. Cena i
+// podsumowanie nie zmieniają się: składniki to wewnętrzny podział marży.
+// Arytmetyka w groszach (liczby całkowite).
+// ---------------------------------------------------------------------------
+
+/** Wartości wejściowe pól składników na starcie edycji: klucz -> zapisana kwota. */
+export function skladnikiMarzyStart(snapshot) {
+  const wynik = {}
+  for (const sk of snapshot?.skladniki_marzy || []) {
+    wynik[sk.klucz] = sk.kwota != null ? String(sk.kwota) : ''
+  }
+  return wynik
+}
+
+/**
+ * Podgląd na żywo składników marży. Nie mutuje argumentów. Pusty albo błędny wpis
+ * oznacza brak zmiany (zostaje zapisana kwota).
+ *
+ * @param {object|null} snapshot - sparsowany snapshot
+ * @param {Object<string,string>} edycjeMarz - klucz -> wpisana kwota składnika
+ * @returns {{skladniki: object[], suma: number, marzaPlan: number, nierozdzielona: number, bledy: string[]}}
+ */
+export function przeliczSkladnikiMarzy(snapshot, edycjeMarz) {
+  const bledy = []
+  const edycje = edycjeMarz || {}
+  let sumaG = 0
+  const skladniki = []
+  for (const sk of snapshot?.skladniki_marzy || []) {
+    const zapisany = grosze(sk.kwota)
+    const surowy = edycje[sk.klucz]
+    const sparsowany = parsujKosztRzeczywisty(surowy)
+    if (sparsowany === null && typeof surowy === 'string' && surowy.trim() !== '') {
+      bledy.push(`Nieprawidłowa kwota składnika marży „${sk.etykieta || sk.klucz}”.`)
+    }
+    const nowy = sparsowany === null ? zapisany : Math.round(sparsowany * 100)
+    const pierwotnyZapisany = liczbaLubNull(sk.kwota_pierwotna)
+    sumaG += nowy
+    skladniki.push({
+      klucz: sk.klucz,
+      etykieta: sk.etykieta || sk.klucz,
+      kwotaZapisana: zGroszy(zapisany),
+      kwotaNowa: zGroszy(nowy),
+      // Wartość, do której wraca przywrócenie: zapisana pierwotna albo (przy niezapisanej
+      // zmianie) obecnie zapisana kwota.
+      pierwotny:
+        pierwotnyZapisany !== null ? roundPln(pierwotnyZapisany) : nowy !== zapisany ? zGroszy(zapisany) : null,
+      zmieniony: nowy !== zapisany,
+    })
+  }
+  const marzaG = grosze(snapshot?.podsumowanie?.marza_plan)
+  return {
+    skladniki,
+    suma: zGroszy(sumaG),
+    marzaPlan: zGroszy(marzaG),
+    nierozdzielona: zGroszy(marzaG - sumaG),
+    bledy,
+  }
+}
+
+/** Payload do API: tylko składniki zmienione względem zapisanych; kwota jako wpisany napis. */
+export function zbudujPayloadMarz(snapshot, edycjeMarz) {
+  const podglad = przeliczSkladnikiMarzy(snapshot, edycjeMarz)
+  const skladniki = {}
+  for (const sk of podglad.skladniki) {
+    if (sk.zmieniony) skladniki[sk.klucz] = sk.kwotaNowa.toFixed(2)
+  }
+  return { skladniki }
+}
+
+/** Czy payload marż niesie jakąkolwiek zmianę (do wyłączania przycisku Zapisz). */
+export function czyPayloadMarzMaZmiany(payload) {
+  return Object.keys(payload?.skladniki || {}).length > 0
+}

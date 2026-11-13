@@ -9,6 +9,10 @@ import {
   zbudujPayloadPlanu,
   czyPayloadPlanuMaZmiany,
   czyZmienioneRzeczywiste,
+  skladnikiMarzyStart,
+  przeliczSkladnikiMarzy,
+  zbudujPayloadMarz,
+  czyPayloadMarzMaZmiany,
 } from '@/utils/montazKoszty'
 
 function deepFreeze(value) {
@@ -622,5 +626,73 @@ describe('Edycja kosztów planowanych (montazKoszty)', () => {
       expect(czyZmienioneRzeczywiste(snap, { k_falownik: '4000', k_bateria: '', k_montaz_pv: '' }, [])).toBe(true)
       expect(czyZmienioneRzeczywiste(snap, { k_falownik: '', k_bateria: '', k_montaz_pv: '' }, [{ nazwa: '', kwota: '' }])).toBe(true)
     })
+  })
+})
+
+describe('Edycja składników marży (montazKoszty, ops#339)', () => {
+  function marzeSnapshot() {
+    return {
+      wersja: 1,
+      linia_produktowa: 'pv',
+      linie: [],
+      skladniki_marzy: [
+        { klucz: 'marza_proenergy', etykieta: 'Marża ProEnergy', kwota: '5000.00' },
+        { klucz: 'narzut', etykieta: 'Narzut handlowca', kwota: '1000.00', kwota_pierwotna: '800.00' },
+      ],
+      podsumowanie: { netto: '30000.00', koszt_plan: '20000.00', marza_plan: '10000.00', zysk_plan: '10000.00' },
+    }
+  }
+
+  it('start: zapisane kwoty jako napisy', () => {
+    expect(skladnikiMarzyStart(marzeSnapshot())).toEqual({ marza_proenergy: '5000.00', narzut: '1000.00' })
+    expect(skladnikiMarzyStart(null)).toEqual({})
+  })
+
+  it('bez zmian: suma i nierozdzielona marża', () => {
+    const snap = marzeSnapshot()
+    const w = przeliczSkladnikiMarzy(snap, skladnikiMarzyStart(snap))
+    expect(w.suma).toBe(6000)
+    expect(w.marzaPlan).toBe(10000)
+    expect(w.nierozdzielona).toBe(4000)
+    expect(w.skladniki.every((s) => !s.zmieniony)).toBe(true)
+    expect(w.skladniki[1].pierwotny).toBe(800)
+    expect(w.bledy).toEqual([])
+  })
+
+  it('zmiana przesuwa sumę i marżę nierozdzieloną na żywo, pierwotny z niezapisanej zmiany', () => {
+    const snap = marzeSnapshot()
+    const w = przeliczSkladnikiMarzy(snap, { marza_proenergy: '5 500,50', narzut: '1000.00' })
+    expect(w.suma).toBe(6500.5)
+    expect(w.nierozdzielona).toBe(3499.5)
+    expect(w.skladniki[0].zmieniony).toBe(true)
+    expect(w.skladniki[0].pierwotny).toBe(5000)
+  })
+
+  it('nierozdzielona ujemna, gdy suma przekracza marżę', () => {
+    const snap = marzeSnapshot()
+    expect(przeliczSkladnikiMarzy(snap, { marza_proenergy: '12000' }).nierozdzielona).toBe(-3000)
+  })
+
+  it('błędny wpis: błąd i brak zmiany, pusty: brak zmiany', () => {
+    const snap = marzeSnapshot()
+    const w = przeliczSkladnikiMarzy(snap, { marza_proenergy: 'abc', narzut: '' })
+    expect(w.bledy).toHaveLength(1)
+    expect(w.suma).toBe(6000)
+  })
+
+  it('nie mutuje argumentów', () => {
+    const snap = deepFreeze(marzeSnapshot())
+    const edycje = Object.freeze({ narzut: '2000' })
+    expect(() => przeliczSkladnikiMarzy(snap, edycje)).not.toThrow()
+    expect(() => zbudujPayloadMarz(snap, edycje)).not.toThrow()
+  })
+
+  it('payload: tylko zmienione, kwota z dwoma miejscami', () => {
+    const snap = marzeSnapshot()
+    const p = zbudujPayloadMarz(snap, { marza_proenergy: '5000', narzut: '1 500,5' })
+    expect(p).toEqual({ skladniki: { narzut: '1500.50' } })
+    expect(czyPayloadMarzMaZmiany(p)).toBe(true)
+    expect(czyPayloadMarzMaZmiany(zbudujPayloadMarz(snap, skladnikiMarzyStart(snap)))).toBe(false)
+    expect(czyPayloadMarzMaZmiany(null)).toBe(false)
   })
 })

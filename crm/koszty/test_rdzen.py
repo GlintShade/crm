@@ -5,11 +5,14 @@ from decimal import Decimal
 from crm.koszty.rdzen import (
 	aktualizuj_po_edycji_zestawu,
 	czy_zmieniona_korekta,
+	nierozdzielona_marza,
 	policz_zmiany_planu,
+	policz_zmiany_skladnikow,
 	scal_snapshot,
 	zbuduj_snapshot_cp,
 	zbuduj_snapshot_oze,
 	zmien_koszty_planowane,
+	zmien_skladniki_marzy,
 )
 
 WEWNETRZNE = {
@@ -877,3 +880,90 @@ class ZmienKosztyPlanowaneOdrzucenieTest(unittest.TestCase):
 		self.assertTrue(czy_zmieniona_korekta(z_korekta, inna))
 		self.assertFalse(czy_zmieniona_korekta(z_korekta, inna_linia))
 		self.assertFalse(czy_zmieniona_korekta(snap, snap))
+
+
+def _snap_marze() -> dict:
+	snap = _pv_snapshot()
+	snap["skladniki_marzy"] = [
+		{"klucz": "marza_proenergy", "etykieta": "Marża ProEnergy", "kwota": "5000.00"},
+		{"klucz": "narzut", "etykieta": "Narzut handlowca", "kwota": "1000.00"},
+	]
+	return snap
+
+
+def _sk(snap: dict, klucz: str) -> dict:
+	return next(sk for sk in snap["skladniki_marzy"] if sk["klucz"] == klucz)
+
+
+class ZmienSkladnikiMarzyTest(unittest.TestCase):
+	def test_zmiana_i_wartosc_pierwotna(self):
+		nowy = zmien_skladniki_marzy(_snap_marze(), {"narzut": "1 500,50"}, T0, "adm")
+		self.assertEqual(_sk(nowy, "narzut")["kwota"], "1500.50")
+		self.assertEqual(_sk(nowy, "narzut")["kwota_pierwotna"], "1000.00")
+		self.assertNotIn("kwota_pierwotna", _sk(nowy, "marza_proenergy"))
+		self.assertEqual(nowy["edycja_marzy"], {"kiedy": T0, "kto": "adm"})
+		self.assertEqual(nowy["zmodyfikowal"], "adm")
+
+	def test_pierwotna_nie_nadpisywana(self):
+		p1 = zmien_skladniki_marzy(_snap_marze(), {"narzut": "1500"}, T0, "adm")
+		p2 = zmien_skladniki_marzy(p1, {"narzut": "2000"}, T0, "adm")
+		self.assertEqual(_sk(p2, "narzut")["kwota_pierwotna"], "1000.00")
+		self.assertEqual(_sk(p2, "narzut")["kwota"], "2000.00")
+
+	def test_przywrocenie_none_i_rowna_pierwotnej(self):
+		p1 = zmien_skladniki_marzy(_snap_marze(), {"narzut": "1500"}, T0, "adm")
+		for wartosc in (None, "1000"):
+			p2 = zmien_skladniki_marzy(p1, {"narzut": wartosc}, T0, "adm")
+			self.assertEqual(_sk(p2, "narzut")["kwota"], "1000.00")
+			self.assertNotIn("kwota_pierwotna", _sk(p2, "narzut"))
+
+	def test_brak_zmian(self):
+		with self.assertRaisesRegex(ValueError, "Brak zmian w składnikach marży."):
+			zmien_skladniki_marzy(_snap_marze(), {"narzut": "1000"}, T0, "adm")
+		with self.assertRaisesRegex(ValueError, "Brak zmian w składnikach marży."):
+			zmien_skladniki_marzy(_snap_marze(), {"narzut": None}, T0, "adm")
+
+	def test_nieznany_klucz(self):
+		with self.assertRaisesRegex(ValueError, "Nieznany składnik marży: xx."):
+			zmien_skladniki_marzy(_snap_marze(), {"xx": "1"}, T0, "adm")
+
+	def test_kwota_ujemna_lub_smiec(self):
+		for zla in ("-1", "abc", True):
+			with self.assertRaises(ValueError):
+				zmien_skladniki_marzy(_snap_marze(), {"narzut": zla}, T0, "adm")
+
+	def test_cp_i_brak_snapshotu(self):
+		snap = _snap_marze()
+		snap["linia_produktowa"] = "cp"
+		with self.assertRaisesRegex(ValueError, "Czystego Powietrza"):
+			zmien_skladniki_marzy(snap, {"narzut": "1"}, T0, "adm")
+		for pusty in (None, {}):
+			with self.assertRaisesRegex(ValueError, "Brak snapshotu kosztów"):
+				zmien_skladniki_marzy(pusty, {"narzut": "1"}, T0, "adm")
+
+	def test_brak_mutacji_i_podsumowanie_nietkniete(self):
+		snap = _snap_marze()
+		kopia = copy.deepcopy(snap)
+		nowy = zmien_skladniki_marzy(snap, {"narzut": "2000", "marza_proenergy": "100"}, T0, "adm")
+		self.assertEqual(snap, kopia)
+		self.assertEqual(nowy["podsumowanie"], kopia["podsumowanie"])
+		self.assertEqual(nowy["linie"], kopia["linie"])
+		self.assertEqual(nowy["dodatkowe"], kopia["dodatkowe"])
+		self.assertEqual(nowy["podsumowanie_rzeczywiste"], kopia["podsumowanie_rzeczywiste"])
+
+	def test_przezywa_inne_edycje(self):
+		edytowany = zmien_skladniki_marzy(_snap_marze(), {"narzut": "1500"}, T0, "adm")
+		po_planie = zmien_koszty_planowane(edytowany, {"k_bateria": "13000"}, None, T0, "adm")
+		po_zestawie = aktualizuj_po_edycji_zestawu(edytowany, "31000", "adm", T0)
+		po_kosztach = scal_snapshot(edytowany, {"k_bateria": "100"}, [], T0, "adm")
+		for wynik in (po_planie, po_zestawie, po_kosztach):
+			self.assertEqual(_sk(wynik, "narzut")["kwota"], "1500.00")
+			self.assertEqual(_sk(wynik, "narzut")["kwota_pierwotna"], "1000.00")
+			self.assertEqual(wynik["edycja_marzy"], {"kiedy": T0, "kto": "adm"})
+
+	def test_policz_zmiany_i_nierozdzielona(self):
+		snap = _snap_marze()
+		nowy = zmien_skladniki_marzy(snap, {"narzut": "1500"}, T0, "adm")
+		self.assertEqual(policz_zmiany_skladnikow(snap, nowy), 1)
+		self.assertEqual(nierozdzielona_marza(snap), Decimal("4000.00"))
+		self.assertEqual(nierozdzielona_marza(nowy), Decimal("3500.00"))

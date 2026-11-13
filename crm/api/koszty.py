@@ -36,8 +36,10 @@ from crm.api.umowa import _sprawdz_dostep_do_szansy
 from crm.koszty.rdzen import (
 	czy_zmieniona_korekta,
 	policz_zmiany_planu,
+	policz_zmiany_skladnikow,
 	scal_snapshot,
 	zmien_koszty_planowane,
+	zmien_skladniki_marzy,
 )
 from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad
 
@@ -187,6 +189,51 @@ def volteo_koszty_plan_zapisz(
 				suma=czy_zmieniona_korekta(zapisany, nowy),
 			),
 		)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), "Volteo Koszty: błąd zapisu śladu aktywności")
+
+	return {"koszty": nowy}
+
+
+@frappe.whitelist()
+@rate_limit(limit=30, seconds=60)
+def volteo_koszty_marze_zapisz(deal: str, skladniki: dict[str, Any]) -> dict[str, Any]:
+	"""Nanosi edycję SKŁADNIKÓW marży planowej administratora na zapisany snapshot kosztów
+	szansy OZE (`linia_produktowa` `pv` albo `oze`; ops#339).
+
+	Semantykę (wartość pierwotna, przywracanie, brak zmian) opisuje
+	`crm.koszty.rdzen.zmien_skladniki_marzy`; cena i `podsumowanie` zostają nietknięte. Bramka
+	`ADMIN_ROLE` jest pierwszą instrukcją (fail-closed). Gdy zmienił się składnik `narzut`,
+	pole szansy `custom_narzut` dostaje tę samą kwotę (spójność ze snapshotem). Już naliczone
+	wiersze `Volteo Rozliczenie` nie są zmieniane. Ślad w Aktywności niesie wyłącznie licznik.
+	"""
+	role_uzytkownika = set(frappe.get_roles(frappe.session.user))
+	if not ADMIN_ROLE & role_uzytkownika:
+		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
+
+	_sprawdz_dostep_do_szansy(deal, "write")
+
+	zapisany = _wczytaj_zapisany_snapshot(deal)
+
+	try:
+		nowy = zmien_skladniki_marzy(zapisany, skladniki, frappe.utils.now(), frappe.session.user)
+	except ValueError as blad:
+		frappe.throw(str(blad))
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), "Volteo Koszty: błąd zapisu składników marży")
+		frappe.throw(_("Wystąpił błąd podczas zapisu składników marży."))
+
+	meta = frappe.get_meta("CRM Deal")
+	pola: dict[str, Any] = {"custom_koszty_json": json.dumps(nowy, ensure_ascii=False)}
+	narzut_przed = next((s["kwota"] for s in zapisany.get("skladniki_marzy") or [] if s["klucz"] == "narzut"), None)
+	narzut_po = next((s["kwota"] for s in nowy.get("skladniki_marzy") or [] if s["klucz"] == "narzut"), None)
+	if narzut_po is not None and narzut_po != narzut_przed and meta.has_field("custom_narzut"):
+		pola["custom_narzut"] = flt(narzut_po, 2)
+	# permlevel 2, update_modified=False: ten sam powód co w `volteo_koszty_zapisz` wyżej.
+	frappe.db.set_value("CRM Deal", deal, pola, update_modified=False)
+
+	try:
+		zapisz_slad(deal, tekst_sladu("koszty_marze", pozycje=policz_zmiany_skladnikow(zapisany, nowy)))
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), "Volteo Koszty: błąd zapisu śladu aktywności")
 

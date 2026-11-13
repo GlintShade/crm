@@ -75,7 +75,7 @@
           variant="outline"
           size="sm"
           :label="__('Edytuj koszty planowane')"
-          :disabled="saving || rzeczywisteZmienione"
+          :disabled="saving || rzeczywisteZmienione || trybMarz"
           data-testid="koszty-edytuj-plan"
           @click="rozpocznijEdycjePlanu"
         />
@@ -197,12 +197,69 @@
         <Button variant="outline" size="sm" :label="__('Dodaj pozycję')" :disabled="saving || trybPlanu" @click="dodajDodatkowa" />
       </div>
 
-      <!-- PV and OZE (b68, nowe rodzaje): read-only planned margin components -->
+      <!-- PV i OZE: składniki marży planowej (edycja ops#339) -->
       <div v-if="['pv', 'oze'].includes(snapshot.linia_produktowa) && skladnikiMarzy.length" class="mk-section">
         <div class="mk-section-title">{{ __('Składniki marży planowej') }}</div>
-        <div v-for="skl in skladnikiMarzy" :key="skl.klucz" class="mk-skladnik-row">
+        <div v-if="edycjaMarzyTekst" class="mb-2 text-xs text-ink-amber-8" data-testid="koszty-edycja-marz">
+          {{ edycjaMarzyTekst }}
+        </div>
+        <div v-for="skl in skladnikiMarzyWidok" :key="skl.klucz" class="mk-skladnik-row">
           <span>{{ skl.etykieta }}</span>
-          <span class="tabular-nums">{{ formatPln(skl.kwota) }}</span>
+          <span class="tabular-nums">
+            <template v-if="trybMarz">
+              <input
+                type="text"
+                inputmode="decimal"
+                class="mk-input mk-input-suma"
+                :class="{ 'mk-input-zmieniony': skl.zmieniony }"
+                :value="edycjeMarz[skl.klucz]"
+                :disabled="saving"
+                :data-testid="`koszty-marza-${skl.klucz}`"
+                @input="edycjeMarz[skl.klucz] = $event.target.value"
+              />
+            </template>
+            <template v-else>{{ formatPln(skl.kwotaNowa) }}</template>
+            <span v-if="skl.pierwotny !== null" class="mk-pierwotny">
+              {{ __('Pierwotnie') }}: {{ formatPln(skl.pierwotny) }}
+              <button v-if="trybMarz" type="button" class="mk-link" :disabled="saving" @click="przywrocSkladnik(skl.klucz)">
+                {{ __('Przywróć') }}
+              </button>
+            </span>
+          </span>
+        </div>
+        <div class="mk-skladnik-row">
+          <span>{{ __('Suma składników') }}</span>
+          <span class="tabular-nums">{{ formatPln(marze.suma) }}</span>
+        </div>
+        <div v-if="marze.nierozdzielona !== 0" class="mk-skladnik-row" data-testid="koszty-marza-nierozdzielona">
+          <span>{{ __('Nierozdzielona marża') }}</span>
+          <span class="tabular-nums" :class="marze.nierozdzielona < 0 ? 'text-ink-red-6' : 'text-ink-amber-8'">
+            {{ formatPln(marze.nierozdzielona) }}
+          </span>
+        </div>
+        <div class="mk-actions">
+          <Button
+            v-if="!trybMarz"
+            variant="outline"
+            size="sm"
+            :label="__('Edytuj marże')"
+            :disabled="saving || trybPlanu"
+            data-testid="koszty-marze-edytuj"
+            @click="rozpocznijEdycjeMarz"
+          />
+          <template v-else>
+            <span v-if="marze.bledy.length" class="mk-actions-hint">{{ marze.bledy[0] }}</span>
+            <Button variant="outline" size="sm" :disabled="saving" :label="__('Anuluj')" @click="zakonczEdycjeMarz" />
+            <Button
+              variant="solid"
+              size="sm"
+              :loading="saving"
+              :disabled="saving || marze.bledy.length > 0 || !marzeMajaZmiany"
+              :label="__('Zapisz marże')"
+              data-testid="koszty-marze-zapisz"
+              @click="zapiszMarze"
+            />
+          </template>
         </div>
       </div>
 
@@ -325,6 +382,10 @@ import {
   zbudujPayloadPlanu,
   czyPayloadPlanuMaZmiany,
   czyZmienioneRzeczywiste,
+  skladnikiMarzyStart,
+  przeliczSkladnikiMarzy,
+  zbudujPayloadMarz,
+  czyPayloadMarzMaZmiany,
 } from '@/utils/montazKoszty'
 
 const props = defineProps({
@@ -345,6 +406,9 @@ const trybPlanu = ref(false)
 const edycjePlanu = ref({}) // klucz -> wpisany koszt planowany
 const sumaPlanuWpis = ref(null) // wpisana suma planu albo null (nie ruszana)
 const usunKorekte = ref(false)
+// Tryb edycji składników marży planowej (ops#339): wzajemnie wyłączny z trybem planu.
+const trybMarz = ref(false)
+const edycjeMarz = ref({}) // klucz -> wpisana kwota składnika
 
 // --- Load -------------------------------------------------------------------
 // Permlevel-2 field: Frappe drops `custom_koszty_json` from the response
@@ -376,6 +440,7 @@ createResource({
 function seedFromSnapshot(nowySnapshot) {
   snapshot.value = nowySnapshot
   zakonczEdycjePlanu()
+  zakonczEdycjeMarz()
 
   const edycjeInit = {}
   for (const linia of nowySnapshot?.linie || []) {
@@ -449,7 +514,7 @@ function przywrocPierwotny(klucz) {
   edycjePlanu.value = { ...edycjePlanu.value, [klucz]: pierwotny.toFixed(2) }
 }
 function rozpocznijEdycjePlanu() {
-  if (!mozeEdytowacPlan.value || rzeczywisteZmienione.value || saving.value) return
+  if (!mozeEdytowacPlan.value || rzeczywisteZmienione.value || saving.value || trybMarz.value) return
   edycjePlanu.value = edycjePlanuStart(snapshot.value)
   sumaPlanuWpis.value = null
   usunKorekte.value = false
@@ -479,6 +544,33 @@ const edycjaPlanuTekst = computed(() => {
   )
 })
 const skladnikiMarzy = computed(() => snapshot.value?.skladniki_marzy || [])
+
+// --- Edycja składników marży planowej (ops#339) -------------------------
+const marze = computed(() => przeliczSkladnikiMarzy(snapshot.value, trybMarz.value ? edycjeMarz.value : {}))
+const skladnikiMarzyWidok = computed(() => marze.value.skladniki)
+const payloadMarz = computed(() => zbudujPayloadMarz(snapshot.value, edycjeMarz.value))
+const marzeMajaZmiany = computed(() => czyPayloadMarzMaZmiany(payloadMarz.value))
+function rozpocznijEdycjeMarz() {
+  if (!snapshot.value || saving.value || trybPlanu.value) return
+  edycjeMarz.value = skladnikiMarzyStart(snapshot.value)
+  trybMarz.value = true
+}
+function zakonczEdycjeMarz() {
+  trybMarz.value = false
+  edycjeMarz.value = {}
+}
+function przywrocSkladnik(klucz) {
+  const pierwotny = marze.value.skladniki.find((s) => s.klucz === klucz)?.pierwotny
+  if (pierwotny == null) return
+  edycjeMarz.value = { ...edycjeMarz.value, [klucz]: pierwotny.toFixed(2) }
+}
+const edycjaMarzyTekst = computed(() => {
+  const ed = snapshot.value?.edycja_marzy ?? null
+  if (!ed) return ''
+  const kiedy = formatujDataGodzine(ed.kiedy)
+  const kto = (ed.kto && getUser(ed.kto)?.full_name) || ed.kto || ''
+  return `${__('Składniki marży zmienione ręcznie')}${kiedy ? ' ' + kiedy : ''}${kto ? ' (' + kto + ')' : ''}.`
+})
 
 function jednostkaLabel(jednostka) {
   return jednostka === 'm2' ? 'm²' : jednostka || ''
@@ -564,6 +656,23 @@ async function zapiszPlan() {
     toast.success(__('Zapisano koszty planowane'))
   } catch (err) {
     toast.error(extractErrorMessage(err, __('Nie udało się zapisać kosztów planowanych')))
+  } finally {
+    saving.value = false
+  }
+}
+
+async function zapiszMarze() {
+  if (!snapshot.value || saving.value || marze.value.bledy.length || !marzeMajaZmiany.value) return
+  saving.value = true
+  try {
+    const data = await call('crm.api.koszty.volteo_koszty_marze_zapisz', {
+      deal: props.dealId,
+      skladniki: payloadMarz.value.skladniki,
+    })
+    seedFromSnapshot(parseSnapshot(data?.koszty))
+    toast.success(__('Zapisano składniki marży'))
+  } catch (err) {
+    toast.error(extractErrorMessage(err, __('Nie udało się zapisać składników marży')))
   } finally {
     saving.value = false
   }
