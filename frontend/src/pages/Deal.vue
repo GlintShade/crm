@@ -15,6 +15,7 @@
       v-model:assignees="assignees.data"
       :deal-id="dealId"
       :doc="doc"
+      @zmieniono-doradce="odswiezPoZmianieDoradcy"
       :okruszki="breadcrumbs"
       :tabs="tabs"
       :opcje-statusow="statuses"
@@ -891,6 +892,12 @@ function beforeStatusChange(data) {
       onSuccess: () => reloadResources(data),
     })
   }
+}
+
+// ops#336: po zmianie doradcy w naglowku przeladuj szanse i przypisania.
+function odswiezPoZmianieDoradcy() {
+  document.reload()
+  assignees.reload()
 }
 
 function reloadResources(data) {

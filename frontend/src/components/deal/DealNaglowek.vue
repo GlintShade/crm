@@ -39,25 +39,11 @@
       </nav>
       <div class="flex shrink-0 items-center gap-2">
         <slot name="akcje" />
-        <AssignTo
-          :model-value="assignees"
-          doctype="CRM Deal"
-          :docname="dealId"
-          @update:model-value="(v) => emit('update:assignees', v)"
-        >
-          <template #target="{ togglePopover }">
-            <button
-              type="button"
-              class="flex items-center gap-2 rounded-md px-1.5 py-1 text-sm hover:bg-surface-gray-2"
-              data-testid="naglowek-doradca"
-              @click="togglePopover"
-            >
-              <span class="text-xs text-ink-gray-5">{{ __('Doradca') }}</span>
-              <span class="text-ink-gray-9">{{ doradca || __('Przypisz') }}</span>
-              <span class="lucide-chevron-down size-3.5 text-ink-gray-5" aria-hidden="true" />
-            </button>
-          </template>
-        </AssignTo>
+        <ZmienDoradceSzansy
+          :deal-id="dealId"
+          :doradca="doc.deal_owner"
+          @zmieniono="emit('zmieniono-doradce')"
+        />
       </div>
     </div>
 
@@ -348,10 +334,9 @@
 import { Button, Dialog, Tooltip, createResource, toast } from 'frappe-ui'
 import { computed, defineComponent, h, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
-import AssignTo from '@/components/AssignTo.vue'
+import ZmienDoradceSzansy from '@/components/deal/ZmienDoradceSzansy.vue'
 import DealPipelineBar from '@/components/deal/DealPipelineBar.vue'
 import { statusesStore } from '@/stores/statuses'
-import { usersStore } from '@/stores/users'
 import { copyToClipboard } from '@/utils'
 import {
   bandMode,
@@ -387,11 +372,10 @@ const props = defineProps({
   opcjeStatusow: { type: Array, default: () => [] },
   assignees: { type: Array, default: () => [] },
 })
-const emit = defineEmits(['update:assignees'])
+const emit = defineEmits(['update:assignees', 'zmieniono-doradce'])
 const tabIndex = defineModel('tabIndex', { type: Number, default: 0 })
 
 const { getDealStatus } = statusesStore()
-const { getUser } = usersStore()
 
 // Ten sam zasób (URL, parametry, klucz cache) co w DealPipelineBar.vue, więc
 // współdzielony; odświeżany tylko przy zmianie rodzaju (patrz tamten komentarz).
@@ -418,14 +402,6 @@ const odznaka = computed(
 
 const czas = computed(() => czasWEtapie(props.doc.status_change_log, status.value))
 
-const doradca = computed(() => {
-  const owner = props.doc.deal_owner
-  if (!owner) return ''
-  const u = getUser(owner)
-  const nazwa = u?.full_name || owner
-  const wiecej = Math.max(0, (props.assignees?.length || 0) - 1)
-  return wiecej ? `${nazwa} +${wiecej}` : nazwa
-})
 // --- Wariant widoku etapów (Kroki / Pasek), pamiętany w localStorage ---------------
 const KLUCZ_WARIANTU = 'volteo.naglowek.wariant'
 function odczytajWariant() {
