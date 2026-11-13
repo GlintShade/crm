@@ -229,7 +229,7 @@
               class="rounded border px-1.5 py-0.5 text-p-sm"
               :class="
                 p === ZNACZNIK_NOWY
-                  ? 'border-outline-amber-2 bg-surface-amber-2 text-ink-amber-3'
+                  ? 'border-outline-amber-2 bg-surface-amber-2 text-ink-amber-8'
                   : 'bg-surface-gray-2 text-ink-gray-7 hover:bg-surface-gray-3'
               "
               :title="
