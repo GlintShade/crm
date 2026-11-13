@@ -851,6 +851,20 @@ class TestTekstSladu(unittest.TestCase):
 		self.assertIn("Umowa: Podpisana (Autenti), PDF z 12.10.2026 bez zmian.", t)
 		self.assertIn("Snapshot kosztów: podsumowanie przeliczone, linie kosztów bez zmian.", t)
 
+	def test_czlon_kosztow_i_marz_tylko_liczniki(self):
+		t = z.tekst_sladu_zestawu(z.Roznice(), None, None, [], None, None, {}, koszty=(2, 1))
+		self.assertIn("Koszty i marże: koszty planowane: 2 pozycje, marże: 1 pozycja.", t)
+		t = z.tekst_sladu_zestawu(z.Roznice(), None, None, [], None, None, {}, koszty=(5, 0))
+		self.assertIn("Koszty i marże: koszty planowane: 5 pozycji.", t)
+		self.assertNotIn(", marże:", t)
+		t = z.tekst_sladu_zestawu(z.Roznice(), None, None, [], None, None, {}, koszty=(0, 3))
+		self.assertIn("Koszty i marże: marże: 3 pozycje.", t)
+
+	def test_brak_czlonu_kosztow_gdy_zero_lub_none(self):
+		for k in (None, (0, 0)):
+			t = z.tekst_sladu_zestawu(z.Roznice(), None, None, [], None, None, {}, koszty=k)
+			self.assertNotIn("Koszty i marże", t)
+
 	def test_brak_powodu(self):
 		t = z.tekst_sladu_zestawu(self.roznice(), None, None, [], None, None, {})
 		self.assertTrue(t.startswith("[volteo:zestaw] Edycja zestawu. "))

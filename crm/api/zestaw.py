@@ -34,10 +34,20 @@ from crm.api.koszty import ADMIN_ROLE
 from crm.api.limit_zadan import rate_limit
 from crm.api.umowa import RODZAJ_CP, _sprawdz_dostep_do_szansy
 from crm.integrations.autenti.logika import mozna_wyslac
-from crm.koszty.rdzen import aktualizuj_po_edycji_zestawu
+from crm.koszty.rdzen import (
+	LINIE_EDYTOWALNE_PLANU,
+	aktualizuj_po_edycji_zestawu,
+	bilans,
+	czy_zmieniony_plan,
+	policz_zmiany_planu,
+	policz_zmiany_skladnikow,
+	widok_kosztow,
+	zmien_plan_laczny,
+)
 from crm.volteo_aktywnosc import zapisz_slad
 from crm.volteo_kalkulator_oze import RODZAJE_NOWE
 from crm.volteo_pipeline import OZE_RODZAJE
+from crm.volteo_rozliczenie import ROLA_HANDLOWIEC
 from crm.volteo_zestaw import (
 	KLUCZE_DOTACJI_CP,
 	TYPY_WIERSZY_CP,
@@ -450,6 +460,65 @@ def _ostrzezenie_falownika(konfiguracja_falownik: Any, wiersze: Any) -> list[str
 	return []
 
 
+def _snapshot_edytowalny(deal: str) -> dict[str, Any] | None:
+	"""Snapshot kosztow szansy, gdy istnieje i jest `pv`/`oze` (ops#340); inaczej None.
+	Uszkodzony JSON jest logowany i traktowany jak brak snapshotu."""
+	surowy = frappe.db.get_value(DOCTYPE, deal, "custom_koszty_json")
+	if not surowy:
+		return None
+	try:
+		snapshot = json.loads(surowy)
+	except (TypeError, ValueError):
+		frappe.log_error(frappe.get_traceback(), "Volteo Zestaw: uszkodzony snapshot kosztów")
+		return None
+	if not isinstance(snapshot, dict) or snapshot.get("linia_produktowa") not in LINIE_EDYTOWALNE_PLANU:
+		return None
+	return snapshot
+
+
+def _rozliczenie_handlowca_naliczone(deal: str) -> bool:
+	"""Czy szansa ma juz wiersz rozliczenia z rola handlowca (ops#340). `get_all` ignoruje
+	uprawnienia, ale API jest i tak tylko dla `ADMIN_ROLE`."""
+	return bool(
+		frappe.get_all("Volteo Rozliczenie", filters={"deal": deal, "rola": ROLA_HANDLOWIEC}, limit=1, pluck="name")
+	)
+
+
+def _koszty_ladunek(koszty: Any) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+	"""Walidacja ksztaltu ladunku `koszty` z klienta: `({linie}, marze)`."""
+	if not isinstance(koszty, dict):
+		frappe.throw(_("Dane kosztów mają nieprawidłowy format."))
+	linie = koszty.get("linie")
+	marze = koszty.get("marze") or {}
+	if not isinstance(linie, list) or not all(isinstance(l, dict) for l in linie) or not isinstance(marze, dict):
+		frappe.throw(_("Dane kosztów mają nieprawidłowy format."))
+	return linie, marze
+
+
+def _plan_laczny(
+	snapshot: dict[str, Any],
+	koszty: Any,
+	nowe: list[dict[str, Any]],
+	netto: Decimal,
+	powod: str,
+) -> dict[str, Any]:
+	"""Snapshot po wspolnej edycji (`zmien_plan_laczny`); `ValueError` rdzenia to czytelny throw."""
+	linie, marze = _koszty_ladunek(koszty)
+	try:
+		return zmien_plan_laczny(snapshot, linie, marze, nowe, netto, now(), frappe.session.user, powod)
+	except ValueError as e:
+		frappe.throw(str(e))
+
+
+def _ostrzezenie_bilansu(snapshot: dict[str, Any]) -> list[str]:
+	roznica = bilans(snapshot)["roznica"]
+	if roznica < 0:
+		return [_("Bilans się nie zgadza: do pokrycia {0} zł.").format(_formatuj_kwote(-roznica))]
+	if roznica > 0:
+		return [_("Bilans się nie zgadza: nadwyżka {0} zł do rozdzielenia.").format(_formatuj_kwote(roznica))]
+	return []
+
+
 def _stan(doc: "frappe.model.document.Document") -> dict[str, Any]:
 	"""Pelny stan edytora zestawu (odpowiedz `volteo_zestaw_get`)."""
 	deal = doc.name
@@ -482,6 +551,7 @@ def _stan(doc: "frappe.model.document.Document") -> dict[str, Any]:
 		"linia": linia,
 		"modified": str(doc.modified),
 		"wiersze": wiersze,
+		"koszty": widok_kosztow(_snapshot_edytowalny(deal), wiersze, _rozliczenie_handlowca_naliczone(deal)),
 		"typy": list(TYPY_WIERSZY_OZE),
 		"cena": _cena_ze_szansy(doc),
 		"konfiguracja": {} if nowy_rodzaj else _konfiguracja_ze_szansy(doc),
@@ -656,6 +726,7 @@ def volteo_zestaw_podglad(
 	wiersze: list[dict[str, Any]],
 	cena: dict[str, Any],
 	producent: str | None = None,
+	koszty: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
 	"""Podglad edycji bez zapisu: przeliczona cena, propozycja konfiguracji, roznice, ostrzezenia.
 
@@ -664,6 +735,11 @@ def volteo_zestaw_podglad(
 	to wybrany w formularzu producent; None oznacza producenta zapisanego na szansie.
 	Odpowiedz niesie `producent` i `zestaw_typ` (wyprowadzony z producenta tylko przy
 	jego zmianie, inaczej zestaw zapisany na szansie).
+
+	`koszty` (ops#340, opcjonalne): `{linie, marze}` wspolnego edytora; None to dotychczasowa
+	sciezka. Gdy podane i szansa ma snapshot `pv`/`oze`, odpowiedz niesie `koszty` (stan po
+	zmianach, bez zapisu) i `bilans` (`netto`, `koszty`, `marze`, `roznica`); niezgodny bilans
+	to ostrzezenie, nie blad. Dla Czystego Powietrza ignorowane.
 	"""
 	doc = _wczytaj_dla_edycji(deal)
 	dozwolone, powod, linia = _blokada(doc.get("custom_rodzaj_umowy"))
@@ -704,7 +780,7 @@ def volteo_zestaw_podglad(
 		# Zestaw wyliczany tylko przy zmianie producenta; inaczej zapisany bez zmian.
 		zestaw_typ = nowy_zestaw_typ(doc.get(POLE_PRODUCENT), wybrany, doc.get(POLE_ZESTAW_TYP), rodzaj)
 
-	return {
+	odpowiedz = {
 		"cena": _cena_z_wyniku(doc, wejscie, wynik),
 		"konfiguracja_propozycja": propozycja,
 		"roznice": _serializuj_roznice(roznice),
@@ -712,6 +788,13 @@ def volteo_zestaw_podglad(
 		"producent": wybrany,
 		"zestaw_typ": zestaw_typ,
 	}
+	snapshot = _snapshot_edytowalny(deal) if koszty is not None else None
+	if snapshot is not None:
+		nowy = _plan_laczny(snapshot, koszty, nowe, wynik["netto"], "")
+		odpowiedz["koszty"] = widok_kosztow(nowy, nowe, _rozliczenie_handlowca_naliczone(deal))
+		odpowiedz["bilans"] = {k: str(v) for k, v in bilans(nowy).items()}
+		odpowiedz["ostrzezenia"] = list(dict.fromkeys(odpowiedz["ostrzezenia"] + _ostrzezenie_bilansu(nowy)))
+	return odpowiedz
 
 
 def _pola_ceny_do_zapisu(wynik: dict[str, Any], wejscie: dict[str, Any]) -> dict[str, Any]:
@@ -755,6 +838,31 @@ def _zapisz_snapshot(deal: str, netto: Decimal, powod: str, meta: "frappe.model.
 	# permlevel 2: zapis bez dotykania `modified` (patrz docstring modulu).
 	frappe.db.set_value(DOCTYPE, deal, pola, update_modified=False)
 	return "zaktualizowano netto {0} zł".format(_formatuj_kwote(netto))
+
+
+def _zapisz_snapshot_laczny(
+	deal: str,
+	nowy: dict[str, Any],
+	przed: dict[str, Any],
+	meta: "frappe.model.meta.Meta",
+) -> str:
+	"""Zapisuje snapshot po wspolnej edycji (ops#340): `custom_koszty_json` i pola zysku,
+	oraz `custom_narzut`, gdy zmienil sie skladnik `narzut`. Koszty i marze zyja wylacznie
+	w snapshocie (permlevel 2); `custom_narzut` to jedyne pole permlevel 0, ktore dostaje wartosc.
+	Zwraca krotki opis do sladu (bez kwot kosztow i marz)."""
+	pola: dict[str, Any] = {"custom_koszty_json": json.dumps(nowy, ensure_ascii=False)}
+	if meta.has_field("custom_koszty_zysk_plan"):
+		pola["custom_koszty_zysk_plan"] = flt(nowy["podsumowanie"]["zysk_plan"], 2)
+	rzeczywiste = nowy.get("podsumowanie_rzeczywiste")
+	if rzeczywiste is not None and meta.has_field("custom_koszty_zysk_rzeczywisty"):
+		pola["custom_koszty_zysk_rzeczywisty"] = flt(rzeczywiste["zysk_rzeczywisty"], 2)
+	narzut_przed = next((sk["kwota"] for sk in przed.get("skladniki_marzy") or [] if sk["klucz"] == "narzut"), None)
+	narzut_po = next((sk["kwota"] for sk in nowy.get("skladniki_marzy") or [] if sk["klucz"] == "narzut"), None)
+	if narzut_po is not None and narzut_po != narzut_przed and meta.has_field("custom_narzut"):
+		pola["custom_narzut"] = flt(narzut_po, 2)
+	# permlevel 2: zapis bez dotykania `modified` (patrz docstring modulu).
+	frappe.db.set_value(DOCTYPE, deal, pola, update_modified=False)
+	return "zaktualizowano netto {0} zł".format(_formatuj_kwote(Decimal(nowy["podsumowanie"]["netto"])))
 
 
 def _zapisz_cp(
@@ -883,9 +991,16 @@ def volteo_zestaw_zapisz(
 	konfiguracja: dict[str, Any],
 	powod: str,
 	modified: str,
+	koszty: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
 	"""Zapisuje edycje zestawu i ceny szansy (OZE), aktualizuje snapshot kosztow i dopisuje
 	slad `[volteo:zestaw]` (widoczny tylko dla administracji).
+
+	`koszty` (ops#340, opcjonalne): `{linie, marze}` wspolnego edytora. None to dotychczasowa
+	sciezka (`aktualizuj_po_edycji_zestawu`). Gdy podane i szansa ma snapshot `pv`/`oze`,
+	snapshot idzie przez `zmien_plan_laczny`, a zmiana skladnika `narzut` zapisuje tez
+	`custom_narzut`. Niezgodny bilans to ostrzezenie w odpowiedzi, nie blad. Dla Czystego
+	Powietrza ignorowane.
 
 	Zwraca stan jak `volteo_zestaw_get` plus `wskazowka_pdf`. Blokada optymistyczna po
 	`modified`. Brak zmian (identyczne wiersze, cena i konfiguracja) jest odrzucany.
@@ -948,7 +1063,12 @@ def volteo_zestaw_zapisz(
 	zmienione_pola_cen = [p for p, v in pola_ceny.items() if _rozne(doc.get(p), v)]
 	zmienione_konfiguracje = [p for p, v in zmiany_konfiguracji.items() if _rozne(doc.get(p), v)]
 	konfiguracja_przed = {p: doc.get(p) for p in zmienione_konfiguracje}
-	if roznice.puste and not zmienione_pola_cen and not zmienione_konfiguracje:
+	snapshot_przed = _snapshot_edytowalny(deal) if koszty is not None else None
+	snapshot_po = None
+	if snapshot_przed is not None:
+		snapshot_po = _plan_laczny(snapshot_przed, koszty, nowe, wynik["netto"], powod)
+	koszty_zmienione = snapshot_po is not None and czy_zmieniony_plan(snapshot_przed, snapshot_po)
+	if roznice.puste and not zmienione_pola_cen and not zmienione_konfiguracje and not koszty_zmienione:
 		frappe.throw(_("Brak zmian do zapisania."))
 
 	status_umowy = ""
@@ -983,7 +1103,15 @@ def volteo_zestaw_zapisz(
 			pola_edycji[POLE_POWOD] = powod
 		frappe.db.set_value(DOCTYPE, deal, pola_edycji, update_modified=False)
 
-	opis_snapshotu = _zapisz_snapshot(deal, wynik["netto"], powod, meta)
+	if snapshot_po is not None:
+		opis_snapshotu = _zapisz_snapshot_laczny(deal, snapshot_po, snapshot_przed, meta)
+		licznik_kosztow = (
+			policz_zmiany_planu(snapshot_przed, snapshot_po),
+			policz_zmiany_skladnikow(snapshot_przed, snapshot_po),
+		)
+	else:
+		opis_snapshotu = _zapisz_snapshot(deal, wynik["netto"], powod, meta)
+		licznik_kosztow = None
 
 	etykiety = {p: (meta.get_label(p) or p) for p in zmienione_konfiguracje}
 	for pole, etykieta in ETYKIETY_PRODUCENT_ZESTAW.items():
@@ -1005,12 +1133,15 @@ def volteo_zestaw_zapisz(
 				status_umowy,
 				etykiety=etykiety,
 				snapshot=opis_snapshotu,
+				koszty=licznik_kosztow,
 			),
 		)
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), "Volteo Zestaw: błąd zapisu śladu aktywności")
 
 	stan = _stan(frappe.get_doc(DOCTYPE, deal))
+	if snapshot_po is not None:
+		stan["ostrzezenia"] = list(dict.fromkeys(list(stan.get("ostrzezenia") or []) + _ostrzezenie_bilansu(snapshot_po)))
 	if stan["umowa"]["istnieje"]:
 		wskazowka = _(MSG_PDF_REGENERUJ) if stan["umowa"]["mozna_regenerowac"] else _(MSG_PDF_ANEKS)
 	else:

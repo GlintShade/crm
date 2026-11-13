@@ -412,6 +412,12 @@ def scal_snapshot(
 		if linia.get("koszt_plan_pierwotny") is not None:
 			# Pierwotny koszt planowany linii (edycja planu, ops#335) przeżywa edycję kosztów rzeczywistych.
 			nowa_linia["koszt_plan_pierwotny"] = linia["koszt_plan_pierwotny"]
+		if linia.get("reczna"):
+			# Linia dodana ręcznie przez administratora (ops#340) zostaje ręczna.
+			nowa_linia["reczna"] = True
+		if linia.get("wiersz") is not None:
+			# Podpis powiązanej pozycji zestawu (ops#340) przeżywa edycję kosztów rzeczywistych.
+			nowa_linia["wiersz"] = dict(linia["wiersz"])
 		if klucz in koszty_rzeczywiste:
 			wartosc = koszty_rzeczywiste[klucz]
 			if klucz == KLUCZ_KOREKTY_SUMY:
@@ -664,6 +670,29 @@ def czy_zmieniona_korekta(przed: dict[str, Any], po: dict[str, Any]) -> bool:
 	return _korekta(przed) != _korekta(po)
 
 
+def _skladniki_po_zmianie(
+	stare: list[dict[str, Any]], zadane: dict[str, Decimal | None]
+) -> list[dict[str, Any]]:
+	"""Nowa lista składników marży z naniesionymi kwotami (zasada wartości pierwotnej:
+	pierwsza zmiana zapamiętuje `kwota_pierwotna`, powrót do niej ją usuwa). Bez mutacji."""
+	nowe: list[dict[str, Any]] = []
+	for sk in stare:
+		nowy_sk = dict(sk)
+		if sk["klucz"] in zadane:
+			stara_kwota = _kwota(sk["kwota"])
+			pierwotna_surowa = sk.get("kwota_pierwotna")
+			bazowa = _kwota(pierwotna_surowa) if pierwotna_surowa is not None else stara_kwota
+			zadana = zadane[sk["klucz"]]
+			nowa_kwota = bazowa if zadana is None else zadana
+			if nowa_kwota == bazowa:
+				nowy_sk.pop("kwota_pierwotna", None)
+			else:
+				nowy_sk["kwota_pierwotna"] = str(bazowa)
+			nowy_sk["kwota"] = str(nowa_kwota)
+		nowe.append(nowy_sk)
+	return nowe
+
+
 def zmien_skladniki_marzy(
 	snapshot: dict[str, Any] | None,
 	skladniki: dict[str, Any],
@@ -697,21 +726,7 @@ def zmien_skladniki_marzy(
 			raise ValueError(f"Nieznany składnik marży: {klucz}.")
 		zadane[klucz] = None if wartosc is None else _parsuj_kwote_klienta(wartosc)
 
-	nowe: list[dict[str, Any]] = []
-	for sk in stare:
-		nowy_sk = dict(sk)
-		if sk["klucz"] in zadane:
-			stara_kwota = _kwota(sk["kwota"])
-			pierwotna_surowa = sk.get("kwota_pierwotna")
-			bazowa = _kwota(pierwotna_surowa) if pierwotna_surowa is not None else stara_kwota
-			zadana = zadane[sk["klucz"]]
-			nowa_kwota = bazowa if zadana is None else zadana
-			if nowa_kwota == bazowa:
-				nowy_sk.pop("kwota_pierwotna", None)
-			else:
-				nowy_sk["kwota_pierwotna"] = str(bazowa)
-			nowy_sk["kwota"] = str(nowa_kwota)
-		nowe.append(nowy_sk)
+	nowe = _skladniki_po_zmianie(stare, zadane)
 
 	if policz_zmiany_skladnikow(snapshot, {"skladniki_marzy": nowe}) == 0 and [
 		sk.get("kwota_pierwotna") for sk in nowe
@@ -738,3 +753,420 @@ def nierozdzielona_marza(snapshot: dict[str, Any]) -> Decimal:
 	"""`podsumowanie.marza_plan` minus suma kwot składników marży."""
 	suma = sum((_kwota(sk["kwota"]) for sk in snapshot.get("skladniki_marzy") or []), _ZERO)
 	return _kwota(_kwota(snapshot["podsumowanie"]["marza_plan"]) - suma)
+
+
+# ---------------------------------------------------------------------------
+# Wspólny edytor zestawu, kosztów i marż (ops#340)
+# ---------------------------------------------------------------------------
+
+_ETYKIETY_LINII: dict[str, str] = {
+	"k_falownik": "Falownik",
+	"k_bateria": "Bateria",
+	"k_panele": "Panele",
+	"k_konstrukcja": "Konstrukcja",
+	"k_sterownik": "Sterownik",
+	"k_spoldzielnia": "Spółdzielnia energetyczna",
+	"k_montaz_pv": "Montaż PV",
+	"k_montaz_mag": "Montaż magazynu",
+	"k_akcesoria": "Akcesoria",
+	"k_kabel": "Kabel",
+	"k_licznik": "Dodatkowy licznik",
+	"k_ppoz": "Uzgodnienia PPOŻ",
+	"kilometrowka": "Kilometrówka",
+	"k_dod_klima": "Dodatek klimatyzacja",
+	"k_dod_panele": "Dodatek panele PV",
+	"k_dod_panele_mikro": "Dodatek panele PV + mikro",
+	"k_ems_breeze": "Dodatek EMS Zeronest",
+	"k_ev": "Dodatek ładowarka EV",
+	"marza_proenergy": "Marża ProEnergy",
+	"marza_sps": "Marża SPS",
+	"bonus_liderki": "Bonus liderski",
+	"bonus_liderski": "Bonus liderski",
+	"narzut": "Narzut handlowca",
+	"marza_dodatki": "Marża dodatki",
+}
+
+# Snapshot `pv`: typ pozycji zestawu -> klucz linii kosztu (ops#340).
+_TYP_WIERSZA_NA_LINIE_PV: dict[str, str] = {
+	"Falownik": "k_falownik",
+	"Magazyn energii": "k_bateria",
+	"Panele PV": "k_panele",
+	"Konstrukcja": "k_konstrukcja",
+	"Sterownik": "k_sterownik",
+	"Akcesoria": "k_akcesoria",
+	"Klimatyzacja": "k_dod_klima",
+	"EMS Zeronest": "k_ems_breeze",
+	"EMS Breeze": "k_ems_breeze",
+	"Ladowarka EV": "k_ev",
+	"Panele PV (dodatek)": "k_dod_panele",
+	"Panele PV + mikro (dodatek)": "k_dod_panele_mikro",
+	"Kabel": "k_kabel",
+	"Licznik": "k_licznik",
+	"PPOZ": "k_ppoz",
+	"Spoldzielnia": "k_spoldzielnia",
+}
+
+MAX_ETYKIETA_LINII = 140
+
+
+def etykieta_wyswietlana(klucz: str | None, etykieta: str | None) -> str:
+	"""Etykieta linii kosztu albo składnika marży do pokazania w edytorze (z polskimi
+	znakami). Znany klucz dostaje etykietę z mapy, nieznany zachowuje zapisaną etykietę.
+	Zapisanych etykiet w snapshotach nie zmienia nikt."""
+	if klucz in _ETYKIETY_LINII:
+		return _ETYKIETY_LINII[klucz]
+	return etykieta or ""
+
+
+def _klucz_linii_dla_wiersza(wiersz: dict[str, Any]) -> str | None:
+	"""Klucz linii `pv` odpowiadający pozycji zestawu (po typie, Montaż po nazwie)."""
+	typ = wiersz.get("typ")
+	if typ == "Montaż":
+		return "k_montaz_mag" if "magazyn" in str(wiersz.get("nazwa") or "").casefold() else "k_montaz_pv"
+	return _TYP_WIERSZA_NA_LINIE_PV.get(typ)
+
+
+def dopasuj_linie_do_wierszy(wiersze: list[dict[str, Any]], snapshot: dict[str, Any] | None) -> dict[str, int]:
+	"""Mapa klucz linii kosztu -> indeks pozycji zestawu (ops#340). Jedna pozycja ma
+	najwyżej jedną linię i odwrotnie; linia bez dopasowania to koszt bez pozycji.
+
+	Reguły po kolei: (a) zapisany podpis `wiersz: {typ, nazwa}` linii i pozycja o tym samym
+	typie i nazwie (przy duplikatach kolejno); (b) snapshot `pv`: typ pozycji na klucz linii,
+	tylko gdy dokładnie jedna pozycja wskazuje ten klucz i linia istnieje; (c) snapshot `oze`:
+	etykieta linii równa nazwie pozycji (bez rozróżniania wielkości liter). Wejście nie jest
+	mutowane."""
+	if not snapshot:
+		return {}
+	linie = [l for l in snapshot.get("linie") or [] if l["klucz"] != KLUCZ_KOREKTY_SUMY]
+	wynik: dict[str, int] = {}
+	zajete: set[int] = set()
+
+	for linia in linie:
+		podpis = linia.get("wiersz")
+		if not isinstance(podpis, dict):
+			continue
+		for idx, w in enumerate(wiersze):
+			if idx not in zajete and w.get("typ") == podpis.get("typ") and w.get("nazwa") == podpis.get("nazwa"):
+				wynik[linia["klucz"]] = idx
+				zajete.add(idx)
+				break
+
+	rodzaj = snapshot.get("linia_produktowa")
+	if rodzaj == "pv":
+		istniejace = {l["klucz"] for l in linie}
+		cele = [_klucz_linii_dla_wiersza(w) for w in wiersze]
+		for idx, cel in enumerate(cele):
+			if idx in zajete or cel is None or cel not in istniejace or cel in wynik:
+				continue
+			if cele.count(cel) == 1:
+				wynik[cel] = idx
+				zajete.add(idx)
+	elif rodzaj == "oze":
+		for linia in linie:
+			if linia["klucz"] in wynik:
+				continue
+			etykieta = str(linia.get("etykieta") or "").casefold()
+			for idx, w in enumerate(wiersze):
+				if idx not in zajete and etykieta and str(w.get("nazwa") or "").casefold() == etykieta:
+					wynik[linia["klucz"]] = idx
+					zajete.add(idx)
+					break
+	return wynik
+
+
+def bilans(snapshot: dict[str, Any]) -> dict[str, Decimal]:
+	"""Bilans planu: `netto`, `koszty` (koszt planowany), `marze` (suma składników) i
+	`roznica` = netto - koszty - marze (0 oznacza zgodny bilans). Kwoty `Decimal`."""
+	netto = _kwota(snapshot["podsumowanie"]["netto"])
+	koszty = _kwota(snapshot["podsumowanie"]["koszt_plan"])
+	marze = sum((_kwota(sk["kwota"]) for sk in snapshot.get("skladniki_marzy") or []), _ZERO)
+	marze = _kwota(marze)
+	return {"netto": netto, "koszty": koszty, "marze": marze, "roznica": _kwota(netto - koszty - marze)}
+
+
+def _odcisk_planu(snapshot: dict[str, Any]) -> tuple[Any, ...]:
+	linie = tuple(
+		(
+			linia["klucz"],
+			str(linia.get("etykieta") or ""),
+			_kwota(linia["koszt_plan"]),
+			None if linia.get("koszt_plan_pierwotny") is None else _kwota(linia["koszt_plan_pierwotny"]),
+		)
+		for linia in snapshot.get("linie") or []
+	)
+	skladniki = tuple(
+		(
+			sk["klucz"],
+			_kwota(sk["kwota"]),
+			None if sk.get("kwota_pierwotna") is None else _kwota(sk["kwota_pierwotna"]),
+		)
+		for sk in snapshot.get("skladniki_marzy") or []
+	)
+	return (linie, _kwota(snapshot["podsumowanie"]["koszt_plan"]), skladniki)
+
+
+def czy_zmieniony_plan(przed: dict[str, Any], po: dict[str, Any]) -> bool:
+	"""Czy plan kosztów albo składniki marży różnią się między snapshotami (linie, ich
+	etykiety, koszty, wartości pierwotne, suma planu, składniki). Podpisy pozycji i cena
+	netto nie liczą się: sam podpis nie jest zmianą do zapisania."""
+	return _odcisk_planu(przed) != _odcisk_planu(po)
+
+
+def zmien_plan_laczny(
+	snapshot: dict[str, Any] | None,
+	linie: list[dict[str, Any]],
+	marze: dict[str, Any] | None,
+	wiersze: list[dict[str, Any]],
+	netto_nowe: Any,
+	teraz: str,
+	uzytkownik: str,
+	powod: str | None = None,
+) -> dict[str, Any]:
+	"""Zwraca NOWY snapshot po wspólnej edycji zestawu, kosztów i marż (ops#340).
+	Tylko `pv` i `oze`; wejście nie jest mutowane, kwoty `Decimal`.
+
+	`linie`: PEŁNA lista po edycji, elementy `{klucz, etykieta, koszt_plan, wiersz}`
+	(`klucz` None = nowa linia ręczna, `wiersz` = indeks w `wiersze` albo None).
+	Linia katalogowa nieobecna w liście zostaje z kosztem 0.00 (pierwotny zapamiętany),
+	ręczna nieobecna jest usuwana (nie z kosztem rzeczywistym), korekta sumy nieobecna
+	jest usuwana, a obecna nie zmienia kwoty. `marze`: klucz -> kwota (None przywraca
+	pierwotną). `netto_nowe`: None zostawia cenę. Brak zmian nie jest błędem."""
+	if not snapshot:
+		raise ValueError("Brak snapshotu kosztów dla tej szansy.")
+	if snapshot.get("linia_produktowa") not in LINIE_EDYTOWALNE_PLANU:
+		raise ValueError("Kosztów i marż Czystego Powietrza nie edytuje się w tym panelu.")
+	if not isinstance(linie, list) or not all(isinstance(l, dict) for l in linie):
+		raise ValueError("Nieprawidłowy format kosztów planowanych.")
+	if not isinstance(wiersze, list):
+		raise ValueError("Nieprawidłowy format pozycji zestawu.")
+	if marze is None:
+		marze = {}
+	if not isinstance(marze, dict):
+		raise ValueError("Nieprawidłowy format składników marży.")
+
+	stare_linie = snapshot.get("linie") or []
+	stare_wg_klucza = {l["klucz"]: l for l in stare_linie}
+
+	# Walidacja ładunku linii.
+	zadane: dict[str, dict[str, Any]] = {}
+	nowe_wpisy: list[dict[str, Any]] = []
+	uzyte_wiersze: set[int] = set()
+	for wpis in linie:
+		klucz = wpis.get("klucz")
+		idx = wpis.get("wiersz")
+		if idx is not None:
+			if isinstance(idx, bool) or not isinstance(idx, int) or not 0 <= idx < len(wiersze):
+				raise ValueError("Linia kosztu wskazuje nieistniejącą pozycję zestawu.")
+			if idx in uzyte_wiersze:
+				raise ValueError("Dwie linie kosztu wskazują tę samą pozycję zestawu.")
+			uzyte_wiersze.add(idx)
+		if klucz is None:
+			nowe_wpisy.append(wpis)
+			continue
+		if klucz not in stare_wg_klucza:
+			raise ValueError(f"Nieznana pozycja kosztorysu: {klucz}.")
+		if klucz in zadane:
+			raise ValueError(f"Pozycja kosztorysu występuje dwa razy: {klucz}.")
+		zadane[klucz] = wpis
+
+	def _podpis(idx: Any) -> dict[str, Any] | None:
+		if idx is None:
+			return None
+		return {"typ": wiersze[idx].get("typ"), "nazwa": wiersze[idx].get("nazwa")}
+
+	def _etykieta_reczna(wpis: dict[str, Any], idx: Any, poprzednia: str = "") -> str:
+		tekst = str(wpis.get("etykieta") or "").strip()
+		if not tekst and idx is not None:
+			tekst = str(wiersze[idx].get("nazwa") or "").strip()
+		if not tekst:
+			tekst = poprzednia
+		if not tekst:
+			raise ValueError("Podaj nazwę kosztu bez pozycji zestawu.")
+		if len(tekst) > MAX_ETYKIETA_LINII:
+			raise ValueError(f"Nazwa kosztu jest za długa (maksymalnie {MAX_ETYKIETA_LINII} znaków).")
+		return tekst
+
+	suma_przed = _kwota(snapshot["podsumowanie"]["koszt_plan"])
+	delta = _ZERO
+	nowe_linie: list[dict[str, Any]] = []
+	for linia in stare_linie:
+		klucz = linia["klucz"]
+		nowa = dict(linia)
+		stary_koszt = _kwota(linia["koszt_plan"])
+		wpis = zadane.get(klucz)
+		if klucz == KLUCZ_KOREKTY_SUMY:
+			if wpis is None:
+				delta -= stary_koszt
+				continue
+			if _kwota(_jako_decimal(wpis.get("koszt_plan"))) != stary_koszt:
+				raise ValueError("Kwoty korekty sumy kosztów planowanych nie edytuje się jako pozycji.")
+			nowe_linie.append(nowa)
+			continue
+		if linia.get("reczna"):
+			if wpis is None:
+				if linia.get("koszt_rzeczywisty") is not None:
+					raise ValueError(f"Najpierw usuń koszt rzeczywisty pozycji: {linia['etykieta']}.")
+				delta -= stary_koszt
+				continue
+			nowy_koszt = _parsuj_kwote_klienta(wpis.get("koszt_plan"))
+			nowa["etykieta"] = _etykieta_reczna(wpis, wpis.get("wiersz"), str(linia.get("etykieta") or ""))
+			nowa["koszt_plan"] = str(nowy_koszt)
+			nowa["wiersz"] = _podpis(wpis.get("wiersz"))
+			delta += nowy_koszt - stary_koszt
+			nowe_linie.append(nowa)
+			continue
+		# Linia katalogowa: nieobecna w ładunku zostaje z kosztem 0.00.
+		if wpis is None:
+			nowy_koszt = _ZERO
+			podpis = None
+		else:
+			nowy_koszt = _parsuj_kwote_klienta(wpis.get("koszt_plan"))
+			podpis = _podpis(wpis.get("wiersz"))
+		pierwotny_surowy = linia.get("koszt_plan_pierwotny")
+		bazowy = _kwota(pierwotny_surowy) if pierwotny_surowy is not None else stary_koszt
+		if nowy_koszt == bazowy:
+			nowa.pop("koszt_plan_pierwotny", None)
+		else:
+			nowa["koszt_plan_pierwotny"] = str(bazowy)
+		nowa["koszt_plan"] = str(nowy_koszt)
+		nowa["wiersz"] = podpis
+		delta += nowy_koszt - stary_koszt
+		nowe_linie.append(nowa)
+
+	numery = [
+		int(k[2:])
+		for k in (set(stare_wg_klucza) | set(zadane))
+		if k.startswith("r_") and k[2:].isdigit()
+	]
+	nastepny = max(numery, default=0) + 1
+	for wpis in nowe_wpisy:
+		koszt = _parsuj_kwote_klienta(wpis.get("koszt_plan"))
+		idx = wpis.get("wiersz")
+		nowe_linie.append(
+			{
+				"klucz": f"r_{nastepny}",
+				"etykieta": _etykieta_reczna(wpis, idx),
+				"ilosc": None,
+				"jednostka": None,
+				"netto": None,
+				"prowizja_plan": None,
+				"koszt_plan": str(koszt),
+				"koszt_rzeczywisty": None,
+				"reczna": True,
+				"wiersz": _podpis(idx),
+			}
+		)
+		nastepny += 1
+		delta += koszt
+
+	suma_nowa = _kwota(suma_przed + delta)
+	if suma_nowa < _ZERO:
+		raise ValueError("Suma kosztów planowanych nie może być ujemna.")
+
+	# Składniki marży.
+	stare_skladniki = snapshot.get("skladniki_marzy") or []
+	klucze_marzy = {sk["klucz"] for sk in stare_skladniki}
+	zadane_marze: dict[str, Decimal | None] = {}
+	for klucz, wartosc in marze.items():
+		if klucz not in klucze_marzy:
+			raise ValueError(f"Nieznany składnik marży: {klucz}.")
+		zadane_marze[klucz] = None if wartosc is None else _parsuj_kwote_klienta(wartosc)
+	nowe_skladniki = _skladniki_po_zmianie(stare_skladniki, zadane_marze)
+
+	# Cena i podsumowanie.
+	netto_przed = _kwota(snapshot["podsumowanie"]["netto"])
+	netto = netto_przed if netto_nowe is None else _kwota(netto_nowe)
+	marza_plan = _kwota(netto - suma_nowa)
+	prowizja_plan = snapshot["podsumowanie"].get("prowizja_plan")
+	prowizja = _kwota(prowizja_plan) if prowizja_plan is not None else _ZERO
+	zysk_plan = _kwota(marza_plan - prowizja)
+
+	nowy = copy.deepcopy(snapshot)
+	nowy["linie"] = nowe_linie
+	nowy["skladniki_marzy"] = nowe_skladniki
+	nowy["podsumowanie"] = {
+		**snapshot["podsumowanie"],
+		"netto": str(netto),
+		"koszt_plan": str(suma_nowa),
+		"marza_plan": str(marza_plan),
+		"zysk_plan": str(zysk_plan),
+	}
+
+	zmieniony = czy_zmieniony_plan(snapshot, nowy)
+	koszty_zmienione = _odcisk_planu(snapshot)[:2] != _odcisk_planu(nowy)[:2]
+	marze_zmienione = _odcisk_planu(snapshot)[2] != _odcisk_planu(nowy)[2]
+	if zmieniony or netto != netto_przed:
+		nowy["zmodyfikowano"] = teraz
+		nowy["zmodyfikowal"] = uzytkownik
+	if koszty_zmienione:
+		poprzednia = snapshot.get("edycja_planu") or {}
+		nowy["edycja_planu"] = {
+			"kiedy": teraz,
+			"kto": uzytkownik,
+			"koszt_plan_przed": str(suma_przed),
+			"koszt_plan_pierwotny": str(poprzednia.get("koszt_plan_pierwotny") or suma_przed),
+		}
+	if marze_zmienione:
+		nowy["edycja_marzy"] = {"kiedy": teraz, "kto": uzytkownik}
+	if netto != netto_przed:
+		poprzednia = snapshot.get("edycja_reczna") or {}
+		nowy["edycja_reczna"] = {
+			"kiedy": teraz,
+			"kto": uzytkownik,
+			"powod": (powod or "").strip(),
+			"netto_przed": str(snapshot["podsumowanie"]["netto"]),
+			"netto_pierwotne": str(poprzednia.get("netto_pierwotne") or snapshot["podsumowanie"]["netto"]),
+		}
+	if snapshot.get("podsumowanie_rzeczywiste") is not None:
+		nowy["podsumowanie_rzeczywiste"] = _oblicz_podsumowanie_rzeczywiste(nowy)
+	return nowy
+
+
+def widok_kosztow(
+	snapshot: dict[str, Any] | None, wiersze: list[dict[str, Any]], rozliczenie_naliczone: bool = False
+) -> dict[str, Any] | None:
+	"""Blok `koszty` odpowiedzi API edytora (ops#340) albo `None`, gdy nie ma snapshotu
+	albo nie jest to `pv`/`oze`. Kwoty jako napisy z dwoma miejscami; etykiety już
+	poprawione do wyświetlenia. Wejście nie jest mutowane."""
+	if not snapshot or snapshot.get("linia_produktowa") not in LINIE_EDYTOWALNE_PLANU:
+		return None
+	dopasowanie = dopasuj_linie_do_wierszy(wiersze, snapshot)
+	linie = []
+	for linia in snapshot.get("linie") or []:
+		klucz = linia["klucz"]
+		pierwotny = linia.get("koszt_plan_pierwotny")
+		rzeczywisty = linia.get("koszt_rzeczywisty")
+		linie.append(
+			{
+				"klucz": klucz,
+				"etykieta": etykieta_wyswietlana(klucz, linia.get("etykieta")),
+				"koszt_plan": _str_kwota(linia["koszt_plan"]),
+				"koszt_plan_pierwotny": None if pierwotny is None else _str_kwota(pierwotny),
+				"koszt_rzeczywisty": None if rzeczywisty is None else _str_kwota(rzeczywisty),
+				"wiersz": dopasowanie.get(klucz),
+				"reczna": bool(linia.get("reczna")),
+				"korekta": klucz == KLUCZ_KOREKTY_SUMY,
+			}
+		)
+	skladniki = []
+	for sk in snapshot.get("skladniki_marzy") or []:
+		pierwotna = sk.get("kwota_pierwotna")
+		skladniki.append(
+			{
+				"klucz": sk["klucz"],
+				"etykieta": etykieta_wyswietlana(sk["klucz"], sk.get("etykieta")),
+				"kwota": _str_kwota(sk["kwota"]),
+				"kwota_pierwotna": None if pierwotna is None else _str_kwota(pierwotna),
+			}
+		)
+	podsumowanie = snapshot["podsumowanie"]
+	return {
+		"linie": linie,
+		"skladniki_marzy": skladniki,
+		"podsumowanie": {
+			"netto": _str_kwota(podsumowanie["netto"]),
+			"koszt_plan": _str_kwota(podsumowanie["koszt_plan"]),
+			"marza_plan": _str_kwota(podsumowanie["marza_plan"]),
+		},
+		"rozliczenie_handlowca": {"naliczone": bool(rozliczenie_naliczone)},
+	}
