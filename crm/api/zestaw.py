@@ -113,6 +113,11 @@ _KLUCZE_CENY_Z_WEJSCIA = (
 )
 """Klucze `cena` z klienta, ktore wchodza do lancucha; reszta (pola pochodne) ignorowana."""
 
+_KLUCZE_PODSTAWY_Z_KLIENTA = ("podstawa", "brutto")
+"""Opcjonalne klucze podstawy przeliczenia (`podstawa` = netto|brutto, `brutto`). Biora sie
+WYLACZNIE z klienta, nigdy ze szansy: bez nich (stary klient) zachowanie jest jak dotad
+(podstawa netto), a przy `podstawa` brutto brak `brutto` konczy sie bledem walidacji."""
+
 MSG_CP_WYLACZONE = "Edycja zestawu Czystego Powietrza jest wyłączona."
 MSG_CP_KONFIGURACJA = "Konfiguracji Czystego Powietrza nie edytuje się w tym oknie. Użyj panelu bocznego."
 MSG_RODZAJ_NIEDOSTEPNY = "Edycja zestawu nie jest dostępna dla tego rodzaju umowy."
@@ -522,6 +527,9 @@ def _wejscie_ceny(doc: "frappe.model.document.Document", cena: Any) -> dict[str,
 	bazowa = _cena_ze_szansy(doc)
 	wejscie: dict[str, Any] = {k: bazowa[k] for k in _KLUCZE_CENY_Z_WEJSCIA}
 	for klucz in _KLUCZE_CENY_Z_WEJSCIA:
+		if klucz in cena and cena[klucz] is not None:
+			wejscie[klucz] = cena[klucz]
+	for klucz in _KLUCZE_PODSTAWY_Z_KLIENTA:
 		if klucz in cena and cena[klucz] is not None:
 			wejscie[klucz] = cena[klucz]
 	wejscie["typ_klienta"] = doc.get("custom_typ_klienta")
