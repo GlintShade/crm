@@ -60,6 +60,33 @@
         {{ edycjaReczna.tekst }}
       </div>
 
+      <!-- Ślad edycji kosztów planowanych (ops#335) -->
+      <div
+        v-if="edycjaPlanuTekst"
+        class="mb-3 rounded-md border border-outline-amber-3 bg-surface-amber-3 px-2.5 py-2 text-xs text-ink-amber-8"
+        data-testid="koszty-edycja-planu"
+      >
+        {{ edycjaPlanuTekst }}
+      </div>
+
+      <!-- Przełącznik trybu edycji kosztów planowanych (tylko OZE) -->
+      <div v-if="mozeEdytowacPlan && !trybPlanu" class="mb-3 flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          :label="__('Edytuj koszty planowane')"
+          :disabled="saving || rzeczywisteZmienione"
+          data-testid="koszty-edytuj-plan"
+          @click="rozpocznijEdycjePlanu"
+        />
+        <span v-if="rzeczywisteZmienione" class="text-xs text-ink-gray-5">
+          {{ __('Najpierw zapisz koszty rzeczywiste albo cofnij zmiany.') }}
+        </span>
+      </div>
+      <div v-if="trybPlanu" class="mb-3 rounded-md border border-outline-amber-3 bg-surface-amber-3 px-2.5 py-2 text-xs text-ink-amber-8" data-testid="koszty-tryb-planu">
+        {{ __('Tryb edycji kosztów planowanych: koszty rzeczywiste są chwilowo zablokowane.') }}
+      </div>
+
       <!-- Cost lines -->
       <div class="mk-head">
         <div>{{ __('Pozycja') }}</div>
@@ -79,10 +106,44 @@
         </div>
 
         <div class="mk-cell tabular-nums">
-          <span class="mk-mobile-label">{{ __('Koszt plan') }}: </span>{{ formatPln(linia.kosztPlan) }}
+          <span class="mk-mobile-label">{{ __('Koszt plan') }}: </span>
+          <template v-if="trybPlanu && !linia.czyKorekta">
+            <input
+              type="text"
+              inputmode="decimal"
+              class="mk-input"
+              :class="{ 'mk-input-zmieniony': planLinia(linia.klucz)?.zmieniona }"
+              :value="edycjePlanu[linia.klucz]"
+              :disabled="saving"
+              :data-testid="`koszt-plan-${linia.klucz}`"
+              @input="edycjePlanu[linia.klucz] = $event.target.value"
+            />
+          </template>
+          <template v-else-if="trybPlanu && linia.czyKorekta">
+            {{ formatPln(plan.korekta) }}
+            <button type="button" class="mk-link" :disabled="saving || !plan.korektaIstnieje" @click="usunKorekte = !usunKorekte">
+              {{ usunKorekte ? __('Zostaw korektę') : __('Usuń korektę') }}
+            </button>
+          </template>
+          <template v-else>{{ formatPln(linia.kosztPlan) }}</template>
+          <div v-if="pierwotnyLinii(linia) !== null" class="mk-pierwotny">
+            {{ __('pierwotnie') }} {{ formatPln(pierwotnyLinii(linia)) }}
+            <button
+              v-if="trybPlanu && !linia.czyKorekta"
+              type="button"
+              class="mk-link"
+              :disabled="saving"
+              @click="przywrocPierwotny(linia.klucz)"
+            >
+              {{ __('Przywróć') }}
+            </button>
+          </div>
         </div>
 
-        <div class="mk-cell">
+        <div v-if="linia.czyKorekta" class="mk-cell">
+          <span class="mk-badge">{{ __('wg planu') }}</span>
+        </div>
+        <div v-else class="mk-cell">
           <span class="mk-mobile-label">{{ __('Koszt rzeczywisty') }}: </span>
           <input
             type="text"
@@ -90,7 +151,7 @@
             class="mk-input"
             :value="edycje[linia.klucz]"
             :placeholder="formatPlnAmount(linia.kosztPlan)"
-            :disabled="saving"
+            :disabled="saving || trybPlanu"
             @input="edycje[linia.klucz] = $event.target.value"
           />
           <span v-if="linia.wgPlanu" class="mk-badge">{{ __('wg planu') }}</span>
@@ -111,7 +172,7 @@
             class="mk-input mk-input-nazwa"
             :value="wiersz.nazwa"
             :placeholder="__('Nazwa pozycji')"
-            :disabled="saving"
+            :disabled="saving || trybPlanu"
             @input="ustawNazwaDodatkowa(indeks, $event.target.value)"
           />
           <input
@@ -120,20 +181,20 @@
             class="mk-input mk-input-kwota"
             :value="wiersz.kwota"
             placeholder="0,00"
-            :disabled="saving"
+            :disabled="saving || trybPlanu"
             @input="ustawKwoteDodatkowa(indeks, $event.target.value)"
           />
           <button
             type="button"
             class="mk-remove"
             :aria-label="__('Usuń pozycję')"
-            :disabled="saving"
+            :disabled="saving || trybPlanu"
             @click="usunDodatkowa(indeks)"
           >
             <FeatherIcon name="x" class="h-3.5 w-3.5" />
           </button>
         </div>
-        <Button variant="outline" size="sm" :label="__('Dodaj pozycję')" :disabled="saving" @click="dodajDodatkowa" />
+        <Button variant="outline" size="sm" :label="__('Dodaj pozycję')" :disabled="saving || trybPlanu" @click="dodajDodatkowa" />
       </div>
 
       <!-- PV and OZE (b68, nowe rodzaje): read-only planned margin components -->
@@ -146,12 +207,44 @@
       </div>
 
       <!-- Errors -->
-      <ul v-if="wynik.bledy.length" class="mk-errors">
-        <li v-for="(blad, i) in wynik.bledy" :key="i">{{ blad }}</li>
+      <ul v-if="bledyWidoczne.length" class="mk-errors">
+        <li v-for="(blad, i) in bledyWidoczne" :key="i">{{ blad }}</li>
       </ul>
 
+      <!-- Podsumowanie w trybie edycji kosztów planowanych -->
+      <div v-if="trybPlanu" class="mk-summary" data-testid="koszty-podsumowanie-planu">
+        <div class="mk-summary-row">
+          <span>{{ __('Netto') }}</span><span class="tabular-nums">{{ formatPln(plan.razem.netto) }}</span>
+        </div>
+        <div class="mk-summary-row">
+          <span>{{ __('Koszt (plan)') }}</span>
+          <input
+            type="text"
+            inputmode="decimal"
+            class="mk-input mk-input-suma"
+            :value="sumaPlanuWyswietlana"
+            :disabled="saving"
+            data-testid="koszt-plan-suma"
+            @input="sumaPlanuWpis = $event.target.value"
+          />
+        </div>
+        <div v-if="plan.roznicaSumy !== 0" class="mk-summary-footer" data-testid="koszty-roznica-sumy">
+          {{ __('Różnica') }} {{ formatDelta(plan.roznicaSumy) }}
+          {{ __('trafi do wiersza „Korekta sumy kosztów planowanych”.') }}
+        </div>
+        <div class="mk-summary-row">
+          <span>{{ __('Marża (plan)') }}</span><span class="tabular-nums">{{ formatPln(plan.razem.marzaPlan) }}</span>
+        </div>
+        <div v-if="plan.razem.prowizjaPlan !== null" class="mk-summary-row">
+          <span>{{ __('Prowizja (plan)') }}</span><span class="tabular-nums">{{ formatPln(plan.razem.prowizjaPlan) }}</span>
+        </div>
+        <div class="mk-summary-row mk-summary-highlight">
+          <span>{{ __('Zysk (plan)') }}</span><span class="tabular-nums font-semibold">{{ formatPln(plan.razem.zyskPlan) }}</span>
+        </div>
+      </div>
+
       <!-- Summary -->
-      <div class="mk-summary">
+      <div v-else class="mk-summary">
         <div class="mk-summary-row">
           <span>{{ __('Netto') }}</span><span class="tabular-nums">{{ formatPln(wynik.razem.netto) }}</span>
         </div>
@@ -190,7 +283,19 @@
         </div>
       </div>
 
-      <div class="mk-actions">
+      <div v-if="trybPlanu" class="mk-actions">
+        <span v-if="plan.bledy.length" class="mk-actions-hint">{{ __('Popraw błędy powyżej, aby zapisać') }}</span>
+        <Button variant="outline" :disabled="saving" :label="__('Anuluj')" data-testid="koszty-plan-anuluj" @click="anulujEdycjePlanu" />
+        <Button
+          variant="solid"
+          :loading="saving"
+          :disabled="saving || plan.bledy.length > 0 || !planMaZmiany"
+          :label="__('Zapisz koszty planowane')"
+          data-testid="koszty-plan-zapisz"
+          @click="zapiszPlan"
+        />
+      </div>
+      <div v-else class="mk-actions">
         <span v-if="wynik.bledy.length" class="mk-actions-hint">{{ __('Popraw błędy powyżej, aby zapisać') }}</span>
         <Button
           variant="solid"
@@ -210,7 +315,17 @@ import { Button, FeatherIcon, call, createResource, toast } from 'frappe-ui'
 import { formatPln, formatPlnAmount } from '@/utils/money'
 import { formatujDataGodzine } from '@/utils/dataPolska'
 import { usersStore } from '@/stores/users'
-import { parseSnapshot, przeliczRzeczywiste, zbudujPayload } from '@/utils/montazKoszty'
+import {
+  parseSnapshot,
+  przeliczRzeczywiste,
+  zbudujPayload,
+  czyEdytowalnyPlan,
+  edycjePlanuStart,
+  przeliczPlan,
+  zbudujPayloadPlanu,
+  czyPayloadPlanuMaZmiany,
+  czyZmienioneRzeczywiste,
+} from '@/utils/montazKoszty'
 
 const props = defineProps({
   dealId: { type: String, required: true },
@@ -224,6 +339,12 @@ const edycje = ref({}) // klucz -> raw typed "koszt rzeczywisty" string
 const dodatkowe = ref([]) // [{id?, nazwa, kwota}], raw, in-progress
 const expanded = ref(false) // collapsed by default (screenshare-safe, mirrors KalkulatorTab.vue)
 const saving = ref(false)
+// Tryb edycji kosztów PLANOWANYCH (ops#335): wzajemnie wyłączny z edycją
+// kosztów rzeczywistych (jeden zapis na raz).
+const trybPlanu = ref(false)
+const edycjePlanu = ref({}) // klucz -> wpisany koszt planowany
+const sumaPlanuWpis = ref(null) // wpisana suma planu albo null (nie ruszana)
+const usunKorekte = ref(false)
 
 // --- Load -------------------------------------------------------------------
 // Permlevel-2 field: Frappe drops `custom_koszty_json` from the response
@@ -254,6 +375,7 @@ createResource({
  */
 function seedFromSnapshot(nowySnapshot) {
   snapshot.value = nowySnapshot
+  zakonczEdycjePlanu()
 
   const edycjeInit = {}
   for (const linia of nowySnapshot?.linie || []) {
@@ -289,6 +411,72 @@ const edycjaReczna = computed(() => {
     `${Number.isFinite(nettoPrzed) ? ' (' + __('netto przed zmianą') + ': ' + formatPln(nettoPrzed) + ')' : ''} ` +
     `${__('i mogą być nieaktualne.')}`
   return { tekst }
+})
+
+// --- Edycja kosztów planowanych (ops#335) --------------------------------
+const mozeEdytowacPlan = computed(() => czyEdytowalnyPlan(snapshot.value))
+const rzeczywisteZmienione = computed(() => czyZmienioneRzeczywiste(snapshot.value, edycje.value, dodatkowe.value))
+const plan = computed(() =>
+  przeliczPlan(snapshot.value, edycjePlanu.value, sumaPlanuWpis.value, usunKorekte.value),
+)
+const payloadPlanu = computed(() =>
+  zbudujPayloadPlanu(snapshot.value, edycjePlanu.value, sumaPlanuWpis.value, usunKorekte.value),
+)
+const planMaZmiany = computed(() => czyPayloadPlanuMaZmiany(payloadPlanu.value))
+const bledyWidoczne = computed(() => (trybPlanu.value ? plan.value.bledy : wynik.value.bledy))
+// Dopóki pole sumy nie było ruszone, pokazuje sumę po zmianach linii.
+const sumaPlanuWyswietlana = computed(() =>
+  sumaPlanuWpis.value !== null ? sumaPlanuWpis.value : plan.value.razem.sumaPoLiniach.toFixed(2),
+)
+const planLiniiMapa = computed(() => {
+  const mapa = {}
+  for (const l of plan.value.linie) mapa[l.klucz] = l
+  return mapa
+})
+function planLinia(klucz) {
+  return planLiniiMapa.value[klucz]
+}
+// Wartość pierwotna do pokazania: w trybie planu z podglądu (uwzględnia niezapisaną zmianę),
+// poza nim z zapisanego snapshotu.
+function pierwotnyLinii(linia) {
+  if (linia.czyKorekta) return null
+  if (trybPlanu.value) return planLinia(linia.klucz)?.pierwotny ?? null
+  return linia.kosztPlanPierwotny
+}
+function przywrocPierwotny(klucz) {
+  const pierwotny = planLinia(klucz)?.pierwotny
+  if (pierwotny == null) return
+  edycjePlanu.value = { ...edycjePlanu.value, [klucz]: pierwotny.toFixed(2) }
+}
+function rozpocznijEdycjePlanu() {
+  if (!mozeEdytowacPlan.value || rzeczywisteZmienione.value || saving.value) return
+  edycjePlanu.value = edycjePlanuStart(snapshot.value)
+  sumaPlanuWpis.value = null
+  usunKorekte.value = false
+  trybPlanu.value = true
+}
+function zakonczEdycjePlanu() {
+  trybPlanu.value = false
+  edycjePlanu.value = {}
+  sumaPlanuWpis.value = null
+  usunKorekte.value = false
+}
+function anulujEdycjePlanu() {
+  if (saving.value) return
+  zakonczEdycjePlanu()
+}
+
+// Baner ostatniej edycji planu: kto, kiedy, pierwotna suma planu (bez śladu, gdy brak).
+const edycjaPlanuTekst = computed(() => {
+  const ed = snapshot.value?.edycja_planu ?? null
+  if (!ed) return ''
+  const kiedy = formatujDataGodzine(ed.kiedy)
+  const kto = (ed.kto && getUser(ed.kto)?.full_name) || ed.kto || ''
+  const pierwotna = Number(ed.koszt_plan_pierwotny)
+  return (
+    `${__('Koszty planowane zmienione ręcznie')}${kiedy ? ' ' + kiedy : ''}${kto ? ' (' + kto + ')' : ''}` +
+    `${Number.isFinite(pierwotna) ? '. ' + __('Pierwotna suma kosztów planowanych') + ': ' + formatPln(pierwotna) : ''}.`
+  )
 })
 const skladnikiMarzy = computed(() => snapshot.value?.skladniki_marzy || [])
 
@@ -362,6 +550,25 @@ async function zapiszKoszty() {
   }
 }
 
+async function zapiszPlan() {
+  if (!snapshot.value || saving.value || plan.value.bledy.length || !planMaZmiany.value) return
+  saving.value = true
+  try {
+    const payload = payloadPlanu.value
+    const data = await call('crm.api.koszty.volteo_koszty_plan_zapisz', {
+      deal: props.dealId,
+      koszty_plan: payload.koszty_plan,
+      suma_plan: payload.suma_plan,
+    })
+    seedFromSnapshot(parseSnapshot(data?.koszty))
+    toast.success(__('Zapisano koszty planowane'))
+  } catch (err) {
+    toast.error(extractErrorMessage(err, __('Nie udało się zapisać kosztów planowanych')))
+  } finally {
+    saving.value = false
+  }
+}
+
 // Copied verbatim from the extractErrorMessage() pattern used across the
 // deal tabs (useAutenti.js, KredytTab.vue, UmowaTab.vue, ...), but that
 // pattern was blind to the actual shape of errors thrown by frappe-ui's
@@ -374,26 +581,26 @@ async function zapiszKoszty() {
 // fell through to the raw "{url} {exc_type}" fallback instead of the
 // server's Polish message. The old `_server_messages`/`exception` branches
 // are kept as a fallback for any caller that isn't call().
-function extractErrorMessage(err) {
+function extractErrorMessage(err, domyslny = __('Nie udało się zapisać kosztów rzeczywistych')) {
   try {
     if (err?.messages?.length && err.messages[0]) return err.messages[0]
     if (err && err._server_messages) {
       const msgs = JSON.parse(err._server_messages)
       if (msgs && msgs.length) {
         const first = JSON.parse(msgs[0])
-        return first.message || __('Nie udało się zapisać kosztów rzeczywistych')
+        return first.message || domyslny
       }
     }
     if (err && err.exception) {
       const parts = String(err.exception).split(': ')
-      return parts[parts.length - 1] || __('Nie udało się zapisać kosztów rzeczywistych')
+      return parts[parts.length - 1] || domyslny
     }
     if (err && err.messages && err.messages.length) return err.messages[0]
     if (err && err.message) return err.message
   } catch (e) {
     /* fall through */
   }
-  return __('Nie udało się zapisać kosztów rzeczywistych')
+  return domyslny
 }
 </script>
 
@@ -454,6 +661,32 @@ function extractErrorMessage(err) {
 .mk-input:disabled {
   cursor: not-allowed;
   opacity: 0.65;
+}
+.mk-input-zmieniony {
+  border-color: var(--outline-amber-3);
+  background: var(--surface-amber-2);
+}
+.mk-input-suma {
+  max-width: 130px;
+  text-align: right;
+}
+.mk-pierwotny {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--ink-gray-5);
+}
+.mk-link {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--ink-gray-6);
+  text-decoration: underline;
+}
+.mk-link:hover {
+  color: var(--ink-gray-8);
+}
+.mk-link:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 .mk-badge {
   margin-left: 6px;
