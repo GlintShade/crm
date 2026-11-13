@@ -285,13 +285,30 @@ def ustaw_termin(
 	# status (ta sama zasada co strażnik w `CRMLead.validate`, ops#265/#308).
 	from crm.permissions.org_hierarchy import ma_flage_zmiany_statusu_cc
 	from crm.volteo_kalendarz import czy_ustawic_status_umowiony
-	from crm.volteo_leady_status import czy_moze_zmienic_status_cc
+	from crm.volteo_leady_status import czy_moze_zmienic_status_cc, lead_bezposredni_wlasny
+
+	# ops#351: wartosci leada SPRZED tego zapisu (doc.lead_owner mogl byc dopiero
+	# co zmieniony wyzej), a gdy pola reguly jeszcze nie ma w bazie, fals.
+	if frappe.get_meta("CRM Lead").has_field("custom_przydzial_bezposredni"):
+		przed = frappe.db.get_value(
+			"CRM Lead", doc.name, ["lead_owner", "custom_przydzial_bezposredni"], as_dict=True
+		)
+		bezposredni_wlasny = lead_bezposredni_wlasny(
+			frappe.session.user,
+			przed.get("custom_przydzial_bezposredni") if przed else None,
+			przed.get("lead_owner") if przed else None,
+		)
+	else:
+		bezposredni_wlasny = False
 
 	if czy_ustawic_status_umowiony(
 		termin_norm,
 		doc.status,
 		czy_moze_zmienic_status_cc(
-			frappe.session.user, frappe.get_roles(), ma_flage_zmiany_statusu_cc(frappe.session.user)
+			frappe.session.user,
+			frappe.get_roles(),
+			ma_flage_zmiany_statusu_cc(frappe.session.user),
+			bezposredni_wlasny,
 		),
 	):
 		doc.status = "Umówiony"

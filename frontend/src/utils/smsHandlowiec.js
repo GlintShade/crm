@@ -24,6 +24,46 @@ export const POLA_FLAG = [
 ]
 export const LIMIT_MAX = 1000
 
+// Czwarta, osobna sekcja: SMS do handlowca o nowym leadzie z reguly bezposredniej.
+// Ustawienia leza w Single `Volteo SMS Ustawienia`, API zwraca je w kluczu `lead_bezposredni`.
+export const TYP_LEAD = 'lead'
+export const POLE_LEAD_WLACZONE = 'lead_bezposredni_wlaczone'
+export const POLE_LEAD_TRESCI = 'tresc_lead_bezposredni'
+export const POLE_LEAD_LIMITU = 'limit_dzienny_lead_bezposredni'
+export const ZNACZNIK_NOWY = 'mapa'
+
+// Formularz sekcji leada (osobny od formularza szablonow o spotkaniach) ze STAN API
+export function formularzLead(lead) {
+  return {
+    [POLE_LEAD_TRESCI]: String(lead?.tresc ?? ''),
+    [POLE_LEAD_LIMITU]: lead?.limit ?? 0,
+  }
+}
+
+// Ladunek dla volteo_sms_handlowiec_zapisz: tylko pola leada rozne od zapisanych
+export function zmienioneLead(formularz, zapisane) {
+  const wynik = {}
+  const tresc = String(formularz?.[POLE_LEAD_TRESCI] ?? '')
+  if (tresc !== String(zapisane?.[POLE_LEAD_TRESCI] ?? ''))
+    wynik[POLE_LEAD_TRESCI] = tresc
+  const nowy = String(formularz?.[POLE_LEAD_LIMITU] ?? '').trim()
+  if (nowy !== String(zapisane?.[POLE_LEAD_LIMITU] ?? '').trim())
+    wynik[POLE_LEAD_LIMITU] = Number(nowy)
+  return wynik
+}
+
+export function czySaZmianyLead(formularz, zapisane) {
+  return Object.keys(zmienioneLead(formularz, zapisane)).length > 0
+}
+
+// Dopisuje {znacznik} na koncu tresci (ze spacja, gdy tresc nie konczy sie odstepem)
+export function wstawZnacznik(tresc, znacznik) {
+  const t = String(tresc ?? '')
+  const wstawka = `{${znacznik}}`
+  if (!t || /\s$/.test(t)) return t + wstawka
+  return `${t} ${wstawka}`
+}
+
 // Formularz (tylko pola zapisywane przyciskiem) ze STAN zwroconego przez API
 export function formularzZeStanu(stan) {
   const wynik = {}

@@ -88,11 +88,11 @@ describe('dyzury: walidujTresc', () => {
     expect(walidujTresc('Lead {klient}, {telefon}, {kod}, {miejscowosc}. {link}')).toBeNull()
   })
 
-  it('akceptuje osiem nowych placeholderow plus okreg, razem 14', () => {
-    expect(PLACEHOLDERY_DYZUR).toHaveLength(14)
+  it('akceptuje osiem nowych placeholderow plus okreg i mapa, razem 15', () => {
+    expect(PLACEHOLDERY_DYZUR).toHaveLength(15)
     expect(
       walidujTresc(
-        '{produkt} {ma_pv} {zasady} {kampania} {okreg} {formularz} {data_zgloszenia} {wojewodztwo} {uwagi}',
+        '{produkt} {ma_pv} {zasady} {kampania} {okreg} {formularz} {data_zgloszenia} {wojewodztwo} {uwagi} {mapa}',
       ),
     ).toBeNull()
   })

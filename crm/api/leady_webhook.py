@@ -70,6 +70,20 @@ według grafiku `Volteo Dyzur SMS` ma teraz dyżur. Własny przełącznik `dyzur
 Idzie przy `utworzony` oraz przy pierwszym `scalony` (klient ponownie zgłasza
 zainteresowanie, SMS dotyczy istniejącego leada); powtórka scalenia go nie wysyła.
 
+Przydział wg reguł obszaru (ops#347)
+------------------------------------
+Nowy lead, którego kod pocztowy daje współrzędne w obszarze aktywnej reguły
+(`Volteo Regula Przydzialu`), dostaje od razu `lead_owner` i `custom_przydzial_bezposredni = 1`
+(`crm.api.przydzial_bezposredni`). Przydział idzie już w insercie, więc `CRMLead.after_insert`
+tworzy ToDo i DocShare dla handlowca. SMS o leadzie dostaje wtedy handlowiec
+(`crm.api.sms_lead_bezposredni.powiadom_handlowca`) ZAMIAST dyżurnego CC; reszta leadów
+idzie torem CC jak dotąd. Ponowne zgłoszenie numeru leada przydzielonego regułą idzie do
+jego handlowca z prefiksem "Ponownie: ", bez ponownego dopasowania reguł i bez zmiany
+właściciela. Każdy błąd w nowym kroku (dopasowanie, insert z właścicielem, ślad, kolejkowanie)
+trafia do Error Log, a lead i odpowiedź webhooka zostają bez zmian: w razie wyjątku lead
+idzie torem CC. Insert z właścicielem jest w savepoincie; gdy się nie uda, wstawiamy leada
+tak jak dotąd, bez przydziału.
+
 Dane adresowe z kodu pocztowego (ops#329)
 -----------------------------------------
 Nowy lead z poprawnym kodem dostaje województwo, powiat, gminę (gdy na leadzie jest
@@ -87,6 +101,7 @@ import frappe
 from frappe import _
 
 from crm.api.kod_pocztowy import dane_kodu
+from crm.api.przydzial_bezposredni import przydziel_wg_reguly, zapisz_slad_przydzialu
 from crm.volteo_aktywnosc import zapisz_slad
 from crm.volteo_leady_webhook import (
 	LIMIT_ZADAN_NA_MINUTE,
@@ -101,6 +116,7 @@ from crm.volteo_leady_webhook import (
 	tresc_sladu_ponownego_zgloszenia,
 	zbuduj_leada_z_webhooka,
 )
+from crm.volteo_reguly_przydzialu import POLE_ZNACZNIKA, czy_ponowne_do_handlowca
 
 KOMUNIKAT_LIMITU = "Przekroczono limit %d żądań na minutę. Spróbuj ponownie za chwilę."
 
@@ -214,6 +230,77 @@ def _zakolejkuj_sms_dyzurny(lead: str) -> None:
 		)
 
 
+def _zakolejkuj_sms_lead_bezposredni(lead: str, ponowne: bool = False) -> None:
+	"""SMS do handlowca o leadzie z reguły (ops#347): ten sam wzorzec co `_zakolejkuj_sms_dyzurny`.
+
+	Osobny callback `after_commit` z własnym try/except i wpisem "SMS lead bezpośredni" w
+	Error Log, żeby błąd kolejkowania nie zablokował innych kanałów ani odpowiedzi webhooka.
+	"""
+
+	def _enqueue() -> None:
+		try:
+			frappe.enqueue(
+				"crm.api.sms_lead_bezposredni.powiadom_handlowca", queue="short", lead=lead, ponowne=ponowne
+			)
+		except Exception:
+			frappe.log_error(
+				title="SMS lead bezpośredni",
+				message=f"Lead {lead}: nie udało się zakolejkować\n{frappe.get_traceback()}",
+			)
+
+	try:
+		frappe.db.after_commit.add(_enqueue)
+	except Exception:
+		frappe.log_error(
+			title="SMS lead bezpośredni",
+			message=f"Lead {lead}: nie udało się zarejestrować callbacku\n{frappe.get_traceback()}",
+		)
+
+
+def _sms_dla_scalonego(lead: str) -> None:
+	"""Wybór SMS-a po ponownym zgłoszeniu: handlowiec leada z reguły albo dyżurny jak dotąd.
+
+	Każdy wyjątek (także brak pola schematu) daje tor dyżurnego CC. Dopasowanie reguł nie
+	jest uruchamiane od nowa, a właściciel leada nie jest zmieniany."""
+	try:
+		if frappe.get_meta("CRM Lead").has_field(POLE_ZNACZNIKA):
+			wiersz = frappe.db.get_value("CRM Lead", lead, ["lead_owner", POLE_ZNACZNIKA], as_dict=True)
+			if wiersz and czy_ponowne_do_handlowca(wiersz.get(POLE_ZNACZNIKA), wiersz.get("lead_owner")):
+				_zakolejkuj_sms_lead_bezposredni(lead, ponowne=True)
+				return
+	except Exception:
+		frappe.log_error(title="Webhook leadów: przydział", message=frappe.get_traceback())
+	_zakolejkuj_sms_dyzurny(lead)
+
+
+def _wstaw_leada(dane: dict) -> tuple["frappe.model.document.Document", dict | None]:
+	"""Wstawia leada; przy dopasowanej regule od razu z właścicielem (ops#347).
+
+	Zwraca (dokument, przydział albo None). Dopasowanie i insert z właścicielem są w
+	`try/except` z savepointem: każdy wyjątek cofa tylko ten insert, idzie do Error Log, a
+	lead jest wstawiany jak dotąd, bez przydziału (tor CC)."""
+	przydzial = None
+	try:
+		przydzial = przydziel_wg_reguly(dane)
+	except Exception:
+		frappe.log_error(title="Webhook leadów: przydział", message=frappe.get_traceback())
+	if przydzial is not None:
+		savepoint = "webhook_przydzial"
+		try:
+			frappe.db.savepoint(savepoint)
+			doc = frappe.get_doc({"doctype": "CRM Lead", **dane, **przydzial["pola"]}).insert(
+				ignore_permissions=True
+			)
+			return doc, przydzial
+		except Exception:
+			frappe.log_error(title="Webhook leadów: przydział", message=frappe.get_traceback())
+			try:
+				frappe.db.rollback(save_point=savepoint)
+			except Exception:
+				frappe.log_error(title="Webhook leadów: przydział", message=frappe.get_traceback())
+	return frappe.get_doc({"doctype": "CRM Lead", **dane}).insert(ignore_permissions=True), None
+
+
 def _scal_z_istniejacym(dane: dict) -> str | None:
 	"""Ponowne zgłoszenie tego samego numeru (ops#324): zwraca nazwę istniejącego leada albo None.
 
@@ -241,7 +328,7 @@ def _scal_z_istniejacym(dane: dict) -> str | None:
 		return nazwa
 	frappe.db.set_value("CRM Lead", nazwa, pola_do_scalenia(istniejacy, dane), update_modified=True)
 	zapisz_slad(nazwa, tresc_sladu_ponownego_zgloszenia(dane), doctype="CRM Lead")
-	_zakolejkuj_sms_dyzurny(nazwa)
+	_sms_dla_scalonego(nazwa)
 	return nazwa
 
 
@@ -267,7 +354,14 @@ def przyjmij() -> dict:
 	if scalony:
 		return {"status": "scalony", "lead": scalony}
 
-	doc = frappe.get_doc({"doctype": "CRM Lead", **_z_centroidem_kodu(dane)}).insert(ignore_permissions=True)
+	doc, przydzial = _wstaw_leada(_z_centroidem_kodu(dane))
 	_zakolejkuj_sms_powitalny(doc.name)
-	_zakolejkuj_sms_dyzurny(doc.name)
+	if przydzial is None:
+		_zakolejkuj_sms_dyzurny(doc.name)
+	else:
+		try:
+			zapisz_slad_przydzialu(doc.name, przydzial)
+		except Exception:
+			frappe.log_error(title="Webhook leadów: przydział", message=frappe.get_traceback())
+		_zakolejkuj_sms_lead_bezposredni(doc.name)
 	return {"status": "utworzony", "lead": doc.name}

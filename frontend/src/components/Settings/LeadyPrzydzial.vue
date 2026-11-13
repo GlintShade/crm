@@ -25,11 +25,13 @@
 
     <!-- Mode switch -->
     <div class="px-2">
-      <TabButtons v-model="tryb" :options="trybOptions" />
+      <TabButtons v-model="tryb" :options="trybOptions" data-testid="przydzial-tryb" />
     </div>
 
+    <RegulyBezposrednie v-if="tryb === 'reguly'" />
+
     <!-- Assignment form -->
-    <div class="flex flex-col gap-4 px-2">
+    <div v-if="tryb !== 'reguly'" class="flex flex-col gap-4 px-2">
       <div class="text-base-semibold">{{ __('Nowy przydział') }}</div>
       <div class="grid grid-cols-2 gap-4 max-w-2xl">
         <FormControl
@@ -99,7 +101,7 @@
       </div>
     </div>
 
-    <div class="border-t mx-2" />
+    <div v-if="tryb !== 'reguly'" class="border-t mx-2" />
 
     <!-- Rep table -->
     <div v-if="tryb === 'handlowiec'" class="flex flex-col gap-4 px-2">
@@ -142,7 +144,7 @@
     </div>
 
     <!-- CC table -->
-    <div v-else class="flex flex-col gap-4 px-2">
+    <div v-else-if="tryb === 'cc'" class="flex flex-col gap-4 px-2">
       <div class="text-base-semibold">{{ __('Osoby CC') }}</div>
 
       <div
@@ -194,6 +196,8 @@ import {
   ErrorMessage,
   TabButtons,
 } from 'frappe-ui'
+import RegulyBezposrednie from '@/components/Settings/RegulyBezposrednie.vue'
+import { usersStore } from '@/stores/users'
 
 // Reactive state declares every key up front and is always replaced with a
 // fresh value on update, never gated on key presence (see CLAUDE.md:
@@ -232,10 +236,13 @@ const LIMIT_PRZYDZIAL_CC = 2000
 // dzielą to samo `form` (wojewodztwo/powiat/miasto/ilosc) - tylko pole osoby
 // docelowej (handlowiec vs cc) i wywoływany endpoint się różnią.
 const tryb = ref('handlowiec')
-const trybOptions = [
+const { isVolteoAdmin } = usersStore()
+// Trzecia opcja ("Reguły bezpośrednie") tylko dla administratora.
+const trybOptions = computed(() => [
   { label: __('Handlowiec'), value: 'handlowiec' },
   { label: 'CC', value: 'cc' },
-]
+  ...(isVolteoAdmin() ? [{ label: __('Reguły bezpośrednie'), value: 'reguly' }] : []),
+])
 
 function emptyForm() {
   return {
@@ -449,7 +456,7 @@ const assignCcResource = createResource({
 // Resource aktywny w bieżącym trybie - jedyne miejsce, które decyduje, który
 // z dwóch createResource ma :loading/:disabled na formularzu i przycisku.
 const aktywnyAssignResource = computed(() =>
-  tryb.value === 'handlowiec' ? assignResource : assignCcResource,
+  tryb.value === 'cc' ? assignCcResource : assignResource,
 )
 
 function submitAssign() {

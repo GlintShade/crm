@@ -77,6 +77,7 @@ export const PLACEHOLDERY_DYZUR = [
   'data_zgloszenia',
   'wojewodztwo',
   'uwagi',
+  'mapa',
 ]
 export const LIMIT_DYZUR_MAX = 1000
 

@@ -54,6 +54,7 @@ PLACEHOLDERY_DYZUR: tuple[str, ...] = (
 	"data_zgloszenia",
 	"wojewodztwo",
 	"uwagi",
+	"mapa",
 )
 """Znane placeholdery treści SMS dyżurowego."""
 
@@ -71,6 +72,7 @@ DANE_PRZYKLADOWE_DYZUR: Mapping[str, str] = {
 	"data_zgloszenia": "01.11",
 	"wojewodztwo": "dolnoslaskie",
 	"uwagi": "Pytanie dodatkowe: tak",
+	"mapa": "https://maps.google.com/?q=52.4447,15.5780",
 }
 """Dane do podglądu i SMS testowego; `link` dokłada adapter (zależy od URL site)."""
 

@@ -18,6 +18,12 @@ import {
   listaPlaceholderow,
   wynikTestu,
   komunikatBledu,
+  formularzLead,
+  zmienioneLead,
+  czySaZmianyLead,
+  wstawZnacznik,
+  POLE_LEAD_TRESCI,
+  POLE_LEAD_LIMITU,
 } from '@/utils/smsHandlowiec'
 
 const PLACEHOLDERY = [
@@ -333,5 +339,45 @@ describe('komunikatBledu', () => {
       ),
     ).toBe('Domyślny')
     expect(komunikatBledu(undefined, 'Domyślny')).toBe('Domyślny')
+  })
+})
+
+describe('sekcja leada bezposredniego', () => {
+  const LEAD = { tresc: 'Nowy lead: {klient}, {mapa}', limit: 100 }
+  it('formularz ze stanu, pusty stan nie rzuca', () => {
+    expect(formularzLead(LEAD)).toEqual({
+      [POLE_LEAD_TRESCI]: 'Nowy lead: {klient}, {mapa}',
+      [POLE_LEAD_LIMITU]: 100,
+    })
+    expect(formularzLead(undefined)).toEqual({
+      [POLE_LEAD_TRESCI]: '',
+      [POLE_LEAD_LIMITU]: 0,
+    })
+  })
+  it('bez zmian daje pusty ladunek', () => {
+    const f = formularzLead(LEAD)
+    expect(zmienioneLead(f, f)).toEqual({})
+    expect(czySaZmianyLead(f, f)).toBe(false)
+  })
+  it('zmieniona tresc i limit (tekst z pola number to liczba)', () => {
+    const z = formularzLead(LEAD)
+    expect(
+      zmienioneLead({ ...z, [POLE_LEAD_TRESCI]: 'Inna {mapa}' }, z),
+    ).toEqual({ [POLE_LEAD_TRESCI]: 'Inna {mapa}' })
+    expect(zmienioneLead({ ...z, [POLE_LEAD_LIMITU]: '150' }, z)).toEqual({
+      [POLE_LEAD_LIMITU]: 150,
+    })
+    expect(zmienioneLead({ ...z, [POLE_LEAD_LIMITU]: '100' }, z)).toEqual({})
+    expect(czySaZmianyLead({ ...z, [POLE_LEAD_LIMITU]: 0 }, z)).toBe(true)
+  })
+  it('wstawZnacznik dopisuje ze spacja albo bez', () => {
+    expect(wstawZnacznik('', 'mapa')).toBe('{mapa}')
+    expect(wstawZnacznik('Lead', 'mapa')).toBe('Lead {mapa}')
+    expect(wstawZnacznik('Lead ', 'mapa')).toBe('Lead {mapa}')
+    expect(wstawZnacznik(null, 'kod')).toBe('{kod}')
+  })
+  it('walidujSzablon zna {mapa} tylko z listy serwera', () => {
+    expect(walidujSzablon('Mapa: {mapa}', ['klient', 'mapa'])).toBeNull()
+    expect(walidujSzablon('Mapa: {mapa}', ['klient'])).toContain('{mapa}')
   })
 })

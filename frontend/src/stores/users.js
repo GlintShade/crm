@@ -172,11 +172,17 @@ export const usersStore = defineStore('crm-users', () => {
   // Uwaga 71: czy uzytkownik moze zmieniac status CC leada. Ta sama regula
   // co serwerowe crm/volteo_leady_status.py.
   // Uwaga 81: wlaczona flaga custom_zmiana_statusu_cc zdejmuje blokade z handlowca.
-  function mozeZmieniacStatusCC(email) {
+  // ops#351: opcjonalny drugi argument `lead` (dokument albo wiersz z listy)
+  // pozwala handlowcowi zmieniac status leada z reguly bezposredniej, ktorego
+  // jest wlascicielem; bez niego dziala jak dotad.
+  function mozeZmieniacStatusCC(email, lead = null) {
+    const uzytkownik = getUser(email)
     return mozeZmieniacStatusCCRole(
-      getUser(email).roles,
+      uzytkownik.roles,
       isVolteoAdmin(),
-      Boolean(getUser(email).custom_zmiana_statusu_cc),
+      Boolean(uzytkownik.custom_zmiana_statusu_cc),
+      lead,
+      uzytkownik.name,
     )
   }
 

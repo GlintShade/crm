@@ -47,7 +47,7 @@
         class="text-sm text-ink-gray-5"
       >{{ __('Status CC') }}</span>
       <Dropdown
-        v-if="doc && document.statuses && mozeZmieniacStatusCC()"
+        v-if="doc && document.statuses && mozeZmieniacStatusCC(undefined, doc)"
         :options="statuses"
         placement="right"
       >
@@ -564,7 +564,7 @@ const sections = createResource({
 // instancja tego samego zasobu) stracilaby pole email razem z panelem.
 // Uwaga 71: dla handlowca pole `status` w panelu jest tylko do odczytu.
 const sectionsPanel = computed(() =>
-  mozeZmieniacStatusCC()
+  mozeZmieniacStatusCC(undefined, doc.value)
     ? sections.data
     : sekcjeZeStatusemTylkoDoOdczytu(sections.data),
 )

@@ -46,6 +46,7 @@ from crm.volteo_dyzury import (
 	zbuduj_tresc_dyzur,
 	zdecyduj_wysylke_dyzur,
 )
+from crm.volteo_reguly_przydzialu import link_mapy
 from crm.volteo_sms import (
 	NADAWCA_DOMYSLNY,
 	SMSAPI_URL,
@@ -78,6 +79,8 @@ def _cofnij_licznik(klucz: str) -> None:
 
 
 def _dane_leada(lead: str) -> dict:
+	meta = frappe.get_meta("CRM Lead")
+	pola_wspolrzednych = [p for p in ("custom_lat", "custom_lng") if meta.has_field(p)]
 	wiersz = frappe.db.get_value(
 		"CRM Lead",
 		lead,
@@ -93,6 +96,7 @@ def _dane_leada(lead: str) -> dict:
 			"custom_import_date",
 			"custom_voivodeship",
 			"custom_uwagi_import",
+			*pola_wspolrzednych,
 		],
 		as_dict=True,
 	)
@@ -115,6 +119,7 @@ def _dane_leada(lead: str) -> dict:
 		"data_zgloszenia": opisz_date(wiersz.custom_import_date),
 		"wojewodztwo": wiersz.custom_voivodeship or "",
 		"uwagi": reszta_uwag(wiersz.custom_uwagi_import),
+		"mapa": link_mapy(wiersz.get("custom_lat"), wiersz.get("custom_lng")),
 	}
 
 
