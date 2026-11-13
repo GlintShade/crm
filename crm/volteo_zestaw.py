@@ -312,9 +312,37 @@ def _typ_indywidualny(typ_klienta: Any) -> bool:
 	return _tekst(typ_klienta).lower() == "indywidualny"
 
 
+PODSTAWY_CENY: tuple[str, ...] = ("netto", "brutto")
+
+
+def _podstawa_ceny(wejscie: dict) -> str:
+	"""Podstawa przeliczenia: `netto` (domyslnie, brak klucza) albo `brutto`."""
+	return _tekst(wejscie.get("podstawa")).lower() or "netto"
+
+
+def brutto_z_netto(netto: Decimal, vat_pct: Decimal) -> Decimal:
+	"""Brutto z netto: `netto + zaokraglenie(netto * VAT / 100)` (grosze, ROUND_HALF_UP)."""
+	n = _grosze(netto)
+	return n + _grosze(n * vat_pct / 100)
+
+
+def netto_z_brutto(brutto: Decimal, vat_pct: Decimal) -> Decimal:
+	"""Netto z brutto: `zaokraglenie(brutto / (1 + VAT / 100))` (grosze, ROUND_HALF_UP)."""
+	return _grosze(_grosze(brutto) / (1 + vat_pct / 100))
+
+
 def waliduj_cene(wejscie: dict) -> list[str]:
-	"""Lista komunikatow bledow wejscia ceny (pusta = OK)."""
+	"""Lista komunikatow bledow wejscia ceny (pusta = OK).
+
+	Opcjonalne klucze `podstawa` (`netto` domyslnie albo `brutto`) i `brutto`: przy
+	podstawie `brutto` to wpisane brutto jest zrodlem, a `netto` jest ignorowane.
+	"""
 	bledy: list[str] = []
+	podstawa = _podstawa_ceny(wejscie)
+	if podstawa not in PODSTAWY_CENY:
+		bledy.append("Podstawa przeliczenia ceny musi być netto albo brutto.")
+		podstawa = "netto"
+	po_brutto = podstawa == "brutto"
 
 	def liczba(klucz: str, etykieta: str) -> Decimal | None:
 		try:
@@ -323,7 +351,8 @@ def waliduj_cene(wejscie: dict) -> list[str]:
 			bledy.append(f"{etykieta} nie jest liczbą.")
 			return None
 
-	netto = liczba("netto", "Netto")
+	netto = None if po_brutto else liczba("netto", "Netto")
+	brutto_wej = liczba("brutto", "Brutto") if po_brutto else None
 	vat = liczba("vat_pct", "Stawka VAT")
 	dotacja = liczba("dotacja", "Dotacja")
 	ulga_pct = liczba("ulga_pct", "Ulga")
@@ -332,6 +361,8 @@ def waliduj_cene(wejscie: dict) -> list[str]:
 	dodatki = liczba("dodatki_bez_ulgi_brutto", "Dodatki wyłączone z ulgi")
 	if netto is not None and netto <= 0:
 		bledy.append("Netto musi być większe od zera.")
+	if brutto_wej is not None and brutto_wej <= 0:
+		bledy.append("Brutto musi być większe od zera.")
 	if vat is not None and not (0 <= vat <= 100):
 		bledy.append("Stawka VAT musi być w zakresie 0 do 100.")
 	if ulga_pct is not None and not (0 <= ulga_pct <= 100):
@@ -344,8 +375,13 @@ def waliduj_cene(wejscie: dict) -> list[str]:
 		bledy.append("Dodatki wyłączone z ulgi nie mogą być ujemne.")
 	if dotacja is not None and dotacja < 0:
 		bledy.append("Dotacja nie może być ujemna.")
-	if netto is not None and netto > 0 and vat is not None and 0 <= vat <= 100 and dotacja is not None:
-		brutto = _grosze(netto) + _grosze(_grosze(netto) * vat / 100)
+	if po_brutto:
+		podstawa_ok = brutto_wej is not None and brutto_wej > 0
+		brutto = _grosze(brutto_wej) if podstawa_ok else None
+	else:
+		podstawa_ok = netto is not None and netto > 0 and vat is not None and 0 <= vat <= 100
+		brutto = brutto_z_netto(netto, vat) if podstawa_ok else None
+	if podstawa_ok and dotacja is not None:
 		if dotacja > brutto:
 			bledy.append("Dotacja nie może być większa od brutto.")
 		elif (
@@ -376,18 +412,22 @@ def _rata(kwota_raty: Decimal, wplata: Decimal, i: Decimal, factor: Decimal, mon
 def przelicz_cene(wejscie: dict, stale: dict) -> dict:
 	"""Lancuch pochodnych ceny w `Decimal` (2 miejsca), wzor z `ops/crm-kalkulator-bom.py`.
 
-	Wejscie: `netto`, `vat_pct`, `dotacja`, `ulga_pct`, `okres_lat`, `wplata_wlasna`,
-	`typ_klienta`, `dodatki_bez_ulgi_brutto`. Stale: `pmt_oprocentowanie_mies`
+	Wejscie: `netto` (albo `brutto` przy `podstawa="brutto"`, wtedy brutto zostaje
+	dokladnie jak wpisane, a netto jest przeliczone), `vat_pct`, `dotacja`, `ulga_pct`,
+	`okres_lat`, `wplata_wlasna`, `typ_klienta`, `dodatki_bez_ulgi_brutto`. Stale: `pmt_oprocentowanie_mies`
 	(procent miesieczny, argument, nigdy czytany w rdzeniu). Niepoprawne wejscie
 	daje `ValueError` z polaczonymi komunikatami z `waliduj_cene`.
 	"""
 	bledy = waliduj_cene(wejscie)
 	if bledy:
 		raise ValueError(" ".join(bledy))
-	netto = _grosze(kwota(wejscie.get("netto")))
 	vat_pct = kwota(wejscie.get("vat_pct"))
-	vat = _grosze(netto * vat_pct / 100)
-	brutto = netto + vat
+	if _podstawa_ceny(wejscie) == "brutto":
+		brutto = _grosze(kwota(wejscie.get("brutto")))
+		netto = netto_z_brutto(brutto, vat_pct)
+	else:
+		netto = _grosze(kwota(wejscie.get("netto")))
+		brutto = brutto_z_netto(netto, vat_pct)
 	indywidualny = _typ_indywidualny(wejscie.get("typ_klienta"))
 	okres_lat = int(kwota(wejscie.get("okres_lat")))
 	wplata = _grosze(kwota(wejscie.get("wplata_wlasna")))
