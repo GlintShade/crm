@@ -185,6 +185,150 @@
         </div>
       </div>
 
+      <!-- New lead from a direct rule -->
+      <div class="flex flex-col gap-4 px-2 max-w-2xl">
+        <div class="text-base-semibold">
+          {{ __('Nowy lead z reguły bezpośredniej') }}
+        </div>
+        <div
+          class="flex items-center justify-between gap-4 rounded-lg border p-4"
+        >
+          <div class="flex flex-col gap-1">
+            <p class="text-base-semibold">
+              {{ __('Wysyłaj SMS do handlowca o nowym leadzie') }}
+            </p>
+            <p class="text-p-sm text-ink-gray-6">
+              {{
+                __(
+                  'Lead z Facebooka, który trafia od razu do handlowca według reguły przydziału, kończy się SMS-em do tego handlowca. Token SMSAPI, nadawca i tryb testowy są wspólne z pozostałymi SMS-ami.',
+                )
+              }}
+            </p>
+          </div>
+          <Switch
+            :modelValue="Boolean(state.lead.wlaczone)"
+            :disabled="zapisuje"
+            @update:modelValue="(val) => przelaczLead(val)"
+          />
+        </div>
+
+        <div class="flex flex-col gap-2 rounded-lg border p-4">
+          <div class="text-p-base-medium">{{ __('Treść') }}</div>
+          <FormControl
+            type="textarea"
+            :rows="4"
+            :modelValue="formularzLeada[POLE_LEAD_TRESCI]"
+            :disabled="zapisuje"
+            @update:modelValue="zmienTrescLeada"
+          />
+          <div class="flex flex-wrap items-center gap-1.5">
+            <button
+              v-for="p in state.lead.placeholdery"
+              :key="p"
+              type="button"
+              class="rounded border px-1.5 py-0.5 text-p-sm"
+              :class="
+                p === ZNACZNIK_NOWY
+                  ? 'border-outline-amber-2 bg-surface-amber-2 text-ink-amber-3'
+                  : 'bg-surface-gray-2 text-ink-gray-7 hover:bg-surface-gray-3'
+              "
+              :title="
+                p === ZNACZNIK_NOWY
+                  ? __(
+                      'Nowy znacznik: link do Google Maps ze współrzędnymi leada',
+                    )
+                  : __('Wstaw znacznik w treść')
+              "
+              :disabled="zapisuje"
+              @click="wstawZnacznikLeada(p)"
+            >
+              {{ '{' + p + '}' }}
+            </button>
+          </div>
+          <div class="flex flex-col gap-1">
+            <p class="text-p-sm text-ink-gray-6">{{ __('Podgląd SMS') }}</p>
+            <div
+              class="rounded-lg border p-3 text-p-base text-ink-gray-8 break-words"
+            >
+              {{ podgladLeada.tresc || '…' }}
+            </div>
+            <p class="text-p-sm text-ink-gray-6">
+              {{ opisCzesci(podgladLeada.dlugosc, podgladLeada.czesci) }}
+            </p>
+            <p v-if="ostrzezenieLeada" class="text-p-sm text-ink-amber-8">
+              {{ ostrzezenieLeada }}
+            </p>
+            <ErrorMessage :message="podgladLeada.blad" />
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-1">
+          <FormControl
+            class="w-32"
+            type="number"
+            min="0"
+            max="1000"
+            :label="__('Limit dzienny')"
+            :modelValue="formularzLeada[POLE_LEAD_LIMITU]"
+            :disabled="zapisuje"
+            @update:modelValue="zmienLimitLeada"
+          />
+          <p class="text-p-sm text-ink-gray-6">{{ __('0 blokuje wysyłkę') }}</p>
+          <p class="text-p-sm text-ink-gray-6">{{ licznikLeadaTekst }}</p>
+        </div>
+        <ErrorMessage :message="bladZapisuLeada" />
+        <div class="flex flex-wrap items-center gap-2">
+          <Button
+            variant="subtle"
+            :label="__('Wyślij SMS testowy do mnie')"
+            :loading="testLeada.wysyla"
+            :disabled="
+              !state.tokenUstawiony ||
+              testLeada.wysyla ||
+              zapisuje ||
+              zmienioneLeada
+            "
+            @click="wyslijTestowyLeada"
+          />
+          <div class="flex-1"></div>
+          <Button
+            v-if="zmienioneLeada"
+            variant="ghost"
+            :label="__('Cofnij zmiany')"
+            :disabled="zapisuje"
+            @click="cofnijZmianyLeada"
+          />
+          <Button
+            variant="solid"
+            :label="__('Zapisz')"
+            :loading="zapisuje"
+            :disabled="!zmienioneLeada"
+            @click="zapiszLeada"
+          />
+        </div>
+        <p v-if="zmienioneLeada" class="text-p-sm text-ink-amber-8">
+          {{
+            __(
+              'Masz niezapisane zmiany. SMS testowy wysyła zapisaną treść, więc najpierw zapisz albo cofnij zmiany.',
+            )
+          }}
+        </p>
+        <p class="text-p-sm text-ink-gray-6">
+          {{
+            __(
+              'SMS testowy wysyła zapisaną treść z przykładowymi danymi na numer zapisany przy Twoim koncie. Liczy się do limitu dziennego tej sekcji, cisza nocna go nie wstrzymuje.',
+            )
+          }}
+        </p>
+        <p
+          v-if="testLeada.wynik"
+          class="text-p-sm"
+          :class="testLeada.wynikOk ? 'text-ink-gray-8' : 'text-ink-red-6'"
+        >
+          {{ testLeada.wynik }}
+        </p>
+      </div>
+
       <!-- Test SMS -->
       <div class="flex flex-col gap-3 px-2 max-w-2xl">
         <div class="text-base-semibold">
@@ -342,6 +486,14 @@ import {
   listaPlaceholderow,
   wynikTestu,
   komunikatBledu,
+  TYP_LEAD,
+  POLE_LEAD_TRESCI,
+  POLE_LEAD_LIMITU,
+  ZNACZNIK_NOWY,
+  formularzLead,
+  zmienioneLead,
+  czySaZmianyLead,
+  wstawZnacznik,
 } from '@/utils/smsHandlowiec'
 
 const API = 'crm.api.sms_handlowiec_panel.'
@@ -362,8 +514,27 @@ const state = reactive({
   domyslne: {},
   handlowcy: [],
   zapisane: formularzZeStanu(null),
+  lead: {
+    wlaczone: 0,
+    wyslaneDzis: null,
+    limit: 0,
+    placeholdery: [],
+    zapisane: formularzLead(null),
+  },
   zaladowano: false,
 })
+const formularzLeada = reactive(formularzLead(null))
+const podgladLeada = reactive({
+  tresc: '',
+  dlugosc: 0,
+  czesci: 1,
+  ostrzezenie: '',
+  blad: '',
+})
+let podgladLeadaTimer = null
+let podgladLeadaNr = 0
+const bladZapisuLeada = ref('')
+const testLeada = reactive({ wysyla: false, wynik: '', wynikOk: true })
 const formularz = reactive(formularzZeStanu(null))
 const podglady = reactive(
   Object.fromEntries(
@@ -396,6 +567,18 @@ const licznikTekst = computed(() =>
 const placeholderyTekst = computed(() =>
   listaPlaceholderow(state.placeholdery, state.przyklady).join(', '),
 )
+const zmienioneLeada = computed(() =>
+  czySaZmianyLead(formularzLeada, state.lead.zapisane),
+)
+const licznikLeadaTekst = computed(() =>
+  opisLicznikaDnia(state.lead.wyslaneDzis, state.lead.limit),
+)
+const ostrzezenieLeada = computed(() => {
+  if (podgladLeada.blad) return ''
+  return (
+    podgladLeada.ostrzezenie || ostrzezenieCzesci(podgladLeada.czesci) || ''
+  )
+})
 const bezNumeru = computed(() => liczBezNumeru(state.handlowcy))
 const opcjeTestu = computed(() =>
   SZABLONY.map((s) => ({ label: __(s.etykieta), value: s.typ })),
@@ -429,8 +612,33 @@ function zastosujStan(data, nadpisz = []) {
   state.przyklady = { ...(data?.dane_przykladowe || {}) }
   state.domyslne = { ...(data?.tresci_domyslne || {}) }
   state.handlowcy = sortujHandlowcow(data?.handlowcy)
+  // Sekcja leada: stary backend (bez klucza lead_bezposredni) zostawia domyslne wartosci
+  const lead = data?.lead_bezposredni
+  const noweLeadZapisane = formularzLead(lead)
+  let trescLeadaZmieniona = false
+  for (const [pole, wartosc] of Object.entries(noweLeadZapisane)) {
+    const bezZmian =
+      String(formularzLeada[pole] ?? '') ===
+      String(state.lead.zapisane[pole] ?? '')
+    if (!state.zaladowano || bezZmian || nadpisz.includes(pole)) {
+      if (
+        pole === POLE_LEAD_TRESCI &&
+        String(formularzLeada[pole] ?? '') !== String(wartosc ?? '')
+      )
+        trescLeadaZmieniona = true
+      formularzLeada[pole] = wartosc
+    }
+  }
+  state.lead = {
+    wlaczone: lead?.wlaczone ? 1 : 0,
+    wyslaneDzis: lead?.wyslane_dzis ?? null,
+    limit: lead?.limit ?? 0,
+    placeholdery: [...(lead?.placeholdery || [])],
+    zapisane: noweLeadZapisane,
+  }
   const pierwszy = !state.zaladowano
   state.zaladowano = true
+  if (pierwszy || trescLeadaZmieniona) odswiezPodgladLeada()
   for (const s of SZABLONY) {
     if (pierwszy || doPodgladu.includes(s.pole)) odswiezPodglad(s)
   }
@@ -474,6 +682,125 @@ function odswiezPodglad(s) {
       p.czesci = 1
       p.ostrzezenie = ''
       p.blad = komunikatBledu(err, __('Nie udało się pobrać podglądu SMS'))
+    },
+  })
+}
+
+function odswiezPodgladLeada() {
+  const nr = ++podgladLeadaNr
+  createResource({
+    url: API + 'volteo_sms_handlowiec_podglad',
+    params: { tresc: formularzLeada[POLE_LEAD_TRESCI], typ: TYP_LEAD },
+    auto: true,
+    onSuccess: (data) => {
+      if (nr !== podgladLeadaNr) return
+      podgladLeada.tresc = data?.tresc || ''
+      podgladLeada.dlugosc = data?.dlugosc || 0
+      podgladLeada.czesci = data?.czesci || 1
+      podgladLeada.ostrzezenie = data?.ostrzezenie || ''
+      podgladLeada.blad = data?.blad || ''
+    },
+    onError: (err) => {
+      if (nr !== podgladLeadaNr) return
+      podgladLeada.tresc = ''
+      podgladLeada.dlugosc = 0
+      podgladLeada.czesci = 1
+      podgladLeada.ostrzezenie = ''
+      podgladLeada.blad = komunikatBledu(
+        err,
+        __('Nie udało się pobrać podglądu SMS'),
+      )
+    },
+  })
+}
+
+function zmienTrescLeada(val) {
+  formularzLeada[POLE_LEAD_TRESCI] = val ?? ''
+  bladZapisuLeada.value = ''
+  clearTimeout(podgladLeadaTimer)
+  podgladLeadaTimer = setTimeout(odswiezPodgladLeada, 400)
+}
+
+function wstawZnacznikLeada(znacznik) {
+  zmienTrescLeada(wstawZnacznik(formularzLeada[POLE_LEAD_TRESCI], znacznik))
+}
+
+function zmienLimitLeada(val) {
+  formularzLeada[POLE_LEAD_LIMITU] = val
+  bladZapisuLeada.value = ''
+}
+
+function cofnijZmianyLeada() {
+  zmienTrescLeada(state.lead.zapisane[POLE_LEAD_TRESCI])
+  formularzLeada[POLE_LEAD_LIMITU] = state.lead.zapisane[POLE_LEAD_LIMITU]
+  bladZapisuLeada.value = ''
+}
+
+function zapiszLeada() {
+  const ladunek = zmienioneLead(formularzLeada, state.lead.zapisane)
+  if (ladunek[POLE_LEAD_TRESCI] !== undefined) {
+    const komunikat = walidujSzablon(
+      ladunek[POLE_LEAD_TRESCI],
+      state.lead.placeholdery,
+    )
+    if (komunikat) {
+      bladZapisuLeada.value = komunikat
+      return
+    }
+  }
+  if (ladunek[POLE_LEAD_LIMITU] !== undefined) {
+    const komunikat = walidujLimit(formularzLeada[POLE_LEAD_LIMITU])
+    if (komunikat) {
+      bladZapisuLeada.value = komunikat
+      return
+    }
+  }
+  if (!Object.keys(ladunek).length) return
+  zapisz(
+    ladunek,
+    () => toast.success(__('Ustawienia SMS o nowym leadzie zapisane')),
+    (msg) => (bladZapisuLeada.value = msg),
+  )
+}
+
+function przelaczLead(val) {
+  zapisz(
+    { lead_bezposredni_wlaczone: val ? 1 : 0 },
+    () =>
+      toast.success(
+        val
+          ? __('SMS o nowym leadzie włączony')
+          : __('SMS o nowym leadzie wyłączony'),
+      ),
+    (msg) => toast.error(msg),
+  )
+}
+
+function wyslijTestowyLeada() {
+  if (zmienioneLeada.value) return
+  testLeada.wysyla = true
+  testLeada.wynik = ''
+  createResource({
+    url: API + 'volteo_sms_handlowiec_test',
+    params: { typ: TYP_LEAD },
+    auto: true,
+    onSuccess: (data) => {
+      testLeada.wysyla = false
+      const wynik = wynikTestu(data)
+      testLeada.wynik = wynik.tekst
+      testLeada.wynikOk = wynik.ok
+      if (wynik.ok) toast.success(wynik.tekst)
+      else toast.error(wynik.tekst)
+      listResource.reload()
+    },
+    onError: (err) => {
+      testLeada.wysyla = false
+      testLeada.wynik = komunikatBledu(
+        err,
+        __('Nie udało się wysłać SMS testowego'),
+      )
+      testLeada.wynikOk = false
+      toast.error(testLeada.wynik)
     },
   })
 }
