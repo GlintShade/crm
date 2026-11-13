@@ -75,7 +75,7 @@
         __('Status CC')
       }}</span>
       <Dropdown
-        v-if="doc.status && mozeZmieniacStatusCC()"
+        v-if="doc.status && mozeZmieniacStatusCC(undefined, doc)"
         :options="statuses"
         placement="bottom-start"
       >
@@ -274,7 +274,7 @@ const sections = createResource({
 
 // Uwaga 71: dla handlowca pole `status` w panelu jest tylko do odczytu.
 const sectionsPanel = computed(() =>
-  mozeZmieniacStatusCC()
+  mozeZmieniacStatusCC(undefined, doc.value)
     ? sections.data
     : sekcjeZeStatusemTylkoDoOdczytu(sections.data),
 )

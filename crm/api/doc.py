@@ -1183,6 +1183,24 @@ def update_in_standard_filter(fieldname, doctype, value):
 		)
 
 
+def _dolacz_pola_decyzyjne_lead(doctype: str, rows: list) -> None:
+	"""ops#351: dolacza do `rows` pola, od ktorych zalezy mozliwosc zmiany statusu CC.
+
+	Frontend decyduje (pigulka, przeciaganie w Kanbanie, komorka listy), czy
+	handlowiec moze zmienic status danego leada, a do tego potrzebuje
+	`lead_owner` i `custom_przydzial_bezposredni`. Dopisujemy je do `rows`
+	(w miejscu) tylko, gdy pole istnieje i wolajacy ma do niego odczyt;
+	domyslne kolumny listy sie nie zmieniaja.
+	"""
+	if doctype != "CRM Lead":
+		return
+	meta = frappe.get_meta(doctype)
+	dodatkowe = [
+		f for f in ("lead_owner", "custom_przydzial_bezposredni") if meta.has_field(f) and f not in rows
+	]
+	rows.extend(_odfiltruj_niedozwolone_klucze(doctype, dodatkowe))
+
+
 @frappe.whitelist()
 def get_data(
 	doctype: str,
@@ -1325,6 +1343,8 @@ def get_data(
 		if group_by_field and group_by_field not in rows:
 			rows.append(group_by_field)
 
+		_dolacz_pola_decyzyjne_lead(doctype, rows)
+
 		# VOLTEO (ops#94): "_comment_count" nie jest prawdziwym DocFieldem, wiec
 		# psulby zapytanie SQL wprost w `fields`. Wycinamy je z listy pol PRZED
 		# `frappe.get_list`, a po pobraniu danych doliczamy JEDNYM zapytaniem
@@ -1410,6 +1430,7 @@ def get_data(
 		# zapytaniem do bazy nizej.
 		rows = _odfiltruj_niedozwolone_klucze(doctype, rows)
 		kanban_fields = _odfiltruj_niedozwolone_klucze(doctype, kanban_fields)
+		_dolacz_pola_decyzyjne_lead(doctype, rows)
 
 		for kc in kanban_columns:
 			column_filters = {column_field: kc.get("name")}

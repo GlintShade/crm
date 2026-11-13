@@ -140,7 +140,7 @@
     @focusin="prefetchMiejscowosci"
   >
     <Button
-      v-if="column.key === 'status' && !mozeZmieniacStatusCC()"
+      v-if="column.key === 'status' && !mozeZmieniacStatusCC(undefined, row)"
       data-testid="status-cc-readonly"
       variant="ghost"
       size="sm"
