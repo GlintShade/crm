@@ -24,7 +24,7 @@
 
     <div
       v-if="!stan.smsWlaczony && stan.reguly.some((r) => r.aktywna)"
-      class="rounded-md border p-2 text-xs text-ink-amber-3"
+      class="rounded-lg border border-outline-amber-3 bg-surface-amber-2 px-3 py-2 text-p-sm text-ink-amber-8"
       data-testid="reguly-sms-wylaczony"
     >
       {{
@@ -69,7 +69,7 @@
             </td>
             <td class="px-3 py-2.5 text-ink-gray-8">
               <div class="font-medium">{{ r.handlowiec_nazwa }}</div>
-              <div v-for="o in r.ostrzezenia" :key="o" class="text-xs text-ink-amber-3">{{ o }}</div>
+              <div v-for="o in r.ostrzezenia" :key="o" class="text-xs text-ink-amber-8">{{ o }}</div>
             </td>
             <td class="px-3 py-2.5 text-ink-gray-8">{{ opisObszaru(r) }}</td>
             <td class="px-3 py-2.5 text-right text-ink-gray-8">{{ r.leady_30_dni }}</td>
@@ -189,7 +189,7 @@
             <span
               v-for="k in kontrola"
               :key="k.tekst"
-              :class="k.ok ? 'text-ink-green-3' : 'text-ink-amber-3'"
+              :class="k.ok ? 'text-ink-green-8' : 'text-ink-amber-8'"
               >{{ k.ok ? '✓' : '!' }} {{ k.tekst }}</span
             >
           </div>
