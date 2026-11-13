@@ -42,9 +42,9 @@
     </div>
 
     <!-- Wiersze -->
-    <div v-if="maKoszty" class="mb-1 flex items-baseline gap-2">
+    <div v-if="maKoszty" class="mb-1 flex flex-wrap items-baseline gap-x-2">
       <span class="text-sm font-semibold text-ink-gray-8">{{ __('Pozycje zestawu') }}</span>
-      <span class="text-xs text-ink-gray-5">{{ __('widzi je klient i handlowiec, bez kosztów') }}</span>
+      <span class="text-xs text-ink-gray-5">{{ __('Backoffice, Handlowiec i klient widzą nazwę tych pozycji i ilość sztuk, nie widzą kosztu danej pozycji') }}</span>
     </div>
     <div class="overflow-x-auto rounded-md border border-outline-gray-2">
       <table class="w-full border-collapse text-sm">
@@ -162,8 +162,8 @@
         </tbody>
       </table>
     </div>
-    <div v-if="!maKoszty" class="mt-2">
-      <Button :label="__('Dodaj pozycję')" variant="outline" size="sm" data-testid="zestaw-dodaj" @click="stan = dodajWiersz(stan)" />
+    <div class="mt-2">
+      <Button :label="maKoszty ? __('Dodaj pozycję z kosztem') : __('Dodaj pozycję')" variant="outline" size="sm" data-testid="zestaw-dodaj" @click="stan = dodajWiersz(stan)" />
     </div>
 
     <!-- Koszty bez pozycji, bilans -->
@@ -205,8 +205,7 @@
       </div>
       <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
         <div class="flex flex-wrap items-center gap-2">
-          <Button :label="__('Dodaj pozycję')" variant="outline" size="sm" data-testid="zestaw-dodaj" @click="stan = dodajWiersz(stan)" />
-          <Button :label="__('Dodaj sam koszt')" variant="outline" size="sm" data-testid="zestaw-dodaj-koszt" @click="stan = dodajSamKoszt(stan)" />
+          <Button :label="__('Dodaj koszt bez pozycji')" variant="outline" size="sm" data-testid="zestaw-dodaj-koszt" @click="stan = dodajSamKoszt(stan)" />
           <button
             v-if="liczbaPustych > 0"
             type="button"
