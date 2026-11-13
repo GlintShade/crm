@@ -191,8 +191,8 @@ export function czyCp(stan) {
   return stan?.linia === 'cp'
 }
 
-export function pustyWiersz(typ = '') {
-  return { klucz: nowyKlucz(), name: null, typ, nazwa: '', ilosc: '1', jednostka: 'szt.', netto: '0', brutto: '0' }
+export function pustyWiersz(typ = '', jednostka = 'szt.') {
+  return { klucz: nowyKlucz(), name: null, typ, nazwa: '', ilosc: '1', jednostka, netto: '0', brutto: '0' }
 }
 
 function cenaDoStanu(cena, pola = POLA_CENY_WEJSCIE) {

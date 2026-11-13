@@ -461,3 +461,15 @@ describe('koszty: suma z delty i etykieta nowej linii', () => {
     expect(kosztyDoWywolania(s).linie.at(-1).etykieta).toBe('EMS z integratorem')
   })
 })
+
+describe('pustyWiersz: jednostka', () => {
+  it('domyslnie szt., a pusta jednostka bez typu trafia do stanu', async () => {
+    const { pustyWiersz } = await import('@/utils/zestawEdycja')
+    expect(pustyWiersz().jednostka).toBe('szt.')
+    const pusty = pustyWiersz('', '')
+    expect(pusty.jednostka).toBe('')
+    expect(pusty.typ).toBe('')
+    const s = dodajWiersz(stanZOdpowiedzi(odpowiedz()), pusty)
+    expect(s.wiersze.at(-1).jednostka).toBe('')
+  })
+})

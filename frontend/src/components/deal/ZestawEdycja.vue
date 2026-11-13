@@ -163,7 +163,7 @@
       </table>
     </div>
     <div class="mt-2">
-      <Button :label="maKoszty ? __('Dodaj pozycję z kosztem') : __('Dodaj pozycję')" variant="outline" size="sm" data-testid="zestaw-dodaj" @click="stan = dodajWiersz(stan)" />
+      <Button :label="maKoszty ? __('Dodaj pozycję z kosztem') : __('Dodaj pozycję')" variant="outline" size="sm" data-testid="zestaw-dodaj" @click="stan = dodajWiersz(stan, pustyWiersz('', jestCp ? 'szt.' : ''))" />
     </div>
 
     <!-- Koszty bez pozycji, bilans -->
@@ -565,6 +565,7 @@ import {
   pokazGrosze,
   przelaczPusteKoszty,
   przesunWiersz,
+  pustyWiersz,
   roznicaDoOkna,
   roznicaKosztowDoOkna,
   sumaKosztowGrosze,
