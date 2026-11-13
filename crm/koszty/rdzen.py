@@ -32,6 +32,10 @@ from typing import Any
 
 WERSJA = 1
 
+KLUCZ_KOREKTY_SUMY = "korekta_sumy_plan"
+ETYKIETA_KOREKTY_SUMY = "Korekta sumy kosztów planowanych"
+LINIE_EDYTOWALNE_PLANU = ("pv", "oze")
+
 _KWANT = Decimal("0.01")
 _ZERO = Decimal("0.00")
 
@@ -405,8 +409,16 @@ def scal_snapshot(
 			"koszt_plan": linia["koszt_plan"],
 			"koszt_rzeczywisty": linia.get("koszt_rzeczywisty"),
 		}
+		if linia.get("koszt_plan_pierwotny") is not None:
+			# Pierwotny koszt planowany linii (edycja planu, ops#335) przeżywa edycję kosztów rzeczywistych.
+			nowa_linia["koszt_plan_pierwotny"] = linia["koszt_plan_pierwotny"]
 		if klucz in koszty_rzeczywiste:
 			wartosc = koszty_rzeczywiste[klucz]
+			if klucz == KLUCZ_KOREKTY_SUMY:
+				if wartosc is not None:
+					raise ValueError("Korekty sumy kosztów planowanych nie edytuje się jako kosztu rzeczywistego.")
+				nowe_linie.append(nowa_linia)
+				continue
 			nowa_linia["koszt_rzeczywisty"] = None if wartosc is None else str(_parsuj_kwote_klienta(wartosc))
 		nowe_linie.append(nowa_linia)
 
@@ -427,6 +439,9 @@ def scal_snapshot(
 	if snapshot.get("edycja_reczna") is not None:
 		# Ślad ręcznej edycji zestawu (ops#270) przeżywa późniejszą edycję kosztów.
 		nowy["edycja_reczna"] = dict(snapshot["edycja_reczna"])
+	if snapshot.get("edycja_planu") is not None:
+		# Ślad edycji kosztów planowanych (ops#335) też przeżywa edycję kosztów rzeczywistych.
+		nowy["edycja_planu"] = dict(snapshot["edycja_planu"])
 	nowy["podsumowanie_rzeczywiste"] = _oblicz_podsumowanie_rzeczywiste(nowy)
 	return nowy
 
@@ -483,3 +498,136 @@ def aktualizuj_po_edycji_zestawu(
 	if snapshot.get("podsumowanie_rzeczywiste") is not None:
 		nowy["podsumowanie_rzeczywiste"] = _oblicz_podsumowanie_rzeczywiste(nowy)
 	return nowy
+
+
+def _linia_korekty(kwota: Decimal) -> dict[str, Any]:
+	return {
+		"klucz": KLUCZ_KOREKTY_SUMY,
+		"etykieta": ETYKIETA_KOREKTY_SUMY,
+		"ilosc": None,
+		"jednostka": None,
+		"netto": None,
+		"prowizja_plan": None,
+		"koszt_plan": str(_kwota(kwota)),
+		"koszt_rzeczywisty": None,
+	}
+
+
+def zmien_koszty_planowane(
+	snapshot: dict[str, Any] | None,
+	koszty_plan: dict[str, Any],
+	suma_plan: Any,
+	teraz: str,
+	uzytkownik: str,
+) -> dict[str, Any]:
+	"""Zwraca NOWY snapshot po edycji kosztów PLANOWANYCH przez administratora (ops#335).
+	Tylko snapshoty OZE (`linia_produktowa` = `pv` albo `oze`); `cp` daje `ValueError`.
+
+	`koszty_plan`: mapa klucz -> (kwota | `None`). Klucz musi pasować do istniejącej linii.
+	Kwota ustawia `koszt_plan` linii; przy PIERWSZEJ zmianie dotychczasowa wartość trafia do
+	`koszt_plan_pierwotny` i nigdy nie jest nadpisywana. `None` albo wartość równa pierwotnej
+	przywraca pierwotny koszt i usuwa `koszt_plan_pierwotny`. Klucz `korekta_sumy_plan`
+	przyjmuje tylko `None` (usuwa korektę).
+
+	`suma_plan`: `None` (suma przesuwa się o zmiany linii) albo kwota >= 0. Różnicę między
+	wpisaną sumą a sumą po zmianach linii niesie jedna linia `korekta_sumy_plan` (może mieć
+	ujemny `koszt_plan`; korekta równa 0 znika). Wygrywa wpisana suma.
+
+	`podsumowanie.koszt_plan` = dotychczasowe + delta zmian linii (NIE suma od zera z linii:
+	stare snapshoty mogą mieć sumę różną od sumy linii), a przy podanej `suma_plan` dokładnie
+	ona. `marza_plan`/`zysk_plan` liczone jak w `aktualizuj_po_edycji_zestawu`;
+	`podsumowanie_rzeczywiste` przeliczane tylko gdy już istniało. Wejście nie jest mutowane.
+	"""
+	if not snapshot:
+		raise ValueError("Brak snapshotu kosztów dla tej szansy.")
+	if snapshot.get("linia_produktowa") not in LINIE_EDYTOWALNE_PLANU:
+		raise ValueError("Kosztów planowanych Czystego Powietrza nie edytuje się w tym panelu.")
+	if not isinstance(koszty_plan, dict):
+		raise ValueError("Nieprawidłowy format kosztów planowanych.")
+
+	stare_linie = snapshot.get("linie") or []
+	klucze_znane = {linia["klucz"] for linia in stare_linie}
+	zadane: dict[str, Decimal | None] = {}
+	for klucz, wartosc in koszty_plan.items():
+		if klucz == KLUCZ_KOREKTY_SUMY:
+			if wartosc is not None:
+				raise ValueError("Korekty sumy kosztów planowanych nie edytuje się jako pozycji.")
+			zadane[klucz] = None
+			continue
+		if klucz not in klucze_znane:
+			raise ValueError(f"Nieznana pozycja kosztorysu: {klucz}.")
+		zadane[klucz] = None if wartosc is None else _parsuj_kwote_klienta(wartosc)
+	suma_wpisana = None if suma_plan is None else _parsuj_kwote_klienta(suma_plan)
+
+	suma_przed = _kwota(snapshot["podsumowanie"]["koszt_plan"])
+	delta = _ZERO
+	nowe_linie: list[dict[str, Any]] = []
+	korekta = _ZERO
+	for linia in stare_linie:
+		klucz = linia["klucz"]
+		nowa = dict(linia)
+		if klucz == KLUCZ_KOREKTY_SUMY:
+			if KLUCZ_KOREKTY_SUMY in zadane:  # jedyna dozwolona wartość to None: usuń korektę
+				delta -= _kwota(linia["koszt_plan"])
+				continue
+			korekta = _kwota(linia["koszt_plan"])
+			nowe_linie.append(nowa)
+			continue
+		if klucz in zadane:
+			stary_koszt = _kwota(linia["koszt_plan"])
+			pierwotny_surowy = linia.get("koszt_plan_pierwotny")
+			bazowy = _kwota(pierwotny_surowy) if pierwotny_surowy is not None else stary_koszt
+			zadana = zadane[klucz]
+			nowy_koszt = bazowy if zadana is None else zadana
+			if nowy_koszt == bazowy:
+				nowa.pop("koszt_plan_pierwotny", None)
+			else:
+				nowa["koszt_plan_pierwotny"] = str(bazowy)
+			nowa["koszt_plan"] = str(nowy_koszt)
+			delta += nowy_koszt - stary_koszt
+		nowe_linie.append(nowa)
+
+	suma_po_liniach = _kwota(suma_przed + delta)
+	if suma_wpisana is None:
+		suma_nowa = suma_po_liniach
+	else:
+		korekta = _kwota(korekta + suma_wpisana - suma_po_liniach)
+		suma_nowa = suma_wpisana
+		nowe_linie = [linia for linia in nowe_linie if linia["klucz"] != KLUCZ_KOREKTY_SUMY]
+		if korekta != _ZERO:
+			nowe_linie.append(_linia_korekty(korekta))
+
+	netto = _kwota(snapshot["podsumowanie"]["netto"])
+	marza_plan = _kwota(netto - suma_nowa)
+	prowizja_plan = snapshot["podsumowanie"].get("prowizja_plan")
+	prowizja = _kwota(prowizja_plan) if prowizja_plan is not None else _ZERO
+	zysk_plan = _kwota(marza_plan - prowizja)
+
+	poprzednia = snapshot.get("edycja_planu") or {}
+	nowy = copy.deepcopy(snapshot)
+	nowy["linie"] = nowe_linie
+	nowy["zmodyfikowano"] = teraz
+	nowy["zmodyfikowal"] = uzytkownik
+	nowy["podsumowanie"] = {
+		**snapshot["podsumowanie"],
+		"koszt_plan": str(suma_nowa),
+		"marza_plan": str(marza_plan),
+		"zysk_plan": str(zysk_plan),
+	}
+	nowy["edycja_planu"] = {
+		"kiedy": teraz,
+		"kto": uzytkownik,
+		"koszt_plan_przed": str(suma_przed),
+		"koszt_plan_pierwotny": str(poprzednia.get("koszt_plan_pierwotny") or suma_przed),
+	}
+	if snapshot.get("podsumowanie_rzeczywiste") is not None:
+		nowy["podsumowanie_rzeczywiste"] = _oblicz_podsumowanie_rzeczywiste(nowy)
+	return nowy
+
+
+def policz_zmiany_planu(przed: dict[str, Any], po: dict[str, Any]) -> int:
+	"""Liczba linii, których `koszt_plan` różni się między dwoma snapshotami (łącznie z
+	dodaną, zmienioną lub usuniętą korektą sumy). Do śladu aktywności: tylko licznik, bez kwot."""
+	stare = {linia["klucz"]: _kwota(linia["koszt_plan"]) for linia in przed.get("linie") or []}
+	nowe = {linia["klucz"]: _kwota(linia["koszt_plan"]) for linia in po.get("linie") or []}
+	return sum(1 for klucz in set(stare) | set(nowe) if stare.get(klucz) != nowe.get(klucz))

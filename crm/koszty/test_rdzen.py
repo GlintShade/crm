@@ -4,9 +4,11 @@ from decimal import Decimal
 
 from crm.koszty.rdzen import (
 	aktualizuj_po_edycji_zestawu,
+	policz_zmiany_planu,
 	scal_snapshot,
 	zbuduj_snapshot_cp,
 	zbuduj_snapshot_oze,
+	zmien_koszty_planowane,
 )
 
 WEWNETRZNE = {
@@ -597,3 +599,250 @@ class AktualizujPoEdycjiZestawuTest(unittest.TestCase):
 		po_kosztach = scal_snapshot(edytowany, {klucz: "100"}, [], "2026-10-16", "adm")
 		self.assertEqual(po_kosztach["edycja_reczna"], edytowany["edycja_reczna"])
 		self.assertEqual(po_kosztach["podsumowanie"]["netto"], "50000.00")
+
+
+T0 = "2026-11-13 10:00:00"
+
+
+def _pv_snapshot() -> dict:
+	"""Snapshot w kształcie silnika PV: linie bez ilości/netto, suma planu = suma linii."""
+	linie = [
+		{
+			"klucz": klucz,
+			"etykieta": klucz,
+			"ilosc": None,
+			"jednostka": None,
+			"netto": None,
+			"prowizja_plan": None,
+			"koszt_plan": kwota,
+			"koszt_rzeczywisty": None,
+		}
+		for klucz, kwota in (("k_falownik", "5000.00"), ("k_bateria", "12000.00"), ("k_montaz_pv", "3000.00"))
+	]
+	return {
+		"wersja": 1,
+		"linia_produktowa": "pv",
+		"utworzono": "2026-10-01 09:00:00",
+		"zmodyfikowano": None,
+		"zmodyfikowal": None,
+		"linie": linie,
+		"skladniki_marzy": [{"klucz": "narzut", "etykieta": "Narzut", "kwota": "1000.00"}],
+		"dodatkowe": [],
+		"podsumowanie": {
+			"netto": "30000.00",
+			"koszt_plan": "20000.00",
+			"marza_plan": "10000.00",
+			"prowizja_plan": None,
+			"zysk_plan": "10000.00",
+		},
+		"podsumowanie_rzeczywiste": None,
+	}
+
+
+def _linia(snap: dict, klucz: str) -> dict:
+	return next(linia for linia in snap["linie"] if linia["klucz"] == klucz)
+
+
+class ZmienKosztyPlanowaneTest(unittest.TestCase):
+	def test_zmiana_jednej_linii(self):
+		snap = _pv_snapshot()
+		nowy = zmien_koszty_planowane(snap, {"k_bateria": "13 000,50"}, None, T0, "adm")
+		linia = _linia(nowy, "k_bateria")
+		self.assertEqual(linia["koszt_plan"], "13000.50")
+		self.assertEqual(linia["koszt_plan_pierwotny"], "12000.00")
+		self.assertEqual(nowy["podsumowanie"]["koszt_plan"], "21000.50")
+		self.assertEqual(nowy["podsumowanie"]["marza_plan"], "8999.50")
+		self.assertEqual(nowy["podsumowanie"]["zysk_plan"], "8999.50")
+		self.assertEqual(nowy["podsumowanie"]["netto"], "30000.00")
+		self.assertNotIn("koszt_plan_pierwotny", _linia(nowy, "k_falownik"))
+		self.assertEqual(nowy["zmodyfikowal"], "adm")
+
+	def test_kilka_linii(self):
+		nowy = zmien_koszty_planowane(_pv_snapshot(), {"k_falownik": 4000, "k_montaz_pv": "3500"}, None, T0, "adm")
+		self.assertEqual(nowy["podsumowanie"]["koszt_plan"], "19500.00")
+
+	def test_przywrocenie_none(self):
+		p1 = zmien_koszty_planowane(_pv_snapshot(), {"k_bateria": "13000"}, None, T0, "adm")
+		p2 = zmien_koszty_planowane(p1, {"k_bateria": None}, None, T0, "adm")
+		self.assertEqual(_linia(p2, "k_bateria")["koszt_plan"], "12000.00")
+		self.assertNotIn("koszt_plan_pierwotny", _linia(p2, "k_bateria"))
+		self.assertEqual(p2["podsumowanie"]["koszt_plan"], "20000.00")
+
+	def test_none_dla_nigdy_niezmienianej_nic_nie_robi(self):
+		nowy = zmien_koszty_planowane(_pv_snapshot(), {"k_bateria": None}, None, T0, "adm")
+		self.assertEqual(nowy["linie"], _pv_snapshot()["linie"])
+		self.assertEqual(nowy["podsumowanie"]["koszt_plan"], "20000.00")
+
+	def test_wartosc_rowna_pierwotnej_dziala_jak_przywrocenie(self):
+		p1 = zmien_koszty_planowane(_pv_snapshot(), {"k_bateria": "13000"}, None, T0, "adm")
+		p2 = zmien_koszty_planowane(p1, {"k_bateria": "12000"}, None, T0, "adm")
+		self.assertNotIn("koszt_plan_pierwotny", _linia(p2, "k_bateria"))
+		self.assertEqual(p2["podsumowanie"]["koszt_plan"], "20000.00")
+
+	def test_pierwotny_nie_jest_nadpisywany_przy_kolejnej_zmianie(self):
+		p1 = zmien_koszty_planowane(_pv_snapshot(), {"k_bateria": "13000"}, None, T0, "adm")
+		p2 = zmien_koszty_planowane(p1, {"k_bateria": "14000"}, None, T0, "adm")
+		self.assertEqual(_linia(p2, "k_bateria")["koszt_plan_pierwotny"], "12000.00")
+		self.assertEqual(p2["podsumowanie"]["koszt_plan"], "22000.00")
+
+	def test_suma_wyzsza_daje_dodatnia_korekte(self):
+		nowy = zmien_koszty_planowane(_pv_snapshot(), {}, "21 500", T0, "adm")
+		korekta = _linia(nowy, "korekta_sumy_plan")
+		self.assertEqual(korekta["koszt_plan"], "1500.00")
+		self.assertEqual(korekta["etykieta"], "Korekta sumy kosztów planowanych")
+		for pole in ("ilosc", "jednostka", "netto", "prowizja_plan", "koszt_rzeczywisty"):
+			self.assertIsNone(korekta[pole])
+		self.assertEqual(nowy["podsumowanie"]["koszt_plan"], "21500.00")
+		self.assertEqual(nowy["podsumowanie"]["marza_plan"], "8500.00")
+
+	def test_suma_nizsza_daje_ujemna_korekte(self):
+		nowy = zmien_koszty_planowane(_pv_snapshot(), {}, "18000", T0, "adm")
+		self.assertEqual(_linia(nowy, "korekta_sumy_plan")["koszt_plan"], "-2000.00")
+		self.assertEqual(nowy["podsumowanie"]["koszt_plan"], "18000.00")
+
+	def test_suma_rowna_sumie_linii_nie_tworzy_korekty(self):
+		nowy = zmien_koszty_planowane(_pv_snapshot(), {}, "20000", T0, "adm")
+		self.assertFalse([l for l in nowy["linie"] if l["klucz"] == "korekta_sumy_plan"])
+
+	def test_zmiana_linii_i_sumy_wygrywa_suma(self):
+		nowy = zmien_koszty_planowane(_pv_snapshot(), {"k_bateria": "13000"}, "20500", T0, "adm")
+		self.assertEqual(nowy["podsumowanie"]["koszt_plan"], "20500.00")
+		self.assertEqual(_linia(nowy, "korekta_sumy_plan")["koszt_plan"], "-500.00")
+
+	def test_zmiana_linii_przy_istniejacej_korekcie_zostawia_korekte(self):
+		p1 = zmien_koszty_planowane(_pv_snapshot(), {}, "21500", T0, "adm")
+		p2 = zmien_koszty_planowane(p1, {"k_bateria": "13000"}, None, T0, "adm")
+		self.assertEqual(_linia(p2, "korekta_sumy_plan")["koszt_plan"], "1500.00")
+		self.assertEqual(p2["podsumowanie"]["koszt_plan"], "22500.00")
+
+	def test_ponowna_suma_przy_istniejacej_korekcie_przelicza_korekte(self):
+		p1 = zmien_koszty_planowane(_pv_snapshot(), {}, "21500", T0, "adm")
+		p2 = zmien_koszty_planowane(p1, {}, "20000", T0, "adm")
+		self.assertFalse([l for l in p2["linie"] if l["klucz"] == "korekta_sumy_plan"])
+		p3 = zmien_koszty_planowane(p1, {}, "23000", T0, "adm")
+		self.assertEqual(_linia(p3, "korekta_sumy_plan")["koszt_plan"], "3000.00")
+
+	def test_none_na_kluczu_korekty_usuwa_korekte(self):
+		p1 = zmien_koszty_planowane(_pv_snapshot(), {}, "21500", T0, "adm")
+		p2 = zmien_koszty_planowane(p1, {"korekta_sumy_plan": None}, None, T0, "adm")
+		self.assertFalse([l for l in p2["linie"] if l["klucz"] == "korekta_sumy_plan"])
+		self.assertEqual(p2["podsumowanie"]["koszt_plan"], "20000.00")
+
+	def test_kwota_na_kluczu_korekty_odrzucona(self):
+		with self.assertRaises(ValueError):
+			zmien_koszty_planowane(_pv_snapshot(), {"korekta_sumy_plan": "100"}, None, T0, "adm")
+
+	def test_snapshot_oze(self):
+		snap = _snapshot_oze()
+		klucz = snap["linie"][0]["klucz"]
+		przed = Decimal(snap["podsumowanie"]["koszt_plan"])
+		stary = Decimal(snap["linie"][0]["koszt_plan"])
+		nowy = zmien_koszty_planowane(snap, {klucz: stary + 100}, None, T0, "adm")
+		self.assertEqual(Decimal(nowy["podsumowanie"]["koszt_plan"]), przed + 100)
+		self.assertEqual(nowy["linia_produktowa"], "oze")
+
+	def test_cp_odrzucony(self):
+		with self.assertRaisesRegex(ValueError, "Czystego Powietrza"):
+			zmien_koszty_planowane(_snapshot(), {"pompa_ciepla": "1"}, None, T0, "adm")
+
+	def test_pusty_snapshot_odrzucony(self):
+		with self.assertRaises(ValueError):
+			zmien_koszty_planowane(None, {}, None, T0, "adm")
+
+	def test_nieznany_klucz(self):
+		with self.assertRaisesRegex(ValueError, "Nieznana pozycja"):
+			zmien_koszty_planowane(_pv_snapshot(), {"nie_ma": "1"}, None, T0, "adm")
+
+	def test_kwoty_niepoprawne(self):
+		for zla in ("-1", "abc", "", float("inf"), True, None.__class__):
+			with self.assertRaises(ValueError):
+				zmien_koszty_planowane(_pv_snapshot(), {"k_bateria": zla}, None, T0, "adm")
+		with self.assertRaises(ValueError):
+			zmien_koszty_planowane(_pv_snapshot(), {}, "-5", T0, "adm")
+		with self.assertRaises(ValueError):
+			zmien_koszty_planowane(_pv_snapshot(), {}, "xyz", T0, "adm")
+
+	def test_zachowuje_edycje_reczna(self):
+		snap = aktualizuj_po_edycji_zestawu(_pv_snapshot(), "31000", "a@x.pl", T0, "p")
+		nowy = zmien_koszty_planowane(snap, {"k_bateria": "13000"}, None, T0, "adm")
+		self.assertEqual(nowy["edycja_reczna"], snap["edycja_reczna"])
+		self.assertEqual(nowy["podsumowanie"]["netto"], "31000.00")
+		self.assertEqual(nowy["podsumowanie"]["marza_plan"], str(Decimal("31000.00") - Decimal("21000.00")))
+
+	def test_podsumowanie_rzeczywiste_przeliczane_gdy_istnialo(self):
+		snap = scal_snapshot(_pv_snapshot(), {"k_falownik": "4000"}, [], T0, "adm")
+		nowy = zmien_koszty_planowane(snap, {"k_bateria": "13000"}, None, T0, "adm")
+		# falownik rzeczywisty 4000 + bateria wg planu 13000 + montaz 3000
+		self.assertEqual(nowy["podsumowanie_rzeczywiste"]["koszt_rzeczywisty"], "20000.00")
+		self.assertEqual(nowy["podsumowanie_rzeczywiste"]["marza_rzeczywista"], "10000.00")
+
+	def test_brak_podsumowania_rzeczywistego_gdy_nie_istnialo(self):
+		nowy = zmien_koszty_planowane(_pv_snapshot(), {"k_bateria": "13000"}, None, T0, "adm")
+		self.assertIsNone(nowy["podsumowanie_rzeczywiste"])
+
+	def test_zysk_z_prowizja(self):
+		snap = _pv_snapshot()
+		snap["podsumowanie"]["prowizja_plan"] = "500.00"
+		nowy = zmien_koszty_planowane(snap, {"k_bateria": "13000"}, None, T0, "adm")
+		self.assertEqual(nowy["podsumowanie"]["zysk_plan"], "8500.00")
+
+	def test_stary_snapshot_z_suma_rozna_od_sumy_linii(self):
+		snap = _pv_snapshot()
+		snap["podsumowanie"]["koszt_plan"] = "20500.00"  # linie sumują się do 20000
+		nowy = zmien_koszty_planowane(snap, {"k_bateria": "13000"}, None, T0, "adm")
+		self.assertEqual(nowy["podsumowanie"]["koszt_plan"], "21500.00")  # delta, nie suma z linii
+		nowy2 = zmien_koszty_planowane(snap, {}, "20500", T0, "adm")
+		self.assertFalse([l for l in nowy2["linie"] if l["klucz"] == "korekta_sumy_plan"])
+
+	def test_edycja_planu_slad(self):
+		p1 = zmien_koszty_planowane(_pv_snapshot(), {"k_bateria": "13000"}, None, T0, "a@x.pl")
+		self.assertEqual(
+			p1["edycja_planu"],
+			{"kiedy": T0, "kto": "a@x.pl", "koszt_plan_przed": "20000.00", "koszt_plan_pierwotny": "20000.00"},
+		)
+		p2 = zmien_koszty_planowane(p1, {"k_bateria": "14000"}, None, "2026-11-14 10:00:00", "b@x.pl")
+		self.assertEqual(p2["edycja_planu"]["koszt_plan_przed"], "21000.00")
+		self.assertEqual(p2["edycja_planu"]["koszt_plan_pierwotny"], "20000.00")
+		self.assertEqual(p2["edycja_planu"]["kto"], "b@x.pl")
+
+	def test_nie_mutuje_wejscia(self):
+		snap = _pv_snapshot()
+		kopia = copy.deepcopy(snap)
+		koszty = {"k_bateria": "13000"}
+		nowy = zmien_koszty_planowane(snap, koszty, "25000", T0, "adm")
+		self.assertEqual(snap, kopia)
+		self.assertEqual(koszty, {"k_bateria": "13000"})
+		self.assertIsNot(nowy["linie"], snap["linie"])
+
+	def test_scal_snapshot_zachowuje_nowe_klucze(self):
+		p1 = zmien_koszty_planowane(_pv_snapshot(), {"k_bateria": "13000"}, "25000", T0, "adm")
+		po = scal_snapshot(p1, {"k_bateria": "12500"}, [], "2026-11-14", "adm")
+		self.assertEqual(_linia(po, "k_bateria")["koszt_plan_pierwotny"], "12000.00")
+		self.assertEqual(_linia(po, "k_bateria")["koszt_plan"], "13000.00")
+		self.assertEqual(_linia(po, "korekta_sumy_plan")["koszt_plan"], "4000.00")
+		self.assertEqual(po["edycja_planu"], p1["edycja_planu"])
+		self.assertEqual(po["podsumowanie"]["koszt_plan"], "25000.00")
+		# rzeczywiste: falownik 5000 + bateria 12500 + montaz 3000 + korekta 4000 (wg planu)
+		self.assertEqual(po["podsumowanie_rzeczywiste"]["koszt_rzeczywisty"], "24500.00")
+
+	def test_scal_snapshot_odrzuca_koszt_rzeczywisty_korekty(self):
+		p1 = zmien_koszty_planowane(_pv_snapshot(), {}, "25000", T0, "adm")
+		with self.assertRaises(ValueError):
+			scal_snapshot(p1, {"korekta_sumy_plan": "1"}, [], T0, "adm")
+		ok = scal_snapshot(p1, {"korekta_sumy_plan": None}, [], T0, "adm")
+		self.assertEqual(_linia(ok, "korekta_sumy_plan")["koszt_plan"], "5000.00")
+
+	def test_aktualizuj_po_edycji_zestawu_zachowuje_nowe_klucze(self):
+		p1 = zmien_koszty_planowane(_pv_snapshot(), {"k_bateria": "13000"}, "25000", T0, "adm")
+		po = aktualizuj_po_edycji_zestawu(p1, "40000", "a@x.pl", T0, "")
+		self.assertEqual(_linia(po, "k_bateria")["koszt_plan_pierwotny"], "12000.00")
+		self.assertIn("korekta_sumy_plan", [l["klucz"] for l in po["linie"]])
+		self.assertEqual(po["edycja_planu"], p1["edycja_planu"])
+		self.assertEqual(po["podsumowanie"]["koszt_plan"], "25000.00")
+
+	def test_policz_zmiany_planu(self):
+		snap = _pv_snapshot()
+		nowy = zmien_koszty_planowane(snap, {"k_bateria": "13000", "k_falownik": "5000"}, "21500", T0, "adm")
+		# bateria zmieniona + korekta dodana (falownik bez zmiany)
+		self.assertEqual(policz_zmiany_planu(snap, nowy), 2)
+		self.assertEqual(policz_zmiany_planu(snap, snap), 0)
