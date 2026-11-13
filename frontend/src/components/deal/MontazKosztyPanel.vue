@@ -49,14 +49,8 @@
       </div>
 
       <!-- Ślady ręcznych edycji (zestaw, koszty planowane, marże): krótkie linie tekstu -->
-      <div v-if="edycjaReczna" class="mb-1.5 text-xs text-ink-amber-8" data-testid="koszty-edycja-reczna">
-        {{ edycjaReczna.tekst }}
-      </div>
-      <div v-if="edycjaPlanuTekst" class="mb-1.5 text-xs text-ink-amber-8" data-testid="koszty-edycja-planu">
-        {{ edycjaPlanuTekst }}
-      </div>
-      <div v-if="edycjaMarzyTekst" class="mb-1.5 text-xs text-ink-amber-8" data-testid="koszty-edycja-marz">
-        {{ edycjaMarzyTekst }}
+      <div v-if="liniePrzebiegu.length" class="mb-1 text-xs text-ink-amber-8" data-testid="koszty-edycje">
+        <div v-for="(linia, i) in liniePrzebiegu" :key="i" class="mb-1.5">{{ linia }}</div>
       </div>
 
       <!-- Cost lines -->
@@ -238,6 +232,7 @@ import {
   przeliczRzeczywiste,
   zbudujPayload,
   przeliczSkladnikiMarzy,
+  opisEdycjiRecznych,
 } from '@/utils/montazKoszty'
 
 const props = defineProps({
@@ -311,49 +306,18 @@ const widoczneLinie = computed(() =>
   pokazPuste.value ? wynik.value.linie : wynik.value.linie.filter((l) => !puste.value.includes(l)),
 )
 
-// Baner ręcznej edycji zestawu (ops#273): czytany wprost ze snapshotu, jawny
-// null, bez mutacji. Powód pomijany, gdy pusty; osoba: pełne imię albo e-mail.
-const edycjaReczna = computed(() => {
-  const ed = snapshot.value?.edycja_reczna ?? null
-  if (!ed) return null
-  const kiedy = formatujDataGodzine(ed.kiedy)
-  const kto = (ed.kto && getUser(ed.kto)?.full_name) || ed.kto || ''
-  const powod = String(ed.powod ?? '').trim()
-  const nettoPrzed = Number(ed.netto_przed)
-  const szczegoly = [kto, powod ? `${__('powód')}: ${powod}` : ''].filter(Boolean).join(', ')
-  const tekst =
-    `${__('Zestaw zmieniony ręcznie')}${kiedy ? ' ' + kiedy : ''}` +
-    `${szczegoly ? ' (' + szczegoly + ')' : ''}. ` +
-    `${__('Koszty planowane pochodzą z pierwotnej konfiguracji')}` +
-    `${Number.isFinite(nettoPrzed) ? ' (' + __('netto przed zmianą') + ': ' + formatPln(nettoPrzed) + ')' : ''} ` +
-    `${__('i mogą być nieaktualne.')}`
-  return { tekst }
-})
-
-// Baner ostatniej edycji planu: kto, kiedy, pierwotna suma planu (bez śladu, gdy brak).
-const edycjaPlanuTekst = computed(() => {
-  const ed = snapshot.value?.edycja_planu ?? null
-  if (!ed) return ''
-  const kiedy = formatujDataGodzine(ed.kiedy)
-  const kto = (ed.kto && getUser(ed.kto)?.full_name) || ed.kto || ''
-  const pierwotna = Number(ed.koszt_plan_pierwotny)
-  return (
-    `${__('Koszty planowane zmienione ręcznie')}${kiedy ? ' ' + kiedy : ''}${kto ? ' (' + kto + ')' : ''}` +
-    `${Number.isFinite(pierwotna) ? '. ' + __('Pierwotna suma kosztów planowanych') + ': ' + formatPln(pierwotna) : ''}.`
-  )
-})
+// Jedna krótka informacja o ręcznych zmianach (zestaw, koszty planowane, marże).
+const liniePrzebiegu = computed(() =>
+  opisEdycjiRecznych(snapshot.value, {
+    formatujDate: formatujDataGodzine,
+    nazwaUzytkownika: (kto) => (kto && getUser(kto)?.full_name) || kto || '',
+    formatPln,
+  }),
+)
 
 const skladnikiMarzy = computed(() => snapshot.value?.skladniki_marzy || [])
 // Składniki marży tylko do odczytu: bez wpisanych zmian (edycję robi wspólny edytor zestawu).
 const marze = computed(() => przeliczSkladnikiMarzy(snapshot.value, {}))
-const edycjaMarzyTekst = computed(() => {
-  const ed = snapshot.value?.edycja_marzy ?? null
-  if (!ed) return ''
-  const kiedy = formatujDataGodzine(ed.kiedy)
-  const kto = (ed.kto && getUser(ed.kto)?.full_name) || ed.kto || ''
-  return `${__('Składniki marży zmienione ręcznie')}${kiedy ? ' ' + kiedy : ''}${kto ? ' (' + kto + ')' : ''}.`
-})
-
 function jednostkaLabel(jednostka) {
   return jednostka === 'm2' ? 'm²' : jednostka || ''
 }

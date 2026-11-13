@@ -221,7 +221,7 @@
           Układ dwóch kolumn (ops#342): "Wycena" po lewej, "Koszty i marża" po
           prawej, tylko gdy panel kosztów faktycznie się renderuje (czyli dla
           administratora i szansy OZE ze snapshotem kosztów). Pozostali widzą
-          samą "Wycenę" na całą szerokość. Panel meldzuje swoją widoczność
+          samą "Wycenę" na całą szerokość. Panel zgłasza swoją widoczność
           zdarzeniem `widocznosc`; wąski ekran układa kolumny jedna pod drugą.
         -->
         <div

@@ -387,3 +387,46 @@ export function przeliczSkladnikiMarzy(snapshot, edycjeMarz) {
     bledy,
   }
 }
+
+/**
+ * Krótki opis ręcznych zmian snapshotu jako lista linii (pusta, gdy nic nie
+ * zmieniano). Pierwsza linia: najnowsza z `edycja_reczna`, `edycja_planu`,
+ * `edycja_marzy` (data i osoba), z powodem zmiany zestawu, jeśli jest. Kolejne
+ * tylko wtedy, gdy cena netto albo suma kosztów planowanych faktycznie różni
+ * się (co do grosza) od wartości pierwotnej. Formatowanie daty i osoby jest
+ * wstrzykiwane, żeby funkcja pozostała czysta.
+ *
+ * @param {object|null} snapshot
+ * @param {{formatujDate: Function, nazwaUzytkownika: Function, formatPln: Function}} opcje
+ * @returns {string[]}
+ */
+export function opisEdycjiRecznych(snapshot, { formatujDate, nazwaUzytkownika, formatPln }) {
+  if (!snapshot) return []
+  const wpisy = ['edycja_reczna', 'edycja_planu', 'edycja_marzy']
+    .map((k) => snapshot[k])
+    .filter((e) => e && typeof e === 'object')
+  if (!wpisy.length) return []
+
+  const czas = (e) => {
+    const t = Date.parse(String(e.kiedy ?? '').replace(' ', 'T'))
+    return Number.isFinite(t) ? t : -Infinity
+  }
+  const najnowszy = wpisy.reduce((a, b) => (czas(b) > czas(a) ? b : a))
+  const kiedy = formatujDate(najnowszy.kiedy)
+  const kto = nazwaUzytkownika(najnowszy.kto)
+  const powod = String(snapshot.edycja_reczna?.powod ?? '').trim()
+  const linie = [
+    `Zestaw, koszty lub marże zmienione ręcznie${kiedy ? ' ' + kiedy : ''}${kto ? ' (' + kto + ')' : ''}.` +
+      (powod ? ` Powód: ${powod}.` : ''),
+  ]
+
+  const nettoPrzed = liczbaLubNull(snapshot.edycja_reczna?.netto_przed)
+  if (nettoPrzed !== null && grosze(nettoPrzed) !== grosze(snapshot.podsumowanie?.netto)) {
+    linie.push(`Cena netto przed zmianą: ${formatPln(nettoPrzed)}.`)
+  }
+  const planPierwotny = liczbaLubNull(snapshot.edycja_planu?.koszt_plan_pierwotny)
+  if (planPierwotny !== null && grosze(planPierwotny) !== grosze(snapshot.podsumowanie?.koszt_plan)) {
+    linie.push(`Pierwotna suma kosztów planowanych: ${formatPln(planPierwotny)}.`)
+  }
+  return linie
+}
