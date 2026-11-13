@@ -467,6 +467,8 @@ def volteo_oze_create_deal(wejscie: dict[str, Any], contact: str) -> dict[str, A
 		snapshot = zbuduj_snapshot_oze(wynik["wewnetrzne"], frappe.utils.now())
 		deal.db_set("custom_koszty_json", json.dumps(snapshot, ensure_ascii=False))
 		deal.db_set("custom_koszty_zysk_plan", flt(snapshot["podsumowanie"]["zysk_plan"], 2))
+		# ops#343: custom_narzut moze miec permlevel 2, insert jako handlowiec go gubi, wiec zapis jak snapshot kosztow.
+		deal.db_set("custom_narzut", wynik["narzut"])
 
 		try:
 			zapisz_slad(
