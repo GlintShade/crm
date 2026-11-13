@@ -838,6 +838,14 @@ def _kropka(tekst: str) -> str:
 	return tekst if tekst.endswith(".") else tekst + "."
 
 
+def _licznik_pozycji(n: int) -> str:
+	if n == 1:
+		return "1 pozycja"
+	if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
+		return f"{n} pozycje"
+	return f"{n} pozycji"
+
+
 def tekst_sladu_zestawu(
 	roznice: Roznice,
 	cena_przed: dict | None,
@@ -848,6 +856,7 @@ def tekst_sladu_zestawu(
 	etykiety: dict | None = None,
 	snapshot: str | None = None,
 	cp: dict | None = None,
+	koszty: tuple[int, int] | None = None,
 ) -> str:
 	"""Jedna linia sladu `[volteo:zestaw]`; czlony puste sa pomijane.
 
@@ -857,6 +866,9 @@ def tekst_sladu_zestawu(
 	`cp` (Czyste Powietrze): slownik `przed`/`po` z kluczami `deal_value`,
 	`dotacja_laczna`, `wklad_wlasny`; wlacza kwoty wierszy oraz czlony "prowizje CP bez
 	zmian" i "wejscie kalkulatora nie odpowiada juz zestawowi".
+	`koszty` (ops#340): para `(zmienione_linie, zmienione_skladniki_marzy)`; dopisuje czlon
+	z samymi licznikami, bez kwot kosztow i marz (slad widza tylko administratorzy, ale
+	kwoty kosztow nie powinny zyc w tekstach).
 	"""
 	etykiety = etykiety or {}
 	powod = _tekst(powod)
@@ -901,6 +913,13 @@ def tekst_sladu_zestawu(
 		czlony.append("Umowa: " + _kropka(_tekst(status_umowy)))
 	if _tekst(snapshot):
 		czlony.append("Snapshot kosztów: " + _kropka(_tekst(snapshot)))
+	if koszty and (koszty[0] or koszty[1]):
+		czesci = []
+		if koszty[0]:
+			czesci.append("koszty planowane: " + _licznik_pozycji(koszty[0]))
+		if koszty[1]:
+			czesci.append("marże: " + _licznik_pozycji(koszty[1]))
+		czlony.append("Koszty i marże: " + ", ".join(czesci) + ".")
 	return f"{ZNACZNIK_ZESTAW} " + " ".join(czlony)
 
 

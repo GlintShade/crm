@@ -4,14 +4,20 @@ from decimal import Decimal
 
 from crm.koszty.rdzen import (
 	aktualizuj_po_edycji_zestawu,
+	bilans,
 	czy_zmieniona_korekta,
+	czy_zmieniony_plan,
+	dopasuj_linie_do_wierszy,
+	etykieta_wyswietlana,
 	nierozdzielona_marza,
 	policz_zmiany_planu,
 	policz_zmiany_skladnikow,
 	scal_snapshot,
+	widok_kosztow,
 	zbuduj_snapshot_cp,
 	zbuduj_snapshot_oze,
 	zmien_koszty_planowane,
+	zmien_plan_laczny,
 	zmien_skladniki_marzy,
 )
 
@@ -967,3 +973,340 @@ class ZmienSkladnikiMarzyTest(unittest.TestCase):
 		self.assertEqual(policz_zmiany_skladnikow(snap, nowy), 1)
 		self.assertEqual(nierozdzielona_marza(snap), Decimal("4000.00"))
 		self.assertEqual(nierozdzielona_marza(nowy), Decimal("3500.00"))
+
+
+# ---------------------------------------------------------------------------
+# Wspólny edytor zestawu, kosztów i marż (ops#340)
+# ---------------------------------------------------------------------------
+
+
+def _snap_ems() -> dict:
+	"""PV: koszty 51921.00, marże 32000.00 (narzut 10000.00), netto 83921.00, bilans 0."""
+	snap = _pv_snapshot()
+	for linia, kwota in zip(snap["linie"], ("3251.00", "40000.00", "8670.00"), strict=True):
+		linia["koszt_plan"] = kwota
+	snap["skladniki_marzy"] = [
+		{"klucz": "marza_proenergy", "etykieta": "Marza ProEnergy", "kwota": "11000.00"},
+		{"klucz": "marza_sps", "etykieta": "Marza SPS", "kwota": "11000.00"},
+		{"klucz": "narzut", "etykieta": "Narzut handlowca", "kwota": "10000.00"},
+	]
+	snap["podsumowanie"] = {
+		"netto": "83921.00",
+		"koszt_plan": "51921.00",
+		"marza_plan": "32000.00",
+		"prowizja_plan": None,
+		"zysk_plan": "32000.00",
+	}
+	return snap
+
+
+WIERSZE_EMS = [
+	{"typ": "Falownik", "nazwa": "Sigen 8 kW"},
+	{"typ": "Magazyn energii", "nazwa": "Sigen 12 kWh"},
+	{"typ": "Montaż", "nazwa": "Montaż PV"},
+	{"typ": "EMS Zeronest", "nazwa": "EMS z integratorem"},
+]
+
+
+def _linie_ems(**koszty) -> list[dict]:
+	bazowe = {"k_falownik": ("3251.00", 0), "k_bateria": ("40000.00", 1), "k_montaz_pv": ("8670.00", 2)}
+	wynik = []
+	for klucz, (kwota, idx) in bazowe.items():
+		wynik.append({"klucz": klucz, "etykieta": klucz, "koszt_plan": koszty.get(klucz, kwota), "wiersz": idx})
+	return wynik
+
+
+class EtykietaWyswietlanaTest(unittest.TestCase):
+	def test_znane_klucze_dostaja_polskie_etykiety(self):
+		self.assertEqual(etykieta_wyswietlana("k_montaz_pv", "Montaz PV"), "Montaż PV")
+		self.assertEqual(etykieta_wyswietlana("k_ppoz", "Uzgodnienia PPOZ"), "Uzgodnienia PPOŻ")
+		self.assertEqual(etykieta_wyswietlana("bonus_liderki", "Bonus liderki"), "Bonus liderski")
+		self.assertEqual(etykieta_wyswietlana("marza_dodatki", "x"), "Marża dodatki")
+
+	def test_nieznany_klucz_zwraca_zapisana_etykiete(self):
+		self.assertEqual(etykieta_wyswietlana("pc_x:montaz", "Montaż (Pompa)"), "Montaż (Pompa)")
+		self.assertEqual(etykieta_wyswietlana("r_1", None), "")
+
+
+class DopasujLinieDoWierszyTest(unittest.TestCase):
+	def test_pv_po_typie_i_montaz_po_nazwie(self):
+		snap = _snap_ems()
+		snap["linie"].append(
+			{**snap["linie"][2], "klucz": "k_montaz_mag", "koszt_plan": "1000.00"}
+		)
+		wiersze = [
+			{"typ": "Falownik", "nazwa": "F"},
+			{"typ": "Montaż", "nazwa": "Montaż magazynu"},
+			{"typ": "Montaż", "nazwa": "Montaż instalacji"},
+			{"typ": "Magazyn energii", "nazwa": "B"},
+		]
+		self.assertEqual(
+			dopasuj_linie_do_wierszy(wiersze, snap),
+			{"k_falownik": 0, "k_montaz_mag": 1, "k_montaz_pv": 2, "k_bateria": 3},
+		)
+
+	def test_dwa_wiersze_tego_samego_typu_nie_sa_dopasowane_po_typie(self):
+		snap = _snap_ems()
+		wiersze = [{"typ": "Falownik", "nazwa": "A"}, {"typ": "Falownik", "nazwa": "B"}]
+		self.assertEqual(dopasuj_linie_do_wierszy(wiersze, snap), {})
+
+	def test_podpis_wygrywa_i_obsluguje_duplikaty_kolejno(self):
+		snap = _snap_ems()
+		snap["linie"][0]["wiersz"] = {"typ": "Falownik", "nazwa": "B"}
+		snap["linie"][1]["wiersz"] = {"typ": "Falownik", "nazwa": "B"}
+		wiersze = [{"typ": "Falownik", "nazwa": "B"}, {"typ": "Falownik", "nazwa": "B"}]
+		self.assertEqual(dopasuj_linie_do_wierszy(wiersze, snap), {"k_falownik": 0, "k_bateria": 1})
+
+	def test_oze_po_etykiecie_bez_wielkosci_liter(self):
+		snap = zbuduj_snapshot_oze(WEWNETRZNE_OZE, "2026-01-01")
+		wiersze = [{"typ": "Pompa ciepła", "nazwa": "BUFOR"}, {"typ": "X", "nazwa": "Inna"}]
+		self.assertEqual(dopasuj_linie_do_wierszy(wiersze, snap), {"wspolne:bufor": 0})
+
+	def test_linia_bez_dopasowania_i_brak_snapshotu(self):
+		self.assertEqual(dopasuj_linie_do_wierszy([], _snap_ems()), {})
+		self.assertEqual(dopasuj_linie_do_wierszy([{"typ": "Falownik", "nazwa": "F"}], None), {})
+
+	def test_korekta_sumy_nie_jest_dopasowywana(self):
+		snap = zmien_koszty_planowane(_snap_ems(), {}, "50000", T0, "adm")
+		wynik = dopasuj_linie_do_wierszy([{"typ": "Falownik", "nazwa": "F"}], snap)
+		self.assertNotIn("korekta_sumy_plan", wynik)
+
+
+class ZmienPlanLacznyTest(unittest.TestCase):
+	def _ems(self, **kw):
+		snap = kw.pop("snap", None) or _snap_ems()
+		linie = kw.pop("linie", None)
+		if linie is None:
+			linie = [*_linie_ems(), {"klucz": None, "etykieta": "EMS z integratorem", "koszt_plan": "3000.00", "wiersz": 3}]
+		return zmien_plan_laczny(
+			snap, linie, kw.pop("marze", {"narzut": "7000.00"}), WIERSZE_EMS, kw.pop("netto", "83921.00"), T0, "adm", "ems"
+		)
+
+	def test_przyklad_kontrolny_ems(self):
+		snap = _snap_ems()
+		kopia = copy.deepcopy(snap)
+		nowy = self._ems(snap=snap)
+		self.assertEqual(snap, kopia)  # wejście nie jest mutowane
+		self.assertEqual(nowy["podsumowanie"]["koszt_plan"], "54921.00")
+		self.assertEqual(nowy["podsumowanie"]["netto"], "83921.00")
+		self.assertEqual(nowy["podsumowanie"]["marza_plan"], "29000.00")
+		self.assertEqual(_sk(nowy, "narzut")["kwota"], "7000.00")
+		self.assertEqual(_sk(nowy, "narzut")["kwota_pierwotna"], "10000.00")
+		self.assertEqual(
+			bilans(nowy),
+			{"netto": Decimal("83921.00"), "koszty": Decimal("54921.00"), "marze": Decimal("29000.00"), "roznica": Decimal("0.00")},
+		)
+		nowa = _linia(nowy, "r_1")
+		self.assertTrue(nowa["reczna"])
+		self.assertEqual(nowa["wiersz"], {"typ": "EMS Zeronest", "nazwa": "EMS z integratorem"})
+		self.assertEqual(nowa["etykieta"], "EMS z integratorem")
+		self.assertIsNone(nowa["koszt_rzeczywisty"])
+		self.assertNotIn("edycja_reczna", nowy)  # netto bez zmian
+		self.assertEqual(nowy["edycja_planu"]["koszt_plan_pierwotny"], "51921.00")
+		self.assertEqual(nowy["edycja_marzy"], {"kiedy": T0, "kto": "adm"})
+		self.assertTrue(czy_zmieniony_plan(snap, nowy))
+
+	def test_zmiana_kosztu_linii_katalogowej_zapamietuje_pierwotny(self):
+		linie = _linie_ems(k_falownik="4000.00")
+		nowy = self._ems(linie=linie, marze={})
+		self.assertEqual(_linia(nowy, "k_falownik")["koszt_plan"], "4000.00")
+		self.assertEqual(_linia(nowy, "k_falownik")["koszt_plan_pierwotny"], "3251.00")
+		self.assertEqual(nowy["podsumowanie"]["koszt_plan"], "52670.00")
+		wrot = self._ems(snap=nowy, linie=_linie_ems(), marze={})
+		self.assertNotIn("koszt_plan_pierwotny", _linia(wrot, "k_falownik"))
+
+	def test_linia_katalogowa_nieobecna_zostaje_z_zerem(self):
+		linie = [l for l in _linie_ems() if l["klucz"] != "k_montaz_pv"]
+		nowy = self._ems(linie=linie, marze={})
+		self.assertEqual(_linia(nowy, "k_montaz_pv")["koszt_plan"], "0.00")
+		self.assertEqual(_linia(nowy, "k_montaz_pv")["koszt_plan_pierwotny"], "8670.00")
+		self.assertIsNone(_linia(nowy, "k_montaz_pv")["wiersz"])
+		self.assertEqual(nowy["podsumowanie"]["koszt_plan"], "43251.00")
+
+	def test_linia_reczna_nieobecna_jest_usuwana(self):
+		z_ems = self._ems()
+		bez = self._ems(snap=z_ems, linie=_linie_ems(), marze={})
+		self.assertNotIn("r_1", [l["klucz"] for l in bez["linie"]])
+		self.assertEqual(bez["podsumowanie"]["koszt_plan"], "51921.00")
+
+	def test_linia_reczna_z_kosztem_rzeczywistym_blokuje_usuniecie(self):
+		z_ems = self._ems()
+		_linia(z_ems, "r_1")["koszt_rzeczywisty"] = "2900.00"
+		with self.assertRaisesRegex(ValueError, "Najpierw usuń koszt rzeczywisty pozycji: EMS z integratorem."):
+			self._ems(snap=z_ems, linie=_linie_ems(), marze={})
+
+	def test_edycja_linii_recznej_zmienia_etykiete_i_koszt(self):
+		z_ems = self._ems()
+		linie = [*_linie_ems(), {"klucz": "r_1", "etykieta": "EMS v2", "koszt_plan": "2500.00", "wiersz": None}]
+		nowy = self._ems(snap=z_ems, linie=linie, marze={})
+		self.assertEqual(_linia(nowy, "r_1")["etykieta"], "EMS v2")
+		self.assertIsNone(_linia(nowy, "r_1")["wiersz"])
+		self.assertEqual(nowy["podsumowanie"]["koszt_plan"], "54421.00")
+
+	def test_klucz_nowej_linii_jest_unikalny(self):
+		z_ems = self._ems()
+		linie = [
+			*_linie_ems(),
+			{"klucz": "r_1", "etykieta": "EMS", "koszt_plan": "3000.00", "wiersz": 3},
+			{"klucz": None, "etykieta": "Drugi", "koszt_plan": "100.00", "wiersz": None},
+		]
+		nowy = self._ems(snap=z_ems, linie=linie, marze={})
+		self.assertEqual([l["klucz"] for l in nowy["linie"]][-2:], ["r_1", "r_2"])
+
+	def test_pusta_etykieta_przy_powiazaniu_bierze_nazwe_wiersza(self):
+		linie = [*_linie_ems(), {"klucz": None, "etykieta": "  ", "koszt_plan": "10.00", "wiersz": 3}]
+		nowy = self._ems(linie=linie, marze={})
+		self.assertEqual(_linia(nowy, "r_1")["etykieta"], "EMS z integratorem")
+
+	def test_pusta_etykieta_bez_wiersza_to_blad(self):
+		linie = [*_linie_ems(), {"klucz": None, "etykieta": "", "koszt_plan": "10.00", "wiersz": None}]
+		with self.assertRaisesRegex(ValueError, "Podaj nazwę kosztu"):
+			self._ems(linie=linie, marze={})
+
+	def test_korekta_sumy(self):
+		snap = zmien_koszty_planowane(_snap_ems(), {}, "50000", T0, "adm")
+		kor = _linia(snap, "korekta_sumy_plan")["koszt_plan"]
+		obecna = [*_linie_ems(), {"klucz": "korekta_sumy_plan", "etykieta": "x", "koszt_plan": kor, "wiersz": None}]
+		bez_zmian = self._ems(snap=snap, linie=obecna, marze={})
+		self.assertEqual(_linia(bez_zmian, "korekta_sumy_plan")["koszt_plan"], kor)
+		with self.assertRaisesRegex(ValueError, "Kwoty korekty"):
+			zmieniona = [dict(l, koszt_plan="1.00") if l["klucz"] == "korekta_sumy_plan" else l for l in obecna]
+			self._ems(snap=snap, linie=zmieniona, marze={})
+		usunieta = self._ems(snap=snap, linie=_linie_ems(), marze={})
+		self.assertNotIn("korekta_sumy_plan", [l["klucz"] for l in usunieta["linie"]])
+		self.assertEqual(usunieta["podsumowanie"]["koszt_plan"], "51921.00")
+
+	def test_zmiana_netto_ustawia_edycje_reczna_i_marze(self):
+		nowy = self._ems(linie=_linie_ems(), marze={}, netto="90000.00")
+		self.assertEqual(nowy["podsumowanie"]["netto"], "90000.00")
+		self.assertEqual(nowy["podsumowanie"]["marza_plan"], "38079.00")
+		self.assertEqual(nowy["edycja_reczna"]["netto_pierwotne"], "83921.00")
+		self.assertEqual(nowy["edycja_reczna"]["powod"], "ems")
+		self.assertNotIn("edycja_planu", nowy)
+		self.assertNotIn("edycja_marzy", nowy)
+
+	def test_oznacz_edycje_stempluje_przy_niezmienionej_cenie(self):
+		def wywolaj(snap, **kw):
+			return zmien_plan_laczny(
+				snap, _linie_ems(), {"narzut": "9000.00"}, WIERSZE_EMS, None, T0, "adm", "  powod 1 ", **kw
+			)
+
+		pierwszy = wywolaj(_snap_ems(), oznacz_edycje=True)
+		er = pierwszy["edycja_reczna"]
+		self.assertEqual((er["kiedy"], er["kto"], er["powod"]), (T0, "adm", "powod 1"))
+		self.assertEqual(er["netto_przed"], "83921.00")
+		self.assertEqual(er["netto_pierwotne"], "83921.00")
+		self.assertEqual(pierwszy["zmodyfikowal"], "adm")
+		drugi = zmien_plan_laczny(
+			pierwszy, _linie_ems(), {"narzut": "8000.00"}, WIERSZE_EMS, "90000.00", T0, "adm", "p2", oznacz_edycje=True
+		)
+		self.assertEqual(drugi["edycja_reczna"]["netto_pierwotne"], "83921.00")
+		self.assertEqual(drugi["edycja_reczna"]["netto_przed"], "83921.00")
+		trzeci = zmien_plan_laczny(
+			drugi, _linie_ems(), {}, WIERSZE_EMS, None, T0, "adm", "p3", oznacz_edycje=True
+		)
+		self.assertEqual(trzeci["edycja_reczna"]["netto_pierwotne"], "83921.00")
+		self.assertEqual(trzeci["edycja_reczna"]["netto_przed"], "90000.00")
+
+	def test_bez_oznacz_edycje_cena_bez_zmian_nie_dodaje_edycji_recznej(self):
+		nowy = zmien_plan_laczny(_snap_ems(), _linie_ems(), {"narzut": "9000.00"}, WIERSZE_EMS, None, T0, "adm", "x")
+		self.assertNotIn("edycja_reczna", nowy)
+
+	def test_netto_none_zostawia_cene(self):
+		nowy = self._ems(netto=None)
+		self.assertEqual(nowy["podsumowanie"]["netto"], "83921.00")
+
+	def test_brak_zmian_nie_jest_bledem(self):
+		snap = _snap_ems()
+		nowy = self._ems(snap=snap, linie=_linie_ems(), marze={})
+		self.assertFalse(czy_zmieniony_plan(snap, nowy))
+		self.assertNotIn("edycja_planu", nowy)
+		self.assertNotIn("edycja_marzy", nowy)
+		self.assertIsNone(nowy["zmodyfikowano"])
+
+	def test_podsumowanie_rzeczywiste_tylko_gdy_istnialo(self):
+		self.assertIsNone(self._ems()["podsumowanie_rzeczywiste"])
+		snap = scal_snapshot(_snap_ems(), {"k_falownik": "100"}, [], T0, "adm")
+		nowy = self._ems(snap=snap)
+		self.assertIsNotNone(nowy["podsumowanie_rzeczywiste"])
+
+	def test_sumuje_od_poprzedniej_sumy_nie_od_zera(self):
+		snap = _snap_ems()
+		snap["podsumowanie"]["koszt_plan"] = "60000.00"  # stara suma różna od sumy linii
+		nowy = self._ems(snap=snap)
+		self.assertEqual(nowy["podsumowanie"]["koszt_plan"], "63000.00")
+
+	def test_walidacje(self):
+		przypadki = [
+			(dict(linie=[{"klucz": "k_nieznany", "etykieta": "", "koszt_plan": "1", "wiersz": None}]), "Nieznana pozycja"),
+			(dict(linie=[*_linie_ems(), {"klucz": None, "etykieta": "a", "koszt_plan": "1", "wiersz": 9}]), "nieistniejącą pozycję"),
+			(dict(linie=[*_linie_ems(), {"klucz": None, "etykieta": "a", "koszt_plan": "1", "wiersz": 0}]), "tę samą pozycję"),
+			(dict(linie=_linie_ems(k_falownik="-5")), "Nieprawidłowa kwota"),
+			(dict(marze={"narzut": "-1"}), "Nieprawidłowa kwota"),
+			(dict(marze={"nie_ma": "1"}), "Nieznany składnik marży"),
+			(dict(linie=[dict(l, koszt_plan="0") for l in _linie_ems()], netto="1"), None),
+		]
+		for kw, wzorzec in przypadki:
+			if wzorzec is None:
+				continue
+			with self.subTest(wzorzec=wzorzec), self.assertRaisesRegex(ValueError, wzorzec):
+				self._ems(**kw)
+
+	def test_cp_i_brak_snapshotu(self):
+		with self.assertRaisesRegex(ValueError, "Brak snapshotu"):
+			zmien_plan_laczny(None, [], {}, [], None, T0, "adm")
+		cp = _snap_ems()
+		cp["linia_produktowa"] = "cp"
+		with self.assertRaisesRegex(ValueError, "Czystego Powietrza"):
+			zmien_plan_laczny(cp, [], {}, [], None, T0, "adm")
+
+	def test_snapshot_oze_dopasowanie_po_etykiecie_przy_zapisie(self):
+		snap = zbuduj_snapshot_oze(WEWNETRZNE_OZE, "2026-01-01")
+		wiersze = [{"typ": "Pompa ciepła", "nazwa": "Bufor"}]
+		linie = [dict(klucz=l["klucz"], etykieta=l["etykieta"], koszt_plan=l["koszt_plan"], wiersz=None) for l in snap["linie"]]
+		linie[1]["wiersz"] = 0
+		nowy = zmien_plan_laczny(snap, linie, {}, wiersze, None, T0, "adm")
+		self.assertEqual(_linia(nowy, "wspolne:bufor")["wiersz"], {"typ": "Pompa ciepła", "nazwa": "Bufor"})
+		self.assertEqual(dopasuj_linie_do_wierszy(wiersze, nowy), {"wspolne:bufor": 0})
+
+	def test_edycje_przezywaja_scal_snapshot(self):
+		nowy = self._ems()
+		po_kosztach = scal_snapshot(nowy, {"k_falownik": "100"}, [], T0, "adm")
+		self.assertTrue(_linia(po_kosztach, "r_1")["reczna"])
+		self.assertEqual(_linia(po_kosztach, "r_1")["wiersz"], {"typ": "EMS Zeronest", "nazwa": "EMS z integratorem"})
+		self.assertEqual(_linia(po_kosztach, "k_falownik")["wiersz"], {"typ": "Falownik", "nazwa": "Sigen 8 kW"})
+		self.assertNotIn("reczna", _linia(po_kosztach, "k_falownik"))
+
+
+class WidokKosztowTest(unittest.TestCase):
+	def test_ksztalt_zgodny_z_kontraktem(self):
+		snap = _snap_ems()
+		widok = widok_kosztow(snap, WIERSZE_EMS[:3], True)
+		self.assertEqual(
+			widok["linie"][0],
+			{
+				"klucz": "k_falownik",
+				"etykieta": "Falownik",
+				"koszt_plan": "3251.00",
+				"koszt_plan_pierwotny": None,
+				"koszt_rzeczywisty": None,
+				"wiersz": 0,
+				"reczna": False,
+				"korekta": False,
+			},
+		)
+		self.assertEqual(widok["linie"][2]["etykieta"], "Montaż PV")
+		self.assertEqual(widok["skladniki_marzy"][2], {"klucz": "narzut", "etykieta": "Narzut handlowca", "kwota": "10000.00", "kwota_pierwotna": None})
+		self.assertEqual(widok["podsumowanie"], {"netto": "83921.00", "koszt_plan": "51921.00", "marza_plan": "32000.00"})
+		self.assertEqual(widok["rozliczenie_handlowca"], {"naliczone": True})
+
+	def test_none_gdy_brak_snapshotu_lub_cp(self):
+		self.assertIsNone(widok_kosztow(None, []))
+		cp = _snap_ems()
+		cp["linia_produktowa"] = "cp"
+		self.assertIsNone(widok_kosztow(cp, []))
+
+	def test_korekta_i_reczna_oznaczone(self):
+		snap = zmien_koszty_planowane(_snap_ems(), {}, "50000", T0, "adm")
+		widok = widok_kosztow(snap, [])
+		self.assertTrue(next(l for l in widok["linie"] if l["korekta"])["klucz"] == "korekta_sumy_plan")
