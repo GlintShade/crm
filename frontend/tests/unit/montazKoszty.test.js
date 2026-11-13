@@ -5,6 +5,7 @@ import {
   zbudujPayload,
   przeliczSkladnikiMarzy,
   etykietaKosztu,
+  opisEdycjiRecznych,
 } from '@/utils/montazKoszty'
 
 function deepFreeze(value) {
@@ -531,5 +532,49 @@ describe('etykietaKosztu', () => {
     }
     expect(przeliczRzeczywiste(snap, {}, []).linie[0].etykieta).toBe('Bonus liderski')
     expect(przeliczSkladnikiMarzy(snap, {}).skladniki[0].etykieta).toBe('Marża SPS')
+  })
+})
+
+describe('opisEdycjiRecznych', () => {
+  const opcje = {
+    formatujDate: (d) => `D(${d})`,
+    nazwaUzytkownika: (k) => `U(${k})`,
+    formatPln: (n) => `${n} zł`,
+  }
+  const baza = (extra) => ({ podsumowanie: { netto: '1000.00', koszt_plan: '600.00' }, ...extra })
+
+  it('nic nie ustawione: pusta lista', () => {
+    expect(opisEdycjiRecznych(baza({}), opcje)).toEqual([])
+    expect(opisEdycjiRecznych(null, opcje)).toEqual([])
+  })
+
+  it('tylko edycja_reczna z powodem i bez zmiany ceny: jedna linia', () => {
+    const s = baza({ edycja_reczna: { kiedy: '2026-11-13 12:00:00', kto: 'a', powod: 'Aneks', netto_przed: '1000.00' } })
+    expect(opisEdycjiRecznych(s, opcje)).toEqual(['Zestaw, koszty lub marże zmienione ręcznie D(2026-11-13 12:00:00) (U(a)). Powód: Aneks.'])
+  })
+
+  it('zmieniona cena: druga linia', () => {
+    const s = baza({ edycja_reczna: { kiedy: '2026-11-13 12:00:00', kto: 'a', powod: '', netto_przed: '900.00' } })
+    const l = opisEdycjiRecznych(s, opcje)
+    expect(l).toHaveLength(2)
+    expect(l[0]).not.toContain('Powód')
+    expect(l[1]).toBe('Cena netto przed zmianą: 900 zł.')
+  })
+
+  it('zmieniona suma planu: linia z pierwotną sumą', () => {
+    const s = baza({ edycja_planu: { kiedy: '2026-11-13 12:00:00', kto: 'b', koszt_plan_pierwotny: '500.00' } })
+    expect(opisEdycjiRecznych(s, opcje)).toEqual([
+      'Zestaw, koszty lub marże zmienione ręcznie D(2026-11-13 12:00:00) (U(b)).',
+      'Pierwotna suma kosztów planowanych: 500 zł.',
+    ])
+  })
+
+  it('najnowsza z trzech wyznacza datę i osobę', () => {
+    const s = baza({
+      edycja_reczna: { kiedy: '2026-11-13 10:00:00', kto: 'a' },
+      edycja_planu: { kiedy: '2026-11-13 11:00:00', kto: 'b' },
+      edycja_marzy: { kiedy: '2026-11-13 09:00:00', kto: 'c' },
+    })
+    expect(opisEdycjiRecznych(s, opcje)[0]).toContain('(U(b))')
   })
 })
