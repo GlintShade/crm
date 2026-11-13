@@ -3,6 +3,9 @@ import {
   POLA_CENY_WEJSCIE,
   POLA_KONFIGURACJI,
   bledyWierszyCp,
+  bruttoZNetto,
+  nettoZBrutto,
+  zastosujCeneZSerwera,
   cenaDoWywolania,
   dataBaneruProwizji,
   czyBladWersji,
@@ -169,7 +172,8 @@ describe('serializacja', () => {
     expect(Object.keys(c)).toEqual(POLA_CENY_WEJSCIE)
     expect(c.netto).toBe(45000)
     expect(c.ulga_pct).toBe('12')
-    expect(c.brutto).toBeUndefined()
+    expect(c.brutto).toBe(48600)
+    expect(c.podstawa).toBe('netto')
   })
   it('ulga z przecinkiem i pusta', () => {
     let s = zmienPoleCeny(stanZOdpowiedzi(odp()), 'ulga_pct', '8,5')
@@ -364,5 +368,99 @@ describe('Czyste Powietrze (ops#275)', () => {
   it('dataBaneruProwizji', () => {
     expect(dataBaneruProwizji({ kiedy: '2026-10-15 09:05:00' })).toBe('15.10.2026')
     expect(dataBaneruProwizji(null)).toBe('')
+  })
+})
+
+describe('cena OZE: netto albo brutto jako podstawa (ops#334)', () => {
+  it('bruttoZNetto i nettoZBrutto: zaokraglenie half-up na groszach', () => {
+    expect(bruttoZNetto('41780', '8')).toBe('45122.40')
+    expect(bruttoZNetto('100,05', 5)).toBe('105.05')
+    expect(nettoZBrutto('45122.40', '8')).toBe('41780.00')
+    expect(nettoZBrutto('12300', '23')).toBe('10000.00')
+    expect(nettoZBrutto('10.80', 8)).toBe('10.00')
+    expect(nettoZBrutto('0.01', 8)).toBe('0.01')
+    expect(nettoZBrutto('1,00', 23)).toBe('0.81')
+    expect(nettoZBrutto('100', 0)).toBe('100.00')
+  })
+  it('smieci i puste daja pusty tekst', () => {
+    expect(bruttoZNetto('', 8)).toBe('')
+    expect(bruttoZNetto('abc', 8)).toBe('')
+    expect(nettoZBrutto('100', '')).toBe('')
+    expect(nettoZBrutto('-5', 8)).toBe('')
+  })
+  it('otwarte okno: podstawa netto, brutto z serwera', () => {
+    const s = stanZOdpowiedzi(odp())
+    expect(s.cena.podstawa).toBe('netto')
+    expect(s.cena.brutto).toBe('48600')
+  })
+  it('edycja netto przelicza brutto i ustawia podstawe netto', () => {
+    const s = zmienPoleCeny(stanZOdpowiedzi(odp()), 'netto', '41780')
+    expect(s.cena).toMatchObject({ netto: '41780', brutto: '45122.40', podstawa: 'netto' })
+  })
+  it('edycja brutto przelicza netto, brutto zostaje dokladnie jak wpisane', () => {
+    const s = zmienPoleCeny(stanZOdpowiedzi(odp()), 'brutto', '45122,40')
+    expect(s.cena).toMatchObject({ brutto: '45122,40', netto: '41780.00', podstawa: 'brutto' })
+    const c = cenaDoWywolania(s)
+    expect(c.podstawa).toBe('brutto')
+    expect(c.brutto).toBe(45122.4)
+  })
+  it('zmiana VAT przelicza pole, ktore nie jest podstawa', () => {
+    let s = zmienPoleCeny(stanZOdpowiedzi(odp()), 'brutto', '12300')
+    s = zmienPoleCeny(s, 'vat_pct', '23')
+    expect(s.cena.netto).toBe('10000.00')
+    expect(s.cena.brutto).toBe('12300')
+    let n = zmienPoleCeny(stanZOdpowiedzi(odp()), 'netto', '10000')
+    n = zmienPoleCeny(n, 'vat_pct', '23')
+    expect(n.cena.brutto).toBe('12300.00')
+    expect(n.cena.netto).toBe('10000')
+  })
+  it('zmiana innych pol ceny nie rusza netto i brutto', () => {
+    const s0 = zmienPoleCeny(stanZOdpowiedzi(odp()), 'brutto', '1000')
+    const s = zmienPoleCeny(s0, 'dotacja', '10')
+    expect(s.cena.netto).toBe(s0.cena.netto)
+    expect(s.cena.brutto).toBe('1000')
+  })
+  it('nie mutuje stanu', () => {
+    const s = stanZOdpowiedzi(odp())
+    const kopia = JSON.stringify(s)
+    zmienPoleCeny(s, 'brutto', '1000')
+    expect(JSON.stringify(s)).toBe(kopia)
+  })
+  it('wartosc serwera trafia tylko do pola, ktore nie jest podstawa', () => {
+    const wpisane = zmienPoleCeny(stanZOdpowiedzi(odp()), 'brutto', '45122,40')
+    const po = zastosujCeneZSerwera(wpisane, { netto: '41780.00', brutto: '45122.40' })
+    expect(po.cena.brutto).toBe('45122,40')
+    expect(po.cena.netto).toBe('41780.00')
+    const nettoPodstawa = zmienPoleCeny(stanZOdpowiedzi(odp()), 'netto', '41780')
+    const po2 = zastosujCeneZSerwera(nettoPodstawa, { netto: '41780.00', brutto: '45122.41' })
+    expect(po2.cena.netto).toBe('41780')
+    expect(po2.cena.brutto).toBe('45122.41')
+    expect(zastosujCeneZSerwera(nettoPodstawa, null)).toBe(nettoPodstawa)
+  })
+  it('czyZmieniony: ta sama kwota wpisana jako brutto nie jest zmiana, inna jest', () => {
+    const s0 = stanZOdpowiedzi(odp())
+    expect(czyZmieniony(s0, zmienPoleCeny(s0, 'brutto', '48600'))).toBe(false)
+    expect(czyZmieniony(s0, zmienPoleCeny(s0, 'brutto', '48601'))).toBe(true)
+  })
+  it('Czyste Powietrze nie dostaje netto/brutto/podstawy', () => {
+    const cp = stanZOdpowiedzi({ linia: 'cp', wiersze: [], cena_cp: { okres_lat: 5 } })
+    expect(Object.keys(cp.cena)).toEqual(POLA_CENY_CP)
+    expect(zmienPoleCeny(cp, 'okres_lat', '7').cena).toEqual({ ...cp.cena, okres_lat: '7' })
+    expect(Object.keys(cenaDoWywolania(cp))).toEqual(POLA_CENY_CP)
+  })
+  it('roznicaDoOkna pokazuje netto i brutto przed i po', () => {
+    const r = roznicaDoOkna({}, { netto: '41780.00', brutto: '45122.40' }, { netto: '41781.48', brutto: '45123.99' }, KONF, KONF)
+    expect(r.cena.map((c) => c.etykieta)).toEqual(['Netto', 'Brutto'])
+  })
+  it('podstawa z serwera (brutto) zostaje, zastosowanie ceny serwera nie robi zmiany', () => {
+    const o = odp()
+    o.cena = { ...o.cena, netto: '0.06', brutto: '0.07', vat_pct: 8, podstawa: 'brutto' }
+    const s0 = stanZOdpowiedzi(o)
+    expect(s0.cena.podstawa).toBe('brutto')
+    const s1 = zastosujCeneZSerwera(s0, o.cena)
+    expect(czyZmieniony(s0, s1)).toBe(false)
+    const c = cenaDoWywolania(s1)
+    expect(c.podstawa).toBe('brutto')
+    expect(c.brutto).toBe(0.07)
   })
 })

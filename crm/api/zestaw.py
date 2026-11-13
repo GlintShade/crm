@@ -47,10 +47,12 @@ from crm.volteo_zestaw import (
 	kwota,
 	nowy_zestaw_typ,
 	odtworz_dodatki_bez_ulgi,
+	podstawa_zapisanej_ceny,
 	przelicz_cene,
 	przelicz_cene_cp,
 	roznice_zestawu,
 	tekst_sladu_zestawu,
+	uzupelnij_podstawe,
 	waliduj_cene,
 	waliduj_cene_cp,
 	waliduj_producenta,
@@ -112,6 +114,11 @@ _KLUCZE_CENY_Z_WEJSCIA = (
 	"dodatki_bez_ulgi_brutto",
 )
 """Klucze `cena` z klienta, ktore wchodza do lancucha; reszta (pola pochodne) ignorowana."""
+
+_KLUCZE_PODSTAWY_Z_KLIENTA = ("podstawa", "brutto")
+"""Opcjonalne klucze podstawy przeliczenia (`podstawa` = netto|brutto, `brutto`). Biora sie
+WYLACZNIE z klienta, nigdy ze szansy: bez nich (stary klient) zachowanie jest jak dotad
+(podstawa netto), a przy `podstawa` brutto brak `brutto` konczy sie bledem walidacji."""
 
 MSG_CP_WYLACZONE = "Edycja zestawu Czystego Powietrza jest wyłączona."
 MSG_CP_KONFIGURACJA = "Konfiguracji Czystego Powietrza nie edytuje się w tym oknie. Użyj panelu bocznego."
@@ -229,6 +236,9 @@ def _cena_ze_szansy(doc: "frappe.model.document.Document") -> dict[str, Any]:
 		"netto": _s2(doc.get("custom_netto")),
 		"vat_pct": _pct(doc.get("custom_vat_pct")),
 		"brutto": _s2(doc.get("deal_value")),
+		"podstawa": podstawa_zapisanej_ceny(
+			doc.get("custom_netto"), doc.get("deal_value"), doc.get("custom_vat_pct")
+		),
 		"dotacja": _s2(doc.get("custom_dotacja")),
 		"zasady_dotacji": doc.get("custom_zasady_dotacji") or "",
 		"ulga_pct": _pct(doc.get("custom_ulga_pct")),
@@ -258,6 +268,7 @@ def _cena_z_wyniku(
 		"netto": _s2(wynik["netto"]),
 		"vat_pct": _pct(wynik["vat_pct"]),
 		"brutto": _s2(wynik["brutto"]),
+		"podstawa": "brutto" if wejscie.get("podstawa") == "brutto" else "netto",
 		"dotacja": _s2(wynik["dotacja"]),
 		"zasady_dotacji": doc.get("custom_zasady_dotacji") or "",
 		"ulga_pct": _pct(wynik["ulga_pct"]),
@@ -522,6 +533,10 @@ def _wejscie_ceny(doc: "frappe.model.document.Document", cena: Any) -> dict[str,
 	bazowa = _cena_ze_szansy(doc)
 	wejscie: dict[str, Any] = {k: bazowa[k] for k in _KLUCZE_CENY_Z_WEJSCIA}
 	for klucz in _KLUCZE_CENY_Z_WEJSCIA:
+		if klucz in cena and cena[klucz] is not None:
+			wejscie[klucz] = cena[klucz]
+	cena = uzupelnij_podstawe(cena, bazowa)
+	for klucz in _KLUCZE_PODSTAWY_Z_KLIENTA:
 		if klucz in cena and cena[klucz] is not None:
 			wejscie[klucz] = cena[klucz]
 	wejscie["typ_klienta"] = doc.get("custom_typ_klienta")
