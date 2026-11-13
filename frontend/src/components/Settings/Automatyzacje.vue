@@ -122,11 +122,40 @@
             <FormControl
               type="checkbox"
               :label="__('Przypisany handlowiec')"
-              :description="__('dynamicznie: właściciel danej szansy')"
+              :description="
+                row.klucz === KLUCZ_LEAD_BEZ_ZMIAN
+                  ? __('właściciel leada')
+                  : __('dynamicznie: właściciel danej szansy')
+              "
               :modelValue="Boolean(row.odbiorca_handlowiec)"
               :disabled="isSaving(row.klucz)"
               @update:modelValue="(val) => persist(row, { odbiorca_handlowiec: val ? 1 : 0 })"
             />
+
+            <!-- Tylko regula "lead bez zmian": prog w godzinach i zakres leadow -->
+            <template v-if="row.klucz === KLUCZ_LEAD_BEZ_ZMIAN">
+              <FormControl
+                type="number"
+                :label="__('Po ilu godzinach')"
+                :description="__('Od 1 do 720; liczone od utworzenia leada, także w weekend')"
+                min="1"
+                max="720"
+                step="1"
+                :modelValue="progGodzinDraft[row.klucz] ?? (row.prog_godzin || 48)"
+                :disabled="isSaving(row.klucz)"
+                @update:modelValue="(val) => (progGodzinDraft[row.klucz] = val)"
+                @focus="onProgGodzinFocus(row)"
+                @blur="onProgGodzinBlur(row)"
+              />
+              <FormControl
+                type="select"
+                :label="__('Które leady')"
+                :options="OPCJE_ZAKRESU_LEADOW"
+                :modelValue="row.zakres_leadow || ZAKRES_LEADOW_WSZYSTKIE"
+                :disabled="isSaving(row.klucz)"
+                @update:modelValue="(val) => persist(row, { zakres_leadow: val })"
+              />
+            </template>
 
             <!-- Channels -->
             <div class="flex flex-col gap-1.5">
@@ -156,6 +185,9 @@
                   @update:modelValue="(val) => persist(row, { kanal_sms: val ? 1 : 0 })"
                 />
               </div>
+              <p v-if="row.klucz === KLUCZ_LEAD_BEZ_ZMIAN" class="text-p-sm text-ink-gray-5">
+                {{ __('Dla tej reguły działa na razie tylko powiadomienie w CRM.') }}
+              </p>
             </div>
           </div>
         </div>
@@ -342,6 +374,31 @@ const pokazKreskePrzedPola = computed(
 // trap keeps tracking each row's draft correctly.
 const terminDniDraft = reactive({})
 
+// Regula "lead bez zmian" (ops#352): klucz oraz trzy wartosci zakresu leadow musza byc
+// identyczne znak w znak z crm/volteo_lead_bez_zmian.py i z ops/crm-automatyzacja-lead-bez-zmian.py.
+const KLUCZ_LEAD_BEZ_ZMIAN = 'lead_bez_zmian'
+const ZAKRES_LEADOW_WSZYSTKIE = 'Wszystkie leady z Facebooka'
+const OPCJE_ZAKRESU_LEADOW = [
+  { label: ZAKRES_LEADOW_WSZYSTKIE, value: ZAKRES_LEADOW_WSZYSTKIE },
+  { label: 'Leady z przypisanym handlowcem', value: 'Leady z przypisanym handlowcem' },
+  { label: 'Leady z reguły bezpośredniej', value: 'Leady z reguły bezpośredniej' },
+]
+
+// Szkic pola "Po ilu godzinach", zapisywany dopiero przy opuszczeniu pola (jak "Termin (dni)").
+const progGodzinDraft = reactive({})
+
+function onProgGodzinFocus(row) {
+  progGodzinDraft[row.klucz] = row.prog_godzin || 48
+}
+
+function onProgGodzinBlur(row) {
+  const parsed = Math.min(720, Math.max(1, Math.trunc(Number(progGodzinDraft[row.klucz]) || 48)))
+  progGodzinDraft[row.klucz] = parsed
+  if (parsed !== (row.prog_godzin || 48)) {
+    persist(row, { prog_godzin: parsed })
+  }
+}
+
 function onTerminDniFocus(row) {
   terminDniDraft[row.klucz] = row.termin_dni || 0
 }
@@ -388,8 +445,15 @@ function persist(row, patch) {
   replaceRow(row.klucz, optimistic)
   saving[row.klucz] = true
 
+  const opcjonalne = {}
+  if (optimistic.klucz === KLUCZ_LEAD_BEZ_ZMIAN) {
+    opcjonalne.prog_godzin = Number(optimistic.prog_godzin) || 48
+    opcjonalne.zakres_leadow = optimistic.zakres_leadow || ZAKRES_LEADOW_WSZYSTKIE
+  }
+
   saveResource.submit(
     {
+      ...opcjonalne,
       klucz: optimistic.klucz,
       wlaczona: optimistic.wlaczona ? 1 : 0,
       odbiorcy: JSON.stringify(optimistic.odbiorcy || []),
@@ -404,6 +468,9 @@ function persist(row, patch) {
         replaceRow(data.klucz, data)
         if (data.typ === 'Zadanie') {
           terminDniDraft[data.klucz] = data.termin_dni || 0
+        }
+        if (data.klucz === KLUCZ_LEAD_BEZ_ZMIAN) {
+          progGodzinDraft[data.klucz] = data.prog_godzin || 48
         }
         saving[row.klucz] = false
         toast.success(__('Zapisano'))

@@ -34,6 +34,8 @@ import frappe
 from frappe import _
 from frappe.utils import cint
 
+from crm.volteo_lead_bez_zmian import czy_prog_poprawny, czy_zakres_poprawny
+
 DOCTYPE = "Volteo Automatyzacja"
 
 # Kto może wołać którąkolwiek funkcję tego modułu — identyczny zestaw co
@@ -52,11 +54,18 @@ _POLA_LISTY = (
 	"kanal_sms",
 )
 
+# Pola dokladane przez ops/crm-automatyzacja-lead-bez-zmian.py (ops#352): lista musi dzialac
+# takze na bazie, w ktorej ich jeszcze nie ma, wiec czytamy je tylko, gdy sa w meta.
+_POLA_OPCJONALNE = ("prog_godzin", "zakres_leadow")
+
 
 def _wiersz_do_dict(doc: "frappe.model.document.Document") -> dict[str, Any]:
 	"""Kształt jednej reguły zwracany przez listę i zapis — te same klucze co
 	`_POLA_LISTY` plus `odbiorcy` (lista e-maili z tabeli podrzędnej)."""
 	wynik = {pole: doc.get(pole) for pole in _POLA_LISTY}
+	meta = frappe.get_meta(DOCTYPE)
+	for pole in _POLA_OPCJONALNE:
+		wynik[pole] = doc.get(pole) if meta.has_field(pole) else None
 	wynik["odbiorcy"] = [wiersz.uzytkownik for wiersz in (doc.get("odbiorcy") or [])]
 	return wynik
 
@@ -88,6 +97,8 @@ def volteo_automatyzacja_zapisz(
 	kanal_email: int = 0,
 	kanal_sms: int = 0,
 	termin_dni: int = 0,
+	prog_godzin: int | None = None,
+	zakres_leadow: str | None = None,
 ) -> dict[str, Any]:
 	"""Aktualizuje istniejącą regułę automatyzacji (flagi kanałów, odbiorca
 	handlowiec, termin w dniach, lista odbiorców-użytkowników). NIGDY nie tworzy
@@ -102,6 +113,10 @@ def volteo_automatyzacja_zapisz(
 	reguł typu „Zadanie” (ops#192), ale jest przyjmowany i zapisywany zawsze,
 	razem z resztą pól, bez sprawdzania `typ`: reguła powiadomień po prostu
 	nigdy go nie czyta (patrz `crm.api.pipeline.dispatch_task`).
+
+	`prog_godzin` i `zakres_leadow` (ops#352, regula `lead_bez_zmian`) sa opcjonalne:
+	`None` oznacza "nie ruszaj", wiec stare wywolania dzialaja bez zmian. Prog musi byc
+	liczba calkowita 1 do 720, zakres jedna z trzech wartosci z `crm.volteo_lead_bez_zmian`.
 	"""
 	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
 
@@ -113,6 +128,11 @@ def volteo_automatyzacja_zapisz(
 
 	lista_odbiorcow = _sparsuj_odbiorcow(odbiorcy)
 
+	if prog_godzin is not None and not czy_prog_poprawny(prog_godzin):
+		frappe.throw(_("Liczba godzin musi być liczbą całkowitą od 1 do 720."))
+	if zakres_leadow is not None and not czy_zakres_poprawny(zakres_leadow):
+		frappe.throw(_("Nieprawidłowy zakres leadów."))
+
 	doc = frappe.get_doc(DOCTYPE, klucz)
 	doc.wlaczona = cint(wlaczona)
 	doc.odbiorca_handlowiec = cint(odbiorca_handlowiec)
@@ -120,6 +140,11 @@ def volteo_automatyzacja_zapisz(
 	doc.kanal_email = cint(kanal_email)
 	doc.kanal_sms = cint(kanal_sms)
 	doc.termin_dni = max(0, cint(termin_dni))
+	meta = frappe.get_meta(DOCTYPE)
+	if prog_godzin is not None and meta.has_field("prog_godzin"):
+		doc.prog_godzin = cint(prog_godzin)
+	if zakres_leadow is not None and meta.has_field("zakres_leadow"):
+		doc.zakres_leadow = zakres_leadow
 
 	doc.set("odbiorcy", [])
 	for email in lista_odbiorcow:
