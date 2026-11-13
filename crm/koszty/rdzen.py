@@ -921,6 +921,8 @@ def zmien_plan_laczny(
 	teraz: str,
 	uzytkownik: str,
 	powod: str | None = None,
+	*,
+	oznacz_edycje: bool = False,
 ) -> dict[str, Any]:
 	"""Zwraca NOWY snapshot po wspólnej edycji zestawu, kosztów i marż (ops#340).
 	Tylko `pv` i `oze`; wejście nie jest mutowane, kwoty `Decimal`.
@@ -1095,7 +1097,7 @@ def zmien_plan_laczny(
 	zmieniony = czy_zmieniony_plan(snapshot, nowy)
 	koszty_zmienione = _odcisk_planu(snapshot)[:2] != _odcisk_planu(nowy)[:2]
 	marze_zmienione = _odcisk_planu(snapshot)[2] != _odcisk_planu(nowy)[2]
-	if zmieniony or netto != netto_przed:
+	if oznacz_edycje or zmieniony or netto != netto_przed:
 		nowy["zmodyfikowano"] = teraz
 		nowy["zmodyfikowal"] = uzytkownik
 	if koszty_zmienione:
@@ -1108,7 +1110,7 @@ def zmien_plan_laczny(
 		}
 	if marze_zmienione:
 		nowy["edycja_marzy"] = {"kiedy": teraz, "kto": uzytkownik}
-	if netto != netto_przed:
+	if oznacz_edycje or netto != netto_przed:
 		poprzednia = snapshot.get("edycja_reczna") or {}
 		nowy["edycja_reczna"] = {
 			"kiedy": teraz,

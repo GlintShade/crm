@@ -1185,6 +1185,33 @@ class ZmienPlanLacznyTest(unittest.TestCase):
 		self.assertNotIn("edycja_planu", nowy)
 		self.assertNotIn("edycja_marzy", nowy)
 
+	def test_oznacz_edycje_stempluje_przy_niezmienionej_cenie(self):
+		def wywolaj(snap, **kw):
+			return zmien_plan_laczny(
+				snap, _linie_ems(), {"narzut": "9000.00"}, WIERSZE_EMS, None, T0, "adm", "  powod 1 ", **kw
+			)
+
+		pierwszy = wywolaj(_snap_ems(), oznacz_edycje=True)
+		er = pierwszy["edycja_reczna"]
+		self.assertEqual((er["kiedy"], er["kto"], er["powod"]), (T0, "adm", "powod 1"))
+		self.assertEqual(er["netto_przed"], "83921.00")
+		self.assertEqual(er["netto_pierwotne"], "83921.00")
+		self.assertEqual(pierwszy["zmodyfikowal"], "adm")
+		drugi = zmien_plan_laczny(
+			pierwszy, _linie_ems(), {"narzut": "8000.00"}, WIERSZE_EMS, "90000.00", T0, "adm", "p2", oznacz_edycje=True
+		)
+		self.assertEqual(drugi["edycja_reczna"]["netto_pierwotne"], "83921.00")
+		self.assertEqual(drugi["edycja_reczna"]["netto_przed"], "83921.00")
+		trzeci = zmien_plan_laczny(
+			drugi, _linie_ems(), {}, WIERSZE_EMS, None, T0, "adm", "p3", oznacz_edycje=True
+		)
+		self.assertEqual(trzeci["edycja_reczna"]["netto_pierwotne"], "83921.00")
+		self.assertEqual(trzeci["edycja_reczna"]["netto_przed"], "90000.00")
+
+	def test_bez_oznacz_edycje_cena_bez_zmian_nie_dodaje_edycji_recznej(self):
+		nowy = zmien_plan_laczny(_snap_ems(), _linie_ems(), {"narzut": "9000.00"}, WIERSZE_EMS, None, T0, "adm", "x")
+		self.assertNotIn("edycja_reczna", nowy)
+
 	def test_netto_none_zostawia_cene(self):
 		nowy = self._ems(netto=None)
 		self.assertEqual(nowy["podsumowanie"]["netto"], "83921.00")

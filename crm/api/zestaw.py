@@ -501,11 +501,13 @@ def _plan_laczny(
 	nowe: list[dict[str, Any]],
 	netto: Decimal,
 	powod: str,
+	*,
+	oznacz_edycje: bool = False,
 ) -> dict[str, Any]:
 	"""Snapshot po wspolnej edycji (`zmien_plan_laczny`); `ValueError` rdzenia to czytelny throw."""
 	linie, marze = _koszty_ladunek(koszty)
 	try:
-		return zmien_plan_laczny(snapshot, linie, marze, nowe, netto, now(), frappe.session.user, powod)
+		return zmien_plan_laczny(snapshot, linie, marze, nowe, netto, now(), frappe.session.user, powod, oznacz_edycje=oznacz_edycje)
 	except ValueError as e:
 		frappe.throw(str(e))
 
@@ -1066,7 +1068,7 @@ def volteo_zestaw_zapisz(
 	snapshot_przed = _snapshot_edytowalny(deal) if koszty is not None else None
 	snapshot_po = None
 	if snapshot_przed is not None:
-		snapshot_po = _plan_laczny(snapshot_przed, koszty, nowe, wynik["netto"], powod)
+		snapshot_po = _plan_laczny(snapshot_przed, koszty, nowe, wynik["netto"], powod, oznacz_edycje=True)
 	koszty_zmienione = snapshot_po is not None and czy_zmieniony_plan(snapshot_przed, snapshot_po)
 	if roznice.puste and not zmienione_pola_cen and not zmienione_konfiguracje and not koszty_zmienione:
 		frappe.throw(_("Brak zmian do zapisania."))
