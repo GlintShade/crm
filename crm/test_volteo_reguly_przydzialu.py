@@ -9,26 +9,35 @@ from crm.volteo_reguly_przydzialu import (
 	DANE_PRZYKLADOWE_LEAD_BEZPOSREDNI,
 	KLUCZ_ODROCZONYCH,
 	PLACEHOLDERY_LEAD_BEZPOSREDNI,
+	POLE_LIMITU,
+	POLE_TRESCI,
 	PREFIKS_KLUCZA,
 	PREFIKS_PONOWNE,
 	TRESC_LEAD_BEZPOSREDNI_DOMYSLNA,
 	Regula,
+	czy_ponowne_do_handlowca,
+	czy_wyslac_odroczone,
 	dopasuj_regule,
 	grupuj_kandydatow_srodka,
+	klucz_alertu_limitu,
 	klucz_licznika_dnia,
 	klucz_rezerwacji,
+	limit_dzienny_lead,
 	link_mapy,
 	ma_wspolrzedne,
 	najblizsza_regula,
+	odkoduj_odroczenie_lead,
 	odleglosc_km,
 	opis_obszaru,
 	ostrzezenia_reguly,
 	policz_leady_w_promieniu,
 	regula_z_wiersza,
+	szablon_lead_bezposredni,
 	tekst_sladu_przydzialu,
 	tekst_sladu_sms,
 	uporzadkuj,
 	waliduj_regule,
+	zakoduj_odroczenie_lead,
 	zbuduj_wynik_sprawdzenia,
 	zdecyduj_sms,
 )
@@ -480,6 +489,56 @@ class TestApiRegul(unittest.TestCase):
 				"najblizsza",
 			},
 		)
+
+
+class TestWebhookISmsLead(unittest.TestCase):
+	def test_ponowne_do_handlowca_tylko_ze_znacznikiem_i_wlascicielem(self):
+		self.assertTrue(czy_ponowne_do_handlowca(1, "a@x.pl"))
+		self.assertTrue(czy_ponowne_do_handlowca("1", "a@x.pl"))
+		self.assertFalse(czy_ponowne_do_handlowca(0, "a@x.pl"))
+		self.assertFalse(czy_ponowne_do_handlowca("0", "a@x.pl"))
+		self.assertFalse(czy_ponowne_do_handlowca(None, "a@x.pl"))
+		self.assertFalse(czy_ponowne_do_handlowca(1, ""))
+		self.assertFalse(czy_ponowne_do_handlowca(1, None))
+
+	def test_odroczone_wymaga_tego_samego_wlasciciela_i_znacznika(self):
+		self.assertTrue(czy_wyslac_odroczone("a@x.pl", "a@x.pl", 1))
+		self.assertFalse(czy_wyslac_odroczone("a@x.pl", "b@x.pl", 1))
+		self.assertFalse(czy_wyslac_odroczone("a@x.pl", "", 1))
+		self.assertFalse(czy_wyslac_odroczone("a@x.pl", "a@x.pl", 0))
+		self.assertFalse(czy_wyslac_odroczone("", "a@x.pl", 1))
+
+	def test_limit_dzienny_lead(self):
+		self.assertEqual(limit_dzienny_lead({}), 100)
+		self.assertEqual(limit_dzienny_lead({POLE_LIMITU: ""}), 100)
+		self.assertEqual(limit_dzienny_lead({POLE_LIMITU: "0"}), 0)
+		self.assertEqual(limit_dzienny_lead({POLE_LIMITU: "25"}), 25)
+		self.assertEqual(limit_dzienny_lead({POLE_LIMITU: -3}), 0)
+		self.assertEqual(limit_dzienny_lead({POLE_LIMITU: "abc"}), 100)
+
+	def test_szablon_domyslny_zapisany_i_ponowny(self):
+		self.assertEqual(szablon_lead_bezposredni({}), TRESC_LEAD_BEZPOSREDNI_DOMYSLNA)
+		self.assertEqual(szablon_lead_bezposredni({POLE_TRESCI: "  "}), TRESC_LEAD_BEZPOSREDNI_DOMYSLNA)
+		self.assertEqual(szablon_lead_bezposredni({POLE_TRESCI: "Lead {klient}"}), "Lead {klient}")
+		self.assertEqual(
+			szablon_lead_bezposredni({POLE_TRESCI: "Lead {klient}"}, ponowne=True),
+			PREFIKS_PONOWNE + "Lead {klient}",
+		)
+		self.assertTrue(szablon_lead_bezposredni({}, True).startswith(PREFIKS_PONOWNE))
+
+	def test_kodowanie_odroczenia(self):
+		tekst = zakoduj_odroczenie_lead(True, "a@x.pl")
+		self.assertEqual(odkoduj_odroczenie_lead(tekst), (True, "a@x.pl"))
+		self.assertEqual(odkoduj_odroczenie_lead(tekst.encode()), (True, "a@x.pl"))
+		self.assertEqual(odkoduj_odroczenie_lead(zakoduj_odroczenie_lead(False, "")), (False, ""))
+		for zle in (None, "", "nie json", "[]", '{"ponowne": "tak"}', "{}"):
+			self.assertIsNone(odkoduj_odroczenie_lead(zle), zle)
+
+	def test_klucz_alertu_ma_prefiks_i_dzien(self):
+		klucz = klucz_alertu_limitu(date(2026, 11, 13))
+		self.assertTrue(klucz.startswith(PREFIKS_KLUCZA))
+		self.assertIn("2026-11-13", klucz)
+		self.assertNotEqual(klucz, klucz_licznika_dnia(date(2026, 11, 13)))
 
 
 if __name__ == "__main__":

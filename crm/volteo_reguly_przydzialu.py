@@ -12,6 +12,7 @@ Moduł celowo nie importuje ``frappe`` (precedens `crm/volteo_dyzury.py`).
 Tożsamość osoby CC nigdy nie wchodzi do SMS ani do śladów.
 """
 
+import json
 import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
@@ -425,3 +426,71 @@ def zbuduj_wynik_sprawdzenia(
 		wpis.pop("handlowiec_nazwa")
 		wynik["najblizsza"] = wpis
 	return wynik
+
+
+# --- Webhook i SMS do handlowca o leadzie (ops#347): logika czysta --------------
+
+TTL_LICZNIKA_SEK: int = 2 * 24 * 3600
+TTL_REZERWACJI_SEK: int = 24 * 3600
+TTL_ODROCZONYCH_SEK: int = 2 * 24 * 3600
+TTL_ALERTU_SEK: int = 2 * 24 * 3600
+POLE_ZNACZNIKA: str = "custom_przydzial_bezposredni"
+
+
+def klucz_alertu_limitu(data: date | datetime) -> str:
+	"""Klucz Redis alertu "limit wyczerpany": jeden wpis w Error Log na dobę."""
+	return f"{PREFIKS_KLUCZA}alert:limit:{_dzien(data)}"
+
+
+def czy_znacznik(wartosc: Any) -> bool:
+	"""Znacznik `custom_przydzial_bezposredni` z bazy (0, 1, "0", "1", None)."""
+	liczba = _liczba(wartosc)
+	return liczba is not None and liczba != 0
+
+
+def czy_ponowne_do_handlowca(znacznik: Any, wlasciciel: Any) -> bool:
+	"""Ponowne zgłoszenie tego samego numeru idzie do handlowca tylko dla leada przydzielonego
+	regułą (znacznik 1) i z niepustym właścicielem; inaczej do dyżurnego jak dotąd."""
+	return czy_znacznik(znacznik) and bool(_tekst(wlasciciel))
+
+
+def czy_wyslac_odroczone(wpis_wlasciciel: Any, wlasciciel: Any, znacznik: Any) -> bool:
+	"""Po ciszy nocnej wysyłamy tylko, gdy lead ma nadal tego samego właściciela i znacznik 1."""
+	biezacy = _tekst(wlasciciel)
+	return bool(biezacy) and biezacy == _tekst(wpis_wlasciciel) and czy_znacznik(znacznik)
+
+
+def limit_dzienny_lead(ustawienia: Mapping[str, Any]) -> int:
+	"""`limit_dzienny_lead_bezposredni`; brak albo nieliczbowy = domyślny, ujemny = 0."""
+	wartosc = ustawienia.get(POLE_LIMITU)
+	if wartosc in (None, ""):
+		return LIMIT_DZIENNY_DOMYSLNY
+	try:
+		return max(0, int(float(wartosc)))
+	except (TypeError, ValueError):
+		return LIMIT_DZIENNY_DOMYSLNY
+
+
+def szablon_lead_bezposredni(ustawienia: Mapping[str, Any], ponowne: bool = False) -> str:
+	"""Szablon SMS: zapisany (niepusty) albo domyślny; przy ponownym zgłoszeniu z `PREFIKS_PONOWNE`."""
+	zapisany = ustawienia.get(POLE_TRESCI)
+	szablon = zapisany if isinstance(zapisany, str) and zapisany.strip() else TRESC_LEAD_BEZPOSREDNI_DOMYSLNA
+	return f"{PREFIKS_PONOWNE}{szablon}" if ponowne else szablon
+
+
+def zakoduj_odroczenie_lead(ponowne: bool, wlasciciel: str) -> str:
+	"""Wartość w `KLUCZ_ODROCZONYCH`: czy ponowne zgłoszenie i właściciel z chwili odroczenia (JSON)."""
+	return json.dumps({"ponowne": bool(ponowne), "wlasciciel": _tekst(wlasciciel)})
+
+
+def odkoduj_odroczenie_lead(tekst: Any) -> tuple[bool, str] | None:
+	"""(ponowne, właściciel) z wartości kolejki odroczonych (str albo bytes); None dla nieczytelnej."""
+	if isinstance(tekst, bytes):
+		tekst = tekst.decode("utf-8", "replace")
+	try:
+		dane = json.loads(_tekst(tekst))
+	except (ValueError, TypeError):
+		return None
+	if not isinstance(dane, dict) or not isinstance(dane.get("ponowne"), bool):
+		return None
+	return dane["ponowne"], _tekst(dane.get("wlasciciel"))
