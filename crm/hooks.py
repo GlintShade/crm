@@ -363,6 +363,8 @@ scheduler_events = {
 	"hourly_long": ["crm.lead_syncing.background_sync.sync_leads_from_sources_hourly"],
 	"monthly_long": ["crm.lead_syncing.background_sync.sync_leads_from_sources_monthly"],
 	"cron": {
+		# VOLTEO (ops#352): alert "lead bez zmian przez X godzin", co godzine, uruchomienia o 08:00 do 20:00 wlacznie
+		"0 8-20 * * *": ["crm.api.lead_bez_zmian.sprawdz_leady_bez_zmian"],
 		"*/5 * * * *": ["crm.lead_syncing.background_sync.sync_leads_from_sources_5_minutes"],
 		"*/10 * * * *": [
 			"crm.lead_syncing.background_sync.sync_leads_from_sources_10_minutes",
