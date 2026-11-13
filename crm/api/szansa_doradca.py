@@ -14,11 +14,7 @@ import frappe
 from frappe import _
 
 from crm.api.limit_zadan import rate_limit
-from crm.volteo_szansa_doradca import (
-	ROLA_DORADCY,
-	czy_dozwolony_doradca,
-	czy_moze_zmienic_doradce,
-)
+from crm.volteo_szansa_doradca import ROLA_DORADCY, czy_moze_zmienic_doradce
 
 BLAD_UPRAWNIEN = "Nie masz uprawnień do zmiany doradcy szansy."
 
@@ -29,14 +25,14 @@ def _wymagaj_uprawnien() -> None:
 		frappe.throw(_(BLAD_UPRAWNIEN), frappe.PermissionError)
 
 
-@frappe.whitelist()
-@rate_limit(limit=60, seconds=60)
-def doradcy() -> list[dict]:
-	"""Wlaczone konta z rola `Volteo D2D Sales`, posortowane po `full_name`."""
-	_wymagaj_uprawnien()
+def _konta_doradcow() -> list[dict]:
+	"""Wlaczone konta z wierszem `Has Role` roli `Volteo D2D Sales`, po `full_name`.
+
+	Jedno zrodlo dla listy i walidacji. `Administrator` i `Guest` pomijane jawnie
+	(`frappe.get_roles` zwraca dla Administratora wszystkie role)."""
 	konta = frappe.get_all(
 		"User",
-		filters={"enabled": 1},
+		filters={"enabled": 1, "name": ("not in", ["Administrator", "Guest"])},
 		fields=["name", "full_name"],
 	)
 	z_rola = {
@@ -53,6 +49,14 @@ def doradcy() -> list[dict]:
 		if k.name in z_rola
 	]
 	return sorted(lista, key=lambda w: (w["full_name"] or "").lower())
+
+
+@frappe.whitelist()
+@rate_limit(limit=60, seconds=60)
+def doradcy() -> list[dict]:
+	"""Konta, ktore moga byc doradca szansy."""
+	_wymagaj_uprawnien()
+	return _konta_doradcow()
 
 
 @frappe.whitelist()
@@ -74,13 +78,10 @@ def zmien_doradce(deal: str, doradca: str) -> dict:
 
 	if not doradca:
 		frappe.throw(_("Doradca jest wymagany."))
-	if not frappe.db.exists("User", doradca):
-		frappe.throw(_("Użytkownik {0} nie istnieje.").format(doradca))
-	wlaczony = bool(frappe.db.get_value("User", doradca, "enabled"))
-	if not czy_dozwolony_doradca(wlaczony, frappe.get_roles(doradca)):
+	if doradca not in {k["user"] for k in _konta_doradcow()}:
 		frappe.throw(
-			_("Użytkownik {0} nie może być doradcą szansy (wymagane włączone konto z rolą {1}).").format(
-				doradca, ROLA_DORADCY
+			_("Użytkownik {0} nie może być doradcą szansy (wymagane włączone konto handlowca).").format(
+				doradca
 			)
 		)
 
