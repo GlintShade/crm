@@ -12,7 +12,11 @@
 <template>
   <div class="mb-4 rounded-lg border border-outline-amber-3 p-3">
     <div class="mb-2 flex items-center justify-between">
-      <div class="text-sm font-semibold text-ink-amber-8">{{ __('Edycja zestawu (administracja)') }}</div>
+      <div v-if="maKoszty" class="flex items-center gap-2">
+        <div class="text-sm font-semibold text-ink-amber-8">{{ __('Edycja zestawu, kosztów i marż') }}</div>
+        <span class="rounded-full border border-outline-amber-3 bg-surface-amber-2 px-2 py-0.5 text-xs text-ink-amber-8">{{ __('tylko administracja') }}</span>
+      </div>
+      <div v-else class="text-sm font-semibold text-ink-amber-8">{{ __('Edycja zestawu (administracja)') }}</div>
       <div class="flex items-center gap-2">
         <span v-if="przelicza" class="text-xs text-ink-gray-5">{{ __('Przeliczanie...') }}</span>
         <Button :label="__('Anuluj')" variant="outline" size="sm" @click="anuluj" />
@@ -38,6 +42,10 @@
     </div>
 
     <!-- Wiersze -->
+    <div v-if="maKoszty" class="mb-1 flex items-baseline gap-2">
+      <span class="text-sm font-semibold text-ink-gray-8">{{ __('Pozycje zestawu') }}</span>
+      <span class="text-xs text-ink-gray-5">{{ __('widzi je klient i handlowiec, bez kosztów') }}</span>
+    </div>
     <div class="overflow-x-auto rounded-md border border-outline-gray-2">
       <table class="w-full border-collapse text-sm">
         <thead>
@@ -46,6 +54,7 @@
             <th class="px-2 py-2 text-left font-medium">{{ __('NAZWA') }}</th>
             <th class="w-24 px-2 py-2 text-right font-medium">{{ __('ILOŚĆ') }}</th>
             <th class="w-24 px-2 py-2 text-left font-medium">{{ __('JEDNOSTKA') }}</th>
+            <th v-if="maKoszty" class="w-32 px-2 py-2 text-right font-medium">{{ __('KOSZT PLAN') }}</th>
             <template v-if="jestCp">
               <th class="w-28 px-2 py-2 text-right font-medium">{{ __('NETTO') }}</th>
               <th class="w-28 px-2 py-2 text-right font-medium">{{ __('BRUTTO') }}</th>
@@ -105,6 +114,17 @@
                 @input="stan = zmienPoleWiersza(stan, i, 'jednostka', $event.target.value)"
               />
             </td>
+            <td v-if="maKoszty" class="px-2 py-1.5 align-top">
+              <input
+                class="rounded border border-outline-gray-2 bg-surface-base px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none w-full text-right"
+                type="number"
+                step="0.01"
+                min="0"
+                :value="kosztPozycji(stan, w.klucz)"
+                data-testid="zestaw-koszt"
+                @input="stan = zmienKosztPozycji(stan, w.klucz, $event.target.value)"
+              />
+            </td>
             <template v-if="jestCp">
               <td class="px-2 py-1.5 align-top">
                 <input
@@ -137,14 +157,102 @@
             </td>
           </tr>
           <tr v-if="!stan.wiersze.length">
-            <td :colspan="jestCp ? 7 : 5" class="px-2 py-3 text-center text-ink-gray-5">{{ __('Brak pozycji.') }}</td>
+            <td :colspan="jestCp ? 7 : maKoszty ? 6 : 5" class="px-2 py-3 text-center text-ink-gray-5">{{ __('Brak pozycji.') }}</td>
           </tr>
         </tbody>
       </table>
     </div>
-    <div class="mt-2">
+    <div v-if="!maKoszty" class="mt-2">
       <Button :label="__('Dodaj pozycję')" variant="outline" size="sm" data-testid="zestaw-dodaj" @click="stan = dodajWiersz(stan)" />
     </div>
+
+    <!-- Koszty bez pozycji, bilans -->
+    <template v-if="maKoszty">
+      <div class="mt-4 mb-1 flex items-baseline gap-2">
+        <span class="text-sm font-semibold text-ink-gray-8">{{ __('Koszty bez pozycji w zestawie') }}</span>
+        <span class="text-xs text-ink-gray-5">{{ __('widzi je tylko administracja') }}</span>
+      </div>
+      <div class="rounded-md border border-outline-gray-2">
+        <div
+          v-for="l in linieBezPozycjiWidoczne"
+          :key="l.lid"
+          class="flex items-center gap-2 border-t border-outline-gray-1 px-2 py-1.5 first:border-t-0"
+          data-testid="zestaw-koszt-bez-pozycji"
+        >
+          <span class="w-20 shrink-0 text-xs text-ink-gray-5">{{ l.korekta ? __('korekta') : __('tylko koszt') }}</span>
+          <input
+            class="min-w-0 flex-1 rounded border border-outline-gray-2 bg-surface-base px-2 py-1 text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none"
+            type="text"
+            :value="l.etykieta"
+            :disabled="!l.reczna"
+            :placeholder="__('Nazwa kosztu')"
+            :class="{ 'border-outline-red-3': l.reczna && !l.etykieta.trim() }"
+            @input="stan = zmienLinieKosztu(stan, l.lid, 'etykieta', $event.target.value)"
+          />
+          <input
+            class="w-32 rounded border border-outline-gray-2 bg-surface-base px-2 py-1 text-right text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none"
+            type="number"
+            step="0.01"
+            min="0"
+            :value="l.koszt"
+            :disabled="l.korekta"
+            data-testid="zestaw-koszt-bez-pozycji-kwota"
+            @input="stan = zmienLinieKosztu(stan, l.lid, 'koszt', $event.target.value)"
+          />
+          <Button variant="ghost" size="sm" theme="red" :label="__('Usuń')" @click="stan = usunLinieKosztu(stan, l.lid)" />
+        </div>
+        <div v-if="!linieBezPozycjiWidoczne.length" class="px-2 py-2 text-sm text-ink-gray-5">{{ __('Brak kosztów bez pozycji.') }}</div>
+      </div>
+      <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <Button :label="__('Dodaj pozycję')" variant="outline" size="sm" data-testid="zestaw-dodaj" @click="stan = dodajWiersz(stan)" />
+          <Button :label="__('Dodaj sam koszt')" variant="outline" size="sm" data-testid="zestaw-dodaj-koszt" @click="stan = dodajSamKoszt(stan)" />
+          <button
+            v-if="liczbaPustych > 0"
+            type="button"
+            class="text-xs text-ink-gray-6 underline"
+            data-testid="zestaw-puste-koszty"
+            @click="stan = przelaczPusteKoszty(stan)"
+          >
+            {{ stan.koszty.pokazPuste ? __('Ukryj puste koszty') : __('Pokaż {0} pustych kosztów', [liczbaPustych]) }}
+          </button>
+        </div>
+        <div class="text-sm text-ink-gray-7" data-testid="zestaw-suma-kosztow">
+          <span>{{ __('Suma kosztów planowanych') }}</span>
+          <span class="ml-2 font-semibold text-ink-gray-8">{{ pokazGrosze(sumaKosztow) }}</span>
+          <span v-if="sumaKosztow !== sumaBazowa" class="ml-2 text-xs text-ink-gray-5">{{ __('poprzednio') }} {{ pokazGrosze(sumaBazowa) }}</span>
+        </div>
+      </div>
+      <div
+        v-if="bilansNaZywo"
+        class="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-md border border-outline-gray-2 bg-surface-gray-1 p-3"
+        data-testid="zestaw-bilans"
+      >
+        <div class="flex flex-wrap items-end gap-x-3 gap-y-1">
+          <div class="flex flex-col">
+            <span class="text-xs text-ink-gray-5">{{ __('Cena netto') }}</span>
+            <span class="text-base font-semibold text-ink-gray-8">{{ pokazGrosze(bilansNaZywo.netto) }}</span>
+          </div>
+          <span class="pb-0.5 text-ink-gray-5">=</span>
+          <div class="flex flex-col">
+            <span class="text-xs text-ink-gray-5">{{ __('Koszty planowane') }}</span>
+            <span class="text-base font-semibold text-ink-gray-8">{{ pokazGrosze(bilansNaZywo.koszty) }}</span>
+          </div>
+          <span class="pb-0.5 text-ink-gray-5">+</span>
+          <div class="flex flex-col">
+            <span class="text-xs text-ink-gray-5">{{ __('Marże i narzut') }}</span>
+            <span class="text-base font-semibold text-ink-gray-8">{{ pokazGrosze(bilansNaZywo.marze) }}</span>
+          </div>
+        </div>
+        <span
+          class="rounded-full border px-3 py-1 text-sm font-medium"
+          :class="bilansNaZywo.status === 'zgadza' ? 'border-outline-gray-3 bg-surface-white text-ink-gray-8' : 'border-outline-amber-3 bg-surface-amber-2 text-ink-amber-8'"
+          data-testid="zestaw-bilans-stan"
+        >
+          {{ opisBilansu }}
+        </span>
+      </div>
+    </template>
 
     <!-- Dotacja i finansowanie (Czyste Powietrze) -->
     <template v-if="jestCp">
@@ -195,6 +303,8 @@
 
     <!-- Cena -->
     <template v-if="!jestCp">
+    <div :class="maKoszty ? 'mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2' : ''">
+    <div>
     <div class="mt-4 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Cena') }}</div>
     <div class="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
       <label v-for="pole in poleCenyWejscie" :key="pole.klucz" class="flex flex-col gap-0.5 text-xs text-ink-gray-6">
@@ -220,6 +330,33 @@
         <span>{{ p.etykieta }}</span>
         <span :data-testid="`zestaw-pochodna-${p.klucz}`">{{ p.wartosc }}</span>
       </div>
+    </div>
+
+    </div>
+    <div v-if="maKoszty">
+      <div class="mt-4 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Marże i narzut') }}</div>
+      <div class="mt-1 rounded-md border border-outline-gray-2">
+        <div
+          v-for="m in stan.koszty.marze"
+          :key="m.klucz"
+          class="flex items-start justify-between gap-2 border-t border-outline-gray-1 px-2 py-1.5 first:border-t-0"
+        >
+          <span class="pt-1 text-sm text-ink-gray-7">{{ m.etykieta }}</span>
+          <div class="flex flex-col items-end">
+            <input
+              class="w-32 rounded border border-outline-gray-2 bg-surface-base px-2 py-1 text-right text-sm text-ink-gray-8 focus:border-outline-gray-4 focus:outline-none"
+              type="number"
+              step="0.01"
+              min="0"
+              :value="m.kwota"
+              :data-testid="`zestaw-marza-${m.klucz}`"
+              @input="stan = zmienMarze(stan, m.klucz, $event.target.value)"
+            />
+            <span v-if="marzaBylo(m)" class="text-[11px] text-ink-gray-4">{{ __('było') }} {{ pokazGrosze(groszeZPola(marzaBylo(m))) }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
     </div>
     </template>
 
@@ -334,6 +471,22 @@
               {{ c.etykieta }}: {{ c.przed }} -> {{ c.po }}
             </div>
           </div>
+          <div v-if="rozniceKoszty && (rozniceKoszty.koszty || rozniceKoszty.marze.length)" data-testid="zestaw-okno-koszty">
+            <div class="font-medium text-ink-gray-8">{{ __('Koszty i marże') }}</div>
+            <div v-if="rozniceKoszty.koszty" class="text-ink-gray-7">
+              {{ __('Koszty planowane') }}: {{ rozniceKoszty.koszty.przed }} -> {{ rozniceKoszty.koszty.po }}
+            </div>
+            <div v-for="m in rozniceKoszty.marze" :key="m.etykieta" class="text-ink-gray-7">
+              {{ m.etykieta }}: {{ m.przed }} -> {{ m.po }}
+            </div>
+          </div>
+          <div
+            v-if="rozniceKoszty && rozniceKoszty.ostrzezenie"
+            class="rounded-md border border-outline-amber-3 bg-surface-amber-2 p-2 text-ink-amber-8"
+            data-testid="zestaw-okno-prowizja"
+          >
+            {{ __(rozniceKoszty.ostrzezenie) }}
+          </div>
           <div
             v-if="producentZmieniony"
             class="rounded-md border border-outline-amber-3 bg-surface-amber-2 p-2 text-ink-amber-8"
@@ -342,7 +495,7 @@
             {{ __(MSG_NOTA_PRODUCENTA) }}
           </div>
           <div
-            v-if="!rozniceOkna.dodane.length && !rozniceOkna.usuniete.length && !rozniceOkna.zmienione.length && !rozniceOkna.cena.length && !rozniceOkna.konfiguracja.length"
+            v-if="!rozniceOkna.dodane.length && !rozniceOkna.usuniete.length && !rozniceOkna.zmienione.length && !rozniceOkna.cena.length && !rozniceOkna.konfiguracja.length && !(rozniceKoszty && (rozniceKoszty.koszty || rozniceKoszty.marze.length))"
             class="text-ink-gray-5"
           >
             {{ __('Brak widocznych różnic.') }}
@@ -393,23 +546,39 @@ import {
   POLE_PRODUCENT,
   POLE_ZESTAW_TYP,
   TYP_INNY,
+  bilans,
+  bledyKoszty,
   bledyWierszyCp,
   czyBladWersji,
   czyTypInny,
   czyZmieniony,
+  dodajSamKoszt,
   dodajWiersz,
   doPodgladu,
   doZapisu,
+  groszeZPola,
   komunikatBledu,
+  kosztPozycji,
+  liczbaPustychKosztow,
+  linieBezPozycjiWidoczne as widoczneLinieBezPozycji,
+  marzaBylo,
   opcjeProducenta,
+  pokazGrosze,
+  przelaczPusteKoszty,
   przesunWiersz,
   roznicaDoOkna,
+  roznicaKosztowDoOkna,
+  sumaKosztowGrosze,
   stanZOdpowiedzi,
+  usunLinieKosztu,
   usunWiersz,
   wierszeKomunikatow,
   zastosujCeneZSerwera,
   zastosujPropozycje,
   nowyZestawTyp,
+  zmienKosztPozycji,
+  zmienLinieKosztu,
+  zmienMarze,
   zmienPoleCeny,
   zmienPoleKonfiguracji,
   zmienPoleWiersza,
@@ -439,8 +608,31 @@ const typy = computed(() => props.dostep.typy || [])
 const zmieniony = computed(() => czyZmieniony(poczatkowy, stan.value))
 const jestCp = computed(() => stan.value.linia === 'cp')
 const bledyCp = computed(() => bledyWierszyCp(stan.value))
+// Koszty i marże: tylko OZE ze snapshotem (stan.koszty !== null); inaczej ekran jak dotąd.
+const maKoszty = computed(() => !jestCp.value && stan.value.koszty != null)
+const linieBezPozycjiWidoczne = computed(() => widoczneLinieBezPozycji(stan.value))
+const liczbaPustych = computed(() => liczbaPustychKosztow(stan.value))
+const sumaKosztow = computed(() => sumaKosztowGrosze(stan.value))
+const sumaBazowa = computed(() => stan.value.koszty?.sumaBazowa ?? 0)
+const bilansNaZywo = computed(() => bilans(stan.value, podglad.value?.cena?.netto ?? props.dostep.cena?.netto))
+const opisBilansu = computed(() => {
+  const b = bilansNaZywo.value
+  if (!b) return ''
+  if (b.status === 'zgadza') return __('Bilans się zgadza')
+  if (b.status === 'do_pokrycia') return __('Do pokrycia: {0}', [pokazGrosze(-b.roznica)])
+  return __('Nadwyżka: {0}', [pokazGrosze(b.roznica)])
+})
+const rozniceKoszty = computed(() =>
+  roznicaKosztowDoOkna(stan.value, sumaBazowa.value, Boolean(props.dostep.koszty?.rozliczenie_handlowca?.naliczone)),
+)
 const mozeZapisac = computed(
-  () => zmieniony.value && !blad.value && !przelicza.value && stan.value.wiersze.length > 0 && bledyCp.value.length === 0,
+  () =>
+    zmieniony.value &&
+    !blad.value &&
+    !przelicza.value &&
+    stan.value.wiersze.length > 0 &&
+    bledyCp.value.length === 0 &&
+    bledyKoszty(stan.value).length === 0,
 )
 function bladPola(indeks, pole) {
   return bledyCp.value.some((b) => b.indeks === indeks && b.pole === pole)
