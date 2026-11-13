@@ -274,11 +274,14 @@ function konfiguracjaDoStanu(konfiguracja) {
 export function stanZOdpowiedzi(odp) {
   const o = odp || {}
   const cp = o.linia === 'cp'
+  const wiersze = (o.wiersze || []).map(wierszZApi)
   return {
     linia: cp ? 'cp' : 'oze',
-    wiersze: (o.wiersze || []).map(wierszZApi),
+    wiersze,
     cena: cp ? cenaDoStanu(o.cena_cp, POLA_CENY_CP) : cenaDoStanu(o.cena),
     konfiguracja: konfiguracjaDoStanu(o.konfiguracja),
+    // Koszty i marże (ops#341): tylko OZE ze snapshotem; null = zachowanie jak dotąd.
+    koszty: cp ? null : kosztyZApi(o.koszty, wiersze),
     reczne: [],
     powod: '',
   }
@@ -290,7 +293,13 @@ export function dodajWiersz(stan, wiersz = pustyWiersz()) {
 
 export function usunWiersz(stan, indeks) {
   if (indeks < 0 || indeks >= stan.wiersze.length) return stan
-  return { ...stan, wiersze: stan.wiersze.filter((_, i) => i !== indeks) }
+  const usuniety = stan.wiersze[indeks]
+  const wynik = { ...stan, wiersze: stan.wiersze.filter((_, i) => i !== indeks) }
+  // Linia kosztu usuwanej pozycji znika z ładunku (serwer linię katalogową i tak zostawi z zerem).
+  if (stan.koszty) {
+    wynik.koszty = { ...stan.koszty, linie: stan.koszty.linie.filter((l) => l.wierszKlucz !== usuniety.klucz) }
+  }
+  return wynik
 }
 
 /** kierunek: -1 w górę, +1 w dół. Poza zakresem: stan bez zmian. */
@@ -419,9 +428,11 @@ export function konfiguracjaDoWywolania(stan) {
   return wynik
 }
 
-/** Argumenty wspólne podglądu i zapisu (wiersze + cena). */
+/** Argumenty wspólne podglądu i zapisu (wiersze + cena + opcjonalnie koszty). */
 export function doWywolania(stan) {
-  return { wiersze: wierszeDoWywolania(stan), cena: cenaDoWywolania(stan) }
+  const wynik = { wiersze: wierszeDoWywolania(stan), cena: cenaDoWywolania(stan) }
+  const koszty = kosztyDoWywolania(stan)
+  return koszty ? { ...wynik, koszty } : wynik
 }
 
 /** Argumenty `volteo_zestaw_podglad` (bez `deal`): wiersze, cena i (OZE) wybrany producent. */
@@ -583,4 +594,216 @@ export function opisOstatniejEdycji(edycja) {
   const powod = tekst(edycja.powod).trim()
   if (powod) czesci.push(`powód: ${powod}`)
   return czesci.join(', ')
+}
+
+
+// ---- koszty planowane i marże (ops#341, wariant A) ----
+// Wszystko w groszach (liczby całkowite). Linia kosztu jest związana z pozycją przez
+// stabilny `klucz` wiersza (`wierszKlucz`); indeksy `wiersz` powstają dopiero przy budowie
+// ładunku, więc dodawanie, usuwanie i przesuwanie pozycji ich nie psuje.
+
+export const KLUCZ_SKLADNIKA_NARZUT = 'narzut'
+export const MSG_PROWIZJA_NALICZONA = 'Prowizja handlowca jest już naliczona. Po zapisie nalicz ją ponownie w zakładce Rozliczenia.'
+
+function kosztyZApi(k, wiersze) {
+  if (!k || typeof k !== 'object') return null
+  return {
+    linie: (k.linie || []).map((l) => ({
+      lid: l.klucz ? `l:${l.klucz}` : nowyKlucz(),
+      klucz: l.klucz ?? null,
+      etykieta: tekst(l.etykieta),
+      koszt: l.koszt_plan == null ? '' : tekst(l.koszt_plan),
+      wierszKlucz: l.wiersz != null && wiersze[l.wiersz] ? wiersze[l.wiersz].klucz : null,
+      reczna: Boolean(l.reczna),
+      korekta: Boolean(l.korekta),
+      nowa: false,
+    })),
+    marze: (k.skladniki_marzy || []).map((m) => ({
+      klucz: m.klucz,
+      etykieta: tekst(m.etykieta),
+      kwota: m.kwota == null ? '' : tekst(m.kwota),
+      bazowa: m.kwota == null ? '' : tekst(m.kwota),
+      pierwotna: m.kwota_pierwotna == null ? null : tekst(m.kwota_pierwotna),
+    })),
+    pokazPuste: false,
+  }
+}
+
+/** Grosze z pola tekstowego; puste albo błędne = 0. */
+export function groszeZPola(v) {
+  return naGrosze(v) ?? 0
+}
+
+/** Grosze -> "1234.50" (do ładunku API). */
+export function groszeNaTekst(grosze) {
+  return naTekstKwoty(grosze)
+}
+
+/** Kwota w groszach do pokazania ("3 251,00 zł"). */
+export function pokazGrosze(grosze) {
+  return formatPln(naTekstKwoty(grosze))
+}
+
+export function linieZPozycja(stan) {
+  return stan.koszty ? stan.koszty.linie.filter((l) => l.wierszKlucz != null) : []
+}
+
+export function linieBezPozycji(stan) {
+  return stan.koszty ? stan.koszty.linie.filter((l) => l.wierszKlucz == null) : []
+}
+
+/** Linia bez pozycji z kosztem 0,00 (poza świeżo dodaną) jest schowana pod odnośnikiem. */
+export function czyLiniaPusta(l) {
+  return l.wierszKlucz == null && !l.nowa && groszeZPola(l.koszt) === 0
+}
+
+export function liczbaPustychKosztow(stan) {
+  return linieBezPozycji(stan).filter(czyLiniaPusta).length
+}
+
+/** Linie bez pozycji do pokazania: wszystkie, gdy `pokazPuste`, inaczej bez pustych. */
+export function linieBezPozycjiWidoczne(stan) {
+  const wszystkie = linieBezPozycji(stan)
+  return stan.koszty?.pokazPuste ? wszystkie : wszystkie.filter((l) => !czyLiniaPusta(l))
+}
+
+export function przelaczPusteKoszty(stan) {
+  if (!stan.koszty) return stan
+  return { ...stan, koszty: { ...stan.koszty, pokazPuste: !stan.koszty.pokazPuste } }
+}
+
+/** Wartość pola kosztu pozycji (puste, gdy pozycja nie ma linii kosztu). */
+export function kosztPozycji(stan, wierszKlucz) {
+  const l = linieZPozycja(stan).find((x) => x.wierszKlucz === wierszKlucz)
+  return l ? l.koszt : ''
+}
+
+/** Zmiana kosztu pozycji; puste pole usuwa linię, nowa wartość bez linii ją tworzy. */
+export function zmienKosztPozycji(stan, wierszKlucz, wartosc) {
+  if (!stan.koszty) return stan
+  const w = stan.wiersze.find((x) => x.klucz === wierszKlucz)
+  if (!w) return stan
+  const istnieje = stan.koszty.linie.some((l) => l.wierszKlucz === wierszKlucz)
+  let linie
+  if (tekst(wartosc).trim() === '') {
+    linie = stan.koszty.linie.filter((l) => l.wierszKlucz !== wierszKlucz)
+  } else if (istnieje) {
+    linie = stan.koszty.linie.map((l) => (l.wierszKlucz === wierszKlucz ? { ...l, koszt: wartosc } : l))
+  } else {
+    const etykieta = tekst(w.nazwa).trim() || tekst(w.typ).trim()
+    linie = [
+      ...stan.koszty.linie,
+      { lid: nowyKlucz(), klucz: null, etykieta, koszt: wartosc, wierszKlucz, reczna: false, korekta: false, nowa: false },
+    ]
+  }
+  return { ...stan, koszty: { ...stan.koszty, linie } }
+}
+
+/** Nowa linia kosztu bez pozycji (klucz null, ręczna). */
+export function dodajSamKoszt(stan) {
+  if (!stan.koszty) return stan
+  const linia = { lid: nowyKlucz(), klucz: null, etykieta: '', koszt: '', wierszKlucz: null, reczna: true, korekta: false, nowa: true }
+  return { ...stan, koszty: { ...stan.koszty, linie: [...stan.koszty.linie, linia] } }
+}
+
+export function zmienLinieKosztu(stan, lid, pole, wartosc) {
+  if (!stan.koszty) return stan
+  return {
+    ...stan,
+    koszty: { ...stan.koszty, linie: stan.koszty.linie.map((l) => (l.lid === lid ? { ...l, [pole]: wartosc } : l)) },
+  }
+}
+
+export function usunLinieKosztu(stan, lid) {
+  if (!stan.koszty) return stan
+  return { ...stan, koszty: { ...stan.koszty, linie: stan.koszty.linie.filter((l) => l.lid !== lid) } }
+}
+
+export function zmienMarze(stan, klucz, wartosc) {
+  if (!stan.koszty) return stan
+  return {
+    ...stan,
+    koszty: { ...stan.koszty, marze: stan.koszty.marze.map((m) => (m.klucz === klucz ? { ...m, kwota: wartosc } : m)) },
+  }
+}
+
+/** Składnik zmieniony względem wartości z ładowania (porównanie w groszach). */
+export function marzaZmieniona(m) {
+  return groszeZPola(m.kwota) !== groszeZPola(m.bazowa)
+}
+
+/** Wartość "było" do pokazania przy zmienionym składniku: pierwotna z serwera albo z ładowania; '' gdy bez zmiany. */
+export function marzaBylo(m) {
+  const baza = m.pierwotna ?? m.bazowa
+  return groszeZPola(m.kwota) === groszeZPola(baza) ? '' : baza
+}
+
+export function sumaKosztowGrosze(stan) {
+  return stan.koszty ? stan.koszty.linie.reduce((s, l) => s + groszeZPola(l.koszt), 0) : 0
+}
+
+export function sumaMarzyGrosze(stan) {
+  return stan.koszty ? stan.koszty.marze.reduce((s, m) => s + groszeZPola(m.kwota), 0) : 0
+}
+
+/**
+ * Bilans na żywo: netto = koszty planowane + marże. Przy podstawie brutto netto bierzemy
+ * z ostatniego podglądu serwera (`nettoPodgladu`), inaczej z pola. `status`: zgadza,
+ * do_pokrycia (koszty + marże > netto) albo nadwyzka. null bez kosztów.
+ */
+export function bilans(stan, nettoPodgladu) {
+  if (!stan.koszty || czyCp(stan)) return null
+  const zPola = naGrosze(stan.cena.netto)
+  const zPodgladu = naGrosze(nettoPodgladu)
+  const netto = stan.cena.podstawa === PODSTAWA_BRUTTO ? (zPodgladu ?? zPola ?? 0) : (zPola ?? 0)
+  const koszty = sumaKosztowGrosze(stan)
+  const marze = sumaMarzyGrosze(stan)
+  const roznica = netto - koszty - marze
+  const status = roznica === 0 ? 'zgadza' : roznica < 0 ? 'do_pokrycia' : 'nadwyzka'
+  return { netto, koszty, marze, roznica, status }
+}
+
+/** Linie z pustą nazwą (ręczne bez nazwy) blokują zapis. */
+export function bledyKoszty(stan) {
+  if (!stan.koszty) return []
+  return stan.koszty.linie.filter((l) => l.reczna && tekst(l.etykieta).trim() === '').map((l) => l.lid)
+}
+
+/** Parametr `koszty` podglądu i zapisu; null (brak parametru) gdy edytor nie ma kosztów. */
+export function kosztyDoWywolania(stan) {
+  if (!stan.koszty || czyCp(stan)) return null
+  const indeks = (klucz) => (klucz == null ? -1 : stan.wiersze.findIndex((w) => w.klucz === klucz))
+  const linie = stan.koszty.linie.map((l) => {
+    const i = indeks(l.wierszKlucz)
+    return {
+      klucz: l.klucz,
+      etykieta: tekst(l.etykieta).trim(),
+      koszt_plan: naTekstKwoty(groszeZPola(l.koszt)),
+      wiersz: i >= 0 ? i : null,
+    }
+  })
+  const marze = {}
+  for (const m of stan.koszty.marze) {
+    if (marzaZmieniona(m)) marze[m.klucz] = naTekstKwoty(groszeZPola(m.kwota))
+  }
+  return { linie, marze }
+}
+
+/**
+ * Sekcja "Koszty i marże" okna potwierdzenia. `sumaZapisanaGrosze` to suma kosztów z
+ * ładowania. `prowizjaNaliczona`: `koszty.rozliczenie_handlowca.naliczone`.
+ * @returns {{koszty: {przed: string, po: string}|null, marze: {etykieta, przed, po}[], ostrzezenie: string}|null}
+ */
+export function roznicaKosztowDoOkna(stan, sumaZapisanaGrosze, prowizjaNaliczona) {
+  if (!stan.koszty) return null
+  const po = sumaKosztowGrosze(stan)
+  const koszty = po === sumaZapisanaGrosze ? null : { przed: pokazGrosze(sumaZapisanaGrosze), po: pokazGrosze(po) }
+  const zmienione = stan.koszty.marze.filter(marzaZmieniona)
+  const marze = zmienione.map((m) => ({
+    etykieta: m.etykieta,
+    przed: pokazGrosze(groszeZPola(m.bazowa)),
+    po: pokazGrosze(groszeZPola(m.kwota)),
+  }))
+  const narzut = zmienione.some((m) => m.klucz === KLUCZ_SKLADNIKA_NARZUT)
+  return { koszty, marze, ostrzezenie: prowizjaNaliczona && narzut ? MSG_PROWIZJA_NALICZONA : '' }
 }

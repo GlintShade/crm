@@ -227,3 +227,208 @@ describe('wierszeKomunikatow', () => {
     expect(wierszeKomunikatow(null)).toEqual([])
   })
 })
+
+// ---- koszty i marże (ops#341) ----
+import {
+  bilans,
+  bledyKoszty,
+  dodajSamKoszt,
+  dodajWiersz,
+  kosztPozycji,
+  kosztyDoWywolania,
+  liczbaPustychKosztow,
+  linieBezPozycjiWidoczne,
+  marzaBylo,
+  przelaczPusteKoszty,
+  przesunWiersz,
+  roznicaKosztowDoOkna,
+  usunLinieKosztu,
+  usunWiersz,
+  zmienKosztPozycji,
+  zmienLinieKosztu,
+  zmienMarze,
+  zmienPoleCeny,
+  MSG_PROWIZJA_NALICZONA,
+} from '@/utils/zestawEdycja'
+
+function odpKoszty(nad = {}) {
+  return odpowiedz({
+    wiersze: [
+      { name: 'a1', typ: 'Falownik', nazwa: 'F', ilosc: 1, jednostka: 'szt.', netto: '0', brutto: '0' },
+      { name: 'a2', typ: 'Panele PV', nazwa: 'P', ilosc: 11, jednostka: 'szt.', netto: '0', brutto: '0' },
+      { name: 'a3', typ: 'Licznik', nazwa: 'L', ilosc: 1, jednostka: 'szt.', netto: '0', brutto: '0' },
+    ],
+    cena: { netto: '83921.00', vat_pct: '8', dotacja: '0', ulga_pct: '12', okres_lat: 10, wplata_wlasna: '0', dodatki_bez_ulgi_brutto: '0', podstawa: 'netto' },
+    koszty: {
+      linie: [
+        { klucz: 'k_falownik', etykieta: 'Falownik', koszt_plan: '3251.00', wiersz: 0, reczna: false, korekta: false },
+        { klucz: 'k_panele', etykieta: 'Panele', koszt_plan: '3960.00', wiersz: 1, reczna: false, korekta: false },
+        { klucz: 'k_sterownik', etykieta: 'Sterownik', koszt_plan: '969.00', wiersz: null, reczna: false, korekta: false },
+        { klucz: 'k_kilometrowka', etykieta: 'Kilometrówka', koszt_plan: '0.00', wiersz: null, reczna: false, korekta: false },
+      ],
+      skladniki_marzy: [
+        { klucz: 'narzut', etykieta: 'Narzut handlowca', kwota: '10000.00', kwota_pierwotna: null },
+        { klucz: 'marza_proenergy', etykieta: 'Marża ProEnergy', kwota: '5000.00', kwota_pierwotna: null },
+      ],
+      podsumowanie: { netto: '83921.00', koszt_plan: '8180.00', marza_plan: '15000.00' },
+      rozliczenie_handlowca: { naliczone: false },
+    },
+    ...nad,
+  })
+}
+
+describe('koszty: brak snapshotu i CP', () => {
+  it('koszty null: stan.koszty null i brak parametru koszty', () => {
+    const s = stanZOdpowiedzi(odpowiedz())
+    expect(s.koszty).toBeNull()
+    expect('koszty' in doPodgladu(s)).toBe(false)
+    expect('koszty' in doZapisu(s)).toBe(false)
+    expect(bilans(s, '1')).toBeNull()
+    expect(roznicaKosztowDoOkna(s, 0, false)).toBeNull()
+  })
+  it('CP ignoruje koszty', () => {
+    const s = stanZOdpowiedzi({ ...odpKoszty(), linia: 'cp', cena_cp: {} })
+    expect(s.koszty).toBeNull()
+  })
+})
+
+describe('koszty: ładunek', () => {
+  it('pełna lista linii z indeksami wiersz, marze tylko zmienione', () => {
+    let s = stanZOdpowiedzi(odpKoszty())
+    expect(kosztyDoWywolania(s)).toEqual({
+      linie: [
+        { klucz: 'k_falownik', etykieta: 'Falownik', koszt_plan: '3251.00', wiersz: 0 },
+        { klucz: 'k_panele', etykieta: 'Panele', koszt_plan: '3960.00', wiersz: 1 },
+        { klucz: 'k_sterownik', etykieta: 'Sterownik', koszt_plan: '969.00', wiersz: null },
+        { klucz: 'k_kilometrowka', etykieta: 'Kilometrówka', koszt_plan: '0.00', wiersz: null },
+      ],
+      marze: {},
+    })
+    s = zmienMarze(s, 'narzut', '7000')
+    expect(doPodgladu(s).koszty.marze).toEqual({ narzut: '7000.00' })
+    expect(doZapisu(s).koszty.marze).toEqual({ narzut: '7000.00' })
+  })
+
+  it('nowa pozycja z kosztem: linia z kluczem null i indeksem nowego wiersza', () => {
+    let s = stanZOdpowiedzi(odpKoszty())
+    s = dodajWiersz(s, { ...s.wiersze[0], klucz: 'nowy', name: null, typ: 'EMS', nazwa: 'EMS z integratorem' })
+    s = zmienKosztPozycji(s, 'nowy', '3000')
+    const linie = kosztyDoWywolania(s).linie
+    expect(linie[linie.length - 1]).toEqual({ klucz: null, etykieta: 'EMS z integratorem', koszt_plan: '3000.00', wiersz: 3 })
+  })
+
+  it('indeksy wiersz po usunięciu i przesunięciu pozycji', () => {
+    let s = stanZOdpowiedzi(odpKoszty())
+    s = przesunWiersz(s, 1, -1)
+    let linie = kosztyDoWywolania(s).linie
+    expect(linie.find((l) => l.klucz === 'k_panele').wiersz).toBe(0)
+    expect(linie.find((l) => l.klucz === 'k_falownik').wiersz).toBe(1)
+    s = usunWiersz(s, 0) // panele
+    linie = kosztyDoWywolania(s).linie
+    expect(linie.find((l) => l.klucz === 'k_panele')).toBeUndefined()
+    expect(linie.find((l) => l.klucz === 'k_falownik').wiersz).toBe(0)
+    expect(s.koszty.linie.some((l) => l.klucz === 'k_panele')).toBe(false)
+  })
+
+  it('puste pole kosztu pozycji usuwa linię, wpisanie tworzy', () => {
+    let s = stanZOdpowiedzi(odpKoszty())
+    expect(kosztPozycji(s, s.wiersze[0].klucz)).toBe('3251.00')
+    s = zmienKosztPozycji(s, s.wiersze[0].klucz, '')
+    expect(kosztPozycji(s, s.wiersze[0].klucz)).toBe('')
+    expect(kosztyDoWywolania(s).linie.some((l) => l.klucz === 'k_falownik')).toBe(false)
+    s = zmienKosztPozycji(s, s.wiersze[2].klucz, '12,5')
+    expect(kosztyDoWywolania(s).linie.at(-1)).toMatchObject({ klucz: null, koszt_plan: '12.50', wiersz: 2 })
+  })
+
+  it('dodaj sam koszt: linia reczna z kluczem null i wiersz null; bez nazwy blokuje zapis', () => {
+    let s = dodajSamKoszt(stanZOdpowiedzi(odpKoszty()))
+    expect(bledyKoszty(s)).toHaveLength(1)
+    const lid = s.koszty.linie.at(-1).lid
+    s = zmienLinieKosztu(s, lid, 'etykieta', 'Dojazd')
+    s = zmienLinieKosztu(s, lid, 'koszt', '250')
+    expect(bledyKoszty(s)).toHaveLength(0)
+    expect(kosztyDoWywolania(s).linie.at(-1)).toEqual({ klucz: null, etykieta: 'Dojazd', koszt_plan: '250.00', wiersz: null })
+    s = usunLinieKosztu(s, lid)
+    expect(kosztyDoWywolania(s).linie).toHaveLength(4)
+  })
+})
+
+describe('koszty: ukrywanie pustych', () => {
+  it('zero bez pozycji schowane, przełącznik w obie strony, świeżo dodana widoczna', () => {
+    let s = stanZOdpowiedzi(odpKoszty())
+    expect(liczbaPustychKosztow(s)).toBe(1)
+    expect(linieBezPozycjiWidoczne(s).map((l) => l.klucz)).toEqual(['k_sterownik'])
+    s = przelaczPusteKoszty(s)
+    expect(linieBezPozycjiWidoczne(s)).toHaveLength(2)
+    s = przelaczPusteKoszty(s)
+    expect(linieBezPozycjiWidoczne(s)).toHaveLength(1)
+    s = dodajSamKoszt(s)
+    expect(linieBezPozycjiWidoczne(s)).toHaveLength(2)
+  })
+  it('schowana linia nadal idzie w ładunku', () => {
+    const s = stanZOdpowiedzi(odpKoszty())
+    expect(kosztyDoWywolania(s).linie.some((l) => l.klucz === 'k_kilometrowka')).toBe(true)
+  })
+})
+
+describe('koszty: bilans w groszach', () => {
+  it('zgadza, do pokrycia, nadwyżka', () => {
+    let s = stanZOdpowiedzi(odpKoszty())
+    // koszty 8180 + marze 15000 = 23180 przy netto 83921: nadwyzka
+    let b = bilans(s)
+    expect(b).toMatchObject({ netto: 8392100, koszty: 818000, marze: 1500000, roznica: 8392100 - 818000 - 1500000, status: 'nadwyzka' })
+    s = zmienPoleCeny(s, 'netto', '23180')
+    expect(bilans(s).status).toBe('zgadza')
+    s = zmienKosztPozycji(s, s.wiersze[2].klucz, '3000')
+    b = bilans(s)
+    expect(b.status).toBe('do_pokrycia')
+    expect(b.roznica).toBe(-300000)
+  })
+  it('podstawa brutto: netto z podgladu serwera', () => {
+    let s = stanZOdpowiedzi(odpKoszty())
+    s = zmienPoleCeny(s, 'brutto', '90635.88')
+    expect(s.cena.podstawa).toBe('brutto')
+    expect(bilans(s, '83921.00').netto).toBe(8392100)
+  })
+  it('bez zaokragleń zmiennoprzecinkowych', () => {
+    let s = stanZOdpowiedzi(odpKoszty())
+    s = zmienKosztPozycji(s, s.wiersze[0].klucz, '0.1')
+    s = zmienKosztPozycji(s, s.wiersze[1].klucz, '0.2')
+    expect(bilans(s).koszty).toBe(10 + 20 + 96900)
+  })
+})
+
+describe('koszty: marza i okno', () => {
+  it('bylo tylko dla zmienionych; pierwotna z serwera ma pierwszenstwo', () => {
+    let s = stanZOdpowiedzi(odpKoszty())
+    expect(marzaBylo(s.koszty.marze[0])).toBe('')
+    s = zmienMarze(s, 'narzut', '7000')
+    expect(marzaBylo(s.koszty.marze[0])).toBe('10000.00')
+    const s2 = stanZOdpowiedzi(
+      odpKoszty({ koszty: { ...odpKoszty().koszty, skladniki_marzy: [{ klucz: 'narzut', etykieta: 'N', kwota: '7000.00', kwota_pierwotna: '10000.00' }] } }),
+    )
+    expect(marzaBylo(s2.koszty.marze[0])).toBe('10000.00')
+  })
+
+  it('okno: koszty przed i po, marze, ostrzezenie prowizji tylko gdy naliczona i narzut', () => {
+    let s = stanZOdpowiedzi(odpKoszty())
+    expect(roznicaKosztowDoOkna(s, 818000, true)).toMatchObject({ koszty: null, marze: [], ostrzezenie: '' })
+    s = zmienKosztPozycji(s, s.wiersze[2].klucz, '3000')
+    s = zmienMarze(s, 'marza_proenergy', '4000')
+    let r = roznicaKosztowDoOkna(s, 818000, true)
+    expect(r.koszty.przed).toContain('8')
+    expect(r.marze).toHaveLength(1)
+    expect(r.ostrzezenie).toBe('')
+    s = zmienMarze(s, 'narzut', '7000')
+    r = roznicaKosztowDoOkna(s, 818000, true)
+    expect(r.ostrzezenie).toBe(MSG_PROWIZJA_NALICZONA)
+    expect(roznicaKosztowDoOkna(s, 818000, false).ostrzezenie).toBe('')
+  })
+
+  it('czyZmieniony widzi zmianę kosztu i marzy, nie samo ukrycie pustych', () => {
+    const p = stanZOdpowiedzi(odpKoszty())
+    expect(czyZmieniony(p, przelaczPusteKoszty(p))).toBe(false)
+    expect(czyZmieniony(p, zmienMarze(p, 'narzut', '7000'))).toBe(true)
+    expect(czyZmieniony(p, zmienKosztPozycji(p, p.wiersze[0].klucz, '1'))).toBe(true)
+  })
+})
