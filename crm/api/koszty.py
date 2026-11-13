@@ -33,7 +33,12 @@ from frappe.utils import flt
 from crm.api import volteo_poziom_prowizji, volteo_widzi_prowizje
 from crm.api.limit_zadan import rate_limit
 from crm.api.umowa import _sprawdz_dostep_do_szansy
-from crm.koszty.rdzen import policz_zmiany_planu, scal_snapshot, zmien_koszty_planowane
+from crm.koszty.rdzen import (
+	czy_zmieniona_korekta,
+	policz_zmiany_planu,
+	scal_snapshot,
+	zmien_koszty_planowane,
+)
 from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad
 
 ADMIN_ROLE = {"Volteo Core Admin", "System Manager"}
@@ -179,7 +184,7 @@ def volteo_koszty_plan_zapisz(
 			tekst_sladu(
 				"koszty_plan",
 				pozycje=policz_zmiany_planu(zapisany, nowy),
-				suma=suma_plan is not None,
+				suma=czy_zmieniona_korekta(zapisany, nowy),
 			),
 		)
 	except Exception:

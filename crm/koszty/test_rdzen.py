@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from crm.koszty.rdzen import (
 	aktualizuj_po_edycji_zestawu,
+	czy_zmieniona_korekta,
 	policz_zmiany_planu,
 	scal_snapshot,
 	zbuduj_snapshot_cp,
@@ -669,9 +670,9 @@ class ZmienKosztyPlanowaneTest(unittest.TestCase):
 		self.assertEqual(p2["podsumowanie"]["koszt_plan"], "20000.00")
 
 	def test_none_dla_nigdy_niezmienianej_nic_nie_robi(self):
-		nowy = zmien_koszty_planowane(_pv_snapshot(), {"k_bateria": None}, None, T0, "adm")
-		self.assertEqual(nowy["linie"], _pv_snapshot()["linie"])
-		self.assertEqual(nowy["podsumowanie"]["koszt_plan"], "20000.00")
+		nowy = zmien_koszty_planowane(_pv_snapshot(), {"k_bateria": None, "k_falownik": "6000"}, None, T0, "adm")
+		self.assertEqual(_linia(nowy, "k_bateria"), _linia(_pv_snapshot(), "k_bateria"))
+		self.assertEqual(nowy["podsumowanie"]["koszt_plan"], "21000.00")
 
 	def test_wartosc_rowna_pierwotnej_dziala_jak_przywrocenie(self):
 		p1 = zmien_koszty_planowane(_pv_snapshot(), {"k_bateria": "13000"}, None, T0, "adm")
@@ -701,7 +702,7 @@ class ZmienKosztyPlanowaneTest(unittest.TestCase):
 		self.assertEqual(nowy["podsumowanie"]["koszt_plan"], "18000.00")
 
 	def test_suma_rowna_sumie_linii_nie_tworzy_korekty(self):
-		nowy = zmien_koszty_planowane(_pv_snapshot(), {}, "20000", T0, "adm")
+		nowy = zmien_koszty_planowane(_pv_snapshot(), {"k_bateria": "13000"}, "21000", T0, "adm")
 		self.assertFalse([l for l in nowy["linie"] if l["klucz"] == "korekta_sumy_plan"])
 
 	def test_zmiana_linii_i_sumy_wygrywa_suma(self):
@@ -791,7 +792,7 @@ class ZmienKosztyPlanowaneTest(unittest.TestCase):
 		snap["podsumowanie"]["koszt_plan"] = "20500.00"  # linie sumują się do 20000
 		nowy = zmien_koszty_planowane(snap, {"k_bateria": "13000"}, None, T0, "adm")
 		self.assertEqual(nowy["podsumowanie"]["koszt_plan"], "21500.00")  # delta, nie suma z linii
-		nowy2 = zmien_koszty_planowane(snap, {}, "20500", T0, "adm")
+		nowy2 = zmien_koszty_planowane(snap, {"k_bateria": "13000"}, "21500", T0, "adm")
 		self.assertFalse([l for l in nowy2["linie"] if l["klucz"] == "korekta_sumy_plan"])
 
 	def test_edycja_planu_slad(self):
@@ -846,3 +847,33 @@ class ZmienKosztyPlanowaneTest(unittest.TestCase):
 		# bateria zmieniona + korekta dodana (falownik bez zmiany)
 		self.assertEqual(policz_zmiany_planu(snap, nowy), 2)
 		self.assertEqual(policz_zmiany_planu(snap, snap), 0)
+
+
+class ZmienKosztyPlanowaneOdrzucenieTest(unittest.TestCase):
+	def test_brak_zmian_odrzucony(self):
+		for koszty, suma in (({}, None), ({}, "20000"), ({"k_bateria": "12000"}, None), ({"k_bateria": None}, "20000.00")):
+			with self.assertRaisesRegex(ValueError, "Brak zmian"):
+				zmien_koszty_planowane(_pv_snapshot(), koszty, suma, T0, "adm")
+
+	def test_none_na_nieistniejacej_korekcie_to_brak_zmian(self):
+		with self.assertRaisesRegex(ValueError, "Brak zmian"):
+			zmien_koszty_planowane(_pv_snapshot(), {"korekta_sumy_plan": None}, None, T0, "adm")
+
+	def test_suma_ujemna_odrzucona(self):
+		snap = zmien_koszty_planowane(_pv_snapshot(), {}, "100", T0, "adm")  # korekta -19900
+		with self.assertRaisesRegex(ValueError, "nie może być ujemna"):
+			zmien_koszty_planowane(
+				snap, {"k_falownik": "0", "k_bateria": "0", "k_montaz_pv": "0"}, None, T0, "adm"
+			)
+
+	def test_czy_zmieniona_korekta(self):
+		snap = _pv_snapshot()
+		z_korekta = zmien_koszty_planowane(snap, {}, "21500", T0, "adm")
+		inna = zmien_koszty_planowane(z_korekta, {}, "22000", T0, "adm")
+		usunieta = zmien_koszty_planowane(z_korekta, {"korekta_sumy_plan": None}, None, T0, "adm")
+		inna_linia = zmien_koszty_planowane(z_korekta, {"k_bateria": "13000"}, None, T0, "adm")
+		self.assertTrue(czy_zmieniona_korekta(snap, z_korekta))
+		self.assertTrue(czy_zmieniona_korekta(z_korekta, usunieta))
+		self.assertTrue(czy_zmieniona_korekta(z_korekta, inna))
+		self.assertFalse(czy_zmieniona_korekta(z_korekta, inna_linia))
+		self.assertFalse(czy_zmieniona_korekta(snap, snap))

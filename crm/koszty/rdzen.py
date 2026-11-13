@@ -597,6 +597,22 @@ def zmien_koszty_planowane(
 		if korekta != _ZERO:
 			nowe_linie.append(_linia_korekty(korekta))
 
+	if suma_nowa < _ZERO:
+		raise ValueError("Suma kosztów planowanych nie może być ujemna.")
+
+	def _odcisk(linie: list[dict[str, Any]]) -> list[tuple[Any, ...]]:
+		return [
+			(
+				linia["klucz"],
+				_kwota(linia["koszt_plan"]),
+				None if linia.get("koszt_plan_pierwotny") is None else _kwota(linia["koszt_plan_pierwotny"]),
+			)
+			for linia in linie
+		]
+
+	if _odcisk(nowe_linie) == _odcisk(stare_linie) and suma_nowa == suma_przed:
+		raise ValueError("Brak zmian w kosztach planowanych.")
+
 	netto = _kwota(snapshot["podsumowanie"]["netto"])
 	marza_plan = _kwota(netto - suma_nowa)
 	prowizja_plan = snapshot["podsumowanie"].get("prowizja_plan")
@@ -631,3 +647,15 @@ def policz_zmiany_planu(przed: dict[str, Any], po: dict[str, Any]) -> int:
 	stare = {linia["klucz"]: _kwota(linia["koszt_plan"]) for linia in przed.get("linie") or []}
 	nowe = {linia["klucz"]: _kwota(linia["koszt_plan"]) for linia in po.get("linie") or []}
 	return sum(1 for klucz in set(stare) | set(nowe) if stare.get(klucz) != nowe.get(klucz))
+
+
+def czy_zmieniona_korekta(przed: dict[str, Any], po: dict[str, Any]) -> bool:
+	"""Czy linia `korekta_sumy_plan` różni się między snapshotami (dodana, usunięta albo inna kwota)."""
+
+	def _korekta(snapshot: dict[str, Any]) -> Decimal | None:
+		for linia in snapshot.get("linie") or []:
+			if linia["klucz"] == KLUCZ_KOREKTY_SUMY:
+				return _kwota(linia["koszt_plan"])
+		return None
+
+	return _korekta(przed) != _korekta(po)
