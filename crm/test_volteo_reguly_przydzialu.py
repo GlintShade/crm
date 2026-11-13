@@ -309,19 +309,29 @@ class TestStaleSms(unittest.TestCase):
 	def test_tresc_domyslna_znak_w_znak(self):
 		self.assertEqual(
 			TRESC_LEAD_BEZPOSREDNI_DOMYSLNA,
-			"Nowy lead dla Ciebie: {klient}, tel. {telefon}, {kod}, PV: {ma_pv}. Mapa: {mapa}",
+			"Nowy lead dla Ciebie: {klient}, tel. {telefon}, {kod}, {ma_pv}. Mapa: {mapa}",
 		)
 
 	def test_tresc_przechodzi_walidacje(self):
 		self.assertIsNone(waliduj_szablon(TRESC_LEAD_BEZPOSREDNI_DOMYSLNA, PLACEHOLDERY_LEAD_BEZPOSREDNI))
 
-	def test_wzorcowy_117_znakow_1_czesc(self):
+	def test_wzorcowy_119_znakow_1_czesc(self):
 		tresc, _ = wypelnij_szablon(
 			TRESC_LEAD_BEZPOSREDNI_DOMYSLNA,
 			DANE_PRZYKLADOWE_LEAD_BEZPOSREDNI,
 			PLACEHOLDERY_LEAD_BEZPOSREDNI,
 		)
-		self.assertEqual(len(tresc), 117)
+		self.assertEqual(
+			tresc,
+			"Nowy lead dla Ciebie: Jan Kowalski, tel. 600100200, 66-300, nie ma PV. "
+			"Mapa: https://maps.google.com/?q=52.4447,15.5780",
+		)
+		self.assertEqual(len(tresc), 119)
+		self.assertEqual(liczba_czesci_sms(tresc), 1)
+
+	def test_najdluzszy_ma_pv_i_numer_z_prefiksem_1_czesc(self):
+		dane = {**DANE_PRZYKLADOWE_LEAD_BEZPOSREDNI, "ma_pv": "ma PV bez magazynu", "telefon": "+48600100200"}
+		tresc, _ = wypelnij_szablon(TRESC_LEAD_BEZPOSREDNI_DOMYSLNA, dane, PLACEHOLDERY_LEAD_BEZPOSREDNI)
 		self.assertEqual(liczba_czesci_sms(tresc), 1)
 
 	def test_dane_przykladowe_obejmuja_placeholdery(self):
