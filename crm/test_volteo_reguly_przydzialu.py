@@ -14,6 +14,7 @@ from crm.volteo_reguly_przydzialu import (
 	TRESC_LEAD_BEZPOSREDNI_DOMYSLNA,
 	Regula,
 	dopasuj_regule,
+	grupuj_kandydatow_srodka,
 	klucz_licznika_dnia,
 	klucz_rezerwacji,
 	link_mapy,
@@ -21,11 +22,14 @@ from crm.volteo_reguly_przydzialu import (
 	najblizsza_regula,
 	odleglosc_km,
 	opis_obszaru,
+	ostrzezenia_reguly,
+	policz_leady_w_promieniu,
 	regula_z_wiersza,
 	tekst_sladu_przydzialu,
 	tekst_sladu_sms,
 	uporzadkuj,
 	waliduj_regule,
+	zbuduj_wynik_sprawdzenia,
 	zdecyduj_sms,
 )
 from crm.volteo_sms import liczba_czesci_sms, waliduj_szablon, wypelnij_szablon
@@ -377,6 +381,105 @@ class TestSlady(unittest.TestCase):
 			zrodlo = f.read()
 		self.assertNotIn(chr(0x2014), zrodlo)
 		self.assertNotIn(chr(0x2013), zrodlo)
+
+
+def _r(name, handlowiec, lat, lng, promien, kolejnosc=1, aktywna=True):
+	return Regula(name, handlowiec, "Srodek " + name, "00-000", lat, lng, promien, aktywna, kolejnosc)
+
+
+class TestApiRegul(unittest.TestCase):
+	def test_grupowanie_kandydatow(self):
+		wiersze = [
+			{
+				"kod": "66-401",
+				"miejscowosc": "Gorzów",
+				"powiat": "gorzowski",
+				"wojewodztwo": "lubuskie",
+				"lat": 52.7,
+				"lng": 15.2,
+			},
+			{
+				"kod": "66-400",
+				"miejscowosc": "gorzów",
+				"powiat": "Gorzowski",
+				"wojewodztwo": "lubuskie",
+				"lat": 52.7,
+				"lng": 15.2,
+			},
+			{
+				"kod": "66-500",
+				"miejscowosc": "Gorzów",
+				"powiat": "inny",
+				"wojewodztwo": "x",
+				"lat": 52.6,
+				"lng": 15.1,
+			},
+			{"kod": "00-001", "miejscowosc": "Bez", "powiat": "p", "wojewodztwo": "x", "lat": 0, "lng": 0},
+			{"kod": "00-002", "miejscowosc": "", "powiat": "p", "wojewodztwo": "x", "lat": 52, "lng": 20},
+		]
+		wynik = grupuj_kandydatow_srodka(wiersze)
+		self.assertEqual([w["kod"] for w in wynik], ["66-400", "66-500"])
+		self.assertEqual(len(grupuj_kandydatow_srodka(wiersze, limit=1)), 1)
+		self.assertEqual(grupuj_kandydatow_srodka([]), [])
+
+	def test_liczenie_leadow(self):
+		r1 = _r("a", "u1", 52.0, 20.0, 10)
+		r2 = _r("b", "u2", None, None, 10)
+		r3 = _r("c", "u3", 52.0, 20.0, 0)
+		punkty = [(52.0, 20.0), (52.01, 20.0), (53.5, 20.0), (0, 0), (None, 1)]
+		self.assertEqual(policz_leady_w_promieniu([r1, r2, r3], punkty), {"a": 2, "b": 0, "c": 0})
+
+	def test_ostrzezenia(self):
+		self.assertEqual(ostrzezenia_reguly(None, False, False, False), ["Konto nie istnieje"])
+		self.assertEqual(ostrzezenia_reguly({"enabled": 1}, True, True, True), [])
+		self.assertEqual(
+			ostrzezenia_reguly({"enabled": 0}, False, False, False),
+			["Konto wyłączone", "Brak roli handlowca", "Brak dostępu do Leadów", "Brak numeru telefonu"],
+		)
+
+	def test_wynik_regula(self):
+		r1 = _r("a", "u1", 52.0, 20.0, 50, 1)
+		r2 = _r("b", "u2", 52.1, 20.0, 50, 2)
+		dop = dopasuj_regule(52.0, 20.0, [r1, r2])
+		w = zbuduj_wynik_sprawdzenia(
+			"00-001", {"miejscowosc": "X", "wojewodztwo": "y"}, dop, None, {"u1": "Jan K", "u2": "Ola M"}
+		)
+		self.assertTrue(w["znany"])
+		self.assertEqual(w["wynik"], "regula")
+		self.assertEqual(w["regula"]["handlowiec_nazwa"], "Jan K")
+		self.assertEqual(w["regula"]["promien_km"], 50)
+		self.assertEqual(w["odleglosc_km"], 0)
+		self.assertEqual(w["inne_pasujace"][0]["handlowiec_nazwa"], "Ola M")
+		self.assertEqual(w["inne_pasujace"][0]["odleglosc_km"], 11)
+		self.assertIsNone(w["najblizsza"])
+
+	def test_wynik_cc_z_najblizsza(self):
+		r1 = _r("a", "u1", 52.0, 20.0, 5, 3)
+		najb = najblizsza_regula(52.5, 20.0, [r1])
+		w = zbuduj_wynik_sprawdzenia("00-001", {"miejscowosc": "X", "wojewodztwo": "y"}, None, najb, {})
+		self.assertEqual(w["wynik"], "cc")
+		self.assertIsNone(w["regula"])
+		self.assertEqual(w["najblizsza"], {"kolejnosc": 3, "srodek_nazwa": "Srodek a", "odleglosc_km": 56})
+
+	def test_wynik_kod_nieznany(self):
+		w = zbuduj_wynik_sprawdzenia("99-999", None, None, None, {})
+		self.assertFalse(w["znany"])
+		self.assertEqual(w["wynik"], "cc")
+		self.assertEqual(w["miejscowosc"], "")
+		self.assertEqual(
+			set(w),
+			{
+				"kod",
+				"znany",
+				"miejscowosc",
+				"wojewodztwo",
+				"wynik",
+				"regula",
+				"odleglosc_km",
+				"inne_pasujace",
+				"najblizsza",
+			},
+		)
 
 
 if __name__ == "__main__":
