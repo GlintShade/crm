@@ -470,6 +470,15 @@ class TestApiRegul(unittest.TestCase):
 		self.assertIsNone(w["regula"])
 		self.assertEqual(w["najblizsza"], {"kolejnosc": 3, "srodek_nazwa": "Srodek a", "odleglosc_km": 56})
 
+	def test_wynik_wspolrzedne_kodu_znanego(self):
+		w = zbuduj_wynik_sprawdzenia("00-001", {"lat": "52.5", "lng": 20.25}, None, None, {})
+		self.assertEqual((w["lat"], w["lng"]), (52.5, 20.25))
+
+	def test_wynik_wspolrzedne_kodu_nieznanego(self):
+		w = zbuduj_wynik_sprawdzenia("99-999", None, None, None, {})
+		self.assertIsNone(w["lat"])
+		self.assertIsNone(w["lng"])
+
 	def test_wynik_kod_nieznany(self):
 		w = zbuduj_wynik_sprawdzenia("99-999", None, None, None, {})
 		self.assertFalse(w["znany"])
@@ -482,6 +491,8 @@ class TestApiRegul(unittest.TestCase):
 				"znany",
 				"miejscowosc",
 				"wojewodztwo",
+				"lat",
+				"lng",
 				"wynik",
 				"regula",
 				"odleglosc_km",

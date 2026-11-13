@@ -400,6 +400,8 @@ def zbuduj_wynik_sprawdzenia(
 		"znany": znany,
 		"miejscowosc": _tekst(dane_kodu.get("miejscowosc")) if dane_kodu else "",
 		"wojewodztwo": _tekst(dane_kodu.get("wojewodztwo")) if dane_kodu else "",
+		"lat": _liczba(dane_kodu.get("lat")) if dane_kodu else None,
+		"lng": _liczba(dane_kodu.get("lng")) if dane_kodu else None,
 		"wynik": "cc",
 		"regula": None,
 		"odleglosc_km": None,

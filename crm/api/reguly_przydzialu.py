@@ -24,6 +24,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, cint, now_datetime
 
+from crm.api.sms_powitalny import DOCTYPE_USTAWIEN
 from crm.api.volteo_leady import ROLA_D2D, _aktywni_d2d_reprezentanci, _waliduj_handlowca
 from crm.permissions.org_hierarchy import _ma_linie_leady
 from crm.volteo_dyzury import normalizuj_numer_pl
@@ -31,6 +32,7 @@ from crm.volteo_kod_pocztowy import normalizuj_kod
 from crm.volteo_leady_kontakt import czy_lead_z_webhooka
 from crm.volteo_reguly_przydzialu import (
 	MIN_ZNAKOW_SZUKANIA,
+	POLE_WLACZONE,
 	Regula,
 	dopasuj_regule,
 	grupuj_kandydatow_srodka,
@@ -149,6 +151,14 @@ def _konta(nazwy: list[str]) -> dict[str, dict[str, Any]]:
 	}
 
 
+def _sms_wlaczony() -> bool:
+	"""Przełącznik SMS do handlowca o leadzie bezpośrednim; brak pola albo doctype to fałsz."""
+	try:
+		return bool(cint((frappe.db.get_singles_dict(DOCTYPE_USTAWIEN) or {}).get(POLE_WLACZONE)))
+	except Exception:
+		return False
+
+
 def _lista() -> dict[str, Any]:
 	reguly = uporzadkuj(wczytaj_reguly())
 	konta = _konta(sorted({r.handlowiec for r in reguly if r.handlowiec}))
@@ -189,7 +199,7 @@ def _lista() -> dict[str, Any]:
 		for nazwa, k in konta_handlowcow.items()
 	]
 	handlowcy.sort(key=lambda h: h["full_name"].casefold())
-	return {"reguly": wynik_regul, "handlowcy": handlowcy}
+	return {"reguly": wynik_regul, "handlowcy": handlowcy, "sms_wlaczony": _sms_wlaczony()}
 
 
 def _srodek_z_kodu(srodek_kod: str) -> dict[str, Any]:
@@ -229,7 +239,8 @@ def _dokument(name: str) -> "frappe.model.document.Document":
 def lista() -> dict:
 	"""Reguły i handlowcy do wyboru.
 
-	Zwraca `{"reguly": [...], "handlowcy": [...]}`. Reguła: `name, handlowiec,
+	Zwraca `{"reguly": [...], "handlowcy": [...], "sms_wlaczony": bool}`
+	(`sms_wlaczony`: przełącznik `lead_bezposredni_wlaczone` w `Volteo SMS Ustawienia`). Reguła: `name, handlowiec,
 	handlowiec_nazwa, srodek_nazwa, srodek_kod, srodek_lat, srodek_lng, promien_km,
 	aktywna, kolejnosc, leady_30_dni, ostrzezenia` (lista tekstów: konto wyłączone,
 	brak roli D2D, brak dostępu do Leadów, brak numeru telefonu), posortowane po
@@ -388,7 +399,8 @@ def podglad_obszaru(srodek_kod: str, promien_km: int) -> dict:
 def sprawdz_kod(kod: str) -> dict:
 	"""Do kogo trafi lead z danego kodu pocztowego (nic nie zapisuje).
 
-	Zwraca `{kod, znany, miejscowosc, wojewodztwo, wynik: "regula" | "cc",
+	Zwraca `{kod, znany, miejscowosc, wojewodztwo, lat, lng (float albo None
+	dla kodu nieznanego), wynik: "regula" | "cc",
 	regula: {name, kolejnosc, handlowiec_nazwa, srodek_nazwa, promien_km} | None,
 	odleglosc_km: int | None, inne_pasujace: [{kolejnosc, handlowiec_nazwa,
 	srodek_nazwa, odleglosc_km}], najblizsza: {kolejnosc, srodek_nazwa,
