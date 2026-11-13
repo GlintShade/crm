@@ -55,7 +55,7 @@
           <Badge v-if="ofertaName" variant="subtle" theme="gray" size="sm" :label="ofertaName" />
           <Button
             v-if="mozeEdytowac && !edycja"
-            :label="__('Edytuj zestaw')"
+            :label="etykietaEdycji"
             variant="outline"
             size="sm"
             data-testid="zestaw-edytuj"
@@ -217,9 +217,24 @@
           between them is needed -- `showWycena`, `hasGroupSubsidy` and
           `hasCpFinancing` simply never agree.
         -->
-        <div v-if="showWycena" class="mt-3 w-full rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-2.5 text-sm">
+        <!--
+          Układ dwóch kolumn (ops#342): "Wycena" po lewej, "Koszty i marża" po
+          prawej, tylko gdy panel kosztów faktycznie się renderuje (czyli dla
+          administratora i szansy OZE ze snapshotem kosztów). Pozostali widzą
+          samą "Wycenę" na całą szerokość. Panel meldzuje swoją widoczność
+          zdarzeniem `widocznosc`; wąski ekran układa kolumny jedna pod drugą.
+        -->
+        <div
+          v-if="ukladOze"
+          class="mt-3 items-start gap-3"
+          :class="{ 'grid lg:grid-cols-2': ukladAdmin }"
+          :data-testid="ukladAdmin ? 'zestaw-uklad-admin' : undefined"
+        >
+        <div v-if="showWycena" class="min-w-0 w-full rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-2.5 text-sm" data-testid="zestaw-wycena">
           <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Wycena') }}</div>
 
+          <div :class="{ 'lg:grid lg:grid-cols-2 lg:gap-x-8': wycenaDwieKolumny }">
+          <div>
           <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Konfiguracja') }}</div>
           <div v-if="wycenaFields.custom_typ_klienta" class="flex justify-between py-0.5 text-ink-gray-7">
             <span>{{ __('Typ klienta') }}</span><span>{{ wycenaFields.custom_typ_klienta }}</span>
@@ -261,7 +276,10 @@
             <span>{{ __('Uzgodnienia PPOŻ') }}</span><span>{{ wycenaFields.custom_ppoz }}</span>
           </div>
 
-          <div class="mb-1 mt-1 border-t border-outline-gray-2 pt-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Cena') }}</div>
+          </div>
+
+          <div>
+          <div class="mb-1 mt-1 border-t border-outline-gray-2 pt-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5" :class="{ 'lg:mt-0 lg:border-t-0 lg:pt-0': wycenaDwieKolumny }">{{ __('Cena') }}</div>
           <div class="flex justify-between py-0.5 text-ink-gray-9">
             <span>{{ __('Cena netto') }}</span><span>{{ formatPln(wycenaFields.custom_netto) }}</span>
           </div>
@@ -341,6 +359,8 @@
               <span>{{ __('Dodatki razem') }}</span><span>{{ formatPln(wycenaFields.custom_dodatki_netto) }}</span>
             </div>
           </template>
+          </div>
+          </div>
         </div>
 
         <!--
@@ -355,17 +375,21 @@
           wiec to v-if, nie v-else-if - prostszy, niezalezny warunek, ten sam
           wzorzec co boksy CP/PV powyzej.
         -->
-        <div v-if="showWycenaOze" class="mt-3 w-full rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-2.5 text-sm">
+        <div v-if="showWycenaOze" class="min-w-0 w-full rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-2.5 text-sm" data-testid="zestaw-wycena">
           <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Wycena') }}</div>
 
+          <div :class="{ 'lg:grid lg:grid-cols-2 lg:gap-x-8': wycenaDwieKolumny && konfiguracjaOzeNowe.length }">
+          <div v-if="konfiguracjaOzeNowe.length">
           <template v-if="konfiguracjaOzeNowe.length">
             <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Konfiguracja') }}</div>
             <div v-for="wiersz in konfiguracjaOzeNowe" :key="wiersz.etykieta" class="flex justify-between py-0.5 text-ink-gray-7">
               <span>{{ wiersz.etykieta }}</span><span>{{ wiersz.wartosc }}</span>
             </div>
           </template>
+          </div>
 
-          <div class="mb-1 mt-1 border-t border-outline-gray-2 pt-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">{{ __('Cena') }}</div>
+          <div>
+          <div class="mb-1 mt-1 border-t border-outline-gray-2 pt-1 text-xs font-semibold uppercase tracking-wide text-ink-gray-5" :class="{ 'lg:mt-0 lg:border-t-0 lg:pt-0': wycenaDwieKolumny && konfiguracjaOzeNowe.length }">{{ __('Cena') }}</div>
           <div v-if="wycenaFields.custom_typ_klienta" class="flex justify-between py-0.5 text-ink-gray-7">
             <span>{{ __('Typ klienta') }}</span><span>{{ wycenaFields.custom_typ_klienta }}</span>
           </div>
@@ -398,6 +422,16 @@
           <div v-if="Number(wycenaFields.custom_ulga_pct) > 0" class="flex justify-between py-0.5 text-ink-gray-7">
             <span>{{ __('Rata po uldze') }}</span><span>{{ formatPln(wycenaFields.custom_rata_po_uldze) }} /mies.</span>
           </div>
+          </div>
+          </div>
+        </div>
+
+        <MontazKosztyPanel
+          :key="panelKlucz"
+          class="min-w-0"
+          :deal-id="dealId"
+          @widocznosc="kosztyWidoczne = $event"
+        />
         </div>
 
         <!--
@@ -477,9 +511,10 @@
       </div>
 
       <!--
-        Koszty rzeczywiste (montaż/realizacja) — admin-only panel, placed at
-        the very bottom of this tab's content (owner decision, moved here
-        from MontazTab.vue where it was originally placed by mistake). Lives
+        Koszty rzeczywiste (montaż/realizacja), panel tylko dla administratorów.
+        Szansa OZE ma go obok "Wyceny" (wyżej, w układzie dwóch kolumn); tutaj,
+        na samym dole zakładki, zostaje dla Czystego Powietrza i dla szansy bez
+        wyliczonej wyceny, jako zwijany panel jak dotąd. Lives
         outside the loading/empty/populated v-if chain above on purpose: the
         underlying snapshot (`CRM Deal.custom_koszty_json`) is independent of
         whether this deal has BOM rows to show, so the panel must still
@@ -490,7 +525,13 @@
         width) so it scrolls with the rest of the tab's content and lines up
         with the table above.
       -->
-      <MontazKosztyPanel :deal-id="dealId" />
+      <MontazKosztyPanel
+        v-if="dealWycena.data && !panelWGridzie"
+        :key="panelKlucz"
+        class="mt-4"
+        :deal-id="dealId"
+        zwijany
+      />
 
       <!--
         Strumień notatek (issue #200): na końcu zakładki, poza szerokością
@@ -528,6 +569,14 @@ const showCommission = ref(false)
 // (crm.api.zestaw) pilnuje roli i dopuszczalności edycji niezależnie.
 const { isVolteoAdmin } = usersStore()
 const jestAdminem = computed(() => isVolteoAdmin())
+// Etykieta przycisku edycji: dla OZE edytor obejmuje też koszty i marże.
+const etykietaEdycji = computed(() =>
+  dostep.data?.linia === 'cp' ? __('Edytuj zestaw') : __('Edytuj zestaw, koszty i marże'),
+)
+// Panel kosztów zgłasza, czy ma co pokazać (snapshot dostępny tylko dla administratora).
+const kosztyWidoczne = ref(false)
+// Zmiana klucza przeładowuje panel po zapisie edytora (snapshot kosztów się zmienił).
+const panelKlucz = ref(0)
 const edycja = ref(false)
 const edycjaKlucz = ref(0)
 // Bez `cache`: komponent bywa montowany wiele razy (patrz MobileDeal.vue).
@@ -566,6 +615,7 @@ async function odswiezDostep() {
 
 function poZapisie(odp) {
   edycja.value = false
+  panelKlucz.value += 1
   bom.reload()
   dealWycena.reload()
   dealSubsidy.reload()
@@ -982,6 +1032,15 @@ const showWycena = computed(() =>
   czyOzePv(wycenaFields.value.custom_rodzaj_umowy) &&
   (Number(wycenaFields.value.custom_netto) > 0 || Number(wycenaFields.value.deal_value) > 0),
 )
+
+// Szansa OZE z wyliczoną wyceną: tu stoi układ "Wycena" plus panel kosztów.
+const ukladOze = computed(() => showWycena.value || showWycenaOze.value)
+// Panel stoi w układzie dwóch kolumn tylko wtedy, gdy ten układ w ogóle się renderuje.
+const panelWGridzie = computed(() => !loading.value && rows.value.length > 0 && ukladOze.value)
+// Dwie kolumny zewnętrzne (Wycena | Koszty i marża) tylko, gdy panel jest widoczny.
+const ukladAdmin = computed(() => ukladOze.value && kosztyWidoczne.value)
+// Bez panelu kosztów "Wycena" ma całą szerokość i dzieli się na dwie kolumny wewnętrzne.
+const wycenaDwieKolumny = computed(() => !ukladAdmin.value)
 
 // "Opcje dodatkowe" (b68, PV/PV+ME/ME) - Klimatyzacja/Panele/Panele+mikro/
 // EMS Zeronest/Pstryk/Ladowarka EV. Caly podblok w szablonie jest gated na tym

@@ -1,47 +1,35 @@
 <!--
-  Zestaw tab, bottom of content, admin-only actual-cost panel. The file is
-  named for the domain it covers (koszty montażu/realizacji: installation/
-  fulfilment costs), NOT for the tab it renders in: it is mounted at the
-  very bottom of ZestawTab.vue's template (owner decision: an earlier
-  version of this panel briefly lived in MontazTab.vue by mistake and was
-  moved here; keep that history in mind if you go looking for it in the
-  wrong tab). Reads the planned cost snapshot persisted by the calculator
-  that created the deal (`CRM Deal.custom_koszty_json`, permlevel 2), lets
-  an admin type in the real post-installation cost per line (or leave it
-  blank to keep using the plan), add extra unplanned cost positions, and
-  see the resulting marża/zysk update live before saving.
+  Zestaw tab, panel "Koszty i marża" (tylko administratorzy). Nazwa pliku
+  odnosi się do DOMENY (koszty montażu/realizacji), nie do zakładki. Od ops#342
+  panel stoi obok boksu "Wycena" (OZE) i jest zawsze rozwinięty; dla Czystego
+  Powietrza (prop `zwijany`) zostaje zwijanym panelem pod treścią zakładki, jak
+  dotąd. Czyta snapshot planowanych kosztów zapisany przez kalkulator
+  (`CRM Deal.custom_koszty_json`, permlevel 2), pozwala administratorowi wpisać
+  rzeczywisty koszt każdej linii (puste = wg planu), dodać nieplanowane pozycje
+  i widzieć marżę/zysk na żywo przed zapisem. Koszty planowane i składniki
+  marży edytuje wspólny edytor zestawu (ZestawEdycja.vue); tu są tylko do
+  odczytu, razem z dopiskiem "Pierwotnie", gdy wartość była zmieniana ręcznie.
 
-  Renders NOTHING when there is no usable snapshot: `custom_koszty_json` is
-  permlevel 2, so Frappe silently drops the key from the get_value response
-  for any role without read access to it (see ZestawTab.vue's own
-  dealSubsidy fetch, a few components up in the same file, for the same
-  pattern, verified empirically for this codebase), there is no error,
-  just an absent key. A pre-b49 deal (created before this snapshot existed)
-  or a parse failure look identical from here: `null`, no panel, no console
-  noise. Deliberately mounted outside ZestawTab's loading/empty/populated
-  v-if chain, so it still renders for a deal with no BOM rows to show, the
-  snapshot this panel reads is unrelated to whether the BOM itself is
-  populated. This is a display+edit surface only; the server
-  (`crm.api.koszty.volteo_koszty_zapisz`) is the sole source of truth once
-  saved and re-derives every figure from what was actually sent, never from
-  what this component displayed.
+  Nie renderuje NIC, gdy nie ma użytecznego snapshotu: `custom_koszty_json`
+  jest permlevel 2, więc Frappe po cichu pomija klucz w odpowiedzi dla ról bez
+  odczytu (brak błędu, brak klucza). Deal sprzed b49 i błąd parsowania wyglądają
+  tak samo: `null`, brak panelu, brak szumu w konsoli. O tym, czy panel jest
+  widoczny, rodzic dowiaduje się z zdarzenia `widocznosc` (potrzebuje tego do
+  wyboru układu dwóch kolumn). Zapis (`crm.api.koszty.volteo_koszty_zapisz`)
+  jest autorytatywny po stronie serwera, ten komponent tylko wyświetla i edytuje.
 
-  All the live math (fallback to plan, delta, marża/zysk) is display-only
-  and lives in `@/utils/montazKoszty.js`; see that file's header for why
-  Number (not Decimal) is fine here.
+  Cała arytmetyka na żywo (fallback do planu, różnica, marża/zysk) jest
+  wyłącznie prezentacyjna i mieszka w `@/utils/montazKoszty.js`.
 
-  Reactive state is declared up front with explicit `null`/`{}`/`[]`
-  defaults and is always REPLACED wholesale (`x.value = newThing`), never
-  read via `hasOwnProperty`/`in`; see the header comment in
-  DokumentyLista.vue and the trap writeup in ZestawTab.vue: a `computed`
-  built on a `hasOwnProperty` read against a `reactive()`/`ref()` object
-  registers no dependency and freezes at first evaluation. Plain property
-  `get`/`set` (as used throughout this file) is unaffected; only the
-  presence-check traps are the problem.
+  Stan reaktywny deklarowany z góry z jawnymi `null`/`{}`/`[]` i zawsze
+  ZASTĘPOWANY w całości, nigdy czytany przez `hasOwnProperty`/`in` (computed
+  zbudowany na takim odczycie na obiekcie reaktywnym zamarza po pierwszym
+  przeliczeniu).
 -->
 <template>
-  <div v-if="snapshot" class="mt-4">
+  <div v-if="snapshot" data-testid="koszty-panel">
     <button
+      v-if="zwijany"
       type="button"
       class="flex w-full items-center justify-between rounded-md border border-outline-amber-3 bg-surface-amber-2 px-2.5 py-1.5 text-sm font-semibold text-ink-amber-8 transition-colors hover:bg-surface-amber-3"
       @click="expanded = !expanded"
@@ -50,52 +38,35 @@
       <FeatherIcon :name="expanded ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 text-ink-amber-8" />
     </button>
 
-    <div v-show="expanded" class="mt-2 rounded-lg border border-dashed border-outline-amber-3 bg-surface-amber-2 p-3">
-      <!-- Ślad ręcznej edycji zestawu (ops#273) -->
-      <div
-        v-if="edycjaReczna"
-        class="mb-3 rounded-md border border-outline-amber-3 bg-surface-amber-3 px-2.5 py-2 text-xs text-ink-amber-8"
-        data-testid="koszty-edycja-reczna"
-      >
+    <div
+      v-show="expanded"
+      class="rounded-lg border border-dashed border-outline-amber-3 bg-surface-amber-2 p-3"
+      :class="{ 'mt-2': zwijany }"
+    >
+      <div v-if="!zwijany" class="mb-3 flex flex-wrap items-baseline justify-between gap-x-3">
+        <div class="text-xs font-semibold uppercase tracking-wide text-ink-amber-8">{{ __('Koszty i marża') }}</div>
+        <div class="text-xs text-ink-amber-8">{{ __('widoczne tylko dla administratorów') }}</div>
+      </div>
+
+      <!-- Ślady ręcznych edycji (zestaw, koszty planowane, marże): krótkie linie tekstu -->
+      <div v-if="edycjaReczna" class="mb-1.5 text-xs text-ink-amber-8" data-testid="koszty-edycja-reczna">
         {{ edycjaReczna.tekst }}
       </div>
-
-      <!-- Ślad edycji kosztów planowanych (ops#335) -->
-      <div
-        v-if="edycjaPlanuTekst"
-        class="mb-3 rounded-md border border-outline-amber-3 bg-surface-amber-3 px-2.5 py-2 text-xs text-ink-amber-8"
-        data-testid="koszty-edycja-planu"
-      >
+      <div v-if="edycjaPlanuTekst" class="mb-1.5 text-xs text-ink-amber-8" data-testid="koszty-edycja-planu">
         {{ edycjaPlanuTekst }}
       </div>
-
-      <!-- Przełącznik trybu edycji kosztów planowanych (tylko OZE) -->
-      <div v-if="mozeEdytowacPlan && !trybPlanu" class="mb-3 flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          :label="__('Edytuj koszty planowane')"
-          :disabled="saving || rzeczywisteZmienione || trybMarz"
-          data-testid="koszty-edytuj-plan"
-          @click="rozpocznijEdycjePlanu"
-        />
-        <span v-if="rzeczywisteZmienione" class="text-xs text-ink-gray-5">
-          {{ __('Najpierw zapisz koszty rzeczywiste albo cofnij zmiany.') }}
-        </span>
-      </div>
-      <div v-if="trybPlanu" class="mb-3 rounded-md border border-outline-amber-3 bg-surface-amber-3 px-2.5 py-2 text-xs text-ink-amber-8" data-testid="koszty-tryb-planu">
-        {{ __('Tryb edycji kosztów planowanych: koszty rzeczywiste są chwilowo zablokowane.') }}
+      <div v-if="edycjaMarzyTekst" class="mb-1.5 text-xs text-ink-amber-8" data-testid="koszty-edycja-marz">
+        {{ edycjaMarzyTekst }}
       </div>
 
       <!-- Cost lines -->
-      <div class="mk-head">
+      <div class="mk-head mt-2">
         <div>{{ __('Pozycja') }}</div>
         <div>{{ __('Koszt plan') }}</div>
-        <div>{{ __('Koszt rzeczywisty') }}</div>
-        <div>{{ __('Różnica') }}</div>
+        <div>{{ __('Rzeczywisty') }}</div>
       </div>
 
-      <div v-for="linia in wynik.linie" :key="linia.klucz" class="mk-row">
+      <div v-for="linia in widoczneLinie" :key="linia.klucz" class="mk-row">
         <div class="mk-cell mk-cell-label">
           <div class="font-medium text-ink-gray-8">{{ linia.etykieta }}</div>
           <div v-if="linia.ilosc || linia.netto !== null" class="text-xs text-ink-gray-5">
@@ -106,37 +77,9 @@
         </div>
 
         <div class="mk-cell tabular-nums">
-          <span class="mk-mobile-label">{{ __('Koszt plan') }}: </span>
-          <template v-if="trybPlanu && !linia.czyKorekta">
-            <input
-              type="text"
-              inputmode="decimal"
-              class="mk-input"
-              :class="{ 'mk-input-zmieniony': planLinia(linia.klucz)?.zmieniona }"
-              :value="edycjePlanu[linia.klucz]"
-              :disabled="saving"
-              :data-testid="`koszt-plan-${linia.klucz}`"
-              @input="edycjePlanu[linia.klucz] = $event.target.value"
-            />
-          </template>
-          <template v-else-if="trybPlanu && linia.czyKorekta">
-            {{ formatPln(plan.korekta) }}
-            <button type="button" class="mk-link" :disabled="saving || !plan.korektaIstnieje" @click="usunKorekte = !usunKorekte">
-              {{ usunKorekte ? __('Zostaw korektę') : __('Usuń korektę') }}
-            </button>
-          </template>
-          <template v-else>{{ formatPln(linia.kosztPlan) }}</template>
-          <div v-if="pierwotnyLinii(linia) !== null" class="mk-pierwotny">
-            {{ __('pierwotnie') }} {{ formatPln(pierwotnyLinii(linia)) }}
-            <button
-              v-if="trybPlanu && !linia.czyKorekta"
-              type="button"
-              class="mk-link"
-              :disabled="saving"
-              @click="przywrocPierwotny(linia.klucz)"
-            >
-              {{ __('Przywróć') }}
-            </button>
+          <span class="mk-mobile-label">{{ __('Koszt plan') }}: </span>{{ formatPln(linia.kosztPlan) }}
+          <div v-if="!linia.czyKorekta && linia.kosztPlanPierwotny !== null" class="mk-pierwotny">
+            {{ __('Pierwotnie') }}: {{ formatPln(linia.kosztPlanPierwotny) }}
           </div>
         </div>
 
@@ -144,23 +87,29 @@
           <span class="mk-badge">{{ __('wg planu') }}</span>
         </div>
         <div v-else class="mk-cell">
-          <span class="mk-mobile-label">{{ __('Koszt rzeczywisty') }}: </span>
+          <span class="mk-mobile-label">{{ __('Rzeczywisty') }}: </span>
           <input
             type="text"
             inputmode="decimal"
             class="mk-input"
             :value="edycje[linia.klucz]"
             :placeholder="formatPlnAmount(linia.kosztPlan)"
-            :disabled="saving || trybPlanu"
+            :disabled="saving"
             @input="edycje[linia.klucz] = $event.target.value"
           />
           <span v-if="linia.wgPlanu" class="mk-badge">{{ __('wg planu') }}</span>
         </div>
-
-        <div class="mk-cell tabular-nums" :class="deltaClass(linia.delta)">
-          <span class="mk-mobile-label">{{ __('Różnica') }}: </span>{{ formatDelta(linia.delta) }}
-        </div>
       </div>
+
+      <button
+        v-if="puste.length"
+        type="button"
+        class="mk-link mk-puste"
+        data-testid="koszty-puste-pozycje"
+        @click="pokazPuste = !pokazPuste"
+      >
+        {{ pokazPuste ? __('Ukryj puste pozycje') : __('Pokaż {0} pustych pozycji', [puste.length]) }}
+      </button>
 
       <!-- Extra cost positions -->
       <div class="mk-section">
@@ -172,7 +121,7 @@
             class="mk-input mk-input-nazwa"
             :value="wiersz.nazwa"
             :placeholder="__('Nazwa pozycji')"
-            :disabled="saving || trybPlanu"
+            :disabled="saving"
             @input="ustawNazwaDodatkowa(indeks, $event.target.value)"
           />
           <input
@@ -181,50 +130,30 @@
             class="mk-input mk-input-kwota"
             :value="wiersz.kwota"
             placeholder="0,00"
-            :disabled="saving || trybPlanu"
+            :disabled="saving"
             @input="ustawKwoteDodatkowa(indeks, $event.target.value)"
           />
           <button
             type="button"
             class="mk-remove"
             :aria-label="__('Usuń pozycję')"
-            :disabled="saving || trybPlanu"
+            :disabled="saving"
             @click="usunDodatkowa(indeks)"
           >
             <FeatherIcon name="x" class="h-3.5 w-3.5" />
           </button>
         </div>
-        <Button variant="outline" size="sm" :label="__('Dodaj pozycję')" :disabled="saving || trybPlanu" @click="dodajDodatkowa" />
+        <Button variant="outline" size="sm" :label="__('Dodaj pozycję')" :disabled="saving" @click="dodajDodatkowa" />
       </div>
 
-      <!-- PV i OZE: składniki marży planowej (edycja ops#339) -->
-      <div v-if="['pv', 'oze'].includes(snapshot.linia_produktowa) && skladnikiMarzy.length" class="mk-section">
+      <!-- PV i OZE: składniki marży planowej (tylko do odczytu) -->
+      <div v-if="czyOze && skladnikiMarzy.length" class="mk-section">
         <div class="mk-section-title">{{ __('Składniki marży planowej') }}</div>
-        <div v-if="edycjaMarzyTekst" class="mb-2 text-xs text-ink-amber-8" data-testid="koszty-edycja-marz">
-          {{ edycjaMarzyTekst }}
-        </div>
-        <div v-for="skl in skladnikiMarzyWidok" :key="skl.klucz" class="mk-skladnik-row">
+        <div v-for="skl in marze.skladniki" :key="skl.klucz" class="mk-skladnik-row">
           <span>{{ skl.etykieta }}</span>
           <span class="tabular-nums">
-            <template v-if="trybMarz">
-              <input
-                type="text"
-                inputmode="decimal"
-                class="mk-input mk-input-suma"
-                :class="{ 'mk-input-zmieniony': skl.zmieniony }"
-                :value="edycjeMarz[skl.klucz]"
-                :disabled="saving"
-                :data-testid="`koszty-marza-${skl.klucz}`"
-                @input="edycjeMarz[skl.klucz] = $event.target.value"
-              />
-            </template>
-            <template v-else>{{ formatPln(skl.kwotaNowa) }}</template>
-            <span v-if="skl.pierwotny !== null" class="mk-pierwotny">
-              {{ __('Pierwotnie') }}: {{ formatPln(skl.pierwotny) }}
-              <button v-if="trybMarz" type="button" class="mk-link" :disabled="saving" @click="przywrocSkladnik(skl.klucz)">
-                {{ __('Przywróć') }}
-              </button>
-            </span>
+            {{ formatPln(skl.kwotaNowa) }}
+            <span v-if="skl.pierwotny !== null" class="mk-pierwotny">{{ __('Pierwotnie') }}: {{ formatPln(skl.pierwotny) }}</span>
           </span>
         </div>
         <div class="mk-skladnik-row">
@@ -237,71 +166,15 @@
             {{ formatPln(marze.nierozdzielona) }}
           </span>
         </div>
-        <div class="mk-actions">
-          <Button
-            v-if="!trybMarz"
-            variant="outline"
-            size="sm"
-            :label="__('Edytuj marże')"
-            :disabled="saving || trybPlanu"
-            data-testid="koszty-marze-edytuj"
-            @click="rozpocznijEdycjeMarz"
-          />
-          <template v-else>
-            <span v-if="marze.bledy.length" class="mk-actions-hint">{{ marze.bledy[0] }}</span>
-            <Button variant="outline" size="sm" :disabled="saving" :label="__('Anuluj')" @click="zakonczEdycjeMarz" />
-            <Button
-              variant="solid"
-              size="sm"
-              :loading="saving"
-              :disabled="saving || marze.bledy.length > 0 || !marzeMajaZmiany"
-              :label="__('Zapisz marże')"
-              data-testid="koszty-marze-zapisz"
-              @click="zapiszMarze"
-            />
-          </template>
-        </div>
       </div>
 
       <!-- Errors -->
-      <ul v-if="bledyWidoczne.length" class="mk-errors">
-        <li v-for="(blad, i) in bledyWidoczne" :key="i">{{ blad }}</li>
+      <ul v-if="wynik.bledy.length" class="mk-errors">
+        <li v-for="(blad, i) in wynik.bledy" :key="i">{{ blad }}</li>
       </ul>
 
-      <!-- Podsumowanie w trybie edycji kosztów planowanych -->
-      <div v-if="trybPlanu" class="mk-summary" data-testid="koszty-podsumowanie-planu">
-        <div class="mk-summary-row">
-          <span>{{ __('Netto') }}</span><span class="tabular-nums">{{ formatPln(plan.razem.netto) }}</span>
-        </div>
-        <div class="mk-summary-row">
-          <span>{{ __('Koszt (plan)') }}</span>
-          <input
-            type="text"
-            inputmode="decimal"
-            class="mk-input mk-input-suma"
-            :value="sumaPlanuWyswietlana"
-            :disabled="saving"
-            data-testid="koszt-plan-suma"
-            @input="sumaPlanuWpis = $event.target.value"
-          />
-        </div>
-        <div v-if="plan.roznicaSumy !== 0" class="mk-summary-footer" data-testid="koszty-roznica-sumy">
-          {{ __('Różnica') }} {{ formatDelta(plan.roznicaSumy) }}
-          {{ __('trafi do wiersza „Korekta sumy kosztów planowanych”.') }}
-        </div>
-        <div class="mk-summary-row">
-          <span>{{ __('Marża (plan)') }}</span><span class="tabular-nums">{{ formatPln(plan.razem.marzaPlan) }}</span>
-        </div>
-        <div v-if="plan.razem.prowizjaPlan !== null" class="mk-summary-row">
-          <span>{{ __('Prowizja (plan)') }}</span><span class="tabular-nums">{{ formatPln(plan.razem.prowizjaPlan) }}</span>
-        </div>
-        <div class="mk-summary-row mk-summary-highlight">
-          <span>{{ __('Zysk (plan)') }}</span><span class="tabular-nums font-semibold">{{ formatPln(plan.razem.zyskPlan) }}</span>
-        </div>
-      </div>
-
       <!-- Summary -->
-      <div v-else class="mk-summary">
+      <div class="mk-summary">
         <div class="mk-summary-row">
           <span>{{ __('Netto') }}</span><span class="tabular-nums">{{ formatPln(wynik.razem.netto) }}</span>
         </div>
@@ -340,19 +213,7 @@
         </div>
       </div>
 
-      <div v-if="trybPlanu" class="mk-actions">
-        <span v-if="plan.bledy.length" class="mk-actions-hint">{{ __('Popraw błędy powyżej, aby zapisać') }}</span>
-        <Button variant="outline" :disabled="saving" :label="__('Anuluj')" data-testid="koszty-plan-anuluj" @click="anulujEdycjePlanu" />
-        <Button
-          variant="solid"
-          :loading="saving"
-          :disabled="saving || plan.bledy.length > 0 || !planMaZmiany"
-          :label="__('Zapisz koszty planowane')"
-          data-testid="koszty-plan-zapisz"
-          @click="zapiszPlan"
-        />
-      </div>
-      <div v-else class="mk-actions">
+      <div class="mk-actions">
         <span v-if="wynik.bledy.length" class="mk-actions-hint">{{ __('Popraw błędy powyżej, aby zapisać') }}</span>
         <Button
           variant="solid"
@@ -376,46 +237,28 @@ import {
   parseSnapshot,
   przeliczRzeczywiste,
   zbudujPayload,
-  czyEdytowalnyPlan,
-  edycjePlanuStart,
-  przeliczPlan,
-  zbudujPayloadPlanu,
-  czyPayloadPlanuMaZmiany,
-  czyZmienioneRzeczywiste,
-  skladnikiMarzyStart,
   przeliczSkladnikiMarzy,
-  zbudujPayloadMarz,
-  czyPayloadMarzMaZmiany,
 } from '@/utils/montazKoszty'
 
 const props = defineProps({
   dealId: { type: String, required: true },
+  // Czyste Powietrze: panel zostaje zwijany (domyślnie zwinięty), jak dotąd.
+  zwijany: { type: Boolean, default: false },
 })
+const emit = defineEmits(['widocznosc'])
 
-// --- State (declared up front, always replaced wholesale, never mutated
-// in place beyond a single leaf key/value set, and never read via
-// hasOwnProperty/in; see header comment above). --------------------------
+// --- State (declared up front, always replaced wholesale) -----------------
 const snapshot = ref(null) // parsed custom_koszty_json, or null (see header)
 const edycje = ref({}) // klucz -> raw typed "koszt rzeczywisty" string
 const dodatkowe = ref([]) // [{id?, nazwa, kwota}], raw, in-progress
-const expanded = ref(false) // collapsed by default (screenshare-safe, mirrors KalkulatorTab.vue)
+const expanded = ref(!props.zwijany) // zawsze rozwinięty, poza trybem zwijanym (CP)
 const saving = ref(false)
-// Tryb edycji kosztów PLANOWANYCH (ops#335): wzajemnie wyłączny z edycją
-// kosztów rzeczywistych (jeden zapis na raz).
-const trybPlanu = ref(false)
-const edycjePlanu = ref({}) // klucz -> wpisany koszt planowany
-const sumaPlanuWpis = ref(null) // wpisana suma planu albo null (nie ruszana)
-const usunKorekte = ref(false)
-// Tryb edycji składników marży planowej (ops#339): wzajemnie wyłączny z trybem planu.
-const trybMarz = ref(false)
-const edycjeMarz = ref({}) // klucz -> wpisana kwota składnika
+const pokazPuste = ref(false)
 
 // --- Load -------------------------------------------------------------------
 // Permlevel-2 field: Frappe drops `custom_koszty_json` from the response
 // entirely for any role without read access, so a non-admin's fetch
-// SUCCEEDS with the key simply absent; there is no error path to handle
-// here for the "not an admin" case, only for genuine fetch failures, and
-// both end up rendering nothing (parseSnapshot(undefined) -> null).
+// SUCCEEDS with the key simply absent (parseSnapshot(undefined) -> null).
 createResource({
   url: 'frappe.client.get_value',
   params: {
@@ -434,13 +277,12 @@ createResource({
 
 /**
  * Replace the local editable state wholesale from a fresh snapshot (initial
- * load, or the server's response after a successful save). Never mutates
- * the previous state in place.
+ * load, or the server's response after a successful save).
  */
 function seedFromSnapshot(nowySnapshot) {
   snapshot.value = nowySnapshot
-  zakonczEdycjePlanu()
-  zakonczEdycjeMarz()
+  // Rodzic wybiera układ dwóch kolumn po tym, czy panel ma co pokazać.
+  emit('widocznosc', Boolean(nowySnapshot))
 
   const edycjeInit = {}
   for (const linia of nowySnapshot?.linie || []) {
@@ -458,6 +300,16 @@ function seedFromSnapshot(nowySnapshot) {
 // --- Derived / display --------------------------------------------------
 const wynik = computed(() => przeliczRzeczywiste(snapshot.value, edycje.value, dodatkowe.value))
 const { getUser } = usersStore()
+const czyOze = computed(() => ['pv', 'oze'].includes(snapshot.value?.linia_produktowa))
+
+// Linie z kosztem planowanym 0,00 i bez kosztu rzeczywistego chowamy pod
+// odnośnikiem (tylko OZE; panel CP wygląda jak dotąd).
+const puste = computed(() =>
+  czyOze.value ? wynik.value.linie.filter((l) => !l.czyKorekta && l.kosztPlan === 0 && l.kosztRzeczywisty === null) : [],
+)
+const widoczneLinie = computed(() =>
+  pokazPuste.value ? wynik.value.linie : wynik.value.linie.filter((l) => !puste.value.includes(l)),
+)
 
 // Baner ręcznej edycji zestawu (ops#273): czytany wprost ze snapshotu, jawny
 // null, bez mutacji. Powód pomijany, gdy pusty; osoba: pełne imię albo e-mail.
@@ -478,59 +330,6 @@ const edycjaReczna = computed(() => {
   return { tekst }
 })
 
-// --- Edycja kosztów planowanych (ops#335) --------------------------------
-const mozeEdytowacPlan = computed(() => czyEdytowalnyPlan(snapshot.value))
-const rzeczywisteZmienione = computed(() => czyZmienioneRzeczywiste(snapshot.value, edycje.value, dodatkowe.value))
-const plan = computed(() =>
-  przeliczPlan(snapshot.value, edycjePlanu.value, sumaPlanuWpis.value, usunKorekte.value),
-)
-const payloadPlanu = computed(() =>
-  zbudujPayloadPlanu(snapshot.value, edycjePlanu.value, sumaPlanuWpis.value, usunKorekte.value),
-)
-const planMaZmiany = computed(() => czyPayloadPlanuMaZmiany(payloadPlanu.value))
-const bledyWidoczne = computed(() => (trybPlanu.value ? plan.value.bledy : wynik.value.bledy))
-// Dopóki pole sumy nie było ruszone, pokazuje sumę po zmianach linii.
-const sumaPlanuWyswietlana = computed(() =>
-  sumaPlanuWpis.value !== null ? sumaPlanuWpis.value : plan.value.razem.sumaPoLiniach.toFixed(2),
-)
-const planLiniiMapa = computed(() => {
-  const mapa = {}
-  for (const l of plan.value.linie) mapa[l.klucz] = l
-  return mapa
-})
-function planLinia(klucz) {
-  return planLiniiMapa.value[klucz]
-}
-// Wartość pierwotna do pokazania: w trybie planu z podglądu (uwzględnia niezapisaną zmianę),
-// poza nim z zapisanego snapshotu.
-function pierwotnyLinii(linia) {
-  if (linia.czyKorekta) return null
-  if (trybPlanu.value) return planLinia(linia.klucz)?.pierwotny ?? null
-  return linia.kosztPlanPierwotny
-}
-function przywrocPierwotny(klucz) {
-  const pierwotny = planLinia(klucz)?.pierwotny
-  if (pierwotny == null) return
-  edycjePlanu.value = { ...edycjePlanu.value, [klucz]: pierwotny.toFixed(2) }
-}
-function rozpocznijEdycjePlanu() {
-  if (!mozeEdytowacPlan.value || rzeczywisteZmienione.value || saving.value || trybMarz.value) return
-  edycjePlanu.value = edycjePlanuStart(snapshot.value)
-  sumaPlanuWpis.value = null
-  usunKorekte.value = false
-  trybPlanu.value = true
-}
-function zakonczEdycjePlanu() {
-  trybPlanu.value = false
-  edycjePlanu.value = {}
-  sumaPlanuWpis.value = null
-  usunKorekte.value = false
-}
-function anulujEdycjePlanu() {
-  if (saving.value) return
-  zakonczEdycjePlanu()
-}
-
 // Baner ostatniej edycji planu: kto, kiedy, pierwotna suma planu (bez śladu, gdy brak).
 const edycjaPlanuTekst = computed(() => {
   const ed = snapshot.value?.edycja_planu ?? null
@@ -543,27 +342,10 @@ const edycjaPlanuTekst = computed(() => {
     `${Number.isFinite(pierwotna) ? '. ' + __('Pierwotna suma kosztów planowanych') + ': ' + formatPln(pierwotna) : ''}.`
   )
 })
-const skladnikiMarzy = computed(() => snapshot.value?.skladniki_marzy || [])
 
-// --- Edycja składników marży planowej (ops#339) -------------------------
-const marze = computed(() => przeliczSkladnikiMarzy(snapshot.value, trybMarz.value ? edycjeMarz.value : {}))
-const skladnikiMarzyWidok = computed(() => marze.value.skladniki)
-const payloadMarz = computed(() => zbudujPayloadMarz(snapshot.value, edycjeMarz.value))
-const marzeMajaZmiany = computed(() => czyPayloadMarzMaZmiany(payloadMarz.value))
-function rozpocznijEdycjeMarz() {
-  if (!snapshot.value || saving.value || trybPlanu.value) return
-  edycjeMarz.value = skladnikiMarzyStart(snapshot.value)
-  trybMarz.value = true
-}
-function zakonczEdycjeMarz() {
-  trybMarz.value = false
-  edycjeMarz.value = {}
-}
-function przywrocSkladnik(klucz) {
-  const pierwotny = marze.value.skladniki.find((s) => s.klucz === klucz)?.pierwotny
-  if (pierwotny == null) return
-  edycjeMarz.value = { ...edycjeMarz.value, [klucz]: pierwotny.toFixed(2) }
-}
+const skladnikiMarzy = computed(() => snapshot.value?.skladniki_marzy || [])
+// Składniki marży tylko do odczytu: bez wpisanych zmian (edycję robi wspólny edytor zestawu).
+const marze = computed(() => przeliczSkladnikiMarzy(snapshot.value, {}))
 const edycjaMarzyTekst = computed(() => {
   const ed = snapshot.value?.edycja_marzy ?? null
   if (!ed) return ''
@@ -574,17 +356,6 @@ const edycjaMarzyTekst = computed(() => {
 
 function jednostkaLabel(jednostka) {
   return jednostka === 'm2' ? 'm²' : jednostka || ''
-}
-
-function formatDelta(delta) {
-  const formatted = formatPln(delta)
-  return delta > 0 ? `+${formatted}` : formatted
-}
-
-function deltaClass(delta) {
-  if (delta > 0) return 'text-ink-red-6'
-  if (delta < 0) return 'text-ink-green-6'
-  return 'text-ink-gray-6'
 }
 
 // Actual vs plan comparison for the summary highlight rows: a lower actual
@@ -612,18 +383,11 @@ function ustawKwoteDodatkowa(indeks, wartosc) {
 
 // --- Save ---------------------------------------------------------------
 // Full dotted path is mandatory: crm.api.koszty is a whitelisted fork API
-// method, not a Server Script, and a bare method name resolves only for
-// Server Scripts (see the api-call-path trap documented in UmowaTab.vue:
-// AudytTab.vue's Server Script calls by bare name look like a valid pattern
-// to copy here and silently are not, producing an HTTP 417 at runtime).
+// method, not a Server Script (a bare name resolves only for Server Scripts).
 async function zapiszKoszty() {
-  // Belt and braces alongside the disabled-button binding above (guards
-  // Enter-key submits and any other path that bypasses the button's
-  // :disabled state): a garbage/negative line value would silently CLEAR a
-  // previously saved actual (zbudujPayload sends null for it), and an
-  // invalid/over-length dodatkowa row would silently DROP a previously
-  // saved row from the full-replacement payload. Never save while `bledy`
-  // is non-empty.
+  // Belt and braces alongside the disabled-button binding above: never save
+  // while `bledy` is non-empty (a garbage value would silently CLEAR a saved
+  // actual, an invalid row would silently DROP a saved extra row).
   if (!snapshot.value || saving.value || wynik.value.bledy.length) return
   saving.value = true
   try {
@@ -642,54 +406,11 @@ async function zapiszKoszty() {
   }
 }
 
-async function zapiszPlan() {
-  if (!snapshot.value || saving.value || plan.value.bledy.length || !planMaZmiany.value) return
-  saving.value = true
-  try {
-    const payload = payloadPlanu.value
-    const data = await call('crm.api.koszty.volteo_koszty_plan_zapisz', {
-      deal: props.dealId,
-      koszty_plan: payload.koszty_plan,
-      suma_plan: payload.suma_plan,
-    })
-    seedFromSnapshot(parseSnapshot(data?.koszty))
-    toast.success(__('Zapisano koszty planowane'))
-  } catch (err) {
-    toast.error(extractErrorMessage(err, __('Nie udało się zapisać kosztów planowanych')))
-  } finally {
-    saving.value = false
-  }
-}
-
-async function zapiszMarze() {
-  if (!snapshot.value || saving.value || marze.value.bledy.length || !marzeMajaZmiany.value) return
-  saving.value = true
-  try {
-    const data = await call('crm.api.koszty.volteo_koszty_marze_zapisz', {
-      deal: props.dealId,
-      skladniki: payloadMarz.value.skladniki,
-    })
-    seedFromSnapshot(parseSnapshot(data?.koszty))
-    toast.success(__('Zapisano składniki marży'))
-  } catch (err) {
-    toast.error(extractErrorMessage(err, __('Nie udało się zapisać składników marży')))
-  } finally {
-    saving.value = false
-  }
-}
-
-// Copied verbatim from the extractErrorMessage() pattern used across the
-// deal tabs (useAutenti.js, KredytTab.vue, UmowaTab.vue, ...), but that
-// pattern was blind to the actual shape of errors thrown by frappe-ui's
-// call() (see frontend/node_modules/frappe-ui/src/utils/frappeRequest.js
-// ~L82-124): call() consumes _server_messages itself and re-throws an
-// error whose `message` is just "{url} {exc_type}" and whose `messages` is
-// the already-parsed array of server message strings (the Polish text
-// lives there, not under `_server_messages`/`exception`). Without the
-// `err.messages` branch below, the name-mismatch ValidationError always
-// fell through to the raw "{url} {exc_type}" fallback instead of the
-// server's Polish message. The old `_server_messages`/`exception` branches
-// are kept as a fallback for any caller that isn't call().
+// frappe-ui call() consumes _server_messages itself and re-throws an error
+// whose `message` is just "{url} {exc_type}" and whose `messages` is the
+// already-parsed array of server message strings (the Polish text lives
+// there). The older `_server_messages`/`exception` branches stay as a
+// fallback for any caller that isn't call().
 function extractErrorMessage(err, domyslny = __('Nie udało się zapisać kosztów rzeczywistych')) {
   try {
     if (err?.messages?.length && err.messages[0]) return err.messages[0]
@@ -704,7 +425,6 @@ function extractErrorMessage(err, domyslny = __('Nie udało się zapisać koszt�
       const parts = String(err.exception).split(': ')
       return parts[parts.length - 1] || domyslny
     }
-    if (err && err.messages && err.messages.length) return err.messages[0]
     if (err && err.message) return err.message
   } catch (e) {
     /* fall through */
@@ -724,7 +444,7 @@ function extractErrorMessage(err, domyslny = __('Nie udało się zapisać koszt�
    commission-modeling sandbox. */
 .mk-head {
   display: grid;
-  grid-template-columns: minmax(160px, 2fr) minmax(90px, 1fr) minmax(150px, 1fr) minmax(90px, 1fr);
+  grid-template-columns: minmax(120px, 2fr) minmax(90px, 1fr) minmax(120px, 1fr);
   gap: 6px 12px;
   padding-bottom: 6px;
   font-size: 11px;
@@ -735,7 +455,7 @@ function extractErrorMessage(err, domyslny = __('Nie udało się zapisać koszt�
 }
 .mk-row {
   display: grid;
-  grid-template-columns: minmax(160px, 2fr) minmax(90px, 1fr) minmax(150px, 1fr) minmax(90px, 1fr);
+  grid-template-columns: minmax(120px, 2fr) minmax(90px, 1fr) minmax(120px, 1fr);
   gap: 6px 12px;
   align-items: center;
   padding: 8px 0;
@@ -771,15 +491,8 @@ function extractErrorMessage(err, domyslny = __('Nie udało się zapisać koszt�
   cursor: not-allowed;
   opacity: 0.65;
 }
-.mk-input-zmieniony {
-  border-color: var(--outline-amber-3);
-  background: var(--surface-amber-2);
-}
-.mk-input-suma {
-  max-width: 130px;
-  text-align: right;
-}
 .mk-pierwotny {
+  margin-left: 6px;
   margin-top: 2px;
   font-size: 11px;
   color: var(--ink-gray-5);
@@ -793,9 +506,9 @@ function extractErrorMessage(err, domyslny = __('Nie udało się zapisać koszt�
 .mk-link:hover {
   color: var(--ink-gray-8);
 }
-.mk-link:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
+.mk-puste {
+  display: block;
+  margin: 8px 0 0;
 }
 .mk-badge {
   margin-left: 6px;
