@@ -407,6 +407,7 @@ import {
   stanZOdpowiedzi,
   usunWiersz,
   wierszeKomunikatow,
+  zastosujCeneZSerwera,
   zastosujPropozycje,
   nowyZestawTyp,
   zmienPoleCeny,
@@ -468,10 +469,18 @@ const producentZmieniony = computed(
 )
 const maKonfiguracje = computed(() => Object.keys(props.dostep.konfiguracja || {}).length > 0)
 
-const poleCenyWejscie = POLA_CENY_WEJSCIE.map((klucz) => ({
+// Pole `podstawa` nie jest inputem; "Cena brutto" stoi zaraz za "Cena netto".
+const klucze = POLA_CENY_WEJSCIE.filter((k) => k !== 'podstawa' && k !== 'brutto')
+klucze.splice(klucze.indexOf('netto') + 1, 0, 'brutto')
+const poleCenyWejscie = klucze.map((klucz) => ({
   klucz,
   etykieta: __(ETYKIETY_POL_CENY[klucz]),
-  podpowiedz: klucz === 'dodatki_bez_ulgi_brutto' ? __('klimatyzacja i ładowarka EV nie wchodzą do ulgi') : '',
+  podpowiedz:
+    klucz === 'dodatki_bez_ulgi_brutto'
+      ? __('klimatyzacja i ładowarka EV nie wchodzą do ulgi')
+      : klucz === 'brutto'
+        ? __('wpisz netto albo brutto, drugie przelicza się ze stawki VAT')
+        : '',
 }))
 
 const poleDotacjiCp = ['dotacja_zrodlo', 'dotacja_co', 'dotacja_termo'].map((klucz) => ({
@@ -515,7 +524,6 @@ const wierszeOstrzezen = computed(() => wierszeKomunikatow(ostrzezenia.value))
 const pochodne = computed(() => {
   const c = cenaPodglad.value
   const kwoty = [
-    ['brutto', __('Cena brutto'), c.brutto],
     ['cena_po_dotacji', __('Cena po dotacji'), c.cena_po_dotacji],
     ['ulga_kwota', __('Kwota ulgi'), c.ulga_kwota],
     ['cena_po_uldze', __('Cena po uldze'), c.cena_po_uldze],
@@ -596,14 +604,20 @@ async function przelicz() {
   const moj = licznikWywolan
   przelicza.value = true
   try {
+    const wyslane = doPodgladu(stan.value)
+    const kluczWyslanych = JSON.stringify(wyslane)
     const odp = await call('crm.api.zestaw.volteo_zestaw_podglad', {
       deal: props.dealId,
-      ...doPodgladu(stan.value),
+      ...wyslane,
     })
     if (moj !== licznikWywolan) return false
     podglad.value = odp
     blad.value = ''
+    // Wartość serwera trafia tylko do pola, które nie jest podstawą, i tylko gdy
+    // użytkownik nic nie zmienił w trakcie wywołania (inaczej nadpisalibyśmy pisanie).
+    const bezZmian = JSON.stringify(doPodgladu(stan.value)) === kluczWyslanych
     stan.value = zastosujPropozycje(stan.value, odp?.konfiguracja_propozycja)
+    if (bezZmian) stan.value = zastosujCeneZSerwera(stan.value, odp?.cena)
     return true
   } catch (err) {
     if (moj !== licznikWywolan) return false

@@ -18,7 +18,13 @@ export const POLA_CENY_WEJSCIE = [
   'okres_lat',
   'wplata_wlasna',
   'dodatki_bez_ulgi_brutto',
+  'brutto',
+  'podstawa',
 ]
+
+// Podstawa przeliczenia ceny OZE (ops#334): ostatnio edytowane pole, netto albo brutto.
+export const PODSTAWA_NETTO = 'netto'
+export const PODSTAWA_BRUTTO = 'brutto'
 
 // Czyste Powietrze (ops#275): jedyne klucze `cena` przyjmowane przez serwer.
 export const POLA_CENY_CP = ['dotacja_zrodlo', 'dotacja_co', 'dotacja_termo', 'okres_lat', 'wplata_gotowka']
@@ -93,6 +99,7 @@ export const ETYKIETY_POL_CENY = {
   okres_lat: 'Okres rat (lata)',
   wplata_wlasna: 'Wpłata własna',
   dodatki_bez_ulgi_brutto: 'Kwota brutto dodatków bez ulgi',
+  brutto: 'Cena brutto',
 }
 
 export const ETYKIETY_POL_WIERSZA = {
@@ -194,7 +201,60 @@ function cenaDoStanu(cena, pola = POLA_CENY_WEJSCIE) {
   for (const pole of pola) {
     wynik[pole] = c[pole] == null ? '' : tekst(c[pole])
   }
+  // Nowo otwarte okno: podstawą jest netto (jak dotąd), brutto to lustro serwera.
+  if ('podstawa' in wynik) wynik.podstawa = PODSTAWA_NETTO
   return wynik
+}
+
+// ---- lustro zaokrąglenia serwera (crm/volteo_zestaw.py: brutto_z_netto, netto_z_brutto) ----
+// Arytmetyka na groszach jako liczbach całkowitych, ROUND_HALF_UP. Kwoty tekstowe z pola
+// (przecinek lub kropka) są parsowane bez float. Serwer i tak liczy po swojemu i jego
+// wartość zastępuje lustro po odpowiedzi podglądu.
+
+/** Tekst kwoty -> grosze (całkowite, half-up po 3. miejscu) albo null, gdy to nie liczba >= 0. */
+function naGrosze(v) {
+  const t = tekst(v).trim().replace(/\s/g, '').replace(',', '.')
+  if (!/^\d*\.?\d*$/.test(t) || t === '' || t === '.') return null
+  const [calosci, ulamek = ''] = t.split('.')
+  const u = `${ulamek}000`
+  return Number(calosci || '0') * 100 + Number(u.slice(0, 2)) + (Number(u[2]) >= 5 ? 1 : 0)
+}
+
+/** Stawka VAT (procent) -> setne procenta jako liczba całkowita albo null. */
+function naSetneProcenta(v) {
+  const g = naGrosze(v)
+  return g === null || g > 10000 ? null : g
+}
+
+function dzielenieHalfUp(licznik, mianownik) {
+  const q = Math.floor(licznik / mianownik)
+  return 2 * (licznik - q * mianownik) >= mianownik ? q + 1 : q
+}
+
+function naTekstKwoty(grosze) {
+  return `${Math.floor(grosze / 100)}.${String(grosze % 100).padStart(2, '0')}`
+}
+
+/** Brutto z netto: netto + zaokrąglenie(netto * VAT / 100). '' gdy dane nie są liczbami. */
+export function bruttoZNetto(netto, vatPct) {
+  const n = naGrosze(netto)
+  const v = naSetneProcenta(vatPct)
+  if (n === null || v === null) return ''
+  return naTekstKwoty(n + dzielenieHalfUp(n * v, 10000))
+}
+
+/** Netto z brutto: zaokrąglenie(brutto / (1 + VAT / 100)). '' gdy dane nie są liczbami. */
+export function nettoZBrutto(brutto, vatPct) {
+  const b = naGrosze(brutto)
+  const v = naSetneProcenta(vatPct)
+  if (b === null || v === null) return ''
+  return naTekstKwoty(dzielenieHalfUp(b * 10000, 10000 + v))
+}
+
+/** Pole przeliczane (nie będące podstawą) dla danej podstawy: lustro lokalne. */
+function zLustrem(cena) {
+  if (cena.podstawa === PODSTAWA_BRUTTO) return { ...cena, netto: nettoZBrutto(cena.brutto, cena.vat_pct) }
+  return { ...cena, brutto: bruttoZNetto(cena.netto, cena.vat_pct) }
 }
 
 function konfiguracjaDoStanu(konfiguracja) {
@@ -253,7 +313,26 @@ export function zmienPoleWiersza(stan, indeks, pole, wartosc) {
 }
 
 export function zmienPoleCeny(stan, pole, wartosc) {
-  return { ...stan, cena: { ...stan.cena, [pole]: wartosc } }
+  const cena = { ...stan.cena, [pole]: wartosc }
+  if (czyCp(stan) || !('podstawa' in stan.cena)) return { ...stan, cena }
+  // OZE: ostatnio edytowane pole netto/brutto jest podstawą, drugie jest lustrem.
+  if (pole === 'netto') return { ...stan, cena: zLustrem({ ...cena, podstawa: PODSTAWA_NETTO }) }
+  if (pole === 'brutto') return { ...stan, cena: zLustrem({ ...cena, podstawa: PODSTAWA_BRUTTO }) }
+  if (pole === 'vat_pct') return { ...stan, cena: zLustrem(cena) }
+  return { ...stan, cena }
+}
+
+/**
+ * Wartość z podglądu serwera dla pola, które NIE jest podstawą (brutto przy podstawie
+ * netto, netto przy podstawie brutto). Pole podstawy nie jest ruszane, więc użytkownik
+ * pisze bez nadpisywania. Czyste Powietrze i brak wartości: stan bez zmian.
+ */
+export function zastosujCeneZSerwera(stan, cenaSerwera) {
+  if (czyCp(stan) || !cenaSerwera || !('podstawa' in stan.cena)) return stan
+  const pole = stan.cena.podstawa === PODSTAWA_BRUTTO ? 'netto' : 'brutto'
+  const v = cenaSerwera[pole]
+  if (v == null || tekst(stan.cena[pole]) === tekst(v)) return stan
+  return { ...stan, cena: { ...stan.cena, [pole]: tekst(v) } }
 }
 
 /** Ręczne nadpisanie pola konfiguracji: zapamiętujemy je jako ręczne. */
@@ -321,6 +400,10 @@ export function cenaDoWywolania(stan) {
   }
   for (const pole of POLA_CENY_WEJSCIE) {
     const v = stan.cena[pole]
+    if (pole === 'podstawa') {
+      wynik[pole] = v === PODSTAWA_BRUTTO ? PODSTAWA_BRUTTO : PODSTAWA_NETTO
+      continue
+    }
     // ulga_pct to w bazie pole Data (tekst), reszta to liczby.
     wynik[pole] = pole === 'ulga_pct' ? tekst(v).trim().replace(',', '.') || '0' : liczba(v)
   }
@@ -358,7 +441,16 @@ export function doZapisu(stan, powod = '') {
 
 /** Czy formularz różni się od stanu początkowego (z `stanZOdpowiedzi`). */
 export function czyZmieniony(stanPoczatkowy, stan) {
-  return JSON.stringify(doZapisu(stanPoczatkowy)) !== JSON.stringify(doZapisu(stan))
+  // `podstawa` sama (przy tych samych kwotach) nie jest zmianą: liczą się kwoty.
+  const bezPodstawy = (s) => {
+    const z = doZapisu(s)
+    if ('podstawa' in z.cena) {
+      const { podstawa: _p, ...cena } = z.cena
+      return { ...z, cena }
+    }
+    return z
+  }
+  return JSON.stringify(bezPodstawy(stanPoczatkowy)) !== JSON.stringify(bezPodstawy(stan))
 }
 
 export function etykietaTypu(typ) {
