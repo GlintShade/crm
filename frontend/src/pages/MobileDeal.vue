@@ -30,7 +30,11 @@
     v-if="doc.name"
     class="flex h-12 items-center justify-between gap-2 border-b px-3 py-2.5"
   >
-    <AssignTo v-model="assignees.data" doctype="CRM Deal" :docname="dealId" />
+    <ZmienDoradceSzansy
+      :deal-id="dealId"
+      :doradca="doc.deal_owner"
+      @zmieniono="odswiezPoZmianieDoradcy"
+    />
     <div class="flex items-center gap-2">
       <CustomActions
         v-if="document._actions?.length"
@@ -321,7 +325,7 @@ import DealPipelineBar from '@/components/deal/DealPipelineBar.vue'
 import DealNextStepNote from '@/components/deal/DealNextStepNote.vue'
 import OrganizationModal from '@/components/Modals/OrganizationModal.vue'
 import LostReasonModal from '@/components/Modals/LostReasonModal.vue'
-import AssignTo from '@/components/AssignTo.vue'
+import ZmienDoradceSzansy from '@/components/deal/ZmienDoradceSzansy.vue'
 import ContactModal from '@/components/Modals/ContactModal.vue'
 import Section from '@/components/CollapsibleSection.vue'
 import Link from '@/components/Controls/Link.vue'
@@ -380,6 +384,12 @@ const {
 } = useDocument('CRM Deal', props.dealId)
 
 const doc = computed(() => document.doc || {})
+
+// ops#336: po zmianie doradcy przeladuj szanse i przypisania.
+function odswiezPoZmianieDoradcy() {
+  document.reload()
+  assignees.reload()
+}
 
 // Ten sam wyścig co w Deal.vue: przy zimnym wejściu (refresh) dokument szansy
 // potrafi dotrzeć przed globalną listą statusów w store (dealStatuses,
