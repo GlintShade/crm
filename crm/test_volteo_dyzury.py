@@ -585,12 +585,38 @@ class TestNoweTresci(unittest.TestCase):
 		self.assertNotIn(", .", tresc)
 
 	def test_trzy_nowe_placeholdery_walidacja(self):
-		self.assertEqual(len(PLACEHOLDERY_DYZUR), 14)
+		self.assertEqual(len(PLACEHOLDERY_DYZUR), 15)
 		self.assertIsNone(waliduj_tresc_dyzur("{produkt} {ma_pv} {zasady} {kampania} {uwagi}"))
 
 	def test_dane_przykladowe_maja_wszystkie_klucze(self):
 		brakujace = set(PLACEHOLDERY_DYZUR) - set(DANE_PRZYKLADOWE_DYZUR) - {"link"}
 		self.assertEqual(brakujace, set())
+
+
+class TestZnacznikMapa(unittest.TestCase):
+	def test_mapa_znana_i_waliduje_sie(self):
+		self.assertIn("mapa", PLACEHOLDERY_DYZUR)
+		self.assertIsNone(waliduj_tresc_dyzur("Lead {klient} {mapa}"))
+
+	def test_podglad_ma_dane_przykladowe(self):
+		self.assertEqual(DANE_PRZYKLADOWE_DYZUR["mapa"], "https://maps.google.com/?q=52.4447,15.5780")
+		tresc, _ = zbuduj_tresc_dyzur("Mapa: {mapa}", dict(DANE_PRZYKLADOWE_DYZUR))
+		self.assertIn("maps.google.com/?q=52.4447,15.5780", tresc)
+
+	def test_pusty_znacznik_bez_wspolrzednych(self):
+		from crm.volteo_reguly_przydzialu import link_mapy
+
+		tresc, _ = zbuduj_tresc_dyzur(
+			"Lead {klient}. {mapa}", {"klient": "Jan", "mapa": link_mapy(None, None)}
+		)
+		self.assertNotIn("{mapa}", tresc)
+		self.assertNotIn("maps.google", tresc)
+
+	def test_tresc_domyslna_bez_zmian(self):
+		self.assertEqual(
+			TRESC_DYZUR_DOMYSLNA,
+			"Lead FB: {klient}, tel. {telefon}, {kod}, {produkt}, {ma_pv}, {zasady}. {link}",
+		)
 
 
 class TestOkregZKampanii(unittest.TestCase):
