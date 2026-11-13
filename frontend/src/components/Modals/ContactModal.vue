@@ -59,6 +59,7 @@
           </div>
         </div>
 
+        <OstrzezenieKontoAdministracyjne rodzaj="klient" class="mb-4" />
         <div class="flex flex-col gap-4">
           <div>
             <FormControl
@@ -227,6 +228,7 @@
 
 <script setup>
 import { useDocument } from '@/data/document'
+import OstrzezenieKontoAdministracyjne from '@/components/OstrzezenieKontoAdministracyjne.vue'
 import { pobierzDaneKodu } from '@/data/kodPocztowy'
 import {
   WARTOSC_RECZNIE,

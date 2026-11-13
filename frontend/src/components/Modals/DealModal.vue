@@ -25,6 +25,7 @@
             />
           </div>
         </div>
+        <OstrzezenieKontoAdministracyjne rodzaj="szansa" class="mb-4" />
         <div>
           <div
             v-if="hasOrganizationSections || hasContactSections"
@@ -74,6 +75,7 @@
 
 <script setup>
 import EditIcon from '@/components/Icons/EditIcon.vue'
+import OstrzezenieKontoAdministracyjne from '@/components/OstrzezenieKontoAdministracyjne.vue'
 import FieldLayout from '@/components/FieldLayout/FieldLayout.vue'
 import { usersStore } from '@/stores/users'
 import { statusesStore } from '@/stores/statuses'
