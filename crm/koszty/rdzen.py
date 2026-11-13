@@ -442,6 +442,9 @@ def scal_snapshot(
 	if snapshot.get("edycja_planu") is not None:
 		# Ślad edycji kosztów planowanych (ops#335) też przeżywa edycję kosztów rzeczywistych.
 		nowy["edycja_planu"] = dict(snapshot["edycja_planu"])
+	if snapshot.get("edycja_marzy") is not None:
+		# Ślad edycji składników marży (ops#339) też przeżywa edycję kosztów rzeczywistych.
+		nowy["edycja_marzy"] = dict(snapshot["edycja_marzy"])
 	nowy["podsumowanie_rzeczywiste"] = _oblicz_podsumowanie_rzeczywiste(nowy)
 	return nowy
 
@@ -659,3 +662,79 @@ def czy_zmieniona_korekta(przed: dict[str, Any], po: dict[str, Any]) -> bool:
 		return None
 
 	return _korekta(przed) != _korekta(po)
+
+
+def zmien_skladniki_marzy(
+	snapshot: dict[str, Any] | None,
+	skladniki: dict[str, Any],
+	teraz: str,
+	uzytkownik: str,
+) -> dict[str, Any]:
+	"""Zwraca NOWY snapshot po edycji SKŁADNIKÓW marży planowej przez administratora (ops#339).
+	Tylko snapshoty OZE (`pv` albo `oze`); `cp` daje `ValueError`.
+
+	`skladniki`: mapa klucz -> (kwota | `None`). Klucz musi istnieć w `skladniki_marzy`
+	(nie dodaje ani nie usuwa składników). Przy PIERWSZEJ zmianie dotychczasowa kwota trafia do
+	`kwota_pierwotna` i nigdy nie jest nadpisywana; `None` albo kwota równa pierwotnej przywraca
+	pierwotną i usuwa `kwota_pierwotna`.
+
+	Nie zmienia `podsumowanie`, `linie`, `dodatkowe` ani `podsumowanie_rzeczywiste`: składniki
+	są wewnętrznym podziałem marży, cenę klienta zmienia wyłącznie "Edytuj zestaw". Dodaje
+	`edycja_marzy: {kiedy, kto}`. Wejście nie jest mutowane.
+	"""
+	if not snapshot:
+		raise ValueError("Brak snapshotu kosztów dla tej szansy.")
+	if snapshot.get("linia_produktowa") not in LINIE_EDYTOWALNE_PLANU:
+		raise ValueError("Składników marży Czystego Powietrza nie edytuje się w tym panelu.")
+	if not isinstance(skladniki, dict):
+		raise ValueError("Nieprawidłowy format składników marży.")
+
+	stare = snapshot.get("skladniki_marzy") or []
+	klucze_znane = {sk["klucz"] for sk in stare}
+	zadane: dict[str, Decimal | None] = {}
+	for klucz, wartosc in skladniki.items():
+		if klucz not in klucze_znane:
+			raise ValueError(f"Nieznany składnik marży: {klucz}.")
+		zadane[klucz] = None if wartosc is None else _parsuj_kwote_klienta(wartosc)
+
+	nowe: list[dict[str, Any]] = []
+	for sk in stare:
+		nowy_sk = dict(sk)
+		if sk["klucz"] in zadane:
+			stara_kwota = _kwota(sk["kwota"])
+			pierwotna_surowa = sk.get("kwota_pierwotna")
+			bazowa = _kwota(pierwotna_surowa) if pierwotna_surowa is not None else stara_kwota
+			zadana = zadane[sk["klucz"]]
+			nowa_kwota = bazowa if zadana is None else zadana
+			if nowa_kwota == bazowa:
+				nowy_sk.pop("kwota_pierwotna", None)
+			else:
+				nowy_sk["kwota_pierwotna"] = str(bazowa)
+			nowy_sk["kwota"] = str(nowa_kwota)
+		nowe.append(nowy_sk)
+
+	if policz_zmiany_skladnikow(snapshot, {"skladniki_marzy": nowe}) == 0 and [
+		sk.get("kwota_pierwotna") for sk in nowe
+	] == [sk.get("kwota_pierwotna") for sk in stare]:
+		raise ValueError("Brak zmian w składnikach marży.")
+
+	nowy = copy.deepcopy(snapshot)
+	nowy["skladniki_marzy"] = nowe
+	nowy["zmodyfikowano"] = teraz
+	nowy["zmodyfikowal"] = uzytkownik
+	nowy["edycja_marzy"] = {"kiedy": teraz, "kto": uzytkownik}
+	return nowy
+
+
+def policz_zmiany_skladnikow(przed: dict[str, Any], po: dict[str, Any]) -> int:
+	"""Liczba składników marży, których `kwota` różni się między dwoma snapshotami.
+	Do śladu aktywności: tylko licznik, bez kwot."""
+	stare = {sk["klucz"]: _kwota(sk["kwota"]) for sk in przed.get("skladniki_marzy") or []}
+	nowe = {sk["klucz"]: _kwota(sk["kwota"]) for sk in po.get("skladniki_marzy") or []}
+	return sum(1 for klucz in set(stare) | set(nowe) if stare.get(klucz) != nowe.get(klucz))
+
+
+def nierozdzielona_marza(snapshot: dict[str, Any]) -> Decimal:
+	"""`podsumowanie.marza_plan` minus suma kwot składników marży."""
+	suma = sum((_kwota(sk["kwota"]) for sk in snapshot.get("skladniki_marzy") or []), _ZERO)
+	return _kwota(_kwota(snapshot["podsumowanie"]["marza_plan"]) - suma)
