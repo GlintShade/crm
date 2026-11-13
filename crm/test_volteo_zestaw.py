@@ -531,6 +531,74 @@ class TestPodstawaBrutto(unittest.TestCase):
 		self.assertEqual(o["rata_brutto"], z.przelicz_cene(wejscie(), STALE)["rata_brutto"])
 
 
+class TestPodstawaZapisanejCeny(unittest.TestCase):
+	def _para_brutto(self, vat):
+		for g in range(7, 2000):
+			b = D(g) / 100
+			n = z.netto_z_brutto(b, D(vat))
+			if z.brutto_z_netto(n, D(vat)) != b:
+				return n, b
+		self.fail("brak pary")
+
+	def test_para_netto_spojna(self):
+		self.assertEqual(z.podstawa_zapisanej_ceny("41780", "45122.40", 8), "netto")
+
+	def test_para_brutto_nieosiagalna_z_netto(self):
+		for vat in (8, 23):
+			n, b = self._para_brutto(vat)
+			self.assertEqual(z.podstawa_zapisanej_ceny(n, b, vat), "brutto")
+		self.assertEqual(z.podstawa_zapisanej_ceny("0.06", "0.07", 8), "brutto")
+
+	def test_para_niespojna_w_obie_strony(self):
+		self.assertEqual(z.podstawa_zapisanej_ceny("1000", "5000", 8), "netto")
+
+	def test_dane_puste_i_smieciowe(self):
+		for args in (("", "", 8), (None, None, None), ("abc", "10", 8), ("10", "abc", 8), ("10", "0", 8), ("10", "11", 101), ("10", "11", "x")):
+			self.assertEqual(z.podstawa_zapisanej_ceny(*args), "netto", args)
+
+	def test_obie_reguly_pasuja_to_netto(self):
+		self.assertEqual(z.podstawa_zapisanej_ceny("100", "100", 0), "netto")
+
+
+class TestUzupelnijPodstawe(unittest.TestCase):
+	def _szansa(self):
+		n, b = D("0.06"), D("0.07")
+		return {"netto": str(n), "brutto": str(b), "vat_pct": "8"}
+
+	def test_stary_klient_niezmieniona_cena_zachowuje_brutto(self):
+		szansa = {"netto": "0.06", "brutto": "0.07", "vat_pct": "8"}
+		w = z.uzupelnij_podstawe({"netto": 0.06, "vat_pct": 8, "dotacja": 0}, szansa)
+		self.assertEqual(w["podstawa"], "brutto")
+		o = z.przelicz_cene(wejscie(**{**w, "dotacja": 0, "ulga_pct": 0}), STALE)
+		self.assertEqual(o["brutto"], D("0.07"))
+		self.assertEqual(o["netto"], D("0.06"))
+
+	def test_brak_kluczy_netto_i_vat_to_bez_zmiany(self):
+		szansa = {"netto": "0.06", "brutto": "0.07", "vat_pct": "8"}
+		self.assertEqual(z.uzupelnij_podstawe({"dotacja": 0}, szansa)["podstawa"], "brutto")
+
+	def test_zmienione_netto_liczy_od_netto(self):
+		szansa = {"netto": "0.06", "brutto": "0.07", "vat_pct": "8"}
+		w = z.uzupelnij_podstawe({"netto": 100, "vat_pct": 8}, szansa)
+		self.assertNotIn("podstawa", w)
+
+	def test_zmieniony_vat_liczy_od_netto(self):
+		szansa = {"netto": "0.06", "brutto": "0.07", "vat_pct": "8"}
+		self.assertNotIn("podstawa", z.uzupelnij_podstawe({"netto": 0.06, "vat_pct": 23}, szansa))
+
+	def test_jawna_podstawa_wygrywa(self):
+		szansa = {"netto": "0.06", "brutto": "0.07", "vat_pct": "8"}
+		w = z.uzupelnij_podstawe({"netto": 0.06, "vat_pct": 8, "podstawa": "netto"}, szansa)
+		self.assertEqual(w["podstawa"], "netto")
+		self.assertNotIn("brutto", w)
+
+	def test_szansa_netto_spojna_bez_zmian_i_nie_mutuje(self):
+		szansa = {"netto": "41780", "brutto": "45122.40", "vat_pct": "8"}
+		wej = {"netto": 41780, "vat_pct": 8}
+		self.assertNotIn("podstawa", z.uzupelnij_podstawe(wej, szansa))
+		self.assertEqual(wej, {"netto": 41780, "vat_pct": 8})
+
+
 class TestOdtworzDodatki(unittest.TestCase):
 	def test_ulga_zero_to_zero(self):
 		self.assertEqual(z.odtworz_dodatki_bez_ulgi(1000, 0, 0), D(0))

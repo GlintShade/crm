@@ -201,8 +201,8 @@ function cenaDoStanu(cena, pola = POLA_CENY_WEJSCIE) {
   for (const pole of pola) {
     wynik[pole] = c[pole] == null ? '' : tekst(c[pole])
   }
-  // Nowo otwarte okno: podstawą jest netto (jak dotąd), brutto to lustro serwera.
-  if ('podstawa' in wynik) wynik.podstawa = PODSTAWA_NETTO
+  // Podstawę podaje serwer (brutto, gdy zapisana para netto/brutto jest osiągalna tylko z brutto).
+  if ('podstawa' in wynik) wynik.podstawa = c.podstawa === PODSTAWA_BRUTTO ? PODSTAWA_BRUTTO : PODSTAWA_NETTO
   return wynik
 }
 

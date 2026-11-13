@@ -452,4 +452,15 @@ describe('cena OZE: netto albo brutto jako podstawa (ops#334)', () => {
     const r = roznicaDoOkna({}, { netto: '41780.00', brutto: '45122.40' }, { netto: '41781.48', brutto: '45123.99' }, KONF, KONF)
     expect(r.cena.map((c) => c.etykieta)).toEqual(['Netto', 'Brutto'])
   })
+  it('podstawa z serwera (brutto) zostaje, zastosowanie ceny serwera nie robi zmiany', () => {
+    const o = odp()
+    o.cena = { ...o.cena, netto: '0.06', brutto: '0.07', vat_pct: 8, podstawa: 'brutto' }
+    const s0 = stanZOdpowiedzi(o)
+    expect(s0.cena.podstawa).toBe('brutto')
+    const s1 = zastosujCeneZSerwera(s0, o.cena)
+    expect(czyZmieniony(s0, s1)).toBe(false)
+    const c = cenaDoWywolania(s1)
+    expect(c.podstawa).toBe('brutto')
+    expect(c.brutto).toBe(0.07)
+  })
 })

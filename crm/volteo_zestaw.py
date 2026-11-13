@@ -331,6 +331,60 @@ def netto_z_brutto(brutto: Decimal, vat_pct: Decimal) -> Decimal:
 	return _grosze(_grosze(brutto) / (1 + vat_pct / 100))
 
 
+def podstawa_zapisanej_ceny(netto: Any, brutto: Any, vat_pct: Any) -> str:
+	"""Podstawa, z ktorej da sie odtworzyc zapisana pare netto/brutto co do grosza.
+
+	"netto", gdy `brutto_z_netto(netto) == brutto` (tez gdy pasuja obie reguly);
+	"brutto", gdy tamto nie zachodzi, a `netto_z_brutto(brutto) == netto`; w kazdym
+	innym przypadku (stare lub korygowane szanse, dane puste i bledne, VAT poza 0..100,
+	brutto <= 0) "netto", czyli zachowanie dotychczasowe. Nigdy nie rzuca.
+	"""
+	try:
+		n = _grosze(kwota(netto))
+		b = _grosze(kwota(brutto))
+		v = kwota(vat_pct)
+		if b <= 0 or n <= 0 or not (0 <= v <= 100):
+			return "netto"
+		if brutto_z_netto(n, v) == b:
+			return "netto"
+		if netto_z_brutto(b, v) == n:
+			return "brutto"
+	except (ValueError, ArithmeticError):
+		pass
+	return "netto"
+
+
+def uzupelnij_podstawe(cena_klienta: dict, cena_szansy: dict) -> dict:
+	"""Nowy slownik `cena` klienta, uzupelniony o podstawe brutto dla starego klienta.
+
+	Gdy klient nie przyslal `podstawa`, a jego `netto` i `vat_pct` (po normalizacji,
+	brak klucza = bez zmiany) rowna sie zapisanym na szansie, ktora jest spojna
+	brutto (`podstawa_zapisanej_ceny` == "brutto"), dodaje `podstawa="brutto"` i
+	zapisane brutto. Jawna `podstawa` klienta wygrywa bez zmian.
+	"""
+	wynik = dict(cena_klienta)
+	if wynik.get("podstawa") is not None:
+		return wynik
+	try:
+		netto_szansy = _grosze(kwota(cena_szansy.get("netto")))
+		vat_szansy = kwota(cena_szansy.get("vat_pct"))
+		brutto_szansy = _grosze(kwota(cena_szansy.get("brutto")))
+		netto_klienta = (
+			_grosze(kwota(wynik["netto"])) if wynik.get("netto") is not None else netto_szansy
+		)
+		vat_klienta = kwota(wynik["vat_pct"]) if wynik.get("vat_pct") is not None else vat_szansy
+	except ValueError:
+		return wynik
+	if (
+		netto_klienta == netto_szansy
+		and vat_klienta == vat_szansy
+		and podstawa_zapisanej_ceny(netto_szansy, brutto_szansy, vat_szansy) == "brutto"
+	):
+		wynik["podstawa"] = "brutto"
+		wynik["brutto"] = brutto_szansy
+	return wynik
+
+
 def waliduj_cene(wejscie: dict) -> list[str]:
 	"""Lista komunikatow bledow wejscia ceny (pusta = OK).
 
