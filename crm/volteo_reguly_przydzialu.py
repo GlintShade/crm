@@ -290,3 +290,138 @@ def tekst_sladu_sms(wynik: str, handlowiec_nazwa: str) -> str:
 		WYNIK_BLAD: f"SMS do handlowca ({handlowiec_nazwa}) nie wysłany: błąd wysyłki",
 	}
 	return teksty.get(wynik, f"SMS do handlowca ({handlowiec_nazwa}): {wynik}")
+
+
+# --- Adapter API reguł (ops#346): logika czysta ---------------------------------
+
+LIMIT_KANDYDATOW_SRODKA: int = 20
+MIN_ZNAKOW_SZUKANIA: int = 2
+
+
+def grupuj_kandydatow_srodka(
+	wiersze: Iterable[Mapping[str, Any]], limit: int = LIMIT_KANDYDATOW_SRODKA
+) -> list[dict[str, Any]]:
+	"""Kandydaci środka z wierszy `Postal Code`: jeden na parę miejscowość i powiat.
+
+	Z każdej pary zostaje wiersz o najniższym kodzie. Wiersze bez miejscowości albo
+	bez współrzędnych odpadają. Wynik posortowany po miejscowości, kodzie; maks. `limit`.
+	Pola: kod, miejscowosc, powiat, wojewodztwo, lat, lng.
+	"""
+	najlepsze: dict[tuple[str, str], dict[str, Any]] = {}
+	for wiersz in wiersze:
+		miejscowosc = _tekst(wiersz.get("miejscowosc"))
+		kod = _tekst(wiersz.get("kod"))
+		if not miejscowosc or not kod or not ma_wspolrzedne(wiersz.get("lat"), wiersz.get("lng")):
+			continue
+		powiat = _tekst(wiersz.get("powiat"))
+		klucz = (miejscowosc.casefold(), powiat.casefold())
+		aktualny = najlepsze.get(klucz)
+		if aktualny is not None and aktualny["kod"] <= kod:
+			continue
+		najlepsze[klucz] = {
+			"kod": kod,
+			"miejscowosc": miejscowosc,
+			"powiat": powiat,
+			"wojewodztwo": _tekst(wiersz.get("wojewodztwo")),
+			"lat": float(_liczba(wiersz.get("lat"))),  # type: ignore[arg-type]
+			"lng": float(_liczba(wiersz.get("lng"))),  # type: ignore[arg-type]
+		}
+	wynik = sorted(najlepsze.values(), key=lambda k: (k["miejscowosc"].casefold(), k["kod"]))
+	return wynik[: max(0, int(limit))]
+
+
+def policz_leady_w_promieniu(
+	reguly: Iterable[Regula], wspolrzedne_leadow: Iterable[tuple[Any, Any]]
+) -> dict[str, int]:
+	"""Dla każdej reguły (po `name`) liczba punktów w jej promieniu od środka.
+
+	Reguła bez współrzędnych środka albo z promieniem <= 0 dostaje 0. Punkty bez
+	poprawnych współrzędnych są pomijane. Nieaktywne reguły też są liczone (podgląd).
+	"""
+	punkty = [
+		(float(_liczba(lat)), float(_liczba(lng)))  # type: ignore[arg-type]
+		for lat, lng in wspolrzedne_leadow
+		if ma_wspolrzedne(lat, lng)
+	]
+	wynik: dict[str, int] = {}
+	for regula in reguly:
+		licznik = 0
+		if regula.promien_km > 0 and ma_wspolrzedne(regula.srodek_lat, regula.srodek_lng):
+			for lat, lng in punkty:
+				if odleglosc_km(lat, lng, regula.srodek_lat, regula.srodek_lng) <= regula.promien_km:  # type: ignore[arg-type]
+					licznik += 1
+		wynik[regula.name] = licznik
+	return wynik
+
+
+def ostrzezenia_reguly(
+	konto: Mapping[str, Any] | None, ma_rola_d2d: bool, ma_linie_leady: bool, ma_numer: bool
+) -> list[str]:
+	"""Ostrzeżenia o handlowcu reguły (teksty po polsku, kolejność stała)."""
+	if konto is None:
+		return ["Konto nie istnieje"]
+	ostrzezenia: list[str] = []
+	if not konto.get("enabled"):
+		ostrzezenia.append("Konto wyłączone")
+	if not ma_rola_d2d:
+		ostrzezenia.append("Brak roli handlowca")
+	if not ma_linie_leady:
+		ostrzezenia.append("Brak dostępu do Leadów")
+	if not ma_numer:
+		ostrzezenia.append("Brak numeru telefonu")
+	return ostrzezenia
+
+
+def _wpis_reguly(regula: Regula, odleglosc: float, nazwy: Mapping[str, str]) -> dict[str, Any]:
+	return {
+		"kolejnosc": regula.kolejnosc,
+		"handlowiec_nazwa": nazwy.get(regula.handlowiec) or regula.handlowiec,
+		"srodek_nazwa": regula.srodek_nazwa,
+		"odleglosc_km": round(odleglosc),
+	}
+
+
+def zbuduj_wynik_sprawdzenia(
+	kod: str,
+	dane_kodu: Mapping[str, Any] | None,
+	dopasowanie: Dopasowanie | None,
+	najblizsza: tuple[Regula, float] | None,
+	nazwy_handlowcow: Mapping[str, str],
+) -> dict[str, Any]:
+	"""Słownik odpowiedzi `sprawdz_kod` z obiektów rdzenia (bez I/O).
+
+	`dane_kodu` None oznacza kod nieznany albo bez współrzędnych: wynik "cc".
+	Odpowiedź nie zawiera numeru telefonu ani tożsamości CC.
+	"""
+	znany = dane_kodu is not None
+	wynik: dict[str, Any] = {
+		"kod": kod,
+		"znany": znany,
+		"miejscowosc": _tekst(dane_kodu.get("miejscowosc")) if dane_kodu else "",
+		"wojewodztwo": _tekst(dane_kodu.get("wojewodztwo")) if dane_kodu else "",
+		"wynik": "cc",
+		"regula": None,
+		"odleglosc_km": None,
+		"inne_pasujace": [],
+		"najblizsza": None,
+	}
+	if dopasowanie is not None:
+		r = dopasowanie.regula
+		wynik["wynik"] = "regula"
+		wynik["regula"] = {
+			"name": r.name,
+			"kolejnosc": r.kolejnosc,
+			"handlowiec_nazwa": nazwy_handlowcow.get(r.handlowiec) or r.handlowiec,
+			"srodek_nazwa": r.srodek_nazwa,
+			"promien_km": r.promien_km,
+		}
+		wynik["odleglosc_km"] = round(dopasowanie.odleglosc_km)
+		wynik["inne_pasujace"] = [
+			_wpis_reguly(inna, odl, nazwy_handlowcow) for inna, odl in dopasowanie.inne_pasujace
+		]
+	elif najblizsza is not None:
+		r, odl = najblizsza
+		wpis = _wpis_reguly(r, odl, nazwy_handlowcow)
+		wpis.pop("handlowiec_nazwa")
+		wynik["najblizsza"] = wpis
+	return wynik
