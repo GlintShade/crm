@@ -3,6 +3,12 @@ import {
   parseSnapshot,
   przeliczRzeczywiste,
   zbudujPayload,
+  czyEdytowalnyPlan,
+  edycjePlanuStart,
+  przeliczPlan,
+  zbudujPayloadPlanu,
+  czyPayloadPlanuMaZmiany,
+  czyZmienioneRzeczywiste,
 } from '@/utils/montazKoszty'
 
 function deepFreeze(value) {
@@ -380,6 +386,241 @@ describe('Montaż — koszty rzeczywiste (montazKoszty)', () => {
       ]
       const wynik = przeliczRzeczywiste(snapshot, {}, dodatkowe)
       expect(wynik.razem.kosztRzeczywisty).toBe(18000 + 30.3)
+    })
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+// Edycja kosztów planowanych (ops#335)
+// ---------------------------------------------------------------------------
+function planSnapshot(overrides = {}) {
+  const linie = [
+    { ...PV_LINIA, klucz: 'k_falownik', etykieta: 'Falownik', koszt_plan: '5000.00' },
+    { ...PV_LINIA, klucz: 'k_bateria', etykieta: 'Bateria', koszt_plan: '12000.00' },
+    { ...PV_LINIA, klucz: 'k_montaz_pv', etykieta: 'Montaż PV', koszt_plan: '3000.00' },
+  ]
+  return {
+    ...pvSnapshot(),
+    linie,
+    podsumowanie: {
+      netto: '30000.00',
+      koszt_plan: '20000.00',
+      marza_plan: '10000.00',
+      prowizja_plan: null,
+      zysk_plan: '10000.00',
+    },
+    ...overrides,
+  }
+}
+
+describe('Edycja kosztów planowanych (montazKoszty)', () => {
+  describe('czyEdytowalnyPlan', () => {
+    it('pv i oze tak, cp i brak nie', () => {
+      expect(czyEdytowalnyPlan({ linia_produktowa: 'pv' })).toBe(true)
+      expect(czyEdytowalnyPlan({ linia_produktowa: 'oze' })).toBe(true)
+      expect(czyEdytowalnyPlan({ linia_produktowa: 'cp' })).toBe(false)
+      expect(czyEdytowalnyPlan(null)).toBe(false)
+    })
+  })
+
+  describe('przeliczPlan', () => {
+    it('bez zmian: wartości zapisane', () => {
+      const snap = planSnapshot()
+      const w = przeliczPlan(snap, edycjePlanuStart(snap), null)
+      expect(w.razem.kosztPlan).toBe(20000)
+      expect(w.razem.marzaPlan).toBe(10000)
+      expect(w.razem.zyskPlan).toBe(10000)
+      expect(w.roznicaSumy).toBe(0)
+      expect(w.linie.every((l) => !l.zmieniona)).toBe(true)
+    })
+
+    it('zmiana jednej linii przesuwa sumę, marżę i zysk', () => {
+      const snap = planSnapshot()
+      const w = przeliczPlan(snap, { ...edycjePlanuStart(snap), k_bateria: '13 000,50' }, null)
+      expect(w.razem.kosztPlan).toBe(21000.5)
+      expect(w.razem.marzaPlan).toBe(8999.5)
+      const bateria = w.linie.find((l) => l.klucz === 'k_bateria')
+      expect(bateria.zmieniona).toBe(true)
+      expect(bateria.pierwotny).toBe(12000)
+    })
+
+    it('zysk uwzględnia prowizję planu', () => {
+      const snap = planSnapshot({
+        podsumowanie: { netto: '30000.00', koszt_plan: '20000.00', marza_plan: '10000.00', prowizja_plan: '500.00', zysk_plan: '9500.00' },
+      })
+      const w = przeliczPlan(snap, { ...edycjePlanuStart(snap), k_bateria: '13000' }, null)
+      expect(w.razem.zyskPlan).toBe(8500)
+    })
+
+    it('wpisana suma wyższa niż suma linii: różnica idzie do korekty, wygrywa suma', () => {
+      const snap = planSnapshot()
+      const w = przeliczPlan(snap, { ...edycjePlanuStart(snap), k_bateria: '13000' }, '21500')
+      expect(w.razem.kosztPlan).toBe(21500)
+      expect(w.roznicaSumy).toBe(500)
+      expect(w.korekta).toBe(500)
+      expect(w.razem.marzaPlan).toBe(8500)
+    })
+
+    it('wpisana suma niższa: ujemna korekta', () => {
+      const snap = planSnapshot()
+      const w = przeliczPlan(snap, edycjePlanuStart(snap), '18000')
+      expect(w.roznicaSumy).toBe(-2000)
+      expect(w.korekta).toBe(-2000)
+    })
+
+    it('suma równa sumie linii: brak różnicy', () => {
+      const snap = planSnapshot()
+      const w = przeliczPlan(snap, { ...edycjePlanuStart(snap), k_bateria: '13000' }, '21000')
+      expect(w.roznicaSumy).toBe(0)
+      expect(w.korekta).toBe(0)
+    })
+
+    it('istniejąca korekta (ujemny koszt_plan) zostaje i można ją usunąć', () => {
+      const korekta = { klucz: 'korekta_sumy_plan', etykieta: 'Korekta sumy kosztów planowanych', ilosc: null, jednostka: null, netto: null, prowizja_plan: null, koszt_plan: '-500.00', koszt_rzeczywisty: null }
+      const snap = planSnapshot()
+      snap.linie = [...snap.linie, korekta]
+      snap.podsumowanie = { ...snap.podsumowanie, koszt_plan: '19500.00', marza_plan: '10500.00', zysk_plan: '10500.00' }
+      const bez = przeliczPlan(snap, edycjePlanuStart(snap), null)
+      expect(bez.razem.kosztPlan).toBe(19500)
+      expect(bez.korekta).toBe(-500)
+      expect(bez.korektaIstnieje).toBe(true)
+      expect(Object.keys(edycjePlanuStart(snap))).not.toContain('korekta_sumy_plan')
+      const usun = przeliczPlan(snap, edycjePlanuStart(snap), null, true)
+      expect(usun.razem.kosztPlan).toBe(20000)
+      expect(usun.korekta).toBe(0)
+    })
+
+    it('suma planu stara różna od sumy linii: delta, nie suma od zera', () => {
+      const snap = planSnapshot()
+      snap.podsumowanie = { ...snap.podsumowanie, koszt_plan: '20500.00' }
+      const w = przeliczPlan(snap, { ...edycjePlanuStart(snap), k_bateria: '13000' }, null)
+      expect(w.razem.kosztPlan).toBe(21500)
+    })
+
+    it('zapisana wartość pierwotna jest pokazana i służy do przywrócenia', () => {
+      const snap = planSnapshot()
+      snap.linie = snap.linie.map((l) => (l.klucz === 'k_bateria' ? { ...l, koszt_plan: '13000.00', koszt_plan_pierwotny: '12000.00' } : l))
+      const w = przeliczPlan(snap, edycjePlanuStart(snap), null)
+      expect(w.linie.find((l) => l.klucz === 'k_bateria').pierwotny).toBe(12000)
+    })
+
+    it('błędne wartości zgłaszane jako błędy, traktowane jako bez zmiany', () => {
+      const snap = planSnapshot()
+      const w = przeliczPlan(snap, { ...edycjePlanuStart(snap), k_bateria: 'abc', k_falownik: '-1' }, 'xyz')
+      expect(w.bledy).toHaveLength(3)
+      expect(w.razem.kosztPlan).toBe(20000)
+    })
+
+    it('puste pole linii = bez zmiany, bez błędu', () => {
+      const snap = planSnapshot()
+      const w = przeliczPlan(snap, { ...edycjePlanuStart(snap), k_bateria: '' }, '')
+      expect(w.bledy).toEqual([])
+      expect(w.razem.kosztPlan).toBe(20000)
+    })
+
+    it('nie mutuje argumentów (zamrożone wejście)', () => {
+      const snap = deepFreeze(planSnapshot())
+      const edycje = deepFreeze({ ...edycjePlanuStart(snap), k_bateria: '13000' })
+      expect(() => przeliczPlan(snap, edycje, '21000')).not.toThrow()
+    })
+
+    it('grosze: brak błędów zmiennoprzecinkowych', () => {
+      const snap = planSnapshot()
+      const w = przeliczPlan(snap, { ...edycjePlanuStart(snap), k_falownik: '5000.10', k_bateria: '12000.20' }, null)
+      expect(w.razem.kosztPlan).toBe(20000.3)
+    })
+  })
+
+  describe('zbudujPayloadPlanu', () => {
+    it('wysyła tylko zmienione linie jako stringi z groszami', () => {
+      const snap = planSnapshot()
+      const p = zbudujPayloadPlanu(snap, { ...edycjePlanuStart(snap), k_bateria: '13 000,5' }, null)
+      expect(p).toEqual({ koszty_plan: { k_bateria: '13000.50' }, suma_plan: null })
+      expect(czyPayloadPlanuMaZmiany(p)).toBe(true)
+    })
+
+    it('brak zmian: pusty payload', () => {
+      const snap = planSnapshot()
+      const p = zbudujPayloadPlanu(snap, edycjePlanuStart(snap), null)
+      expect(p).toEqual({ koszty_plan: {}, suma_plan: null })
+      expect(czyPayloadPlanuMaZmiany(p)).toBe(false)
+    })
+
+    it('suma wpisana trafia jako string, razem ze zmianą linii', () => {
+      const snap = planSnapshot()
+      const p = zbudujPayloadPlanu(snap, { ...edycjePlanuStart(snap), k_bateria: '13000' }, '21 500')
+      expect(p.suma_plan).toBe('21500.00')
+      expect(p.koszty_plan).toEqual({ k_bateria: '13000.00' })
+    })
+
+    it('przywrócenie do pierwotnej wysyła wartość pierwotną', () => {
+      const snap = planSnapshot()
+      snap.linie = snap.linie.map((l) => (l.klucz === 'k_bateria' ? { ...l, koszt_plan: '13000.00', koszt_plan_pierwotny: '12000.00' } : l))
+      const p = zbudujPayloadPlanu(snap, { ...edycjePlanuStart(snap), k_bateria: '12000.00' }, null)
+      expect(p.koszty_plan).toEqual({ k_bateria: '12000.00' })
+    })
+
+    it('usunięcie korekty wysyła null na kluczu korekty', () => {
+      const p = zbudujPayloadPlanu(planSnapshot(), {}, null, true)
+      expect(p.koszty_plan).toEqual({ korekta_sumy_plan: null })
+      expect(czyPayloadPlanuMaZmiany(p)).toBe(true)
+    })
+
+    it('śmieciowe wartości pomijane', () => {
+      const snap = planSnapshot()
+      const p = zbudujPayloadPlanu(snap, { ...edycjePlanuStart(snap), k_bateria: 'abc' }, 'xyz')
+      expect(p).toEqual({ koszty_plan: {}, suma_plan: null })
+    })
+  })
+
+  describe('linia korekty w kosztach rzeczywistych', () => {
+    const korekta = { klucz: 'korekta_sumy_plan', etykieta: 'Korekta sumy kosztów planowanych', ilosc: null, jednostka: null, netto: null, prowizja_plan: null, koszt_plan: '-500.00', koszt_rzeczywisty: null }
+
+    it('przeliczRzeczywiste liczy ujemną korektę wg planu i oznacza linię', () => {
+      const snap = planSnapshot()
+      snap.linie = [...snap.linie, korekta]
+      const w = przeliczRzeczywiste(snap, {}, [])
+      const lk = w.linie.find((l) => l.klucz === 'korekta_sumy_plan')
+      expect(lk.czyKorekta).toBe(true)
+      expect(lk.kosztPlan).toBe(-500)
+      expect(w.razem.kosztRzeczywisty).toBe(19500)
+    })
+
+    it('zbudujPayload nie wysyła klucza korekty', () => {
+      const snap = planSnapshot()
+      snap.linie = [...snap.linie, korekta]
+      const p = zbudujPayload(snap, {}, [])
+      expect(Object.keys(p.koszty_rzeczywiste)).not.toContain('korekta_sumy_plan')
+    })
+
+    it('przeliczRzeczywiste niesie koszt_plan_pierwotny linii', () => {
+      const snap = planSnapshot()
+      snap.linie = snap.linie.map((l) => (l.klucz === 'k_bateria' ? { ...l, koszt_plan: '13000.00', koszt_plan_pierwotny: '12000.00' } : l))
+      const w = przeliczRzeczywiste(snap, {}, [])
+      expect(w.linie.find((l) => l.klucz === 'k_bateria').kosztPlanPierwotny).toBe(12000)
+      expect(w.linie.find((l) => l.klucz === 'k_falownik').kosztPlanPierwotny).toBeNull()
+    })
+
+    it('parseSnapshot przyjmuje snapshot z korektą i edycja_planu', () => {
+      const snap = planSnapshot()
+      snap.linie = [...snap.linie, korekta]
+      snap.edycja_planu = { kiedy: '2026-11-13 10:00:00', kto: 'a@x.pl', koszt_plan_przed: '20000.00', koszt_plan_pierwotny: '20000.00' }
+      expect(parseSnapshot(JSON.stringify(snap)).edycja_planu.kto).toBe('a@x.pl')
+    })
+  })
+
+  describe('czyZmienioneRzeczywiste', () => {
+    it('stan startowy: brak zmian', () => {
+      const snap = planSnapshot()
+      const edycje = { k_falownik: '', k_bateria: '', k_montaz_pv: '' }
+      expect(czyZmienioneRzeczywiste(snap, edycje, [])).toBe(false)
+    })
+
+    it('wpisany koszt rzeczywisty albo nowy wiersz dodatkowy to zmiana', () => {
+      const snap = planSnapshot()
+      expect(czyZmienioneRzeczywiste(snap, { k_falownik: '4000', k_bateria: '', k_montaz_pv: '' }, [])).toBe(true)
+      expect(czyZmienioneRzeczywiste(snap, { k_falownik: '', k_bateria: '', k_montaz_pv: '' }, [{ nazwa: '', kwota: '' }])).toBe(true)
     })
   })
 })

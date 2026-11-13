@@ -33,7 +33,12 @@ from frappe.utils import flt
 from crm.api import volteo_poziom_prowizji, volteo_widzi_prowizje
 from crm.api.limit_zadan import rate_limit
 from crm.api.umowa import _sprawdz_dostep_do_szansy
-from crm.koszty.rdzen import scal_snapshot
+from crm.koszty.rdzen import (
+	czy_zmieniona_korekta,
+	policz_zmiany_planu,
+	scal_snapshot,
+	zmien_koszty_planowane,
+)
 from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad
 
 ADMIN_ROLE = {"Volteo Core Admin", "System Manager"}
@@ -120,6 +125,67 @@ def volteo_koszty_zapisz(
 		zapisz_slad(
 			deal,
 			tekst_sladu("koszty", pozycje=len(nowy["linie"]), dodatkowe=len(dodatkowe)),
+		)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), "Volteo Koszty: błąd zapisu śladu aktywności")
+
+	return {"koszty": nowy}
+
+
+@frappe.whitelist()
+@rate_limit(limit=30, seconds=60)
+def volteo_koszty_plan_zapisz(
+	deal: str, koszty_plan: dict[str, Any], suma_plan: str | None = None
+) -> dict[str, Any]:
+	"""Nanosi edycję kosztów PLANOWANYCH administratora (każda pozycja osobno i/albo suma)
+	na zapisany snapshot kosztów szansy OZE (`linia_produktowa` `pv` albo `oze`; ops#335).
+
+	Semantykę (przywracanie pierwotnych wartości, linia `korekta_sumy_plan`, przeliczenie
+	marży i zysku) opisuje `crm.koszty.rdzen.zmien_koszty_planowane`. Bramka `ADMIN_ROLE` jest
+	pierwszą instrukcją (fail-closed). `ValueError` z rdzenia (m.in. snapshot Czystego
+	Powietrza, nieznany klucz, kwota ujemna) wraca do UI jako czytelny komunikat. Ślad w
+	Aktywności niesie wyłącznie licznik zmienionych pozycji, nigdy kwotę.
+	"""
+	role_uzytkownika = set(frappe.get_roles(frappe.session.user))
+	if not ADMIN_ROLE & role_uzytkownika:
+		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
+
+	_sprawdz_dostep_do_szansy(deal, "write")
+
+	zapisany = _wczytaj_zapisany_snapshot(deal)
+
+	try:
+		nowy = zmien_koszty_planowane(
+			zapisany,
+			koszty_plan,
+			suma_plan,
+			frappe.utils.now(),
+			frappe.session.user,
+		)
+	except ValueError as blad:
+		frappe.throw(str(blad))
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), "Volteo Koszty: błąd zapisu kosztów planowanych")
+		frappe.throw(_("Wystąpił błąd podczas zapisu kosztów planowanych."))
+
+	meta = frappe.get_meta("CRM Deal")
+	pola: dict[str, Any] = {"custom_koszty_json": json.dumps(nowy, ensure_ascii=False)}
+	if meta.has_field("custom_koszty_zysk_plan"):
+		pola["custom_koszty_zysk_plan"] = flt(nowy["podsumowanie"]["zysk_plan"], 2)
+	rzeczywiste = nowy.get("podsumowanie_rzeczywiste")
+	if rzeczywiste is not None and meta.has_field("custom_koszty_zysk_rzeczywisty"):
+		pola["custom_koszty_zysk_rzeczywisty"] = flt(rzeczywiste["zysk_rzeczywisty"], 2)
+	# permlevel 2, update_modified=False: ten sam powód co w `volteo_koszty_zapisz` wyżej.
+	frappe.db.set_value("CRM Deal", deal, pola, update_modified=False)
+
+	try:
+		zapisz_slad(
+			deal,
+			tekst_sladu(
+				"koszty_plan",
+				pozycje=policz_zmiany_planu(zapisany, nowy),
+				suma=czy_zmieniona_korekta(zapisany, nowy),
+			),
 		)
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), "Volteo Koszty: błąd zapisu śladu aktywności")

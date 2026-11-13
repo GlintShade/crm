@@ -686,6 +686,16 @@ class TestTekstSladu(unittest.TestCase):
 		self.assertEqual(text, f"{ZNACZNIK_KOSZTY} zaktualizowano koszty rzeczywiste (3 pozycji, 1 dodatkowych)")
 		self.assertTrue(text.startswith(ZNACZNIK_KOSZTY))
 
+	def test_l2_koszty_plan_nigdy_nie_niesie_kwot(self: "TestTekstSladu") -> None:
+		text = tekst_sladu("koszty_plan", pozycje=2, suma=False)
+		self.assertEqual(text, f"{ZNACZNIK_KOSZTY} zaktualizowano koszty planowane (2 pozycji)")
+		self.assertTrue(text.startswith(ZNACZNIK_KOSZTY))
+		self.assertEqual(
+			tekst_sladu("koszty_plan", pozycje=1, suma=True),
+			f"{ZNACZNIK_KOSZTY} zaktualizowano koszty planowane (1 pozycji, z korektą sumy)",
+		)
+		self.assertFalse(any(znak.isdigit() for znak in tekst_sladu("koszty_plan", pozycje=0, suma=False).split("(")[0]))
+
 	def test_m_status_auto(self: "TestTekstSladu") -> None:
 		self.assertEqual(
 			tekst_sladu("status_auto", automatyzacja="Umowa Wygenerowana", stary="Lead", nowy="Umowa Wygenerowana"),

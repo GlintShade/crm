@@ -38,6 +38,11 @@ import { roundPln } from '@/utils/money'
 // any other incomplete row -- see that function's doc comment.
 const DLUGOSC_NAZWY_MAX = 140
 
+// Edycja kosztów PLANOWANYCH (ops#335): lustro `crm/koszty/rdzen.py`
+// (`KLUCZ_KOREKTY_SUMY`, `LINIE_EDYTOWALNE_PLANU`). Tylko snapshoty OZE.
+export const KLUCZ_KOREKTY_SUMY = 'korekta_sumy_plan'
+export const LINIE_EDYTOWALNE_PLANU = ['pv', 'oze']
+
 /**
  * Parse a raw cost value typed by the administrator into a finite,
  * non-negative number, or `null` when the input represents "no actual
@@ -171,6 +176,8 @@ export function przeliczRzeczywiste(snapshot, edycje, dodatkowe) {
       netto: netto !== null ? roundPln(netto) : null,
       prowizjaPlan: prowizjaPlan !== null ? roundPln(prowizjaPlan) : null,
       kosztPlan: roundPln(kosztPlan),
+      kosztPlanPierwotny: liczbaLubNull(linia.koszt_plan_pierwotny),
+      czyKorekta: klucz === KLUCZ_KOREKTY_SUMY,
       kosztRzeczywisty: kosztRzeczywistySurowy !== null ? roundPln(kosztRzeczywistySurowy) : null,
       kosztUzyty: roundPln(kosztUzytySurowy),
       wgPlanu,
@@ -268,6 +275,8 @@ export function zbudujPayload(snapshot, edycje, dodatkowe) {
 
   const koszty_rzeczywiste = {}
   for (const linia of linieZrodlowe) {
+    // Linia korekty sumy planu nie ma kosztu rzeczywistego (serwer odrzuca wartość).
+    if (linia.klucz === KLUCZ_KOREKTY_SUMY) continue
     const sparsowana = parsujKosztRzeczywisty(edycjeBezpieczne[linia.klucz])
     koszty_rzeczywiste[linia.klucz] = sparsowana !== null ? roundPln(sparsowana) : null
   }
@@ -287,4 +296,177 @@ export function zbudujPayload(snapshot, edycje, dodatkowe) {
   }
 
   return { koszty_rzeczywiste, dodatkowe: dodatkowePayload }
+}
+
+// ---------------------------------------------------------------------------
+// Edycja kosztów PLANOWANYCH (ops#335). Tylko podgląd na żywo; serwer
+// (`crm.api.koszty.volteo_koszty_plan_zapisz`) przelicza autorytatywnie.
+// Arytmetyka w groszach (liczby całkowite), żeby suma na ekranie zgadzała
+// się z serwerowym Decimal co do grosza.
+// ---------------------------------------------------------------------------
+
+function grosze(wartosc) {
+  return Math.round(liczbaLubZero(wartosc) * 100)
+}
+
+function zGroszy(g) {
+  return g / 100
+}
+
+/** Czy snapshot jest edytowalny w trybie planu (tylko OZE: pv, oze). */
+export function czyEdytowalnyPlan(snapshot) {
+  return !!snapshot && LINIE_EDYTOWALNE_PLANU.includes(snapshot.linia_produktowa)
+}
+
+/** Wartości wejściowe pól planu na starcie edycji: klucz -> zapisany koszt planowany. */
+export function edycjePlanuStart(snapshot) {
+  const wynik = {}
+  for (const linia of snapshot?.linie || []) {
+    if (linia.klucz === KLUCZ_KOREKTY_SUMY) continue
+    wynik[linia.klucz] = linia.koszt_plan != null ? String(linia.koszt_plan) : ''
+  }
+  return wynik
+}
+
+/**
+ * Podgląd na żywo edycji kosztów planowanych. Nie mutuje argumentów.
+ *
+ * @param {object|null} snapshot - sparsowany snapshot
+ * @param {Object<string,string>} edycjePlanu - klucz -> wpisany koszt planowany
+ * @param {string|null} sumaWpisana - wpisana suma kosztów planowanych albo null (nie ruszana)
+ * @param {boolean} usunKorekte - czy usunąć linię korekty sumy
+ */
+export function przeliczPlan(snapshot, edycjePlanu, sumaWpisana, usunKorekte = false) {
+  const bledy = []
+  const edycje = edycjePlanu || {}
+  const linieZrodlowe = Array.isArray(snapshot?.linie) ? snapshot.linie : []
+  const sumaPrzed = grosze(snapshot?.podsumowanie?.koszt_plan)
+
+  let delta = 0
+  let korektaStara = 0
+  const linie = []
+  for (const linia of linieZrodlowe) {
+    const klucz = linia.klucz
+    const etykieta = linia.etykieta || klucz
+    const zapisany = grosze(linia.koszt_plan)
+    if (klucz === KLUCZ_KOREKTY_SUMY) {
+      korektaStara = zapisany
+      continue
+    }
+    const surowy = edycje[klucz]
+    const sparsowany = parsujKosztRzeczywisty(surowy)
+    if (sparsowany === null && typeof surowy === 'string' && surowy.trim() !== '') {
+      bledy.push(`Nieprawidłowa wartość kosztu planowanego dla pozycji „${etykieta}”.`)
+    }
+    // Pusty albo błędny wpis = bez zmiany (zostaje zapisana wartość).
+    const nowy = sparsowany === null ? zapisany : Math.round(sparsowany * 100)
+    const pierwotnyZapisany = liczbaLubNull(linia.koszt_plan_pierwotny)
+    const zmieniona = nowy !== zapisany
+    delta += nowy - zapisany
+    linie.push({
+      klucz,
+      etykieta,
+      kosztZapisany: zGroszy(zapisany),
+      kosztNowy: zGroszy(nowy),
+      // Wartość, do której wraca przycisk przywrócenia: zapisana pierwotna albo (przy
+      // niezapisanej zmianie) obecnie zapisany koszt.
+      pierwotny: pierwotnyZapisany !== null ? roundPln(pierwotnyZapisany) : zmieniona ? zGroszy(zapisany) : null,
+      zmieniona,
+    })
+  }
+
+  let korekta = korektaStara
+  if (usunKorekte && korektaStara !== 0) {
+    delta -= korektaStara
+    korekta = 0
+  }
+  const sumaPoLiniach = sumaPrzed + delta
+
+  const sumaSparsowana = parsujKosztRzeczywisty(sumaWpisana)
+  if (sumaSparsowana === null && typeof sumaWpisana === 'string' && sumaWpisana.trim() !== '') {
+    bledy.push('Nieprawidłowa wartość sumy kosztów planowanych.')
+  }
+  let sumaNowa = sumaPoLiniach
+  let roznica = 0
+  if (sumaSparsowana !== null) {
+    sumaNowa = Math.round(sumaSparsowana * 100)
+    roznica = sumaNowa - sumaPoLiniach
+    korekta += roznica
+  }
+
+  const netto = grosze(snapshot?.podsumowanie?.netto)
+  const prowizjaPlan = liczbaLubNull(snapshot?.podsumowanie?.prowizja_plan)
+  const marza = netto - sumaNowa
+  const zysk = marza - (prowizjaPlan !== null ? grosze(prowizjaPlan) : 0)
+
+  return {
+    linie,
+    razem: {
+      netto: zGroszy(netto),
+      kosztPlan: zGroszy(sumaNowa),
+      sumaPoLiniach: zGroszy(sumaPoLiniach),
+      marzaPlan: zGroszy(marza),
+      zyskPlan: zGroszy(zysk),
+      prowizjaPlan: prowizjaPlan !== null ? roundPln(prowizjaPlan) : null,
+    },
+    // `roznica` != 0 oznacza, że różnica między wpisaną sumą a sumą linii trafi do korekty.
+    roznicaSumy: zGroszy(roznica),
+    korekta: zGroszy(korekta),
+    korektaIstnieje: korektaStara !== 0,
+    bledy,
+  }
+}
+
+/**
+ * Payload dla `crm.api.koszty.volteo_koszty_plan_zapisz`. Do `koszty_plan` trafiają
+ * tylko linie, których wpisana wartość różni się od zapisanej (wartość równa
+ * pierwotnej serwer traktuje jak przywrócenie). `suma_plan` (string) tylko gdy
+ * wpisana i poprawna; wygrywa nad zmianami linii. Nie mutuje argumentów.
+ */
+export function zbudujPayloadPlanu(snapshot, edycjePlanu, sumaWpisana, usunKorekte = false) {
+  const edycje = edycjePlanu || {}
+  const koszty_plan = {}
+  for (const linia of Array.isArray(snapshot?.linie) ? snapshot.linie : []) {
+    if (linia.klucz === KLUCZ_KOREKTY_SUMY) continue
+    const sparsowany = parsujKosztRzeczywisty(edycje[linia.klucz])
+    if (sparsowany === null) continue
+    const nowy = Math.round(sparsowany * 100)
+    if (nowy !== grosze(linia.koszt_plan)) koszty_plan[linia.klucz] = zGroszy(nowy).toFixed(2)
+  }
+  if (usunKorekte) koszty_plan[KLUCZ_KOREKTY_SUMY] = null
+
+  const sumaSparsowana = parsujKosztRzeczywisty(sumaWpisana)
+  const suma_plan = sumaSparsowana !== null ? zGroszy(Math.round(sumaSparsowana * 100)).toFixed(2) : null
+  return { koszty_plan, suma_plan }
+}
+
+/** Czy payload planu niesie jakąkolwiek zmianę (do wyłączania przycisku Zapisz). */
+export function czyPayloadPlanuMaZmiany(payload) {
+  return Object.keys(payload?.koszty_plan || {}).length > 0 || payload?.suma_plan != null
+}
+
+/**
+ * Czy administrator ma niezapisane zmiany kosztów RZECZYWISTYCH (edycje linii albo
+ * dodatkowe pozycje względem snapshotu). Tryb edycji planu startuje dopiero bez nich:
+ * jeden zapis na raz, nic nie ginie po cichu.
+ */
+export function czyZmienioneRzeczywiste(snapshot, edycje, dodatkowe) {
+  const bazaEdycji = {}
+  for (const linia of snapshot?.linie || []) {
+    bazaEdycji[linia.klucz] = linia.koszt_rzeczywisty != null ? String(linia.koszt_rzeczywisty) : ''
+  }
+  const bazaDodatkowe = (snapshot?.dodatkowe || []).map((d) => ({
+    id: d.id,
+    nazwa: d.nazwa || '',
+    kwota: d.kwota != null ? String(d.kwota) : '',
+  }))
+  // Surowe dodatkowe (z niepełnymi wierszami) też liczą się jako zmiana.
+  const surowe = (Array.isArray(dodatkowe) ? dodatkowe : []).map((d) => ({
+    id: d?.id,
+    nazwa: String(d?.nazwa ?? ''),
+    kwota: String(d?.kwota ?? ''),
+  }))
+  const a = zbudujPayload(snapshot, edycje, dodatkowe)
+  const b = zbudujPayload(snapshot, bazaEdycji, bazaDodatkowe)
+  return JSON.stringify(a) !== JSON.stringify(b) || JSON.stringify(surowe) !== JSON.stringify(bazaDodatkowe)
 }
