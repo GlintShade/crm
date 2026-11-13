@@ -30,7 +30,7 @@ DLUGOSC_MIN: float = 13.5
 DLUGOSC_MAX: float = 24.5
 
 TRESC_LEAD_BEZPOSREDNI_DOMYSLNA: str = (
-	"Nowy lead dla Ciebie: {klient}, tel. {telefon}, {kod}, PV: {ma_pv}. Mapa: {mapa}"
+	"Nowy lead dla Ciebie: {klient}, tel. {telefon}, {kod}, {ma_pv}. Mapa: {mapa}"
 )
 """Seed `tresc_lead_bezposredni` i fallback."""
 
@@ -53,7 +53,7 @@ DANE_PRZYKLADOWE_LEAD_BEZPOSREDNI: Mapping[str, str] = {
 	"telefon": "600100200",
 	"kod": "66-300",
 	"miejscowosc": "Międzyrzecz",
-	"ma_pv": "nie",
+	"ma_pv": "nie ma PV",
 	"zasady": "brak",
 	"link": "https://crm.proenergy.pro/crm/leads/CRM-LEAD-2026-00001",
 	"mapa": "https://maps.google.com/?q=52.4447,15.5780",
