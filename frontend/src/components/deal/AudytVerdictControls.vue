@@ -1,11 +1,11 @@
 <!--
-  Per-element verdict controls for the Audyt tab's Weryfikacja stage —
+  Per-element verdict controls for the Audyt tab's Weryfikacja stage,
   reused in every list row and every photo card footer (see
   AudytTab.vue). Purely presentational: it renders the current verdict
   (waiting/accepted/error) and, for reviewers, the buttons to set one, but
   never calls the API or touches the audit store itself. The parent owns the
   `weryfikacja` map and is the only place `volteo_audyt_set_verdict` is
-  called — this component only emits `set-verdict`.
+  called, this component only emits `set-verdict`.
 -->
 <template>
   <div
@@ -14,13 +14,13 @@
   >
     <!-- Reviewer: waiting -> two equal actions -->
     <template v-if="canReview && status === 'waiting' && !noteMode">
-      <div :class="karta ? 'grid grid-cols-2 gap-2' : 'flex items-center gap-1.5'">
+      <div :class="karta ? 'flex flex-wrap gap-2' : 'flex items-center gap-1.5'">
         <Button
           size="sm"
           variant="subtle"
           theme="green"
-          iconLeft="lucide-check"
-          :class="karta ? 'w-full' : ''"
+          :iconLeft="karta ? undefined : 'lucide-check'"
+          :class="karta ? 'flex-1 basis-[4.75rem]' : ''"
           :label="__('Akceptuj')"
           :disabled="busy"
           @click="$emit('set-verdict', 'accepted')"
@@ -29,8 +29,8 @@
           size="sm"
           variant="subtle"
           theme="red"
-          iconLeft="lucide-x"
-          :class="karta ? 'w-full' : ''"
+          :iconLeft="karta ? undefined : 'lucide-x'"
+          :class="karta ? 'flex-1 basis-[4.75rem]' : ''"
           :label="__('Odrzuć')"
           :disabled="busy"
           @click="openNote"
@@ -134,14 +134,14 @@ const props = defineProps({
   verdict: { type: Object, default: () => ({ status: 'waiting' }) },
   canReview: { type: Boolean, default: false },
   busy: { type: Boolean, default: false },
-  // True only while the audit is in Weryfikacja — outside that stage this
+  // True only while the audit is in Weryfikacja, outside that stage this
   // component renders nothing at all.
   showControls: { type: Boolean, default: false },
   // 'wiersz' (kompaktowo, do prawej, dla wierszy listy) albo 'karta' (stopka karty zdjecia).
   uklad: { type: String, default: 'wiersz' },
 })
 
-const emit = defineEmits(['set-verdict'])
+const emit = defineEmits(['set-verdict', 'edytor'])
 
 const karta = computed(() => props.uklad === 'karta')
 const status = computed(() => props.verdict?.status || 'waiting')
@@ -151,7 +151,7 @@ const noteMode = ref(false)
 const noteText = ref('')
 
 // The parent replaces `verdict` with the server's authoritative response
-// after every call — once that lands, close any note editor left open
+// after every call, once that lands, close any note editor left open
 // rather than risk it showing a stale draft against a new status.
 watch(
   () => [props.verdict?.status, props.verdict?.note, props.verdict?.at],
@@ -160,6 +160,9 @@ watch(
     noteText.value = ''
   },
 )
+
+// Rodzic (wiersz listy) moze dzieki temu dac edytorowi cala szerokosc.
+watch(noteMode, (v) => emit('edytor', v))
 
 function openNote() {
   noteText.value = props.verdict?.status === 'error' ? props.verdict?.note || '' : ''
