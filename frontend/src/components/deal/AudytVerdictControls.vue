@@ -17,20 +17,26 @@
       <div :class="karta ? 'flex flex-wrap gap-2' : 'flex items-center gap-1.5'">
         <Button
           size="sm"
-          variant="subtle"
+          variant="outline"
           theme="green"
           :iconLeft="karta ? undefined : 'lucide-check'"
-          :class="karta ? 'flex-1 basis-[4.75rem]' : ''"
+          :class="[
+            'font-medium !border-outline-green-3 !bg-surface-base !text-ink-green-8 hover:!bg-surface-gray-1',
+            karta ? 'flex-1 basis-[4.75rem]' : '',
+          ]"
           :label="__('Akceptuj')"
           :disabled="busy"
           @click="$emit('set-verdict', 'accepted')"
         />
         <Button
           size="sm"
-          variant="subtle"
+          variant="outline"
           theme="red"
           :iconLeft="karta ? undefined : 'lucide-x'"
-          :class="karta ? 'flex-1 basis-[4.75rem]' : ''"
+          :class="[
+            '!border-outline-red-3 !bg-surface-base !text-ink-red-8 hover:!bg-surface-gray-1',
+            karta ? 'flex-1 basis-[4.75rem]' : '',
+          ]"
           :label="__('Odrzuć')"
           :disabled="busy"
           @click="openNote"
