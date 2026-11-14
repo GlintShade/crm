@@ -8,7 +8,7 @@
   map and persists it via `zdjecia_json`.
 -->
 <template>
-  <div class="flex flex-col gap-1.5">
+  <div class="flex h-full flex-col gap-1.5">
     <!-- Empty + enabled -->
     <button
       v-if="!value && !disabled"
@@ -36,7 +36,7 @@
     </div>
 
     <!-- Filled: card -->
-    <div v-else :class="['flex flex-col overflow-hidden rounded-lg border', cardClass]">
+    <div v-else :class="['flex flex-1 flex-col overflow-hidden rounded-lg border', cardClass]">
       <div class="relative aspect-[4/3] w-full overflow-hidden bg-surface-gray-1">
         <img
           v-if="!isPdfValue && !isVideoValue"
@@ -51,7 +51,7 @@
           @click="openFullImage"
         >
           <FileVideoIcon class="size-8 text-ink-gray-5" />
-          <span class="w-full truncate text-center text-xs text-ink-gray-6">{{ fileNameFromUrl }}</span>
+          <span v-if="kompakt" class="w-full truncate text-center text-xs text-ink-gray-6">{{ fileNameFromUrl }}</span>
         </div>
         <div v-else-if="pokazPodgladPdf" class="relative h-full w-full">
           <iframe
@@ -59,7 +59,7 @@
             :title="label"
             loading="lazy"
             tabindex="-1"
-            class="pointer-events-none h-full w-full border-0 bg-white"
+            class="pointer-events-none h-full w-full border-0 bg-surface-base"
           />
           <!-- przezroczysta warstwa klikalna nad iframe -->
           <div class="absolute inset-0 cursor-pointer" @click="openFullImage" />
@@ -70,18 +70,18 @@
           @click="openFullImage"
         >
           <FileTextIcon class="size-8 text-ink-gray-5" />
-          <span class="w-full truncate text-center text-xs text-ink-gray-6">{{ fileNameFromUrl }}</span>
+          <span v-if="kompakt" class="w-full truncate text-center text-xs text-ink-gray-6">{{ fileNameFromUrl }}</span>
         </div>
 
         <span
           v-if="isPdfValue"
-          class="pointer-events-none absolute left-1.5 top-1.5 rounded bg-surface-gray-7 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
+          class="pointer-events-none absolute left-1.5 top-1.5 rounded border border-outline-gray-2 bg-surface-base px-1.5 py-0.5 text-[10px] font-semibold leading-none text-ink-gray-8"
         >
           PDF
         </span>
         <span
           v-else-if="isVideoValue"
-          class="pointer-events-none absolute left-1.5 top-1.5 rounded bg-surface-gray-7 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
+          class="pointer-events-none absolute left-1.5 top-1.5 rounded border border-outline-gray-2 bg-surface-base px-1.5 py-0.5 text-[10px] font-semibold leading-none text-ink-gray-8"
         >
           {{ __('film') }}
         </span>
@@ -89,6 +89,7 @@
         <!-- Narzedzia w rogu: zawsze widoczne male ikony -->
         <div class="pointer-events-none absolute right-1.5 top-1.5 flex gap-1">
           <Button
+            v-if="!kompakt"
             class="pointer-events-auto"
             size="sm"
             variant="subtle"
@@ -118,7 +119,7 @@
         </div>
       </div>
 
-      <div v-if="!kompakt" class="flex flex-col gap-2 p-2.5">
+      <div v-if="!kompakt" class="flex flex-1 flex-col gap-2 p-2.5">
         <div>
           <div class="line-clamp-2 text-left text-sm font-medium text-ink-gray-8">
             {{ displayLabel }}
@@ -127,7 +128,7 @@
             {{ fileNameFromUrl }}
           </div>
         </div>
-        <slot name="stopka" />
+        <div v-if="$slots.stopka" class="mt-auto"><slot name="stopka" /></div>
       </div>
     </div>
 
@@ -196,7 +197,7 @@ const verdictRing = computed(() => {
 const cardClass = computed(() => {
   if (props.verdictStatus === 'waiting') return 'border-outline-blue-2 bg-surface-blue-2'
   if (props.verdictStatus === 'error') return 'border-outline-red-3 bg-surface-red-2'
-  return 'border-outline-gray-2 bg-surface-white'
+  return 'border-outline-gray-2 bg-surface-base'
 })
 
 // Podglad pierwszej strony PDF w iframe. Jedna flaga: ustaw na false, aby

@@ -5,9 +5,8 @@
   Prezentacyjny: emituje `zatwierdz` i `idz` (klucz elementu), nie wola API.
 -->
 <template>
-  <div
-    class="sticky bottom-0 z-20 -mx-5 mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-outline-gray-2 bg-surface-white px-5 py-3"
-  >
+  <div class="sticky bottom-0 z-20 -mx-5 -mb-5 mt-auto border-t border-outline-gray-2 bg-surface-base px-5 py-3">
+    <div class="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-x-4 gap-y-2">
     <div class="h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-surface-gray-3">
       <div class="h-full rounded-full bg-surface-green-3" :style="{ width: procent + '%' }" />
     </div>
@@ -57,6 +56,7 @@
       :loading="loading"
       @click="$emit('zatwierdz')"
     />
+    </div>
   </div>
 </template>
 

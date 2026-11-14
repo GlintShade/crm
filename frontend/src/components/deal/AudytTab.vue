@@ -18,7 +18,7 @@
 -->
 <template>
   <div class="flex flex-1 flex-col overflow-y-auto p-5">
-    <div class="mx-auto w-full max-w-3xl">
+    <div :class="['mx-auto w-full max-w-3xl', canReview && isReview ? 'pb-4' : '']">
       <!-- Loading -->
       <div
         v-if="audyt.loading || reqLoading"
@@ -198,8 +198,8 @@
               :class="[
                 'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
                 filtr === chip.klucz
-                  ? 'border-outline-gray-4 bg-surface-gray-7 text-white'
-                  : 'border-outline-gray-2 bg-surface-white text-ink-gray-6 hover:bg-surface-gray-2',
+                  ? 'border-outline-gray-7 bg-surface-gray-10 text-ink-base'
+                  : 'border-outline-gray-2 bg-surface-base text-ink-gray-6 hover:bg-surface-gray-2',
               ]"
               @click="filtr = chip.klucz"
             >
@@ -234,8 +234,8 @@
                 v-for="f in visibleFields(sec)"
                 :key="f.fieldname"
                 :class="[
-                  'rounded',
-                  f.required && !fieldOk(f) ? 'p-1.5 ring-1 ring-outline-red-3' : '',
+                  'rounded p-1.5',
+                  f.required && !fieldOk(f) ? 'ring-1 ring-outline-red-3' : '',
                 ]"
               >
                 <FormControl
@@ -263,11 +263,12 @@
                 {{ __('{0} z {1} zaakceptowane', [zdjeciaZaakceptowane, zdjeciaRazem]) }}
               </div>
             </div>
-            <div v-if="!isReview || pokazaneZdjecia.length" :class="['grid grid-cols-2 gap-4', kolumnyZdjec]">
+            <div v-if="!isReview || pokazaneZdjecia.length" class="grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-4">
               <div
                 v-for="slot in pokazaneZdjecia"
                 :key="slot.key"
                 :id="'audyt-el-' + photoKey(slot.key)"
+                class="h-full max-w-xs"
               >
                 <AudytPhotoSlot
                   :label="slot.label"
@@ -442,17 +443,17 @@
             </div>
           </div>
         </section>
-
-        <AudytPasekDecyzji
-          v-if="canReview && isReview"
-          :agg="agg"
-          :pozostale="pozostaleElementy"
-          :loading="statusUpdating"
-          @zatwierdz="setStatus('Zatwierdzony')"
-          @idz="idzDoElementu"
-        />
       </div>
     </div>
+
+    <AudytPasekDecyzji
+      v-if="exists && !audyt.loading && !reqLoading && !reqError && canReview && isReview"
+      :agg="agg"
+      :pozostale="pozostaleElementy"
+      :loading="statusUpdating"
+      @zatwierdz="setStatus('Zatwierdzony')"
+      @idz="idzDoElementu"
+    />
 
     <Dialog v-model="zmianaRodzajuOtwarta" :options="{ title: __('Zmień rodzaj instalacji') }">
       <template #body-content>
@@ -898,11 +899,6 @@ const zdjeciaZaakceptowane = computed(
       (slot) => verdictStatusFor(photoKey(slot.key)) === 'accepted',
     ).length,
 )
-// Cztery widoczne sloty rozkladaja sie 4 w rzedzie, inaczej 3.
-const kolumnyZdjec = computed(() =>
-  visiblePhotoSlots.value.length === 4 ? 'sm:grid-cols-4' : 'sm:grid-cols-3',
-)
-
 function idzDoElementu(klucz) {
   filtr.value = 'wszystkie'
   nextTick(() => {

@@ -74,13 +74,14 @@
               </div>
             </div>
 
-            <div class="col-span-2 sm:col-span-1">
+            <div :class="['col-span-2', edytorOtwarty[f.fieldname] ? 'sm:col-span-full' : 'sm:col-span-1']">
               <AudytVerdictControls
                 uklad="wiersz"
                 :verdict="verdictFor(weryfikacja, fieldKey(f.fieldname))"
                 :can-review="canReview"
                 :busy="!!busy[fieldKey(f.fieldname)]"
                 :show-controls="true"
+                @edytor="(v) => (edytorOtwarty[f.fieldname] = v)"
                 @set-verdict="(st, note) => $emit('set-verdict', fieldKey(f.fieldname), st, note)"
               />
             </div>
@@ -107,7 +108,7 @@
 import AudytVerdictControls from '@/components/deal/AudytVerdictControls.vue'
 import { fieldKey, spojnoscPv, verdictFor } from '@/utils/audytWeryfikacja'
 import { Button, FormControl } from 'frappe-ui'
-import { computed, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 
 const props = defineProps({
   // [{ label, fields }], pola juz przefiltrowane do widocznych (depends_on)
@@ -127,6 +128,8 @@ defineEmits(['set-verdict'])
 
 // Tylko jeden wiersz w trybie edycji naraz.
 const edytowany = ref(null)
+// Wiersze, w ktorych otwarty jest edytor uwagi (decyzja zajmuje cala szerokosc).
+const edytorOtwarty = reactive({})
 
 function status(f) {
   return verdictFor(props.weryfikacja, fieldKey(f.fieldname)).status
