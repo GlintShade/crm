@@ -107,16 +107,7 @@
               <!-- Back office: status control -->
               <template v-if="canReview">
                 <Button
-                  v-if="isReview"
-                  variant="solid"
-                  theme="green"
-                  :label="__('Zatwierdź audyt')"
-                  :disabled="!agg.allAccepted"
-                  :loading="statusUpdating"
-                  @click="setStatus('Zatwierdzony')"
-                />
-                <Button
-                  v-else-if="isApproved"
+                  v-if="isApproved"
                   :label="__('Przywróć do edycji')"
                   :loading="statusUpdating"
                   @click="setStatus('Szkic')"
@@ -126,7 +117,7 @@
           </div>
 
           <!-- Verification progress — only meaningful while under review -->
-          <div v-if="isReview" class="text-xs text-ink-gray-5">
+          <div v-if="isReview && !canReview" class="text-xs text-ink-gray-5">
             {{ __('Zaakceptowano {0}/{1} elementów', [agg.accepted, agg.total]) }}<template v-if="agg.errors > 0"
               >&nbsp;· {{ __('Błędy: {0}', [agg.errors]) }}</template
             >
@@ -135,11 +126,6 @@
           <!-- Submit helper — draft not yet complete -->
           <div v-if="isDraft && !complete" class="text-xs text-ink-amber-6">
             {{ __('Musisz wypełnić wszystkie wymagane pola i zdjęcia, aby przesłać audyt do weryfikacji.') }}
-          </div>
-
-          <!-- Approve helper — review not yet fully accepted -->
-          <div v-if="canReview && isReview && !agg.allAccepted" class="text-xs text-ink-amber-6">
-            {{ __('Zatwierdzenie możliwe po zaakceptowaniu wszystkich elementów.') }}
           </div>
         </div>
 
@@ -158,14 +144,10 @@
 
         <!-- Verification (Weryfikacja) banner -->
         <div
-          v-if="isReview"
+          v-if="isReview && !canReview"
           class="rounded-lg border border-outline-blue-2 bg-surface-blue-2 px-4 py-3 text-sm text-ink-blue-8"
         >
-          {{
-            canReview
-              ? __('Audyt w weryfikacji: możesz edytować pola bezpośrednio, a następnie zatwierdzić.')
-              : __('Audyt oczekuje na weryfikację przez back office: pola są zablokowane do czasu decyzji.')
-          }}
+          {{ __('Audyt oczekuje na weryfikację przez back office: pola są zablokowane do czasu decyzji.') }}
         </div>
 
         <!-- Legacy variant banner -->
@@ -181,7 +163,18 @@
         </div>
 
         <!-- Variant picker (always visible once the audit exists) -->
-        <div class="w-full sm:max-w-xs">
+        <div v-if="isReview" class="text-sm text-ink-gray-7">
+          {{ __('Rodzaj instalacji') }}: <strong class="font-semibold">{{ form.rodzaj_instalacji || '-' }}</strong>
+          <button
+            v-if="!readOnly"
+            type="button"
+            class="ml-2 text-ink-blue-6 underline-offset-2 hover:underline"
+            @click="otworzZmianeRodzaju"
+          >
+            {{ __('Zmień') }}
+          </button>
+        </div>
+        <div v-else class="w-full sm:max-w-xs">
           <FormControl
             type="select"
             :label="__('Rodzaj instalacji')"
@@ -192,11 +185,47 @@
         </div>
 
         <template v-if="variantDef">
-          <div class="text-sm text-ink-gray-5">
+          <div v-if="isDraft" class="text-sm text-ink-gray-5">
             {{ __('Pola') }}: {{ fieldsDone }}/{{ fieldsTotal }} · {{ __('Zdjęcia') }}: {{ photosDone }}/{{ photosTotal }}
           </div>
 
-          <section v-for="sec in variantDef.sections" :key="sec.label">
+          <!-- Filtry listy (etap Weryfikacja) -->
+          <div v-if="isReview" class="flex flex-wrap items-center gap-2">
+            <button
+              v-for="chip in filtrChips"
+              :key="chip.klucz"
+              type="button"
+              :class="[
+                'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                filtr === chip.klucz
+                  ? 'border-outline-gray-4 bg-surface-gray-7 text-white'
+                  : 'border-outline-gray-2 bg-surface-white text-ink-gray-6 hover:bg-surface-gray-2',
+              ]"
+              @click="filtr = chip.klucz"
+            >
+              {{ chip.label }} {{ chip.liczba }}
+            </button>
+          </div>
+          <div
+            v-if="isReview && !pokazanePola.length && !pokazaneZdjecia.length"
+            class="rounded-lg border border-outline-gray-2 px-4 py-6 text-center text-sm text-ink-gray-5"
+          >
+            {{ __('Brak elementów w tym filtrze.') }}
+          </div>
+
+          <AudytWeryfikacjaLista
+            v-if="isReview"
+            :sekcje="sekcjeWidoczne"
+            :form="form"
+            :weryfikacja="weryfikacja"
+            :can-review="canReview"
+            :read-only="readOnly"
+            :busy="verdictBusy"
+            :filtr="filtr"
+            @set-verdict="setVerdict"
+          />
+
+          <section v-for="sec in (isReview ? [] : variantDef.sections)" :key="sec.label">
             <div class="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-gray-5">
               {{ sec.label }}
             </div>
@@ -206,11 +235,7 @@
                 :key="f.fieldname"
                 :class="[
                   'rounded',
-                  isReview
-                    ? 'ring-2 ' + VERDICT_META[verdictStatusFor(fieldKey(f.fieldname))].ring
-                    : f.required && !fieldOk(f)
-                      ? 'ring-1 ring-outline-red-3'
-                      : '',
+                  f.required && !fieldOk(f) ? 'p-1.5 ring-1 ring-outline-red-3' : '',
                 ]"
               >
                 <FormControl
@@ -222,23 +247,28 @@
                   :disabled="readOnly"
                   v-model="form[f.fieldname]"
                 />
-                <AudytVerdictControls
-                  :verdict="verdictFor(weryfikacja, fieldKey(f.fieldname))"
-                  :can-review="canReview"
-                  :busy="!!verdictBusy[fieldKey(f.fieldname)]"
-                  :show-controls="isReview"
-                  @set-verdict="(status, note) => setVerdict(fieldKey(f.fieldname), status, note)"
-                />
               </div>
             </div>
           </section>
 
-          <section>
-            <div class="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-gray-5">
-              {{ __('Dokumentacja zdjęciowa') }} ({{ photosDone }}/{{ photosTotal }})
+          <section v-if="!isReview || pokazaneZdjecia.length || (filtr === 'wszystkie' && (editable || zdjeciaDodatkowe.length))">
+            <div
+              v-if="!isReview || pokazaneZdjecia.length"
+              class="mb-3 flex items-baseline justify-between gap-2"
+            >
+              <div class="text-sm font-semibold uppercase tracking-wide text-ink-gray-5">
+                {{ __('Dokumentacja zdjęciowa') }}<template v-if="!isReview"> ({{ photosDone }}/{{ photosTotal }})</template>
+              </div>
+              <div v-if="isReview" class="text-xs text-ink-gray-5">
+                {{ __('{0} z {1} zaakceptowane', [zdjeciaZaakceptowane, zdjeciaRazem]) }}
+              </div>
             </div>
-            <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <div v-for="slot in visiblePhotoSlots" :key="slot.key" class="flex flex-col gap-1">
+            <div v-if="!isReview || pokazaneZdjecia.length" :class="['grid grid-cols-2 gap-4', kolumnyZdjec]">
+              <div
+                v-for="slot in pokazaneZdjecia"
+                :key="slot.key"
+                :id="'audyt-el-' + photoKey(slot.key)"
+              >
                 <AudytPhotoSlot
                   :label="slot.label"
                   :value="zdjecia[slot.key] || null"
@@ -252,28 +282,42 @@
                   :preview-key="slot.key"
                   @change="(url) => onPhotoChange(slot.key, url)"
                   @preview="otworzPodglad"
-                />
-                <AudytVerdictControls
-                  :verdict="verdictFor(weryfikacja, photoKey(slot.key))"
-                  :can-review="canReview"
-                  :busy="!!verdictBusy[photoKey(slot.key)]"
-                  :show-controls="isReview"
-                  @set-verdict="(status, note) => setVerdict(photoKey(slot.key), status, note)"
-                />
+                >
+                  <template v-if="isReview" #stopka>
+                    <AudytVerdictControls
+                      uklad="karta"
+                      :verdict="verdictFor(weryfikacja, photoKey(slot.key))"
+                      :can-review="canReview"
+                      :busy="!!verdictBusy[photoKey(slot.key)]"
+                      :show-controls="true"
+                      @set-verdict="(status, note) => setVerdict(photoKey(slot.key), status, note)"
+                    />
+                  </template>
+                </AudytPhotoSlot>
               </div>
             </div>
 
-            <!-- Additional (optional) photos -->
-            <div v-if="editable || zdjeciaDodatkowe.length" class="mt-5">
-              <div class="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-gray-5">
-                {{ __('Zdjęcia i filmy dodatkowe (opcjonalne, maks. 5)') }}
+            <!-- Additional (optional) photos, bez akceptacji -->
+            <div
+              v-if="(!isReview || filtr === 'wszystkie') && (editable || zdjeciaDodatkowe.length)"
+              :class="isReview && !pokazaneZdjecia.length ? '' : 'mt-5'"
+            >
+              <div class="mb-3 flex items-baseline justify-between gap-2">
+                <div class="text-xs font-semibold uppercase tracking-wide text-ink-gray-5">
+                  <template v-if="isReview">{{ __('Zdjęcia i filmy dodatkowe') }}</template>
+                  <template v-else>{{ __('Zdjęcia i filmy dodatkowe (opcjonalne, maks. 5)') }}</template>
+                </div>
+                <div v-if="isReview" class="text-xs text-ink-gray-5">
+                  {{ __('{0} z 5, bez akceptacji', [zdjeciaDodatkowe.length]) }}
+                </div>
               </div>
-              <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <div class="grid grid-cols-3 gap-3 sm:grid-cols-5">
                 <AudytPhotoSlot
                   v-for="(url, idx) in zdjeciaDodatkowe"
                   :key="'extra-' + idx + '-' + url"
                   :label="__('Zdjęcie dodatkowe')"
                   :value="url"
+                  kompakt
                   doctype="Volteo Audyt"
                   :docname="dealId"
                   :disabled="readOnly"
@@ -287,6 +331,7 @@
                   :key="'extra-new-' + zdjeciaDodatkowe.length"
                   :label="__('Zdjęcie dodatkowe')"
                   :value="null"
+                  kompakt
                   doctype="Volteo Audyt"
                   :docname="dealId"
                   :disabled="false"
@@ -397,8 +442,44 @@
             </div>
           </div>
         </section>
+
+        <AudytPasekDecyzji
+          v-if="canReview && isReview"
+          :agg="agg"
+          :pozostale="pozostaleElementy"
+          :loading="statusUpdating"
+          @zatwierdz="setStatus('Zatwierdzony')"
+          @idz="idzDoElementu"
+        />
       </div>
     </div>
+
+    <Dialog v-model="zmianaRodzajuOtwarta" :options="{ title: __('Zmień rodzaj instalacji') }">
+      <template #body-content>
+        <div class="flex flex-col gap-3">
+          <FormControl
+            type="select"
+            :label="__('Rodzaj instalacji')"
+            :options="['', ...requirements.variants]"
+            v-model="nowyRodzaj"
+          />
+          <div class="text-sm text-ink-amber-8">
+            {{ __('Zmiana rodzaju instalacji usuwa wszystkie decyzje weryfikacji.') }}
+          </div>
+        </div>
+      </template>
+      <template #actions>
+        <div class="flex justify-end gap-2">
+          <Button variant="subtle" :label="__('Anuluj')" @click="zmianaRodzajuOtwarta = false" />
+          <Button
+            variant="solid"
+            :label="__('Zmień rodzaj')"
+            :disabled="!nowyRodzaj || nowyRodzaj === form.rodzaj_instalacji"
+            @click="potwierdzZmianeRodzaju"
+          />
+        </div>
+      </template>
+    </Dialog>
 
     <AudytPodgladZdjec
       v-model="podgladOtwarty"
@@ -414,25 +495,29 @@ import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
 import AudytIcon from '@/components/Icons/AudytIcon.vue'
 import AudytPhotoSlot from '@/components/deal/AudytPhotoSlot.vue'
 import AudytPodgladZdjec from '@/components/deal/AudytPodgladZdjec.vue'
+import AudytPasekDecyzji from '@/components/deal/AudytPasekDecyzji.vue'
 import AudytVerdictControls from '@/components/deal/AudytVerdictControls.vue'
+import AudytWeryfikacjaLista from '@/components/deal/AudytWeryfikacjaLista.vue'
 import { usersStore } from '@/stores/users.js'
 import { useAttachments } from '@/composables/useAttachments'
 import { sanitizeHTML } from '@/utils'
 import { tekstPusty } from '@/utils/aktualizacje'
 import { indeksDlaKlucza, zbudujListePodgladu } from '@/utils/audytPodglad'
 import {
-  VERDICT_META,
   aggregate,
   depOk as depOkUtil,
   fieldKey,
+  filtruj,
   parseWeryfikacja,
   photoKey,
+  pozostale,
   verdictFor,
   visibleElements,
 } from '@/utils/audytWeryfikacja'
 import {
   Badge,
   Button,
+  Dialog,
   FileUploader,
   FormControl,
   TextEditor,
@@ -764,6 +849,82 @@ const agg = computed(() => aggregate(weryfikacja, elements.value))
 
 function verdictStatusFor(key) {
   return verdictFor(weryfikacja, key).status
+}
+
+// --- Filtr i nawigacja etapu Weryfikacja ------------------------------------
+const filtr = ref('wszystkie') // 'wszystkie' | 'otwarte' | 'bledy'
+
+const pozostaleElementy = computed(() => pozostale(weryfikacja, elements.value))
+
+const filtrChips = computed(() => {
+  const chips = []
+  if (canReview.value) {
+    chips.push({
+      klucz: 'otwarte',
+      label: __('Do sprawdzenia'),
+      liczba: pozostaleElementy.value.oczekujace.length,
+    })
+  }
+  chips.push({ klucz: 'bledy', label: __('Błędy'), liczba: pozostaleElementy.value.bledy.length })
+  chips.push({ klucz: 'wszystkie', label: __('Wszystkie'), liczba: elements.value.length })
+  return chips
+})
+
+const sekcjeWidoczne = computed(() =>
+  (variantDef.value?.sections || [])
+    .map((sec) => ({ label: sec.label, fields: visibleFields(sec) }))
+    .filter((sec) => sec.fields.length),
+)
+
+// Pola i zdjecia pokazane po zastosowaniu filtra (poza Weryfikacja: wszystkie).
+const pokazanePola = computed(() =>
+  isReview.value
+    ? filtruj(weryfikacja, elements.value, filtr.value).filter((e) => e.kind === 'field')
+    : [],
+)
+const pokazaneZdjecia = computed(() => {
+  if (!isReview.value) return visiblePhotoSlots.value
+  const klucze = new Set(
+    filtruj(weryfikacja, elements.value, filtr.value)
+      .filter((e) => e.kind === 'photo')
+      .map((e) => e.key),
+  )
+  return visiblePhotoSlots.value.filter((slot) => klucze.has(photoKey(slot.key)))
+})
+const zdjeciaRazem = computed(() => visiblePhotoSlots.value.length)
+const zdjeciaZaakceptowane = computed(
+  () =>
+    visiblePhotoSlots.value.filter(
+      (slot) => verdictStatusFor(photoKey(slot.key)) === 'accepted',
+    ).length,
+)
+// Cztery widoczne sloty rozkladaja sie 4 w rzedzie, inaczej 3.
+const kolumnyZdjec = computed(() =>
+  visiblePhotoSlots.value.length === 4 ? 'sm:grid-cols-4' : 'sm:grid-cols-3',
+)
+
+function idzDoElementu(klucz) {
+  filtr.value = 'wszystkie'
+  nextTick(() => {
+    document
+      .getElementById('audyt-el-' + klucz)
+      ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  })
+}
+
+// --- Zmiana rodzaju instalacji w trakcie weryfikacji -------------------------
+const zmianaRodzajuOtwarta = ref(false)
+const nowyRodzaj = ref('')
+
+function otworzZmianeRodzaju() {
+  nowyRodzaj.value = form.rodzaj_instalacji || ''
+  zmianaRodzajuOtwarta.value = true
+}
+
+function potwierdzZmianeRodzaju() {
+  if (!nowyRodzaj.value) return
+  form.rodzaj_instalacji = nowyRodzaj.value
+  zmianaRodzajuOtwarta.value = false
 }
 
 // --- Autosave (fields) --------------------------------------------------------

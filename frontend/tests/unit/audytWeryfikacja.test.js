@@ -7,6 +7,9 @@ import {
   fieldKey,
   parseWeryfikacja,
   photoKey,
+  filtruj,
+  pozostale,
+  spojnoscPv,
   verdictFor,
   visibleElements,
 } from '@/utils/audytWeryfikacja'
@@ -227,6 +230,52 @@ describe('Audyt — weryfikacja elementów', () => {
       expect(VERDICT_META.waiting).toEqual({ theme: 'blue', label: 'Oczekuje', ring: 'ring-outline-blue-2' })
       expect(VERDICT_META.accepted).toEqual({ theme: 'green', label: 'Zaakceptowano', ring: 'ring-outline-green-2' })
       expect(VERDICT_META.error).toEqual({ theme: 'red', label: 'Błąd', ring: 'ring-outline-red-3' })
+    })
+  })
+  describe('pozostale / filtruj', () => {
+    const els = [{ key: 'a' }, { key: 'b' }, { key: 'c' }, { key: 'd' }]
+    const map = { a: { status: 'accepted' }, b: { status: 'error', note: 'x' }, d: { status: 'error' } }
+
+    it('pozostale rozdziela oczekujace i bledy w kolejnosci', () => {
+      const r = pozostale(map, els)
+      expect(r.oczekujace.map((e) => e.key)).toEqual(['c'])
+      expect(r.bledy.map((e) => e.key)).toEqual(['b', 'd'])
+    })
+
+    it('pozostale radzi sobie z pustymi danymi', () => {
+      expect(pozostale(null, null)).toEqual({ oczekujace: [], bledy: [] })
+    })
+
+    it('filtruj zwraca elementy wg filtra', () => {
+      expect(filtruj(map, els, 'otwarte').map((e) => e.key)).toEqual(['c'])
+      expect(filtruj(map, els, 'bledy').map((e) => e.key)).toEqual(['b', 'd'])
+      expect(filtruj(map, els, 'wszystkie').map((e) => e.key)).toEqual(['a', 'b', 'c', 'd'])
+    })
+  })
+
+  describe('spojnoscPv', () => {
+    it('zwraca null dla pustych lub niepoprawnych danych', () => {
+      expect(spojnoscPv('', 10)).toBeNull()
+      expect(spojnoscPv(5, null)).toBeNull()
+      expect(spojnoscPv(0, 10)).toBeNull()
+      expect(spojnoscPv(5, -2)).toBeNull()
+      expect(spojnoscPv('abc', 10)).toBeNull()
+    })
+
+    it('liczy waty na modul i ocenia typowosc', () => {
+      expect(spojnoscPv(5, 10)).toEqual({ watNaModul: 500, nietypowe: false })
+      expect(spojnoscPv(10, 12)).toEqual({ watNaModul: 833, nietypowe: true })
+      expect(spojnoscPv(2, 10)).toEqual({ watNaModul: 200, nietypowe: true })
+      expect(spojnoscPv(2.5, 10).nietypowe).toBe(false)
+    })
+
+    it('przyjmuje teksty z przecinkiem dziesietnym', () => {
+      expect(spojnoscPv('4,5', '10')).toEqual({ watNaModul: 450, nietypowe: false })
+    })
+
+    it('granice 250 i 600 sa typowe', () => {
+      expect(spojnoscPv(2.5, 10).nietypowe).toBe(false)
+      expect(spojnoscPv(6, 10).nietypowe).toBe(false)
     })
   })
 })
