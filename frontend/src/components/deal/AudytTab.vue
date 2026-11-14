@@ -290,7 +290,7 @@
                   @change="(url) => onPhotoChange(slot.key, url)"
                   @preview="otworzPodglad"
                 >
-                  <template v-if="isReview" #stopka>
+                  <template v-if="isReview" #stopka="{ podmien }">
                     <AudytVerdictControls
                       uklad="karta"
                       :verdict="verdictFor(weryfikacja, photoKey(slot.key))"
@@ -298,6 +298,16 @@
                       :busy="!!verdictBusy[photoKey(slot.key)]"
                       :show-controls="true"
                       @set-verdict="(status, note) => setVerdict(photoKey(slot.key), status, note)"
+                    />
+                    <Button
+                      v-if="trybPoprawek && verdictStatusFor(photoKey(slot.key)) === 'error' && poprawialny(photoKey(slot.key))"
+                      class="mt-2 w-full !border-outline-red-3 !bg-surface-base !text-ink-red-8 hover:!bg-surface-gray-1"
+                      size="sm"
+                      variant="outline"
+                      theme="red"
+                      iconLeft="lucide-refresh-cw"
+                      :label="slot.pdf ? __('Podmień plik') : __('Podmień zdjęcie')"
+                      @click="podmien()"
                     />
                   </template>
                 </AudytPhotoSlot>

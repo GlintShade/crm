@@ -132,7 +132,7 @@
             {{ fileNameFromUrl }}
           </div>
         </div>
-        <div v-if="$slots.stopka" class="mt-auto"><slot name="stopka" /></div>
+        <div v-if="$slots.stopka" class="mt-auto"><slot name="stopka" :podmien="() => (showUploader = true)" /></div>
       </div>
     </div>
 
