@@ -54,12 +54,16 @@
           <span v-if="kompakt" class="w-full truncate text-center text-xs text-ink-gray-6">{{ fileNameFromUrl }}</span>
         </div>
         <div v-else-if="pokazPodgladPdf" class="relative h-full w-full">
+          <!-- ikona pod iframe: bez przegladarkowego czytnika PDF zostaje widoczna -->
+          <div class="absolute inset-0 flex items-center justify-center">
+            <FileTextIcon class="size-8 text-ink-gray-5" />
+          </div>
           <iframe
             :src="pdfPodgladUrl"
             :title="label"
             loading="lazy"
             tabindex="-1"
-            class="pointer-events-none h-full w-full border-0 bg-surface-base"
+            class="pointer-events-none absolute inset-0 h-full w-full border-0"
           />
           <!-- przezroczysta warstwa klikalna nad iframe -->
           <div class="absolute inset-0 cursor-pointer" @click="openFullImage" />

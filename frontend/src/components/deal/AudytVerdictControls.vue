@@ -154,7 +154,7 @@ const noteText = ref('')
 // after every call, once that lands, close any note editor left open
 // rather than risk it showing a stale draft against a new status.
 watch(
-  () => [props.verdict?.status, props.verdict?.note, props.verdict?.at],
+  [() => props.verdict?.status, () => props.verdict?.note, () => props.verdict?.at],
   () => {
     noteMode.value = false
     noteText.value = ''
