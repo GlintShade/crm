@@ -112,3 +112,45 @@ export const VERDICT_META = {
   accepted: { theme: 'green', label: 'Zaakceptowano', ring: 'ring-outline-green-2' },
   error: { theme: 'red', label: 'Błąd', ring: 'ring-outline-red-3' },
 }
+
+/** Elementy bez decyzji (oczekujace) i z bledem, w oryginalnej kolejnosci. */
+export function pozostale(map, elements) {
+  const list = Array.isArray(elements) ? elements : []
+  const oczekujace = []
+  const bledy = []
+  list.forEach((element) => {
+    const status = verdictFor(map, element.key).status
+    if (status === 'waiting') oczekujace.push(element)
+    if (status === 'error') bledy.push(element)
+  })
+  return { oczekujace, bledy }
+}
+
+/** Filtr listy: 'wszystkie' | 'otwarte' (oczekujace) | 'bledy'. */
+export function filtruj(map, elements, filtr) {
+  const list = Array.isArray(elements) ? elements : []
+  if (filtr === 'otwarte') return list.filter((e) => verdictFor(map, e.key).status === 'waiting')
+  if (filtr === 'bledy') return list.filter((e) => verdictFor(map, e.key).status === 'error')
+  return list.slice()
+}
+
+function liczba(value) {
+  if (value === null || value === undefined) return null
+  const text = typeof value === 'string' ? value.trim().replace(',', '.') : value
+  if (text === '') return null
+  const n = Number(text)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
+/**
+ * Sprawdza spojnosc mocy instalacji z liczba modulow. Zwraca null, gdy brak
+ * danych, inaczej { watNaModul, nietypowe } (nietypowe: ponizej 250 W lub
+ * powyzej 600 W na modul).
+ */
+export function spojnoscPv(mocKw, moduly) {
+  const moc = liczba(mocKw)
+  const szt = liczba(moduly)
+  if (moc === null || szt === null) return null
+  const watNaModul = Math.round((moc * 1000) / szt)
+  return { watNaModul, nietypowe: watNaModul < 250 || watNaModul > 600 }
+}

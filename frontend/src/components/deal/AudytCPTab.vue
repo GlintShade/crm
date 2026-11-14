@@ -177,14 +177,18 @@
                 :preview-key="slot.key"
                 @change="(url) => onDocChange(slot.key, url)"
                 @preview="otworzPodglad"
-              />
-              <AudytVerdictControls
-                :verdict="verdictFor(weryfikacja, slot.key)"
-                :can-review="canReview"
-                :busy="!!verdictBusy[slot.key]"
-                :show-controls="isReview && !!dokumenty[slot.key]"
-                @set-verdict="(vStatus, note) => setVerdict(slot.key, vStatus, note)"
-              />
+              >
+                <template v-if="isReview && !!dokumenty[slot.key]" #stopka>
+                  <AudytVerdictControls
+                    uklad="karta"
+                    :verdict="verdictFor(weryfikacja, slot.key)"
+                    :can-review="canReview"
+                    :busy="!!verdictBusy[slot.key]"
+                    :show-controls="true"
+                    @set-verdict="(vStatus, note) => setVerdict(slot.key, vStatus, note)"
+                  />
+                </template>
+              </AudytPhotoSlot>
             </div>
           </div>
         </section>
@@ -203,6 +207,7 @@
               :key="'zdjecie-' + idx + '-' + url"
               :label="__('Zdjęcie {0}', [idx + 1])"
               :value="url"
+              kompakt
               doctype="Volteo Audyt CP"
               :docname="dealId"
               :disabled="readOnly"

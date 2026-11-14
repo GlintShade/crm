@@ -3,8 +3,8 @@
   (Dokumentacja zdjęciowa). Holds a photo, a video (photo slots only, never
   document slots), or a PDF (document slots only). Empty tiles open
   FilesUploader (camera or device); filled tiles show a thumbnail (or an
-  icon tile for video/PDF) with hover/touch overlay actions to replace or
-  remove. Purely presentational, the parent (AudytTab) owns the `zdjecia`
+  icon tile for video/PDF) shown as a card with always-visible corner tools
+  (enlarge, replace, remove) and an optional footer slot (`stopka`). Purely presentational, the parent (AudytTab) owns the `zdjecia`
   map and persists it via `zdjecia_json`.
 -->
 <template>
@@ -35,98 +35,100 @@
       <span class="px-2 text-center text-xs">{{ displayLabel }}</span>
     </div>
 
-    <!-- Filled -->
-    <div
-      v-else
-      :class="[
-        'group relative aspect-[4/3] w-full overflow-hidden rounded-lg border bg-surface-gray-1',
-        verdictRing || 'border-outline-gray-2',
-      ]"
-    >
-      <span
-        v-if="verdictStatus"
-        class="absolute right-1.5 top-1.5 z-10 h-3.5 w-3.5 rounded-full ring-2 ring-white"
-        :class="verdictDotBg"
-        :aria-label="verdictStatus"
-      />
-      <img
-        v-if="!isPdfValue && !isVideoValue"
-        :src="value"
-        :alt="label"
-        class="h-full w-full cursor-pointer object-cover"
-        @click="openFullImage"
-      />
-      <div
-        v-else-if="isVideoValue"
-        class="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 px-2"
-        @click="openFullImage"
-      >
-        <FileVideoIcon class="size-8 text-ink-gray-5" />
-        <span class="w-full truncate text-center text-xs text-ink-gray-6">{{ fileNameFromUrl }}</span>
-      </div>
-      <div
-        v-else
-        class="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 px-2"
-        @click="openFullImage"
-      >
-        <FileTextIcon class="size-8 text-ink-gray-5" />
-        <span class="w-full truncate text-center text-xs text-ink-gray-6">{{ fileNameFromUrl }}</span>
-      </div>
-      <!--
-        Na myszy caly kafelek ciemnieje na hover (bg-black/55). Na dotyku
-        (hover:none) nakladka jest widoczna cały czas (nie ma stanu hover do
-        wywolania), wiec pelne przyciemnienie zostalo zastapione gradientem
-        od dolu, zeby zdjecie nad paskiem przyciskow zostawalo czytelne.
-      -->
-      <div
-        v-if="!disabled"
-        class="pointer-events-none absolute inset-0 flex items-end justify-center gap-2 pb-2 opacity-0 transition-opacity [@media(hover:hover)]:bg-black/55 [@media(hover:none)]:bg-gradient-to-t [@media(hover:none)]:from-black/60 [@media(hover:none)]:to-transparent [@media(hover:none)]:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
-      >
-        <!--
-          Ponizej sm kafelek (2 kolumny, ok. 250px) jest za waski na dwa
-          przyciski z etykietami: „Usuń" wystawal poza kafelek i byl ucinany
-          przez overflow-hidden. Ponizej sm renderujemy same ikony z
-          tooltipem, od sm w gore zostaja przyciski z etykietami jak dotad.
-        -->
-        <Button
-          class="pointer-events-auto sm:hidden"
-          size="sm"
-          variant="subtle"
-          icon="lucide-refresh-cw"
-          :tooltip="__('Podmień')"
-          @click.stop="showUploader = true"
+    <!-- Filled: card -->
+    <div v-else :class="['flex flex-col overflow-hidden rounded-lg border', cardClass]">
+      <div class="relative aspect-[4/3] w-full overflow-hidden bg-surface-gray-1">
+        <img
+          v-if="!isPdfValue && !isVideoValue"
+          :src="value"
+          :alt="label"
+          class="h-full w-full cursor-pointer object-cover"
+          @click="openFullImage"
         />
-        <Button
-          class="pointer-events-auto sm:hidden"
-          size="sm"
-          variant="subtle"
-          theme="red"
-          icon="lucide-trash-2"
-          :tooltip="__('Usuń')"
-          @click.stop="removePhoto"
-        />
-        <Button
-          class="pointer-events-auto hidden sm:inline-flex"
-          size="sm"
-          variant="subtle"
-          :label="__('Podmień')"
-          iconLeft="lucide-refresh-cw"
-          @click.stop="showUploader = true"
-        />
-        <Button
-          class="pointer-events-auto hidden sm:inline-flex"
-          size="sm"
-          variant="subtle"
-          theme="red"
-          :label="__('Usuń')"
-          iconLeft="lucide-trash-2"
-          @click.stop="removePhoto"
-        />
-      </div>
-    </div>
+        <div
+          v-else-if="isVideoValue"
+          class="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 px-2"
+          @click="openFullImage"
+        >
+          <FileVideoIcon class="size-8 text-ink-gray-5" />
+          <span class="w-full truncate text-center text-xs text-ink-gray-6">{{ fileNameFromUrl }}</span>
+        </div>
+        <div v-else-if="pokazPodgladPdf" class="relative h-full w-full">
+          <iframe
+            :src="pdfPodgladUrl"
+            :title="label"
+            loading="lazy"
+            tabindex="-1"
+            class="pointer-events-none h-full w-full border-0 bg-white"
+          />
+          <!-- przezroczysta warstwa klikalna nad iframe -->
+          <div class="absolute inset-0 cursor-pointer" @click="openFullImage" />
+        </div>
+        <div
+          v-else
+          class="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 px-2"
+          @click="openFullImage"
+        >
+          <FileTextIcon class="size-8 text-ink-gray-5" />
+          <span class="w-full truncate text-center text-xs text-ink-gray-6">{{ fileNameFromUrl }}</span>
+        </div>
 
-    <div v-if="value" class="truncate text-center text-xs text-ink-gray-5">
-      {{ displayLabel }}
+        <span
+          v-if="isPdfValue"
+          class="pointer-events-none absolute left-1.5 top-1.5 rounded bg-surface-gray-7 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
+        >
+          PDF
+        </span>
+        <span
+          v-else-if="isVideoValue"
+          class="pointer-events-none absolute left-1.5 top-1.5 rounded bg-surface-gray-7 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
+        >
+          {{ __('film') }}
+        </span>
+
+        <!-- Narzedzia w rogu: zawsze widoczne male ikony -->
+        <div class="pointer-events-none absolute right-1.5 top-1.5 flex gap-1">
+          <Button
+            class="pointer-events-auto"
+            size="sm"
+            variant="subtle"
+            icon="lucide-maximize-2"
+            :tooltip="__('Powiększ')"
+            @click.stop="openFullImage"
+          />
+          <Button
+            v-if="!disabled"
+            class="pointer-events-auto"
+            size="sm"
+            variant="subtle"
+            icon="lucide-refresh-cw"
+            :tooltip="__('Podmień')"
+            @click.stop="showUploader = true"
+          />
+          <Button
+            v-if="!disabled"
+            class="pointer-events-auto"
+            size="sm"
+            variant="subtle"
+            theme="red"
+            icon="lucide-trash-2"
+            :tooltip="__('Usuń')"
+            @click.stop="removePhoto"
+          />
+        </div>
+      </div>
+
+      <div v-if="!kompakt" class="flex flex-col gap-2 p-2.5">
+        <div>
+          <div class="line-clamp-2 text-left text-sm font-medium text-ink-gray-8">
+            {{ displayLabel }}
+          </div>
+          <div v-if="isPdfValue || isVideoValue" class="truncate text-xs text-ink-gray-5">
+            {{ fileNameFromUrl }}
+          </div>
+        </div>
+        <slot name="stopka" />
+      </div>
     </div>
 
     <FilesUploader
@@ -176,27 +178,34 @@ const props = defineProps({
   // żeby rodzic wiedział, który indeks otworzyć w AudytPodgladZdjec. Puste
   // sloty ("dodaj nowe") dostają go też, ale nigdy nie emitują `preview`.
   previewKey: { type: String, default: null },
+  // Maly kafelek (zdjecia dodatkowe): tylko podglad, bez korpusu i podpisu.
+  kompakt: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['change', 'preview'])
 
 const showUploader = ref(false)
 
-// Solid fills for the status dot, restricted to the exact bg-surface-*-2
-// tokens already proven to exist in this codebase (AudytTab.vue's Szkic/
-// Weryfikacja/Zatwierdzony banners use the same three).
-const STATUS_DOT_BG = {
-  waiting: 'bg-surface-blue-2',
-  accepted: 'bg-surface-green-2',
-  error: 'bg-surface-red-2',
-}
-
 const verdictRing = computed(() => {
   const meta = props.verdictStatus ? VERDICT_META[props.verdictStatus] : null
   return meta ? `ring-2 ${meta.ring}` : ''
 })
 
-const verdictDotBg = computed(() => STATUS_DOT_BG[props.verdictStatus] || 'bg-surface-gray-3')
+// Obramowanie i tlo karty wg decyzji: oczekuje = niebieskie, blad = czerwone,
+// zaakceptowane lub brak decyzji = zwykle szare.
+const cardClass = computed(() => {
+  if (props.verdictStatus === 'waiting') return 'border-outline-blue-2 bg-surface-blue-2'
+  if (props.verdictStatus === 'error') return 'border-outline-red-3 bg-surface-red-2'
+  return 'border-outline-gray-2 bg-surface-white'
+})
+
+// Podglad pierwszej strony PDF w iframe. Jedna flaga: ustaw na false, aby
+// wrocic do kafelka z ikona i nazwa pliku.
+const PODGLAD_PDF_W_IFRAME = true
+const pokazPodgladPdf = computed(() => PODGLAD_PDF_W_IFRAME && isPdfValue.value)
+const pdfPodgladUrl = computed(
+  () => `${(props.value || '').split('#')[0]}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`,
+)
 
 const displayLabel = computed(() =>
   props.optional ? `${props.label} ${__('(opcjonalne)')}` : props.label,
