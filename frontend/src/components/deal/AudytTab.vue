@@ -279,7 +279,7 @@
                   doctype="Volteo Audyt"
                   :docname="dealId"
                   :disabled="readOnly"
-                  :verdict-status="isReview ? verdictStatusFor(photoKey(slot.key)) : null"
+                  :verdict-status="statusKartyZdjecia(slot)"
                   :preview-key="slot.key"
                   @change="(url) => onPhotoChange(slot.key, url)"
                   @preview="otworzPodglad"
@@ -899,6 +899,13 @@ const zdjeciaZaakceptowane = computed(
       (slot) => verdictStatusFor(photoKey(slot.key)) === 'accepted',
     ).length,
 )
+// Rep (bez canReview) nie widzi niebieskiego tla dla oczekujacych, tak jak w liscie pol.
+function statusKartyZdjecia(slot) {
+  if (!isReview.value) return null
+  const st = verdictStatusFor(photoKey(slot.key))
+  return st === 'waiting' && !canReview.value ? null : st
+}
+
 function idzDoElementu(klucz) {
   filtr.value = 'wszystkie'
   nextTick(() => {

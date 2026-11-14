@@ -28,9 +28,8 @@
             <button type="button" class="text-ink-red-7 underline-offset-2 hover:underline" @click="$emit('idz', el.key)">
               {{ el.label }}
             </button
-            ><template v-if="i < pozostale.bledy.length - 1">, </template>
+            >{{ i < pozostale.bledy.length - 1 ? ', ' : '.' }}
           </template>
-          .
         </span>
         <span v-if="pozostale.oczekujace.length && pozostale.oczekujace.length <= 4">
           {{ ' ' + __('Zostały:') + ' ' }}
@@ -38,9 +37,8 @@
             <button type="button" class="text-ink-blue-7 underline-offset-2 hover:underline" @click="$emit('idz', el.key)">
               {{ el.label }}
             </button
-            ><template v-if="i < pozostale.oczekujace.length - 1">, </template>
+            >{{ i < pozostale.oczekujace.length - 1 ? ', ' : '.' }}
           </template>
-          .
         </span>
         <span v-else-if="pozostale.oczekujace.length">
           {{ ' ' + __('Do sprawdzenia: {0}', [pozostale.oczekujace.length]) }}
