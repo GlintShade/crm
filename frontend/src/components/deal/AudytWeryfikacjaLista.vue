@@ -24,13 +24,14 @@
             <div
               :class="[
                 'text-sm',
+                f.type === 'textarea' ? 'col-span-2 sm:col-span-1' : '',
                 status(f) === 'accepted' ? 'text-ink-gray-5' : 'font-medium text-ink-gray-8',
               ]"
             >
               {{ f.label }}
             </div>
 
-            <div class="min-w-0 text-sm text-ink-gray-8">
+            <div :class="['min-w-0 text-sm text-ink-gray-8', f.type === 'textarea' ? 'col-span-2' : '']">
               <template v-if="edytowany === f.fieldname && mozeEdytowac(f)">
                 <div class="flex flex-col gap-1.5">
                   <FormControl
@@ -57,7 +58,7 @@
                 </span>
                 <span
                   v-else
-                  :class="f.type === 'textarea' ? 'line-clamp-2 whitespace-pre-wrap' : 'break-words'"
+                  :class="f.type === 'textarea' ? 'whitespace-pre-wrap break-words' : 'break-words'"
                 >
                   {{ form[f.fieldname] }}
                 </span>
@@ -80,7 +81,12 @@
               </div>
             </div>
 
-            <div :class="['col-span-2', edytorOtwarty[f.fieldname] ? 'sm:col-span-full' : 'sm:col-span-1']">
+            <div
+              :class="[
+                'col-span-2',
+                edytorOtwarty[f.fieldname] || f.type === 'textarea' ? 'sm:col-span-full' : 'sm:col-span-1',
+              ]"
+            >
               <AudytVerdictControls
                 uklad="wiersz"
                 :verdict="verdictFor(weryfikacja, fieldKey(f.fieldname))"

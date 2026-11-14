@@ -93,7 +93,10 @@
     </div>
 
     <!-- Error note, visible to every role including the rep -->
-    <div v-if="status === 'error' && verdict?.note" class="text-xs text-ink-red-6">
+    <div
+      v-if="status === 'error' && verdict?.note"
+      :class="['whitespace-pre-wrap break-words text-xs text-ink-red-6', karta ? '' : 'sm:max-w-[18rem]']"
+    >
       {{ verdict.note }}
     </div>
 
