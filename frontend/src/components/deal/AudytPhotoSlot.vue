@@ -111,7 +111,7 @@
             @click.stop="showUploader = true"
           />
           <Button
-            v-if="!disabled"
+            v-if="!disabled && !(bezUsuwania && !kompakt)"
             class="pointer-events-auto"
             size="sm"
             variant="subtle"
@@ -185,6 +185,8 @@ const props = defineProps({
   previewKey: { type: String, default: null },
   // Maly kafelek (zdjecia dodatkowe): tylko podglad, bez korpusu i podpisu.
   kompakt: { type: Boolean, default: false },
+  // Ukrywa narzedzie Usun w zwyklej karcie (handlowiec w trybie poprawek).
+  bezUsuwania: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['change', 'preview'])

@@ -154,3 +154,24 @@ export function spojnoscPv(mocKw, moduly) {
   const watNaModul = Math.round((moc * 1000) / szt)
   return { watNaModul, nietypowe: watNaModul < 250 || watNaModul > 600 }
 }
+
+/**
+ * Czy element wolno poprawiac: recenzent zawsze; w trybie poprawek (handlowiec
+ * w Weryfikacji) tylko element niezaakceptowany.
+ */
+export function mozePoprawic(map, klucz, { canReview = false, trybPoprawek = false } = {}) {
+  if (canReview) return true
+  if (trybPoprawek) return verdictFor(map, klucz).status !== 'accepted'
+  return false
+}
+
+/** Tylko pola zmienione wzgledem `previous`, zawsze bez rodzaj_instalacji. */
+export function zmienionePola(previous, next) {
+  const prev = previous || {}
+  const result = {}
+  Object.keys(next || {}).forEach((k) => {
+    if (k === 'rodzaj_instalacji') return
+    if (next[k] !== prev[k]) result[k] = next[k]
+  })
+  return result
+}

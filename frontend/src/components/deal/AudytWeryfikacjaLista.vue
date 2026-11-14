@@ -37,7 +37,7 @@
                     :type="f.type"
                     :options="f.options"
                     :step="f.step"
-                    :disabled="readOnly"
+                    :disabled="readOnly && !trybPoprawek"
                     v-model="form[f.fieldname]"
                   />
                   <div class="flex flex-wrap items-center gap-2">
@@ -62,14 +62,20 @@
                   {{ form[f.fieldname] }}
                 </span>
                 <button
-                  v-if="!readOnly"
+                  v-if="mozeEdytowac(f)"
                   type="button"
-                  class="shrink-0 rounded p-0.5 text-ink-gray-5 hover:bg-surface-gray-2 hover:text-ink-gray-8"
+                  :class="[
+                    'shrink-0 rounded text-ink-gray-5 hover:bg-surface-gray-2 hover:text-ink-gray-8',
+                    trybPoprawek && status(f) === 'error'
+                      ? 'inline-flex items-center gap-1 border border-outline-red-3 px-1.5 py-0.5 text-xs font-medium !text-ink-red-8'
+                      : 'p-0.5',
+                  ]"
                   :title="__('Edytuj')"
                   :aria-label="__('Edytuj')"
                   @click="edytowany = f.fieldname"
                 >
                   <span class="lucide-pencil size-3.5" aria-hidden="true" />
+                  <template v-if="trybPoprawek && status(f) === 'error'">{{ __('Popraw') }}</template>
                 </button>
               </div>
             </div>
@@ -106,7 +112,7 @@
 
 <script setup>
 import AudytVerdictControls from '@/components/deal/AudytVerdictControls.vue'
-import { fieldKey, spojnoscPv, verdictFor } from '@/utils/audytWeryfikacja'
+import { fieldKey, mozePoprawic, spojnoscPv, verdictFor } from '@/utils/audytWeryfikacja'
 import { Button, FormControl } from 'frappe-ui'
 import { computed, reactive, ref } from 'vue'
 
@@ -118,6 +124,8 @@ const props = defineProps({
   weryfikacja: { type: Object, default: () => ({}) },
   canReview: { type: Boolean, default: false },
   readOnly: { type: Boolean, default: false },
+  // Handlowiec w Weryfikacji: moze poprawiac elementy niezaakceptowane.
+  trybPoprawek: { type: Boolean, default: false },
   // mapa zajetosci per klucz elementu (verdictBusy)
   busy: { type: Object, default: () => ({}) },
   // 'wszystkie' | 'otwarte' | 'bledy'
@@ -147,6 +155,13 @@ const widoczneSekcje = computed(() =>
     }))
     .filter((sec) => sec.fields.length),
 )
+
+function mozeEdytowac(f) {
+  if (props.trybPoprawek) {
+    return mozePoprawic(props.weryfikacja, fieldKey(f.fieldname), { trybPoprawek: true })
+  }
+  return !props.readOnly
+}
 
 function jestPuste(f) {
   const v = props.form[f.fieldname]

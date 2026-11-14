@@ -84,13 +84,13 @@
               />
             </div>
             <div class="flex items-center gap-3">
-              <span v-if="!readOnly && saveState === 'saving'" class="text-xs text-ink-gray-4">
+              <span v-if="mozeZapisywac && saveState === 'saving'" class="text-xs text-ink-gray-4">
                 {{ __('Zapisywanie…') }}
               </span>
-              <span v-else-if="!readOnly && saveState === 'saved'" class="text-xs text-ink-green-6">
+              <span v-else-if="mozeZapisywac && saveState === 'saved'" class="text-xs text-ink-green-6">
                 {{ __('Zapisano') }} ✓
               </span>
-              <span v-else-if="!readOnly && saveState === 'error'" class="text-xs text-ink-red-6">
+              <span v-else-if="mozeZapisywac && saveState === 'error'" class="text-xs text-ink-red-6">
                 {{ __('Błąd zapisu') }}
               </span>
 
@@ -147,7 +147,11 @@
           v-if="isReview && !canReview"
           class="rounded-lg border border-outline-blue-2 bg-surface-blue-2 px-4 py-3 text-sm text-ink-blue-8"
         >
-          {{ __('Audyt oczekuje na weryfikację przez back office: pola są zablokowane do czasu decyzji.') }}
+          {{
+            trybPoprawek
+              ? __('Audyt jest w weryfikacji. Możesz poprawić elementy, które nie są jeszcze zaakceptowane.')
+              : __('Audyt oczekuje na weryfikację przez back office: pola są zablokowane do czasu decyzji.')
+          }}
         </div>
 
         <!-- Legacy variant banner -->
@@ -220,6 +224,7 @@
             :weryfikacja="weryfikacja"
             :can-review="canReview"
             :read-only="readOnly"
+            :tryb-poprawek="trybPoprawek"
             :busy="verdictBusy"
             :filtr="filtr"
             @set-verdict="setVerdict"
@@ -251,7 +256,7 @@
             </div>
           </section>
 
-          <section v-if="!isReview || pokazaneZdjecia.length || (filtr === 'wszystkie' && (editable || zdjeciaDodatkowe.length))">
+          <section v-if="!isReview || pokazaneZdjecia.length || (filtr === 'wszystkie' && (editable || trybPoprawek || zdjeciaDodatkowe.length))">
             <div
               v-if="!isReview || pokazaneZdjecia.length"
               class="mb-3 flex items-baseline justify-between gap-2"
@@ -278,7 +283,8 @@
                   :allow-video="!slot.pdf"
                   doctype="Volteo Audyt"
                   :docname="dealId"
-                  :disabled="readOnly"
+                  :disabled="trybPoprawek ? !poprawialny(photoKey(slot.key)) : readOnly"
+                  :bez-usuwania="trybPoprawek"
                   :verdict-status="statusKartyZdjecia(slot)"
                   :preview-key="slot.key"
                   @change="(url) => onPhotoChange(slot.key, url)"
@@ -300,7 +306,7 @@
 
             <!-- Additional (optional) photos, bez akceptacji -->
             <div
-              v-if="(!isReview || filtr === 'wszystkie') && (editable || zdjeciaDodatkowe.length)"
+              v-if="(!isReview || filtr === 'wszystkie') && (editable || trybPoprawek || zdjeciaDodatkowe.length)"
               :class="isReview && !pokazaneZdjecia.length ? '' : 'mt-5'"
             >
               <div class="mb-3 flex items-baseline justify-between gap-2">
@@ -321,14 +327,14 @@
                   kompakt
                   doctype="Volteo Audyt"
                   :docname="dealId"
-                  :disabled="readOnly"
+                  :disabled="readOnly && !trybPoprawek"
                   allow-video
                   :preview-key="'extra-' + idx"
                   @change="(u) => onExtraPhotoChange(idx, u)"
                   @preview="otworzPodglad"
                 />
                 <AudytPhotoSlot
-                  v-if="editable && zdjeciaDodatkowe.length < 5"
+                  v-if="(editable || trybPoprawek) && zdjeciaDodatkowe.length < 5"
                   :key="'extra-new-' + zdjeciaDodatkowe.length"
                   :label="__('Zdjęcie dodatkowe')"
                   :value="null"
@@ -509,11 +515,13 @@ import {
   depOk as depOkUtil,
   fieldKey,
   filtruj,
+  mozePoprawic,
   parseWeryfikacja,
   photoKey,
   pozostale,
   verdictFor,
   visibleElements,
+  zmienionePola,
 } from '@/utils/audytWeryfikacja'
 import {
   Badge,
@@ -553,6 +561,7 @@ const requirements = reactive({
   is_backend: false,
   is_admin: false,
   can_review: false,
+  can_fix_review: false,
   can_edit: true,
 })
 const reqLoading = ref(true)
@@ -572,6 +581,7 @@ async function loadRequirements() {
     requirements.is_backend = !!data?.is_backend
     requirements.is_admin = !!data?.is_admin
     requirements.can_review = !!data?.can_review
+    requirements.can_fix_review = !!data?.can_fix_review
     requirements.can_edit = data?.can_edit !== false
   } catch (err) {
     reqError.value = extractErrorMessage(err)
@@ -638,6 +648,19 @@ const editable = computed(
   () => (requirements.can_edit && isDraft.value) || (canReview.value && isReview.value),
 )
 const readOnly = computed(() => !editable.value)
+
+// Handlowiec w Weryfikacji poprawia niezaakceptowane elementy (stary serwer
+// nie zwraca can_fix_review: wtedy ekran zostaje tylko do odczytu).
+const trybPoprawek = computed(
+  () => requirements.can_fix_review && !canReview.value && isReview.value,
+)
+const mozeZapisywac = computed(() => !readOnly.value || trybPoprawek.value)
+function poprawialny(klucz) {
+  return mozePoprawic(weryfikacja, klucz, {
+    canReview: canReview.value && !readOnly.value,
+    trybPoprawek: trybPoprawek.value,
+  })
+}
 
 const badgeTheme = computed(() =>
   isApproved.value ? 'green' : isReview.value ? 'blue' : 'amber',
@@ -946,7 +969,7 @@ function currentFieldsPayload() {
 watch(
   form,
   () => {
-    if (hydrating.value || readOnly.value || !exists.value) return
+    if (hydrating.value || !mozeZapisywac.value || !exists.value) return
     if (saveTimer) clearTimeout(saveTimer)
     saveTimer = setTimeout(saveFields, 500)
   },
@@ -985,13 +1008,17 @@ async function saveFields() {
   const payloadStr = JSON.stringify(payload)
   if (payloadStr === lastSavedFieldsPayload) return
   const previousPayload = lastSavedFieldsObj
+  // Handlowiec w trybie poprawek wysyla tylko zmienione pola.
+  const doWyslania = trybPoprawek.value ? zmienionePola(previousPayload, payload) : payload
   saveState.value = 'saving'
   try {
-    await call('frappe.client.set_value', {
-      doctype: 'Volteo Audyt',
-      name: props.dealId,
-      fieldname: payload,
-    })
+    if (Object.keys(doWyslania).length) {
+      await call('frappe.client.set_value', {
+        doctype: 'Volteo Audyt',
+        name: props.dealId,
+        fieldname: doWyslania,
+      })
+    }
     if (isReview.value) mirrorFieldResets(previousPayload, payload)
     lastSavedFieldsObj = payload
     lastSavedFieldsPayload = payloadStr
@@ -999,12 +1026,15 @@ async function saveFields() {
   } catch (err) {
     saveState.value = 'error'
     toast.error(extractErrorMessage(err))
+    if (trybPoprawek.value) await audyt.reload()
   }
 }
 
 // --- Photos (immediate save) --------------------------------------------------
 async function onPhotoChange(key, fileUrl) {
-  if (readOnly.value) return
+  if (!mozeZapisywac.value) return
+  // Handlowiec: nie rusza zaakceptowanego slotu i nie usuwa zdjecia.
+  if (trybPoprawek.value && (!fileUrl || !poprawialny(photoKey(key)))) return
   const oldUrl = zdjecia[key] || null
   trackOldFile(oldUrl, fileUrl)
   if (fileUrl) zdjecia[key] = fileUrl
@@ -1025,6 +1055,7 @@ async function onPhotoChange(key, fileUrl) {
     if (oldUrl) zdjecia[key] = oldUrl
     else delete zdjecia[key]
     toast.error(extractErrorMessage(err))
+    if (trybPoprawek.value) await audyt.reload()
   }
 }
 
@@ -1044,7 +1075,7 @@ async function persistExtraPhotos(prevList) {
 }
 
 async function onExtraPhotoChange(index, fileUrl) {
-  if (readOnly.value) return
+  if (!mozeZapisywac.value) return
   const prevList = zdjeciaDodatkowe.value
   const oldUrl = prevList[index] || null
   trackOldFile(oldUrl, fileUrl)
@@ -1056,7 +1087,7 @@ async function onExtraPhotoChange(index, fileUrl) {
 }
 
 async function onExtraPhotoAdd(fileUrl) {
-  if (readOnly.value || !fileUrl) return
+  if (!mozeZapisywac.value || !fileUrl) return
   if (zdjeciaDodatkowe.value.length >= 5) return
   const prevList = zdjeciaDodatkowe.value
   trackOldFile(null, fileUrl)
