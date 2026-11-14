@@ -8,9 +8,11 @@ import {
   parseWeryfikacja,
   photoKey,
   filtruj,
+  mozePoprawic,
   pozostale,
   spojnoscPv,
   verdictFor,
+  zmienionePola,
   visibleElements,
 } from '@/utils/audytWeryfikacja'
 
@@ -276,6 +278,40 @@ describe('Audyt — weryfikacja elementów', () => {
     it('granice 250 i 600 sa typowe', () => {
       expect(spojnoscPv(2.5, 10).nietypowe).toBe(false)
       expect(spojnoscPv(6, 10).nietypowe).toBe(false)
+    })
+  })
+
+  describe('mozePoprawic', () => {
+    const map = { a: { status: 'accepted' }, e: { status: 'error', note: 'x' } }
+
+    it('recenzent moze zawsze', () => {
+      expect(mozePoprawic(map, 'a', { canReview: true })).toBe(true)
+      expect(mozePoprawic({}, 'z', { canReview: true })).toBe(true)
+    })
+
+    it('tryb poprawek: pusta mapa i error tak, accepted nie', () => {
+      expect(mozePoprawic({}, 'z', { trybPoprawek: true })).toBe(true)
+      expect(mozePoprawic(map, 'e', { trybPoprawek: true })).toBe(true)
+      expect(mozePoprawic(map, 'a', { trybPoprawek: true })).toBe(false)
+    })
+
+    it('oba tryby wylaczone: nie', () => {
+      expect(mozePoprawic(map, 'e', { canReview: false, trybPoprawek: false })).toBe(false)
+      expect(mozePoprawic({}, 'z')).toBe(false)
+    })
+  })
+
+  describe('zmienionePola', () => {
+    it('zwraca tylko zmienione klucze i pomija rodzaj_instalacji', () => {
+      const prev = { rodzaj_instalacji: 'A', x: '1', y: '2' }
+      const next = { rodzaj_instalacji: 'B', x: '1', y: '3', z: '4' }
+      expect(zmienionePola(prev, next)).toEqual({ y: '3', z: '4' })
+    })
+
+    it('pusty wynik gdy nic sie nie zmienilo i radzi sobie z null', () => {
+      expect(zmienionePola({ x: '1' }, { x: '1' })).toEqual({})
+      expect(zmienionePola(null, { x: '1' })).toEqual({ x: '1' })
+      expect(zmienionePola({ x: '1' }, null)).toEqual({})
     })
   })
 })
