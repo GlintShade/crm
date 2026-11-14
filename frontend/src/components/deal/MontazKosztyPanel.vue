@@ -39,14 +39,27 @@
     </button>
 
     <div
-      v-show="expanded"
-      class="rounded-lg border border-dashed border-outline-amber-3 bg-surface-amber-2 p-3"
-      :class="{ 'mt-2': zwijany }"
+      v-if="!zwijany || expanded"
+      class="rounded-lg border border-dashed border-outline-amber-3 bg-surface-amber-2"
+      :class="[zwijany ? 'mt-2' : '', expanded ? 'p-3' : 'px-3 py-2']"
     >
-      <div v-if="!zwijany" class="mb-3 flex flex-wrap items-baseline justify-between gap-x-3">
-        <div class="text-xs font-semibold uppercase tracking-wide text-ink-amber-8">{{ __('Koszty i marża') }}</div>
-        <div class="text-xs text-ink-amber-8">{{ __('widoczne tylko dla administratorów') }}</div>
-      </div>
+      <button
+        v-if="!zwijany"
+        type="button"
+        class="flex w-full flex-wrap items-baseline justify-between gap-x-3 text-left"
+        :class="{ 'mb-3': expanded }"
+        :aria-expanded="expanded"
+        data-testid="koszty-zwin"
+        @click="przelaczZwiniecie"
+      >
+        <span class="text-xs font-semibold uppercase tracking-wide text-ink-amber-8">{{ __('Koszty i marża') }}</span>
+        <span class="flex items-center gap-2 text-xs text-ink-amber-8">
+          {{ __('widoczne tylko dla administratorów') }}
+          <FeatherIcon :name="expanded ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 text-ink-amber-8" />
+        </span>
+      </button>
+
+      <template v-if="expanded">
 
       <!-- Ślady ręcznych edycji (zestaw, koszty planowane, marże): krótkie linie tekstu -->
       <div v-if="liniePrzebiegu.length" class="mb-1 text-xs text-ink-amber-8" data-testid="koszty-edycje">
@@ -217,6 +230,7 @@
           @click="zapiszKoszty"
         />
       </div>
+      </template>
     </div>
   </div>
 </template>
@@ -233,6 +247,8 @@ import {
   zbudujPayload,
   przeliczSkladnikiMarzy,
   opisEdycjiRecznych,
+  czytajZwiniecieKosztow,
+  zapiszZwiniecieKosztow,
 } from '@/utils/montazKoszty'
 
 const props = defineProps({
@@ -240,15 +256,34 @@ const props = defineProps({
   // Czyste Powietrze: panel zostaje zwijany (domyślnie zwinięty), jak dotąd.
   zwijany: { type: Boolean, default: false },
 })
-const emit = defineEmits(['widocznosc'])
+const emit = defineEmits(['widocznosc', 'zwiniety'])
 
 // --- State (declared up front, always replaced wholesale) -----------------
 const snapshot = ref(null) // parsed custom_koszty_json, or null (see header)
 const edycje = ref({}) // klucz -> raw typed "koszt rzeczywisty" string
 const dodatkowe = ref([]) // [{id?, nazwa, kwota}], raw, in-progress
-const expanded = ref(!props.zwijany) // zawsze rozwinięty, poza trybem zwijanym (CP)
+// Tryb OZE: domyślnie rozwinięty, wybór pamiętany w przeglądarce. Tryb CP
+// (`zwijany`): domyślnie zwinięty, stanu nie zapamiętujemy. To panel jest
+// jedynym właścicielem stanu, rodzic dostaje tylko zdarzenie `zwiniety`.
+const expanded = ref(props.zwijany ? false : !czytajZwiniecieKosztow(przegladarkowyStorage()))
 const saving = ref(false)
 const pokazPuste = ref(false)
+
+function przegladarkowyStorage() {
+  try {
+    return window.localStorage
+  } catch (e) {
+    return null
+  }
+}
+function przelaczZwiniecie() {
+  expanded.value = !expanded.value
+  if (!props.zwijany) {
+    zapiszZwiniecieKosztow(przegladarkowyStorage(), !expanded.value)
+    emit('zwiniety', !expanded.value)
+  }
+}
+if (!props.zwijany) emit('zwiniety', !expanded.value)
 
 // --- Load -------------------------------------------------------------------
 // Permlevel-2 field: Frappe drops `custom_koszty_json` from the response

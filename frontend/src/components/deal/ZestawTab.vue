@@ -227,7 +227,7 @@
         <div
           v-if="ukladOze"
           class="mt-3 items-start gap-3"
-          :class="{ 'grid lg:grid-cols-2': ukladAdmin }"
+          :class="bokPoBoku ? 'grid lg:grid-cols-2' : 'flex flex-col'"
           :data-testid="ukladAdmin ? 'zestaw-uklad-admin' : undefined"
         >
         <div v-if="showWycena" class="min-w-0 w-full rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-2.5 text-sm" data-testid="zestaw-wycena">
@@ -431,6 +431,7 @@
           class="min-w-0"
           :deal-id="dealId"
           @widocznosc="kosztyWidoczne = $event"
+          @zwiniety="kosztyZwiniete = $event"
         />
         </div>
 
@@ -575,6 +576,8 @@ const etykietaEdycji = computed(() =>
 )
 // Panel kosztów zgłasza, czy ma co pokazać (snapshot dostępny tylko dla administratora).
 const kosztyWidoczne = ref(false)
+// Panel jest właścicielem stanu zwinięcia (pamiętanego w przeglądarce), tu tylko kopia do wyboru układu.
+const kosztyZwiniete = ref(false)
 // Zmiana klucza przeładowuje panel po zapisie edytora (snapshot kosztów się zmienił).
 const panelKlucz = ref(0)
 const edycja = ref(false)
@@ -1039,8 +1042,10 @@ const ukladOze = computed(() => showWycena.value || showWycenaOze.value)
 const panelWGridzie = computed(() => !loading.value && rows.value.length > 0 && ukladOze.value)
 // Dwie kolumny zewnętrzne (Wycena | Koszty i marża) tylko, gdy panel jest widoczny.
 const ukladAdmin = computed(() => ukladOze.value && kosztyWidoczne.value)
-// Bez panelu kosztów "Wycena" ma całą szerokość i dzieli się na dwie kolumny wewnętrzne.
-const wycenaDwieKolumny = computed(() => !ukladAdmin.value)
+// Obok siebie tylko przy rozwiniętym panelu; zwinięty panel to wąski pasek pod "Wyceną".
+const bokPoBoku = computed(() => ukladAdmin.value && !kosztyZwiniete.value)
+// Bez rozwiniętego panelu "Wycena" ma całą szerokość i dzieli się na dwie kolumny wewnętrzne.
+const wycenaDwieKolumny = computed(() => !bokPoBoku.value)
 
 // "Opcje dodatkowe" (b68, PV/PV+ME/ME) - Klimatyzacja/Panele/Panele+mikro/
 // EMS Zeronest/Pstryk/Ladowarka EV. Caly podblok w szablonie jest gated na tym

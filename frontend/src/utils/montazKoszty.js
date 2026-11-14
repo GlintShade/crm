@@ -430,3 +430,26 @@ export function opisEdycjiRecznych(snapshot, { formatujDate, nazwaUzytkownika, f
   }
   return linie
 }
+
+// Zapamiętany w przeglądarce stan zwinięcia panelu "Koszty i marża" (szansa OZE).
+// Storage jest argumentem, żeby dało się testować; każdy dostęp w try/catch,
+// bo localStorage bywa niedostępny (tryb prywatny, zablokowane dane witryn).
+export const KLUCZ_ZWINIECIA_KOSZTOW = 'volteo_koszty_marza_zwiniety'
+
+/** Czy panel ma być zwinięty. Domyślnie false (rozwinięty), też przy błędzie odczytu. */
+export function czytajZwiniecieKosztow(storage) {
+  try {
+    return storage?.getItem(KLUCZ_ZWINIECIA_KOSZTOW) === '1'
+  } catch (e) {
+    return false
+  }
+}
+
+/** Zapisuje stan zwinięcia ("1" albo "0"); błąd zapisu jest ignorowany. */
+export function zapiszZwiniecieKosztow(storage, zwiniety) {
+  try {
+    storage?.setItem(KLUCZ_ZWINIECIA_KOSZTOW, zwiniety ? '1' : '0')
+  } catch (e) {
+    /* storage niedostępny: zostaje domyślny stan */
+  }
+}

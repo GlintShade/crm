@@ -6,6 +6,9 @@ import {
   przeliczSkladnikiMarzy,
   etykietaKosztu,
   opisEdycjiRecznych,
+  czytajZwiniecieKosztow,
+  zapiszZwiniecieKosztow,
+  KLUCZ_ZWINIECIA_KOSZTOW,
 } from '@/utils/montazKoszty'
 
 function deepFreeze(value) {
@@ -576,5 +579,41 @@ describe('opisEdycjiRecznych', () => {
       edycja_marzy: { kiedy: '2026-11-13 09:00:00', kto: 'c' },
     })
     expect(opisEdycjiRecznych(s, opcje)[0]).toContain('(U(b))')
+  })
+})
+
+describe('zwinięcie panelu kosztów (localStorage)', () => {
+  const magazyn = (start = {}) => {
+    const dane = { ...start }
+    return { dane, getItem: (k) => (k in dane ? dane[k] : null), setItem: (k, v) => { dane[k] = String(v) } }
+  }
+
+  it('klucz brakujący: domyślnie rozwinięty', () => {
+    expect(KLUCZ_ZWINIECIA_KOSZTOW).toBe('volteo_koszty_marza_zwiniety')
+    expect(czytajZwiniecieKosztow(magazyn())).toBe(false)
+    expect(czytajZwiniecieKosztow(null)).toBe(false)
+  })
+
+  it('"1" zwinięty, "0" rozwinięty', () => {
+    expect(czytajZwiniecieKosztow(magazyn({ [KLUCZ_ZWINIECIA_KOSZTOW]: '1' }))).toBe(true)
+    expect(czytajZwiniecieKosztow(magazyn({ [KLUCZ_ZWINIECIA_KOSZTOW]: '0' }))).toBe(false)
+  })
+
+  it('zapis i odczyt razem', () => {
+    const m = magazyn()
+    zapiszZwiniecieKosztow(m, true)
+    expect(m.dane[KLUCZ_ZWINIECIA_KOSZTOW]).toBe('1')
+    zapiszZwiniecieKosztow(m, false)
+    expect(m.dane[KLUCZ_ZWINIECIA_KOSZTOW]).toBe('0')
+  })
+
+  it('getItem rzuca: domyślny stan, bez wyjątku', () => {
+    const m = { getItem() { throw new Error('zablokowany') }, setItem() {} }
+    expect(czytajZwiniecieKosztow(m)).toBe(false)
+  })
+
+  it('setItem rzuca: bez wyjątku', () => {
+    const m = { getItem: () => null, setItem() { throw new Error('pełny') } }
+    expect(() => zapiszZwiniecieKosztow(m, true)).not.toThrow()
   })
 })
