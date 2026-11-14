@@ -5,13 +5,13 @@
   Prezentacyjny: emituje `zatwierdz` i `idz` (klucz elementu), nie wola API.
 -->
 <template>
-  <div class="sticky bottom-0 z-20 -mx-5 -mb-5 mt-auto border-t border-outline-gray-2 bg-surface-base px-5 py-3">
+  <div class="sticky -bottom-5 z-20 -mx-5 -mb-5 mt-auto border-t border-outline-gray-2 bg-surface-base px-5 py-3">
     <div class="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-x-4 gap-y-2">
-    <div class="h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-surface-gray-3">
+    <div class="hidden h-1.5 w-24 shrink-0 sm:block overflow-hidden rounded-full bg-surface-gray-3">
       <div class="h-full rounded-full bg-surface-green-3" :style="{ width: procent + '%' }" />
     </div>
 
-    <div class="min-w-0 flex-1 text-sm text-ink-gray-6">
+    <div class="min-w-0 flex-1 text-xs text-ink-gray-6 sm:text-sm">
       <template v-if="agg.allAccepted">
         <strong class="font-semibold text-ink-gray-8">
           {{ __('Wszystkie {0} zaakceptowane.', [agg.total]) }}
