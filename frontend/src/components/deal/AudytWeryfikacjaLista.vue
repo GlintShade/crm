@@ -31,7 +31,7 @@
             </div>
 
             <div class="min-w-0 text-sm text-ink-gray-8">
-              <template v-if="edytowany === f.fieldname">
+              <template v-if="edytowany === f.fieldname && mozeEdytowac(f)">
                 <div class="flex flex-col gap-1.5">
                   <FormControl
                     :type="f.type"
