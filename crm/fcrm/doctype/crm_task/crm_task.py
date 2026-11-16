@@ -66,8 +66,11 @@ class CRMTask(Document):
 				{pole: przed.get(pole) for pole in pola}, {pole: self.get(pole) for pole in pola}
 			)
 			# Nowy wykonawca (i poprzedni) dostaja juz dzwonek przypisania z ToDo.
-			pomin = {przed.get("assigned_to"), self.get("assigned_to")} - {None, ""}
+			# Dotyczy tylko zdarzenia "wykonawca"; przy statusie i terminie
+			# wykonawca dostaje dzwonek jak kazdy odbiorca.
+			zmiana_wykonawcy = {przed.get("assigned_to"), self.get("assigned_to")} - {None, ""}
 			for zdarzenie in zdarzenia:
+				pomin = zmiana_wykonawcy if zdarzenie == "wykonawca" else None
 				powiadom_o_zdarzeniu(self, zdarzenie, pomin=pomin)
 		except Exception:
 			frappe.log_error(frappe.get_traceback(), "CRM Task: powiadomienie autora zadania")
