@@ -1070,6 +1070,20 @@ const quickFilterOptions = computed(() => {
     })
   }
 
+  // Pseudo-pole "_klient" (kolumna "Klient" listy Zadań, ops#357) nie jest
+  // DocFieldem, więc nie pojawia się w `getFields()`; serwer rozwija filtr po
+  // nim na `name in [...]` (patrz `_rozwin_filtr_klienta` w crm/api/doc.py).
+  if (
+    props.doctype === 'CRM Task' &&
+    !existingQuickFilters.includes('_klient')
+  ) {
+    options.push({
+      label: __('Klient'),
+      value: '_klient',
+      fieldtype: 'Data',
+    })
+  }
+
   return options
 })
 

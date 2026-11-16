@@ -45,6 +45,7 @@ błąd bazy) nie jest połykany: to jest bramka bezpieczeństwa, więc milczące
 "fail-open" na dowolnym nieprzewidzianym wyjątku byłoby luką samo w sobie.
 """
 
+import json
 from typing import Any
 
 import frappe
@@ -54,7 +55,8 @@ from frappe.client import get_value as _rdzen_get_value
 from frappe.desk import reportview as _rdzen_reportview
 from frappe.desk.search import search_link as _rdzen_search_link
 
-from crm.api.doc import _sprawdz_filtry
+from crm.api.doc import _rozwin_filtr_klienta, _sprawdz_filtry
+from crm.volteo_zadania_lista import DOCTYPE_ZADANIA, KLUCZ_KLIENTA
 
 # _sprawdz_filtry jest oznaczona jako prywatna konwencja jednego podkreslenia
 # (nie jest API poza modulem doc.py), ale ops#79/#80 celowo dzieli ja miedzy
@@ -145,6 +147,38 @@ def _sparsowane_filtry(wartosc: object) -> dict | list | tuple | None:
 	return None
 
 
+def _filtry_z_rozwinietym_klientem(doctype: str, filters: object) -> object:
+	"""Filtr `_klient` listy Zadan (ops#357, pole "Klient" paska szybkich
+	filtrow) nie jest DocFieldem, wiec `_sprawdz_filtry` by go odrzucil.
+	`crm.api.doc._rozwin_filtr_klienta` zamienia go na `name in [...]` (tak jak
+	robi to `get_data`), a ten wrapper robi to samo dla endpointow rdzenia,
+	PRZED walidacja. Tylko `CRM Task` i tylko dict (albo JSON-string z dictem)
+	z kluczem `_klient`; kazdy inny ksztalt (np. lista krotek) wraca bez zmian
+	i `_klient` w nim nadal konczy sie odmowa, jak kazde nieznane pole. Wynik
+	to nowy dict; argument nie jest mutowany. Rozwiniecie tylko ZAWEZA wynik,
+	bo rdzen i tak odczytuje zadania z uprawnieniami uzytkownika."""
+	if doctype != DOCTYPE_ZADANIA:
+		return filters
+	parsed = _sparsowane_filtry(filters)
+	if not isinstance(parsed, dict) or KLUCZ_KLIENTA not in parsed:
+		return filters
+	return _rozwin_filtr_klienta(doctype, parsed)
+
+
+def _rozwin_klienta_w_form_dict() -> None:
+	"""Jak `_filtry_z_rozwinietym_klientem`, ale dla endpointow
+	`frappe.desk.reportview.*` (get, get_count, export_query), ktore czytaja
+	`filters` z `frappe.local.form_dict`: rozwiniety dict wraca tam jako
+	JSON-string, w tym samym ksztalcie, w jakim rdzen go sparsuje."""
+	doctype = frappe.local.form_dict.get("doctype")
+	if doctype != DOCTYPE_ZADANIA:
+		return
+	surowe = frappe.local.form_dict.get("filters")
+	rozwiniete = _filtry_z_rozwinietym_klientem(doctype, surowe)
+	if rozwiniete is not surowe:
+		frappe.local.form_dict["filters"] = json.dumps(rozwiniete)
+
+
 def _sprawdz_filtry_bezpiecznie(doctype: str, filters: object, parenttype: str | None = None) -> None:
 	"""Otacza `crm.api.doc._sprawdz_filtry` (ops#79) — liczy zbior dozwolonych
 	pol RAZ i rzuca `frappe.PermissionError`, jesli `filters` odwoluje sie do
@@ -200,6 +234,7 @@ def _waliduj_form_dict() -> None:
 	doctype = frappe.local.form_dict.get("doctype")
 	if not doctype:
 		return
+	_rozwin_klienta_w_form_dict()
 	_waliduj(
 		doctype,
 		frappe.local.form_dict.get("filters"),
@@ -230,6 +265,7 @@ def get_list(
 	`_waliduj`, zeby `parent`/`parenttype`/`parentfield` w `filters` nie
 	byly odrzucane jako niedozwolone pola (ops#80 follow-up; bez tego ta
 	sama linia byla PRZYCZYNA regresji „brak zestawu” w Zestaw)."""
+	filters = _filtry_z_rozwinietym_klientem(doctype, filters)
 	_waliduj(doctype, filters, or_filters, parenttype=parent)
 	return _rdzen_get_list(
 		doctype,
@@ -262,6 +298,7 @@ def get_count(
 	tabeli podrzednej bez znanego rodzica trafia w fallback
 	`_pola_dozwolone` (permlevel-0 pola wlasne doctype'u + `POLA_ZAWSZE_
 	DOZWOLONE`, ktore i tak zawiera `parent`/`parenttype`/`parentfield`)."""
+	filters = _filtry_z_rozwinietym_klientem(doctype, filters)
 	_waliduj(doctype, filters)
 	return _rdzen_get_count(doctype, filters=filters, debug=debug, cache=cache)
 
@@ -280,6 +317,7 @@ def get_value(
 	`None` i sprawdzenie jest pomijane, tak jak w rdzeniu (filtr po `name`
 	jest zawsze dozwolony). `parent` przekazywany dalej jako `parenttype` —
 	jak w `get_list` powyzej (ops#80 follow-up)."""
+	filters = _filtry_z_rozwinietym_klientem(doctype, filters)
 	_waliduj(doctype, filters, parenttype=parent)
 	return _rdzen_get_value(doctype, fieldname, filters=filters, as_dict=as_dict, debug=debug, parent=parent)
 
