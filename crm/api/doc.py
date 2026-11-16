@@ -39,7 +39,17 @@ from crm.volteo_lista_szans import (
 	wzory_tagu,
 )
 from crm.volteo_usuwanie import AUTENTI_STATUSY_BLOKADY, OFERTA_STATUSY_BLOKADY
-from crm.volteo_zadania_lista import KLUCZ_KLIENTA, klient_zadania, nazwy_powiazan
+from crm.volteo_zadania_lista import (
+	DOCTYPE_ZADANIA,
+	KLUCZ_KLIENTA,
+	LIMIT_POWIAZAN,
+	LIMIT_ZADAN,
+	klient_zadania,
+	nazwy_powiazan,
+	tekst_filtra_klienta,
+	uklad_paska_z_klientem,
+	zawez_nazwy_zadan,
+)
 
 # Bezpiecznik rozmiaru unii w `rozwin_grupy` (issue #129): patrz jej
 # docstring. Chroni zapytanie `name in [...]` przed nieograniczonym
@@ -151,7 +161,23 @@ def _pola_istniejace_do_paska(meta) -> set[str]:
 	taka proba zapisu skoncze sie komunikatem, a nie cichym pominieciem przy
 	kolejnym odczycie.
 	"""
-	return {field.fieldname for field in meta.fields} | {"name"}
+	return {field.fieldname for field in meta.fields} | {"name"} | _pola_pseudo_paska(meta.name)
+
+
+def _pola_pseudo_paska(doctype: str) -> frozenset[str]:
+	"""Pseudo-pola (nie DocFieldy), ktore pasek szybkich filtrow danego doctype'u
+	moze zawierac: `_klient` na liscie Zadan (ops#357). Zawsze dozwolone do
+	ulozenia na pasku (nie maja permlevel), bo filtr jest rozwijany do
+	`name in [...]` PRZED strazniczym `_sprawdz_filtry`, patrz
+	`_rozwin_filtr_klienta`."""
+	return frozenset({KLUCZ_KLIENTA}) if doctype == DOCTYPE_ZADANIA else frozenset()
+
+
+def _pola_dozwolone_paska(doctype: str) -> set[str]:
+	"""`_pola_dozwolone` plus pseudo-pola paska (`_pola_pseudo_paska`). Tylko
+	dla ukladu paska szybkich filtrow: `_sprawdz_filtry` nadal uzywa gołego
+	`_pola_dozwolone` i `_klient` NIE jest dla niego dozwolonym polem."""
+	return _pola_dozwolone(doctype) | _pola_pseudo_paska(doctype)
 
 
 def _odczytaj_globalny_uklad_paska(doctype: str, meta) -> list[str]:
@@ -606,6 +632,73 @@ def _rozwin_filtry_tagow(doctype: str, filters: dict) -> dict:
 	return wynik
 
 
+def _rozwin_filtr_klienta(doctype: str, filters: dict) -> dict:
+	"""Rozwija filtr `_klient` listy Zadan (ops#357, pole "Klient" paska
+	szybkich filtrow) na zwykly filtr `name in [...]`, tak jak
+	`_rozwin_filtry_tagow` robi to dla tagow leada. Wolac PRZED
+	`_sprawdz_filtry` (po tej funkcji `_klient` nie ma juz sladu w
+	`filters`, wiec straznik nie musi go znac i dla zadnego innego klucza ani
+	doctype'u nie jest oslabiany).
+
+	Tylko `doctype == "CRM Task"` i tylko gdy `_klient` jest w `filters`;
+	inaczej zwraca `filters` bez zmian. Klucz jest zawsze usuwany; gdy tekst
+	jest pusty albo w nieobslugiwanym ksztalcie (`tekst_filtra_klienta` daje
+	None), filtr po prostu znika. Inaczej: szanse (`CRM Deal`) i leady
+	(`CRM Lead`) z `lead_name like %tekst%` (limit `LIMIT_POWIAZAN` kazdy), potem
+	zadania powiazane z tymi rodzicami (limit `LIMIT_ZADAN`), wynik trafia do
+	`filters["name"] = ["in", nazwy]`. Brak dopasowan = `[""]`, ta sama
+	wartownicza lista co w `polacz_zbiory_nazw` (pusty `in` pasowalby do
+	wszystkiego). Nazwy zadan zostaja liczbami, tak jak je zwraca `get_all`.
+
+	Istniejacy filtr po `name` (skalar, "=", "in", "not in", rozpoznawany przez
+	`_nazwy_istniejacego_filtra_name`) jest przecinany/odejmowany
+	(`zawez_nazwy_zadan`); inny ksztalt (np. "like") nie da sie bezpiecznie
+	polaczyc, wiec zamiast po cichu zgubic warunek rzucamy czytelny blad.
+
+	`frappe.get_all` (bez uprawnien) jest tu bezpieczne z tego samego powodu co
+	w `_rozwin_filtry_tagow`: te zapytania tylko wyliczaja zbior NAZW pasujacych
+	do tekstu; wlasciwy odczyt zadan nadal idzie przez `frappe.get_list` z
+	uprawnieniami uzytkownika (`crm/permissions/child_visibility.py`), wiec
+	rozwiniecie moze wylacznie ZAWEZIC to, co uzytkownik i tak widzi.
+
+	Zwraca NOWY dict, `filters` nie jest mutowany."""
+	if doctype != DOCTYPE_ZADANIA or KLUCZ_KLIENTA not in filters:
+		return filters
+
+	wynik = dict(filters)
+	tekst = tekst_filtra_klienta(wynik.pop(KLUCZ_KLIENTA))
+	if tekst is None:
+		return wynik
+
+	wzorzec = f"%{tekst}%"
+	nazwy_zadan: list = []
+	for doctype_rodzica in ("CRM Deal", "CRM Lead"):
+		rodzice = frappe.get_all(
+			doctype_rodzica,
+			filters={"lead_name": ["like", wzorzec]},
+			pluck="name",
+			limit_page_length=LIMIT_POWIAZAN,
+		)
+		if not rodzice:
+			continue
+		nazwy_zadan += frappe.get_all(
+			DOCTYPE_ZADANIA,
+			filters={"reference_doctype": doctype_rodzica, "reference_docname": ["in", rodzice]},
+			pluck="name",
+			limit_page_length=LIMIT_ZADAN,
+		)
+
+	if "name" in wynik:
+		istniejacy = _nazwy_istniejacego_filtra_name(wynik["name"])
+		if istniejacy is None:
+			frappe.throw(_("Filtra po kliencie nie można połączyć z innym filtrem po nazwie zadania."))
+		rodzaj, zbior = istniejacy
+		nazwy_zadan = zawez_nazwy_zadan(nazwy_zadan, rodzaj, zbior)
+
+	wynik["name"] = ["in", nazwy_zadan or [""]]
+	return wynik
+
+
 def _odfiltruj_niedozwolone_klucze(doctype: str, klucze: list) -> list:
 	"""Zwraca `klucze` (nazwy pol z `rows`/`kanban_fields` w `get_data`) bez
 	tych, do ktorych biezacy uzytkownik nie ma odczytu na poziomie permlevel
@@ -990,9 +1083,11 @@ def get_quick_filters(doctype: str, cached: bool = True):
 	# `wybierz_kolejnosc` (frappe-free, `crm.volteo_filtry_szybkie`)
 	# rozstrzyga, ktory ostatecznie wygrywa: wlasny, jesli po filtrze
 	# uprawnien/istnienia cokolwiek z niego zostaje, inaczej globalny.
-	permitted = _pola_dozwolone(doctype)
+	permitted = _pola_dozwolone_paska(doctype)
 	istniejace = _pola_istniejace_do_paska(meta)
-	globalny_uklad = _odczytaj_globalny_uklad_paska(doctype, meta)
+	# ops#357: pseudo-pole `_klient` (lista Zadan) trafia do WSPOLNEGO ukladu
+	# paska bez zapisu danych, gdy zapisany uklad go nie wymienia.
+	globalny_uklad = uklad_paska_z_klientem(_odczytaj_globalny_uklad_paska(doctype, meta), doctype)
 	wlasny_uklad = parsuj_json_listy(frappe.defaults.get_user_default(klucz_domyslnej_uzytkownika(doctype)))
 
 	kolejnosc = wybierz_kolejnosc(globalny_uklad, wlasny_uklad, permitted, istniejace)
@@ -1001,6 +1096,8 @@ def get_quick_filters(doctype: str, cached: bool = True):
 	for filter in kolejnosc:
 		if filter == "name":
 			fields.append({"label": "Name", "fieldname": "name", "fieldtype": "Data"})
+		elif filter == KLUCZ_KLIENTA:
+			fields.append({"label": _("Klient"), "fieldname": KLUCZ_KLIENTA, "fieldtype": "Data"})
 		else:
 			field = next((f for f in meta.fields if f.fieldname == filter), None)
 			if field:
@@ -1069,7 +1166,7 @@ def update_quick_filters(quick_filters: str, doctype: str):
 	_wymagaj_prawa_do_globalnego_paska()
 
 	meta = frappe.get_meta(doctype)
-	permitted = _pola_dozwolone(doctype)
+	permitted = _pola_dozwolone_paska(doctype)
 	istniejace = _pola_istniejace_do_paska(meta)
 
 	try:
@@ -1087,11 +1184,14 @@ def update_quick_filters(quick_filters: str, doctype: str):
 	# ktore scalony wynik faktycznie dodal/usunal wzgledem PRAWDZIWEGO
 	# poprzedniego stanu globalnego, nigdy pole, ktore przetrwalo scalenie
 	# tylko dlatego, ze edytujacy go nie widzial (patrz docstring wyzej).
+	# Pseudo-pola (`_klient`) nie sa DocFieldami: Property Setter nie ma dla
+	# nich sensu, wiec pomijamy je w obu petlach (ops#357).
+	pseudo = _pola_pseudo_paska(doctype)
 	for fieldname in stare_globalne:
-		if fieldname not in scalone:
+		if fieldname not in scalone and fieldname not in pseudo:
 			update_in_standard_filter(fieldname, doctype, 0)
 	for fieldname in scalone:
-		if fieldname not in stare_globalne:
+		if fieldname not in stare_globalne and fieldname not in pseudo:
 			update_in_standard_filter(fieldname, doctype, 1)
 
 
@@ -1108,7 +1208,7 @@ def zapisz_filtry_szybkie_uzytkownika(doctype: str, pola: str) -> None:
 		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
 
 	meta = frappe.get_meta(doctype)
-	dozwolone = _pola_dozwolone(doctype) & _pola_istniejace_do_paska(meta)
+	dozwolone = _pola_dozwolone_paska(doctype) & _pola_istniejace_do_paska(meta)
 
 	try:
 		lista = waliduj_liste(frappe.parse_json(pola), dozwolone)
@@ -1263,6 +1363,13 @@ def get_data(
 	# _rozwin_filtry_tagow), PRZED _sprawdz_filtry nizej. No-op dla kazdego
 	# doctype'u innego niz CRM Lead.
 	filters = frappe._dict(_rozwin_filtry_tagow(doctype, filters))
+
+	# VOLTEO (ops#357): filtr "Klient" listy Zadan (`_klient`, nie jest
+	# DocFieldem) rozwijany na `name in [...]` w tym samym miejscu i z tego
+	# samego powodu co filtry tagow powyzej: PRZED `_sprawdz_filtry`, wiec
+	# obie galezie (lista i kanban) dostaja juz rozwiniety filtr. No-op dla
+	# kazdego doctype'u innego niz CRM Task.
+	filters = frappe._dict(_rozwin_filtr_klienta(doctype, filters))
 
 	# VOLTEO (ops#311): filtr LIKE po telefonie leada ignoruje spacje,
 	# myslniki i "+" we wpisanym numerze (w bazie: +48XXXXXXXXX). PRZED

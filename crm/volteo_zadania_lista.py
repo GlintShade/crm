@@ -57,3 +57,62 @@ def nazwy_powiazan(wiersze: list[dict]) -> tuple[list[str], list[str]]:
 		elif doctype == DOCTYPE_LEADA and nazwa not in leady:
 			leady.append(nazwa)
 	return szanse, leady
+
+
+DOCTYPE_ZADANIA = "CRM Task"
+KLUCZ_PO_KTORYM_KLIENT = "title"
+"""Pole paska szybkich filtrow, zaraz po ktorym staje pseudo-pole `_klient`."""
+
+LIMIT_POWIAZAN = 2000
+"""Maks. liczba szans i leadow (osobno) pasujacych do tekstu klienta."""
+
+LIMIT_ZADAN = 5000
+"""Maks. liczba zadan zwracana przez rozwiniecie filtra klienta."""
+
+
+def tekst_filtra_klienta(wartosc: object) -> str | None:
+	"""Tekst szukanego klienta z wartosci filtra `_klient`.
+
+	Pasek szybkich filtrow wysyla pole tekstowe jako `["LIKE", "%tekst%"]`;
+	akceptujemy tez male litery (`"like"`) i zwykly string. Znaki `%` i
+	biale znaki z brzegow sa zdejmowane. Pusty tekst albo nieobslugiwany
+	ksztalt (inny operator, inny typ, zla dlugosc listy) daje None.
+	"""
+	if isinstance(wartosc, str):
+		tekst = wartosc
+	elif isinstance(wartosc, (list, tuple)) and len(wartosc) == 2:
+		operator, tekst = wartosc
+		if not isinstance(operator, str) or operator.strip().lower() != "like":
+			return None
+		if not isinstance(tekst, str):
+			return None
+	else:
+		return None
+	tekst = tekst.replace("%", "").strip()
+	return tekst or None
+
+
+def zawez_nazwy_zadan(nazwy: list, rodzaj: str, istniejace: set) -> list:
+	"""Przeciecie (rodzaj `in`) albo roznica (`not in`) nazw zadan z innym
+	ograniczeniem po `name`. Nazwy zadan to liczby, a filtr z zewnatrz bywa
+	tekstem, wiec porownanie idzie po `str()`; zwracane sa oryginalne wartosci
+	z `nazwy` (kolejnosc zachowana)."""
+	zbior = {str(n) for n in istniejace}
+	if rodzaj == "not in":
+		return [n for n in nazwy if str(n) not in zbior]
+	return [n for n in nazwy if str(n) in zbior]
+
+
+def uklad_paska_z_klientem(uklad: list, doctype: str) -> list:
+	"""Globalny uklad paska szybkich filtrow listy Zadan z pseudo-polem
+	`_klient` zaraz po `title`, gdy zapisany uklad go nie wymienia. Uklad,
+	ktory juz wymienia `_klient`, i kazdy inny doctype wracaja bez zmian
+	(nowa lista, argument nie jest mutowany). Brak `title` daje `_klient`
+	na poczatku."""
+	if doctype != DOCTYPE_ZADANIA or KLUCZ_KLIENTA in uklad:
+		return list(uklad)
+	if KLUCZ_PO_KTORYM_KLIENT in uklad:
+		indeks = uklad.index(KLUCZ_PO_KTORYM_KLIENT) + 1
+	else:
+		indeks = 0
+	return [*uklad[:indeks], KLUCZ_KLIENTA, *uklad[indeks:]]

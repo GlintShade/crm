@@ -29,7 +29,7 @@
   />
   <div
     v-if="$route.params.viewType !== 'kanban'"
-    class="flex items-center px-3 pb-1 pt-2 sm:px-5"
+    class="-mt-2 flex items-center px-3 pb-1 sm:px-5"
     data-testid="zadania-zakladki"
   >
     <div
