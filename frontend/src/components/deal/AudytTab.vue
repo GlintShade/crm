@@ -18,7 +18,7 @@
 -->
 <template>
   <div class="flex flex-1 flex-col overflow-y-auto p-5">
-    <div :class="['mx-auto w-full max-w-3xl', canReview && isReview ? 'pb-4' : '']">
+    <div :class="['mx-auto w-full max-w-3xl', (canReview && isReview) || pokazPasekSzkicu ? 'pb-4' : '']">
       <!-- Loading -->
       <div
         v-if="audyt.loading || reqLoading"
@@ -94,16 +94,6 @@
                 {{ __('Błąd zapisu') }}
               </span>
 
-              <!-- Rep: submit draft to verification -->
-              <Button
-                v-if="requirements.is_rep && isDraft"
-                variant="solid"
-                :label="__('Prześlij audyt do weryfikacji')"
-                :disabled="!complete || submitting"
-                :loading="submitting"
-                @click="submitAudyt"
-              />
-
               <!-- Back office: status control -->
               <template v-if="canReview">
                 <Button
@@ -123,10 +113,6 @@
             >
           </div>
 
-          <!-- Submit helper — draft not yet complete -->
-          <div v-if="isDraft && !complete" class="text-xs text-ink-amber-6">
-            {{ __('Musisz wypełnić wszystkie wymagane pola i zdjęcia, aby przesłać audyt do weryfikacji.') }}
-          </div>
         </div>
 
         <!-- Approved banner -->
@@ -189,8 +175,30 @@
         </div>
 
         <template v-if="variantDef">
-          <div v-if="isDraft" class="text-sm text-ink-gray-5">
-            {{ __('Pola') }}: {{ fieldsDone }}/{{ fieldsTotal }} · {{ __('Zdjęcia') }}: {{ photosDone }}/{{ photosTotal }}
+          <!-- Szkic: baner podsumowania (niebieski w trakcie, czerwony po nieudanej
+               próbie przesłania, zielony gdy kompletny; nigdy bursztynowy) -->
+          <div
+            v-if="isDraft && banerSzkicu"
+            data-testid="audyt-baner-szkicu"
+            :class="[
+              'rounded-lg border px-4 py-3 text-sm',
+              banerSzkicu.rodzaj === 'blad'
+                ? 'border-outline-red-3 bg-surface-red-2 text-ink-red-8'
+                : banerSzkicu.rodzaj === 'ok'
+                  ? 'border-outline-green-3 bg-surface-green-2 text-ink-green-8'
+                  : 'border-outline-blue-2 bg-surface-blue-2 text-ink-blue-8',
+            ]"
+          >
+            <div class="font-medium">{{ banerSzkicu.tytul }}</div>
+            <div v-if="banerSzkicu.opis">{{ banerSzkicu.opis }}</div>
+            <Button
+              v-if="banerSzkicu.rodzaj === 'blad'"
+              class="mt-2"
+              variant="outline"
+              size="sm"
+              :label="__('Przejdź do pierwszego')"
+              @click="przejdzDoPierwszego"
+            />
           </div>
 
           <!-- Filtry listy (etap Weryfikacja) -->
@@ -230,7 +238,52 @@
             @set-verdict="setVerdict"
           />
 
-          <section v-for="sec in (isReview ? [] : variantDef.sections)" :key="sec.label">
+          <!-- Szkic: karty sekcji w stylu formularza kredytowego -->
+          <section
+            v-for="sec in (isDraft ? sekcjeWidoczne : [])"
+            :key="'szkic-' + sec.label"
+            class="kalk-part"
+            :data-testid="'audyt-sekcja-' + sec.label"
+          >
+            <div :class="NAGLOWEK_KLASY">
+              <div class="min-w-0">
+                <div>{{ sec.label }}</div>
+                <div v-if="podtytulSekcji(sec.fields)" :class="PODTYTUL_KLASY">
+                  {{ podtytulSekcji(sec.fields) }}
+                </div>
+              </div>
+              <Badge
+                v-if="licznikSekcji(sec.fields, form, proba)"
+                v-bind="badgeLicznika(licznikSekcji(sec.fields, form, proba))"
+                variant="subtle"
+                size="sm"
+                class="shrink-0"
+              >
+                <template v-if="licznikSekcji(sec.fields, form, proba).stan === 'komplet'" #prefix>
+                  <LucideCheck class="h-3 w-3" />
+                </template>
+              </Badge>
+            </div>
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <KredytPole
+                v-for="f in sec.fields"
+                :key="f.fieldname"
+                :id="'audyt-pole-' + f.fieldname"
+                :data-pole="f.fieldname"
+                :class="f.type === 'textarea' ? 'sm:col-span-2' : ''"
+                :f="f"
+                :model-value="wartoscWyswietlana(f, form[f.fieldname], edytowane)"
+                :stan="stanPolaAudytu(f, form[f.fieldname], proba).stan"
+                :komunikat="__(stanPolaAudytu(f, form[f.fieldname], proba).komunikat)"
+                :znacznik="znacznikPola(f)"
+                :wymagany="!!f.required"
+                :disabled="readOnly"
+                @update:model-value="(v) => onPoleZmiana(f, v)"
+              />
+            </div>
+          </section>
+
+          <section v-for="sec in (isDraft || isReview ? [] : variantDef.sections)" :key="sec.label">
             <div class="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-gray-5">
               {{ sec.label }}
             </div>
@@ -256,9 +309,35 @@
             </div>
           </section>
 
-          <section v-if="!isReview || pokazaneZdjecia.length || (filtr === 'wszystkie' && (editable || trybPoprawek || zdjeciaDodatkowe.length))">
+          <section
+            v-if="!isReview || pokazaneZdjecia.length || (filtr === 'wszystkie' && (editable || trybPoprawek || zdjeciaDodatkowe.length))"
+            :class="isDraft ? 'contents' : ''"
+          >
+            <div :class="isDraft ? 'kalk-part' : ''" :data-testid="isDraft ? 'audyt-sekcja-zdjecia' : null">
+            <div v-if="isDraft && licznikZdjecSzkicu" :class="NAGLOWEK_KLASY">
+              <div class="min-w-0">
+                <div>{{ __('Dokumentacja zdjęciowa') }}</div>
+                <div :class="PODTYTUL_KLASY">{{ podtytulZdjec }}</div>
+              </div>
+              <Badge
+                v-bind="badgeLicznika(licznikZdjecSzkicu)"
+                variant="subtle"
+                size="sm"
+                class="shrink-0"
+              >
+                <template v-if="licznikZdjecSzkicu.stan === 'komplet'" #prefix>
+                  <LucideCheck class="h-3 w-3" />
+                </template>
+              </Badge>
+            </div>
+            <div v-else-if="isDraft" :class="NAGLOWEK_KLASY">
+              <div class="min-w-0">
+                <div>{{ __('Dokumentacja zdjęciowa') }}</div>
+                <div :class="PODTYTUL_KLASY">{{ podtytulZdjec }}</div>
+              </div>
+            </div>
             <div
-              v-if="!isReview || pokazaneZdjecia.length"
+              v-else-if="!isReview || pokazaneZdjecia.length"
               class="mb-3 flex items-baseline justify-between gap-2"
             >
               <div class="text-sm font-semibold uppercase tracking-wide text-ink-gray-5">
@@ -286,6 +365,7 @@
                   :disabled="trybPoprawek ? !poprawialny(photoKey(slot.key)) : readOnly"
                   :bez-usuwania="trybPoprawek"
                   :verdict-status="statusKartyZdjecia(slot)"
+                  :stan-braku="isDraft ? stanZdjecia(isPhotoRequired(slot), zdjecia[slot.key], proba) : ''"
                   :preview-key="slot.key"
                   @change="(url) => onPhotoChange(slot.key, url)"
                   @preview="otworzPodglad"
@@ -314,12 +394,23 @@
               </div>
             </div>
 
+            </div>
+
             <!-- Additional (optional) photos, bez akceptacji -->
             <div
               v-if="(!isReview || filtr === 'wszystkie') && (editable || trybPoprawek || zdjeciaDodatkowe.length)"
-              :class="isReview && !pokazaneZdjecia.length ? '' : 'mt-5'"
+              :class="isDraft ? 'kalk-part' : isReview && !pokazaneZdjecia.length ? '' : 'mt-5'"
+              :data-testid="isDraft ? 'audyt-sekcja-dodatkowe' : null"
             >
-              <div class="mb-3 flex items-baseline justify-between gap-2">
+              <div v-if="isDraft" :class="NAGLOWEK_KLASY">
+                <div class="min-w-0">
+                  <div>{{ __('Zdjęcia i filmy dodatkowe') }}</div>
+                  <div :class="PODTYTUL_KLASY">
+                    {{ __('Opcjonalne, maks. {0}. Możesz wybrać kilka plików naraz.', [MAX_DODATKOWYCH_OZE]) }}
+                  </div>
+                </div>
+              </div>
+              <div v-else class="mb-3 flex items-baseline justify-between gap-2">
                 <div class="text-xs font-semibold uppercase tracking-wide text-ink-gray-5">
                   <template v-if="isReview">{{ __('Zdjęcia i filmy dodatkowe') }}</template>
                   <template v-else>{{ __('Zdjęcia i filmy dodatkowe (opcjonalne, maks. {0})', [MAX_DODATKOWYCH_OZE]) }}</template>
@@ -473,6 +564,19 @@
       @idz="idzDoElementu"
     />
 
+    <AudytPasekSzkicu
+      v-if="pokazPasekSzkicu"
+      :pola-gotowe="fieldsDone"
+      :pola-razem="fieldsTotal"
+      :zdjecia-gotowe="photosDone"
+      :zdjecia-razem="photosTotal"
+      :kompletny="complete"
+      :pokaz-przycisk="!!requirements.is_rep"
+      :loading="submitting"
+      :save-state="mozeZapisywac ? saveState : 'idle'"
+      @wyslij="onWyslij"
+    />
+
     <Dialog v-model="zmianaRodzajuOtwarta" :options="{ title: __('Zmień rodzaj instalacji') }">
       <template #body-content>
         <div class="flex flex-col gap-3">
@@ -516,6 +620,21 @@ import AudytPhotoSlot from '@/components/deal/AudytPhotoSlot.vue'
 import { MAX_DODATKOWYCH_OZE, dolaczZdjecia, komunikatLimitu } from '@/utils/audytWielePlikow'
 import AudytPodgladZdjec from '@/components/deal/AudytPodgladZdjec.vue'
 import AudytPasekDecyzji from '@/components/deal/AudytPasekDecyzji.vue'
+import AudytPasekSzkicu from '@/components/deal/AudytPasekSzkicu.vue'
+import KredytPole from '@/components/deal/KredytPole.vue'
+import LucideCheck from '~icons/lucide/check'
+import {
+  frazaBrakow,
+  licznikSekcji,
+  licznikZdjec,
+  podsumowanieSzkicu,
+  podtytulSekcji,
+  poleWypelnione,
+  stanPolaAudytu,
+  stanZdjecia,
+  wartoscWyswietlana,
+  znacznikPola,
+} from '@/utils/audytSzkic'
 import AudytVerdictControls from '@/components/deal/AudytVerdictControls.vue'
 import AudytWeryfikacjaLista from '@/components/deal/AudytWeryfikacjaLista.vue'
 import { usersStore } from '@/stores/users.js'
@@ -685,6 +804,14 @@ const zdjecia = reactive({})
 const zdjeciaDodatkowe = ref([])
 const hydrating = ref(true)
 const saveState = ref('idle') // idle | saving | saved | error
+// Szkic: `proba` = handlowiec kliknął "Prześlij" przy brakach, więc braki są
+// czerwone zamiast niebieskich. Znika, gdy braków już nie ma i przy świeżym
+// wczytaniu audytu / zmianie rodzaju instalacji.
+const proba = ref(false)
+// Pola, które użytkownik sam edytował w tej sesji. Zapisane 0 w polu
+// "positive" wyświetlamy jako puste, dopóki pole nie trafi do tego zbioru;
+// `form` nie jest przy tym dotykany, więc wyświetlenie nie uruchamia autozapisu.
+const edytowane = reactive(new Set())
 
 // --- Per-element verification (Weryfikacja stage) ----------------------------
 // Sparse map keyed by `pole:<fieldname>` / `foto:<slotKey>` (see
@@ -751,6 +878,10 @@ watch(
 function hydrateForm(r) {
   hydrating.value = true
   saveState.value = 'idle'
+  // Nowy stan z serwera: nieudana próba przesłania i ręczne edycje pól
+  // (zero w polu "positive" znów wyświetla się jako puste) zaczynają od zera.
+  proba.value = false
+  edytowane.clear()
 
   Object.keys(form).forEach((k) => delete form[k])
   form.rodzaj_instalacji = r?.rodzaj_instalacji || ''
@@ -796,11 +927,30 @@ function hydrateForm(r) {
   })
 }
 
+// --- Szkic: stan wizualny (styl formularza kredytowego) ------------------------
+
+function onPoleZmiana(f, v) {
+  const fn = f.fieldname
+  // Odruchowa emisja kontrolki z wartością identyczną z widoczną (np. puste
+  // zamiast zapisanego 0) nie jest edycją użytkownika.
+  if (!edytowane.has(fn) && String(v ?? '') === String(wartoscWyswietlana(f, form[fn], edytowane))) return
+  edytowane.add(fn)
+  form[fn] = v
+}
+
+function badgeLicznika(licznik) {
+  if (licznik.stan === 'blad') return { theme: 'red', label: __('{0} do uzupełnienia', [licznik.liczba]) }
+  if (licznik.stan === 'brak') return { theme: 'blue', label: __('Brakuje {0}', [licznik.liczba]) }
+  return { theme: 'green', label: __('Komplet') }
+}
+// Te same klasy nagłówka karty co w KredytTab.vue.
+const NAGLOWEK_KLASY =
+  'kalk-part-heading mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-outline-gray-1 pb-2.5 text-base font-semibold text-ink-gray-9'
+const PODTYTUL_KLASY = 'mt-0.5 text-sm font-normal text-ink-gray-5'
+
 // --- Field rules / progress ---------------------------------------------------
 function fieldOk(f) {
-  const v = form[f.fieldname]
-  if (f.rule === 'positive') return Number(v) > 0
-  return String(v ?? '').trim() !== ''
+  return poleWypelnione(f, form[f.fieldname])
 }
 
 const requiredFields = computed(() => {
@@ -879,6 +1029,76 @@ const complete = computed(
     photosDone.value === photosTotal.value,
 )
 
+const pokazPasekSzkicu = computed(
+  () => exists.value && !audyt.loading && !reqLoading.value && !reqError.value && isDraft.value && !!variantDef.value,
+)
+const podtytulZdjec = computed(() =>
+  requiredPhotoSlots.value.length === visiblePhotoSlots.value.length
+    ? __('Wszystkie zdjęcia są wymagane.')
+    : __('Wszystkie zdjęcia są wymagane, poza oznaczonymi jako opcjonalne.'),
+)
+const licznikZdjecSzkicu = computed(() =>
+  requiredPhotoSlots.value.length
+    ? licznikZdjec(requiredPhotoSlots.value, zdjecia, proba.value)
+    : null,
+)
+const podsumowanie = computed(() =>
+  podsumowanieSzkicu(
+    sekcjeWidoczne.value,
+    requiredPhotoSlots.value,
+    form,
+    zdjecia,
+    __('Dokumentacja zdjęciowa'),
+  ),
+)
+const banerSzkicu = computed(() => {
+  const { pola, zdjecia: zdj, sekcje } = podsumowanie.value
+  if (pola + zdj > 0) {
+    const opis = sekcje.map((x) => `${x.label} ${x.liczba}`).join(', ')
+    if (proba.value) {
+      return {
+        rodzaj: 'blad',
+        tytul: __('Nie można przesłać audytu. Uzupełnij {0}:', [frazaBrakow(pola, zdj, 'biernik')]),
+        opis,
+      }
+    }
+    return { rodzaj: 'brak', tytul: __('Brakuje {0}', [frazaBrakow(pola, zdj, 'dopelniacz')]), opis }
+  }
+  // Zielony baner tylko dla handlowca, który ma przycisk wysyłki.
+  if (complete.value && requirements.is_rep) {
+    return {
+      rodzaj: 'ok',
+      tytul: __('Audyt jest kompletny.'),
+      opis: __('Sprawdź dane i prześlij go do weryfikacji przyciskiem na dole.'),
+    }
+  }
+  return null
+})
+
+async function przejdzDoPierwszego() {
+  const p = podsumowanie.value.pierwszy
+  if (!p) return
+  await nextTick()
+  const el = document.getElementById(
+    p.typ === 'pole' ? 'audyt-pole-' + p.klucz : 'audyt-el-' + photoKey(p.klucz),
+  )
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  el.querySelector('input, select, textarea, button')?.focus({ preventScroll: true })
+}
+
+// Przycisk w pasku jest zawsze aktywny: przy brakach nie przesyła, tylko
+// zapala czerwony baner i przewija do pierwszego braku.
+async function onWyslij() {
+  if (submitting.value) return
+  if (!complete.value) {
+    proba.value = true
+    await przejdzDoPierwszego()
+    return
+  }
+  await submitAudyt()
+}
+
 // Every visible field + photo slot of the active variant, flattened — the
 // universe of elements a reviewer must accept during Weryfikacja.
 const elements = computed(() => visibleElements(variantDef.value, form))
@@ -911,6 +1131,21 @@ const sekcjeWidoczne = computed(() =>
   (variantDef.value?.sections || [])
     .map((sec) => ({ label: sec.label, fields: visibleFields(sec) }))
     .filter((sec) => sec.fields.length),
+)
+
+// Gdy nic już nie brakuje, próba przesłania jest rozliczona: kolejny brak ma
+// znów zacząć jako niebieski. Zmiana rodzaju instalacji też zaczyna od zera.
+watch(
+  () => podsumowanie.value.pola + podsumowanie.value.zdjecia,
+  (n) => {
+    if (n === 0) proba.value = false
+  },
+)
+watch(
+  () => form.rodzaj_instalacji,
+  () => {
+    proba.value = false
+  },
 )
 
 // Pola i zdjecia pokazane po zastosowaniu filtra (poza Weryfikacja: wszystkie).
@@ -1352,3 +1587,16 @@ function extractErrorMessage(err) {
   return __('Wystąpił błąd - spróbuj ponownie')
 }
 </script>
+
+<style scoped>
+/* Karta sekcji Szkicu: ten sam wygląd co .kalk-part w KredytTab.vue. */
+.kalk-part {
+  border: 1px solid var(--outline-gray-1);
+  border-radius: 0.75rem;
+  background: var(--surface-elevation-1);
+  padding: 1.25rem 1.25rem 1.375rem;
+}
+.kalk-part-heading {
+  letter-spacing: -0.01em;
+}
+</style>

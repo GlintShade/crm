@@ -60,6 +60,7 @@
       :type="f.type"
       :options="f.options"
       :inputmode="f.inputmode"
+      :step="f.step"
       :placeholder="placeholder"
       :format="f.type === 'date' ? 'DD.MM.YYYY' : undefined"
       :disabled="disabled"

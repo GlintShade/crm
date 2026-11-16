@@ -15,7 +15,7 @@
       type="button"
       :class="[
         'flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed bg-surface-gray-1 text-ink-gray-5 transition-colors hover:border-outline-gray-4 hover:bg-surface-gray-2',
-        verdictRing || 'border-outline-gray-3',
+        verdictRing || brakBorder || 'border-outline-gray-3',
       ]"
       @click="showUploader = true"
     >
@@ -178,6 +178,9 @@ const props = defineProps({
   // (AudytVerdictControls), never here — this component stays presentational
   // and makes no API calls.
   verdictStatus: { type: String, default: null },
+  // Szkic: brakujący wymagany slot. '' | 'brak' (niebieskie obramowanie) |
+  // 'blad' (czerwone, po nieudanej próbie przesłania). Tylko dekoracja.
+  stanBraku: { type: String, default: '' },
   // Identyfikator tego slotu w liście podglądu budowanej przez rodzica
   // (zbudujListePodgladu), przekazywany z powrotem w zdarzeniu `preview`,
   // żeby rodzic wiedział, który indeks otworzyć w AudytPodgladZdjec. Puste
@@ -196,6 +199,12 @@ const props = defineProps({
 const emit = defineEmits(['change', 'changeMany', 'preview'])
 
 const showUploader = ref(false)
+
+const brakBorder = computed(() => {
+  if (props.stanBraku === 'blad') return 'border-outline-red-3 bg-surface-red-2'
+  if (props.stanBraku === 'brak') return 'border-outline-blue-3'
+  return ''
+})
 
 const verdictRing = computed(() => {
   const meta = props.verdictStatus ? VERDICT_META[props.verdictStatus] : null
