@@ -186,6 +186,7 @@ import HistoriaWpisuDialog from '@/components/HistoriaWpisuDialog.vue'
 import MontazZdjecia from '@/components/deal/MontazZdjecia.vue'
 import NotatkiPrywatne from '@/components/deal/NotatkiPrywatne.vue'
 import { sessionStore } from '@/stores/session'
+import { globalStore } from '@/stores/global'
 import { usersStore } from '@/stores/users.js'
 import { sanitizeHTML } from '@/utils'
 import { tekstPusty } from '@/utils/aktualizacje'
@@ -197,6 +198,9 @@ const props = defineProps({
 
 const { getUser, listaWzmianek, isAdmin } = usersStore()
 const { user } = sessionStore()
+// `$dialog` jest w globalProperties (szablon), a w <script setup> dostepny
+// wylacznie przez globalStore (jak w NotatkiPrywatne.vue).
+const { $dialog } = globalStore()
 const draft = reactive({ typ: props.konfig.typy[0], tekst: '' })
 const adding = ref(false)
 const textEditor = ref(null)
