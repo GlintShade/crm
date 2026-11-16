@@ -4,9 +4,13 @@
 import unittest
 
 from crm.volteo_szansa_doradca import (
+	LIMIT_PARTII_ZBIORCZEJ,
 	ROLE_ZMIANY_DORADCY,
+	ROLE_ZMIANY_DORADCY_ZBIORCZO,
 	czy_dozwolony_doradca,
 	czy_moze_zmienic_doradce,
+	czy_moze_zmienic_doradce_zbiorczo,
+	normalizuj_partie,
 )
 
 
@@ -51,3 +55,51 @@ class TestCzyDozwolonyDoradca(unittest.TestCase):
 	def test_puste_role(self):
 		self.assertFalse(czy_dozwolony_doradca(True, []))
 		self.assertFalse(czy_dozwolony_doradca(True, None))
+
+
+class TestCzyMozeZmienicDoradceZbiorczo(unittest.TestCase):
+	def test_administrator(self):
+		self.assertTrue(czy_moze_zmienic_doradce_zbiorczo("Administrator", []))
+
+	def test_role_administratorskie(self):
+		for rola in ROLE_ZMIANY_DORADCY_ZBIORCZO:
+			self.assertTrue(czy_moze_zmienic_doradce_zbiorczo("u@x.pl", [rola]), rola)
+
+	def test_backoffice_odmowa(self):
+		self.assertFalse(czy_moze_zmienic_doradce_zbiorczo("b@x.pl", ["Volteo Backend", "Sales User"]))
+
+	def test_d2d_i_cc_odmowa(self):
+		self.assertFalse(czy_moze_zmienic_doradce_zbiorczo("h@x.pl", ["Volteo D2D Sales"]))
+		self.assertFalse(czy_moze_zmienic_doradce_zbiorczo("c@x.pl", ["Volteo Call Center"]))
+
+	def test_guest_i_puste(self):
+		self.assertFalse(czy_moze_zmienic_doradce_zbiorczo("Guest", ["System Manager"]))
+		self.assertFalse(czy_moze_zmienic_doradce_zbiorczo("", ["System Manager"]))
+		self.assertFalse(czy_moze_zmienic_doradce_zbiorczo("u@x.pl", None))
+
+	def test_zbior_wezszy_niz_pojedynczy(self):
+		self.assertTrue(ROLE_ZMIANY_DORADCY_ZBIORCZO < ROLE_ZMIANY_DORADCY)
+
+
+class TestNormalizujPartie(unittest.TestCase):
+	def test_unikalne_w_kolejnosci(self):
+		self.assertEqual(normalizuj_partie(["A", " B ", "A", "", None, "C"]), ["A", "B", "C"])
+
+	def test_nie_lista(self):
+		for zle in ("A", None, {"a": 1}, 5):
+			with self.assertRaises(ValueError):
+				normalizuj_partie(zle)
+
+	def test_pusta(self):
+		with self.assertRaises(ValueError):
+			normalizuj_partie([])
+		with self.assertRaises(ValueError):
+			normalizuj_partie(["", "  "])
+
+	def test_limit(self):
+		self.assertEqual(len(normalizuj_partie([f"D{i}" for i in range(LIMIT_PARTII_ZBIORCZEJ)])), LIMIT_PARTII_ZBIORCZEJ)
+		with self.assertRaises(ValueError):
+			normalizuj_partie([f"D{i}" for i in range(LIMIT_PARTII_ZBIORCZEJ + 1)])
+
+	def test_duplikaty_nie_licza_sie_do_limitu(self):
+		self.assertEqual(normalizuj_partie(["A"] * 500), ["A"])

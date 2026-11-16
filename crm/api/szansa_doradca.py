@@ -14,7 +14,12 @@ import frappe
 from frappe import _
 
 from crm.api.limit_zadan import rate_limit
-from crm.volteo_szansa_doradca import ROLA_DORADCY, czy_moze_zmienic_doradce
+from crm.volteo_szansa_doradca import (
+	ROLA_DORADCY,
+	czy_moze_zmienic_doradce,
+	czy_moze_zmienic_doradce_zbiorczo,
+	normalizuj_partie,
+)
 
 BLAD_UPRAWNIEN = "Nie masz uprawnień do zmiany doradcy szansy."
 
@@ -59,6 +64,29 @@ def doradcy() -> list[dict]:
 	return _konta_doradcow()
 
 
+def _wymagaj_doradcy(doradca: str) -> str:
+	"""Waliduje wskazanego doradce (wspolne dla pojedynczej i zbiorczej zmiany)."""
+	doradca = (doradca or "").strip()
+	if not doradca:
+		frappe.throw(_("Doradca jest wymagany."))
+	if doradca not in {k["user"] for k in _konta_doradcow()}:
+		frappe.throw(
+			_("Użytkownik {0} nie może być doradcą szansy (wymagane włączone konto handlowca).").format(
+				doradca
+			)
+		)
+	return doradca
+
+
+def _ustaw_doradce(doc, doradca: str) -> bool:
+	"""Wspolny zapis: ustawia `deal_owner` przez `doc.save`, zwraca czy zmieniono."""
+	if doc.deal_owner == doradca:
+		return False
+	doc.deal_owner = doradca
+	doc.save(ignore_permissions=True)
+	return True
+
+
 @frappe.whitelist()
 @rate_limit(limit=30, seconds=60)
 def zmien_doradce(deal: str, doradca: str) -> dict:
@@ -76,18 +104,53 @@ def zmien_doradce(deal: str, doradca: str) -> dict:
 	if not frappe.has_permission("CRM Deal", "read", doc=doc):
 		frappe.throw(_(BLAD_UPRAWNIEN), frappe.PermissionError)
 
-	if not doradca:
-		frappe.throw(_("Doradca jest wymagany."))
-	if doradca not in {k["user"] for k in _konta_doradcow()}:
-		frappe.throw(
-			_("Użytkownik {0} nie może być doradcą szansy (wymagane włączone konto handlowca).").format(
-				doradca
-			)
-		)
+	doradca = _wymagaj_doradcy(doradca)
+	zmieniono = _ustaw_doradce(doc, doradca)
+	return {"deal": deal, "doradca": doradca, "zmieniono": zmieniono}
 
-	if doc.deal_owner == doradca:
-		return {"deal": deal, "doradca": doradca, "zmieniono": False}
 
-	doc.deal_owner = doradca
-	doc.save(ignore_permissions=True)
-	return {"deal": deal, "doradca": doradca, "zmieniono": True}
+@frappe.whitelist()
+@rate_limit(limit=10, seconds=60)
+def zmien_doradce_zbiorczo(szanse: list, doradca: str) -> dict:
+	"""Zbiorczo ustawia `deal_owner` zaznaczonych szans (tylko administratorzy).
+
+	Kazda szansa ma wlasny savepoint: blad jednej nie przerywa reszty. Wynik:
+	`{zmieniono: int, pominieto: [{deal, powod}]}`."""
+	uzytkownik = frappe.session.user
+	if not czy_moze_zmienic_doradce_zbiorczo(uzytkownik, frappe.get_roles(uzytkownik)):
+		frappe.throw(_(BLAD_UPRAWNIEN), frappe.PermissionError)
+
+	if isinstance(szanse, str):
+		szanse = frappe.parse_json(szanse)
+	try:
+		nazwy = normalizuj_partie(szanse)
+	except ValueError as e:
+		frappe.throw(_(str(e)))
+	doradca = _wymagaj_doradcy(doradca)
+
+	zmieniono = 0
+	pominieto: list[dict] = []
+	bledy: list[tuple[str, str]] = []
+	for i, deal in enumerate(nazwy):
+		sp = f"doradca_zbiorczo_{i}"
+		frappe.db.savepoint(sp)
+		try:
+			if not frappe.db.exists("CRM Deal", deal):
+				pominieto.append({"deal": deal, "powod": _("Szansa nie istnieje.")})
+				continue
+			doc = frappe.get_doc("CRM Deal", deal)
+			if not frappe.has_permission("CRM Deal", "read", doc=doc):
+				pominieto.append({"deal": deal, "powod": _("Brak dostępu do szansy.")})
+				continue
+			if _ustaw_doradce(doc, doradca):
+				zmieniono += 1
+			else:
+				pominieto.append({"deal": deal, "powod": _("Ten doradca jest już przypisany.")})
+		except Exception as e:
+			frappe.db.rollback(save_point=sp)
+			bledy.append((deal, frappe.get_traceback()))
+			pominieto.append({"deal": deal, "powod": _("Błąd zapisu: {0}").format(str(e)[:200])})
+
+	for deal, slad in bledy:
+		frappe.log_error(slad, f"Zbiorcza zmiana doradcy: {deal}")
+	return {"zmieniono": zmieniono, "pominieto": pominieto}

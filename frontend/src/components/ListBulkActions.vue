@@ -6,6 +6,12 @@
     :selectedValues="selectedValues"
     @reload="reload"
   />
+  <DoradcaZbiorczoModal
+    v-if="showDoradcaZbiorczoModal"
+    v-model="showDoradcaZbiorczoModal"
+    :selections="selectedValues"
+    @reload="reload"
+  />
   <AssignmentModal
     v-if="showAssignmentModal"
     v-model="showAssignmentModal"
@@ -39,6 +45,7 @@
 
 <script setup>
 import EditValueModal from '@/components/Modals/EditValueModal.vue'
+import DoradcaZbiorczoModal from '@/components/Modals/DoradcaZbiorczoModal.vue'
 import AssignmentModal from '@/components/Modals/AssignmentModal.vue'
 import PrzydzielCCModal from '@/components/Modals/PrzydzielCCModal.vue'
 import { setupListCustomizations } from '@/utils'
@@ -131,8 +138,15 @@ function assignToCC(selections, unselectAll) {
   unselectAllAction.value = unselectAll
 }
 
+const showDoradcaZbiorczoModal = ref(false)
+
 function assignValues(selections, unselectAll) {
-  showAssignmentModal.value = true
+  // VOLTEO (ops#365): na liscie szans "Przypisz do" zmienia doradce (deal_owner).
+  if (props.doctype === 'CRM Deal') {
+    showDoradcaZbiorczoModal.value = true
+  } else {
+    showAssignmentModal.value = true
+  }
   selectedValues.value = selections
   unselectAllAction.value = unselectAll
 }
