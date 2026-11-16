@@ -49,9 +49,13 @@
 <template>
   <Dialog v-model:open="show" size="3xl">
     <template #body>
-      <!-- Okno nigdy wyzsze od widoku (klasa .zadanie-okno, patrz <style> nizej):
-        naglowek i stopka ze stalym miejscem, srodek (siatka dwoch kolumn, a na
-        waskich ekranach jedna kolumna) przewija sie w srodku okna. -->
+      <!-- Okno nigdy wyzsze od widoku (klasa .zadanie-okno, patrz blok style
+        nizej): naglowek i stopka ze stalym miejscem. Na desktopie okno sie NIE
+        przewija: dwie kolumny (flex, nie siatka) dostaja wysokosc srodka, a lista
+        wpisow rozmowy (ZadanieRozmowa.vue) oddaje brakujace miejsce i przewija
+        sie we wlasnej ramce. Przewijanie srodka okna zostaje tylko awaryjnie
+        (minima sie nie mieszcza, bardzo niski widok) i na telefonie, gdzie
+        kolumny leza jedna pod druga. -->
       <div class="zadanie-okno flex flex-col bg-surface-elevation-1">
         <div class="mb-4 flex shrink-0 items-start justify-between gap-2 px-4 pt-5 sm:items-center sm:px-6">
           <div class="flex min-w-0 flex-col items-start gap-2 sm:flex-row sm:items-center">
@@ -85,13 +89,13 @@
           />
         </div>
 
-        <div class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-6">
+        <div class="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden pb-6">
           <div
-            class="grid grid-cols-1 sm:grid-cols-[1fr_250px]"
+            class="flex shrink-0 flex-col sm:min-h-0 sm:shrink sm:flex-row"
             :class="ladowanie ? 'pointer-events-none opacity-60' : ''"
           >
             <!-- Lewa kolumna: treść -->
-            <div class="flex min-w-0 flex-col gap-4 px-4 pb-2 sm:px-6">
+            <div class="flex min-w-0 flex-col gap-4 px-4 pb-2 sm:min-h-0 sm:flex-1 sm:px-6">
               <FormControl
                 type="text"
                 :label="__('Title')"
@@ -105,7 +109,7 @@
                   ref="opisEditor"
                   :content="doc.description"
                   :editor-class="[
-                    'prose-sm max-w-none min-h-[7rem] rounded-b-lg border border-t-0 border-outline-gray-2 bg-surface-white px-3 py-2',
+                    'prose-sm max-w-none min-h-[7rem] max-h-[11rem] overflow-y-auto rounded-b-lg border border-t-0 border-outline-gray-2 bg-surface-white px-3 py-2',
                   ]"
                   :fixed-menu="opisPrzyciski"
                   :mentions="mentionsKonfig"
@@ -116,34 +120,6 @@
 
               <ZadanieRozmowa v-if="editMode" :zadanie="String(doc.name)" />
 
-              <div
-                v-if="editMode"
-                class="flex flex-col gap-2 border-t border-outline-gray-2 pt-3 text-sm"
-              >
-                <div class="text-xs font-medium uppercase tracking-wide text-ink-gray-4">
-                  {{ __('Historia') }}
-                </div>
-                <div class="grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-2">
-                  <div class="text-ink-gray-5">{{ __('Utworzone') }}</div>
-                  <div class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-                    <UserAvatar v-if="doc.owner" :user="doc.owner" size="xs" />
-                    <span class="font-medium text-ink-gray-8">{{ utworzoneAutor }}</span>
-                    <span class="text-ink-gray-5">·</span>
-                    <span class="text-ink-gray-5">{{ utworzoneData }}</span>
-                  </div>
-
-                  <template v-if="pokazOstatniaZmiane">
-                    <div class="text-ink-gray-5">{{ __('Ostatnia zmiana') }}</div>
-                    <div class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-                      <UserAvatar v-if="doc.modified_by" :user="doc.modified_by" size="xs" />
-                      <span class="font-medium text-ink-gray-8">{{ ostatniaZmianaAutor }}</span>
-                      <span class="text-ink-gray-5">·</span>
-                      <span class="text-ink-gray-5">{{ ostatniaZmianaData }}</span>
-                    </div>
-                  </template>
-                </div>
-              </div>
-
               <ErrorMessage v-if="error" :message="__(error)" />
             </div>
 
@@ -151,9 +127,11 @@
             stron na mobile (border-t, pełna szerokość); na sm+ krawędź
             górna+dolna+lewa (border-y+border-l, bez prawej, bo dochodzi do
             krawędzi okna dialogu - patrz komentarz przy szablonie u góry
-            pliku), self-stretch na pełną wysokość wiersza siatki. -->
+            pliku), self-stretch na pełną wysokość wiersza (flex, od sm stała
+            szerokość 250 px; panel przewija się w sobie tylko w bardzo niskim
+            oknie). -->
             <div
-              class="mt-4 flex flex-col gap-5 self-stretch border-t border-outline-gray-2 bg-surface-gray-1 p-4 sm:mt-0 sm:rounded-l-lg sm:border-b sm:border-l"
+              class="mt-4 flex flex-col gap-5 self-stretch border-t border-outline-gray-2 bg-surface-gray-1 p-4 sm:mt-0 sm:min-h-0 sm:w-[250px] sm:shrink-0 sm:overflow-y-auto sm:rounded-l-lg sm:border-b sm:border-l"
             >
               <div>
                 <div class="mb-2 text-sm text-ink-gray-5">{{ __('Status') }}</div>
@@ -254,6 +232,35 @@
                     @click="ustawTerminZaDni(7)"
                   />
                   <Button variant="outline" size="sm" :label="__('Clear')" @click="wyczyscTermin" />
+                </div>
+              </div>
+              <!-- Historia: na dole panelu (sm:mt-auto), zeby kolumna z rozmowa
+              miala cala wysokosc dla listy wpisow. -->
+              <div
+                v-if="editMode"
+                class="flex flex-col gap-2 border-t border-outline-gray-2 pt-3 text-sm sm:mt-auto"
+              >
+                <div class="text-xs font-medium uppercase tracking-wide text-ink-gray-4">
+                  {{ __('Historia') }}
+                </div>
+                <div class="flex flex-col gap-1">
+                  <div class="text-ink-gray-5">{{ __('Utworzone') }}</div>
+                  <div class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                    <UserAvatar v-if="doc.owner" :user="doc.owner" size="xs" />
+                    <span class="font-medium text-ink-gray-8">{{ utworzoneAutor }}</span>
+                    <span class="text-ink-gray-5">·</span>
+                    <span class="text-ink-gray-5">{{ utworzoneData }}</span>
+                  </div>
+
+                  <template v-if="pokazOstatniaZmiane">
+                    <div class="mt-1 text-ink-gray-5">{{ __('Ostatnia zmiana') }}</div>
+                    <div class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                      <UserAvatar v-if="doc.modified_by" :user="doc.modified_by" size="xs" />
+                      <span class="font-medium text-ink-gray-8">{{ ostatniaZmianaAutor }}</span>
+                      <span class="text-ink-gray-5">·</span>
+                      <span class="text-ink-gray-5">{{ ostatniaZmianaData }}</span>
+                    </div>
+                  </template>
                 </div>
               </div>
             </div>
@@ -557,6 +564,10 @@ onBeforeUnmount(() => {
   (2rem + 2rem), razem 6rem. Dialog nie ogranicza wysokosci tresci (panel ma
   `overflow-hidden`, a overlay `overflow-y-auto`), wiec bez tego dluga zawartosc
   rozpycha okno ponad ekran i stopka z przyciskami wypada poza widok.
+  Na desktopie okno sie NIE przewija: lista wpisow rozmowy oddaje brakujace
+  miejsce i przewija sie we wlasnej ramce (min-h-0 w calym lancuchu kolumn).
+  Przewijanie srodka okna jest tylko awaryjne (minima sie nie mieszcza,
+  bardzo niski widok) i dziala na telefonie (kolumny jedna pod druga).
   Dwie deklaracje celowo w czystym CSS: przegladarka bez jednostki `dvh`
   odrzuca druga i zostaje przy `vh`; `dvh` uwzglednia dynamiczny pasek adresu
   na telefonach. Szerokosc ogranicza sam Dialog (`w-full max-w-3xl` w wrapperze
