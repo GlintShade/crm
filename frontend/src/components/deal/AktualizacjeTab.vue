@@ -133,7 +133,14 @@
             </div>
           </div>
           <div v-if="edytowany === u.name" class="flex flex-col gap-2">
+            <FormControl
+              v-if="!konfig.html"
+              type="textarea"
+              :rows="2"
+              v-model="trescEdycji"
+            />
             <TextEditor
+              v-else
               :content="trescEdycji"
               :editor-class="['prose-sm max-w-none min-h-[3rem]']"
               :editable="true"
@@ -146,7 +153,7 @@
                 variant="solid"
                 :label="__('Save')"
                 :loading="zapisuje"
-                :disabled="tekstPusty(trescEdycji)"
+                :disabled="konfig.html ? tekstPusty(trescEdycji) : !trescEdycji.trim()"
                 data-testid="wpis-zapisz"
                 @click="zapiszEdycje(u)"
               />
@@ -166,7 +173,7 @@
       v-if="historiaOtwarta"
       v-model:open="historiaOtwarta"
       :komentarz="historiaWpis"
-      endpoint="crm.api.trify.historia"
+      :endpoint="`${konfig.api}.historia`"
       parametr="name"
     />
   </div>
@@ -220,7 +227,7 @@ const rows = computed(() => updates.data || [])
 // per wpis (ikona historii), edycja wlasnego wpisu, usuwanie tylko dla
 // administratora (System Manager / Administrator, DocPerm decyduje serwerowo).
 const liczbyZmianZasob = createResource({
-  url: 'crm.api.trify.liczby_zmian',
+  url: `${props.konfig.api}.liczby_zmian`,
   params: { deal: props.dealId },
   auto: Boolean(props.konfig.edycja),
 })
@@ -243,14 +250,14 @@ async function odswiez() {
 }
 
 async function zapiszEdycje(u) {
-  if (tekstPusty(trescEdycji.value) || zapisuje.value) return
+  if ((props.konfig.html ? tekstPusty(trescEdycji.value) : !trescEdycji.value.trim()) || zapisuje.value) return
   if (trescEdycji.value === u.tekst) {
     edytowany.value = ''
     return
   }
   zapisuje.value = true
   try {
-    await call('crm.api.trify.edytuj', { name: u.name, tekst: trescEdycji.value })
+    await call(`${props.konfig.api}.edytuj`, { name: u.name, tekst: trescEdycji.value })
     edytowany.value = ''
     await odswiez()
   } catch (err) {
