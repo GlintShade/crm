@@ -15,6 +15,7 @@ def get_notifications():
 
 	_notifications = []
 	for notification in notifications:
+		reference_doctype, route_name = get_route(notification)
 		_notifications.append(
 			{
 				"creation": notification.creation,
@@ -29,9 +30,9 @@ def get_notifications():
 				"notification_text": notification.notification_text,
 				"notification_type_doctype": notification.notification_type_doctype,
 				"notification_type_doc": notification.notification_type_doc,
-				"reference_doctype": ("deal" if notification.reference_doctype == "CRM Deal" else "lead"),
+				"reference_doctype": reference_doctype,
 				"reference_name": notification.reference_name,
-				"route_name": ("Deal" if notification.reference_doctype == "CRM Deal" else "Lead"),
+				"route_name": route_name,
 			}
 		)
 
@@ -54,10 +55,30 @@ def mark_as_read(doc: str | None = None):
 		d.save()
 
 
+def get_route(notification):
+	"""(etykieta `reference_doctype`, nazwa trasy frontu) powiadomienia.
+
+	Wzmianka w rozmowie zadania (`crm.api.comment._notify_mention`) ma
+	`reference_doctype == "CRM Task"` i prowadzi na liste zadan (`Tasks`), a
+	frontend (`Notifications.vue::getRoute`) dokleja `open=<nazwa zadania>`,
+	zeby strona zadan otworzyla jego okno. Wszystko inne jak dotad: szansa
+	albo lead."""
+	if notification.reference_doctype == "CRM Task":
+		return "task", "Tasks"
+	if notification.reference_doctype == "CRM Deal":
+		return "deal", "Deal"
+	return "lead", "Lead"
+
+
 def get_hash(notification):
 	_hash = ""
 	if notification.type == "Mention" and notification.notification_type_doc:
 		_hash = "#" + notification.notification_type_doc
+
+	if notification.type == "Mention" and notification.reference_doctype == "CRM Task":
+		# wzmianka w rozmowie zadania: trasa `Tasks` nie ma zakladek ani kotwic,
+		# a `notification_type_doc` to nazwa komentarza (nie kotwica na stronie)
+		_hash = ""
 
 	if notification.type == "Mention" and notification.notification_type_doctype == "Volteo Trify Update":
 		# wzmianka we wpisie Trify: hash to nazwa zakładki (useActiveTabManager

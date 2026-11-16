@@ -16,6 +16,7 @@ from crm.volteo_notatki import (
 	czy_pdf,
 	etykieta_zrodla,
 	normalizuj_komentarz_audytu,
+	normalizuj_komentarz_zadania,
 	normalizuj_notatke,
 	odfiltruj_zmigrowane,
 	posortuj,
@@ -317,19 +318,21 @@ class TestVolteoNotatkiPosortuj(unittest.TestCase):
 
 
 class TestVolteoNotatkiZrodlaFeedu(unittest.TestCase):
-	def test_a_dziesiec_zrodel(self: "TestVolteoNotatkiZrodlaFeedu") -> None:
-		self.assertEqual(len(ZRODLA_FEEDU), 10)
+	def test_a_jedenascie_zrodel(self: "TestVolteoNotatkiZrodlaFeedu") -> None:
+		self.assertEqual(len(ZRODLA_FEEDU), 11)
 
 	def test_b_bez_duplikatow(self: "TestVolteoNotatkiZrodlaFeedu") -> None:
 		self.assertEqual(len(ZRODLA_FEEDU), len(set(ZRODLA_FEEDU)))
 
-	def test_c_osiem_zakladek_potem_audyt_i_audytcp(self: "TestVolteoNotatkiZrodlaFeedu") -> None:
+	def test_c_osiem_zakladek_potem_audyt_audytcp_i_zadanie(self: "TestVolteoNotatkiZrodlaFeedu") -> None:
 		self.assertEqual(ZRODLA_FEEDU[:8], ZAKLADKI)
-		self.assertEqual(ZRODLA_FEEDU[8:], ("Audyt", "AudytCP"))
+		self.assertEqual(ZRODLA_FEEDU[8:], ("Audyt", "AudytCP", "Zadanie"))
 
-	def test_d_audyt_i_audytcp_poza_zakladkami(self: "TestVolteoNotatkiZrodlaFeedu") -> None:
+	def test_d_audyt_audytcp_i_zadanie_poza_zakladkami(self: "TestVolteoNotatkiZrodlaFeedu") -> None:
 		self.assertNotIn("Audyt", ZAKLADKI)
 		self.assertNotIn("AudytCP", ZAKLADKI)
+		# `Zadanie` to zrodlo feedu, NIE zakladka notatek ani wartosc pola `zakladka`.
+		self.assertNotIn("Zadanie", ZAKLADKI)
 
 
 class TestVolteoNotatkiEtykietaZrodla(unittest.TestCase):
@@ -348,10 +351,15 @@ class TestVolteoNotatkiEtykietaZrodla(unittest.TestCase):
 		for zrodlo in ZRODLA_FEEDU:
 			self.assertTrue(etykieta_zrodla(zrodlo), zrodlo)
 
-	def test_e_dodatkowe_etykiety_maja_dokladnie_audyt_i_audytcp(
+	def test_e_dodatkowe_etykiety_maja_dokladnie_audyt_audytcp_i_zadanie(
 		self: "TestVolteoNotatkiEtykietaZrodla",
 	) -> None:
-		self.assertEqual(set(ETYKIETY_ZRODEL_DODATKOWYCH), {"Audyt", "AudytCP"})
+		self.assertEqual(set(ETYKIETY_ZRODEL_DODATKOWYCH), {"Audyt", "AudytCP", "Zadanie"})
+
+	def test_f_zadanie_ma_etykiete_panelu_zrodel_w_liczbie_mnogiej(
+		self: "TestVolteoNotatkiEtykietaZrodla",
+	) -> None:
+		self.assertEqual(etykieta_zrodla("Zadanie"), "Zadania")
 
 
 class TestVolteoNotatkiNormalizujNotatke(unittest.TestCase):
@@ -561,6 +569,136 @@ class TestVolteoNotatkiNormalizujKomentarzAudytu(unittest.TestCase):
 		wynik = normalizuj_komentarz_audytu(self._komentarz(content=html_ze_wzmianka), "AudytCP")
 		self.assertEqual(wynik["tekst_html"], html_ze_wzmianka)
 		self.assertIn('data-type="mention"', wynik["tekst_html"])
+
+
+class TestVolteoNotatkiNormalizujKomentarzZadania(unittest.TestCase):
+	def _komentarz(self: "TestVolteoNotatkiNormalizujKomentarzZadania", **nadpisania: object) -> dict:
+		bazowy = {
+			"name": "COMMENT-0042",
+			"owner": "anna@proenergy.pro",
+			"creation": "2026-11-16 11:30:00",
+			"content": "<p>Klient oddzwoni jutro</p>",
+			"autor_nazwa": "Anna Nowak",
+			"pliki": [],
+		}
+		bazowy.update(nadpisania)
+		return bazowy
+
+	def _zadanie(self: "TestVolteoNotatkiNormalizujKomentarzZadania", **nadpisania: object) -> dict:
+		bazowe = {"name": 17, "title": "Zadzwonic do klienta"}
+		bazowe.update(nadpisania)
+		return bazowe
+
+	def test_a_ksztalt_wyniku_jak_przy_audycie_plus_pole_zadanie(
+		self: "TestVolteoNotatkiNormalizujKomentarzZadania",
+	) -> None:
+		wynik = normalizuj_komentarz_zadania(self._komentarz(), self._zadanie())
+		oczekiwane_klucze = {
+			"klucz",
+			"zrodlo",
+			"zrodlo_etykieta",
+			"zakladka_hash",
+			"zadanie",
+			"typ",
+			"data",
+			"creation",
+			"autor",
+			"autor_nazwa",
+			"tekst_html",
+			"pliki",
+			"kredyt",
+		}
+		self.assertEqual(set(wynik.keys()), oczekiwane_klucze)
+		# Ten sam kształt co normalizator Audytu, plus tylko `zadanie`.
+		wynik_audytu = normalizuj_komentarz_audytu(self._komentarz(), "Audyt")
+		self.assertEqual(set(wynik.keys()) - set(wynik_audytu.keys()), {"zadanie"})
+
+	def test_b_zrodlo_klucz_i_pusty_hash_zakladki(
+		self: "TestVolteoNotatkiNormalizujKomentarzZadania",
+	) -> None:
+		wynik = normalizuj_komentarz_zadania(self._komentarz(), self._zadanie())
+		self.assertEqual(wynik["zrodlo"], "Zadanie")
+		self.assertEqual(wynik["klucz"], "zadanie:COMMENT-0042")
+		self.assertEqual(wynik["zakladka_hash"], "")
+
+	def test_c_etykieta_z_tytulem_zadania(self: "TestVolteoNotatkiNormalizujKomentarzZadania") -> None:
+		wynik = normalizuj_komentarz_zadania(self._komentarz(), self._zadanie())
+		self.assertEqual(wynik["zrodlo_etykieta"], "Zadanie: Zadzwonic do klienta")
+
+	def test_d_etykieta_bez_tytulu(self: "TestVolteoNotatkiNormalizujKomentarzZadania") -> None:
+		wynik = normalizuj_komentarz_zadania(self._komentarz(), self._zadanie(title=None))
+		self.assertEqual(wynik["zrodlo_etykieta"], "Zadanie")
+
+	def test_e_nazwa_zadania_zawsze_jako_string(
+		self: "TestVolteoNotatkiNormalizujKomentarzZadania",
+	) -> None:
+		# `CRM Task` ma nazwy liczbowe (autoincrement), a Frappe waliduje typy
+		# argumentow metod whitelist -- front dostaje nazwe jako string.
+		wynik = normalizuj_komentarz_zadania(self._komentarz(), self._zadanie(name=17))
+		self.assertEqual(wynik["zadanie"], "17")
+		self.assertIsInstance(wynik["zadanie"], str)
+		wynik_bez = normalizuj_komentarz_zadania(self._komentarz(), self._zadanie(name=None))
+		self.assertEqual(wynik_bez["zadanie"], "")
+
+	def test_f_typ_komentarz_i_kredyt_none(self: "TestVolteoNotatkiNormalizujKomentarzZadania") -> None:
+		wynik = normalizuj_komentarz_zadania(self._komentarz(), self._zadanie())
+		self.assertEqual(wynik["typ"], "Komentarz")
+		self.assertIsNone(wynik["kredyt"])
+
+	def test_g_autor_i_data(self: "TestVolteoNotatkiNormalizujKomentarzZadania") -> None:
+		wynik = normalizuj_komentarz_zadania(self._komentarz(), self._zadanie())
+		self.assertEqual(wynik["autor"], "anna@proenergy.pro")
+		self.assertEqual(wynik["autor_nazwa"], "Anna Nowak")
+		self.assertEqual(wynik["data"], "2026-11-16 11:30:00")
+		self.assertEqual(wynik["creation"], "2026-11-16 11:30:00")
+
+	def test_h_autor_nazwa_spada_na_owner_nigdy_na_comment_by(
+		self: "TestVolteoNotatkiNormalizujKomentarzZadania",
+	) -> None:
+		wynik = normalizuj_komentarz_zadania(
+			self._komentarz(autor_nazwa=None, comment_by="Ignorowane Pole"), self._zadanie()
+		)
+		self.assertEqual(wynik["autor_nazwa"], "anna@proenergy.pro")
+
+	def test_i_html_z_edytora_przepisany_bez_zmian_wzmianka_przezyla(
+		self: "TestVolteoNotatkiNormalizujKomentarzZadania",
+	) -> None:
+		html_ze_wzmianka = (
+			'<p>Sprawdz to <span class="mention" data-type="mention" '
+			'data-id="handlowiec@proenergy.pro" data-label="Jan Kowalski">'
+			"@Jan Kowalski</span></p>"
+		)
+		wynik = normalizuj_komentarz_zadania(self._komentarz(content=html_ze_wzmianka), self._zadanie())
+		self.assertEqual(wynik["tekst_html"], html_ze_wzmianka)
+
+	def test_j_zwykly_tekst_jest_escapowany(self: "TestVolteoNotatkiNormalizujKomentarzZadania") -> None:
+		wynik = normalizuj_komentarz_zadania(
+			self._komentarz(content="Cena < 5000 zl, <script>alert(1)</script>\ndruga linia"),
+			self._zadanie(),
+		)
+		self.assertNotIn("<script>", wynik["tekst_html"])
+		self.assertIn("&lt;script&gt;", wynik["tekst_html"])
+		self.assertIn("<br>", wynik["tekst_html"])
+
+	def test_k_pliki_przepisane_a_brak_daje_pusta_liste(
+		self: "TestVolteoNotatkiNormalizujKomentarzZadania",
+	) -> None:
+		pliki = [{"name": "FILE-0003", "file_name": "zdjecie.png"}]
+		self.assertEqual(
+			normalizuj_komentarz_zadania(self._komentarz(pliki=pliki), self._zadanie())["pliki"], pliki
+		)
+		self.assertEqual(
+			normalizuj_komentarz_zadania(self._komentarz(pliki=None), self._zadanie())["pliki"], []
+		)
+
+	def test_l_zrodlo_zadanie_liczone_w_zbuduj_zrodla(
+		self: "TestVolteoNotatkiNormalizujKomentarzZadania",
+	) -> None:
+		wynik = normalizuj_komentarz_zadania(self._komentarz(), self._zadanie())
+		zrodla = zbuduj_zrodla({wynik["zrodlo"]: 2})
+		po_kluczu = {z["klucz"]: z for z in zrodla}
+		self.assertEqual(po_kluczu["Zadanie"]["liczba"], 2)
+		self.assertEqual(po_kluczu["Zadanie"]["etykieta"], "Zadania")
 
 
 class TestVolteoNotatkiZbudujZrodla(unittest.TestCase):

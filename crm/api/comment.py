@@ -1,4 +1,5 @@
 from collections.abc import Iterable
+from html import escape as html_escape
 
 import frappe
 from bs4 import BeautifulSoup
@@ -67,7 +68,21 @@ def _notify_mention(doc, reference_doc, mention):
 	redirect_to_doctype = doc.reference_doctype
 	redirect_to_docname = doc.reference_name
 
-	if doctype.startswith("CRM "):
+	if doctype == "CRM Task":
+		# Rozmowa zadania (ZadanieRozmowa.vue): wzmianka w wpisie zadania.
+		# PRZED galezia `startswith("CRM ")` -- inaczej zadanie wpadalo w nia i
+		# dostawalo `name = None` (zadanie nie ma pol lead_name/organization).
+		# Powiadomienie wskazuje (`reference_doctype`/`reference_name` rekordu
+		# CRM Notification, czyli `redirect_to_*` tutaj) na SAME zadanie:
+		# `crm.api.notifications.get_notifications` buduje z tego trase `Tasks`
+		# z `open=<nazwa zadania>`. `notification_type_doctype`/`_doc` zostaja
+		# domyslne (Comment / nazwa komentarza), jak dla leada i szansy.
+		# Tytul zadania idzie do HTML-a escapowany: to tekst uzytkownika.
+		doctype = "zadaniu"
+		name = html_escape(str(reference_doc.get("title") or doc.reference_name))
+		redirect_to_doctype = "CRM Task"
+		redirect_to_docname = doc.reference_name
+	elif doctype.startswith("CRM "):
 		doctype = doctype[4:].lower()
 		name = (
 			reference_doc.get("lead_name")

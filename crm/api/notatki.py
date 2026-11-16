@@ -52,6 +52,7 @@ from crm.volteo_notatki import (
 	ZAKLADKI,
 	ZNACZNIK_ROBOCZY,
 	normalizuj_komentarz_audytu,
+	normalizuj_komentarz_zadania,
 	normalizuj_notatke,
 	rozbij_znacznik,
 	rozszerzenie,
@@ -147,7 +148,9 @@ def feed(deal: str) -> dict:
 	"""Zakladka „Notatki" (issue ops#201, uwaga 40, faza 1 = tylko OZE): jeden
 	strumien laczacy WSZYSTKIE notatki `Volteo Notatka` szansy (kazda
 	zakladka naraz, nie tylko jedna jak `lista()`) z komentarzami watku
-	„Komentarze" zakladki Audyt (`Volteo Audyt`/`Volteo Audyt CP`).
+	„Komentarze" zakladki Audyt (`Volteo Audyt`/`Volteo Audyt CP`) oraz z
+	rozmowa zadan tej szansy (`CRM Task` z `reference_doctype = "CRM Deal"`,
+	zrodlo `Zadanie`, `Comment` z `reference_doctype = "CRM Task"`).
 	Wylacznie widok -- bramkuje wylacznie odczyt, zaden zapis nie idzie przez
 	ten endpoint.
 
@@ -167,6 +170,14 @@ def feed(deal: str) -> dict:
 	`crm.volteo_notatki.normalizuj_komentarz_audytu`: jedno zrodlo prawdy o
 	imieniu i nazwisku, ktore odzwierciedla ewentualna zmiane nazwiska po
 	fakcie).
+
+	Rozmowa zadan (trzecie zrodlo, tez w osobnym `try/except`): bramka wejsciowa
+	(odczyt szansy) jest tu JEDYNA bramka -- zadanie szansy jest widoczne dla
+	kazdego, kto widzi szanse (`crm.permissions.child_visibility` zawęża
+	`CRM Task` dokladnie do widocznosci rodzica), wiec zadan i ich komentarzy nie
+	sprawdzamy osobno. Zadania sa czytane przez `frappe.get_all` PO tej bramce
+	(patrz `crm.api.zadania_rozmowa` -- ten sam wzorzec); nazwy zadan (liczbowe)
+	zamieniamy na string, bo `Comment.reference_name` jest tekstem.
 	"""
 	if not frappe.has_permission("CRM Deal", "read", deal):
 		frappe.throw(_("Brak uprawnień do tej szansy sprzedaży."), frappe.PermissionError)
@@ -248,6 +259,34 @@ def feed(deal: str) -> dict:
 			wlasciciele.add(wiersz.owner)
 			komentarze_raw.append({**wiersz, "zrodlo": zrodlo})
 
+	komentarze_zadan_raw: list[dict] = []
+	try:
+		zadania_szansy = {
+			str(zadanie.name): zadanie
+			for zadanie in frappe.get_all(
+				"CRM Task",
+				filters={"reference_doctype": "CRM Deal", "reference_docname": deal},
+				fields=["name", "title"],
+			)
+		}
+		if zadania_szansy:
+			for wiersz in frappe.get_all(
+				"Comment",
+				filters={
+					"reference_doctype": "CRM Task",
+					"reference_name": ["in", list(zadania_szansy)],
+					"comment_type": "Comment",
+				},
+				fields=["name", "owner", "creation", "content", "reference_name"],
+				order_by="creation desc",
+				limit_page_length=500,
+			):
+				wlasciciele.add(wiersz.owner)
+				komentarze_zadan_raw.append({**wiersz, "zadanie": zadania_szansy[wiersz.reference_name]})
+	except Exception:
+		frappe.log_error(title="Notatki: feed nie mógł pobrać rozmowy zadań", message=frappe.get_traceback())
+		komentarze_zadan_raw = []
+
 	autorzy: dict[str, str] = {}
 	if wlasciciele:
 		for wiersz in frappe.get_all(
@@ -279,6 +318,30 @@ def feed(deal: str) -> dict:
 				message=frappe.get_traceback(),
 			)
 
+	pliki_per_komentarz_zadania: dict[str, list] = {}
+	if komentarze_zadan_raw:
+		try:
+			pliki_komentarzy_zadan = (
+				frappe.db.get_all(
+					"File",
+					filters={
+						"attached_to_doctype": "Comment",
+						"attached_to_name": ["in", [k["name"] for k in komentarze_zadan_raw]],
+					},
+					fields=["attached_to_name", *_POLA_PLIKU],
+				)
+				or []
+			)
+			for plik in pliki_komentarzy_zadan:
+				pliki_per_komentarz_zadania.setdefault(plik.attached_to_name, []).append(
+					{klucz: plik[klucz] for klucz in _POLA_PLIKU}
+				)
+		except Exception:
+			frappe.log_error(
+				title="Notatki: feed nie mógł pobrać plików rozmowy zadań",
+				message=frappe.get_traceback(),
+			)
+
 	wpisy_znormalizowane: list[dict] = []
 	liczniki: dict[str, int] = {}
 
@@ -299,6 +362,16 @@ def feed(deal: str) -> dict:
 			"pliki": pliki_per_komentarz.get(komentarz["name"], []),
 		}
 		znormalizowany = normalizuj_komentarz_audytu(wzbogacony, komentarz["zrodlo"])
+		wpisy_znormalizowane.append(znormalizowany)
+		liczniki[znormalizowany["zrodlo"]] = liczniki.get(znormalizowany["zrodlo"], 0) + 1
+
+	for komentarz in komentarze_zadan_raw:
+		wzbogacony = {
+			**komentarz,
+			"autor_nazwa": autorzy.get(komentarz["owner"]) or komentarz["owner"],
+			"pliki": pliki_per_komentarz_zadania.get(komentarz["name"], []),
+		}
+		znormalizowany = normalizuj_komentarz_zadania(wzbogacony, komentarz["zadanie"])
 		wpisy_znormalizowane.append(znormalizowany)
 		liczniki[znormalizowany["zrodlo"]] = liczniki.get(znormalizowany["zrodlo"], 0) + 1
 
