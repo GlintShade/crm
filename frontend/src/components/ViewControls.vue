@@ -726,7 +726,11 @@ function updateSelections(selections) {
 }
 
 async function exportRows() {
-  let fields = JSON.stringify(list.value.data.columns.map((f) => f.key))
+  // "_klient" (kolumna "Klient" listy Zadan) to pseudo-pole liczone po stronie
+  // serwera w get_data, nie kolumna bazy: eksport go nie zna (ops#357).
+  let fields = JSON.stringify(
+    list.value.data.columns.map((f) => f.key).filter((k) => k !== '_klient'),
+  )
 
   let filters = JSON.stringify({
     ...props.filters,
@@ -1042,6 +1046,12 @@ const quickFilterOptions = computed(() => {
     dozwolonePola.data,
     existingQuickFilters,
   )
+  // `opcjeDodaniaFiltraSzybkiego` jest frappe-free (nie woła __()), więc
+  // etykiety opcji listy "dodaj filtr szybki" tłumaczymy tutaj; `value` bez zmian.
+  options = options.map((o) => ({
+    ...o,
+    label: o.label ? __(o.label) : o.label,
+  }))
 
   // Pseudo-pole "name" -- `opcjeDodaniaFiltraSzybkiego` jest frappe-free
   // (nie woła __()), więc etykieta tłumaczona zostaje tutaj. Sprawdzenie
