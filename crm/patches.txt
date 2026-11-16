@@ -29,3 +29,4 @@ crm.patches.v1_0.create_custom_fields_for_product_item_sync
 crm.patches.v1_0.add_forecasting_section_in_quick_entry
 crm.patches.v1_0.set_persona_captured_for_existing_sites
 crm.patches.v1_0.usun_status_backlog_zadan
+crm.patches.v1_0.etykieta_szansa_w_widokach_zadan
