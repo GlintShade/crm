@@ -39,6 +39,7 @@ from crm.volteo_lista_szans import (
 	wzory_tagu,
 )
 from crm.volteo_usuwanie import AUTENTI_STATUSY_BLOKADY, OFERTA_STATUSY_BLOKADY
+from crm.volteo_zadania_lista import KLUCZ_KLIENTA, klient_zadania, nazwy_powiazan
 
 # Bezpiecznik rozmiaru unii w `rozwin_grupy` (issue #129): patrz jej
 # docstring. Chroni zapytanie `name in [...]` przed nieograniczonym
@@ -87,10 +88,11 @@ _POLA_ZAWSZE_DOZWOLONE = POLA_ZAWSZE_DOZWOLONE | frozenset(_CHILD_TABLE_FIELDS)
 # Pseudo-pola listy (issue #117): NIE sa prawdziwymi DocFieldami (wiec
 # get_permitted_fields ich nie zwroci), ale musza przezyc filtrowanie
 # columns/rows w get_data ponizej. "_comment_count" dzieli klucz kolumny
-# "Komentarze" z default_list_data() na CRM Lead (ops#94). Reszta
+# "Komentarze" z default_list_data() na CRM Lead (ops#94); "_klient" dzieli
+# klucz kolumny "Klient" z default_list_data() na CRM Task (ops#357). Reszta
 # pseudo-pol (name, _assign, _liked_by, _comments...) jest juz w
 # _POLA_ZAWSZE_DOZWOLONE powyzej.
-_POLA_LISTY_ZAWSZE_DOZWOLONE = _POLA_ZAWSZE_DOZWOLONE | frozenset({"_comment_count"})
+_POLA_LISTY_ZAWSZE_DOZWOLONE = _POLA_ZAWSZE_DOZWOLONE | frozenset({"_comment_count", KLUCZ_KLIENTA})
 
 
 def _pola_dozwolone(doctype: str, parenttype: str | None = None) -> set[str]:
@@ -1353,6 +1355,16 @@ def get_data(
 		chce_licznik_komentarzy = "_comment_count" in rows
 		sql_rows = [row for row in rows if row != "_comment_count"]
 
+		# VOLTEO (ops#357): "_klient" (kolumna "Klient" listy Zadan) tez nie jest
+		# DocFieldem. Wycinamy go z pol SQL, a gdy kolumna jest w widoku,
+		# dopilnowujemy pol powiazania, z ktorych liczymy klienta po zapytaniu.
+		chce_klienta = doctype == "CRM Task" and KLUCZ_KLIENTA in rows
+		sql_rows = [row for row in sql_rows if row != KLUCZ_KLIENTA]
+		if chce_klienta:
+			for pole in ("reference_doctype", "reference_docname"):
+				if pole not in sql_rows:
+					sql_rows.append(pole)
+
 		data = (
 			frappe.get_list(
 				doctype,
@@ -1382,6 +1394,9 @@ def get_data(
 					mapa_licznikow[wiersz.reference_name] = wiersz.n
 			for d in data:
 				d["_comment_count"] = mapa_licznikow.get(d.get("name"), 0)
+
+		if chce_klienta:
+			_dolacz_klienta_zadan(data)
 
 	if view_type == "kanban":
 		if not rows:
@@ -1430,6 +1445,10 @@ def get_data(
 		# zapytaniem do bazy nizej.
 		rows = _odfiltruj_niedozwolone_klucze(doctype, rows)
 		kanban_fields = _odfiltruj_niedozwolone_klucze(doctype, kanban_fields)
+		# VOLTEO (ops#357): kanban nie liczy "_klient", a zapisany klucz nie moze
+		# trafic do SQL (`fields=rows` nizej).
+		rows = [row for row in rows if row != KLUCZ_KLIENTA]
+		kanban_fields = [row for row in kanban_fields if row != KLUCZ_KLIENTA]
 		_dolacz_pola_decyzyjne_lead(doctype, rows)
 
 		for kc in kanban_columns:
@@ -1572,6 +1591,31 @@ def get_data(
 		"list_script": get_form_script(doctype, "List"),
 		"view_type": view_type,
 	}
+
+
+def _dolacz_klienta_zadan(data: list) -> None:
+	"""Dopisuje `_klient` (imie i nazwisko klienta szansy albo leada) do kazdego
+	wiersza listy `CRM Task` (ops#357). Dwa zapytania zbiorcze (szanse, leady),
+	nie N+1; pusta lista nazw oznacza brak zapytania.
+
+	`get_all` (bez sprawdzania uprawnien) jest tu bezpieczne: zadanie
+	powiazane z szansa albo leadem jest widoczne tylko wtedy, gdy widoczny
+	jest rodzic (`crm/permissions/child_visibility.py`), a `lead_name` ma
+	permlevel 0, wiec nie ujawniamy nic ponad to, co uzytkownik i tak widzi.
+	"""
+	szanse, leady = nazwy_powiazan(data)
+	klienci_szans: dict = {}
+	klienci_leadow: dict = {}
+	if szanse:
+		for w in frappe.get_all("CRM Deal", filters={"name": ["in", szanse]}, fields=["name", "lead_name"]):
+			klienci_szans[w.name] = w.lead_name
+	if leady:
+		for w in frappe.get_all("CRM Lead", filters={"name": ["in", leady]}, fields=["name", "lead_name"]):
+			klienci_leadow[w.name] = w.lead_name
+	for d in data:
+		d[KLUCZ_KLIENTA] = klient_zadania(
+			d.get("reference_doctype"), d.get("reference_docname"), klienci_szans, klienci_leadow
+		)
 
 
 def parse_list_data(data, doctype):

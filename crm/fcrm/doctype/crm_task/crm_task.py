@@ -68,6 +68,12 @@ class CRMTask(Document):
 				"width": "16rem",
 			},
 			{
+				"label": "Klient",
+				"type": "Data",
+				"key": "_klient",
+				"width": "10rem",
+			},
+			{
 				"label": "Status",
 				"type": "Select",
 				"key": "status",

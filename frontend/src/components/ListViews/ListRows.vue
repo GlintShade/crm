@@ -21,6 +21,7 @@
           :key="row.name"
           v-slot="{ idx, column, item }"
           :row="row"
+          :class="rowClass(row)"
         >
           <slot v-bind="{ idx, column, item, row }" />
         </ListRow>
@@ -38,6 +39,7 @@
       :key="row.name"
       v-slot="{ idx, column, item }"
       :row="row"
+      :class="rowClass(row)"
     >
       <slot v-bind="{ idx, column, item, row }" />
     </ListRow>
@@ -52,6 +54,9 @@ import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue'
 const props = defineProps({
   rows: { type: Array, required: true },
   doctype: { type: String, default: 'CRM Lead' },
+  // Opcjonalna klasa CSS wiersza (np. podswietlenie zadan po terminie na
+  // liscie Zadan, ops#357). Domyslnie brak: pozostale listy sie nie zmieniaja.
+  rowClass: { type: Function, default: () => '' },
 })
 
 const reactivieRows = ref(props.rows)
