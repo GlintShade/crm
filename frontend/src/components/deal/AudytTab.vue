@@ -748,7 +748,7 @@ async function loadRequirements() {
   reqLoading.value = true
   reqError.value = ''
   try {
-    const data = await call('volteo_audyt_requirements')
+    const data = await call('volteo_audyt_requirements', { deal: props.dealId })
     requirements.variants = data?.variants || []
     requirements.matrix = data?.matrix || {}
     requirements.statuses = data?.statuses || []

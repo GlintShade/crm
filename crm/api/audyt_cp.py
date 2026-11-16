@@ -117,6 +117,13 @@ def _pobierz_audyt(deal: str) -> "frappe.model.document.Document | None":
     return None
 
 
+def _jest_autorem_lub_doradca(audyt_doc, deal: str) -> bool:
+    """Autor audytu albo aktualny `deal_owner` szansy (ops#338): tylko oni
+    edytują i przesyłają Szkic; przełożony, który szansę tylko widzi, czyta."""
+    user = frappe.session.user
+    return audyt_doc.owner == user or frappe.db.get_value("CRM Deal", deal, "deal_owner") == user
+
+
 def _audyt_do_dict(audyt_doc: "frappe.model.document.Document") -> dict[str, Any]:
     """Spłaszcza dokument `Volteo Audyt CP` do bloku `audyt` odpowiedzi.
 
@@ -167,8 +174,8 @@ def volteo_audyt_cp_get(deal: str) -> dict[str, Any]:
     jest poprawną odpowiedzią, nie błędem, frontend pokazuje wtedy pusty
     formularz startowy zamiast się wywalać.
 
-    `can_edit` = recenzent (backoffice/core-admin) LUB (audyt istnieje i jego
-    `owner` to bieżący użytkownik) LUB (audyt nie istnieje i wywołujący ma
+    `can_edit` = recenzent (backoffice/core-admin) LUB (audyt istnieje i bieżący
+    użytkownik jest jego autorem albo `deal_owner` szansy, ops#338) LUB (audyt nie istnieje i wywołujący ma
     uprawnienie `create` na `Volteo Audyt CP`), trzy niezależne drogi do
     edycji roboczego formularza, żaden inny użytkownik go nie widzi jako
     edytowalny.
@@ -179,7 +186,7 @@ def volteo_audyt_cp_get(deal: str) -> dict[str, Any]:
     can_review = _is_reviewer()
 
     if audyt_doc is not None:
-        can_edit = can_review or audyt_doc.owner == frappe.session.user
+        can_edit = can_review or _jest_autorem_lub_doradca(audyt_doc, deal)
     else:
         can_edit = can_review or bool(frappe.has_permission(DOCTYPE, "create"))
 
@@ -228,7 +235,7 @@ def volteo_audyt_cp_submit(deal: str) -> dict[str, Any]:
     if audyt_doc is None:
         frappe.throw(_("Audyt dla tej szansy sprzedaży nie istnieje."), frappe.DoesNotExistError)
 
-    if not (_is_reviewer() or audyt_doc.owner == frappe.session.user):
+    if not (_is_reviewer() or _jest_autorem_lub_doradca(audyt_doc, deal)):
         frappe.throw(_("Brak uprawnień do przesłania tego audytu."), frappe.PermissionError)
 
     if audyt_doc.status != "Szkic":
