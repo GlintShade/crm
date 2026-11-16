@@ -154,6 +154,7 @@
 import FilePdfIcon from '@/components/Icons/FilePdfIcon.vue'
 import FilesUploader from '@/components/FilesUploader/FilesUploader.vue'
 import NotatkaKarta from '@/components/deal/NotatkaKarta.vue'
+import { globalStore } from '@/stores/global'
 import { usersStore } from '@/stores/users'
 import { tekstPusty } from '@/utils/aktualizacje'
 import { TYPY_PLIKOW_NOTATKI, ZAKLADKI, czyOze, podzielPliki, typyDla } from '@/utils/notatki'
@@ -175,6 +176,9 @@ const props = defineProps({
 })
 
 const { listaWzmianek } = usersStore()
+// `$dialog` jest w globalProperties (szablon), a w <script setup> dostepny
+// wylacznie przez globalStore (jak w NotatkiPrywatne.vue).
+const { $dialog } = globalStore()
 
 // PUŁAPKA frappe-ui (patrz komentarz w AktualizacjeTab.vue przy
 // `mentionsKonfig`): getter, nie wartość, bo TextEditor bierze `mentions`

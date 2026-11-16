@@ -148,6 +148,7 @@ import {
   wczytajFiltr,
   zapiszFiltr,
 } from '@/utils/notatki'
+import { globalStore } from '@/stores/global'
 import { useDoctypeModal } from '@/composables/doctypeModal'
 import { Button, Dropdown, TextInput, call, createResource, toast } from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
@@ -160,6 +161,8 @@ const props = defineProps({
 const route = useRoute()
 const router = useRouter()
 const { show: oknoZadaniaOtwarte, showModal } = useDoctypeModal()
+// `$dialog` w <script setup> tylko przez globalStore (jak w NotatkiPrywatne.vue).
+const { $dialog } = globalStore()
 
 const feed = createResource({
   url: 'crm.api.notatki.feed',
