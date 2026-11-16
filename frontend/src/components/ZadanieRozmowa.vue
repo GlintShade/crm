@@ -38,7 +38,7 @@
 
     <div
       ref="listaRef"
-      class="flex max-h-64 flex-col gap-3 overflow-y-auto pr-1"
+      class="flex max-h-56 flex-col gap-3 overflow-y-auto pr-1"
       data-testid="rozmowa-lista"
     >
       <div v-if="rozmowa.loading && !wpisy.length" class="text-sm text-ink-gray-5">
@@ -66,6 +66,7 @@
       v-model:content="nowaTresc"
       v-model:attachments="noweZalaczniki"
       card
+      :editor-class="EDYTOR_KOMPAKTOWY"
       :editable="true"
       doctype="CRM Task"
       :placeholder="__('Dodaj wpis, @ oznacza osobę')"
@@ -124,6 +125,11 @@ const props = defineProps({
 })
 
 const listaRef = ref(null)
+
+// Kompaktowe pole nowego wpisu: puste ma ok. 2 linii (3rem), rosnie z tekstem do
+// ok. 8rem i dalej przewija sie w srodku (prop `editorClass` w CommentBox.vue;
+// inne miejsca zostaja przy domyslnej, wyzszej wersji).
+const EDYTOR_KOMPAKTOWY = ['prose-sm max-w-none min-h-[3rem] max-h-32 overflow-y-auto']
 
 // Pole dodawania: CommentBox (doctype 'CRM Task', v-model z { name: zadanie }).
 const wpisDoc = ref({ name: props.zadanie })
