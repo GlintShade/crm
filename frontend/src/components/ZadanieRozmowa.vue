@@ -23,14 +23,19 @@
   rounded-lg i outline-gray-2) i ma pasek przewijania ZAWSZE widoczny, gdy
   wpisy się nie mieszczą (uwaga właściciela 2026-11-16: ma być widać, że jest
   więcej wiadomości; macOS chowa paski systemowe, patrz blok style na końcu pliku).
+  Na desktopie (od sm) lista nie ma górnego limitu wysokości: bierze całe
+  wolne miejsce w oknie zadania, a gdy go brakuje, kurczy się (min. 7rem) i
+  przewija w swojej ramce, dzięki czemu samo okno się nie przewija (min-h-0 w
+  całym łańcuchu kolumn, etykieta i pole nowego wpisu mają shrink-0). Na
+  telefonie zostaje limit 16rem.
 -->
 <template>
   <div
-    class="flex flex-col gap-2 border-t border-outline-gray-2 pt-3 text-sm"
+    class="flex min-h-0 flex-col gap-2 border-t border-outline-gray-2 pt-3 text-sm"
     data-testid="zadanie-rozmowa"
   >
     <div
-      class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-ink-gray-4"
+      class="flex shrink-0 items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-ink-gray-4"
     >
       {{ __('Rozmowa') }}
       <span
@@ -43,8 +48,9 @@
 
     <div
       ref="listaRef"
-      class="rozmowa-lista flex max-h-64 flex-col gap-3 overflow-y-auto rounded-lg border border-outline-gray-2 py-3 pl-3 pr-2"
+      class="rozmowa-lista flex max-h-64 min-h-[7rem] flex-col gap-3 overflow-y-auto rounded-lg border border-outline-gray-2 py-3 pl-3 pr-2 sm:max-h-none"
       data-testid="rozmowa-lista"
+      @scroll.passive="naPrzewiniecie"
     >
       <div v-if="rozmowa.loading && !wpisy.length" class="text-sm text-ink-gray-5">
         {{ __('Ładowanie…') }}
@@ -66,26 +72,28 @@
       </template>
     </div>
 
-    <CommentBox
-      v-model="wpisDoc"
-      v-model:content="nowaTresc"
-      v-model:attachments="noweZalaczniki"
-      card
-      :editor-class="EDYTOR_KOMPAKTOWY"
-      :editable="true"
-      doctype="CRM Task"
-      :placeholder="__('Dodaj wpis, @ oznacza osobę')"
-      :submitLabel="__('Dodaj wpis')"
-      :submitButtonProps="{
-        variant: 'solid',
-        onClick: dodajWpis,
-        disabled: trescPusta || zapisuje,
-        loading: zapisuje,
-      }"
-      :discardButtonProps="{
-        onClick: wyczyscPole,
-      }"
-    />
+    <div class="shrink-0">
+      <CommentBox
+        v-model="wpisDoc"
+        v-model:content="nowaTresc"
+        v-model:attachments="noweZalaczniki"
+        card
+        :editor-class="EDYTOR_KOMPAKTOWY"
+        :editable="true"
+        doctype="CRM Task"
+        :placeholder="__('Dodaj wpis, @ oznacza osobę')"
+        :submitLabel="__('Dodaj wpis')"
+        :submitButtonProps="{
+          variant: 'solid',
+          onClick: dodajWpis,
+          disabled: trescPusta || zapisuje,
+          loading: zapisuje,
+        }"
+        :discardButtonProps="{
+          onClick: wyczyscPole,
+        }"
+      />
+    </div>
 
     <Dialog v-model:open="historiaOtwarta" :title="__('Historia zmian wpisu')" size="lg">
       <div class="flex max-h-[60vh] flex-col gap-3 overflow-y-auto" data-testid="historia-wpisu">
@@ -122,7 +130,7 @@ import CommentBox from '@/components/CommentBox.vue'
 import { sanitizeHTML } from '@/utils'
 import { formatujTermin } from '@/utils/dataPolska'
 import { Dialog, call, createResource, toast } from 'frappe-ui'
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const props = defineProps({
   // Nazwa zadania jako STRING (patrz komentarz w nagłówku pliku).
@@ -144,14 +152,42 @@ const zapisuje = ref(false)
 
 const trescPusta = computed(() => !nowaTresc.value || nowaTresc.value === '<p></p>')
 
+// Przypięcie listy do końca (patrz komentarz przy naPrzewiniecie niżej).
+let przypietaDoDolu = false
+let obserwatorListy = null
+
 // Najnowszy wpis ma być widoczny po załadowaniu i po dodaniu - lista rośnie
 // w dół (najstarsze u góry), więc przewijamy na koniec. Po samej edycji
 // wpisu (przeladuj) NIE przewijamy: użytkownik zostaje tam, gdzie był.
 async function przewinNaDol() {
+  przypietaDoDolu = true
   await nextTick()
   const el = listaRef.value
   if (el) el.scrollTop = el.scrollHeight
 }
+
+// Od sm wysokość listy jest elastyczna (kurczy się do wolnego miejsca w oknie
+// zadania), a okno dociąga rozmiary już po pierwszym przewinięciu (edytor
+// Opisu z treścią, historia, przycisk klienta). Mniejsza lista zostawiłaby
+// najnowszy wpis częściowo pod dolną krawędzią, bo przeglądarka nie zmienia
+// scrollTop przy kurczeniu: dopóki użytkownik sam nie przewinie w górę, każda
+// zmiana wysokości listy przypina ją z powrotem do końca.
+function naPrzewiniecie() {
+  const el = listaRef.value
+  if (!el) return
+  przypietaDoDolu = el.scrollHeight - el.scrollTop - el.clientHeight < 8
+}
+
+onMounted(() => {
+  const el = listaRef.value
+  if (!el || typeof ResizeObserver === 'undefined') return
+  obserwatorListy = new ResizeObserver(() => {
+    if (przypietaDoDolu) el.scrollTop = el.scrollHeight
+  })
+  obserwatorListy.observe(el)
+})
+
+onBeforeUnmount(() => obserwatorListy?.disconnect())
 
 let pierwszeLadowanie = true
 const rozmowa = createResource({
