@@ -159,9 +159,9 @@ for _kod, _moc, _cena in [("klima_teta_x_3_5", "3.5", "1700"), ("klima_teta_x_5_
 	)
 
 poz(
-	"klima_mira_x_3_5", KLIMATYZACJA, "klima_grzanie", "Rotenso Mira X (Biały) 3.5 kW",
+	"klima_mira_x_3_5", KLIMATYZACJA, "klima_grzanie", "Rotenso Mirai X (Biały) 3.5 kW",
 	[s("klimatyzacja", "Klimatyzacja (JZ+JW)", "Koszt", "2900"), *_KLIMA_WSPOLNE],
-	producent="Rotenso", model="Mira X", kolor="Biały", moc_kw="3.5",
+	producent="Rotenso", model="Mirai X", kolor="Biały", moc_kw="3.5",
 )
 
 _PC_WSPOLNE = [
