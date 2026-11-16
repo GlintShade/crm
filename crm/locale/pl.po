@@ -10668,3 +10668,42 @@ msgstr "Wpis nie może być pusty."
 
 msgid "Użytkownik {0} nie może być doradcą szansy (wymagane włączone konto handlowca)."
 msgstr "Użytkownik {0} nie może być doradcą szansy (wymagane włączone konto handlowca)."
+
+msgid "Wszystkie okresy"
+msgstr "Wszystkie okresy"
+
+msgid "Przy wszystkich okresach data nie ma znaczenia."
+msgstr "Przy wszystkich okresach data nie ma znaczenia."
+
+msgid "Wiersz bez wybranej daty liczy się wg daty podpisania umowy, a bez niej wg daty utworzenia szansy."
+msgstr "Wiersz bez wybranej daty liczy się wg daty podpisania umowy, a bez niej wg daty utworzenia szansy."
+
+msgid "Termin wypłaty"
+msgstr "Termin wypłaty"
+
+msgid "Wypłacono dnia"
+msgstr "Wypłacono dnia"
+
+msgid "Termin wypłaty minął"
+msgstr "Termin wypłaty minął"
+
+msgid "Ustaw termin wypłaty"
+msgstr "Ustaw termin wypłaty"
+
+msgid "Termin dotyczy wierszy w statusie Do wypłaty, pozostałe zostaną pominięte. Puste pole czyści termin."
+msgstr "Termin dotyczy wierszy w statusie Do wypłaty, pozostałe zostaną pominięte. Puste pole czyści termin."
+
+msgid "Zmieniono termin wypłaty"
+msgstr "Zmieniono termin wypłaty"
+
+msgid "Ustawiono termin wypłaty."
+msgstr "Ustawiono termin wypłaty."
+
+msgid "Wyczyszczono termin wypłaty."
+msgstr "Wyczyszczono termin wypłaty."
+
+msgid "Nie wybrano żadnych wierszy."
+msgstr "Nie wybrano żadnych wierszy."
+
+msgid "Termin można ustawić tylko dla wierszy w statusie Do wypłaty."
+msgstr "Termin można ustawić tylko dla wierszy w statusie Do wypłaty."
