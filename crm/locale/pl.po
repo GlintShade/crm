@@ -10590,3 +10590,81 @@ msgstr "Zmiana terminu"
 #: frontend/src/components/Settings/SmsHandlowiec.vue
 msgid "Odwołanie albo przekazanie innej osobie"
 msgstr "Odwołanie albo przekazanie innej osobie"
+
+msgid "Finansowanie Trify"
+msgstr "Finansowanie Trify"
+
+msgid "Finansowanie wkładu własnego"
+msgstr "Finansowanie wkładu własnego"
+
+msgid "Np. Złożono wniosek kredytowy w banku… (@ aby wspomnieć użytkownika)"
+msgstr "Np. Złożono wniosek kredytowy w banku… (@ aby wspomnieć użytkownika)"
+
+msgid "Brak wpisów o finansowaniu wkładu własnego."
+msgstr "Brak wpisów o finansowaniu wkładu własnego."
+
+msgid "Doradca zostanie zmieniony w {0} zaznaczonych szansach."
+msgstr "Doradca zostanie zmieniony w {0} zaznaczonych szansach."
+
+msgid "Zmieniono doradcę w {0} szansach."
+msgstr "Zmieniono doradcę w {0} szansach."
+
+msgid "Pominięto: {0}"
+msgstr "Pominięto: {0}"
+
+msgid "Nie udało się zmienić doradcy."
+msgstr "Nie udało się zmienić doradcy."
+
+msgid "Szansa nie istnieje."
+msgstr "Szansa nie istnieje."
+
+msgid "Brak dostępu do szansy."
+msgstr "Brak dostępu do szansy."
+
+msgid "Ten doradca jest już przypisany."
+msgstr "Ten doradca jest już przypisany."
+
+msgid "Błąd zapisu: {0}"
+msgstr "Błąd zapisu: {0}"
+
+msgid "Zaznacz co najmniej jedną szansę."
+msgstr "Zaznacz co najmniej jedną szansę."
+
+msgid "Lista szans jest wymagana."
+msgstr "Lista szans jest wymagana."
+
+msgid "Historia zmian wpisu"
+msgstr "Historia zmian wpisu"
+
+msgid "Brak wcześniejszych wersji."
+msgstr "Brak wcześniejszych wersji."
+
+msgid "Przed zmianą:"
+msgstr "Przed zmianą:"
+
+msgid "Nie udało się pobrać historii zmian."
+msgstr "Nie udało się pobrać historii zmian."
+
+msgid "Historia zmian"
+msgstr "Historia zmian"
+
+msgid "Brak uprawnień do tego dokumentu."
+msgstr "Brak uprawnień do tego dokumentu."
+
+msgid "Brak uprawnień do tego wpisu."
+msgstr "Brak uprawnień do tego wpisu."
+
+msgid "Zmień doradcę"
+msgstr "Zmień doradcę"
+
+msgid "Doradca jest wymagany."
+msgstr "Doradca jest wymagany."
+
+msgid "Wpis może edytować tylko jego autor."
+msgstr "Wpis może edytować tylko jego autor."
+
+msgid "Wpis nie może być pusty."
+msgstr "Wpis nie może być pusty."
+
+msgid "Użytkownik {0} nie może być doradcą szansy (wymagane włączone konto handlowca)."
+msgstr "Użytkownik {0} nie może być doradcą szansy (wymagane włączone konto handlowca)."
