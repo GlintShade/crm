@@ -12,7 +12,9 @@
   >
     <div class="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-x-4 gap-y-2">
       <div class="hidden h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-surface-gray-3 sm:block">
-        <div class="h-full rounded-full bg-surface-green-3" :style="{ width: procent + '%' }" />
+        <div
+          :class="['h-full rounded-full', kompletny ? 'bg-surface-green-6' : 'bg-surface-blue-6']"
+          :style="{ width: procent + '%' }" />
       </div>
 
       <div class="min-w-0 flex-1 text-xs text-ink-gray-6 sm:text-sm">
@@ -31,7 +33,6 @@
         data-testid="audyt-wyslij"
         class="w-full sm:w-auto"
         variant="solid"
-        :theme="kompletny ? 'green' : 'gray'"
         :label="__('Prześlij do weryfikacji')"
         :loading="loading"
         @click="$emit('wyslij')"

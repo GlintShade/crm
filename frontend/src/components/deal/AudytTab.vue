@@ -264,13 +264,13 @@
                 </template>
               </Badge>
             </div>
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div class="audyt-siatka grid gap-4">
               <KredytPole
                 v-for="f in sec.fields"
                 :key="f.fieldname"
                 :id="'audyt-pole-' + f.fieldname"
                 :data-pole="f.fieldname"
-                :class="f.type === 'textarea' ? 'sm:col-span-2' : ''"
+                :class="f.type === 'textarea' ? 'audyt-span-3' : ''"
                 :f="f"
                 :model-value="wartoscWyswietlana(f, form[f.fieldname], edytowane)"
                 :stan="stanPolaAudytu(f, form[f.fieldname], proba).stan"
@@ -1598,5 +1598,20 @@ function extractErrorMessage(err) {
 }
 .kalk-part-heading {
   letter-spacing: -0.01em;
+}
+/* Siatka pól: 1 kolumna na wąskim, 3 na szerokim (kontener, jak kredyt-siatka-3). */
+.kalk-part {
+  container-type: inline-size;
+}
+.audyt-siatka {
+  grid-template-columns: minmax(0, 1fr);
+}
+@container (min-width: 560px) {
+  .audyt-siatka {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .audyt-span-3 {
+    grid-column: span 3 / span 3;
+  }
 }
 </style>
