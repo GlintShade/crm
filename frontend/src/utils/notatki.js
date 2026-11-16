@@ -191,10 +191,11 @@ export { RODZAJE_OZE as OZE_RODZAJE, czyOze } from './rodzajUmowy'
 // CP). Lustro backendu `crm/volteo_notatki.py::ZRODLA_FEEDU`/
 // `etykieta_zrodla` - zmieniać oba miejsca razem.
 
-// Etykiety wszystkich dziesięciu możliwych źródeł feedu (osiem zakładek
-// Volteo Notatka plus komentarze Audytu OZE/CP) - lustro backendowego
-// `ZRODLA_FEEDU` (kolejność) + `ETYKIETY_ZAKLADEK`/`ETYKIETY_ZRODEL_
-// DODATKOWYCH` (etykiety) połączonych w jeden słownik po stronie frontu,
+// Etykiety wszystkich jedenastu możliwych źródeł feedu (osiem zakładek
+// Volteo Notatka plus komentarze Audytu OZE/CP plus rozmowa zadań szansy) -
+// lustro backendowego `ZRODLA_FEEDU` (kolejność) + `ETYKIETY_ZAKLADEK`/
+// `ETYKIETY_ZRODEL_DODATKOWYCH` (etykiety) połączonych w jeden słownik po
+// stronie frontu,
 // bo tu nie ma potrzeby rozróżniać "zakładka notatki" od "audyt" - feed
 // traktuje je jednolicie jako "źródło". Backend i tak zwraca własne
 // `zrodlo_etykieta` per wpis oraz listę `zrodla` (z licznikami) w
@@ -213,6 +214,10 @@ export const ETYKIETY_ZRODEL = {
   Trify: 'Trify',
   Audyt: 'Audyt',
   AudytCP: 'Audyt CP',
+  // Rozmowa zadań szansy (`Comment` na `CRM Task`, `crm.api.zadania_rozmowa`).
+  // To jest etykieta ŹRÓDŁA w panelu źródeł; chip na karcie wpisu pokazuje
+  // `zrodlo_etykieta` z API ("Zadanie: <tytuł>"), patrz `NotatkaKarta.vue`.
+  Zadanie: 'Zadania',
 }
 
 // Kolory per źródło (issue ops#206, "wariant C") - JEDNA mapa, klucz źródła
@@ -318,11 +323,19 @@ export const KOLORY_ZRODEL = {
     tekst: 'text-pink-800 dark:text-pink-200',
     kwadracik: 'bg-pink-600',
   },
+  // Rozmowa zadań szansy: purple istnieje w presecie frappe-ui (patrz
+  // komentarz wyżej o dostępnych rodzinach kolorów).
+  Zadanie: {
+    krawedz: 'border-l-purple-600',
+    tlo: 'bg-purple-100 dark:bg-purple-900/40',
+    tekst: 'text-purple-800 dark:text-purple-200',
+    kwadracik: 'bg-purple-600',
+  },
 }
 
 // Kolor domyślny (szary) dla źródła nieznanego `KOLORY_ZRODEL` - celowo NIE
 // jest kluczem tej mapy (żeby `Object.keys(KOLORY_ZRODEL)` zostało dokładnie
-// dziesięcioma prawdziwymi źródłami, bez sztucznego "fallback" wśród nich).
+// jedenastoma prawdziwymi źródłami, bez sztucznego "fallback" wśród nich).
 const KOLOR_ZRODLA_DOMYSLNY = {
   krawedz: 'border-l-gray-400',
   tlo: 'bg-gray-100 dark:bg-gray-800/40',
@@ -364,6 +377,25 @@ export function godzinaZTekstu(dataCzas) {
 }
 
 const KLUCZ_LOCALSTORAGE = 'notatki-filtr'
+
+// Źródła, które istniały w chwili, gdy filtr był zapisywany BEZ listy `znane`
+// (stary format zapisu, sprzed dodania źródła "Zadanie"). Dla takiego zapisu
+// każde źródło spoza tej listy jest "nowe" i po wczytaniu ma być ZAZNACZONE -
+// inaczej nowe źródło byłoby ukryte u każdego, kto kiedykolwiek ruszył filtr.
+// Lista jest zamrożona celowo: nie wolno jej rozszerzać przy dodawaniu
+// kolejnych źródeł (nowe źródła mają trafiać do `znane` przez `zapiszFiltr`).
+const ZRODLA_ZNANE_W_STARYM_ZAPISIE = [
+  'Zestaw',
+  'Umowa',
+  'Kredyt',
+  'Faktury',
+  'Montaz',
+  'OSD',
+  'Dotacja',
+  'Trify',
+  'Audyt',
+  'AudytCP',
+]
 
 // Rozbija string "YYYY-MM-DD..." (separator dnia/godziny spacja albo "T",
 // godzina/sekundy opcjonalne) na składniki kalendarzowe - NIE używa
@@ -575,6 +607,14 @@ export function podsumowanieFeedu(wpisy) {
 // sesjami nie zostawiło martwego, niezaznaczalnego wpisu w zapisanym
 // stanie. Domyślnie (brak zapisu, zapis niepoprawny, albo pusty po
 // przycięciu) wszystko jest zaznaczone.
+//
+// Źródło, którego nie było w chwili zapisu filtra, jest po wczytaniu
+// ZAZNACZONE (inaczej każde nowe źródło feedu byłoby ukryte u każdego, kto ma
+// zapisany wybór): zapis niesie obok wyboru listę `znane` (źródła znane przy
+// zapisie, patrz `zapiszFiltr`), a źródło dostępne teraz, a nieobecne w
+// `znane`, trafia do zaznaczonych. Stary zapis bez `znane` porównujemy ze
+// zamrożoną listą `ZRODLA_ZNANE_W_STARYM_ZAPISIE` (dziesięć źródeł sprzed
+// "Zadanie"), więc "Zadanie" jest dla niego nowe.
 export function wczytajFiltr(kluczeDostepne) {
   const dostepne = Array.isArray(kluczeDostepne) ? kluczeDostepne : []
   const domyslny = { zaznaczone: [...dostepne], kierunek: KIERUNKI_SORTU.NAJNOWSZE }
@@ -593,8 +633,14 @@ export function wczytajFiltr(kluczeDostepne) {
         ? KIERUNKI_SORTU.NAJSTARSZE
         : KIERUNKI_SORTU.NAJNOWSZE
 
+    const znane = Array.isArray(zapisany?.znane) ? zapisany.znane : ZRODLA_ZNANE_W_STARYM_ZAPISIE
+    const nowe = dostepne.filter((klucz) => !znane.includes(klucz))
+
     return {
-      zaznaczone: zaznaczoneZapisane && zaznaczoneZapisane.length ? zaznaczoneZapisane : [...dostepne],
+      zaznaczone:
+        zaznaczoneZapisane && zaznaczoneZapisane.length
+          ? [...zaznaczoneZapisane, ...nowe.filter((klucz) => !zaznaczoneZapisane.includes(klucz))]
+          : [...dostepne],
       kierunek,
     }
   } catch {
@@ -605,12 +651,16 @@ export function wczytajFiltr(kluczeDostepne) {
 // Zapisuje filtr feedu do localStorage - `try/catch` na zapisie (patrz
 // `wczytajFiltr`), cichy brak zapisu zamiast rzucania: filtr po prostu nie
 // przetrwa przeładowania w tej jednej sesji, reszta aplikacji działa dalej.
-export function zapiszFiltr(zaznaczone, kierunek) {
+//
+// `znane` (lista kluczy źródeł znanych w chwili zapisu, zwykle
+// `zrodla.map(z => z.klucz)` z odpowiedzi API) zapisujemy obok wyboru -
+// `wczytajFiltr` używa jej do rozpoznania źródeł dodanych PO zapisie. Bez
+// `znane` zapis ma stary format (patrz `ZRODLA_ZNANE_W_STARYM_ZAPISIE`).
+export function zapiszFiltr(zaznaczone, kierunek, znane) {
   try {
-    localStorage.setItem(
-      KLUCZ_LOCALSTORAGE,
-      JSON.stringify({ zaznaczone: Array.isArray(zaznaczone) ? zaznaczone : [], kierunek }),
-    )
+    const zapis = { zaznaczone: Array.isArray(zaznaczone) ? zaznaczone : [], kierunek }
+    if (Array.isArray(znane)) zapis.znane = znane
+    localStorage.setItem(KLUCZ_LOCALSTORAGE, JSON.stringify(zapis))
   } catch {
     // localStorage niedostępny (tryb prywatny, zablokowane site data) -
     // filtr po prostu nie przetrwa przeładowania, reszta działa dalej.

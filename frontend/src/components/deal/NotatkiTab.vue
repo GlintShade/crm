@@ -120,6 +120,7 @@
                 pokaz-zakladke
                 tylko-godzina
                 @otworz-zakladke="przejdzDoZakladki"
+                @otworz-zadanie="otworzZadanie"
               />
             </div>
           </div>
@@ -143,6 +144,7 @@ import {
   wczytajFiltr,
   zapiszFiltr,
 } from '@/utils/notatki'
+import { useDoctypeModal } from '@/composables/doctypeModal'
 import { Button, Dropdown, TextInput, createResource, toast } from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -153,6 +155,7 @@ const props = defineProps({
 
 const route = useRoute()
 const router = useRouter()
+const { show: oknoZadaniaOtwarte, showModal } = useDoctypeModal()
 
 const feed = createResource({
   url: 'crm.api.notatki.feed',
@@ -186,7 +189,14 @@ watch(
 
 watch([zaznaczoneZrodla, kierunek], () => {
   if (!filtrWczytany) return
-  zapiszFiltr(zaznaczoneZrodla.value, kierunek.value)
+  // Trzeci argument: źródła znane w chwili zapisu - dzięki niemu źródło
+  // dodane później (np. "Zadanie") jest po wczytaniu ZAZNACZONE, a nie ukryte
+  // (patrz `wczytajFiltr` w utils/notatki.js).
+  zapiszFiltr(
+    zaznaczoneZrodla.value,
+    kierunek.value,
+    zrodla.value.map((zrodlo) => zrodlo.klucz),
+  )
 })
 
 // Kolejność wymagana przez brief: podsumowanie liczy się PO filtrze źródeł,
@@ -233,6 +243,10 @@ function jakoKartaWpis(wpis) {
     autor_nazwa: wpis.autor_nazwa,
     pliki: wpis.pliki,
     zakladka_hash: wpis.zakladka_hash,
+    // Tylko źródło `Zadanie` (rozmowa zadań szansy): nazwa zadania (string)
+    // dla stopki "Otwórz zadanie" i etykieta chipa "Zadanie: <tytuł>".
+    zadanie: wpis.zadanie,
+    zrodlo_etykieta: wpis.zrodlo_etykieta,
   }
 }
 
@@ -240,4 +254,25 @@ function przejdzDoZakladki(hash) {
   if (!hash) return
   router.push({ ...route, hash: `#${hash}` })
 }
+
+// "Otwórz zadanie" (źródło `Zadanie`): to samo okno zadania co z listy zadań
+// (DoctypeModals.vue montuje TaskModal.vue dla doctype 'CRM Task'); nazwa
+// zadania jest liczbowa, ale do okna idzie jako string.
+//
+// Wpisy rozmowy dodaje się w oknie zadania od razu (bez przycisku "Zapisz" i
+// bez callbacku `afterUpdate`), więc po zamknięciu okna otwartego Z TEGO feedu
+// przeładowujemy strumień, żeby nowe wpisy były w nim widoczne.
+let otwartoZadanieZFeedu = false
+
+function otworzZadanie(zadanie) {
+  if (!zadanie) return
+  otwartoZadanieZFeedu = true
+  showModal({ name: String(zadanie), doctype: 'CRM Task', title: 'Task' })
+}
+
+watch(oknoZadaniaOtwarte, (otwarte) => {
+  if (otwarte || !otwartoZadanieZFeedu) return
+  otwartoZadanieZFeedu = false
+  feed.reload()
+})
 </script>

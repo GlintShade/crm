@@ -234,16 +234,21 @@ describe('OZE_RODZAJE / czyOze', () => {
 })
 
 describe('ETYKIETY_ZRODEL', () => {
-  it('zna wszystkie dziesięć źródeł feedu (osiem zakładek plus Audyt/AudytCP)', () => {
+  it('zna wszystkie jedenaście źródeł feedu (osiem zakładek plus Audyt/AudytCP/Zadanie)', () => {
     expect(Object.keys(ETYKIETY_ZRODEL).sort()).toEqual(
-      [...Object.keys(ZAKLADKI), 'Audyt', 'AudytCP'].sort(),
+      [...Object.keys(ZAKLADKI), 'Audyt', 'AudytCP', 'Zadanie'].sort(),
     )
   })
 
-  it('Montaż ma etykietę z ogonkiem, Audyt/AudytCP mają własne etykiety', () => {
+  it('Montaż ma etykietę z ogonkiem, Audyt/AudytCP/Zadanie mają własne etykiety', () => {
     expect(ETYKIETY_ZRODEL.Montaz).toBe('Montaż')
     expect(ETYKIETY_ZRODEL.Audyt).toBe('Audyt')
     expect(ETYKIETY_ZRODEL.AudytCP).toBe('Audyt CP')
+    expect(ETYKIETY_ZRODEL.Zadanie).toBe('Zadania')
+  })
+
+  it('Zadanie nie jest zakładką notatek (ZAKLADKI to osiem zakładek Volteo Notatka)', () => {
+    expect(Object.keys(ZAKLADKI)).not.toContain('Zadanie')
   })
 })
 
@@ -426,10 +431,85 @@ describe('wczytajFiltr / zapiszFiltr', () => {
     const wynik = wczytajFiltr(['Zestaw'])
     expect(wynik.kierunek).toBe(KIERUNKI_SORTU.NAJNOWSZE)
   })
+
+  describe('źródło dodane po zapisie filtra (Zadanie)', () => {
+    const STARE = ['Zestaw', 'Umowa', 'Kredyt', 'Faktury', 'Montaz', 'OSD', 'Dotacja', 'Trify', 'Audyt', 'AudytCP']
+    const WSZYSTKIE = [...STARE, 'Zadanie']
+
+    it('stary zapis bez listy `znane`: Zadanie jest po wczytaniu ZAZNACZONE', () => {
+      // Dokładnie to, co zapisywała wersja sprzed Zadania: sam wybór i kierunek.
+      localStorage.setItem(
+        'notatki-filtr',
+        JSON.stringify({ zaznaczone: ['Zestaw', 'Audyt'], kierunek: KIERUNKI_SORTU.NAJNOWSZE }),
+      )
+      const wynik = wczytajFiltr(WSZYSTKIE)
+      expect(wynik.zaznaczone).toEqual(['Zestaw', 'Audyt', 'Zadanie'])
+    })
+
+    it('stary zapis ze wszystkimi dziesięcioma źródłami: po wczytaniu zaznaczone wszystkie jedenaście', () => {
+      localStorage.setItem(
+        'notatki-filtr',
+        JSON.stringify({ zaznaczone: STARE, kierunek: KIERUNKI_SORTU.NAJSTARSZE }),
+      )
+      const wynik = wczytajFiltr(WSZYSTKIE)
+      expect([...wynik.zaznaczone].sort()).toEqual([...WSZYSTKIE].sort())
+      expect(wynik.kierunek).toBe(KIERUNKI_SORTU.NAJSTARSZE)
+    })
+
+    it('zapis wykonany bez `znane` (zapiszFiltr z dwoma argumentami) też jest starym formatem', () => {
+      zapiszFiltr(['Umowa'], KIERUNKI_SORTU.NAJNOWSZE)
+      expect(wczytajFiltr(WSZYSTKIE).zaznaczone).toEqual(['Umowa', 'Zadanie'])
+    })
+
+    it('zapis z `znane` bez Zadania (źródło dodane później): Zadanie ZAZNACZONE', () => {
+      zapiszFiltr(['Umowa'], KIERUNKI_SORTU.NAJNOWSZE, STARE)
+      expect(wczytajFiltr(WSZYSTKIE).zaznaczone).toEqual(['Umowa', 'Zadanie'])
+    })
+
+    it('zapis z `znane` zawierającym Zadanie: świadome odznaczenie Zadania PRZETRWA', () => {
+      zapiszFiltr(['Umowa'], KIERUNKI_SORTU.NAJNOWSZE, WSZYSTKIE)
+      expect(wczytajFiltr(WSZYSTKIE).zaznaczone).toEqual(['Umowa'])
+    })
+
+    it('zapiszFiltr zapisuje `znane` obok wyboru, a bez `znane` klucza w zapisie nie ma', () => {
+      zapiszFiltr(['Umowa'], KIERUNKI_SORTU.NAJNOWSZE, WSZYSTKIE)
+      expect(JSON.parse(localStorage.getItem('notatki-filtr'))).toEqual({
+        zaznaczone: ['Umowa'],
+        kierunek: KIERUNKI_SORTU.NAJNOWSZE,
+        znane: WSZYSTKIE,
+      })
+      zapiszFiltr(['Umowa'], KIERUNKI_SORTU.NAJNOWSZE)
+      expect(JSON.parse(localStorage.getItem('notatki-filtr'))).toEqual({
+        zaznaczone: ['Umowa'],
+        kierunek: KIERUNKI_SORTU.NAJNOWSZE,
+      })
+    })
+
+    it('nowe źródło nie duplikuje się, gdy zapisany wybór już je zawiera', () => {
+      localStorage.setItem(
+        'notatki-filtr',
+        JSON.stringify({ zaznaczone: ['Umowa', 'Zadanie'], kierunek: KIERUNKI_SORTU.NAJNOWSZE }),
+      )
+      expect(wczytajFiltr(WSZYSTKIE).zaznaczone).toEqual(['Umowa', 'Zadanie'])
+    })
+
+    it('zapis, którego wybór po przycięciu jest pusty, nadal daje "wszystko zaznaczone"', () => {
+      zapiszFiltr(['TylkoZnikleZrodlo'], KIERUNKI_SORTU.NAJNOWSZE, STARE)
+      expect(wczytajFiltr(WSZYSTKIE).zaznaczone).toEqual(WSZYSTKIE)
+    })
+
+    it('`znane` o złym kształcie (nie tablica) traktowane jak stary zapis', () => {
+      localStorage.setItem(
+        'notatki-filtr',
+        JSON.stringify({ zaznaczone: ['Umowa'], kierunek: KIERUNKI_SORTU.NAJNOWSZE, znane: 'cos' }),
+      )
+      expect(wczytajFiltr(WSZYSTKIE).zaznaczone).toEqual(['Umowa', 'Zadanie'])
+    })
+  })
 })
 
 describe('kolorZrodla / KOLORY_ZRODEL', () => {
-  it('zna kolor dla każdego z dziesięciu źródeł feedu', () => {
+  it('zna kolor dla każdego z jedenastu źródeł feedu', () => {
     expect(Object.keys(KOLORY_ZRODEL).sort()).toEqual(Object.keys(ETYKIETY_ZRODEL).sort())
   })
 
@@ -444,6 +524,22 @@ describe('kolorZrodla / KOLORY_ZRODEL', () => {
 
   it('Audyt i AudytCP dzielą ten sam kolor (pink)', () => {
     expect(kolorZrodla('Audyt')).toEqual(kolorZrodla('AudytCP'))
+  })
+
+  it('Zadanie ma kolor z rodziny purple (istnieje w presecie frappe-ui), wszystkie klasy literałami', () => {
+    expect(kolorZrodla('Zadanie')).toEqual({
+      krawedz: 'border-l-purple-600',
+      tlo: 'bg-purple-100 dark:bg-purple-900/40',
+      tekst: 'text-purple-800 dark:text-purple-200',
+      kwadracik: 'bg-purple-600',
+    })
+  })
+
+  it('żadne źródło nie używa rodzin kolorów spoza presetu frappe-ui', () => {
+    const zakazane = /(rose|sky|emerald|lime|indigo|slate)-/
+    for (const [klucz, kolor] of Object.entries(KOLORY_ZRODEL)) {
+      expect(Object.values(kolor).join(' '), klucz).not.toMatch(zakazane)
+    }
   })
 
   it('źródło nieznane dostaje szary fallback, nigdy undefined', () => {

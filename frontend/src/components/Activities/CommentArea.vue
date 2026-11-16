@@ -13,6 +13,19 @@
       </div>
       <div class="ml-auto flex items-center gap-1 whitespace-nowrap">
         <TimelineTimestamp :date="activity.creation" />
+        <!-- VOLTEO (rozmowa zadania): historia zmian wpisu, widoczna dla
+          kazdego, kto widzi wpis (nie tylko autora). Tylko gdy API podalo
+          `liczba_zmian` > 0 (inne miejsca uzywajace tego komponentu nie
+          przekazuja tego pola, wiec przycisku tam nie ma). -->
+        <Button
+          v-if="activity.liczba_zmian > 0"
+          icon="lucide-history"
+          variant="ghost"
+          class="!h-6 !w-6"
+          :tooltip="__('Historia zmian')"
+          data-testid="wpis-historia"
+          @click="emit('historia', activity.name)"
+        />
         <Dropdown
           v-if="isOwner && !editing"
           :options="menuOptions"
@@ -80,9 +93,14 @@ const props = defineProps({
   // "dodał(a) notatkę" zamiast domyslnego "dodał(a) komentarz" -- te same
   // dane (Comment), inna etykieta w naglowku wpisu. Puste = bez zmian.
   rzeczownikWpisu: { type: String, default: '' },
+  // VOLTEO (rozmowa zadania): menu wpisu bez gałęzi usuwania (zostaje samo
+  // "Edit"). Domyślnie false - pozostałe miejsca bez zmian.
+  bezUsuwania: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['reload'])
+// `historia` niesie nazwę wpisu (`activity.name`); emitowane tylko z przycisku
+// widocznego przy `activity.liczba_zmian > 0`.
+const emit = defineEmits(['reload', 'historia'])
 
 const { user } = sessionStore()
 
@@ -99,10 +117,12 @@ const menuOptions = computed(() => [
     icon: 'edit-2',
     onClick: startEdit,
   },
-  ...ConfirmDelete({
-    onConfirmDelete: deleteComment,
-    isConfirmingDelete: confirmingDelete,
-  }),
+  ...(props.bezUsuwania
+    ? []
+    : ConfirmDelete({
+        onConfirmDelete: deleteComment,
+        isConfirmingDelete: confirmingDelete,
+      })),
 ])
 
 function startEdit() {

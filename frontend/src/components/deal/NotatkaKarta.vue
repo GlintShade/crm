@@ -37,7 +37,7 @@
   nadpisania komponent sam wylicza ikonę (`IKONY_ZRODEL`, przeniesione tu z
   `NotatkiTab.vue` na wprost polecenie briefu issue) i etykietę
   (`ETYKIETY_ZRODEL`, już istniejące w `utils/notatki.js`, komplet
-  dziesięciu kluczy łącznie z Audyt/AudytCP) z `wpis.zakladka`.
+  jedenastu kluczy łącznie z Audyt/AudytCP/Zadanie) z `wpis.zakladka`.
 
   `tylkoGodzina` (domyślnie false) pokazuje w prawym górnym rogu wyłącznie
   godzinę 24h (np. "17:00") zamiast pełnej daty z `formatujTermin` - feed
@@ -55,6 +55,12 @@
   co `PlikiTab.vue`'s `otworz()`. Obraz zostaje miniaturą `object-cover`
   otwierającą `AudytPodgladZdjec` - niezmienione względem poprzedniego
   wyglądu.
+
+  Źródło `Zadanie` (rozmowa zadań szansy, `crm.api.notatki.feed`): wpis nie
+  należy do żadnej zakładki szansy, więc zamiast "Otwórz w zakładce {X}" stopka
+  to "Otwórz zadanie" i emituje `otworz-zadanie` z nazwą zadania
+  (`wpis.zadanie`, string), a chip niesie `zrodlo_etykieta` z API
+  ("Zadanie: <tytuł>", obcinany do jednej linii).
 -->
 <template>
   <div
@@ -62,17 +68,18 @@
     :class="kolor.krawedz"
   >
     <div class="flex items-start justify-between gap-2">
-      <div class="flex items-start gap-2.5">
+      <div class="flex min-w-0 items-start gap-2.5">
         <UserAvatar :user="wpis.owner" size="lg" />
-        <div class="flex flex-col gap-1">
+        <div class="flex min-w-0 flex-col gap-1">
           <span class="text-[13px] font-semibold leading-tight text-ink-gray-9">{{ autor }}</span>
           <div class="flex flex-wrap items-center gap-1.5">
             <span
-              class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-semibold leading-none"
+              class="inline-flex max-w-full items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-semibold leading-none"
               :class="[kolor.tlo, kolor.tekst]"
+              :title="etykietaChipu"
             >
               <component :is="ikonaChipu" class="h-3 w-3 shrink-0" />
-              {{ etykietaChipu }}
+              <span class="truncate">{{ etykietaChipu }}</span>
             </span>
             <Badge variant="subtle" theme="gray" size="sm" :label="wpis.typ || __('Notatka')" />
           </div>
@@ -124,7 +131,17 @@
     </div>
 
     <Button
-      v-if="pokazZakladke && wpis.zakladka_hash"
+      v-if="pokazZakladke && czyZadanie && wpis.zadanie"
+      variant="ghost"
+      size="sm"
+      class="self-start !px-0 !text-xs !text-ink-gray-5 hover:!text-ink-gray-7"
+      iconRight="arrow-up-right"
+      :label="__('Otwórz zadanie')"
+      data-testid="otworz-zadanie"
+      @click="$emit('otworz-zadanie', wpis.zadanie)"
+    />
+    <Button
+      v-else-if="pokazZakladke && !czyZadanie && wpis.zakladka_hash"
       variant="ghost"
       size="sm"
       class="self-start !px-0 !text-xs !text-ink-gray-5 hover:!text-ink-gray-7"
@@ -149,6 +166,7 @@ import KredytIcon from '@/components/Icons/KredytIcon.vue'
 import MontazIcon from '@/components/Icons/MontazIcon.vue'
 import NoteIcon from '@/components/Icons/NoteIcon.vue'
 import OsdIcon from '@/components/Icons/OsdIcon.vue'
+import TaskIcon from '@/components/Icons/TaskIcon.vue'
 import TrifyIcon from '@/components/Icons/TrifyIcon.vue'
 import UmowaIcon from '@/components/Icons/UmowaIcon.vue'
 import ZestawIcon from '@/components/Icons/ZestawIcon.vue'
@@ -193,7 +211,7 @@ const props = defineProps({
   pokazUsun: { type: Boolean, default: false },
 })
 
-defineEmits(['otworz-zakladke', 'usun'])
+defineEmits(['otworz-zakladke', 'otworz-zadanie', 'usun'])
 
 const { getUser } = usersStore()
 
@@ -216,20 +234,28 @@ const IKONY_ZRODEL = {
   Trify: TrifyIcon,
   Audyt: AudytIcon,
   AudytCP: AudytIcon,
+  Zadanie: TaskIcon,
 }
+
+// Wpis rozmowy zadania w feedzie szansy (źródło `Zadanie`, patrz komentarz
+// nagłówka pliku): stopka otwiera zadanie, nie zakładkę.
+const czyZadanie = computed(() => props.wpis.zakladka === 'Zadanie')
 
 const ikonaChipu = computed(
   () => props.ikonaZakladki || IKONY_ZRODEL[props.wpis.zakladka] || NoteIcon,
 )
 
-// Etykieta: nadpisanie wywołującego (feed, `zrodlo_etykieta` policzone
-// serwerowo) ma pierwszeństwo, potem `ETYKIETY_ZRODEL` (komplet dziesięciu
-// kluczy, łącznie z Audyt/AudytCP, które `etykietaZakladki()`/`ZAKLADKI` nie
+// Etykieta: nadpisanie wywołującego ma pierwszeństwo, potem `zrodlo_etykieta`
+// z wpisu (feed, policzone serwerowo; dla źródła `Zadanie` to "Zadanie:
+// <tytuł>", dla pozostałych identyczne z `ETYKIETY_ZRODEL`; wpisy spoza feedu
+// tego pola nie mają), potem `ETYKIETY_ZRODEL` (komplet jedenastu kluczy,
+// łącznie z Audyt/AudytCP/Zadanie, które `etykietaZakladki()`/`ZAKLADKI` nie
 // znają), na końcu `etykietaZakladki()` jako ostatnia deska ratunku (zwraca
 // sam klucz dla czegoś naprawdę nieznanego, nigdy pusty string).
 const etykietaChipu = computed(
   () =>
     props.etykietaZakladkiOverride ||
+    props.wpis.zrodlo_etykieta ||
     ETYKIETY_ZRODEL[props.wpis.zakladka] ||
     etykietaZakladki(props.wpis.zakladka),
 )
