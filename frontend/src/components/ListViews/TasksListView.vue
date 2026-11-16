@@ -113,7 +113,7 @@
             class="overflow-hidden"
             data-testid="zadanie-klient"
           >
-            <span v-if="item" class="truncate text-base">
+            <span v-if="item" class="truncate text-base font-[520]">
               {{ item }}
             </span>
             <span v-else class="truncate italic text-ink-gray-4">
