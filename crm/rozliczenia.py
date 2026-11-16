@@ -23,6 +23,7 @@ from crm.volteo_rozliczenie import (
 	waliduj_unikalnosc,
 	waliduj_wyplate,
 	warunek_naliczenia,
+	wiersze_do_odswiezenia,
 )
 
 DOCTYPE = "Volteo Rozliczenie"
@@ -42,6 +43,7 @@ POLA_WIERSZA = [
 	"zrodlo_kwoty",
 	"partia",
 	"data_podpisania",
+	"termin_wyplaty",
 ]
 POLA_CP = (
 	"custom_cp_prowizja_handlowa",
@@ -167,3 +169,25 @@ def nalicz_jesli_spelnione(deal_doc) -> None:
 			nalicz(deal_doc.name)
 	except Exception:
 		frappe.log_error(title="Rozliczenia: automatyczne naliczanie nie powiodło się")
+
+
+def odswiez_date_podpisania(deal_doc, method: str | None = None) -> None:
+	"""Hook `on_update` na `CRM Deal` (nie `validate`: dopiero `on_update` widzi kompletny
+	`status_change_log`). Odświeża `Volteo Rozliczenie.data_podpisania` wierszy tej szansy,
+	gdy różni się od daty z logu. Zapis `db.set_value(update_modified=False)`: bez `save()`,
+	bez walidacji, bez nowej wersji i bez śladu, więc nic nie widać poza samym polem
+	(dostępnym tylko administracji). Szansa bez wierszy rozliczenia: wyjście od razu, zero
+	zapisów. Nigdy nie blokuje zapisu szansy."""
+	try:
+		if not frappe.db.exists("DocType", DOCTYPE):
+			return
+		wiersze = wiersze_szansy(deal_doc.name)
+		if not wiersze:
+			return
+		nowa = data_podpisania(
+			[{"to": w.to, "to_date": w.to_date} for w in (deal_doc.get("status_change_log") or [])]
+		)
+		for nazwa, _stara, data in wiersze_do_odswiezenia(wiersze, nowa):
+			frappe.db.set_value(DOCTYPE, nazwa, "data_podpisania", data, update_modified=False)
+	except Exception:
+		frappe.log_error(title="Rozliczenia: odświeżenie daty podpisania nie powiodło się")

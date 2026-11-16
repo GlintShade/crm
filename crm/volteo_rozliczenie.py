@@ -373,7 +373,43 @@ def data_podpisania(wpisy: Iterable[Mapping[str, Any]]) -> datetime.date | None:
 	return max(daty) if daty else None
 
 
+def wiersze_do_odswiezenia(
+	wiersze: Iterable[Mapping[str, Any]], nowa_data: Any
+) -> list[tuple[str, datetime.date | None, datetime.date | None]]:
+	"""Wiersze (`name`, `data_podpisania`), których zapisana data różni się od `nowa_data`.
+	Zwraca listę `(name, stara, nowa)`. Gdy `nowa_data` jest pusta, a wiersz ma już datę,
+	nic nie zmieniamy (log szansy bez wpisu nie kasuje wcześniej zapisanej daty)."""
+	nowa = _data(nowa_data)
+	if nowa is None:
+		return []
+	wynik = []
+	for w in wiersze:
+		stara = _data(w.get("data_podpisania"))
+		if stara != nowa:
+			wynik.append((w["name"], stara, nowa))
+	return wynik
+
+
+def waliduj_termin(termin: Any) -> str | None:
+	"""Komunikat błędu albo `None`. Termin wypłaty to poprawna data albo puste (wyczyść).
+	Bez ograniczenia "nie w przeszłości": zaległy termin ma być widoczny, nie blokowany."""
+	if termin is None or (isinstance(termin, str) and not termin.strip()):
+		return None
+	if _data(termin) is None:
+		return "Termin wypłaty musi być poprawną datą (RRRR-MM-DD)."
+	return None
+
+
 # --- okres ----------------------------------------------------------------------------
+
+OSIE_OKRESU = ("podpisanie", "wyplata", "utworzenie", "oznaczenie", "termin")
+
+
+def data_okresu(bazowe: Mapping[str, Any], wg: str) -> datetime.date | None:
+	"""Jedna reguła daty dla listy rejestru i kafelków: data z wybranej osi `wg`, a gdy
+	pusta, data podpisania umowy, a gdy i ta pusta, data utworzenia szansy. Wszystkie
+	trzy puste daje `None` (wiersz poza każdym okresem)."""
+	return _data(bazowe.get(wg)) or _data(bazowe.get("podpisanie")) or _data(bazowe.get("utworzenie"))
 
 
 def _koniec_miesiaca(rok: int, miesiac: int) -> datetime.date:
@@ -441,6 +477,8 @@ _AKCJE_SLADU = {
 	"zmiana_kwoty": "zmienił kwotę rozliczenia dla",
 	"dodanie": "dodał odbiorcę rozliczenia:",
 	"naliczenie": "naliczył rozliczenie dla",
+	"termin": "ustawił termin wypłaty dla",
+	"termin_wyczyszczony": "wyczyścił termin wypłaty dla",
 }
 _ROLA_DOPELNIACZ = {ROLA_HANDLOWIEC: "Handlowca", ROLA_MANAGER: "Managera", ROLA_PARTNER: "Partnera"}
 
@@ -459,7 +497,7 @@ def tekst_sladu(
 	2026-10-06, z rejestru prowizji razem z 4 innymi pozycjami`. `partia_n` to liczba
 	INNYCH pozycji w akcji masowej (0 = akcja pojedyncza, bez dopisku). `akcja` to jeden
 	z: wyplata, cofniecie, wstrzymanie, nie_dotyczy, do_wyplaty, zmiana_kwoty, dodanie,
-	naliczenie (inny to `ValueError`)."""
+	naliczenie, termin, termin_wyczyszczony (inny to `ValueError`)."""
 	if akcja not in _AKCJE_SLADU:
 		raise ValueError(f"Nieznana akcja śladu rozliczenia: {akcja!r}.")
 	rola_txt = rola if akcja == "dodanie" else _ROLA_DOPELNIACZ.get(rola, rola)

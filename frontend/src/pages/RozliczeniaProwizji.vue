@@ -80,6 +80,9 @@
         />
         <OkresPicker v-model="wybor" />
       </div>
+      <p v-if="!wszystkieOkresy" class="mt-2 text-sm text-ink-gray-5" data-testid="podpowiedz-okresu">
+        {{ __('Wiersz bez wybranej daty liczy się wg daty podpisania umowy, a bez niej wg daty utworzenia szansy.') }}
+      </p>
       <div v-if="filtry.szansa" class="mt-3 flex items-center gap-2 text-sm">
         <span class="inline-flex items-center gap-1.5 rounded-full border border-outline-blue-2 bg-surface-blue-2 px-3 py-1 text-ink-blue-8">
           {{ __('Szansa') }}: {{ filtry.szansa }}
@@ -155,7 +158,8 @@
                 <th class="w-40 py-1.5">{{ __('Etap procesu') }}</th>
                 <th class="w-28 py-1.5 text-right">{{ __('Kwota') }}</th>
                 <th class="w-28 py-1.5 pl-4">{{ __('Status') }}</th>
-                <th class="w-28 py-1.5">{{ __('Data wypłaty') }}</th>
+                <th class="w-28 py-1.5">{{ __('Termin wypłaty') }}</th>
+                <th class="w-28 py-1.5">{{ __('Wypłacono dnia') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -197,6 +201,14 @@
                 <td class="py-1.5 pl-4">
                   <Badge :label="w.status" :theme="motywStatusu(w.status)" variant="subtle" />
                 </td>
+                <td
+                  class="py-1.5"
+                  :class="poTerminie(w) ? 'font-medium text-ink-red-8' : ''"
+                  :title="poTerminie(w) ? __('Termin wypłaty minął') : ''"
+                  data-testid="termin-wiersza"
+                >
+                  {{ w.termin_wyplaty || '' }}
+                </td>
                 <td class="py-1.5">{{ w.data_wyplaty || '' }}</td>
               </tr>
             </tbody>
@@ -216,6 +228,7 @@
         {{ zl(sumaZaznaczonych) }}
       </b>
       <Button :label="__('Wyczyść')" @click="zaznaczone = new Set()" />
+      <Button :label="__('Ustaw termin wypłaty')" @click="otworzTermin([...zaznaczone])" />
       <Button variant="solid" :label="__('Oznacz jako wypłacone')" @click="otworzDialog([...zaznaczone])" />
     </div>
 
@@ -223,7 +236,7 @@
     <Dialog v-model:open="pokazDialog" :title="tytulDialogu" size="md">
       <template #default>
         <div class="flex flex-col gap-4">
-          <FormControl v-model="dataWyplaty" type="date" :label="__('Data wypłaty')" />
+          <FormControl v-model="dataWyplaty" type="date" :label="__('Wypłacono dnia')" />
           <FormControl
             v-model="uwaga"
             type="textarea"
@@ -244,6 +257,29 @@
         </div>
       </template>
     </Dialog>
+
+    <!-- Okno masowe: termin wypłaty -->
+    <Dialog v-model:open="pokazTermin" :title="__('Ustaw termin wypłaty')" size="sm">
+      <template #default>
+        <div class="flex flex-col gap-3">
+          <FormControl v-model="terminData" type="date" :label="__('Termin wypłaty')" />
+          <div class="text-xs text-ink-gray-5">
+            {{
+              __(
+                'Termin dotyczy wierszy w statusie Do wypłaty, pozostałe zostaną pominięte. Puste pole czyści termin.',
+              )
+            }}
+          </div>
+          <ErrorMessage :message="bladTerminu" />
+        </div>
+      </template>
+      <template #actions>
+        <div class="flex justify-end gap-2">
+          <Button :label="__('Anuluj')" @click="pokazTermin = false" />
+          <Button variant="solid" :label="__('Zapisz')" :loading="zapisujeTermin" @click="zapiszTermin" />
+        </div>
+      </template>
+    </Dialog>
   </div>
 </template>
 
@@ -256,7 +292,7 @@ import OkresPicker from '@/components/OkresPicker.vue'
 import MultiWyborProsty from '@/components/rozliczenia/MultiWyborProsty.vue'
 import Link from '@/components/Controls/Link.vue'
 import { KODY_RODZAJU_UMOWY } from '@/utils/rodzajUmowy'
-import { formatujDate, odczytajWybor, okresDlaApi, zapiszWybor } from '@/utils/okres'
+import { czyOkresGotowy, formatujDate, odczytajWybor, okresDlaApi, zapiszWybor } from '@/utils/okres'
 
 usePageMeta(() => ({ title: __('Rozliczenia prowizji') }))
 
@@ -297,6 +333,13 @@ const bladDialogu = ref('')
 const zapisuje = ref(false)
 
 const okresApi = computed(() => okresDlaApi(wybor.value))
+const wszystkieOkresy = computed(() => wybor.value.preset === 'wszystko')
+
+const pokazTermin = ref(false)
+const terminNazwy = ref([])
+const terminData = ref('')
+const bladTerminu = ref('')
+const zapisujeTermin = ref(false)
 
 function filtryApi() {
   const f = filtry.value
@@ -311,7 +354,7 @@ function filtryApi() {
 
 let numerZapytania = 0
 async function wczytaj() {
-  if (!okresApi.value) return
+  if (!czyOkresGotowy(wybor.value)) return
   const moj = ++numerZapytania
   ladowanie.value = true
   blad.value = ''
@@ -340,13 +383,29 @@ async function wczytaj() {
 }
 
 watch([filtry, wybor, grupowanie], () => wczytaj(), { deep: true })
-watch(wybor, (w) => zapiszWybor(w), { deep: true })
+// Wejscie z zakladki szansy nadpisuje okres tylko na te wizyte (bez zapisu do localStorage).
+let pominZapisWyboru = false
+watch(
+  wybor,
+  (w) => {
+    if (pominZapisWyboru) {
+      pominZapisWyboru = false
+      return
+    }
+    zapiszWybor(w)
+  },
+  { deep: true },
+)
 
 onMounted(() => {
   const s = route.query.szansa
   if (typeof s === 'string' && s) {
     filtry.value = { ...filtry.value, szansa: s, status: [] }
     grupowanie.value = 'szansa'
+    if (wybor.value.preset !== 'wszystko') {
+      pominZapisWyboru = true
+      wybor.value = { wg: wybor.value.wg, preset: 'wszystko' }
+    }
   } else {
     wczytaj()
   }
@@ -358,8 +417,14 @@ function wyczyscSzanse() {
 }
 
 const kafelkiWidok = computed(() => [
-  { etykieta: __('Do wypłaty w okresie'), wartosc: zl(kafelki.value.do_wyplaty_w_okresie) },
-  { etykieta: __('Wypłacono w okresie'), wartosc: zl(kafelki.value.wyplacono_w_okresie) },
+  {
+    etykieta: wszystkieOkresy.value ? __('Do wypłaty') : __('Do wypłaty w okresie'),
+    wartosc: zl(kafelki.value.do_wyplaty_w_okresie),
+  },
+  {
+    etykieta: wszystkieOkresy.value ? __('Wypłacono') : __('Wypłacono w okresie'),
+    wartosc: zl(kafelki.value.wyplacono_w_okresie),
+  },
   { etykieta: __('Szans z otwartym rozliczeniem'), wartosc: String(kafelki.value.szans_z_otwartym) },
   { etykieta: __('Odbiorców do rozliczenia'), wartosc: String(kafelki.value.odbiorcow_do_rozliczenia) },
 ])
@@ -461,9 +526,38 @@ async function zapisz() {
   }
 }
 
+// --- termin wypłaty (masowo) ---
+function poTerminie(w) {
+  return w.status === 'Do wypłaty' && !!w.termin_wyplaty && w.termin_wyplaty < formatujDate(new Date())
+}
+function otworzTermin(nazwy) {
+  terminNazwy.value = nazwy
+  terminData.value = ''
+  bladTerminu.value = ''
+  pokazTermin.value = true
+}
+async function zapiszTermin() {
+  zapisujeTermin.value = true
+  bladTerminu.value = ''
+  try {
+    const odp = await call(`${API}.ustaw_termin`, {
+      nazwy: terminNazwy.value,
+      termin: terminData.value || null,
+    })
+    pokazTermin.value = false
+    zaznaczone.value = new Set()
+    toast.success(`${__('Zmieniono termin wypłaty')}: ${odp?.ustawiono ?? 0}`)
+    await wczytaj()
+  } catch (e) {
+    bladTerminu.value = e?.messages?.[0] || e?.message || __('Nie udało się zapisać.')
+  } finally {
+    zapisujeTermin.value = false
+  }
+}
+
 // --- eksport CSV ---------------------------------------------------------------
 async function eksportuj() {
-  if (!okresApi.value) return
+  if (!czyOkresGotowy(wybor.value)) return
   eksportuje.value = true
   try {
     const tresc = await call(`${API}.eksport_csv`, { filtry: filtryApi(), okres: okresApi.value })
@@ -471,7 +565,9 @@ async function eksportuj() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `rozliczenia-prowizji-${okresApi.value.od}-${okresApi.value.do}.csv`
+    a.download = okresApi.value
+      ? `rozliczenia-prowizji-${okresApi.value.od}-${okresApi.value.do}.csv`
+      : 'rozliczenia-prowizji-wszystkie.csv'
     document.body.appendChild(a)
     a.click()
     a.remove()

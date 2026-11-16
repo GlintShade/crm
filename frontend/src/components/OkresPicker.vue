@@ -8,8 +8,10 @@
     <div class="w-52">
       <label class="mb-1 block text-xs text-ink-gray-5">{{ __('Okres wg') }}</label>
       <select
-        class="h-8 w-full rounded border border-outline-gray-2 bg-surface-base px-2 py-0 text-sm leading-normal text-ink-gray-8"
+        class="h-8 w-full rounded border border-outline-gray-2 bg-surface-base px-2 py-0 text-sm leading-normal text-ink-gray-8 disabled:cursor-not-allowed disabled:opacity-50"
         :value="modelValue.wg"
+        :disabled="wszystkieOkresy"
+        :title="wszystkieOkresy ? __('Przy wszystkich okresach data nie ma znaczenia.') : ''"
         @change="zmienWg($event.target.value)"
       >
         <option v-for="o in OPCJE_WG" :key="o.klucz" :value="o.klucz">{{ __(o.etykieta) }}</option>
@@ -122,8 +124,11 @@ const etykietaPresetu = computed(() => {
   const p = PRESETY.find((x) => x.klucz === props.modelValue.preset)
   return p ? __(p.etykieta) : __('Okres')
 })
+const wszystkieOkresy = computed(() => props.modelValue.preset === 'wszystko')
 const etykietaAktywnego = computed(() =>
-  zakres.value ? etykietaZakresu(zakres.value.od, zakres.value.do) : __('Niepoprawny zakres'),
+  wszystkieOkresy.value
+    ? __('Wszystkie okresy')
+    : zakres.value ? etykietaZakresu(zakres.value.od, zakres.value.do) : __('Niepoprawny zakres'),
 )
 const jestDomyslny = computed(
   () =>

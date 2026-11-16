@@ -3,6 +3,8 @@ import {
   PRESETY,
   OPCJE_WG,
   KLUCZ_STORAGE,
+  DOMYSLNY_WYBOR,
+  czyOkresGotowy,
   zakresOkresu,
   etykietaZakresu,
   okresDlaApi,
@@ -17,12 +19,19 @@ const d = (r, m, dz) => new Date(r, m - 1, dz)
 const DZIS = d(2026, 10, 15)
 
 describe('presety i opcje', () => {
-  it('ma 11 presetow z polskimi etykietami', () => {
-    expect(PRESETY).toHaveLength(11)
+  it('ma 12 presetow, "Wszystkie okresy" na poczatku', () => {
+    expect(PRESETY).toHaveLength(12)
+    expect(PRESETY[0]).toEqual({ klucz: 'wszystko', etykieta: 'Wszystkie okresy' })
     expect(PRESETY.map((p) => p.klucz)).toContain('wlasny')
   })
-  it('ma 4 opcje wg', () => {
-    expect(OPCJE_WG.map((o) => o.klucz)).toEqual(['podpisanie', 'wyplata', 'utworzenie', 'oznaczenie'])
+  it('ma 5 opcji wg, z osia "termin"', () => {
+    expect(OPCJE_WG.map((o) => o.klucz)).toEqual(['podpisanie', 'termin', 'wyplata', 'utworzenie', 'oznaczenie'])
+  })
+  it('nazywa daty: termin wyplaty i wyplacono dnia', () => {
+    const et = Object.fromEntries(OPCJE_WG.map((o) => [o.klucz, o.etykieta]))
+    expect(et.termin).toBe('Termin wypłaty')
+    expect(et.wyplata).toBe('Wypłacono dnia')
+    expect(Object.values(et)).not.toContain('Data wypłaty')
   })
 })
 
@@ -132,6 +141,24 @@ describe('okresDlaApi', () => {
     expect(okresDlaApi({ wg: 'wyplata', preset: 'wlasny' }, DZIS)).toBeNull()
     expect(okresDlaApi(null, DZIS)).toBeNull()
   })
+  it('zwraca null celowo dla "wszystko"', () => {
+    expect(okresDlaApi({ wg: 'podpisanie', preset: 'wszystko' }, DZIS)).toBeNull()
+    expect(zakresOkresu('wszystko', DZIS)).toBeNull()
+  })
+})
+
+describe('czyOkresGotowy', () => {
+  it('true dla "wszystko" i poprawnych zakresow', () => {
+    expect(czyOkresGotowy({ wg: 'podpisanie', preset: 'wszystko' }, DZIS)).toBe(true)
+    expect(czyOkresGotowy({ wg: 'podpisanie', preset: 'ten_miesiac' }, DZIS)).toBe(true)
+    expect(czyOkresGotowy({ wg: 'podpisanie', preset: 'wlasny', od: '2026-01-01', do: '2026-02-01' }, DZIS)).toBe(true)
+  })
+  it('false dla niepoprawnego wlasnego zakresu, nieznanego presetu i pustego wyboru', () => {
+    expect(czyOkresGotowy({ wg: 'podpisanie', preset: 'wlasny' }, DZIS)).toBe(false)
+    expect(czyOkresGotowy({ wg: 'podpisanie', preset: 'wlasny', od: '2026-05-01', do: '2026-04-01' }, DZIS)).toBe(false)
+    expect(czyOkresGotowy({ wg: 'podpisanie', preset: 'zly' }, DZIS)).toBe(false)
+    expect(czyOkresGotowy(null, DZIS)).toBe(false)
+  })
 })
 
 describe('localStorage', () => {
@@ -144,8 +171,21 @@ describe('localStorage', () => {
       },
     })
   })
-  it('domyslnie ten_miesiac wg podpisanie', () => {
-    expect(odczytajWybor()).toEqual({ wg: 'podpisanie', preset: 'ten_miesiac' })
+  it('domyslnie wszystko wg podpisanie', () => {
+    expect(DOMYSLNY_WYBOR).toEqual({ wg: 'podpisanie', preset: 'wszystko' })
+    expect(odczytajWybor()).toEqual({ wg: 'podpisanie', preset: 'wszystko' })
+  })
+  it('klucz storage jest w wersji v2, stary klucz jest ignorowany', () => {
+    expect(KLUCZ_STORAGE).toBe('volteo_rozliczenia_okres_v2')
+    localStorage.setItem(
+      'volteo_rozliczenia_okres',
+      JSON.stringify({ wg: 'wyplata', preset: 'ten_miesiac' }),
+    )
+    expect(odczytajWybor()).toEqual({ wg: 'podpisanie', preset: 'wszystko' })
+  })
+  it('zapis i odczyt "wszystko" z osia termin', () => {
+    zapiszWybor({ wg: 'termin', preset: 'wszystko' })
+    expect(odczytajWybor()).toEqual({ wg: 'termin', preset: 'wszystko' })
   })
   it('zapis i odczyt', () => {
     zapiszWybor({ wg: 'wyplata', preset: 'ten_rok' })
@@ -157,17 +197,17 @@ describe('localStorage', () => {
   })
   it('uszkodzony JSON daje domyslny', () => {
     localStorage.setItem(KLUCZ_STORAGE, '{zle')
-    expect(odczytajWybor()).toEqual({ wg: 'podpisanie', preset: 'ten_miesiac' })
+    expect(odczytajWybor()).toEqual({ wg: 'podpisanie', preset: 'wszystko' })
   })
   it('nieznany preset lub wg daje domyslny', () => {
     localStorage.setItem(KLUCZ_STORAGE, JSON.stringify({ wg: 'x', preset: 'ten_rok' }))
     expect(odczytajWybor().wg).toBe('podpisanie')
     localStorage.setItem(KLUCZ_STORAGE, JSON.stringify({ wg: 'wyplata', preset: 'zly' }))
-    expect(odczytajWybor().preset).toBe('ten_miesiac')
+    expect(odczytajWybor().preset).toBe('wszystko')
   })
   it('wlasny z niepoprawnymi datami daje domyslny', () => {
     localStorage.setItem(KLUCZ_STORAGE, JSON.stringify({ wg: 'wyplata', preset: 'wlasny', od: '2026-05-01', do: '2026-04-01' }))
-    expect(odczytajWybor()).toEqual({ wg: 'podpisanie', preset: 'ten_miesiac' })
+    expect(odczytajWybor()).toEqual({ wg: 'podpisanie', preset: 'wszystko' })
   })
   it('brak localStorage nie rzuca', () => {
     vi.stubGlobal('localStorage', {
@@ -179,6 +219,6 @@ describe('localStorage', () => {
       },
     })
     expect(() => zapiszWybor({ wg: 'wyplata', preset: 'ten_rok' })).not.toThrow()
-    expect(odczytajWybor()).toEqual({ wg: 'podpisanie', preset: 'ten_miesiac' })
+    expect(odczytajWybor()).toEqual({ wg: 'podpisanie', preset: 'wszystko' })
   })
 })

@@ -3,6 +3,7 @@
 // od DOM poza localStorage (zawsze w try/catch), testowalny przez vitest.
 
 export const PRESETY = [
+  { klucz: 'wszystko', etykieta: 'Wszystkie okresy' },
   { klucz: 'dzisiaj', etykieta: 'Dzisiaj' },
   { klucz: 'ten_tydzien', etykieta: 'Ten tydzień' },
   { klucz: 'poprzedni_tydzien', etykieta: 'Poprzedni tydzień' },
@@ -18,13 +19,16 @@ export const PRESETY = [
 
 export const OPCJE_WG = [
   { klucz: 'podpisanie', etykieta: 'Data podpisania umowy' },
-  { klucz: 'wyplata', etykieta: 'Data wypłaty' },
+  { klucz: 'termin', etykieta: 'Termin wypłaty' },
+  { klucz: 'wyplata', etykieta: 'Wypłacono dnia' },
   { klucz: 'utworzenie', etykieta: 'Data utworzenia szansy' },
   { klucz: 'oznaczenie', etykieta: 'Data oznaczenia' },
 ]
 
-export const KLUCZ_STORAGE = 'volteo_rozliczenia_okres'
-export const DOMYSLNY_WYBOR = { wg: 'podpisanie', preset: 'ten_miesiac' }
+// v2 (ops#287): nowy domyslny wybor "Wszystkie okresy"; stary klucz jest ignorowany,
+// wiec zapamietane wybory wracaja jednorazowo do nowego domyslnego.
+export const KLUCZ_STORAGE = 'volteo_rozliczenia_okres_v2'
+export const DOMYSLNY_WYBOR = { wg: 'podpisanie', preset: 'wszystko' }
 
 const RE_DATA = /^\d{4}-\d{2}-\d{2}$/
 
@@ -66,7 +70,8 @@ export function jestPoprawnymPresetem(klucz) {
 }
 
 // Zwraca { od, do } (RRRR-MM-DD) albo null, gdy zakres jest niepoprawny
-// (nieznany preset, "wlasny" bez dat albo od > do).
+// (nieznany preset, "wlasny" bez dat albo od > do) albo gdy preset to "wszystko"
+// (brak ograniczenia dat; stronie odroznia to czyOkresGotowy).
 export function zakresOkresu(preset, dzis = new Date(), od, doDaty) {
   const t = new Date(dzis.getFullYear(), dzis.getMonth(), dzis.getDate())
   let a
@@ -127,7 +132,17 @@ export function etykietaZakresu(od, doDaty) {
   return `od ${od} do ${doDaty}`
 }
 
+// Czy mozna wolac API: true dla "wszystko" (okres: null) i dla poprawnego zakresu,
+// false dla niepoprawnego wlasnego zakresu albo pustego wyboru.
+export function czyOkresGotowy(wybor, dzis = new Date()) {
+  if (!wybor) return false
+  if (wybor.preset === 'wszystko') return true
+  return zakresOkresu(wybor.preset, dzis, wybor.od, wybor.do) !== null
+}
+
 // Wybor ({ wg, preset, od, do }) -> okres dla API ({ wg, od, do }) albo null.
+// Dla "wszystko" zwraca null celowo (serwer bez okresu zwraca wszystko); rozroznienie
+// "wszystko" vs niepoprawny zakres daje czyOkresGotowy.
 export function okresDlaApi(wybor, dzis = new Date()) {
   if (!wybor) return null
   const zakres = zakresOkresu(wybor.preset, dzis, wybor.od, wybor.do)

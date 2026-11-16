@@ -86,13 +86,14 @@
         <div v-else class="overflow-x-auto rounded-lg border border-outline-gray-2">
           <table class="w-full table-fixed border-collapse text-sm">
             <colgroup>
-              <col style="width: 17%" />
+              <col style="width: 15%" />
+              <col style="width: 9%" />
+              <col style="width: 12%" />
               <col style="width: 11%" />
               <col style="width: 13%" />
-              <col style="width: 13%" />
-              <col style="width: 11%" />
-              <col style="width: 14%" />
-              <col style="width: 6%" />
+              <col style="width: 10%" />
+              <col style="width: 10%" />
+              <col style="width: 5%" />
               <col style="width: 15%" />
             </colgroup>
             <thead>
@@ -101,7 +102,8 @@
                 <th class="px-3 py-2.5 text-left font-medium">{{ __('Rola') }}</th>
                 <th class="px-3 py-2.5 text-right font-medium">{{ __('Kwota') }}</th>
                 <th class="px-3 py-2.5 text-left font-medium">{{ __('Status') }}</th>
-                <th class="px-3 py-2.5 text-left font-medium">{{ __('Data') }}</th>
+                <th class="px-3 py-2.5 text-left font-medium">{{ __('Termin wypłaty') }}</th>
+                <th class="px-3 py-2.5 text-left font-medium">{{ __('Wypłacono dnia') }}</th>
                 <th class="px-3 py-2.5 text-left font-medium">{{ __('Oznaczył') }}</th>
                 <th class="px-3 py-2.5 text-left font-medium">{{ __('Potw.') }}</th>
                 <th class="px-3 py-2.5 text-left font-medium">{{ __('Akcje') }}</th>
@@ -134,6 +136,19 @@
                 </td>
                 <td class="truncate whitespace-nowrap px-3 py-2.5">
                   <Badge :theme="motywWiersza(w.status)" variant="subtle" size="sm" :label="__(w.status)" />
+                </td>
+                <td class="px-3 py-2">
+                  <input
+                    v-if="w.status === STATUS_DO_WYPLATY"
+                    type="date"
+                    class="w-full rounded border bg-surface-base px-1 py-1 text-sm"
+                    :class="poTerminie(w) ? 'border-outline-red-2 text-ink-red-8' : 'border-outline-gray-2 text-ink-gray-8'"
+                    :title="poTerminie(w) ? __('Termin wypłaty minął') : ''"
+                    :value="w.termin_wyplaty || ''"
+                    data-testid="termin-wyplaty"
+                    @change="zapiszTermin(w, $event.target.value)"
+                  />
+                  <div v-else class="truncate whitespace-nowrap text-ink-gray-6">{{ w.termin_wyplaty || '-' }}</div>
                 </td>
                 <td class="truncate whitespace-nowrap px-3 py-2.5 text-ink-gray-6">
                   {{ w.data_wyplaty || '-' }}
@@ -226,7 +241,7 @@
       <template #default>
         <div class="flex flex-col gap-3">
           <FormControl type="text" :label="__('Kwota')" :model-value="kwotaWyplaty" disabled />
-          <FormControl type="date" :label="__('Data wypłaty')" v-model="wyplata.data" />
+          <FormControl type="date" :label="__('Wypłacono dnia')" v-model="wyplata.data" />
           <FormControl type="textarea" :label="__('Uwaga')" :rows="2" v-model="wyplata.uwaga" />
           <div class="text-xs text-ink-gray-5">
             {{ __('Potwierdzenie (PDF, JPG) dodasz po zapisie, plusem w kolumnie Potw.') }}
@@ -436,6 +451,21 @@ async function zapiszKwote(w) {
   if (wpisana === undefined || String(wpisana).trim() === '') return
   if (Number(wpisana) === Number(w.kwota)) return
   await mutuj('kwota', 'zmien_kwote', { nazwa: w.name, kwota: String(wpisana) }, __('Zmieniono kwotę.'))
+}
+
+// --- Termin wypłaty (planowany) ---
+function poTerminie(w) {
+  return w.status === STATUS_DO_WYPLATY && !!w.termin_wyplaty && w.termin_wyplaty < dzisiaj()
+}
+
+async function zapiszTermin(w, wartosc) {
+  if ((wartosc || '') === (w.termin_wyplaty || '')) return
+  await mutuj(
+    'termin',
+    'ustaw_termin',
+    { nazwy: [w.name], termin: wartosc || null },
+    wartosc ? __('Ustawiono termin wypłaty.') : __('Wyczyszczono termin wypłaty.'),
+  )
 }
 
 // --- Oznacz wypłacone ---

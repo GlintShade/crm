@@ -8,10 +8,12 @@ from decimal import Decimal
 from typing import ClassVar
 
 from crm.volteo_rozliczenie import (
+	OSIE_OKRESU,
 	STANY_SZANSY,
 	STATUSY_WIERSZA,
 	ZNACZNIK_ROZLICZENIE,
 	ZRODLA_KWOTY,
+	data_okresu,
 	data_podpisania,
 	formatuj_kwote,
 	kwoty_odbiorcow,
@@ -23,9 +25,11 @@ from crm.volteo_rozliczenie import (
 	tekst_sladu,
 	tokeny_odbiorcow,
 	waliduj_kwote,
+	waliduj_termin,
 	waliduj_unikalnosc,
 	waliduj_wyplate,
 	warunek_naliczenia,
+	wiersze_do_odswiezenia,
 	zakres_okresu,
 )
 
@@ -332,6 +336,81 @@ class TestDataPodpisania(unittest.TestCase):
 		self.assertEqual(data_podpisania(wpisy), D(2026, 10, 5))
 
 
+PELNE = {
+	"podpisanie": D(2026, 10, 1),
+	"wyplata": D(2026, 10, 2),
+	"termin": D(2026, 10, 3),
+	"oznaczenie": D(2026, 10, 4),
+	"utworzenie": D(2026, 9, 1),
+}
+
+
+class TestDataOkresu(unittest.TestCase):
+	def test_kazda_os_z_kompletem_dat(self):
+		for os_ in OSIE_OKRESU:
+			self.assertEqual(data_okresu(PELNE, os_), PELNE[os_], os_)
+
+	def test_brak_daty_osi_spada_na_podpisanie(self):
+		for os_ in ("wyplata", "termin", "oznaczenie"):
+			bazowe = {**PELNE, os_: None}
+			self.assertEqual(data_okresu(bazowe, os_), D(2026, 10, 1), os_)
+
+	def test_brak_osi_i_podpisania_spada_na_utworzenie(self):
+		for os_ in (o for o in OSIE_OKRESU if o != "utworzenie"):
+			bazowe = {**PELNE, os_: None, "podpisanie": None}
+			self.assertEqual(data_okresu(bazowe, os_), D(2026, 9, 1), os_)
+
+	def test_wszystkie_puste(self):
+		puste = dict.fromkeys(OSIE_OKRESU)
+		for os_ in OSIE_OKRESU:
+			self.assertIsNone(data_okresu(puste, os_))
+		self.assertIsNone(data_okresu({}, "termin"))
+
+	def test_akceptuje_teksty_i_datetime(self):
+		bazowe = {"podpisanie": "2026-10-01 10:00:00", "utworzenie": datetime.datetime(2026, 9, 1, 8)}
+		self.assertEqual(data_okresu(bazowe, "wyplata"), D(2026, 10, 1))
+		self.assertEqual(data_okresu({"utworzenie": bazowe["utworzenie"]}, "termin"), D(2026, 9, 1))
+
+	def test_os_termin_jest_na_liscie(self):
+		self.assertIn("termin", OSIE_OKRESU)
+
+
+class TestWierszeDoOdswiezenia(unittest.TestCase):
+	def test_zmienia_tylko_rozne(self):
+		wiersze = [
+			{"name": "A", "data_podpisania": None},
+			{"name": "B", "data_podpisania": D(2026, 10, 5)},
+			{"name": "C", "data_podpisania": "2026-10-01"},
+		]
+		self.assertEqual(
+			wiersze_do_odswiezenia(wiersze, "2026-10-05"),
+			[("A", None, D(2026, 10, 5)), ("C", D(2026, 10, 1), D(2026, 10, 5))],
+		)
+
+	def test_pusta_nowa_data_nic_nie_zmienia(self):
+		self.assertEqual(wiersze_do_odswiezenia([{"name": "A", "data_podpisania": "2026-10-01"}], None), [])
+
+	def test_idempotentne(self):
+		wiersze = [{"name": "A", "data_podpisania": D(2026, 10, 5)}]
+		self.assertEqual(wiersze_do_odswiezenia(wiersze, D(2026, 10, 5)), [])
+
+	def test_brak_wierszy(self):
+		self.assertEqual(wiersze_do_odswiezenia([], D(2026, 10, 5)), [])
+
+
+class TestWalidujTermin(unittest.TestCase):
+	def test_puste_i_poprawne(self):
+		for v in (None, "", "  ", "2026-10-31", D(2026, 10, 31), "2026-10-31 10:00:00"):
+			self.assertIsNone(waliduj_termin(v), v)
+
+	def test_przeszlosc_dozwolona(self):
+		self.assertIsNone(waliduj_termin("2020-01-01"))
+
+	def test_niepoprawne(self):
+		for v in ("jutro", "31.10.2026", "2026-13-40", 12345):
+			self.assertIsNotNone(waliduj_termin(v), v)
+
+
 class TestZakresOkresu(unittest.TestCase):
 	def test_dzisiaj(self):
 		self.assertEqual(zakres_okresu("dzisiaj", D(2026, 10, 16)), (D(2026, 10, 16), D(2026, 10, 16)))
@@ -433,6 +512,15 @@ class TestTekstSladu(unittest.TestCase):
 			self.assertTrue(
 				tekst_sladu(akcja, "Handlowiec", "X", "1", None, "Jan").startswith(ZNACZNIK_ROZLICZENIE)
 			)
+
+	def test_termin(self):
+		tekst = tekst_sladu("termin", "Handlowiec", "Łukasz N", "4666.67", "2026-10-31", "Jan")
+		self.assertTrue(tekst.startswith(ZNACZNIK_ROZLICZENIE))
+		self.assertIn("ustawił termin wypłaty dla Handlowca", tekst)
+		self.assertIn("data 2026-10-31", tekst)
+		self.assertIn(
+			"wyczyścił termin wypłaty", tekst_sladu("termin_wyczyszczony", "Manager", "X", "1", None, "Jan")
+		)
 
 	def test_nieznana_akcja(self):
 		with self.assertRaises(ValueError):

@@ -235,7 +235,9 @@ doc_events = {
 	},
 	"CRM Deal": {
 		"on_update": [
-			"crm.fcrm.doctype.erpnext_crm_settings.erpnext_crm_settings.create_customer_in_erpnext"
+			"crm.fcrm.doctype.erpnext_crm_settings.erpnext_crm_settings.create_customer_in_erpnext",
+			# ops#287: odswieza data_podpisania wierszy rozliczen (cichy zapis, bez sladu).
+			"crm.rozliczenia.odswiez_date_podpisania",
 		],
 	},
 	"Sales Order": {
