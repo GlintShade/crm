@@ -45,7 +45,7 @@ const KLIMA_POZYCJE = [
   { kod: 'klima_elis_x_3_5', nazwa: 'Rotenso Elis X Czarny 3,5 kW', rodzaj: 'Klimatyzacja', grupa: 'klima_chlodzenie', producent: 'Rotenso', model: 'Elis X', kolor: 'Czarny', moc_kw: 3.5, ilosc: 1, parametr: '', opis: '25-40 m2', sort: 2 },
   { kod: 'klima_roni_x_2_6', nazwa: 'Rotenso Roni X Bialy 2,6 kW', rodzaj: 'Klimatyzacja', grupa: 'klima_chlodzenie', producent: 'Rotenso', model: 'Roni X', kolor: 'Bialy', moc_kw: 2.6, ilosc: 1, parametr: '', opis: 'do 25 m2', sort: 3 },
   { kod: 'klima_teta_mirror_x_3_5', nazwa: 'Rotenso Teta Mirror X Czarny 3,5 kW', rodzaj: 'Klimatyzacja', grupa: 'klima_dogrzewanie', producent: 'Rotenso', model: 'Teta Mirror X', kolor: 'Czarny', moc_kw: 3.5, ilosc: 1, parametr: '', opis: '', sort: 4 },
-  { kod: 'klima_mira_x_3_5', nazwa: 'Rotenso Mira X Bialy 3,5 kW', rodzaj: 'Klimatyzacja', grupa: 'klima_grzanie', producent: 'Rotenso', model: 'Mira X', kolor: 'Bialy', moc_kw: 3.5, ilosc: 1, parametr: '', opis: '', sort: 5 },
+  { kod: 'klima_mira_x_3_5', nazwa: 'Rotenso Mirai X Bialy 3,5 kW', rodzaj: 'Klimatyzacja', grupa: 'klima_grzanie', producent: 'Rotenso', model: 'Mirai X', kolor: 'Bialy', moc_kw: 3.5, ilosc: 1, parametr: '', opis: '', sort: 5 },
 ]
 
 const GRZEJNIK_POZYCJE = [
