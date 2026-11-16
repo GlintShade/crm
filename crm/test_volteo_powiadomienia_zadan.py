@@ -6,6 +6,7 @@ from crm.volteo_powiadomienia_zadan import (
 	etykieta_statusu,
 	tekst_powiadomienia,
 	wybierz_odbiorce,
+	wybierz_odbiorcow,
 	wykryj_zdarzenia,
 )
 
@@ -61,9 +62,39 @@ class TestOdbiorca(unittest.TestCase):
 		self.assertIsNone(wybierz_odbiorce("Guest", "b@x", True, False))
 
 
+class TestOdbiorcy(unittest.TestCase):
+	AKTYWNI = frozenset({"a@x", "b@x", "c@x"})
+
+	def test_autor_i_wykonawca(self: "TestOdbiorcy") -> None:
+		self.assertEqual(wybierz_odbiorcow("a@x", ["b@x"], "c@x", self.AKTYWNI, False), ["a@x", "b@x"])
+
+	def test_ta_sama_osoba_raz(self: "TestOdbiorcy") -> None:
+		self.assertEqual(
+			wybierz_odbiorcow("a@x", ["a@x", "b@x", "b@x"], "c@x", self.AKTYWNI, False), ["a@x", "b@x"]
+		)
+
+	def test_aktor_pominiety(self: "TestOdbiorcy") -> None:
+		self.assertEqual(wybierz_odbiorcow("a@x", ["b@x"], "a@x", self.AKTYWNI, False), ["b@x"])
+		self.assertEqual(wybierz_odbiorcow("a@x", ["b@x"], "b@x", self.AKTYWNI, False), ["a@x"])
+
+	def test_automatyczne_wykonawca_tak_autor_nie(self: "TestOdbiorcy") -> None:
+		self.assertEqual(wybierz_odbiorcow("a@x", ["b@x"], "c@x", self.AKTYWNI, True), ["b@x"])
+
+	def test_wylaczony(self: "TestOdbiorcy") -> None:
+		self.assertEqual(wybierz_odbiorcow("a@x", ["b@x"], "c@x", {"a@x"}, False), ["a@x"])
+
+	def test_pomin_i_puste(self: "TestOdbiorcy") -> None:
+		self.assertEqual(
+			wybierz_odbiorcow("a@x", [None, "b@x"], "c@x", self.AKTYWNI, False, {"b@x"}), ["a@x"]
+		)
+		self.assertEqual(wybierz_odbiorcow(None, [], "c@x", self.AKTYWNI, False), [])
+
+
 class TestWzmianka(unittest.TestCase):
 	def test_jest(self: "TestWzmianka") -> None:
-		html = '<p>Hej <span class="mention" data-type="mention" data-id="A@X.pl" data-label="A">@A</span></p>'
+		html = (
+			'<p>Hej <span class="mention" data-type="mention" data-id="A@X.pl" data-label="A">@A</span></p>'
+		)
 		self.assertTrue(autor_wzmiankowany(html, "a@x.pl"))
 
 	def test_inny(self: "TestWzmianka") -> None:
@@ -86,7 +117,7 @@ class TestTekst(unittest.TestCase):
 	def test_wpis_bez_dopisku(self: "TestTekst") -> None:
 		t = tekst_powiadomienia("wpis", "Jan", "Zad")
 		self.assertIn("dodał(a) wpis w zadaniu", t)
-		self.assertNotIn("</span> <span class=\"text-ink-gray-5\">(", t)
+		self.assertNotIn('</span> <span class="text-ink-gray-5">(', t)
 
 	def test_nieznane(self: "TestTekst") -> None:
 		with self.assertRaises(ValueError):

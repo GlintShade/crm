@@ -81,6 +81,36 @@ def wybierz_odbiorce(
 	return autor
 
 
+def wybierz_odbiorcow(
+	autor: str | None,
+	wykonawcy: list[str | None],
+	aktor: str | None,
+	aktywni: set[str] | frozenset[str],
+	automatyczne: bool,
+	pomin: set[str] | None = None,
+) -> list[str]:
+	"""Odbiorcy dzwonka o zdarzeniu na zadaniu (ops#360): autor (tylko zadanie
+	reczne) oraz wykonawcy (pole `assigned_to` i osoby z otwartym ToDo; takze przy
+	zadaniu automatycznym). Kazdy raz (bez duplikatow, kolejnosc: autor, wykonawcy),
+	nigdy aktor, tylko konta z `aktywni`, nikt z `pomin` (np. nowy wykonawca przy
+	zmianie wykonawcy, ktory dostaje juz dzwonek przypisania)."""
+	pomin = pomin or set()
+	kandydaci: list[str | None] = [None if automatyczne else autor, *wykonawcy]
+	wynik: list[str] = []
+	for kandydat in kandydaci:
+		if (
+			not kandydat
+			or kandydat in ("Guest",)
+			or kandydat == aktor
+			or kandydat in pomin
+			or kandydat not in aktywni
+			or kandydat in wynik
+		):
+			continue
+		wynik.append(kandydat)
+	return wynik
+
+
 def autor_wzmiankowany(tresc: str | None, uzytkownik: str | None) -> bool:
 	"""Czy HTML wpisu zawiera wzmianke (`span data-type="mention"`) uzytkownika."""
 	if not tresc or not uzytkownik:

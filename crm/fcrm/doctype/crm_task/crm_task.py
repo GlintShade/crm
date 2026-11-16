@@ -12,7 +12,7 @@ from crm.volteo_powiadomienia_zadan import (
 	czy_zadanie_automatyczne,
 	etykieta_statusu,
 	tekst_powiadomienia,
-	wybierz_odbiorce,
+	wybierz_odbiorcow,
 	wykryj_zdarzenia,
 )
 
@@ -65,8 +65,10 @@ class CRMTask(Document):
 			zdarzenia = wykryj_zdarzenia(
 				{pole: przed.get(pole) for pole in pola}, {pole: self.get(pole) for pole in pola}
 			)
+			# Nowy wykonawca (i poprzedni) dostaja juz dzwonek przypisania z ToDo.
+			pomin = {przed.get("assigned_to"), self.get("assigned_to")} - {None, ""}
 			for zdarzenie in zdarzenia:
-				powiadom_autora(self, zdarzenie)
+				powiadom_o_zdarzeniu(self, zdarzenie, pomin=pomin)
 		except Exception:
 			frappe.log_error(frappe.get_traceback(), "CRM Task: powiadomienie autora zadania")
 
@@ -190,34 +192,37 @@ def _czy_automatyczne(zadanie) -> bool:
 	return czy_zadanie_automatyczne(ma_znacznik, zadanie.get("title"), zadanie.get("reference_doctype"))
 
 
-def powiadom_autora(zadanie, zdarzenie: str, tresc_wpisu: str | None = None) -> None:
-	"""Wstawia jeden `CRM Notification` dla autora zadania (`owner`) o zdarzeniu
-	`zdarzenie` (wpis, status, termin, wykonawca) dokonanym przez biezacego
-	uzytkownika. Zasady: `crm.volteo_powiadomienia_zadan`. Wzmianka autora we wpisie
-	wygrywa (powiadomi ja `crm.api.comment.notify_mentions`). Maskowanie CC jak w
-	`crm.api.todo.notify_assigned_user`. Wstawia wiersz bezposrednio, a nie przez
-	`notify_user`, bo jego dedup po tresci gubilby powtorzone, rownie brzmiace
-	zdarzenia (np. dwa razy "Wykonane")."""
+def _wykonawcy(zadanie) -> list[str]:
+	"""`assigned_to` oraz osoby z otwartym ToDo na zadaniu."""
+	todo = frappe.get_all(
+		"ToDo",
+		filters={"reference_type": "CRM Task", "reference_name": str(zadanie.name), "status": "Open"},
+		pluck="allocated_to",
+	)
+	return [zadanie.get("assigned_to"), *todo]
+
+
+def powiadom_o_zdarzeniu(
+	zadanie, zdarzenie: str, tresc_wpisu: str | None = None, pomin: set[str] | None = None
+) -> None:
+	"""Wstawia po jednym `CRM Notification` dla kazdego odbiorcy zdarzenia
+	`zdarzenie` (wpis, status, termin, wykonawca) dokonanego przez biezacego
+	uzytkownika: autora zadania (`owner`, tylko zadanie reczne) i wykonawcow
+	(`crm.volteo_powiadomienia_zadan.wybierz_odbiorcow`). Wzmianka odbiorcy we wpisie
+	wygrywa (powiadomi go `crm.api.comment.notify_mentions`). Maskowanie CC per
+	odbiorca jak w `crm.api.todo.notify_assigned_user`. Wstawia wiersz bezposrednio,
+	a nie przez `notify_user`, bo jego dedup po tresci gubilby powtorzone, rownie
+	brzmiace zdarzenia (np. dwa razy "Wykonane")."""
 	from crm.permissions.org_hierarchy import BYPASS_ROLES, czy_autor_ma_role_cc
 	from crm.volteo_aktywnosc import czy_dokument_maskuje_cc
 	from crm.volteo_powiadomienia import nazwa_przydzielajacego
 
-	autor = zadanie.owner
 	aktor = frappe.session.user
-	autor_aktywny = bool(autor) and bool(frappe.db.get_value("User", autor, "enabled"))
-	odbiorca = wybierz_odbiorce(autor, aktor, autor_aktywny, _czy_automatyczne(zadanie))
-	if not odbiorca:
-		return
-	if zdarzenie == "wpis" and autor_wzmiankowany(tresc_wpisu, odbiorca):
-		return
-
-	odbiorca_widzi_cc = odbiorca == "Administrator" or bool(set(frappe.get_roles(odbiorca)) & BYPASS_ROLES)
-	maskuj = (
-		czy_autor_ma_role_cc(aktor)
-		and not odbiorca_widzi_cc
-		and czy_dokument_maskuje_cc("CRM Task", zadanie.get("reference_doctype"))
+	kandydaci = {zadanie.owner, *_wykonawcy(zadanie)} - {None, ""}
+	aktywni = {u for u in kandydaci if frappe.db.get_value("User", u, "enabled")}
+	odbiorcy = wybierz_odbiorcow(
+		zadanie.owner, _wykonawcy(zadanie), aktor, aktywni, _czy_automatyczne(zadanie), pomin
 	)
-	aktor_nazwa = nazwa_przydzielajacego(frappe.get_cached_value("User", aktor, "full_name"), maskuj=maskuj)
 
 	nowa_wartosc = None
 	if zdarzenie == "status":
@@ -228,19 +233,36 @@ def powiadom_autora(zadanie, zdarzenie: str, tresc_wpisu: str | None = None) -> 
 		nowy = zadanie.get("assigned_to")
 		nowa_wartosc = (frappe.get_cached_value("User", nowy, "full_name") or nowy) if nowy else "brak"
 
-	frappe.get_doc(
-		{
-			"doctype": "CRM Notification",
-			"from_user": aktor,
-			"to_user": odbiorca,
-			"type": "Task",
-			"message": zadanie.get("title") or "",
-			"notification_text": tekst_powiadomienia(
-				zdarzenie, aktor_nazwa, zadanie.get("title"), nowa_wartosc
-			),
-			"notification_type_doctype": "CRM Task",
-			"notification_type_doc": str(zadanie.name),
-			"reference_doctype": "CRM Task",
-			"reference_name": str(zadanie.name),
-		}
-	).insert(ignore_permissions=True)
+	for odbiorca in odbiorcy:
+		try:
+			if zdarzenie == "wpis" and autor_wzmiankowany(tresc_wpisu, odbiorca):
+				continue
+			odbiorca_widzi_cc = odbiorca == "Administrator" or bool(
+				set(frappe.get_roles(odbiorca)) & BYPASS_ROLES
+			)
+			maskuj = (
+				czy_autor_ma_role_cc(aktor)
+				and not odbiorca_widzi_cc
+				and czy_dokument_maskuje_cc("CRM Task", zadanie.get("reference_doctype"))
+			)
+			aktor_nazwa = nazwa_przydzielajacego(
+				frappe.get_cached_value("User", aktor, "full_name"), maskuj=maskuj
+			)
+			frappe.get_doc(
+				{
+					"doctype": "CRM Notification",
+					"from_user": aktor,
+					"to_user": odbiorca,
+					"type": "Task",
+					"message": zadanie.get("title") or "",
+					"notification_text": tekst_powiadomienia(
+						zdarzenie, aktor_nazwa, zadanie.get("title"), nowa_wartosc
+					),
+					"notification_type_doctype": "CRM Task",
+					"notification_type_doc": str(zadanie.name),
+					"reference_doctype": "CRM Task",
+					"reference_name": str(zadanie.name),
+				}
+			).insert(ignore_permissions=True)
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), "CRM Task: powiadomienie o zdarzeniu")
