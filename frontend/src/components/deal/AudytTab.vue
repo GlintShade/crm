@@ -196,6 +196,9 @@
               <span>{{ banerSzkicu.tytul }}</span>
             </div>
             <div v-if="banerSzkicu.opis" class="mt-1 text-base">{{ banerSzkicu.opis }}</div>
+            <div v-if="banerSzkicu.rodzaj !== 'ok'" class="mt-1 text-base font-normal">
+              {{ __('Audyt można przesłać do weryfikacji dopiero wtedy, gdy jest całkowicie wypełniony.') }}
+            </div>
             <div
               v-if="banerSzkicu.wiersze.length"
               data-testid="audyt-baner-lista"
