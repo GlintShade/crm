@@ -127,6 +127,7 @@ from crm.api.doc import (
 	convert_filter_to_tuple,
 	rozwin_grupy,
 )
+from crm.api.komentarze import liczby_zmian_komentarzy
 from crm.permissions.org_hierarchy import BYPASS_ROLES, _ma_linie_leady, czy_autor_ma_role_cc
 from crm.volteo_aktywnosc import czy_dokument_maskuje_cc, maskuj_autora_cc, tekst_sladu, zapisz_slad
 from crm.volteo_leady_telefon import normalizuj_filtr_telefonu
@@ -1095,4 +1096,9 @@ def komentarze(doctype: str, name: str) -> list[dict]:
 		for wiersz in wiersze
 		if wiersz.get("owner") and czy_autor_ma_role_cc(wiersz["owner"], autorzy_role_cache)
 	}
-	return [maskuj_autora_cc(wiersz, autorzy_cc, maskuj) for wiersz in wiersze]
+	# ops#364: licznik zmian tresci (ikona historii przy edytowanym wpisie).
+	liczby_zmian = liczby_zmian_komentarzy([wiersz["name"] for wiersz in wiersze])
+	return [
+		{**maskuj_autora_cc(wiersz, autorzy_cc, maskuj), "liczba_zmian": liczby_zmian.get(wiersz["name"], 0)}
+		for wiersz in wiersze
+	]

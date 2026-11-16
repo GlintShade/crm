@@ -8,6 +8,7 @@ from frappe.desk.form.utils import add_comment as frappe_add_comment
 from frappe.utils import get_fullname
 
 from crm.fcrm.doctype.crm_notification.crm_notification import notify_user
+from crm.volteo_komentarze import wzmianki as _wzmianki_html
 
 
 def on_update(self, method):
@@ -20,9 +21,27 @@ def on_update(self, method):
 	# wewnetrznymi try/except w notify_mentions -- na wypadek bledu, ktorego
 	# tamte nie przewidzialy.
 	try:
-		notify_mentions(self)
+		notify_mentions(self, pomin_emaile=_juz_wzmiankowani(self))
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), "notify_mentions: nieoczekiwany blad")
+
+
+def _juz_wzmiankowani(doc) -> set[str]:
+	"""VOLTEO (ops#364): adresy osob wzmiankowanych w POPRZEDNIEJ tresci
+	komentarza, ktore przy edycji nie dostaja powiadomienia drugi raz (klucz
+	deduplikacji w `notify_user` zawiera tresc, wiec po jej zmianie kazda stara
+	wzmianka powiadamialaby ponownie). Przy wstawieniu nowego komentarza zbior jest
+	pusty. Poprzednia tresc to `doc.flags.volteo_tresc_przed` (ustawia
+	`crm.api.komentarze.edytuj`), a gdy jej nie ma, `get_doc_before_save()`
+	(rozmowa zadania, `crm.api.zadania_rozmowa.edytuj`). Bez poprzedniej tresci
+	zbior jest pusty, czyli zachowanie jak dotad."""
+	if doc.flags.get("in_insert"):
+		return set()
+	przed = doc.flags.get("volteo_tresc_przed")
+	if przed is None:
+		poprzedni = doc.get_doc_before_save()
+		przed = getattr(poprzedni, "content", None) if poprzedni else None
+	return {w["email"] for w in _wzmianki_html(przed) if w["email"]}
 
 
 # VOLTEO (issue #205): doctype'y komentowane przez ten sam generyczny watek
@@ -32,15 +51,17 @@ def on_update(self, method):
 AUDYT_DOCTYPES = ("Volteo Audyt", "Volteo Audyt CP")
 
 
-def notify_mentions(doc):
+def notify_mentions(doc, pomin_emaile: set[str] | None = None):
 	"""
 	Extract mentions from `content`, and notify.
 	`content` must have `HTML` content.
+	`pomin_emaile`: adresy, ktorych nie powiadamiamy (wzmianki z poprzedniej
+	wersji edytowanego komentarza, ops#364).
 	"""
 	content = getattr(doc, "content", None)
 	if not content:
 		return
-	mentions = extract_mentions(content)
+	mentions = [m for m in extract_mentions(content) if m.email not in (pomin_emaile or ())]
 	if not mentions:
 		return
 
