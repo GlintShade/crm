@@ -87,6 +87,26 @@
       </div>
       <div class="flex shrink-0 items-start gap-1">
         <span class="whitespace-nowrap text-xs tabular-nums text-ink-gray-5">{{ dataTekst }}</span>
+        <!-- ops#364: historia zmian (dla kazdego, kto widzi notatke, gdy zmian > 0)
+          i edycja wlasnej notatki jednym kliknieciem. -->
+        <Button
+          v-if="wpis.liczba_zmian > 0 && nazwaNotatki"
+          variant="ghost"
+          size="sm"
+          icon="lucide-history"
+          :tooltip="__('Historia zmian')"
+          data-testid="wpis-historia"
+          @click="historiaOtwarta = true"
+        />
+        <Button
+          v-if="moznaEdytowac && !edytowanie"
+          variant="ghost"
+          size="sm"
+          icon="lucide-pencil"
+          :tooltip="__('Edit')"
+          data-testid="wpis-edytuj"
+          @click="zacznijEdycje"
+        />
         <Button
           v-if="pokazUsun"
           variant="ghost"
@@ -94,12 +114,32 @@
           theme="red"
           icon="lucide-trash-2"
           :tooltip="__('Usuń')"
-          @click="$emit('usun', wpis.name)"
+          @click="$emit('usun', nazwaNotatki || wpis.name)"
         />
       </div>
     </div>
 
-    <div class="prose-f max-w-[64ch] text-[15px] text-ink-gray-9" v-html="sanitizeHTML(wpis.tekst)" />
+    <div v-if="edytowanie" class="flex flex-col gap-2">
+      <TextEditor
+        :content="trescEdycji"
+        :editor-class="['prose-sm max-w-none min-h-[3rem]']"
+        :editable="true"
+        :mentions="mentionsKonfig"
+        @change="trescEdycji = $event"
+      />
+      <div class="flex justify-end gap-2">
+        <Button :label="__('Cancel')" @click="edytowanie = false" />
+        <Button
+          variant="solid"
+          :label="__('Save')"
+          :loading="zapisuje"
+          :disabled="tekstPusty(trescEdycji)"
+          data-testid="wpis-zapisz"
+          @click="zapiszEdycje"
+        />
+      </div>
+    </div>
+    <div v-else class="prose-f max-w-[64ch] text-[15px] text-ink-gray-9" v-html="sanitizeHTML(wpis.tekst)" />
 
     <div v-if="dokumenty.length || obrazy.length" class="flex flex-wrap gap-2">
       <button
@@ -150,6 +190,14 @@
       @click="$emit('otworz-zakladke', wpis.zakladka_hash)"
     />
 
+    <HistoriaWpisuDialog
+      v-if="historiaOtwarta"
+      v-model:open="historiaOtwarta"
+      :komentarz="nazwaNotatki"
+      :endpoint="endpointHistorii"
+      parametr="name"
+    />
+
     <AudytPodgladZdjec v-model="podgladOtwarty" :zdjecia="podgladLista" v-model:indeks="podgladIndeks" />
   </div>
 </template>
@@ -171,13 +219,17 @@ import TrifyIcon from '@/components/Icons/TrifyIcon.vue'
 import UmowaIcon from '@/components/Icons/UmowaIcon.vue'
 import ZestawIcon from '@/components/Icons/ZestawIcon.vue'
 import AudytPodgladZdjec from '@/components/deal/AudytPodgladZdjec.vue'
+import HistoriaWpisuDialog from '@/components/HistoriaWpisuDialog.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
+import { sessionStore } from '@/stores/session'
 import { usersStore } from '@/stores/users'
+import { tekstPusty } from '@/utils/aktualizacje'
 import { sanitizeHTML } from '@/utils'
 import { indeksDlaKlucza } from '@/utils/audytPodglad'
 import { formatujTermin } from '@/utils/dataPolska'
 import {
   ETYKIETY_ZRODEL,
+  ZAKLADKI,
   etykietaZakladki,
   godzinaZTekstu,
   kolorZrodla,
@@ -186,7 +238,7 @@ import {
   podzielPliki,
 } from '@/utils/notatki'
 import { IKONA_PDF, formatujRozmiar, ikonaDla } from '@/utils/pliki'
-import { Badge, Button } from 'frappe-ui'
+import { Badge, Button, TextEditor, call, toast } from 'frappe-ui'
 import { computed, ref } from 'vue'
 
 const props = defineProps({
@@ -209,11 +261,62 @@ const props = defineProps({
   // edycji i BEZ kosza" udokumentowanej w nagłówku pliku dla ośmiu zwykłych
   // zakładek Volteo Notatka - żadne z ich ośmiu wywołań tego nie ustawia.
   pokazUsun: { type: Boolean, default: false },
+  // ops#364: wlaczone TYLKO w strumieniach `Volteo Notatka` (zakladki szansy i
+  // feed "Notatki"): autor poprawia wlasna notatke (olowek), a ikona historii
+  // pokazuje wczesniejsze wersje. Zapis przez `crm.api.notatki.edytuj`.
+  edycja: { type: Boolean, default: false },
+  // Endpointy edycji i historii; domyslnie `Volteo Notatka`, strumien Trify
+  // (AktualizacjeTab.vue) uzywa wlasnych (`crm.api.trify.*`).
+  endpointEdycji: { type: String, default: 'crm.api.notatki.edytuj' },
+  endpointHistorii: { type: String, default: 'crm.api.notatki.historia' },
 })
 
-defineEmits(['otworz-zakladke', 'otworz-zadanie', 'usun'])
+const emit = defineEmits(['otworz-zakladke', 'otworz-zadanie', 'usun', 'zmieniono'])
 
-const { getUser } = usersStore()
+const { getUser, listaWzmianek } = usersStore()
+const { user } = sessionStore()
+
+// Nazwa notatki w bazie: wpis feedu niesie ja w `nazwa_notatki` (jego `name` to
+// klucz `notatka:<nazwa>`), wpis zakladki ma ja w `name`. Wpisy spoza
+// `Volteo Notatka` (Audyt, Zadanie, notatki prywatne) nie maja zakladki z
+// `ZAKLADKI`, wiec nie sa ani edytowalne, ani nie maja historii.
+const nazwaNotatki = computed(() =>
+  ZAKLADKI[props.wpis.zakladka] ? props.wpis.nazwa_notatki || props.wpis.name : '',
+)
+const moznaEdytowac = computed(
+  () => props.edycja && Boolean(nazwaNotatki.value) && props.wpis.owner === user,
+)
+
+// PUŁAPKA frappe-ui: `mentions` jako getter (snapshot przy montowaniu).
+const mentionsKonfig = { mentions: () => listaWzmianek() }
+
+const edytowanie = ref(false)
+const zapisuje = ref(false)
+const trescEdycji = ref('')
+const historiaOtwarta = ref(false)
+
+function zacznijEdycje() {
+  trescEdycji.value = props.wpis.tekst || ''
+  edytowanie.value = true
+}
+
+async function zapiszEdycje() {
+  if (tekstPusty(trescEdycji.value) || zapisuje.value) return
+  if (trescEdycji.value === props.wpis.tekst) {
+    edytowanie.value = false
+    return
+  }
+  zapisuje.value = true
+  try {
+    await call(props.endpointEdycji, { name: nazwaNotatki.value, tekst: trescEdycji.value })
+    edytowanie.value = false
+    emit('zmieniono')
+  } catch (err) {
+    toast.error(err?.messages?.[0] || err?.message || __('Nie udało się zapisać zmiany'))
+  } finally {
+    zapisuje.value = false
+  }
+}
 
 const autor = computed(() => nazwaAutora(props.wpis, getUser))
 

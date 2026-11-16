@@ -45,6 +45,8 @@ import { ref, watch } from 'vue'
 const props = defineProps({
   komentarz: { type: String, default: '' },
   endpoint: { type: String, default: 'crm.api.komentarze.historia' },
+  // Nazwa parametru z nazwą wpisu (komentarze: `komentarz`, notatki i Trify: `name`).
+  parametr: { type: String, default: 'komentarz' },
 })
 
 const otwarte = defineModel('open', { type: Boolean, default: false })
@@ -59,7 +61,7 @@ async function wczytaj() {
   historia.value = []
   ladowanie.value = true
   try {
-    const zmiany = await call(props.endpoint, { komentarz: props.komentarz })
+    const zmiany = await call(props.endpoint, { [props.parametr]: props.komentarz })
     if (numer !== numerZapytania) return
     historia.value = [...(zmiany || [])].reverse()
   } catch (err) {

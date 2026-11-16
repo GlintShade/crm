@@ -86,5 +86,21 @@ class TestHistoriaReuzyta(unittest.TestCase):
 		self.assertEqual(zmiany_tresci(wersje)[0]["przed"], "<p>a</p>")
 
 
+class TestPoleTekst(unittest.TestCase):
+	"""`Volteo Notatka` i `Volteo Trify Update` trzymaja tresc w polu `tekst`."""
+
+	def test_zmiany_pola_tekst(self: "TestPoleTekst") -> None:
+		wersje = [
+			{
+				"owner": "a@x.pl",
+				"creation": "2026-11-16 10:00:00",
+				"data": json.dumps({"changed": [["tekst", "<p>a</p>", "<p>b</p>"]]}),
+			}
+		]
+		self.assertEqual(liczba_zmian_tresci(wersje), 0)
+		self.assertEqual(liczba_zmian_tresci(wersje, "tekst"), 1)
+		self.assertEqual(zmiany_tresci(wersje, "tekst")[0]["po"], "<p>b</p>")
+
+
 if __name__ == "__main__":
 	unittest.main()

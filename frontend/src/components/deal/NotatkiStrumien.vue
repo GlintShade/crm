@@ -126,7 +126,15 @@
         {{ pustyText }}
       </div>
       <div v-else class="flex flex-col gap-3">
-        <NotatkaKarta v-for="w in wpisy" :key="w.name" :wpis="w" />
+        <NotatkaKarta
+          v-for="w in wpisy"
+          :key="w.name"
+          :wpis="w"
+          edycja
+          :pokaz-usun="Boolean(notatki.data?.can_delete)"
+          @zmieniono="notatki.reload()"
+          @usun="usunNotatke"
+        />
       </div>
     </div>
 
@@ -246,6 +254,32 @@ async function usunPlikRoboczy(p) {
   } catch (err) {
     toast.error(err?.messages?.[0] || err?.message || __('Nie udało się usunąć pliku'))
   }
+}
+
+// ops#364: usuwanie notatki widza tylko konta z prawem `delete` na Volteo
+// Notatka (`can_delete` z API, DocPerm: administratorzy); pozostali nie maja
+// kontrolki wcale.
+function usunNotatke(name) {
+  $dialog({
+    title: __('Usuń notatkę'),
+    message: __('Czy na pewno usunąć tę notatkę? Tej operacji nie można cofnąć.'),
+    actions: [
+      {
+        label: __('Usuń'),
+        theme: 'red',
+        variant: 'solid',
+        onClick: async (close) => {
+          try {
+            await call('crm.api.notatki.usun', { deal: props.dealId, name })
+            await notatki.reload()
+            close()
+          } catch (err) {
+            toast.error(err?.messages?.[0] || err?.message || __('Nie udało się usunąć notatki'))
+          }
+        },
+      },
+    ],
+  })
 }
 
 async function dodajNotatke() {

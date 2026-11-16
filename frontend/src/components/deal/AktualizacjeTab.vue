@@ -99,10 +99,61 @@
         >
           <div class="mb-1.5 flex items-center justify-between">
             <Badge variant="subtle" theme="gray" size="sm" :label="u.typ || __('Notatka')" />
-            <span class="text-xs text-ink-gray-4">{{ fmtDate(u.data_zdarzenia) }}</span>
+            <div class="flex items-center gap-1">
+              <span class="text-xs text-ink-gray-4">{{ fmtDate(u.data_zdarzenia) }}</span>
+              <template v-if="konfig.edycja">
+                <Button
+                  v-if="liczbyZmian[u.name] > 0"
+                  variant="ghost"
+                  size="sm"
+                  icon="lucide-history"
+                  :tooltip="__('Historia zmian')"
+                  data-testid="wpis-historia"
+                  @click="otworzHistorie(u.name)"
+                />
+                <Button
+                  v-if="u.owner === user && edytowany !== u.name"
+                  variant="ghost"
+                  size="sm"
+                  icon="lucide-pencil"
+                  :tooltip="__('Edit')"
+                  data-testid="wpis-edytuj"
+                  @click="zacznijEdycje(u)"
+                />
+                <Button
+                  v-if="moznaUsuwac"
+                  variant="ghost"
+                  size="sm"
+                  theme="red"
+                  icon="lucide-trash-2"
+                  :tooltip="__('Usuń')"
+                  @click="usunWpis(u.name)"
+                />
+              </template>
+            </div>
+          </div>
+          <div v-if="edytowany === u.name" class="flex flex-col gap-2">
+            <TextEditor
+              :content="trescEdycji"
+              :editor-class="['prose-sm max-w-none min-h-[3rem]']"
+              :editable="true"
+              :mentions="mentionsKonfig"
+              @change="trescEdycji = $event"
+            />
+            <div class="flex justify-end gap-2">
+              <Button :label="__('Cancel')" @click="edytowany = ''" />
+              <Button
+                variant="solid"
+                :label="__('Save')"
+                :loading="zapisuje"
+                :disabled="tekstPusty(trescEdycji)"
+                data-testid="wpis-zapisz"
+                @click="zapiszEdycje(u)"
+              />
+            </div>
           </div>
           <div
-            v-if="konfig.html"
+            v-else-if="konfig.html"
             class="prose-f text-sm text-ink-gray-8"
             v-html="sanitizeHTML(u.tekst)"
           />
@@ -111,14 +162,23 @@
         </div>
       </div>
     </div>
+    <HistoriaWpisuDialog
+      v-if="historiaOtwarta"
+      v-model:open="historiaOtwarta"
+      :komentarz="historiaWpis"
+      endpoint="crm.api.trify.historia"
+      parametr="name"
+    />
   </div>
 </template>
 
 <script setup>
 import { Badge, Button, FormControl, TextEditor, call, createResource, toast } from 'frappe-ui'
 import { reactive, ref, computed } from 'vue'
+import HistoriaWpisuDialog from '@/components/HistoriaWpisuDialog.vue'
 import MontazZdjecia from '@/components/deal/MontazZdjecia.vue'
 import NotatkiPrywatne from '@/components/deal/NotatkiPrywatne.vue'
+import { sessionStore } from '@/stores/session'
 import { usersStore } from '@/stores/users.js'
 import { sanitizeHTML } from '@/utils'
 import { tekstPusty } from '@/utils/aktualizacje'
@@ -128,7 +188,8 @@ const props = defineProps({
   konfig: { type: Object, required: true },
 })
 
-const { getUser, listaWzmianek } = usersStore()
+const { getUser, listaWzmianek, isAdmin } = usersStore()
+const { user } = sessionStore()
 const draft = reactive({ typ: props.konfig.typy[0], tekst: '' })
 const adding = ref(false)
 const textEditor = ref(null)
@@ -155,6 +216,78 @@ const updates = createResource({
 
 const rows = computed(() => updates.data || [])
 
+// ops#364 (tylko strumienie z `konfig.edycja`, dzis Trify): liczba zmian tresci
+// per wpis (ikona historii), edycja wlasnego wpisu, usuwanie tylko dla
+// administratora (System Manager / Administrator, DocPerm decyduje serwerowo).
+const liczbyZmianZasob = createResource({
+  url: 'crm.api.trify.liczby_zmian',
+  params: { deal: props.dealId },
+  auto: Boolean(props.konfig.edycja),
+})
+const liczbyZmian = computed(() => liczbyZmianZasob.data || {})
+const moznaUsuwac = computed(() => user === 'Administrator' || isAdmin(user))
+
+const edytowany = ref('')
+const trescEdycji = ref('')
+const zapisuje = ref(false)
+const historiaOtwarta = ref(false)
+const historiaWpis = ref('')
+
+function zacznijEdycje(u) {
+  trescEdycji.value = u.tekst || ''
+  edytowany.value = u.name
+}
+
+async function odswiez() {
+  await Promise.all([updates.reload(), props.konfig.edycja ? liczbyZmianZasob.reload() : null])
+}
+
+async function zapiszEdycje(u) {
+  if (tekstPusty(trescEdycji.value) || zapisuje.value) return
+  if (trescEdycji.value === u.tekst) {
+    edytowany.value = ''
+    return
+  }
+  zapisuje.value = true
+  try {
+    await call('crm.api.trify.edytuj', { name: u.name, tekst: trescEdycji.value })
+    edytowany.value = ''
+    await odswiez()
+  } catch (err) {
+    toast.error(err?.messages?.[0] || err?.message || __('Nie udało się zapisać zmiany'))
+  } finally {
+    zapisuje.value = false
+  }
+}
+
+function otworzHistorie(name) {
+  historiaWpis.value = name
+  historiaOtwarta.value = true
+}
+
+function usunWpis(name) {
+  $dialog({
+    title: __('Usuń wpis'),
+    message: __('Czy na pewno usunąć ten wpis? Tej operacji nie można cofnąć.'),
+    actions: [
+      {
+        label: __('Usuń'),
+        theme: 'red',
+        variant: 'solid',
+        onClick: async (close) => {
+          try {
+            await call('frappe.client.delete', { doctype: props.konfig.doctype, name })
+            await odswiez()
+            close()
+          } catch (err) {
+            toast.error(err?.messages?.[0] || err?.message || __('Nie udało się usunąć wpisu'))
+          }
+        },
+      },
+    ],
+  })
+}
+
 async function addUpdate() {
   if (props.konfig.html ? tekstPusty(draft.tekst) : !draft.tekst.trim()) return
   adding.value = true
@@ -175,7 +308,7 @@ async function addUpdate() {
     }
     draft.tekst = ''
     draft.typ = props.konfig.typy[0]
-    await updates.reload()
+    await odswiez()
   } catch (err) {
     toast.error((err && (err.messages?.[0] || err.message)) || __(props.konfig.blad))
   } finally {

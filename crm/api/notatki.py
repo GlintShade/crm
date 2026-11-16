@@ -44,8 +44,10 @@ import frappe
 from frappe import _
 
 from crm.api.comment import extract_mentions
+from crm.api.komentarze import liczby_zmian_dokumentow
 from crm.api.koszty import ADMIN_ROLE
 from crm.fcrm.doctype.crm_notification.crm_notification import notify_user
+from crm.volteo_komentarze import nowe_wzmianki, zmiany_tresci
 from crm.volteo_notatki import (
 	DOCTYPE,
 	DOZWOLONE_ROZSZERZENIA,
@@ -125,11 +127,13 @@ def lista(deal: str, zakladka: str | None = None) -> dict:
 			{klucz: plik[klucz] for klucz in _POLA_PLIKU}
 		)
 
+	liczby_zmian = liczby_zmian_dokumentow(DOCTYPE, [w.name for w in wpisy], "tekst")
 	wynik = [
 		{
 			**wpis,
 			"autor_nazwa": autorzy.get(wpis.owner) or wpis.owner,
 			"pliki": pliki_per_notatka.get(wpis.name, []),
+			"liczba_zmian": liczby_zmian.get(wpis.name, 0),
 		}
 		for wpis in wpisy
 	]
@@ -345,6 +349,12 @@ def feed(deal: str) -> dict:
 	wpisy_znormalizowane: list[dict] = []
 	liczniki: dict[str, int] = {}
 
+	try:
+		liczby_zmian_notatek = liczby_zmian_dokumentow(DOCTYPE, [w.name for w in notatki_raw], "tekst")
+	except Exception:
+		frappe.log_error(title="Notatki: feed nie mógł policzyć zmian", message=frappe.get_traceback())
+		liczby_zmian_notatek = {}
+
 	for wpis in notatki_raw:
 		wzbogacony = {
 			**wpis,
@@ -352,6 +362,8 @@ def feed(deal: str) -> dict:
 			"pliki": pliki_per_notatka.get(wpis.name, []),
 		}
 		znormalizowany = normalizuj_notatke(wzbogacony)
+		znormalizowany["nazwa_notatki"] = wpis.name
+		znormalizowany["liczba_zmian"] = liczby_zmian_notatek.get(wpis.name, 0)
 		wpisy_znormalizowane.append(znormalizowany)
 		liczniki[znormalizowany["zrodlo"]] = liczniki.get(znormalizowany["zrodlo"], 0) + 1
 
@@ -461,6 +473,80 @@ def dodaj(
 		"autor_nazwa": frappe.get_cached_value("User", doc.owner, "full_name") or doc.owner,
 		"pliki": pliki_wynik,
 	}
+
+
+def _notatka(name: str) -> dict:
+	"""Wiersz notatki z odczytalna szansa i samą notatka (hook widocznosci
+	`has_notatka_permission`, fail-closed). Brak notatki i brak uprawnien daja TEN
+	SAM blad, zeby endpoint nie zdradzal istniejacych nazw."""
+	wiersz = frappe.db.get_value(DOCTYPE, name, ["deal", "owner", "tekst"], as_dict=True) if name else None
+	if (
+		not wiersz
+		or not frappe.has_permission("CRM Deal", "read", wiersz.deal)
+		or not frappe.has_permission(DOCTYPE, "read", name)
+	):
+		frappe.throw(_("Brak uprawnień do tej notatki."), frappe.PermissionError)
+	return wiersz
+
+
+@frappe.whitelist(methods=["POST"])
+def edytuj(name: str, tekst: str) -> dict:
+	"""Zmienia tresc notatki (ops#364). TYLKO autor (takze gdy jest
+	administratorem) i tylko, gdy widzi notatke i szanse. Zapis idzie przez
+	`save(ignore_permissions=True)`, bo D2D i Backend maja na `Volteo Notatka`
+	tylko read+create; `track_changes` zapisuje wiersz `Version` (historia), a
+	`validate` sprawdza tresc/zakladke/typ jak przy dodaniu. Powiadomienie dostaja
+	WYLACZNIE osoby wzmiankowane po raz pierwszy w tej edycji."""
+	wiersz = _notatka(name)
+	if wiersz.owner != frappe.session.user:
+		frappe.throw(_("Wpis może edytować tylko jego autor."), frappe.PermissionError)
+	if tekst_pusty(tekst):
+		frappe.throw(_("Treść notatki nie może być pusta."))
+	if tekst == wiersz.tekst:
+		return {"name": name, "tekst": tekst}
+
+	doc = frappe.get_doc(DOCTYPE, name)
+	doc.tekst = tekst
+	doc.save(ignore_permissions=True)
+
+	try:
+		autor_nazwa = frappe.get_cached_value("User", doc.owner, "full_name") or doc.owner
+		for wzmianka in nowe_wzmianki(wiersz.tekst, tekst):
+			notify_user(
+				zbuduj_powiadomienie(doc.owner, autor_nazwa, doc.deal, doc.name, doc.zakladka, wzmianka["email"])
+			)
+	except Exception:
+		frappe.log_error(title="Notatki: powiadomienie o wzmiance po edycji", message=frappe.get_traceback())
+	return {"name": doc.name, "tekst": doc.tekst}
+
+
+@frappe.whitelist()
+def historia(name: str) -> list[dict]:
+	"""Wczesniejsze wersje tresci notatki (rosnaco po dacie zmiany): `{kto,
+	kto_nazwa, kiedy, przed, po}`. Czyta `Version`, widoczne dla kazdego, kto
+	widzi notatke."""
+	_notatka(name)
+	zmiany = zmiany_tresci(
+		frappe.get_all(
+			"Version",
+			filters={"ref_doctype": DOCTYPE, "docname": name},
+			fields=["owner", "creation", "data"],
+			order_by="creation asc",
+			limit_page_length=0,
+		),
+		"tekst",
+	)
+	if not zmiany:
+		return []
+	nazwy = {
+		u.name: u.full_name
+		for u in frappe.get_all(
+			"User",
+			filters={"name": ["in", list({z["kto"] for z in zmiany if z["kto"]})]},
+			fields=["name", "full_name"],
+		)
+	}
+	return [{**z, "kto_nazwa": nazwy.get(z["kto"]) or z["kto"]} for z in zmiany]
 
 
 @frappe.whitelist(methods=["POST"])
