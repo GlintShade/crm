@@ -49,8 +49,11 @@
 <template>
   <Dialog v-model:open="show" size="3xl">
     <template #body>
-      <div class="bg-surface-elevation-1 pb-6 pt-5">
-        <div class="mb-4 flex items-start justify-between gap-2 px-4 sm:items-center sm:px-6">
+      <!-- Okno nigdy wyzsze od widoku (klasa .zadanie-okno, patrz <style> nizej):
+        naglowek i stopka ze stalym miejscem, srodek (siatka dwoch kolumn, a na
+        waskich ekranach jedna kolumna) przewija sie w srodku okna. -->
+      <div class="zadanie-okno flex flex-col bg-surface-elevation-1">
+        <div class="mb-4 flex shrink-0 items-start justify-between gap-2 px-4 pt-5 sm:items-center sm:px-6">
           <div class="flex min-w-0 flex-col items-start gap-2 sm:flex-row sm:items-center">
             <h3 class="text-3xl-semibold leading-6 text-ink-gray-9 sm:truncate">
               {{ editMode ? __('Edit Task') : __('Create Task') }}
@@ -82,190 +85,192 @@
           />
         </div>
 
-        <div
-          class="grid grid-cols-1 sm:grid-cols-[1fr_250px]"
-          :class="ladowanie ? 'pointer-events-none opacity-60' : ''"
-        >
-          <!-- Lewa kolumna: treść -->
-          <div class="flex min-w-0 flex-col gap-4 px-4 pb-2 sm:px-6">
-            <FormControl
-              type="text"
-              :label="__('Title')"
-              v-model="doc.title"
-              :placeholder="__('Enter {0}', [__('Title')])"
-            />
-
-            <div>
-              <div class="mb-2 text-sm text-ink-gray-5">{{ __('Description') }}</div>
-              <TextEditor
-                ref="opisEditor"
-                :content="doc.description"
-                :editor-class="[
-                  'prose-sm max-w-none min-h-[7rem] rounded-b-lg border border-t-0 border-outline-gray-2 bg-surface-white px-3 py-2',
-                ]"
-                :fixed-menu="opisPrzyciski"
-                :mentions="mentionsKonfig"
-                :placeholder="__('Description')"
-                @change="doc.description = $event"
-              />
-            </div>
-
-            <ZadanieRozmowa v-if="editMode" :zadanie="String(doc.name)" />
-
-            <div
-              v-if="editMode"
-              class="flex flex-col gap-2 border-t border-outline-gray-2 pt-3 text-sm"
-            >
-              <div class="text-xs font-medium uppercase tracking-wide text-ink-gray-4">
-                {{ __('Historia') }}
-              </div>
-              <div class="grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-2">
-                <div class="text-ink-gray-5">{{ __('Utworzone') }}</div>
-                <div class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-                  <UserAvatar v-if="doc.owner" :user="doc.owner" size="xs" />
-                  <span class="font-medium text-ink-gray-8">{{ utworzoneAutor }}</span>
-                  <span class="text-ink-gray-5">·</span>
-                  <span class="text-ink-gray-5">{{ utworzoneData }}</span>
-                </div>
-
-                <template v-if="pokazOstatniaZmiane">
-                  <div class="text-ink-gray-5">{{ __('Ostatnia zmiana') }}</div>
-                  <div class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-                    <UserAvatar v-if="doc.modified_by" :user="doc.modified_by" size="xs" />
-                    <span class="font-medium text-ink-gray-8">{{ ostatniaZmianaAutor }}</span>
-                    <span class="text-ink-gray-5">·</span>
-                    <span class="text-ink-gray-5">{{ ostatniaZmianaData }}</span>
-                  </div>
-                </template>
-              </div>
-            </div>
-
-            <ErrorMessage v-if="error" :message="__(error)" />
-          </div>
-
-          <!-- Prawa kolumna: panel właściwości - blok zamknięty z czterech
-          stron na mobile (border-t, pełna szerokość); na sm+ krawędź
-          górna+dolna+lewa (border-y+border-l, bez prawej, bo dochodzi do
-          krawędzi okna dialogu - patrz komentarz przy szablonie u góry
-          pliku), self-stretch na pełną wysokość wiersza siatki. -->
+        <div class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-6">
           <div
-            class="mt-4 flex flex-col gap-5 self-stretch border-t border-outline-gray-2 bg-surface-gray-1 p-4 sm:mt-0 sm:rounded-l-lg sm:border-b sm:border-l"
+            class="grid grid-cols-1 sm:grid-cols-[1fr_250px]"
+            :class="ladowanie ? 'pointer-events-none opacity-60' : ''"
           >
-            <div>
-              <div class="mb-2 text-sm text-ink-gray-5">{{ __('Status') }}</div>
-              <div class="flex flex-col gap-0.5">
-                <button
-                  v-for="s in STATUSY_ZADANIA"
-                  :key="s"
-                  type="button"
-                  class="flex items-center gap-2 rounded px-2 py-1.5 text-left text-sm"
-                  :class="
-                    doc.status === s
-                      ? tloWybranegoStatusu(s)
-                      : 'text-ink-gray-7 hover:bg-surface-gray-2'
-                  "
-                  @click="doc.status = s"
-                >
-                  <IndicatorIcon :class="kropkaStatusu(s)" />
-                  {{ __(s) }}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <div class="mb-2 text-sm text-ink-gray-5">{{ __('Priority') }}</div>
-              <div class="flex gap-1">
-                <button
-                  v-for="p in PRIORYTETY_ZADANIA"
-                  :key="p"
-                  type="button"
-                  class="flex-1 rounded px-2 py-1.5 text-center text-sm"
-                  :class="
-                    doc.priority === p
-                      ? tloWybranegoPriorytetu(p)
-                      : 'text-ink-gray-7 hover:bg-surface-gray-2'
-                  "
-                  @click="doc.priority = p"
-                >
-                  {{ __(p) }}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <div class="mb-2 text-sm text-ink-gray-5">{{ __('Assigned To') }}</div>
-              <Link
-                class="form-control"
-                :value="doc.assigned_to && getUser(doc.assigned_to).full_name"
-                doctype="User"
-                :filters="przypisanyFiltry"
-                :placeholder="__('Select {0}', [__('Assigned To')])"
-                :hideMe="true"
-                @change="(v) => (doc.assigned_to = v)"
-              >
-                <template #prefix>
-                  <UserAvatar
-                    v-if="doc.assigned_to"
-                    class="mr-2"
-                    :user="doc.assigned_to"
-                    size="sm"
-                  />
-                </template>
-                <template #item-prefix="{ option }">
-                  <UserAvatar class="mr-2" :user="option.value" size="sm" />
-                </template>
-                <template #item-label="{ option }">
-                  <Tooltip :text="option.value">
-                    <div class="cursor-pointer">
-                      {{ getUser(option.value).full_name }}
-                    </div>
-                  </Tooltip>
-                </template>
-              </Link>
-            </div>
-
-            <div>
-              <div class="mb-2 text-sm text-ink-gray-5">{{ __('Due Date') }}</div>
-              <DateTimePickerSiatka
-                :value="doc.due_date"
-                :format="terminFormat"
-                :placeholder="__('Enter {0}', [__('Due Date')])"
-                input-class="border-none"
-                @change="(v) => (doc.due_date = v)"
+            <!-- Lewa kolumna: treść -->
+            <div class="flex min-w-0 flex-col gap-4 px-4 pb-2 sm:px-6">
+              <FormControl
+                type="text"
+                :label="__('Title')"
+                v-model="doc.title"
+                :placeholder="__('Enter {0}', [__('Title')])"
               />
-              <div
-                v-if="terminTekst"
-                class="mt-1 text-xs"
-                :class="terminPrzeterminowany ? 'text-ink-red-8' : 'text-ink-gray-5'"
-              >
-                {{ terminTekst }}
-              </div>
-              <div class="mt-2 flex flex-wrap gap-1">
-                <Button variant="outline" size="sm" :label="__('Dziś')" @click="ustawTerminZaDni(0)" />
-                <Button variant="outline" size="sm" :label="__('Jutro')" @click="ustawTerminZaDni(1)" />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  :label="__('Za tydzień')"
-                  @click="ustawTerminZaDni(7)"
+
+              <div>
+                <div class="mb-2 text-sm text-ink-gray-5">{{ __('Description') }}</div>
+                <TextEditor
+                  ref="opisEditor"
+                  :content="doc.description"
+                  :editor-class="[
+                    'prose-sm max-w-none min-h-[7rem] rounded-b-lg border border-t-0 border-outline-gray-2 bg-surface-white px-3 py-2',
+                  ]"
+                  :fixed-menu="opisPrzyciski"
+                  :mentions="mentionsKonfig"
+                  :placeholder="__('Description')"
+                  @change="doc.description = $event"
                 />
-                <Button variant="outline" size="sm" :label="__('Clear')" @click="wyczyscTermin" />
+              </div>
+
+              <ZadanieRozmowa v-if="editMode" :zadanie="String(doc.name)" />
+
+              <div
+                v-if="editMode"
+                class="flex flex-col gap-2 border-t border-outline-gray-2 pt-3 text-sm"
+              >
+                <div class="text-xs font-medium uppercase tracking-wide text-ink-gray-4">
+                  {{ __('Historia') }}
+                </div>
+                <div class="grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-2">
+                  <div class="text-ink-gray-5">{{ __('Utworzone') }}</div>
+                  <div class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                    <UserAvatar v-if="doc.owner" :user="doc.owner" size="xs" />
+                    <span class="font-medium text-ink-gray-8">{{ utworzoneAutor }}</span>
+                    <span class="text-ink-gray-5">·</span>
+                    <span class="text-ink-gray-5">{{ utworzoneData }}</span>
+                  </div>
+
+                  <template v-if="pokazOstatniaZmiane">
+                    <div class="text-ink-gray-5">{{ __('Ostatnia zmiana') }}</div>
+                    <div class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                      <UserAvatar v-if="doc.modified_by" :user="doc.modified_by" size="xs" />
+                      <span class="font-medium text-ink-gray-8">{{ ostatniaZmianaAutor }}</span>
+                      <span class="text-ink-gray-5">·</span>
+                      <span class="text-ink-gray-5">{{ ostatniaZmianaData }}</span>
+                    </div>
+                  </template>
+                </div>
+              </div>
+
+              <ErrorMessage v-if="error" :message="__(error)" />
+            </div>
+
+            <!-- Prawa kolumna: panel właściwości - blok zamknięty z czterech
+            stron na mobile (border-t, pełna szerokość); na sm+ krawędź
+            górna+dolna+lewa (border-y+border-l, bez prawej, bo dochodzi do
+            krawędzi okna dialogu - patrz komentarz przy szablonie u góry
+            pliku), self-stretch na pełną wysokość wiersza siatki. -->
+            <div
+              class="mt-4 flex flex-col gap-5 self-stretch border-t border-outline-gray-2 bg-surface-gray-1 p-4 sm:mt-0 sm:rounded-l-lg sm:border-b sm:border-l"
+            >
+              <div>
+                <div class="mb-2 text-sm text-ink-gray-5">{{ __('Status') }}</div>
+                <div class="flex flex-col gap-0.5">
+                  <button
+                    v-for="s in STATUSY_ZADANIA"
+                    :key="s"
+                    type="button"
+                    class="flex items-center gap-2 rounded px-2 py-1.5 text-left text-sm"
+                    :class="
+                      doc.status === s
+                        ? tloWybranegoStatusu(s)
+                        : 'text-ink-gray-7 hover:bg-surface-gray-2'
+                    "
+                    @click="doc.status = s"
+                  >
+                    <IndicatorIcon :class="kropkaStatusu(s)" />
+                    {{ __(s) }}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <div class="mb-2 text-sm text-ink-gray-5">{{ __('Priority') }}</div>
+                <div class="flex gap-1">
+                  <button
+                    v-for="p in PRIORYTETY_ZADANIA"
+                    :key="p"
+                    type="button"
+                    class="flex-1 rounded px-2 py-1.5 text-center text-sm"
+                    :class="
+                      doc.priority === p
+                        ? tloWybranegoPriorytetu(p)
+                        : 'text-ink-gray-7 hover:bg-surface-gray-2'
+                    "
+                    @click="doc.priority = p"
+                  >
+                    {{ __(p) }}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <div class="mb-2 text-sm text-ink-gray-5">{{ __('Assigned To') }}</div>
+                <Link
+                  class="form-control"
+                  :value="doc.assigned_to && getUser(doc.assigned_to).full_name"
+                  doctype="User"
+                  :filters="przypisanyFiltry"
+                  :placeholder="__('Select {0}', [__('Assigned To')])"
+                  :hideMe="true"
+                  @change="(v) => (doc.assigned_to = v)"
+                >
+                  <template #prefix>
+                    <UserAvatar
+                      v-if="doc.assigned_to"
+                      class="mr-2"
+                      :user="doc.assigned_to"
+                      size="sm"
+                    />
+                  </template>
+                  <template #item-prefix="{ option }">
+                    <UserAvatar class="mr-2" :user="option.value" size="sm" />
+                  </template>
+                  <template #item-label="{ option }">
+                    <Tooltip :text="option.value">
+                      <div class="cursor-pointer">
+                        {{ getUser(option.value).full_name }}
+                      </div>
+                    </Tooltip>
+                  </template>
+                </Link>
+              </div>
+
+              <div>
+                <div class="mb-2 text-sm text-ink-gray-5">{{ __('Due Date') }}</div>
+                <DateTimePickerSiatka
+                  :value="doc.due_date"
+                  :format="terminFormat"
+                  :placeholder="__('Enter {0}', [__('Due Date')])"
+                  input-class="border-none"
+                  @change="(v) => (doc.due_date = v)"
+                />
+                <div
+                  v-if="terminTekst"
+                  class="mt-1 text-xs"
+                  :class="terminPrzeterminowany ? 'text-ink-red-8' : 'text-ink-gray-5'"
+                >
+                  {{ terminTekst }}
+                </div>
+                <div class="mt-2 flex flex-wrap gap-1">
+                  <Button variant="outline" size="sm" :label="__('Dziś')" @click="ustawTerminZaDni(0)" />
+                  <Button variant="outline" size="sm" :label="__('Jutro')" @click="ustawTerminZaDni(1)" />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    :label="__('Za tydzień')"
+                    @click="ustawTerminZaDni(7)"
+                  />
+                  <Button variant="outline" size="sm" :label="__('Clear')" @click="wyczyscTermin" />
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div class="px-4 pb-2 pt-4 sm:px-6">
-        <div class="flex flex-row-reverse gap-2">
-          <Button
-            variant="solid"
-            :label="editMode ? __('Save') : __('Create')"
-            :loading="editMode ? document.save.loading : _create.loading"
-            :disabled="ladowanie"
-            @click="editMode ? update() : create()"
-          />
-          <Button variant="subtle" :label="__('Cancel')" @click="show = false" />
+        <div class="shrink-0 px-4 pb-2 pt-4 sm:px-6">
+          <div class="flex flex-row-reverse gap-2">
+            <Button
+              variant="solid"
+              :label="editMode ? __('Save') : __('Create')"
+              :loading="editMode ? document.save.loading : _create.loading"
+              :disabled="ladowanie"
+              @click="editMode ? update() : create()"
+            />
+            <Button variant="subtle" :label="__('Cancel')" @click="show = false" />
+          </div>
         </div>
       </div>
     </template>
@@ -544,3 +549,21 @@ onBeforeUnmount(() => {
   }
 })
 </script>
+
+<style scoped>
+/*
+  Maksymalna wysokosc okna zadania = widok minus WLASNE pionowe odstepy
+  Dialog.vue z frappe-ui: wrapper `py-4` (1rem + 1rem) i panel `my-8`
+  (2rem + 2rem), razem 6rem. Dialog nie ogranicza wysokosci tresci (panel ma
+  `overflow-hidden`, a overlay `overflow-y-auto`), wiec bez tego dluga zawartosc
+  rozpycha okno ponad ekran i stopka z przyciskami wypada poza widok.
+  Dwie deklaracje celowo w czystym CSS: przegladarka bez jednostki `dvh`
+  odrzuca druga i zostaje przy `vh`; `dvh` uwzglednia dynamiczny pasek adresu
+  na telefonach. Szerokosc ogranicza sam Dialog (`w-full max-w-3xl` w wrapperze
+  z `px-4`), a przewijany srodek ma `overflow-x-hidden`.
+*/
+.zadanie-okno {
+  max-height: calc(100vh - 6rem);
+  max-height: calc(100dvh - 6rem);
+}
+</style>

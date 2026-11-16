@@ -1,7 +1,7 @@
 <template>
   <TextEditor
     ref="textEditor"
-    :editor-class="['prose-sm max-w-none', editable && 'min-h-[7rem]']"
+    :editor-class="editorClass || ['prose-sm max-w-none', editable && 'min-h-[7rem]']"
     :content="content"
     :starterkit-options="{ heading: { levels: [2, 3, 4, 5, 6] } }"
     :placeholder="placeholder"
@@ -133,6 +133,10 @@ defineProps({
   // Uzywane przez sekcje "Notatki" w zakladce Szczegoly leada
   // (KomentarzeLeadaSekcja.vue).
   card: { type: Boolean, default: false },
+  // VOLTEO (rozmowa zadania): opcjonalne klasy edytora (ProseMirror) zamiast
+  // domyslnych `prose-sm max-w-none min-h-[7rem]` - np. kompaktowe pole nowego
+  // wpisu. Domyslnie null = bez zmian dla wszystkich pozostalych miejsc.
+  editorClass: { type: [String, Array], default: null },
 })
 
 const modelValue = defineModel({ type: Object })
