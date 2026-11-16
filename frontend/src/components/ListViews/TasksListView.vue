@@ -22,7 +22,7 @@
         v-for="column in columns"
         :key="column.key"
         :item="column"
-        @columnWidthUpdated="emit('columnWidthUpdated', column)"
+        @columnWidthUpdated="onColumnWidthUpdated"
       >
         <Button
           v-if="column.key == '_liked_by'"
@@ -281,6 +281,21 @@ const emit = defineEmits([
 
 const pageLengthCount = defineModel({ type: Number })
 const list = defineModel('list', { type: Object })
+
+// Reczna zmiana szerokosci kolumny (przeciagniecie krawedzi naglowka). Ta sama
+// naprawa co na liscie Umow, patrz `onColumnWidthUpdated` i jego komentarz w
+// DealsListView.vue: frappe-ui's ListHeaderItem tylko emituje `{key, width,
+// save}` i niczego nie zapamietuje, wiec kolumne szukamy PO KLUCZU w prawdziwej,
+// reaktywnej `list.value.data.columns` (nie w lokalnym prop `columns`, w ktorym
+// ostatnia kolumna jest kopia ze spreada w computed Tasks.vue) i ustawiamy jej
+// `width`. Payload idzie dalej do Tasks.vue, ktory na `save` wola trwaly zapis.
+function onColumnWidthUpdated(payload) {
+  const col = list.value?.data?.columns?.find((c) => c.key === payload?.key)
+  if (col && payload?.width) {
+    col.width = payload.width
+  }
+  emit('columnWidthUpdated', payload)
+}
 
 function getLabel(label, column) {
   if (column.type === 'Duration') return formatDuration(label)

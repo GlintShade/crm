@@ -193,7 +193,7 @@
       totalCount: tasks.data.total_count,
     }"
     @loadMore="() => loadMore++"
-    @columnWidthUpdated="() => triggerResize++"
+    @columnWidthUpdated="onColumnWidthUpdated"
     @updatePageCount="(count) => (updatedPageCount = count)"
     @showTask="showTask"
     @applyFilter="(data) => viewControls.applyFilter(data)"
@@ -255,6 +255,15 @@ const loadMore = ref(1)
 const triggerResize = ref(1)
 const updatedPageCount = ref(20)
 const viewControls = ref(null)
+
+// Trwaly zapis szerokosci kolumny tylko na potwierdzonym, odebouncowanym
+// zdarzeniu `save` (frappe-ui emituje je raz, 1 s po ostatnim ruchu myszy), nigdy
+// na kazdym ruchu. Patrz `onColumnWidthUpdated` w pages/Deals.vue. `.value`,
+// bo to kod skryptu, nie wyrazenie szablonu.
+function onColumnWidthUpdated(payload) {
+  if (!payload?.save) return
+  triggerResize.value++
+}
 
 function getRow(name, field) {
   function getValue(value) {
