@@ -38,6 +38,7 @@ import html
 import re
 
 from crm.volteo_trify import tekst_pusty
+from crm.volteo_zadania_rozmowa import etykieta_zrodla as etykieta_zrodla_zadania
 
 __all__ = [
 	"DOCTYPE",
@@ -55,6 +56,7 @@ __all__ = [
 	"czy_pdf",
 	"etykieta_zrodla",
 	"normalizuj_komentarz_audytu",
+	"normalizuj_komentarz_zadania",
 	"normalizuj_notatke",
 	"odfiltruj_zmigrowane",
 	"posortuj",
@@ -361,10 +363,13 @@ def odfiltruj_zmigrowane(rekordy: list[dict], zmigrowane_nazwy) -> list[dict]:
 # get_all, uprawnienia) i woła te funkcje.
 # ---------------------------------------------------------------------------
 
-ZRODLA_FEEDU: tuple[str, ...] = (*ZAKLADKI, "Audyt", "AudytCP")
+ZRODLA_FEEDU: tuple[str, ...] = (*ZAKLADKI, "Audyt", "AudytCP", "Zadanie")
 """Kolejnosc i zestaw wszystkich mozliwych wartosci `zrodlo` w feedzie:
 osiem zakladek `Volteo Notatka` (kolejnosc `ZAKLADKI`) plus dwa dodatkowe
-zrodla komentarzy watku Audytu (OZE i CP). `crm.api.notatki.feed` zwraca
+zrodla komentarzy watku Audytu (OZE i CP) plus komentarze rozmowy zadan
+szansy (`Zadanie`, `crm.volteo_zadania_rozmowa`). `Zadanie` NIE nalezy do
+`ZAKLADKI` -- to nie jest ani zakladka notatek, ani wartosc pola `zakladka`
+na `Volteo Notatka`. `crm.api.notatki.feed` zwraca
 liste `zrodla` w DOKLADNIE tej kolejnosci (`zbuduj_zrodla` ponizej) -- lista
 filtrow po stronie frontu (`FiltrZrodel.vue`) pokazuje wiec zawsze ten sam
 uklad, niezaleznie od tego, ktore zrodla maja akurat jakies wpisy."""
@@ -372,11 +377,14 @@ uklad, niezaleznie od tego, ktore zrodla maja akurat jakies wpisy."""
 ETYKIETY_ZRODEL_DODATKOWYCH: dict[str, str] = {
 	"Audyt": "Audyt",
 	"AudytCP": "Audyt CP",
+	"Zadanie": "Zadania",
 }
-"""Etykiety dla dwoch zrodel spoza `ZAKLADKI` (komentarze watku Audytu OZE i
-CP) -- `Audyt`/`AudytCP` NIE sa wartosciami pola Select `zakladka` na
-`Volteo Notatka`, wiec nie naleza do `ETYKIETY_ZAKLADEK`; maja wlasny,
-osobny slownik etykiet."""
+"""Etykiety dla zrodel spoza `ZAKLADKI` (komentarze watku Audytu OZE i CP oraz
+rozmowa zadan szansy) -- `Audyt`/`AudytCP`/`Zadanie` NIE sa wartosciami pola
+Select `zakladka` na `Volteo Notatka`, wiec nie naleza do `ETYKIETY_ZAKLADEK`;
+maja wlasny, osobny slownik etykiet. To jest etykieta ZRODLA w panelu zrodel
+(„Zadania"); etykieta pojedynczego wpisu rozmowy to `Zadanie: <tytul>`
+(`crm.volteo_zadania_rozmowa.etykieta_zrodla`)."""
 
 
 def etykieta_zrodla(zrodlo: str) -> str:
@@ -472,6 +480,46 @@ def normalizuj_komentarz_audytu(komentarz: dict, zrodlo: str) -> dict:
 		"zrodlo": zrodlo,
 		"zrodlo_etykieta": etykieta_zrodla(zrodlo),
 		"zakladka_hash": zrodlo.lower(),
+		"typ": "Komentarz",
+		"data": komentarz.get("creation"),
+		"creation": komentarz.get("creation"),
+		"autor": komentarz.get("owner"),
+		"autor_nazwa": komentarz.get("autor_nazwa") or komentarz.get("owner") or "",
+		"tekst_html": tekst_html,
+		"pliki": komentarz.get("pliki") or [],
+		"kredyt": None,
+	}
+
+
+def normalizuj_komentarz_zadania(komentarz: dict, zadanie: dict) -> dict:
+	"""Normalizuje jeden wpis rozmowy zadania (`Comment` z `reference_doctype =
+	"CRM Task"`) do tego samego ksztaltu wpisu feedu co
+	`normalizuj_komentarz_audytu`, z zrodlem `"Zadanie"`.
+
+	`komentarz`: klucze `name`, `owner`, `creation`, `content`, `autor_nazwa`
+	(rozwiazane przez wywolujacego zbiorczym zapytaniem `User.full_name`, tak
+	samo jak przy komentarzach Audytu -- bez `comment_by`) oraz opcjonalnie
+	`pliki`. `zadanie`: slownik z kluczami `name` (nazwa zadania, `CRM Task` ma
+	nazwy liczbowe, wiec w wyniku zawsze jako string) i `title`.
+
+	Wynik niesie dodatkowe pole `zadanie` (nazwa zadania jako string) -- karta w
+	feedzie uzywa go do akcji „Otworz zadanie" zamiast `zakladka_hash`, ktory
+	dla tego zrodla jest pusty (zadanie nie jest zakladka szansy).
+	`zrodlo_etykieta` to `Zadanie: <tytul>`, zeby karta mowila, z ktorego
+	zadania pochodzi wpis.
+
+	Tresc: rozmowa zadania pisze sie w tym samym edytorze TipTap co watek
+	Komentarze Audytu, wiec `content` jest zwykle HTML-em (przepisanym 1:1);
+	zwykly tekst (np. wpis wstawiony skryptem) idzie przez `tekst_na_html`."""
+	tresc = komentarz.get("content") or ""
+	tekst_html = tresc if _wyglada_na_html(tresc) else tekst_na_html(tresc)
+	nazwa_zadania = zadanie.get("name")
+	return {
+		"klucz": "zadanie:{0}".format(komentarz.get("name")),
+		"zrodlo": "Zadanie",
+		"zrodlo_etykieta": etykieta_zrodla_zadania(zadanie.get("title")),
+		"zakladka_hash": "",
+		"zadanie": str(nazwa_zadania) if nazwa_zadania is not None else "",
 		"typ": "Komentarz",
 		"data": komentarz.get("creation"),
 		"creation": komentarz.get("creation"),

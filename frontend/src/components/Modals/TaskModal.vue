@@ -110,6 +110,8 @@
               />
             </div>
 
+            <ZadanieRozmowa v-if="editMode" :zadanie="String(doc.name)" />
+
             <div
               v-if="editMode"
               class="flex flex-col gap-2 border-t border-outline-gray-2 pt-3 text-sm"
@@ -276,6 +278,7 @@ import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
 import Link from '@/components/Controls/Link.vue'
 import DateTimePickerSiatka from '@/components/Controls/DateTimePickerSiatka.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
+import ZadanieRozmowa from '@/components/ZadanieRozmowa.vue'
 import { useDocument } from '@/data/document'
 import { usersStore } from '@/stores/users'
 import { getFormat } from '@/utils'

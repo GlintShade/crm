@@ -135,6 +135,16 @@ onMounted(() => {
 })
 
 function getRoute(notification) {
+  // Wzmianka w rozmowie zadania (crm.api.notifications.get_route): lista zadan
+  // z `open=<nazwa zadania>` - strona Tasks.vue otwiera wtedy okno zadania
+  // (openTaskFromURL). Nazwa zadania jest liczbowa, w adresie zawsze string.
+  if (notification.route_name === 'Tasks') {
+    return {
+      name: 'Tasks',
+      query: { open: String(notification.reference_name) },
+    }
+  }
+
   let params = {
     leadId: notification.reference_name,
   }

@@ -235,7 +235,7 @@ import {
 import { timestampCell } from '@/composables/useTimelinePreferences'
 import { useOnboarding, useTelemetry } from 'frappe-ui/frappe'
 import { Tooltip, Avatar, TextEditor, Dropdown, call, toast } from 'frappe-ui'
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 const { getFormattedPercent, getFormattedFloat, getFormattedCurrency } =
@@ -273,7 +273,6 @@ const rows = computed(() => {
     return getKanbanRows(tasks.value.data.data, tasks.value.data.fields)
   }
 
-  openTaskFromURL()
   return parseRows(tasks.value?.data.data, tasks.value?.data.columns)
 })
 
@@ -475,14 +474,26 @@ function redirect(doctype, docname) {
   router.push({ name: name, params: params })
 }
 
+// Link z powiadomienia o wzmiance w rozmowie zadania (Notifications.vue) i inne
+// linki `?open=<nazwa zadania>`: okno zadania otwiera sie RAZ po zamontowaniu
+// strony, niezaleznie od tego, czy lista ma wiersze i na ktorej zakladce
+// jestesmy (wczesniej wywolanie siedzialo w computed `rows` i wymagalo
+// niepustej listy). Nazwa zadania idzie do okna jako STRING. Z paska adresu
+// znika tylko parametr `open`, reszta zapytania i stan historii zostaja.
 const openTaskFromURL = () => {
   const searchParams = new URLSearchParams(window.location.search)
   const taskName = searchParams.get('open')
+  if (!taskName) return
 
-  if (taskName && rows.value?.length) {
-    showTask(parseInt(taskName))
-    searchParams.delete('open')
-    window.history.replaceState(null, '', window.location.pathname)
-  }
+  showTask(String(taskName))
+  searchParams.delete('open')
+  const reszta = searchParams.toString()
+  window.history.replaceState(
+    window.history.state,
+    '',
+    window.location.pathname + (reszta ? `?${reszta}` : '') + window.location.hash,
+  )
 }
+
+onMounted(openTaskFromURL)
 </script>
