@@ -321,7 +321,13 @@ const etykietaZakresu = computed(() =>
 )
 
 function stylBloku(s) {
-  const p = pozycjaBlokuPx(s.termin, os.value.od, pxNaH.value, dlugoscBloku(s))
+  const p = pozycjaBlokuPx(
+    s.termin,
+    os.value.od,
+    pxNaH.value,
+    dlugoscBloku(s),
+    os.value.do,
+  )
   return { top: p.topPx + 1 + 'px', height: p.heightPx - 2 + 'px' }
 }
 

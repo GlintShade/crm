@@ -184,10 +184,10 @@ export function poczatekWGodzinach(termin) {
 }
 
 /**
- * Zakres osi godzin: oś ZAWSZE zaczyna się od `od` (08:00). Spotkanie kończące się
- * po `doGodziny` wydłuża koniec osi (do 24). Spotkanie przed `od` nie jest ukrywane:
- * rysuje się przyklejone do lewego (lub górnego) brzegu osi. Koniec spotkania =
- * początek + `dlugoscH`.
+ * Zakres osi godzin: oś jest ZAWSZE stała (08:00 do 22:00), niezależnie od spotkań.
+ * Spotkania poza osią nie zmieniają jej: rysują się przyklejone do najbliższego
+ * brzegu (patrz `pozycjaPaska`, `pozycjaBlokuPion`). Parametry `spotkania` i
+ * `dlugoscH` zostają dla zgodności wywołań.
  */
 export function osGodzin(
   spotkania,
@@ -195,13 +195,7 @@ export function osGodzin(
   doGodziny = OS_DO,
   dlugoscH = DLUGOSC_SPOTKANIA_H,
 ) {
-  let maksimum = doGodziny
-  for (const s of spotkania || []) {
-    const start = poczatekWGodzinach(s.termin)
-    if (start === null) continue
-    maksimum = Math.max(maksimum, Math.ceil(start + dlugoscH))
-  }
-  return { od: Math.max(0, od), do: Math.min(24, maksimum) }
+  return { od, do: doGodziny }
 }
 
 /** Godziny do nagłówka i linii siatki: od, od+1, ..., do. */
@@ -209,6 +203,20 @@ export function godzinyOsi(od, doGodziny) {
   const wynik = []
   for (let g = od; g <= doGodziny; g += 1) wynik.push(g)
   return wynik
+}
+
+/**
+ * Pozycja przedziału [start, start+dlugosc] na osi o długości `zakres`, przycięta do osi.
+ * Zwraca { poczatek, dlugosc } w jednostkach osi. Poza osią: przyklejony do najbliższego
+ * brzegu z pełną długością (nic nie znika).
+ */
+function przytnijDoOsi(start, od, zakres, dlugosc) {
+  const poczatek = start - od
+  const koniec = poczatek + dlugosc
+  if (koniec <= 0) return { poczatek: 0, dlugosc }
+  if (poczatek >= zakres) return { poczatek: zakres - dlugosc, dlugosc }
+  const p = Math.max(0, poczatek)
+  return { poczatek: p, dlugosc: Math.min(koniec, zakres) - p }
 }
 
 /** Pozycja poziomego paska w % szerokości osi (początek i szerokość). */
@@ -221,9 +229,11 @@ export function pozycjaPaska(
   const start = poczatekWGodzinach(termin)
   const zakres = doGodziny - od
   if (start === null || zakres <= 0) return { leftPct: 0, widthPct: 0 }
-  const lewo = Math.max(0, ((start - od) / zakres) * 100)
-  const szerokosc = Math.min((dlugoscH / zakres) * 100, 100 - lewo)
-  return { leftPct: lewo, widthPct: Math.max(0, szerokosc) }
+  const r = przytnijDoOsi(start, od, zakres, dlugoscH)
+  return {
+    leftPct: (r.poczatek / zakres) * 100,
+    widthPct: (r.dlugosc / zakres) * 100,
+  }
 }
 
 /** Wysokość godziny w widoku pionowym: pełna (jeden handlowiec) albo kompaktowa (karta w tablicy). */
@@ -231,19 +241,20 @@ export function skalaPionowa(kompakt) {
   return kompakt ? PX_NA_GODZINE_KOMPAKT : PX_NA_GODZINE
 }
 
-/** Pozycja bloku w widoku pionowym w pikselach (góra i wysokość). */
+/** Pozycja bloku w widoku pionowym w pikselach (góra i wysokość), przycięta do osi od..doGodziny. */
 export function pozycjaBlokuPion(
   termin,
   od = OS_OD,
   pxNaH = PX_NA_GODZINE,
   dlugoscH = DLUGOSC_SPOTKANIA_H,
+  doGodziny = OS_DO,
 ) {
   const start = poczatekWGodzinach(termin)
   if (start === null) return { topPx: 0, heightPx: 0 }
-  return {
-    topPx: Math.max(0, (start - od) * pxNaH),
-    heightPx: dlugoscH * pxNaH,
-  }
+  const zakres = doGodziny - od
+  if (zakres <= 0) return { topPx: 0, heightPx: 0 }
+  const r = przytnijDoOsi(start, od, zakres, dlugoscH)
+  return { topPx: r.poczatek * pxNaH, heightPx: r.dlugosc * pxNaH }
 }
 
 /** Pozycja kreski "teraz" w % osi; null, gdy poza osią. */
@@ -534,9 +545,8 @@ export function numerDnia(dataIso) {
 }
 
 /**
- * Wspólna oś godzin dla wielu list spotkań (tablica): zakres od 8 do 22, koniec
- * wydłużony o spotkania WSZYSTKICH podanych handlowców (początek stały), żeby
- * karty obok siebie miały te same kolumny. `mapa` = { user: [spotkania] }, `uzytkownicy` = widoczni.
+ * Wspólna oś godzin dla wielu list spotkań (tablica): stały zakres od 8 do 22
+ * (spotkania go nie zmieniają), żeby karty obok siebie miały te same kolumny. `mapa` = { user: [spotkania] }, `uzytkownicy` = widoczni.
  */
 export function osWspolna(mapa, uzytkownicy, od = OS_OD, doGodziny = OS_DO) {
   const wszystkie = []

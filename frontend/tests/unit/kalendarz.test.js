@@ -226,11 +226,12 @@ describe('oś godzin i pozycje', () => {
     expect(OS_DO).toBe(22)
   })
 
-  it('osGodzin: początek zawsze 8, rozszerza się tylko koniec', () => {
+  it('osGodzin: oś zawsze 8 do 22, spotkania jej nie zmieniają', () => {
     expect(osGodzin([sp('2026-11-02 06:30:00')])).toEqual({ od: 8, do: 22 })
     expect(osGodzin([sp('2026-11-02 00:00:00')])).toEqual({ od: 8, do: 22 })
     expect(osGodzin([sp('2026-11-02 17:30:00')])).toEqual({ od: 8, do: 22 })
-    expect(osGodzin([sp('2026-11-02 21:00:00')])).toEqual({ od: 8, do: 23 })
+    expect(osGodzin([sp('2026-11-02 21:00:00')])).toEqual({ od: 8, do: 22 })
+    expect(osGodzin([sp('2026-11-02 23:30:00')])).toEqual({ od: 8, do: 22 })
   })
 
   it('osGodzin ignoruje spotkania bez poprawnego terminu', () => {
@@ -268,6 +269,32 @@ describe('oś godzin i pozycje', () => {
     expect(p.widthPct).toBeGreaterThan(0)
   })
 
+  it('pozycjaPaska: 21:00 przycięty do prawego brzegu', () => {
+    const p = pozycjaPaska('2026-11-02 21:00:00', 8, 22)
+    expect(p.leftPct).toBeCloseTo((13 / 14) * 100, 5)
+    expect(p.widthPct).toBeCloseTo((1 / 14) * 100, 5)
+  })
+
+  it('pozycjaPaska: 22:00 i 23:30 przyklejone do prawego brzegu', () => {
+    for (const t of ['2026-11-02 22:00:00', '2026-11-02 23:30:00']) {
+      const p = pozycjaPaska(t, 8, 22)
+      expect(p.widthPct).toBeCloseTo((2 / 14) * 100, 5)
+      expect(p.leftPct + p.widthPct).toBeCloseTo(100, 5)
+    }
+  })
+
+  it('pozycjaPaska: 05:00 przyklejone do lewego brzegu', () => {
+    const p = pozycjaPaska('2026-11-02 05:00:00', 8, 22)
+    expect(p.leftPct).toBe(0)
+    expect(p.widthPct).toBeCloseTo((2 / 14) * 100, 5)
+  })
+
+  it('pozycjaPaska: 07:00 przycięty od lewej', () => {
+    const p = pozycjaPaska('2026-11-02 07:00:00', 8, 22)
+    expect(p.leftPct).toBe(0)
+    expect(p.widthPct).toBeCloseTo((1 / 14) * 100, 5)
+  })
+
   it('pozycjaPaska dla niepoprawnego terminu', () => {
     expect(pozycjaPaska('zle')).toEqual({ leftPct: 0, widthPct: 0 })
   })
@@ -278,6 +305,19 @@ describe('oś godzin i pozycje', () => {
       heightPx: 2 * 36,
     })
     expect(pozycjaBlokuPion('zle')).toEqual({ topPx: 0, heightPx: 0 })
+  })
+
+  it('pozycjaBlokuPion: przycięcie i przyklejenie do brzegów osi 8 do 22', () => {
+    const px = 36
+    const a = pozycjaBlokuPion('2026-11-02 21:00:00', 8, px, 2, 22)
+    expect(a.topPx).toBeCloseTo(13 * px, 6)
+    expect(a.heightPx).toBeCloseTo(1 * px, 6)
+    const b = pozycjaBlokuPion('2026-11-02 23:00:00', 8, px, 2, 22)
+    expect(b.topPx).toBeCloseTo(14 * px - 2 * px, 6)
+    expect(b.heightPx).toBeCloseTo(2 * px, 6)
+    const c = pozycjaBlokuPion('2026-11-02 06:00:00', 8, px, 2, 22)
+    expect(c.topPx).toBe(0)
+    expect(c.heightPx).toBeCloseTo(2 * px, 6)
   })
 
   it('skalaPionowa: pełna i kompaktowa', () => {
@@ -542,7 +582,7 @@ describe('stan w localStorage', () => {
 })
 
 describe('runda UI: oś wspólna, ścieżki, etykiety, dymek', () => {
-  it('osWspolna: początek stały, koniec rozszerzony spotkaniami wszystkich', () => {
+  it('osWspolna: oś zawsze 8 do 22', () => {
     const mapa = {
       a: [sp('2026-11-02 10:00:00')],
       b: [sp('2026-11-02 06:30:00')],
@@ -550,7 +590,13 @@ describe('runda UI: oś wspólna, ścieżki, etykiety, dymek', () => {
     }
     expect(osWspolna(mapa, ['a'])).toEqual({ od: 8, do: 22 })
     expect(osWspolna(mapa, ['a', 'b'])).toEqual({ od: 8, do: 22 })
-    expect(osWspolna(mapa, ['a', 'b', 'c'])).toEqual({ od: 8, do: 24 })
+    expect(osWspolna(mapa, ['a', 'b', 'c'])).toEqual({ od: 8, do: 22 })
+    expect(
+      osWspolna(
+        { x: [sp('2026-11-02 00:00:00'), sp('2026-11-02 21:30:00')] },
+        ['x'],
+      ),
+    ).toEqual({ od: 8, do: 22 })
     expect(osWspolna(mapa, [])).toEqual({ od: 8, do: 22 })
     expect(osWspolna(null, ['x'])).toEqual({ od: 8, do: 22 })
   })
@@ -726,8 +772,8 @@ describe('domyślna długość spotkania 2 h i nakładanie spotkań', () => {
     expect(pozycjaBlokuPx('2026-11-02 10:00:00', 8, 36).heightPx).toBe(72)
   })
 
-  it('oś rozszerza się o koniec spotkania liczony po 2 h', () => {
-    expect(osGodzin([w('a', '2026-11-02 21:00:00')]).do).toBe(23)
+  it('oś nie rozszerza się o koniec spotkania', () => {
+    expect(osGodzin([w('a', '2026-11-02 21:00:00')]).do).toBe(22)
     expect(osGodzin([w('a', '2026-11-02 20:00:00')]).do).toBe(22)
   })
 
