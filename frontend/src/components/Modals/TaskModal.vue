@@ -44,7 +44,9 @@
 
   Historia (tylko w trybie edycji) czyta WYŁĄCZNIE metadane dokumentu
   (creation/owner/modified/modified_by) - celowo bez sięgania po Version,
-  to zostaje poza zakresem tego issue (patrz "Poza zakresem").
+  to zostaje poza zakresem tego issue (patrz "Poza zakresem"). Siedzi w stopce
+  okna, na lewo od przycisków (dwie krótkie linie), żeby nie zabierać wysokości
+  żadnej z kolumn.
 -->
 <template>
   <Dialog v-model:open="show" size="3xl">
@@ -234,49 +236,46 @@
                   <Button variant="outline" size="sm" :label="__('Clear')" @click="wyczyscTermin" />
                 </div>
               </div>
-              <!-- Historia: na dole panelu (sm:mt-auto), zeby kolumna z rozmowa
-              miala cala wysokosc dla listy wpisow. -->
-              <div
-                v-if="editMode"
-                class="flex flex-col gap-2 border-t border-outline-gray-2 pt-3 text-sm sm:mt-auto"
-              >
-                <div class="text-xs font-medium uppercase tracking-wide text-ink-gray-4">
-                  {{ __('Historia') }}
-                </div>
-                <div class="flex flex-col gap-1">
-                  <div class="text-ink-gray-5">{{ __('Utworzone') }}</div>
-                  <div class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-                    <UserAvatar v-if="doc.owner" :user="doc.owner" size="xs" />
-                    <span class="font-medium text-ink-gray-8">{{ utworzoneAutor }}</span>
-                    <span class="text-ink-gray-5">·</span>
-                    <span class="text-ink-gray-5">{{ utworzoneData }}</span>
-                  </div>
-
-                  <template v-if="pokazOstatniaZmiane">
-                    <div class="mt-1 text-ink-gray-5">{{ __('Ostatnia zmiana') }}</div>
-                    <div class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-                      <UserAvatar v-if="doc.modified_by" :user="doc.modified_by" size="xs" />
-                      <span class="font-medium text-ink-gray-8">{{ ostatniaZmianaAutor }}</span>
-                      <span class="text-ink-gray-5">·</span>
-                      <span class="text-ink-gray-5">{{ ostatniaZmianaData }}</span>
-                    </div>
-                  </template>
-                </div>
-              </div>
             </div>
           </div>
         </div>
 
         <div class="shrink-0 px-4 pb-2 pt-4 sm:px-6">
-          <div class="flex flex-row-reverse gap-2">
-            <Button
-              variant="solid"
-              :label="editMode ? __('Save') : __('Create')"
-              :loading="editMode ? document.save.loading : _create.loading"
-              :disabled="ladowanie"
-              @click="editMode ? update() : create()"
-            />
-            <Button variant="subtle" :label="__('Cancel')" @click="show = false" />
+          <div class="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+            <!-- Historia (tylko tryb edycji): w stopce, na lewo od przyciskow, zeby
+            nie zabierala wysokosci zadnej z kolumn (mr-auto spycha przyciski
+            na prawo, w trybie tworzenia jej nie ma i justify-end trzyma je
+            po prawej). -->
+            <div
+              v-if="editMode"
+              class="mr-auto flex min-w-0 flex-col gap-0.5 text-xs text-ink-gray-5"
+              data-testid="zadanie-historia"
+            >
+              <div class="flex flex-wrap items-center gap-x-1.5">
+                <span>{{ __('Utworzone') }}</span>
+                <UserAvatar v-if="doc.owner" :user="doc.owner" size="xs" />
+                <span class="font-medium text-ink-gray-8">{{ utworzoneAutor }}</span>
+                <span>·</span>
+                <span>{{ utworzoneData }}</span>
+              </div>
+              <div v-if="pokazOstatniaZmiane" class="flex flex-wrap items-center gap-x-1.5">
+                <span>{{ __('Ostatnia zmiana') }}</span>
+                <UserAvatar v-if="doc.modified_by" :user="doc.modified_by" size="xs" />
+                <span class="font-medium text-ink-gray-8">{{ ostatniaZmianaAutor }}</span>
+                <span>·</span>
+                <span>{{ ostatniaZmianaData }}</span>
+              </div>
+            </div>
+            <div class="flex flex-row-reverse gap-2">
+              <Button
+                variant="solid"
+                :label="editMode ? __('Save') : __('Create')"
+                :loading="editMode ? document.save.loading : _create.loading"
+                :disabled="ladowanie"
+                @click="editMode ? update() : create()"
+              />
+              <Button variant="subtle" :label="__('Cancel')" @click="show = false" />
+            </div>
           </div>
         </div>
       </div>
@@ -413,9 +412,9 @@ function otworzKlienta() {
   router.push({ name: 'Contact', params: { contactId } })
 }
 
-// Historia (tylko w trybie edycji) - metadane dokumentu, bez Version.
-// Dwa rzedy siatki (etykieta + avatar/autor/data) zamiast jednej dlugiej
-// linii - patrz szablon powyzej. Rzad "Ostatnia zmiana" pokazuje sie tylko
+// Historia (tylko w trybie edycji) - metadane dokumentu, bez Version, w stopce
+// okna na lewo od przyciskow. Dwie krotkie linie (etykieta + avatar/autor/data)
+// zamiast jednej dlugiej - patrz szablon powyzej. Linia "Ostatnia zmiana" pokazuje sie tylko
 // gdy faktycznie cos wnosi: pomijany, gdy `modified` pada w tej samej
 // minucie co `creation` (porownanie przez `formatujTermin`, ktory tnie do
 // minuty) I `modified_by` rowna sie `owner` - inaczej druga linia
