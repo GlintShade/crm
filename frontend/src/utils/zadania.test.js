@@ -9,6 +9,7 @@ import {
   kropkaStatusu,
   nazwyUzytkownikowDoPrzypisania,
   czyTlumaczycOpcje,
+  domyslnyTerminZadania,
 } from '@/utils/zadania'
 
 describe('STATUSY_ZADANIA / PRIORYTETY_ZADANIA', () => {
@@ -136,5 +137,34 @@ describe('czyTlumaczycOpcje', () => {
     expect(czyTlumaczycOpcje('CRM Deal', 'status')).toBe(false)
     expect(czyTlumaczycOpcje(undefined, 'status')).toBe(false)
     expect(czyTlumaczycOpcje('CRM Task', undefined)).toBe(false)
+  })
+})
+
+describe('domyslnyTerminZadania', () => {
+  it('14:20 -> jutro 15:00', () => {
+    expect(domyslnyTerminZadania(new Date(2026, 10, 16, 14, 20, 0))).toBe('2026-11-17 15:00:00')
+  })
+
+  it('pelna godzina zostaje: 14:00:00 -> jutro 14:00', () => {
+    expect(domyslnyTerminZadania(new Date(2026, 10, 16, 14, 0, 0))).toBe('2026-11-17 14:00:00')
+  })
+
+  it('sekunda ponad pelna godzine zaokragla w gore: 14:00:01 -> jutro 15:00', () => {
+    expect(domyslnyTerminZadania(new Date(2026, 10, 16, 14, 0, 1))).toBe('2026-11-17 15:00:00')
+  })
+
+  it('23:30 -> za dwa dni 00:00', () => {
+    expect(domyslnyTerminZadania(new Date(2026, 10, 16, 23, 30, 0))).toBe('2026-11-18 00:00:00')
+  })
+
+  it('przejscie przez rok: 2026-12-31 23:10 -> 2027-01-02 00:00', () => {
+    expect(domyslnyTerminZadania(new Date(2026, 11, 31, 23, 10, 0))).toBe('2027-01-02 00:00:00')
+  })
+
+  it('nie mutuje argumentu', () => {
+    const teraz = new Date(2026, 10, 16, 14, 20, 0)
+    const przed = teraz.getTime()
+    domyslnyTerminZadania(teraz)
+    expect(teraz.getTime()).toBe(przed)
   })
 })

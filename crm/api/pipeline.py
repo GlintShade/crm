@@ -483,7 +483,16 @@ def dispatch_task(rule_key: str, deal: str, rodzaj: str) -> int:
 			if frappe.get_all("CRM Task", filters=filtr_duplikatu(deal, odbiorca, tytul), limit=1):
 				continue
 			frappe.get_doc(
-				dane_zadania(rodzaj, klient, deal, autor, odbiorca, dzisiaj, regula.termin_dni)
+				dane_zadania(
+					rodzaj,
+					klient,
+					deal,
+					autor,
+					odbiorca,
+					dzisiaj,
+					regula.termin_dni,
+					teraz=frappe.utils.now_datetime(),
+				)
 			).insert(ignore_permissions=True)
 			utworzone += 1
 
