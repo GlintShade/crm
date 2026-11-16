@@ -322,10 +322,10 @@
               <div class="mb-3 flex items-baseline justify-between gap-2">
                 <div class="text-xs font-semibold uppercase tracking-wide text-ink-gray-5">
                   <template v-if="isReview">{{ __('Zdjęcia i filmy dodatkowe') }}</template>
-                  <template v-else>{{ __('Zdjęcia i filmy dodatkowe (opcjonalne, maks. 5)') }}</template>
+                  <template v-else>{{ __('Zdjęcia i filmy dodatkowe (opcjonalne, maks. {0})', [MAX_DODATKOWYCH_OZE]) }}</template>
                 </div>
                 <div v-if="isReview" class="text-xs text-ink-gray-5">
-                  {{ __('{0} z 5, bez akceptacji', [zdjeciaDodatkowe.length]) }}
+                  {{ __('{0} z {1}, bez akceptacji', [zdjeciaDodatkowe.length, MAX_DODATKOWYCH_OZE]) }}
                 </div>
               </div>
               <div class="grid grid-cols-3 gap-3 sm:grid-cols-5">
@@ -344,7 +344,7 @@
                   @preview="otworzPodglad"
                 />
                 <AudytPhotoSlot
-                  v-if="(editable || trybPoprawek) && zdjeciaDodatkowe.length < 5"
+                  v-if="(editable || trybPoprawek) && zdjeciaDodatkowe.length < MAX_DODATKOWYCH_OZE"
                   :key="'extra-new-' + zdjeciaDodatkowe.length"
                   :label="__('Zdjęcie dodatkowe')"
                   :value="null"
@@ -353,7 +353,7 @@
                   :docname="dealId"
                   :disabled="false"
                   allow-video
-                  :wiele-max="MAX_DODATKOWYCH - zdjeciaDodatkowe.length"
+                  :wiele-max="MAX_DODATKOWYCH_OZE - zdjeciaDodatkowe.length"
                   @change="onExtraPhotoAdd"
                   @change-many="onExtraPhotosAddMany"
                 />
@@ -513,7 +513,7 @@ import AttachmentItem from '@/components/AttachmentItem.vue'
 import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
 import AudytIcon from '@/components/Icons/AudytIcon.vue'
 import AudytPhotoSlot from '@/components/deal/AudytPhotoSlot.vue'
-import { dolaczZdjecia, komunikatLimitu } from '@/utils/audytWielePlikow'
+import { MAX_DODATKOWYCH_OZE, dolaczZdjecia, komunikatLimitu } from '@/utils/audytWielePlikow'
 import AudytPodgladZdjec from '@/components/deal/AudytPodgladZdjec.vue'
 import AudytPasekDecyzji from '@/components/deal/AudytPasekDecyzji.vue'
 import AudytVerdictControls from '@/components/deal/AudytVerdictControls.vue'
@@ -1099,15 +1099,13 @@ async function onExtraPhotoChange(index, fileUrl) {
   await persistExtraPhotos(prevList)
 }
 
-const MAX_DODATKOWYCH = 5
-
 // Wiele plików naraz z jednego okna wysyłki: jeden zapis listy zamiast
 // zapisu na plik (brak konfliktu `modified`).
 async function onExtraPhotosAddMany(urle) {
   if (!mozeZapisywac.value || !urle?.length) return
   const prevList = zdjeciaDodatkowe.value
-  const { lista, dodane, pominiete } = dolaczZdjecia(prevList, urle, MAX_DODATKOWYCH)
-  if (pominiete) toast.error(komunikatLimitu(pominiete, MAX_DODATKOWYCH))
+  const { lista, dodane, pominiete } = dolaczZdjecia(prevList, urle, MAX_DODATKOWYCH_OZE)
+  if (pominiete) toast.error(komunikatLimitu(pominiete, MAX_DODATKOWYCH_OZE))
   if (!dodane.length) return
   dodane.forEach((u) => trackOldFile(null, u))
   zdjeciaDodatkowe.value = lista
@@ -1116,7 +1114,7 @@ async function onExtraPhotosAddMany(urle) {
 
 async function onExtraPhotoAdd(fileUrl) {
   if (!mozeZapisywac.value || !fileUrl) return
-  if (zdjeciaDodatkowe.value.length >= 5) return
+  if (zdjeciaDodatkowe.value.length >= MAX_DODATKOWYCH_OZE) return
   const prevList = zdjeciaDodatkowe.value
   trackOldFile(null, fileUrl)
   zdjeciaDodatkowe.value = [...prevList, fileUrl]

@@ -1,6 +1,10 @@
-import { dolaczZdjecia, ileMiejsca, komunikatLimitu } from '@/utils/audytWielePlikow'
+import { MAX_DODATKOWYCH_OZE, dolaczZdjecia, ileMiejsca, komunikatLimitu } from '@/utils/audytWielePlikow'
 
 describe('audytWielePlikow', () => {
+  it('limit zdjęć dodatkowych OZE to 15', () => {
+    expect(MAX_DODATKOWYCH_OZE).toBe(15)
+    expect(dolaczZdjecia(Array(14).fill('x').map((_, i) => 'a' + i), ['n1', 'n2'], MAX_DODATKOWYCH_OZE).pominiete).toBe(1)
+  })
   it('liczy wolne miejsce', () => {
     expect(ileMiejsca(['a', 'b'], 5)).toBe(3)
     expect(ileMiejsca(null, 5)).toBe(5)

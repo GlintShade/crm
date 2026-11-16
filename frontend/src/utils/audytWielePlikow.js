@@ -1,6 +1,10 @@
 // Dokładanie wielu zdjęć naraz do listy (zdjęcia dodatkowe OZE, galeria CP).
 // Czysta logika, bez Vue i bez API: rodzic zapisuje wynik jednym zapisem.
 
+// Limit zdjęć i filmów dodatkowych w Audycie OZE (jedyne miejsce z tą liczbą;
+// serwer nie egzekwuje limitu, galeria CP ma własny MAX_ZDJEC w audytCP.js).
+export const MAX_DODATKOWYCH_OZE = 15
+
 // Ile plików jeszcze się zmieści w liście o limicie `max`.
 export function ileMiejsca(lista, max) {
   return Math.max(0, max - (Array.isArray(lista) ? lista.length : 0))
