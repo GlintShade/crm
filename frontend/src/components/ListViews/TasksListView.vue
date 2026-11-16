@@ -50,7 +50,7 @@
           <div
             :class="
               czyPrzeterminowane(row.due_date, row.status)
-                ? 'text-ink-red-4'
+                ? 'text-ink-red-8'
                 : ''
             "
           >
@@ -68,7 +68,7 @@
               class="truncate"
               :class="
                 czyPrzeterminowane(row.due_date, row.status)
-                  ? 'font-semibold text-ink-red-4'
+                  ? 'font-semibold text-ink-red-8'
                   : ''
               "
             >
@@ -76,7 +76,7 @@
             </div>
             <div
               v-if="czyPrzeterminowane(row.due_date, row.status)"
-              class="truncate text-xs text-ink-red-4"
+              class="truncate text-xs text-ink-red-8"
               data-testid="zadanie-po-terminie-tekst"
             >
               {{ tekstPoTerminie(row.due_date) }}
@@ -289,12 +289,12 @@ function getLabel(label, column) {
   return label
 }
 
-// Wiersz zadania po terminie: tlo z tokenu frappe-ui `bg-surface-red-1` (w
+// Wiersz zadania po terminie: tlo z tokenu frappe-ui `bg-surface-red-2` (w
 // ciemnym motywie token sam zmienia wartosc). Klasa `zadanie-po-terminie` sluzy
 // stylom ponizej, ktore przywracaja stany zaznaczenia i najechania.
 function klasaWiersza(row) {
   return czyPrzeterminowane(row.due_date, row.status)
-    ? 'bg-surface-red-1 zadanie-po-terminie'
+    ? 'bg-surface-red-2 zadanie-po-terminie'
     : ''
 }
 
@@ -329,17 +329,18 @@ defineExpose({
 /*
   Korzen wiersza (ListRow.vue z frappe-ui) sam niesie tlo zaznaczenia
   (`bg-surface-gray-2`) i najechania (`hover:bg-surface-sidebar`). Czerwone tlo
-  z `bg-surface-red-1` ma byc widoczne w stanie spoczynku, ale nie moze
+  z `bg-surface-red-2` ma byc widoczne w stanie spoczynku, ale nie moze
   zakrywac zaznaczenia ani najechania, wiec te stany dostaja wlasne, mocniejsze
-  reguly (tokeny, bez palety i bez hex).
+  reguly (tokeny, bez palety i bez hex). Tokeny `--surface-*` to pelne
+  wartosci koloru (oklch), nie trojki kanalow, wiec uzywamy ich wprost, bez rgb().
 */
 :deep(.zadanie-po-terminie:hover) {
-  background-color: rgb(var(--surface-red-2));
+  background-color: var(--surface-red-3);
 }
 :deep(.zadanie-po-terminie.bg-surface-gray-2) {
-  background-color: rgb(var(--surface-gray-2));
+  background-color: var(--surface-gray-2);
 }
 :deep(.zadanie-po-terminie.bg-surface-gray-2:hover) {
-  background-color: rgb(var(--surface-gray-3));
+  background-color: var(--surface-gray-3);
 }
 </style>

@@ -62,7 +62,7 @@
             <div
               v-else-if="!dataZalozenia && task.due_date"
               class="flex items-center gap-1.5"
-              :class="terminPrzeterminowany(task) ? 'text-ink-red-4' : ''"
+              :class="terminPrzeterminowany(task) ? 'text-ink-red-8' : ''"
               :title="formatujTermin(task.due_date)"
             >
               <CalendarIcon class="h-3.5 w-3.5 shrink-0" />
