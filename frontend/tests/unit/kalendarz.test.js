@@ -226,8 +226,9 @@ describe('oś godzin i pozycje', () => {
     expect(OS_DO).toBe(22)
   })
 
-  it('osGodzin rozszerza się o spotkanie poza zakresem', () => {
-    expect(osGodzin([sp('2026-11-02 06:30:00')])).toEqual({ od: 6, do: 22 })
+  it('osGodzin: początek zawsze 8, rozszerza się tylko koniec', () => {
+    expect(osGodzin([sp('2026-11-02 06:30:00')])).toEqual({ od: 8, do: 22 })
+    expect(osGodzin([sp('2026-11-02 00:00:00')])).toEqual({ od: 8, do: 22 })
     expect(osGodzin([sp('2026-11-02 17:30:00')])).toEqual({ od: 8, do: 22 })
     expect(osGodzin([sp('2026-11-02 21:00:00')])).toEqual({ od: 8, do: 23 })
   })
@@ -259,6 +260,12 @@ describe('oś godzin i pozycje', () => {
 
   it('pozycjaPaska przed początkiem osi zaczyna od 0', () => {
     expect(pozycjaPaska('2026-11-02 06:00:00').leftPct).toBe(0)
+  })
+
+  it('pozycjaPaska dla 00:00 zostaje widoczna przy brzegu', () => {
+    const p = pozycjaPaska('2026-11-02 00:00:00', 8, 22)
+    expect(p.leftPct).toBe(0)
+    expect(p.widthPct).toBeGreaterThan(0)
   })
 
   it('pozycjaPaska dla niepoprawnego terminu', () => {
@@ -535,15 +542,15 @@ describe('stan w localStorage', () => {
 })
 
 describe('runda UI: oś wspólna, ścieżki, etykiety, dymek', () => {
-  it('osWspolna rozszerza oś o spotkania wszystkich handlowców', () => {
+  it('osWspolna: początek stały, koniec rozszerzony spotkaniami wszystkich', () => {
     const mapa = {
       a: [sp('2026-11-02 10:00:00')],
       b: [sp('2026-11-02 06:30:00')],
       c: [sp('2026-11-02 22:00:00')],
     }
     expect(osWspolna(mapa, ['a'])).toEqual({ od: 8, do: 22 })
-    expect(osWspolna(mapa, ['a', 'b'])).toEqual({ od: 6, do: 22 })
-    expect(osWspolna(mapa, ['a', 'b', 'c'])).toEqual({ od: 6, do: 24 })
+    expect(osWspolna(mapa, ['a', 'b'])).toEqual({ od: 8, do: 22 })
+    expect(osWspolna(mapa, ['a', 'b', 'c'])).toEqual({ od: 8, do: 24 })
     expect(osWspolna(mapa, [])).toEqual({ od: 8, do: 22 })
     expect(osWspolna(null, ['x'])).toEqual({ od: 8, do: 22 })
   })

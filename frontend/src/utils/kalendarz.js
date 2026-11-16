@@ -184,8 +184,10 @@ export function poczatekWGodzinach(termin) {
 }
 
 /**
- * Zakres osi godzin: domyślnie 8 do 22, ale spotkanie poza zakresem rozszerza oś
- * (nigdy nie jest ukrywane). Koniec spotkania = początek + `dlugoscH`.
+ * Zakres osi godzin: oś ZAWSZE zaczyna się od `od` (08:00). Spotkanie kończące się
+ * po `doGodziny` wydłuża koniec osi (do 24). Spotkanie przed `od` nie jest ukrywane:
+ * rysuje się przyklejone do lewego (lub górnego) brzegu osi. Koniec spotkania =
+ * początek + `dlugoscH`.
  */
 export function osGodzin(
   spotkania,
@@ -193,15 +195,13 @@ export function osGodzin(
   doGodziny = OS_DO,
   dlugoscH = DLUGOSC_SPOTKANIA_H,
 ) {
-  let minimum = od
   let maksimum = doGodziny
   for (const s of spotkania || []) {
     const start = poczatekWGodzinach(s.termin)
     if (start === null) continue
-    minimum = Math.min(minimum, Math.floor(start))
     maksimum = Math.max(maksimum, Math.ceil(start + dlugoscH))
   }
-  return { od: Math.max(0, minimum), do: Math.min(24, maksimum) }
+  return { od: Math.max(0, od), do: Math.min(24, maksimum) }
 }
 
 /** Godziny do nagłówka i linii siatki: od, od+1, ..., do. */
@@ -534,9 +534,9 @@ export function numerDnia(dataIso) {
 }
 
 /**
- * Wspólna oś godzin dla wielu list spotkań (tablica): zakres 8 do 22 rozszerzony
- * o spotkania WSZYSTKICH podanych handlowców, żeby karty obok siebie miały te
- * same kolumny. `mapa` = { user: [spotkania] }, `uzytkownicy` = widoczni.
+ * Wspólna oś godzin dla wielu list spotkań (tablica): zakres od 8 do 22, koniec
+ * wydłużony o spotkania WSZYSTKICH podanych handlowców (początek stały), żeby
+ * karty obok siebie miały te same kolumny. `mapa` = { user: [spotkania] }, `uzytkownicy` = widoczni.
  */
 export function osWspolna(mapa, uzytkownicy, od = OS_OD, doGodziny = OS_DO) {
   const wszystkie = []
