@@ -64,6 +64,15 @@
               :iconRight="ArrowUpRightIcon"
               @click="otworzReferencje"
             />
+            <Button
+              v-if="klient"
+              variant="subtle"
+              size="sm"
+              class="max-w-full truncate"
+              :label="klient.full_name"
+              :iconRight="ArrowUpRightIcon"
+              @click="otworzKlienta"
+            />
           </div>
           <Button
             variant="ghost"
@@ -279,9 +288,11 @@ import {
   tloWybranegoStatusu,
   tloWybranegoPriorytetu,
   nazwyUzytkownikowDoPrzypisania,
+  domyslnyTerminZadania,
 } from '@/utils/zadania'
-import { TextEditor, Tooltip, createEditorButton, createResource } from 'frappe-ui'
-import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
+import { TextEditor, Tooltip, call, createEditorButton, createResource } from 'frappe-ui'
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
 
 const props = defineProps({
   doctypeTitle: { type: String, default: '' },
@@ -295,6 +306,8 @@ const show = defineModel({ type: Boolean })
 const emit = defineEmits(['afterInsert', 'afterUpdate'])
 
 const { getUser, users, listaWzmianek } = usersStore()
+
+const router = useRouter()
 
 const { document, triggerOnRender, triggerOnBeforeCreate } = useDocument(
   props.doctype,
@@ -348,6 +361,33 @@ function otworzReferencje() {
   const akcja = document.actions?.[0]
   if (!akcja?.onClick) return
   akcja.onClick(() => (show.value = false))
+}
+
+// Klient szansy (drugi przycisk w naglowku): dla zadania powiazanego z szansa
+// (CRM Deal) czytamy kontakty przez get_deal_contacts (lista juz przefiltrowana
+// uprawnieniami uzytkownika). Klient = kontakt glowny, a gdy go nie ma, pierwszy z
+// listy. Pusta lista albo blad: przycisku nie ma, bez komunikatu.
+const klient = ref(null)
+watch(
+  () => [doc.value.reference_doctype, doc.value.reference_docname],
+  async ([rt, rn]) => {
+    klient.value = null
+    if (rt !== 'CRM Deal' || !rn) return
+    try {
+      const kontakty = await call('crm.fcrm.doctype.crm_deal.api.get_deal_contacts', { name: rn })
+      klient.value = kontakty.find((k) => k.is_primary) || kontakty[0] || null
+    } catch (e) {
+      klient.value = null
+    }
+  },
+  { immediate: true },
+)
+
+function otworzKlienta() {
+  if (!klient.value) return
+  const contactId = klient.value.name
+  show.value = false
+  router.push({ name: 'Contact', params: { contactId } })
 }
 
 // Historia (tylko w trybie edycji) - metadane dokumentu, bez Version.
@@ -462,6 +502,12 @@ onMounted(async () => {
     document.doc = {
       ...document.doc,
       ...props.defaults,
+    }
+    // Domyslny termin: teraz + 24 h, w gore do pelnej godziny. Swiezy przy
+    // kazdym otwarciu okna tworzenia (celowo nadpisuje termin z porzuconego
+    // szkicu). Tryb edycji nie dotyka terminu.
+    if (!props.defaults?.due_date) {
+      document.doc.due_date = domyslnyTerminZadania()
     }
   } else {
     try {

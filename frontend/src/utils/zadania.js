@@ -126,3 +126,19 @@ const POLA_Z_TLUMACZONYMI_OPCJAMI = { 'CRM Task': ['status', 'priority'] }
 export function czyTlumaczycOpcje(doctype, fieldname) {
   return (POLA_Z_TLUMACZONYMI_OPCJAMI[doctype] || []).includes(fieldname)
 }
+
+/**
+ * Domyslny termin nowego zadania: teraz + 24 h, zaokraglone w gore do pelnej godziny
+ * (14:20 -> jutro 15:00; 14:00:00 -> jutro 14:00). Czas lokalny przegladarki.
+ * @param {Date} teraz
+ * @returns {string} 'YYYY-MM-DD HH:00:00'
+ */
+export function domyslnyTerminZadania(teraz = new Date()) {
+  const d = new Date(teraz.getTime())
+  d.setDate(d.getDate() + 1)
+  if (d.getMinutes() || d.getSeconds() || d.getMilliseconds()) {
+    d.setHours(d.getHours() + 1, 0, 0, 0)
+  }
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:00:00`
+}

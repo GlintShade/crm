@@ -1,6 +1,6 @@
 import inspect
 import unittest
-from datetime import date
+from datetime import date, datetime
 
 from crm.volteo_zadania import (
 	ETYKIETA_RODZAJU,
@@ -10,6 +10,7 @@ from crm.volteo_zadania import (
 	dane_zadania,
 	filtr_duplikatu,
 	oblicz_termin,
+	oblicz_termin_godzinowy,
 	opis_zadania_html,
 	tytul_zadania,
 )
@@ -104,6 +105,58 @@ class TestFiltrDuplikatu(unittest.TestCase):
 		self.assertEqual(filtr["status"], ["not in", list(STATUSY_ZAMKNIETE)])
 
 
+class TestObliczTerminGodzinowy(unittest.TestCase):
+	def test_a_zaokragla_w_gore_do_pelnej_godziny(self: "TestObliczTerminGodzinowy") -> None:
+		self.assertEqual(
+			oblicz_termin_godzinowy(datetime(2026, 11, 16, 14, 20, 0), 1),
+			datetime(2026, 11, 17, 15, 0, 0),
+		)
+
+	def test_b_pelna_godzina_zostaje(self: "TestObliczTerminGodzinowy") -> None:
+		self.assertEqual(
+			oblicz_termin_godzinowy(datetime(2026, 11, 16, 14, 0, 0), 1),
+			datetime(2026, 11, 17, 14, 0, 0),
+		)
+
+	def test_c_sekunda_ponad_godzine_zaokragla_w_gore(self: "TestObliczTerminGodzinowy") -> None:
+		self.assertEqual(
+			oblicz_termin_godzinowy(datetime(2026, 11, 16, 14, 0, 1), 1),
+			datetime(2026, 11, 17, 15, 0, 0),
+		)
+
+	def test_d_mikrosekundy_zaokraglaja_w_gore(self: "TestObliczTerminGodzinowy") -> None:
+		self.assertEqual(
+			oblicz_termin_godzinowy(datetime(2026, 11, 16, 14, 0, 0, 5), 2),
+			datetime(2026, 11, 18, 15, 0, 0),
+		)
+
+	def test_e_przejscie_przez_polnoc_i_rok(self: "TestObliczTerminGodzinowy") -> None:
+		self.assertEqual(
+			oblicz_termin_godzinowy(datetime(2026, 11, 16, 23, 30, 0), 1),
+			datetime(2026, 11, 18, 0, 0, 0),
+		)
+		self.assertEqual(
+			oblicz_termin_godzinowy(datetime(2026, 12, 31, 23, 10, 0), 1),
+			datetime(2027, 1, 2, 0, 0, 0),
+		)
+
+	def test_f_zero_ujemne_none_i_smieci_daja_none(self: "TestObliczTerminGodzinowy") -> None:
+		teraz = datetime(2026, 11, 16, 14, 20, 0)
+		for dni in (0, -2, None, "abc", "0"):
+			self.assertIsNone(oblicz_termin_godzinowy(teraz, dni), dni)
+
+	def test_g_string_liczbowy_jest_parsowany(self: "TestObliczTerminGodzinowy") -> None:
+		self.assertEqual(
+			oblicz_termin_godzinowy(datetime(2026, 11, 16, 14, 20, 0), "1"),
+			datetime(2026, 11, 17, 15, 0, 0),
+		)
+
+	def test_h_nie_mutuje_argumentu(self: "TestObliczTerminGodzinowy") -> None:
+		teraz = datetime(2026, 11, 16, 14, 20, 0)
+		oblicz_termin_godzinowy(teraz, 1)
+		self.assertEqual(teraz, datetime(2026, 11, 16, 14, 20, 0))
+
+
 class TestDaneZadania(unittest.TestCase):
 	def test_a_pelny_dict_rownosc(self: "TestDaneZadania") -> None:
 		wynik = dane_zadania(
@@ -143,6 +196,33 @@ class TestDaneZadania(unittest.TestCase):
 			odbiorca="rep2@proenergy.pro",
 			dzisiaj=date(2026, 9, 25),
 			termin_dni=0,
+		)
+		self.assertIsNone(wynik["due_date"])
+
+	def test_d_z_teraz_due_date_godzinowy(self: "TestDaneZadania") -> None:
+		wynik = dane_zadania(
+			rodzaj="oze",
+			klient="Jan Kowalski",
+			deal="PRO/PV/26/0001",
+			autor="Anna Nowak",
+			odbiorca="rep@proenergy.pro",
+			dzisiaj=date(2026, 11, 16),
+			termin_dni=1,
+			teraz=datetime(2026, 11, 16, 14, 20, 0),
+		)
+		self.assertEqual(wynik["due_date"], "2026-11-17 15:00:00")
+		self.assertEqual(wynik["start_date"], "2026-11-16")
+
+	def test_e_z_teraz_i_zerem_dni_due_date_none(self: "TestDaneZadania") -> None:
+		wynik = dane_zadania(
+			rodzaj="cp",
+			klient="Ewa Wisniewska",
+			deal="PRO/CP/26/0002",
+			autor="Piotr Zielinski",
+			odbiorca="rep2@proenergy.pro",
+			dzisiaj=date(2026, 11, 16),
+			termin_dni=0,
+			teraz=datetime(2026, 11, 16, 14, 20, 0),
 		)
 		self.assertIsNone(wynik["due_date"])
 
