@@ -23,12 +23,17 @@ class CRMTask(Document):
 		reference_docname: DF.DynamicLink | None
 		reference_doctype: DF.Link | None
 		start_date: DF.Date | None
-		status: DF.Literal["Backlog", "Todo", "In Progress", "Done", "Canceled"]
+		status: DF.Literal["Todo", "In Progress", "Done", "Canceled"]
 		title: DF.Data
 	# end: auto-generated types
 
 	def after_insert(self):
 		self.assign_to()
+
+	def before_validate(self):
+		# Status "Backlog" usuniety 2026-11-16; stary frontend w cache moze go jeszcze wyslac.
+		if self.status == "Backlog":
+			self.status = "Todo"
 
 	def validate(self):
 		if self.is_new() or not self.assigned_to:

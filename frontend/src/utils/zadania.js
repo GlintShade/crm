@@ -1,10 +1,11 @@
 // Slowniki statusow i priorytetow zadania (CRM Task), uzywane przez
 // TaskModal.vue (issue GlintShade/proenergy-crm-ops#208, "wariant C"
 // dedykowanego okna zadania). Lustro crm/fcrm/doctype/crm_task/crm_task.json
-// (status: Backlog|Todo|In Progress|Done|Canceled, priority: Low|Medium|
-// High) - wartosci to surowy angielski zapisywany do bazy, tlumaczenie
-// etykiet przez __(wartosc) dzieje sie wylacznie u wolajacego (te same
-// msgid juz istnieja w pl.po: Backlog/Todo/In Progress/Done/Canceled,
+// (status: Todo|In Progress|Done|Canceled, priority: Low|Medium|High;
+// status Backlog usuniety 2026-11-16) - wartosci to surowy angielski
+// zapisywany do bazy, tlumaczenie etykiet przez __(wartosc) dzieje sie
+// wylacznie u wolajacego (te same
+// msgid juz istnieja w pl.po: Todo/In Progress/Done/Canceled,
 // Low/Medium/High), nigdy tutaj.
 //
 // Frappe-free (bez importu __, frappe-ui ani @/utils) - ten sam wzorzec co
@@ -21,14 +22,13 @@
 // Rodziny rose/emerald/sky/lime NIE istnieja w presecie frappe-ui - uzywane
 // sa wylacznie gray/blue/green/red/orange/yellow.
 
-export const STATUSY_ZADANIA = ['Backlog', 'Todo', 'In Progress', 'Done', 'Canceled']
+export const STATUSY_ZADANIA = ['Todo', 'In Progress', 'Done', 'Canceled']
 
 export const PRIORYTETY_ZADANIA = ['Low', 'Medium', 'High']
 
 const DOMYSLNY_KOLOR = 'gray'
 
 const KOLOR_STATUSU = {
-  Backlog: 'gray',
   Todo: 'orange',
   'In Progress': 'blue',
   Done: 'green',
@@ -116,4 +116,13 @@ export function kropkaStatusu(status) {
 export function nazwyUzytkownikowDoPrzypisania(crmUsers) {
   if (!Array.isArray(crmUsers)) return []
   return crmUsers.map((u) => u.name)
+}
+
+// Pola Select, ktorych wartosci sa angielskie w bazie, a etykiety maja isc przez __()
+// u wolajacego. Celowo waska lista: slepe __() na kazdej opcji kazdego doctype dawalo
+// kolizje kluczy (np. "CC" -> "DW").
+const POLA_Z_TLUMACZONYMI_OPCJAMI = { 'CRM Task': ['status', 'priority'] }
+
+export function czyTlumaczycOpcje(doctype, fieldname) {
+  return (POLA_Z_TLUMACZONYMI_OPCJAMI[doctype] || []).includes(fieldname)
 }

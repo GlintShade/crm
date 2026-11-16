@@ -229,7 +229,7 @@ export function prettyDate(date, mini = false) {
 }
 
 export function taskStatusOptions(action, data) {
-  let options = ['Backlog', 'Todo', 'In Progress', 'Done', 'Canceled']
+  let options = ['Todo', 'In Progress', 'Done', 'Canceled']
   let statusMeta = getMeta('CRM Task')
     .getFields()
     ?.find((field) => field.fieldname == 'status')

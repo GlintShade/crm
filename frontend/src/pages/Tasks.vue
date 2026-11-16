@@ -34,6 +34,9 @@
       onClick: (row) => showTask(row.name),
       onNewClick: (column) => createTask(column),
     }"
+    :etykietaKolumny="
+      (nazwa) => etykietaPola(tasks.params?.column_field, nazwa)
+    "
     @update="(data) => viewControls.updateKanbanSettings(data)"
     @loadMore="(columnName) => viewControls.loadMoreKanban(columnName)"
   >
@@ -66,7 +69,7 @@
           v-else-if="getRow(itemName, titleField).label"
           class="truncate text-base"
         >
-          {{ getRow(itemName, titleField).label }}
+          {{ etykietaPola(titleField, getRow(itemName, titleField).label) }}
         </div>
         <div v-else class="text-ink-gray-4">{{ __('No Title') }}</div>
       </div>
@@ -115,7 +118,7 @@
           />
         </div>
         <div v-else class="truncate text-base">
-          {{ getRow(itemName, fieldName).label }}
+          {{ etykietaPola(fieldName, getRow(itemName, fieldName).label) }}
         </div>
       </div>
     </template>
@@ -196,6 +199,7 @@ import { useDoctypeModal } from '@/composables/doctypeModal'
 import { getMeta } from '@/stores/meta'
 import { usersStore } from '@/stores/users'
 import { formatDate } from '@/utils'
+import { czyTlumaczycOpcje } from '@/utils/zadania'
 import { timestampCell } from '@/composables/useTimelinePreferences'
 import { useOnboarding, useTelemetry } from 'frappe-ui/frappe'
 import { Tooltip, Avatar, TextEditor, Dropdown, call, toast } from 'frappe-ui'
@@ -336,8 +340,13 @@ function showTask(name) {
   })
 }
 
+// Status i priorytet zadania sa angielskie w bazie; etykieta idzie przez __().
+function etykietaPola(pole, wartosc) {
+  return czyTlumaczycOpcje('CRM Task', pole) && wartosc ? __(wartosc) : wartosc
+}
+
 function createTask(column) {
-  const defaults = { status: 'Backlog', priority: 'Low' }
+  const defaults = { status: 'Todo', priority: 'Low' }
 
   if (column?.column?.name) {
     let column_field = tasks.value.params.column_field

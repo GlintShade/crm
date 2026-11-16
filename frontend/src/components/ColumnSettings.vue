@@ -234,12 +234,21 @@ const fields = computed(() => {
     ? _fields.filter((field) => dozwolonePola.data.includes(field.fieldname))
     : _fields.filter((field) => !field.permlevel)
 
-  return dostepnePola.filter((field) => {
-    return (
-      !columns.value.find((column) => column.key === field.fieldname) &&
-      !existingFields.includes(field.fieldname)
-    )
-  })
+  // Etykieta w liscie "Add Column" idzie przez __(); oryginalna (angielska)
+  // zostaje w `etykietaOryginalna`, zeby do zapisanego widoku trafial ten sam
+  // label co dotychczas.
+  return dostepnePola
+    .filter((field) => {
+      return (
+        !columns.value.find((column) => column.key === field.fieldname) &&
+        !existingFields.includes(field.fieldname)
+      )
+    })
+    .map((field) => ({
+      ...field,
+      etykietaOryginalna: field.label,
+      label: field.label ? __(field.label) : field.label,
+    }))
 })
 
 function addColumn(c) {
@@ -251,7 +260,7 @@ function addColumn(c) {
     : 'left'
 
   let _column = {
-    label: c.label,
+    label: c.etykietaOryginalna ?? c.label,
     type: c.fieldtype,
     key: c.fieldname,
     options: c.options,

@@ -2213,7 +2213,7 @@ msgstr "Dokumentacja"
 #. Option for the 'Status' (Select) field in DocType 'CRM Task'
 #: crm/fcrm/doctype/crm_task/crm_task.json
 msgid "Done"
-msgstr "Gotowe"
+msgstr "Wykonane"
 
 #: frontend/src/components/Dashboard/AddChartModal.vue:29 frontend/src/components/Dashboard/AddChartModal.vue:67
 msgid "Donut Chart"

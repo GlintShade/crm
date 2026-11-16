@@ -50,7 +50,9 @@
                   </div>
                 </template>
               </Popover>
-              <div class="text-ink-gray-9">{{ column.column.name }}</div>
+              <div class="text-ink-gray-9">
+                {{ etykietaKolumny(column.column.name) }}
+              </div>
             </div>
             <div class="flex">
               <Dropdown :options="actions(column)">
@@ -192,7 +194,7 @@ import Draggable from 'vuedraggable'
 import { Dropdown, Popover } from 'frappe-ui'
 import { computed } from 'vue'
 
-defineProps({
+const props = defineProps({
   options: {
     type: Object,
     default: () => ({
@@ -201,6 +203,9 @@ defineProps({
       onNewClick: null,
     }),
   },
+  // Etykieta nazwy kolumny (np. tlumaczenie statusu zadania); `value` kolumny
+  // zostaje surowa. Domyslnie nazwa bez zmian.
+  etykietaKolumny: { type: Function, default: (nazwa) => nazwa },
 })
 
 const emit = defineEmits(['update', 'loadMore'])
@@ -230,7 +235,7 @@ const deletedColumns = computed(() => {
   return _columns
     ?.filter((col) => col['delete'])
     .map((col) => {
-      return { label: col.name, value: col.name }
+      return { label: props.etykietaKolumny(col.name), value: col.name }
     })
 })
 

@@ -343,6 +343,7 @@ import {
   parsujWartoscWielokrotna,
 } from '@/utils/filtrWielokrotny'
 import { zaleznaWartoscFiltraSerwera } from '@/utils/filtrSzybki'
+import { czyTlumaczycOpcje } from '@/utils/zadania'
 import {
   OPERATOR_TAGOW,
   czyPoleTagow,
@@ -883,7 +884,10 @@ function getValueControl(f) {
     // przez `crm.api.doc.get_filterable_fields`, patrz `_dolacz_tagi_lead`),
     // więc `getSelectOptions(options)` działa bez zmian.
     return h(MultiSelect, {
-      options: getSelectOptions(options).map((o) => ({ label: o, value: o })),
+      options: getSelectOptions(options).map((o) => ({
+        label: czyTlumaczycOpcje(props.doctype, field.fieldname) ? __(o) : o,
+        value: o,
+      })),
       modelValue: parsujWartoscWielokrotna(f.value),
       'onUpdate:modelValue': (v) => updateValue(v, f),
     })
@@ -913,7 +917,10 @@ function getValueControl(f) {
     return h(FormControl, {
       type: 'select',
       options: _options.map((o) => ({
-        label: o,
+        label:
+          fieldtype != 'Check' && czyTlumaczycOpcje(props.doctype, field.fieldname)
+            ? __(o)
+            : o,
         value: o,
       })),
       modelValue: f.value,

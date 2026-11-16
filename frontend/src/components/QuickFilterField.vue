@@ -50,6 +50,7 @@ import { opcjeEtapu } from '@/utils/etapFiltr'
 import { parsujWartoscWielokrotna } from '@/utils/filtrWielokrotny'
 import { czyWielokrotnyFiltrSzybki, zaleznaWartoscFiltraSerwera } from '@/utils/filtrSzybki'
 import { czyPoleTagow, opcjeTagow } from '@/utils/tagiProduktow'
+import { czyTlumaczycOpcje } from '@/utils/zadania'
 import { statusesStore } from '@/stores/statuses'
 import { computed, reactive, watch } from 'vue'
 
@@ -126,7 +127,15 @@ const opcjeCheckList = computed(() =>
     ? opcjeEtapuFiltra.value
     : czyPoleTagow(filter)
       ? opcjeTagow(filter).map((token) => ({ label: token, value: token }))
-      : filter.options,
+      : czyTlumaczycOpcje(props.doctype, filter.fieldname) &&
+          Array.isArray(filter.options)
+        ? // Status/priorytet zadania: wartosci angielskie w bazie, etykiety
+          // po polsku (wartosc `value` zostaje surowa).
+          filter.options.map((o) => ({
+            ...o,
+            label: o.label ? __(o.label) : o.label,
+          }))
+        : filter.options,
 )
 
 // QuickFilterCheckList wybiera tryb Select/Link po `fieldtype`: Select
