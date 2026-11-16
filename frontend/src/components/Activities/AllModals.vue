@@ -53,9 +53,14 @@ function updateTaskStatus(status, task) {
     name: task.name,
     fieldname: 'status',
     value: status,
-  }).then(() => {
-    activities.value.reload()
   })
+    .then(() => {
+      activities.value.reload()
+    })
+    .catch((err) => {
+      toast.error(err?.messages?.[0] || __('Nie udało się zmienić statusu zadania.'))
+      activities.value.reload()
+    })
 }
 
 // Notes
