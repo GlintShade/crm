@@ -141,14 +141,11 @@
             "
           />
         </div>
-        <Dropdown
-          class="flex items-center gap-2"
-          :options="actions(itemName)"
-          variant="ghost"
-          @click.stop.prevent
-        >
-          <Button icon="lucide-more-horizontal" variant="ghost" />
-        </Dropdown>
+        <div class="flex items-center gap-2" @click.stop.prevent>
+          <Dropdown :options="actions(itemName)" variant="ghost">
+            <Button icon="lucide-more-horizontal" variant="ghost" />
+          </Dropdown>
+        </div>
       </div>
     </template>
   </KanbanView>
