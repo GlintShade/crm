@@ -10,8 +10,9 @@
   Activities/CommentArea.vue (nagłówek "dodał(a) wpis"), dodawanie istniejący
   CommentBox.vue (wzmianki @, załączniki) - jak w Modals/KomentarzeLeadaModal.vue.
 
-  Decyzje właściciela (2026-11-16): autor może EDYTOWAĆ własny wpis (istniejąca
-  ścieżka CommentArea: frappe.client.set_value na Comment), historia zmian
+  Decyzje właściciela (2026-11-16): autor może EDYTOWAĆ własny wpis (przez
+  crm.api.zadania_rozmowa.edytuj, tylko autor; Comment nie ma dla D2D i
+  Backend prawa write, więc frappe.client.set_value odmawiałoby), historia zmian
   wpisu jest pod małym przyciskiem przy wpisie, a USUWANIA wpisów nie ma
   (prop bezUsuwania wycina gałąź usuwania z menu wpisu).
 
@@ -52,6 +53,7 @@
             :activity="wpis"
             :rzeczownik-wpisu="__('wpis')"
             bez-usuwania
+            :zapisz-edycje="zapiszEdycje"
             @reload="przeladuj"
             @historia="otworzHistorie"
           />
@@ -169,6 +171,13 @@ const wpisy = computed(() =>
 
 function przeladuj() {
   return rozmowa.reload()
+}
+
+// Edycja własnego wpisu: dedykowany endpoint (tylko autor), bo Comment nie
+// ma dla ról D2D i Backend prawa `write`, więc `frappe.client.set_value` z
+// CommentArea odmawiałoby autorom. Błąd leci do CommentArea (toast).
+function zapiszEdycje(komentarz, tresc) {
+  return call('crm.api.zadania_rozmowa.edytuj', { komentarz, tresc })
 }
 
 // Okno zadania jest montowane na jedno zadanie, ale prop może się zmienić bez

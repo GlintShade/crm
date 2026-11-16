@@ -96,6 +96,11 @@ const props = defineProps({
   // VOLTEO (rozmowa zadania): menu wpisu bez gałęzi usuwania (zostaje samo
   // "Edit"). Domyślnie false - pozostałe miejsca bez zmian.
   bezUsuwania: { type: Boolean, default: false },
+  // VOLTEO (rozmowa zadania): własny zapis edycji, `async (nazwaWpisu, tresc)`.
+  // Domyślnie (null) edycja idzie jak dotąd przez `frappe.client.set_value` na
+  // Comment, które odmawia rolom bez prawa `write` na Comment (D2D, Backend);
+  // rozmowa zadania przekazuje tu wywołanie `crm.api.zadania_rozmowa.edytuj`.
+  zapiszEdycje: { type: Function, default: null },
 })
 
 // `historia` niesie nazwę wpisu (`activity.name`); emitowane tylko z przycisku
@@ -142,16 +147,23 @@ async function saveEdit() {
   }
   saving.value = true
   try {
-    await call('frappe.client.set_value', {
-      doctype: 'Comment',
-      name: props.activity.name,
-      fieldname: 'content',
-      value: editContent.value,
-    })
+    if (props.zapiszEdycje) {
+      await props.zapiszEdycje(props.activity.name, editContent.value)
+    } else {
+      await call('frappe.client.set_value', {
+        doctype: 'Comment',
+        name: props.activity.name,
+        fieldname: 'content',
+        value: editContent.value,
+      })
+    }
     editing.value = false
     emit('reload')
   } catch (e) {
-    toast.error(__('Failed to update comment'))
+    // Komunikat serwera tylko przy własnym zapisie (zapiszEdycje): endpoint
+    // zwraca czytelne powody ("Wpis może edytować tylko jego autor.").
+    // Pozostałe miejsca zostają przy stałym komunikacie.
+    toast.error((props.zapiszEdycje && e?.messages?.[0]) || __('Failed to update comment'))
   } finally {
     saving.value = false
   }

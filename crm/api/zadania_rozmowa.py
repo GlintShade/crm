@@ -5,9 +5,11 @@
 `crm.volteo_zadania_rozmowa` (frappe-free).
 
 Wpis rozmowy to zwykly `Comment` (`comment_type = "Comment"`,
-`reference_doctype = "CRM Task"`, `reference_name` = nazwa zadania). Edycja
-tresci idzie istniejaca sciezka `CommentArea.vue` (`frappe.client.set_value` na
-`Comment`) -- ten modul NIE ma wlasnego endpointu edycji ani usuwania.
+`reference_doctype = "CRM Task"`, `reference_name` = nazwa zadania). Usuwania
+wpisow nie ma. Edycja idzie przez `edytuj` (tylko autor wpisu): `Comment` ma dla
+rol `Volteo D2D Sales` i `Volteo Backend` tylko `read` + `create` (decyzja
+2026-08-05, `ops/crm-uprawnienia-audyt-comment.py`), wiec dawna sciezka
+`CommentArea.vue` (`frappe.client.set_value`) odmawialaby autorom z tych rol.
 
 Frontend woła te endpointy WYLACZNIE pelna kropkowana sciezka
 (`crm.api.zadania_rozmowa.*`) i z nazwa zadania jako STRING: `CRM Task` ma
@@ -46,6 +48,53 @@ def _sprawdz_zadanie(zadanie: str) -> None:
 		or not frappe.has_permission(DOCTYPE_ZADANIA, "read", zadanie)
 	):
 		frappe.throw(_("Brak uprawnień do tego zadania."), frappe.PermissionError)
+
+
+def _wpis_zadania(komentarz: str) -> dict:
+	"""Wiersz komentarza (`reference_doctype`, `reference_name`, `comment_type`,
+	`owner`, `content`), ktory jest wpisem rozmowy zadania, z odczytalnym
+	zadaniem. Komentarz nieistniejacy, nie-zadaniowy albo innego typu daje ten
+	sam blad co brak uprawnien (patrz `_sprawdz_zadanie`): endpointy nie moga
+	sluzyc do czytania ani zmiany komentarzy szans, leadow czy audytu."""
+	wpis = (
+		frappe.db.get_value(
+			"Comment",
+			komentarz,
+			["reference_doctype", "reference_name", "comment_type", "owner", "content"],
+			as_dict=True,
+		)
+		if komentarz
+		else None
+	)
+	if not wpis or wpis.reference_doctype != DOCTYPE_ZADANIA or wpis.comment_type != "Comment":
+		frappe.throw(_("Brak uprawnień do tego wpisu."), frappe.PermissionError)
+	_sprawdz_zadanie(wpis.reference_name)
+	return wpis
+
+
+def _sprawdz_zalaczniki(zadanie: str, zalaczniki: list | None) -> None:
+	"""Kazdy zalacznik to NAZWA pliku (`File.name`, string), ktory istnieje, jest
+	wlasnoscia wywolujacego i jest podpiety pod TO zadanie. Tak oznacza plik
+	uploader z `CommentBox.vue` (`frappe.handler.upload_file` z doctype `CRM Task`
+	i docname = nazwa zadania, wlasciciel = uploadujacy). Bez tego
+	`crm.api.comment.add_attachments` skopiowaloby do wpisu DOWOLNY plik o znanej
+	nazwie (takze cudzy, prywatny). Slowniki `{fname, fcontent}`, ktore
+	`add_attachments` tez obsluguje, tu sa odrzucane."""
+	for nazwa in zalaczniki or []:
+		plik = (
+			frappe.db.get_value(
+				"File", nazwa, ["owner", "attached_to_doctype", "attached_to_name"], as_dict=True
+			)
+			if isinstance(nazwa, str) and nazwa
+			else None
+		)
+		if (
+			not plik
+			or plik.owner != frappe.session.user
+			or plik.attached_to_doctype != DOCTYPE_ZADANIA
+			or str(plik.attached_to_name) != zadanie
+		):
+			frappe.throw(_("Nieprawidłowy załącznik."), frappe.PermissionError)
 
 
 @frappe.whitelist()
@@ -113,13 +162,37 @@ def dodaj(zadanie: str, tresc: str, zalaczniki: list | None = None) -> dict:
 	"""Dodaje wpis do rozmowy zadania. Pusta tresc (po zdjeciu znacznikow i
 	bialych znakow) jest odrzucana; sam zapis, wzmianki i zalaczniki robi
 	istniejace `crm.api.comment.add_comment` -- logika zalacznikow nie jest tu
-	duplikowana. `zalaczniki` to lista nazw plikow (`File.name`)."""
+	duplikowana. `zalaczniki` to lista nazw plikow (`File.name`); kazdy musi byc
+	plikiem wywolujacego podpietym pod to zadanie (`_sprawdz_zalaczniki`)."""
 	_sprawdz_zadanie(zadanie)
 	if tekst_pusty(tresc):
 		frappe.throw(_("Wpis nie może być pusty."))
+	_sprawdz_zalaczniki(zadanie, zalaczniki)
 
 	komentarz = add_comment(DOCTYPE_ZADANIA, zadanie, tresc, zalaczniki)
 	return {"name": komentarz.name}
+
+
+@frappe.whitelist(methods=["POST"])
+def edytuj(komentarz: str, tresc: str) -> dict:
+	"""Zmienia tresc wpisu rozmowy. TYLKO autor wpisu (bez wyjatku dla
+	administratorow) i tylko, gdy widzi zadanie. Zapis idzie przez
+	`save(ignore_permissions=True)`, bo rola autora (D2D/Backend) nie ma na
+	`Comment` prawa `write`; `Comment.track_changes` zapisuje wiersz `Version`
+	(historia zmian), a hook `on_update` wysyla powiadomienia o wzmiankach jak
+	przy kazdym zapisie komentarza. Niezmieniona tresc nic nie zapisuje."""
+	wpis = _wpis_zadania(komentarz)
+	if wpis.owner != frappe.session.user:
+		frappe.throw(_("Wpis może edytować tylko jego autor."), frappe.PermissionError)
+	if tekst_pusty(tresc):
+		frappe.throw(_("Wpis nie może być pusty."))
+	if tresc == wpis.content:
+		return {"name": komentarz}
+
+	doc = frappe.get_doc("Comment", komentarz)
+	doc.content = tresc
+	doc.save(ignore_permissions=True)
+	return {"name": doc.name}
 
 
 @frappe.whitelist()
@@ -127,22 +200,7 @@ def historia(komentarz: str) -> list[dict]:
 	"""Wczesniejsze wersje tresci jednego wpisu rozmowy (rosnaco po dacie
 	zmiany): `{kto, kto_nazwa, kiedy, przed, po}`. Czyta wiersze `Version`
 	komentarza (`Comment.track_changes = 1`), niczego nie zapisuje."""
-	wpis = (
-		frappe.db.get_value(
-			"Comment",
-			komentarz,
-			["reference_doctype", "reference_name", "comment_type"],
-			as_dict=True,
-		)
-		if komentarz
-		else None
-	)
-	# Komentarz nieistniejacy, nie-zadaniowy albo innego typu daje ten sam blad
-	# co brak uprawnien (patrz `_sprawdz_zadanie`): endpoint nie moze sluzyc do
-	# czytania historii komentarzy szans, leadow ani audytu.
-	if not wpis or wpis.reference_doctype != DOCTYPE_ZADANIA or wpis.comment_type != "Comment":
-		frappe.throw(_("Brak uprawnień do tego wpisu."), frappe.PermissionError)
-	_sprawdz_zadanie(wpis.reference_name)
+	_wpis_zadania(komentarz)
 
 	zmiany = zmiany_tresci(
 		frappe.get_all(
