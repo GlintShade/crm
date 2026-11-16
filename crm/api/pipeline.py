@@ -482,7 +482,7 @@ def dispatch_task(rule_key: str, deal: str, rodzaj: str) -> int:
 		for odbiorca in odbiorcy:
 			if frappe.get_all("CRM Task", filters=filtr_duplikatu(deal, odbiorca, tytul), limit=1):
 				continue
-			frappe.get_doc(
+			zadanie = frappe.get_doc(
 				dane_zadania(
 					rodzaj,
 					klient,
@@ -493,7 +493,11 @@ def dispatch_task(rule_key: str, deal: str, rodzaj: str) -> int:
 					regula.termin_dni,
 					teraz=frappe.utils.now_datetime(),
 				)
-			).insert(ignore_permissions=True)
+			)
+			# ops#360: zadanie automatyczne nie powiadamia swojego "autora"
+			# (znacznik zapisuje CRMTask.after_insert).
+			zadanie.flags.volteo_zadanie_automatyczne = True
+			zadanie.insert(ignore_permissions=True)
 			utworzone += 1
 
 		if utworzone > 0:
