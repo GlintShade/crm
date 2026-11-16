@@ -198,7 +198,7 @@ import { usersStore } from '@/stores/users'
 import { formatDate } from '@/utils'
 import { timestampCell } from '@/composables/useTimelinePreferences'
 import { useOnboarding, useTelemetry } from 'frappe-ui/frappe'
-import { Tooltip, Avatar, TextEditor, Dropdown, call } from 'frappe-ui'
+import { Tooltip, Avatar, TextEditor, Dropdown, call, toast } from 'frappe-ui'
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
@@ -359,19 +359,24 @@ function actions(name) {
     {
       label: __('Delete'),
       icon: 'trash-2',
-      onClick: () => {
-        deleteTask(name)
-        tasks.value.reload()
+      onClick: async () => {
+        if (await deleteTask(name)) tasks.value.reload()
       },
     },
   ]
 }
 
 async function deleteTask(name) {
-  await call('frappe.client.delete', {
-    doctype: 'CRM Task',
-    name,
-  })
+  try {
+    await call('frappe.client.delete', {
+      doctype: 'CRM Task',
+      name,
+    })
+    return true
+  } catch (err) {
+    toast.error(err?.messages?.[0] || __('Nie udało się usunąć zadania.'))
+    return false
+  }
 }
 
 function redirect(doctype, docname) {

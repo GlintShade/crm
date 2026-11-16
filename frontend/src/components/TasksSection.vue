@@ -105,7 +105,7 @@
 import TaskArea from '@/components/Activities/TaskArea.vue'
 import CollapsibleSection from '@/components/CollapsibleSection.vue'
 import { useDoctypeModal } from '@/composables/doctypeModal'
-import { createResource, call, Button } from 'frappe-ui'
+import { createResource, call, Button, toast } from 'frappe-ui'
 import KartaSekcji from '@/components/KartaSekcji.vue'
 import ZakonczoneZadania from '@/components/ZakonczoneZadania.vue'
 import { motywLicznikaZadan, podsumowanieZadan, podzielZadania } from '@/utils/panelBoczny'
@@ -219,11 +219,15 @@ function showTask(task) {
 }
 
 async function deleteTask(name) {
-  await call('frappe.client.delete', {
-    doctype: 'CRM Task',
-    name,
-  })
-  tasks.reload()
+  try {
+    await call('frappe.client.delete', {
+      doctype: 'CRM Task',
+      name,
+    })
+    tasks.reload()
+  } catch (err) {
+    toast.error(err?.messages?.[0] || __('Nie udało się usunąć zadania.'))
+  }
 }
 
 function zapiszStatus(task, status) {
