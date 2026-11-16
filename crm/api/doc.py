@@ -2096,7 +2096,7 @@ def _usun_jeden(doctype: str, name: str, delete_linked: bool) -> None:
 			frappe.delete_doc("Address", adres_name)
 
 	else:
-		linked_docs = get_linked_docs_of_document(doctype, name)
+		linked_docs = get_linked_docs_of_document(doctype, str(name))
 		for linked_doc in linked_docs:
 			if not linked_doc.get("reference_doctype") or not linked_doc.get("reference_docname"):
 				continue
@@ -2171,7 +2171,7 @@ def delete_bulk_docs(doctype: str, items: str | list, delete_linked: bool = Fals
 			frappe.db.rollback(save_point=savepoint)
 			frappe.clear_messages()
 			frappe.log_error(frappe.get_traceback(), "Bulk Delete Error")
-			failed.append({"name": name, "reason": "Nieoczekiwany błąd — szczegóły w logu serwera."})
+			failed.append({"name": name, "reason": "Nieoczekiwany błąd, szczegóły w logu serwera."})
 
 	# Bezpiecznik: gwarantuje czysta koperte HTTP niezaleznie od tego, ktore
 	# galezie wyzej sie wykonaly (np. msgprint z frappe.get_doc przy
