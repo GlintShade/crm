@@ -71,7 +71,7 @@ class CRMTask(Document):
 				"label": "Klient",
 				"type": "Data",
 				"key": "_klient",
-				"width": "10rem",
+				"width": "11.5rem",
 			},
 			{
 				"label": "Status",
@@ -95,6 +95,13 @@ class CRMTask(Document):
 				"label": "Assigned To",
 				"type": "Link",
 				"key": "assigned_to",
+				"width": "10rem",
+			},
+			{
+				"label": "Szansa",
+				"type": "Dynamic Link",
+				"key": "reference_docname",
+				"options": "reference_doctype",
 				"width": "10rem",
 			},
 			{
