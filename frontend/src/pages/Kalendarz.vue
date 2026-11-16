@@ -33,7 +33,11 @@
       </template>
     </LayoutHeader>
 
-    <div class="flex-1 overflow-y-auto p-4">
+    <!-- Stały rynsztok paska przewijania: szerokość kart (a z niej ich wysokość)
+         nie zależy od tego, czy pasek się akurat pojawił. Bez tego skala px/h
+         z szerokości karty wpadała w pętlę, gdy wysokość tablicy była równa
+         wysokości kontenera. -->
+    <div class="flex-1 overflow-y-auto p-4 [scrollbar-gutter:stable]">
       <KalendarzWidok ref="kal" />
     </div>
   </div>

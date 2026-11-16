@@ -250,7 +250,7 @@
   </KanbanView>
   <div
     v-else-if="route.params.viewType == 'kalendarz'"
-    class="min-h-0 flex-1 overflow-y-auto p-4"
+    class="min-h-0 flex-1 overflow-y-auto p-4 [scrollbar-gutter:stable]"
     data-testid="leady-kalendarz"
   >
     <KalendarzWidok pasek />
