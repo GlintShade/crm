@@ -26,8 +26,20 @@
           data-testid="wpis-historia"
           @click="emit('historia', activity.name)"
         />
+        <!-- VOLTEO (rozmowa zadania, bezUsuwania): menu mialo tylko "Edit", wiec
+          zamiast rozwijanego menu zwykly przycisk z olowkiem; ten sam warunek
+          widocznosci co menu. Lead, szansa i audyt zostaja przy menu. -->
+        <Button
+          v-if="bezUsuwania && isOwner && !editing"
+          icon="lucide-pencil"
+          variant="ghost"
+          class="!h-6 !w-6"
+          :tooltip="__('Edit')"
+          data-testid="wpis-edytuj"
+          @click="startEdit"
+        />
         <Dropdown
-          v-if="isOwner && !editing"
+          v-else-if="isOwner && !editing"
           :options="menuOptions"
           placement="right"
           @click="confirmingDelete = false"
