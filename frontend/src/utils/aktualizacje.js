@@ -51,6 +51,9 @@ export const MONTAZ = {
   name: 'Montaz',
   doctype: 'Volteo Montaz Update',
   html: false,
+  // ops#364: jak TRIFY (zwykly tekst, bez wzmianek).
+  edycja: true,
+  api: 'crm.api.montaz_wpisy',
   zdjecia: true,
   protokol: true,
   prywatneNotatki: true,
@@ -65,6 +68,10 @@ export const TRIFY = {
   name: 'Trify',
   doctype: 'Volteo Trify Update',
   html: true,
+  // ops#364: edycja wlasnego wpisu, historia zmian, usuwanie tylko dla
+  // administratora; `api` to modul z edytuj/historia/liczby_zmian.
+  edycja: true,
+  api: 'crm.api.trify',
   // Lustro: crm/volteo_trify.py TYPY oraz ops/crm-trify.py — zmieniać razem.
   typy: ['Notatka', 'Wniosek Trify', 'Decyzja Trify', 'Umowa Trify', 'Wypłata Trify', 'Problem'],
   placeholder: 'Np. Złożono wniosek Trify 03.09… (@ aby wspomnieć użytkownika)',

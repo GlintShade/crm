@@ -37,11 +37,7 @@ def _sprawdz_dokument(doctype: str, nazwa: str) -> None:
 	"""Wspolna bramka: dokument nadrzedny musi istniec i byc odczytywalny przez
 	wywolujacego. Brak dokumentu i brak uprawnien daja TEN SAM blad, zeby endpoint
 	nie zdradzal, ktore nazwy istnieja."""
-	if (
-		not nazwa
-		or not frappe.db.exists(doctype, nazwa)
-		or not frappe.has_permission(doctype, "read", nazwa)
-	):
+	if not nazwa or not frappe.db.exists(doctype, nazwa) or not frappe.has_permission(doctype, "read", nazwa):
 		frappe.throw(_("Brak uprawnień do tego dokumentu."), frappe.PermissionError)
 
 
@@ -65,18 +61,17 @@ def _wpis(komentarz: str) -> dict:
 	return wpis
 
 
-def liczby_zmian_komentarzy(nazwy: list[str]) -> dict[str, int]:
-	"""`{nazwa komentarza: liczba zmian tresci}` z wierszy `Version` (jedno
-	zapytanie). Pomocnik dla `crm.api.volteo_leady.komentarze` i
-	`crm.api.activities`, NIE metoda whitelist -- wolajacy sam sprawdzil odczyt
-	dokumentu nadrzednego. Komentarze bez zmian nie maja klucza (`.get(nazwa, 0)`)."""
+def liczby_zmian_dokumentow(doctype: str, nazwy: list[str], pole: str) -> dict[str, int]:
+	"""`{nazwa dokumentu: liczba zmian pola `pole`}` z wierszy `Version` (jedno
+	zapytanie). Pomocnik, NIE metoda whitelist -- wolajacy sam sprawdzil odczyt
+	dokumentu nadrzednego. Dokumenty bez zmian nie maja klucza (`.get(nazwa, 0)`)."""
 	nazwy = [nazwa for nazwa in (nazwy or []) if nazwa]
 	if not nazwy:
 		return {}
 	wersje_per_wpis: dict[str, list[dict]] = {}
 	for wersja in frappe.get_all(
 		"Version",
-		filters={"ref_doctype": "Comment", "docname": ["in", nazwy]},
+		filters={"ref_doctype": doctype, "docname": ["in", nazwy]},
 		fields=["docname", "owner", "creation", "data"],
 		order_by="creation asc",
 		limit_page_length=0,
@@ -85,8 +80,14 @@ def liczby_zmian_komentarzy(nazwy: list[str]) -> dict[str, int]:
 	return {
 		nazwa: liczba
 		for nazwa, wersje in wersje_per_wpis.items()
-		if (liczba := liczba_zmian_tresci(wersje))
+		if (liczba := liczba_zmian_tresci(wersje, pole))
 	}
+
+
+def liczby_zmian_komentarzy(nazwy: list[str]) -> dict[str, int]:
+	"""Liczby zmian tresci komentarzy (`Comment.content`), patrz
+	`liczby_zmian_dokumentow`."""
+	return liczby_zmian_dokumentow("Comment", nazwy, "content")
 
 
 @frappe.whitelist(methods=["POST"])

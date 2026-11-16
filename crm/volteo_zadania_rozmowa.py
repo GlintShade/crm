@@ -41,9 +41,10 @@ def _dane_wersji(dane: object) -> dict | None:
 	return None
 
 
-def zmiany_tresci(wersje: list[dict]) -> list[dict]:
+def zmiany_tresci(wersje: list[dict], pole: str = "content") -> list[dict]:
 	"""Z wierszy `Version` (pola: `owner`, `creation`, `data` jako string JSON
-	albo slownik) wybiera zmiany pola `content`. Zwraca liste
+	albo slownik) wybiera zmiany pola `pole` (domyslnie `content`; `Volteo Notatka` i
+	`Volteo Trify Update` trzymaja tresc w `tekst`). Zwraca liste
 	`{"kto", "kiedy", "przed", "po"}` w kolejnosci rosnacej po `creation`.
 
 	Wersje bez zmiany `content`, z niepoprawnym JSON albo bez klucza `changed`
@@ -62,7 +63,7 @@ def zmiany_tresci(wersje: list[dict]) -> list[dict]:
 		for zmiana in zmiany:
 			if not isinstance(zmiana, (list, tuple)) or len(zmiana) < 3:
 				continue
-			if zmiana[0] != "content":
+			if zmiana[0] != pole:
 				continue
 			wynik.append(
 				{
@@ -79,9 +80,9 @@ def zmiany_tresci(wersje: list[dict]) -> list[dict]:
 	return wynik
 
 
-def liczba_zmian_tresci(wersje: list[dict]) -> int:
+def liczba_zmian_tresci(wersje: list[dict], pole: str = "content") -> int:
 	"""Ile razy zmieniono tresc wpisu: `len(zmiany_tresci(wersje))`."""
-	return len(zmiany_tresci(wersje))
+	return len(zmiany_tresci(wersje, pole))
 
 
 def etykieta_zrodla(tytul: str | None) -> str:

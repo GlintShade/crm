@@ -31,7 +31,9 @@ import frappe
 from frappe import _
 
 from crm.api.comment import extract_mentions
+from crm.api.komentarze import liczby_zmian_dokumentow
 from crm.fcrm.doctype.crm_notification.crm_notification import notify_user
+from crm.volteo_komentarze import nowe_wzmianki, zmiany_tresci
 from crm.volteo_trify import TYPY, tekst_pusty, zbuduj_powiadomienie
 
 
@@ -51,3 +53,86 @@ def after_insert(doc, method: str | None = None) -> None:
 			notify_user(zbuduj_powiadomienie(doc.owner, autor_nazwa, doc.deal, doc.name, wzmianka.email))
 	except Exception:
 		frappe.log_error(title="Trify: powiadomienie o wzmiance", message=frappe.get_traceback())
+
+
+DOCTYPE = "Volteo Trify Update"
+
+
+def _wpis(name: str) -> dict:
+	"""Wiersz wpisu Trify z odczytalna szansa i samym wpisem (hook
+	`has_trify_permission`, fail-closed). Brak wpisu i brak uprawnien daja TEN SAM
+	blad."""
+	wiersz = frappe.db.get_value(DOCTYPE, name, ["deal", "owner", "tekst"], as_dict=True) if name else None
+	if (
+		not wiersz
+		or not frappe.has_permission("CRM Deal", "read", wiersz.deal)
+		or not frappe.has_permission(DOCTYPE, "read", name)
+	):
+		frappe.throw(_("Brak uprawnień do tego wpisu."), frappe.PermissionError)
+	return wiersz
+
+
+@frappe.whitelist()
+def liczby_zmian(deal: str) -> dict:
+	"""`{nazwa wpisu: liczba zmian tresci}` dla wpisow Trify szansy (ikona
+	historii, ops#364). Tylko wpisy widoczne dla wolajacego."""
+	if not frappe.has_permission("CRM Deal", "read", deal):
+		frappe.throw(_("Brak uprawnień do tej szansy sprzedaży."), frappe.PermissionError)
+	nazwy = frappe.get_list(DOCTYPE, filters={"deal": deal}, pluck="name", limit_page_length=0)
+	return liczby_zmian_dokumentow(DOCTYPE, nazwy, "tekst")
+
+
+@frappe.whitelist(methods=["POST"])
+def edytuj(name: str, tekst: str) -> dict:
+	"""Zmienia tresc wpisu Trify (ops#364). TYLKO autor wpisu (takze gdy jest
+	administratorem). Zapis przez `save(ignore_permissions=True)` (D2D nie ma
+	`write`); `validate` sprawdza tresc i typ, `track_changes` zapisuje wersje
+	(historia). Powiadomienie dostaja wylacznie osoby wzmiankowane po raz
+	pierwszy w tej edycji."""
+	wiersz = _wpis(name)
+	if wiersz.owner != frappe.session.user:
+		frappe.throw(_("Wpis może edytować tylko jego autor."), frappe.PermissionError)
+	if tekst_pusty(tekst):
+		frappe.throw(_("Treść wpisu nie może być pusta."))
+	if tekst == wiersz.tekst:
+		return {"name": name, "tekst": tekst}
+
+	doc = frappe.get_doc(DOCTYPE, name)
+	doc.tekst = tekst
+	doc.save(ignore_permissions=True)
+
+	try:
+		autor_nazwa = frappe.get_cached_value("User", doc.owner, "full_name") or doc.owner
+		for wzmianka in nowe_wzmianki(wiersz.tekst, tekst):
+			notify_user(zbuduj_powiadomienie(doc.owner, autor_nazwa, doc.deal, doc.name, wzmianka["email"]))
+	except Exception:
+		frappe.log_error(title="Trify: powiadomienie o wzmiance po edycji", message=frappe.get_traceback())
+	return {"name": doc.name, "tekst": doc.tekst}
+
+
+@frappe.whitelist()
+def historia(name: str) -> list[dict]:
+	"""Wczesniejsze wersje tresci wpisu Trify (`{kto, kto_nazwa, kiedy, przed,
+	po}`, rosnaco po dacie); widoczne dla kazdego, kto widzi wpis."""
+	_wpis(name)
+	zmiany = zmiany_tresci(
+		frappe.get_all(
+			"Version",
+			filters={"ref_doctype": DOCTYPE, "docname": name},
+			fields=["owner", "creation", "data"],
+			order_by="creation asc",
+			limit_page_length=0,
+		),
+		"tekst",
+	)
+	if not zmiany:
+		return []
+	nazwy = {
+		u.name: u.full_name
+		for u in frappe.get_all(
+			"User",
+			filters={"name": ["in", list({z["kto"] for z in zmiany if z["kto"]})]},
+			fields=["name", "full_name"],
+		)
+	}
+	return [{**z, "kto_nazwa": nazwy.get(z["kto"]) or z["kto"]} for z in zmiany]

@@ -119,6 +119,10 @@
                 :wpis="jakoKartaWpis(wpis)"
                 pokaz-zakladke
                 tylko-godzina
+                edycja
+                :pokaz-usun="Boolean(feed.data?.can_delete && wpis.nazwa_notatki)"
+                @zmieniono="feed.reload()"
+                @usun="usunNotatke"
                 @otworz-zakladke="przejdzDoZakladki"
                 @otworz-zadanie="otworzZadanie"
               />
@@ -145,7 +149,7 @@ import {
   zapiszFiltr,
 } from '@/utils/notatki'
 import { useDoctypeModal } from '@/composables/doctypeModal'
-import { Button, Dropdown, TextInput, createResource, toast } from 'frappe-ui'
+import { Button, Dropdown, TextInput, call, createResource, toast } from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -247,7 +251,33 @@ function jakoKartaWpis(wpis) {
     // dla stopki "Otwórz zadanie" i etykieta chipa "Zadanie: <tytuł>".
     zadanie: wpis.zadanie,
     zrodlo_etykieta: wpis.zrodlo_etykieta,
+    // ops#364: tylko wpisy `Volteo Notatka` (edycja, historia, usuwanie).
+    nazwa_notatki: wpis.nazwa_notatki,
+    liczba_zmian: wpis.liczba_zmian || 0,
   }
+}
+
+function usunNotatke(name) {
+  $dialog({
+    title: __('Usuń notatkę'),
+    message: __('Czy na pewno usunąć tę notatkę? Tej operacji nie można cofnąć.'),
+    actions: [
+      {
+        label: __('Usuń'),
+        theme: 'red',
+        variant: 'solid',
+        onClick: async (close) => {
+          try {
+            await call('crm.api.notatki.usun', { deal: props.dealId, name })
+            await feed.reload()
+            close()
+          } catch (err) {
+            toast.error(err?.messages?.[0] || err?.message || __('Nie udało się usunąć notatki'))
+          }
+        },
+      },
+    ],
+  })
 }
 
 function przejdzDoZakladki(hash) {
