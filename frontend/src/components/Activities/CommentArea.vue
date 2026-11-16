@@ -24,13 +24,15 @@
           class="!h-6 !w-6"
           :tooltip="__('Historia zmian')"
           data-testid="wpis-historia"
-          @click="emit('historia', activity.name)"
+          @click="otworzHistorie"
         />
-        <!-- VOLTEO (rozmowa zadania, bezUsuwania): menu mialo tylko "Edit", wiec
-          zamiast rozwijanego menu zwykly przycisk z olowkiem; ten sam warunek
-          widocznosci co menu. Lead, szansa i audyt zostaja przy menu. -->
+        <!-- VOLTEO (ops#364): wlasciciel wpisu edytuje go jednym kliknieciem
+          (olowek). Pozycje "Usun" widza tylko administratorzy (System Manager,
+          Administrator): tylko oni maja prawo `delete` na Comment, dla pozostalych
+          kontrolka usuwania nie jest renderowana wcale. Administrator widzacy
+          cudzy wpis ma menu z samym "Usun". -->
         <Button
-          v-if="bezUsuwania && isOwner && !editing"
+          v-if="isOwner && !editing && !usuwanieWidoczne"
           icon="lucide-pencil"
           variant="ghost"
           class="!h-6 !w-6"
@@ -39,7 +41,7 @@
           @click="startEdit"
         />
         <Dropdown
-          v-else-if="isOwner && !editing"
+          v-else-if="(isOwner || usuwanieWidoczne) && !editing"
           :options="menuOptions"
           placement="right"
           @click="confirmingDelete = false"
@@ -88,15 +90,22 @@
         </div>
       </template>
     </div>
+    <HistoriaWpisuDialog
+      v-if="!historiaZewnetrzna && historiaOtwarta"
+      v-model:open="historiaOtwarta"
+      :komentarz="activity.name"
+    />
   </div>
 </template>
 <script setup>
 import UserAvatar from '@/components/UserAvatar.vue'
 import AttachmentItem from '@/components/AttachmentItem.vue'
+import HistoriaWpisuDialog from '@/components/HistoriaWpisuDialog.vue'
 import { Dropdown, Button, TextEditor, call, toast } from 'frappe-ui'
 import TimelineTimestamp from '@/components/Activities/TimelineTimestamp.vue'
 import { sanitizeHTML, ConfirmDelete } from '@/utils'
 import { sessionStore } from '@/stores/session'
+import { usersStore } from '@/stores/users'
 import { computed, ref } from 'vue'
 
 const props = defineProps({
@@ -108,11 +117,15 @@ const props = defineProps({
   // VOLTEO (rozmowa zadania): menu wpisu bez gałęzi usuwania (zostaje samo
   // "Edit"). Domyślnie false - pozostałe miejsca bez zmian.
   bezUsuwania: { type: Boolean, default: false },
-  // VOLTEO (rozmowa zadania): własny zapis edycji, `async (nazwaWpisu, tresc)`.
-  // Domyślnie (null) edycja idzie jak dotąd przez `frappe.client.set_value` na
-  // Comment, które odmawia rolom bez prawa `write` na Comment (D2D, Backend);
-  // rozmowa zadania przekazuje tu wywołanie `crm.api.zadania_rozmowa.edytuj`.
+  // VOLTEO: własny zapis edycji, `async (nazwaWpisu, tresc)`. Domyślnie (null)
+  // edycja idzie przez `crm.api.komentarze.edytuj` (lead i szansa, ops#364: tylko
+  // autor, wersja w historii); `frappe.client.set_value` odmawiał rolom bez prawa
+  // `write` na Comment (D2D, Backend). Rozmowa zadania przekazuje tu wywołanie
+  // `crm.api.zadania_rozmowa.edytuj`.
   zapiszEdycje: { type: Function, default: null },
+  // VOLTEO (ops#364): rozmowa zadania otwiera okno historii sama (zdarzenie
+  // `historia`, własny endpoint); lead i szansa zostawiają je temu komponentowi.
+  historiaZewnetrzna: { type: Boolean, default: false },
 })
 
 // `historia` niesie nazwę wpisu (`activity.name`); emitowane tylko z przycisku
@@ -121,7 +134,20 @@ const emit = defineEmits(['reload', 'historia'])
 
 const { user } = sessionStore()
 
+const { isAdmin } = usersStore()
+
 const isOwner = computed(() => props.activity.owner === user)
+// Tylko administrator (rola System Manager albo konto Administrator) ma prawo
+// `delete` na Comment; nie `isVolteoAdmin()`, bo Volteo Core Admin go nie ma.
+const usuwanieWidoczne = computed(
+  () => !props.bezUsuwania && (user === 'Administrator' || isAdmin(user)),
+)
+
+const historiaOtwarta = ref(false)
+function otworzHistorie() {
+  if (props.historiaZewnetrzna) emit('historia', props.activity.name)
+  else historiaOtwarta.value = true
+}
 
 const editing = ref(false)
 const saving = ref(false)
@@ -129,12 +155,16 @@ const editContent = ref('')
 const confirmingDelete = ref(false)
 
 const menuOptions = computed(() => [
-  {
-    label: __('Edit'),
-    icon: 'edit-2',
-    onClick: startEdit,
-  },
-  ...(props.bezUsuwania
+  ...(isOwner.value
+    ? [
+        {
+          label: __('Edit'),
+          icon: 'edit-2',
+          onClick: startEdit,
+        },
+      ]
+    : []),
+  ...(!usuwanieWidoczne.value
     ? []
     : ConfirmDelete({
         onConfirmDelete: deleteComment,
@@ -162,20 +192,17 @@ async function saveEdit() {
     if (props.zapiszEdycje) {
       await props.zapiszEdycje(props.activity.name, editContent.value)
     } else {
-      await call('frappe.client.set_value', {
-        doctype: 'Comment',
-        name: props.activity.name,
-        fieldname: 'content',
-        value: editContent.value,
+      await call('crm.api.komentarze.edytuj', {
+        komentarz: props.activity.name,
+        tresc: editContent.value,
       })
     }
     editing.value = false
     emit('reload')
   } catch (e) {
-    // Komunikat serwera tylko przy własnym zapisie (zapiszEdycje): endpoint
-    // zwraca czytelne powody ("Wpis może edytować tylko jego autor.").
-    // Pozostałe miejsca zostają przy stałym komunikacie.
-    toast.error((props.zapiszEdycje && e?.messages?.[0]) || __('Failed to update comment'))
+    // Endpointy edycji zwracają czytelne powody ("Wpis może edytować tylko jego
+    // autor."); stały komunikat tylko, gdy serwer nic nie podał.
+    toast.error(e?.messages?.[0] || __('Failed to update comment'))
   } finally {
     saving.value = false
   }

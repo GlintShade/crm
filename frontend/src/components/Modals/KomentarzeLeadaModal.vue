@@ -120,6 +120,7 @@ const comments = computed(() => {
     creation: c.creation,
     content: c.content,
     attachments: [],
+    liczba_zmian: c.liczba_zmian || 0,
   }))
 })
 

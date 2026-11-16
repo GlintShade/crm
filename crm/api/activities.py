@@ -7,6 +7,7 @@ from frappe.desk.form.load import get_docinfo
 from frappe.query_builder import JoinType
 from frappe.translate import get_translated_doctypes
 
+from crm.api.komentarze import liczby_zmian_komentarzy
 from crm.api.koszty import ADMIN_ROLE
 from crm.api.montaz import ZNACZNIK_PROTOKOLU_MONTAZU, ZNACZNIK_ZDJEC_MONTAZU
 from crm.fcrm.doctype.crm_call_log.crm_call_log import parse_call_log
@@ -239,6 +240,7 @@ def get_deal_activities(name: str):
 					}
 				)
 
+	liczby_zmian = liczby_zmian_komentarzy([c.name for c in docinfo.comments])
 	for comment in docinfo.comments:
 		activity = {
 			"name": comment.name,
@@ -247,6 +249,7 @@ def get_deal_activities(name: str):
 			"owner": comment.owner,
 			"content": comment.content,
 			"attachments": get_attachments("Comment", comment.name),
+			"liczba_zmian": liczby_zmian.get(comment.name, 0),
 			"is_lead": False,
 		}
 		activities.append(activity)
@@ -602,6 +605,7 @@ def get_lead_activities(name: str):
 		# computed once, up front, see the block above avoid_fields).
 		activities.append(maskuj_autora_cc(activity, autorzy_cc, maskuj_tozsamosc_cc))
 
+	liczby_zmian = liczby_zmian_komentarzy([c.name for c in docinfo.comments])
 	for comment in docinfo.comments:
 		activity = {
 			"name": comment.name,
@@ -610,6 +614,7 @@ def get_lead_activities(name: str):
 			"owner": comment.owner,
 			"content": comment.content,
 			"attachments": get_attachments("Comment", comment.name),
+			"liczba_zmian": liczby_zmian.get(comment.name, 0),
 			"is_lead": True,
 		}
 		activities.append(maskuj_autora_cc(activity, autorzy_cc, maskuj_tozsamosc_cc))

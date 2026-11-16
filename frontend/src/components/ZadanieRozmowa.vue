@@ -64,6 +64,7 @@
             :activity="wpis"
             :rzeczownik-wpisu="__('wpis')"
             bez-usuwania
+            historia-zewnetrzna
             :zapisz-edycje="zapiszEdycje"
             @reload="przeladuj"
             @historia="otworzHistorie"
@@ -95,41 +96,19 @@
       />
     </div>
 
-    <Dialog v-model:open="historiaOtwarta" :title="__('Historia zmian wpisu')" size="lg">
-      <div class="flex max-h-[60vh] flex-col gap-3 overflow-y-auto" data-testid="historia-wpisu">
-        <div v-if="historiaLadowanie" class="text-sm text-ink-gray-5">
-          {{ __('Ładowanie…') }}
-        </div>
-        <div v-else-if="!historia.length" class="text-sm text-ink-gray-5">
-          {{ __('Brak wcześniejszych wersji.') }}
-        </div>
-        <template v-else>
-          <div
-            v-for="(zmiana, i) in historia"
-            :key="i"
-            class="flex flex-col gap-1 rounded-lg border border-outline-gray-2 p-3"
-          >
-            <div class="flex flex-wrap items-center gap-x-1.5 text-sm">
-              <span class="font-medium text-ink-gray-8">{{ zmiana.kto_nazwa || zmiana.kto }}</span>
-              <span class="text-ink-gray-5">·</span>
-              <span class="text-ink-gray-5">{{ formatujTermin(zmiana.kiedy) }}</span>
-            </div>
-            <div class="text-xs text-ink-gray-5">{{ __('Przed zmianą:') }}</div>
-            <!-- eslint-disable-next-line vue/no-v-html -->
-            <div class="prose-f rounded bg-surface-gray-1 px-3 py-2 text-base" v-html="sanitizeHTML(zmiana.przed)" />
-          </div>
-        </template>
-      </div>
-    </Dialog>
+    <HistoriaWpisuDialog
+      v-model:open="historiaOtwarta"
+      :komentarz="historiaKomentarz"
+      endpoint="crm.api.zadania_rozmowa.historia"
+    />
   </div>
 </template>
 
 <script setup>
 import CommentArea from '@/components/Activities/CommentArea.vue'
 import CommentBox from '@/components/CommentBox.vue'
-import { sanitizeHTML } from '@/utils'
-import { formatujTermin } from '@/utils/dataPolska'
-import { Dialog, call, createResource, toast } from 'frappe-ui'
+import HistoriaWpisuDialog from '@/components/HistoriaWpisuDialog.vue'
+import { call, createResource, toast } from 'frappe-ui'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const props = defineProps({
@@ -269,29 +248,13 @@ function wyczyscPole() {
   noweZalaczniki.value = []
 }
 
-// Historia zmian wpisu: małe okno z wcześniejszymi wersjami treści, od
-// najnowszej zmiany. API zwraca zmiany rosnąco po dacie, odwracamy.
+// Historia zmian wpisu: wspolne okno HistoriaWpisuDialog (ladowanie i render).
 const historiaOtwarta = ref(false)
-const historiaLadowanie = ref(false)
-const historia = ref([])
-let numerZapytaniaHistorii = 0
+const historiaKomentarz = ref('')
 
-async function otworzHistorie(komentarz) {
-  const numer = ++numerZapytaniaHistorii
-  historia.value = []
-  historiaLadowanie.value = true
+function otworzHistorie(komentarz) {
+  historiaKomentarz.value = komentarz
   historiaOtwarta.value = true
-  try {
-    const zmiany = await call('crm.api.zadania_rozmowa.historia', { komentarz })
-    if (numer !== numerZapytaniaHistorii) return
-    historia.value = [...(zmiany || [])].reverse()
-  } catch (err) {
-    if (numer !== numerZapytaniaHistorii) return
-    historiaOtwarta.value = false
-    toast.error(err?.messages?.[0] || __('Nie udało się pobrać historii zmian.'))
-  } finally {
-    if (numer === numerZapytaniaHistorii) historiaLadowanie.value = false
-  }
 }
 </script>
 
