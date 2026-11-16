@@ -170,14 +170,14 @@ def dodaj(zadanie: str, tresc: str, zalaczniki: list | None = None) -> dict:
 	_sprawdz_zalaczniki(zadanie, zalaczniki)
 
 	komentarz = add_comment(DOCTYPE_ZADANIA, zadanie, tresc, zalaczniki)
-	# ops#360: dzwonek dla autora zadania (wzmianka autora we wpisie wygrywa).
+	# ops#360: dzwonek dla autora i wykonawcow zadania (wzmianka we wpisie wygrywa).
 	# Blad powiadomienia nigdy nie cofa wpisu.
 	try:
-		from crm.fcrm.doctype.crm_task.crm_task import powiadom_autora
+		from crm.fcrm.doctype.crm_task.crm_task import powiadom_o_zdarzeniu
 
-		powiadom_autora(frappe.get_doc(DOCTYPE_ZADANIA, zadanie), "wpis", tresc)
+		powiadom_o_zdarzeniu(frappe.get_doc(DOCTYPE_ZADANIA, zadanie), "wpis", tresc)
 	except Exception:
-		frappe.log_error(frappe.get_traceback(), "Rozmowa zadania: powiadomienie autora")
+		frappe.log_error(frappe.get_traceback(), "Rozmowa zadania: powiadomienie o wpisie")
 	return {"name": komentarz.name}
 
 

@@ -29,7 +29,9 @@ class CRMNotification(Document):
 
 	def on_update(self):
 		if self.to_user:
-			frappe.publish_realtime("crm_notification", user=self.to_user)
+			# after_commit: sygnal przed commitem zadania/ToDo kazal przegladarce
+			# odswiezyc liste, zanim wiersz byl widoczny (ops#360).
+			frappe.publish_realtime("crm_notification", user=self.to_user, after_commit=True)
 
 
 def notify_user(notification):
