@@ -10707,3 +10707,36 @@ msgstr "Nie wybrano żadnych wierszy."
 
 msgid "Termin można ustawić tylko dla wierszy w statusie Do wypłaty."
 msgstr "Termin można ustawić tylko dla wierszy w statusie Do wypłaty."
+
+msgid "Brak uprawnień do tej notatki."
+msgstr "Brak uprawnień do tej notatki."
+
+msgid "Brak uprawnień do tej szansy sprzedaży."
+msgstr "Brak uprawnień do tej szansy sprzedaży."
+
+msgid "Czy na pewno usunąć ten wpis? Tej operacji nie można cofnąć."
+msgstr "Czy na pewno usunąć ten wpis? Tej operacji nie można cofnąć."
+
+msgid "Czy na pewno usunąć tę notatkę? Tej operacji nie można cofnąć."
+msgstr "Czy na pewno usunąć tę notatkę? Tej operacji nie można cofnąć."
+
+msgid "Nie udało się usunąć notatki"
+msgstr "Nie udało się usunąć notatki"
+
+msgid "Nie udało się usunąć wpisu"
+msgstr "Nie udało się usunąć wpisu"
+
+msgid "Nie udało się zapisać zmiany"
+msgstr "Nie udało się zapisać zmiany"
+
+msgid "Treść notatki nie może być pusta."
+msgstr "Treść notatki nie może być pusta."
+
+msgid "Treść wpisu nie może być pusta."
+msgstr "Treść wpisu nie może być pusta."
+
+msgid "Usuń notatkę"
+msgstr "Usuń notatkę"
+
+msgid "Usuń wpis"
+msgstr "Usuń wpis"
