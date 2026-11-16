@@ -139,6 +139,8 @@ permission_query_conditions = {
 	"Volteo Trify Update": "crm.permissions.faktura_visibility.get_trify_permission_query_conditions",
 	"Volteo Kredyt": "crm.permissions.faktura_visibility.get_kredyt_permission_query_conditions",
 	"Volteo Notatka": "crm.permissions.faktura_visibility.get_notatka_permission_query_conditions",
+	"Volteo Audyt": "crm.permissions.audyt_visibility.get_audyt_permission_query_conditions",
+	"Volteo Audyt CP": "crm.permissions.audyt_visibility.get_audyt_cp_permission_query_conditions",
 	"FCRM Note": "crm.permissions.child_visibility.get_note_permission_query_conditions",
 	"CRM Task": "crm.permissions.child_visibility.get_task_permission_query_conditions",
 }
@@ -162,6 +164,8 @@ has_permission = {
 	"Volteo Trify Update": "crm.permissions.faktura_visibility.has_trify_permission",
 	"Volteo Kredyt": "crm.permissions.faktura_visibility.has_kredyt_permission",
 	"Volteo Notatka": "crm.permissions.faktura_visibility.has_notatka_permission",
+	"Volteo Audyt": "crm.permissions.audyt_visibility.has_audyt_permission",
+	"Volteo Audyt CP": "crm.permissions.audyt_visibility.has_audyt_cp_permission",
 	"FCRM Note": [
 		"crm.permissions.child_visibility.has_note_permission",
 		"crm.permissions.delete_lockdown.block_nonadmin_delete",
