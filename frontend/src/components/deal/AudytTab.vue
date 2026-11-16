@@ -189,11 +189,47 @@
                   : 'border-outline-blue-2 bg-surface-blue-2 text-ink-blue-8',
             ]"
           >
-            <div class="font-medium">{{ banerSzkicu.tytul }}</div>
-            <div v-if="banerSzkicu.opis">{{ banerSzkicu.opis }}</div>
+            <div class="flex items-center gap-2 text-lg font-semibold">
+              <LucideCircleAlert v-if="banerSzkicu.rodzaj === 'blad'" class="h-5 w-5 shrink-0" />
+              <LucideCheck v-else-if="banerSzkicu.rodzaj === 'ok'" class="h-5 w-5 shrink-0" />
+              <LucideInfo v-else class="h-5 w-5 shrink-0" />
+              <span>{{ banerSzkicu.tytul }}</span>
+            </div>
+            <div v-if="banerSzkicu.opis" class="mt-1 text-base">{{ banerSzkicu.opis }}</div>
+            <div
+              v-if="banerSzkicu.wiersze.length"
+              data-testid="audyt-baner-lista"
+              class="mt-3 flex flex-col"
+            >
+              <button
+                v-for="(w, idx) in banerSzkicu.wiersze"
+                :key="w.label"
+                type="button"
+                :data-testid="'audyt-baner-wiersz-' + idx"
+                :class="[
+                  'flex w-full items-center justify-between gap-3 rounded px-2 py-2.5 text-left text-base transition-colors',
+                  idx > 0 ? 'border-t' : '',
+                  banerSzkicu.rodzaj === 'blad'
+                    ? 'border-outline-red-3 hover:bg-surface-red-3'
+                    : 'border-outline-blue-2 hover:bg-surface-blue-3',
+                ]"
+                @click="przejdzDo(w.pierwszy)"
+              >
+                <span class="min-w-0 flex-1 font-medium">{{ w.label }}</span>
+                <span
+                  :class="[
+                    'shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-sm font-semibold text-white',
+                    banerSzkicu.rodzaj === 'blad' ? 'bg-surface-red-6' : 'bg-surface-blue-6',
+                  ]"
+                >
+                  {{ w.etykieta }}
+                </span>
+                <LucideChevronRight class="h-5 w-5 shrink-0" />
+              </button>
+            </div>
             <Button
               v-if="banerSzkicu.rodzaj === 'blad'"
-              class="mt-2"
+              class="mt-3"
               variant="outline"
               size="sm"
               :label="__('Przejdź do pierwszego')"
@@ -623,7 +659,11 @@ import AudytPasekDecyzji from '@/components/deal/AudytPasekDecyzji.vue'
 import AudytPasekSzkicu from '@/components/deal/AudytPasekSzkicu.vue'
 import KredytPole from '@/components/deal/KredytPole.vue'
 import LucideCheck from '~icons/lucide/check'
+import LucideChevronRight from '~icons/lucide/chevron-right'
+import LucideCircleAlert from '~icons/lucide/circle-alert'
+import LucideInfo from '~icons/lucide/info'
 import {
+  etykietaBraku,
   frazaBrakow,
   licznikSekcji,
   licznikZdjec,
@@ -1054,15 +1094,25 @@ const podsumowanie = computed(() =>
 const banerSzkicu = computed(() => {
   const { pola, zdjecia: zdj, sekcje } = podsumowanie.value
   if (pola + zdj > 0) {
-    const opis = sekcje.map((x) => `${x.label} ${x.liczba}`).join(', ')
+    const wiersze = sekcje.map((x) => ({
+      label: x.label,
+      pierwszy: x.pierwszy,
+      etykieta: etykietaBraku(x.liczba, x.pierwszy.typ === 'zdjecie' ? 'zdjecie' : 'pole'),
+    }))
     if (proba.value) {
       return {
         rodzaj: 'blad',
         tytul: __('Nie można przesłać audytu. Uzupełnij {0}:', [frazaBrakow(pola, zdj, 'biernik')]),
-        opis,
+        opis: '',
+        wiersze,
       }
     }
-    return { rodzaj: 'brak', tytul: __('Brakuje {0}', [frazaBrakow(pola, zdj, 'dopelniacz')]), opis }
+    return {
+      rodzaj: 'brak',
+      tytul: __('Brakuje {0}', [frazaBrakow(pola, zdj, 'dopelniacz')]),
+      opis: '',
+      wiersze,
+    }
   }
   // Zielony baner tylko dla handlowca, który ma przycisk wysyłki.
   if (complete.value && requirements.is_rep) {
@@ -1070,13 +1120,17 @@ const banerSzkicu = computed(() => {
       rodzaj: 'ok',
       tytul: __('Audyt jest kompletny.'),
       opis: __('Sprawdź dane i prześlij go do weryfikacji przyciskiem na dole.'),
+      wiersze: [],
     }
   }
   return null
 })
 
 async function przejdzDoPierwszego() {
-  const p = podsumowanie.value.pierwszy
+  await przejdzDo(podsumowanie.value.pierwszy)
+}
+
+async function przejdzDo(p) {
   if (!p) return
   await nextTick()
   const el = document.getElementById(

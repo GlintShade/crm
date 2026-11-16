@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  etykietaBraku,
   frazaBrakow,
   licznikSekcji,
   licznikZdjec,
@@ -123,9 +124,9 @@ describe('podsumowanieSzkicu', () => {
     expect(r.pola).toBe(2)
     expect(r.zdjecia).toBe(1)
     expect(r.sekcje).toEqual([
-      { label: 'S1', liczba: 1 },
-      { label: 'S3', liczba: 1 },
-      { label: 'Dokumentacja zdjęciowa', liczba: 1 },
+      { label: 'S1', liczba: 1, pierwszy: { typ: 'pole', klucz: 'm' } },
+      { label: 'S3', liczba: 1, pierwszy: { typ: 'pole', klucz: 'b' } },
+      { label: 'Dokumentacja zdjęciowa', liczba: 1, pierwszy: { typ: 'zdjecie', klucz: 'f2' } },
     ])
     expect(r.pierwszy).toEqual({ typ: 'pole', klucz: 'm' })
   })
@@ -145,5 +146,17 @@ describe('procentPostepu', () => {
     expect(procentPostepu(5, 11, 1, 4)).toBe(40)
     expect(procentPostepu(0, 0, 0, 0)).toBe(0)
     expect(procentPostepu(11, 11, 4, 4)).toBe(100)
+  })
+})
+
+describe('etykietaBraku', () => {
+  it('pola', () => {
+    expect(etykietaBraku(1, 'pole')).toBe('brakuje 1 pola')
+    expect(etykietaBraku(2, 'pole')).toBe('brakuje 2 pól')
+    expect(etykietaBraku(5, 'pole')).toBe('brakuje 5 pól')
+  })
+  it('zdjecia', () => {
+    expect(etykietaBraku(1, 'zdjecie')).toBe('brakuje 1 zdjęcia')
+    expect(etykietaBraku(3, 'zdjecie')).toBe('brakuje 3 zdjęć')
   })
 })

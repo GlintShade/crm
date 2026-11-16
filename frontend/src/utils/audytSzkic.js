@@ -123,15 +123,29 @@ export function podsumowanieSzkicu(sekcje, slotyWymagane, wartosci, zdjecia, ety
     )
     if (!braki.length) return
     pola += braki.length
-    lista.push({ label: sek.label, liczba: braki.length })
+    lista.push({
+      label: sek.label,
+      liczba: braki.length,
+      pierwszy: { typ: 'pole', klucz: braki[0].fieldname },
+    })
     if (!pierwszy) pierwszy = { typ: 'pole', klucz: braki[0].fieldname }
   })
   const brakujaceZdjecia = (slotyWymagane || []).filter((s) => !zdjecia?.[s.key])
   if (brakujaceZdjecia.length) {
-    lista.push({ label: etykietaZdjec, liczba: brakujaceZdjecia.length })
+    lista.push({
+      label: etykietaZdjec,
+      liczba: brakujaceZdjecia.length,
+      pierwszy: { typ: 'zdjecie', klucz: brakujaceZdjecia[0].key },
+    })
     if (!pierwszy) pierwszy = { typ: 'zdjecie', klucz: brakujaceZdjecia[0].key }
   }
   return { pola, zdjecia: brakujaceZdjecia.length, sekcje: lista, pierwszy }
+}
+
+/** Tekst plakietki wiersza listy braków: "brakuje 2 pól", "brakuje 1 zdjęcia". */
+export function etykietaBraku(liczba, rodzaj) {
+  const slowo = rodzaj === 'zdjecie' ? odmianaZdjec(liczba, 'dopelniacz') : odmianaPol(liczba, 'dopelniacz')
+  return `brakuje ${liczba} ${slowo}`
 }
 
 /** Postęp 0-100 do paska (pola i zdjęcia razem). */
