@@ -236,7 +236,7 @@
               <div
                 v-if="terminTekst"
                 class="mt-1 text-xs"
-                :class="terminPrzeterminowany ? 'text-ink-red-4' : 'text-ink-gray-5'"
+                :class="terminPrzeterminowany ? 'text-ink-red-8' : 'text-ink-gray-5'"
               >
                 {{ terminTekst }}
               </div>
@@ -278,7 +278,6 @@ import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
 import Link from '@/components/Controls/Link.vue'
 import DateTimePickerSiatka from '@/components/Controls/DateTimePickerSiatka.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
-import ZadanieRozmowa from '@/components/ZadanieRozmowa.vue'
 import { useDocument } from '@/data/document'
 import { usersStore } from '@/stores/users'
 import { getFormat } from '@/utils'
@@ -294,7 +293,7 @@ import {
   domyslnyTerminZadania,
 } from '@/utils/zadania'
 import { TextEditor, Tooltip, call, createEditorButton, createResource } from 'frappe-ui'
-import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { computed, defineAsyncComponent, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 
 const props = defineProps({
@@ -305,6 +304,15 @@ const props = defineProps({
 })
 
 const show = defineModel({ type: Boolean })
+
+// Sekcja "Rozmowa" ladowana leniwie: TaskModal.vue jest w EAGER grafie importow
+// (App.vue -> DoctypeModals.vue), a ZadanieRozmowa.vue -> CommentArea.vue ->
+// TimelineTimestamp.vue -> useTimelinePreferences.js -> stores/settings.js, ktory
+// tworzy zasob FCRM Settings przy ewaluacji modulu. Statyczny import wciagnalby
+// ten sklep przed skonfigurowaniem frappe-ui (zapytanie dostaje HTML zamiast
+// JSON, marka ProEnergy nigdy sie nie ustawia). Patrz komentarz na koncu
+// composables/useTimelinePreferences.js.
+const ZadanieRozmowa = defineAsyncComponent(() => import('@/components/ZadanieRozmowa.vue'))
 
 const emit = defineEmits(['afterInsert', 'afterUpdate'])
 
