@@ -18,6 +18,11 @@
 
   Nazwa zadania idzie do API jako STRING (CRM Task ma nazwy liczbowe, a Frappe
   waliduje typy argumentów metod whitelist w żądaniu HTTP).
+
+  Lista wpisów siedzi w ramce jak pole Opis w oknie zadania (ta sama ramka
+  rounded-lg i outline-gray-2) i ma pasek przewijania ZAWSZE widoczny, gdy
+  wpisy się nie mieszczą (uwaga właściciela 2026-11-16: ma być widać, że jest
+  więcej wiadomości; macOS chowa paski systemowe, patrz blok style na końcu pliku).
 -->
 <template>
   <div
@@ -38,7 +43,7 @@
 
     <div
       ref="listaRef"
-      class="flex max-h-56 flex-col gap-3 overflow-y-auto pr-1"
+      class="rozmowa-lista flex max-h-64 flex-col gap-3 overflow-y-auto rounded-lg border border-outline-gray-2 py-3 pl-3 pr-2"
       data-testid="rozmowa-lista"
     >
       <div v-if="rozmowa.loading && !wpisy.length" class="text-sm text-ink-gray-5">
@@ -253,3 +258,37 @@ async function otworzHistorie(komentarz) {
   }
 }
 </script>
+
+<style scoped>
+/*
+  Pasek przewijania listy wpisow ZAWSZE widoczny, gdy wpisy sie nie mieszcza
+  (uwaga wlasciciela 2026-11-16: ma byc widac, ze jest wiecej wiadomosci).
+  Reguly ::-webkit-scrollbar wymuszaja klasyczny, staly pasek w Safari i
+  Chrome takze przy systemowym ustawieniu "pokazuj paski przy przewijaniu".
+  Wlasciwosci standardowe (scrollbar-width, scrollbar-color) tylko dla
+  przegladarek bez ::-webkit-scrollbar (Firefox): w Chrome wylaczylyby reguly
+  webkit i pasek znow by sie chowal. Kolory z tokenow (pelne wartosci oklch,
+  wiec var() bez rgb()), dzialaja w jasnym i ciemnym motywie.
+*/
+.rozmowa-lista::-webkit-scrollbar {
+  width: 10px;
+}
+.rozmowa-lista::-webkit-scrollbar-track {
+  background: transparent;
+}
+.rozmowa-lista::-webkit-scrollbar-thumb {
+  background-color: var(--outline-gray-4);
+  border: 2px solid transparent;
+  border-radius: 9999px;
+  background-clip: content-box;
+}
+.rozmowa-lista::-webkit-scrollbar-thumb:hover {
+  background-color: var(--ink-gray-5);
+}
+@supports not selector(::-webkit-scrollbar) {
+  .rozmowa-lista {
+    scrollbar-width: thin;
+    scrollbar-color: var(--outline-gray-4) transparent;
+  }
+}
+</style>
