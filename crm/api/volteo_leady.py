@@ -128,7 +128,7 @@ from crm.api.doc import (
 	rozwin_grupy,
 )
 from crm.permissions.org_hierarchy import BYPASS_ROLES, _ma_linie_leady, czy_autor_ma_role_cc
-from crm.volteo_aktywnosc import maskuj_autora_cc, tekst_sladu, zapisz_slad
+from crm.volteo_aktywnosc import czy_dokument_maskuje_cc, maskuj_autora_cc, tekst_sladu, zapisz_slad
 from crm.volteo_leady_telefon import normalizuj_filtr_telefonu
 from crm.volteo_przydzial import normalizuj_wartosci_geo
 
@@ -1069,10 +1069,11 @@ def komentarze(doctype: str, name: str) -> list[dict]:
 	# samo rozwiązanie co crm.api.activities.get_lead_activities dla zakładki
 	# Aktywność (ops#93 + fix 2026-09-10): tam maskowany jest tekst śladu I
 	# owner wpisu, tu nie ma znacznika tekstowego do zdjęcia (to zwykły
-	# komentarz), więc maskowane jest wyłącznie pole tożsamości autora. Poza
-	# leadami (Volteo Audyt/Volteo Audyt CP, CRM Deal) CC nigdy nie pisze
-	# komentarzy, więc autorzy_cc tam wychodzi pusty i maskuj_autora_cc jest
-	# no-opem.
+	# komentarz), więc maskowane jest wyłącznie pole tożsamości autora.
+	# Decyzja właściciela 2026-11-16 (ops#359): maskowanie działa TYLKO na
+	# leadach (CRM Lead). W CRM Deal, Volteo Audyt i Volteo Audyt CP handlowiec
+	# zawsze widzi prawdziwego autora, także gdy konto ma rolę Volteo Call Center
+	# obok np. Volteo Backend.
 	# frappe.get_roles("Administrator") returns EVERY role defined on the
 	# site (Frappe's superuser quirk, documented in
 	# crm.api.activities.get_lead_activities and
@@ -1086,6 +1087,7 @@ def komentarze(doctype: str, name: str) -> list[dict]:
 		frappe.session.user != "Administrator"
 		and not (set(role_wolajacego) & BYPASS_ROLES)
 		and ROLA_D2D in role_wolajacego
+		and czy_dokument_maskuje_cc(doctype)
 	)
 	autorzy_role_cache: dict[str, bool] = {}
 	autorzy_cc = {

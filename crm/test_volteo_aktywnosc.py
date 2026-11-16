@@ -15,6 +15,7 @@ from crm.volteo_aktywnosc import (
 	ZNACZNIK_ZESTAW,
 	ZNACZNIKI_ADMIN,
 	bez_znacznika,
+	czy_dokument_maskuje_cc,
 	czy_pole_widoczne,
 	czy_widoczny,
 	etykieta_wnioskodawcy,
@@ -409,6 +410,34 @@ class TestTekstWidocznyDlaCC(unittest.TestCase):
 	def test_f_bez_znacznika_zdejmuje_tez_znacznik_cc(self: "TestTekstWidocznyDlaCC") -> None:
 		text = f"{ZNACZNIK_CC} przydzielono do CC: Anna Nowak"
 		self.assertEqual(bez_znacznika(text), "przydzielono do CC: Anna Nowak")
+
+
+class TestCzyDokumentMaskujeCC(unittest.TestCase):
+	"""Decyzja właściciela 2026-11-16 (ops#359): maskowanie tożsamości CC tylko na
+	leadach, nigdy w szansie."""
+
+	def test_a_lead_maskuje(self: "TestCzyDokumentMaskujeCC") -> None:
+		self.assertTrue(czy_dokument_maskuje_cc("CRM Lead"))
+
+	def test_b_zadanie_na_leadzie_maskuje(self: "TestCzyDokumentMaskujeCC") -> None:
+		self.assertTrue(czy_dokument_maskuje_cc("CRM Task", "CRM Lead"))
+
+	def test_c_szansa_i_audyty_nie_maskuja(self: "TestCzyDokumentMaskujeCC") -> None:
+		for dt in ("CRM Deal", "Volteo Audyt", "Volteo Audyt CP"):
+			self.assertFalse(czy_dokument_maskuje_cc(dt), dt)
+
+	def test_d_zadanie_na_szansie_lub_bez_rodzica_nie_maskuje(self: "TestCzyDokumentMaskujeCC") -> None:
+		self.assertFalse(czy_dokument_maskuje_cc("CRM Task", "CRM Deal"))
+		self.assertFalse(czy_dokument_maskuje_cc("CRM Task", None))
+		self.assertFalse(czy_dokument_maskuje_cc("CRM Task", ""))
+		self.assertFalse(czy_dokument_maskuje_cc("CRM Task"))
+
+	def test_e_puste_nie_maskuje(self: "TestCzyDokumentMaskujeCC") -> None:
+		self.assertFalse(czy_dokument_maskuje_cc(None))
+		self.assertFalse(czy_dokument_maskuje_cc(""))
+
+	def test_f_rodzic_nie_dziala_dla_innych_typow(self: "TestCzyDokumentMaskujeCC") -> None:
+		self.assertFalse(czy_dokument_maskuje_cc("CRM Deal", "CRM Lead"))
 
 
 class TestMaskujAutoraCC(unittest.TestCase):

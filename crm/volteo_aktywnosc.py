@@ -428,6 +428,22 @@ obecne. Nadzbiór pól używanych w praktyce przez `crm.api.activities.get_lead_
 (`owner`) i `crm.api.volteo_leady.komentarze` (`owner`, `comment_by`, `comment_email`)."""
 
 
+DOCTYPE_MASKOWANIA_CC = "CRM Lead"
+
+
+def czy_dokument_maskuje_cc(doctype: str | None, doctype_nadrzedny: str | None = None) -> bool:
+	"""Czy na dokumencie `doctype` maskuje się tożsamość autora z rolą CC.
+
+	Decyzja właściciela 2026-11-16 (ops#359): maskowanie dotyczy WYŁĄCZNIE leadów
+	(`CRM Lead`), nigdy szansy (`CRM Deal`) ani jej audytu (`Volteo Audyt`,
+	`Volteo Audyt CP`). Zadanie (`CRM Task`) maskuje tylko wtedy, gdy wisi na
+	leadzie (`doctype_nadrzedny == "CRM Lead"`). Każdy inny przypadek, w tym
+	brak typu, daje False."""
+	if doctype == DOCTYPE_MASKOWANIA_CC:
+		return True
+	return doctype == "CRM Task" and doctype_nadrzedny == DOCTYPE_MASKOWANIA_CC
+
+
 def maskuj_autora_cc(wpis: dict, autorzy_cc: Iterable[str], maskuj: bool) -> dict:
 	"""Zwraca NOWY dict: kopię `wpis` (aktywność albo komentarz) z polami tożsamości
 	autora (`_POLA_TOZSAMOSCI_AUTORA`) podmienionymi na `AUTOR_ZASTEPCZY_CC`, gdy
