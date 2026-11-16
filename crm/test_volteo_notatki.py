@@ -34,8 +34,8 @@ from crm.volteo_notatki import (
 
 
 class TestVolteoNotatkiZakladki(unittest.TestCase):
-	def test_a_osiem_zakladek(self: "TestVolteoNotatkiZakladki") -> None:
-		self.assertEqual(len(ZAKLADKI), 8)
+	def test_a_dziewiec_zakladek(self: "TestVolteoNotatkiZakladki") -> None:
+		self.assertEqual(len(ZAKLADKI), 9)
 
 	def test_b_bez_duplikatow(self: "TestVolteoNotatkiZakladki") -> None:
 		self.assertEqual(len(ZAKLADKI), len(set(ZAKLADKI)))
@@ -50,10 +50,11 @@ class TestVolteoNotatkiZakladki(unittest.TestCase):
 
 	def test_e_etykieta_montaz_z_ogonkiem(self: "TestVolteoNotatkiZakladki") -> None:
 		self.assertEqual(ETYKIETY_ZAKLADEK["Montaz"], "Montaż")
+		self.assertEqual(ETYKIETY_ZAKLADEK["WkladWlasny"], "Finansowanie wkładu własnego")
 
 	def test_f_etykieta_reszty_jak_nazwa(self: "TestVolteoNotatkiZakladki") -> None:
 		for zakladka in ZAKLADKI:
-			if zakladka == "Montaz":
+			if zakladka in ("Montaz", "WkladWlasny"):
 				continue
 			self.assertEqual(ETYKIETY_ZAKLADEK[zakladka], zakladka)
 
@@ -76,6 +77,13 @@ class TestVolteoNotatkiTypyDla(unittest.TestCase):
 		for typ in TYPY_BAZOWE:
 			self.assertIn(typ, typy)
 		self.assertEqual(len(typy), len(TYPY_BAZOWE) + 1)
+
+	def test_e2_wklad_wlasny_ma_wlasny_slownik(self: "TestVolteoNotatkiTypyDla") -> None:
+		self.assertEqual(
+			typy_dla("WkladWlasny"),
+			("Notatka", "Wniosek kredytowy", "Decyzja banku", "Umowa kredytowa", "Wypłata", "Problem"),
+		)
+		self.assertEqual(etykieta_zrodla("WkladWlasny"), "Finansowanie wkładu własnego")
 
 	def test_e_trify_ma_wlasny_slownik(self: "TestVolteoNotatkiTypyDla") -> None:
 		typy = typy_dla("Trify")
@@ -318,15 +326,15 @@ class TestVolteoNotatkiPosortuj(unittest.TestCase):
 
 
 class TestVolteoNotatkiZrodlaFeedu(unittest.TestCase):
-	def test_a_jedenascie_zrodel(self: "TestVolteoNotatkiZrodlaFeedu") -> None:
-		self.assertEqual(len(ZRODLA_FEEDU), 11)
+	def test_a_dwanascie_zrodel(self: "TestVolteoNotatkiZrodlaFeedu") -> None:
+		self.assertEqual(len(ZRODLA_FEEDU), 12)
 
 	def test_b_bez_duplikatow(self: "TestVolteoNotatkiZrodlaFeedu") -> None:
 		self.assertEqual(len(ZRODLA_FEEDU), len(set(ZRODLA_FEEDU)))
 
-	def test_c_osiem_zakladek_potem_audyt_audytcp_i_zadanie(self: "TestVolteoNotatkiZrodlaFeedu") -> None:
-		self.assertEqual(ZRODLA_FEEDU[:8], ZAKLADKI)
-		self.assertEqual(ZRODLA_FEEDU[8:], ("Audyt", "AudytCP", "Zadanie"))
+	def test_c_dziewiec_zakladek_potem_audyt_audytcp_i_zadanie(self: "TestVolteoNotatkiZrodlaFeedu") -> None:
+		self.assertEqual(ZRODLA_FEEDU[:9], ZAKLADKI)
+		self.assertEqual(ZRODLA_FEEDU[9:], ("Audyt", "AudytCP", "Zadanie"))
 
 	def test_d_audyt_audytcp_i_zadanie_poza_zakladkami(self: "TestVolteoNotatkiZrodlaFeedu") -> None:
 		self.assertNotIn("Audyt", ZAKLADKI)

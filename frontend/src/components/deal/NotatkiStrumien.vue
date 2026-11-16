@@ -177,7 +177,13 @@ const mentionsKonfig = { mentions: () => listaWzmianek() }
 // Deal.vue już utworzył i ładuje przez `useDocument('CRM Deal', dealId)` -
 // to nie jest drugie zapytanie o szansę, tylko odczyt z cache frappe-ui.
 const dealDoc = computed(() => getCachedDocumentResource('CRM Deal', props.dealId))
-const ozeWidoczne = computed(() => czyOze(dealDoc.value?.doc?.custom_rodzaj_umowy))
+// Bramka: OZE dla zakładek OZE; zakładka CP `WkladWlasny` (ops#361) tylko dla
+// Czyste Powietrze. Nazwa zostaje `ozeWidoczne` (lustro historii pliku).
+const ozeWidoczne = computed(() => {
+  const rodzaj = dealDoc.value?.doc?.custom_rodzaj_umowy
+  if (props.zakladka === 'WkladWlasny') return rodzaj === 'Czyste Powietrze'
+  return czyOze(rodzaj)
+})
 
 const zakladkaKonfig = computed(() => ZAKLADKI[props.zakladka] || {})
 const typyOpcje = computed(() => typyDla(props.zakladka))

@@ -220,6 +220,11 @@
         <AudytTab v-else-if="tab.name === 'Audyt'" :deal-id="dealId" :rodzaj="doc.custom_rodzaj_umowy || ''" />
         <AudytCPTab v-else-if="tab.name === 'AudytCP'" :deal-id="dealId" />
         <AktualizacjeTab v-else-if="tab.name === 'Trify'" :deal-id="dealId" :konfig="TRIFY" />
+        <NotatkiStrumien
+          v-else-if="tab.name === 'WkladWlasny'"
+          :deal-id="dealId"
+          zakladka="WkladWlasny"
+        />
         <NotatkiTab v-else-if="tab.name === 'Notatki'" :deal-id="dealId" />
         <OsdDotacjaTab v-else-if="tab.name === 'OSD'" :deal-id="dealId" zakladka="OSD" />
         <OsdDotacjaTab v-else-if="tab.name === 'Dotacja'" :deal-id="dealId" zakladka="Dotacja" />
@@ -316,6 +321,7 @@ import MontazTabOze from '@/components/deal/MontazTabOze.vue'
 import AudytTab from '@/components/deal/AudytTab.vue'
 import AudytCPTab from '@/components/deal/AudytCPTab.vue'
 import NotatkiTab from '@/components/deal/NotatkiTab.vue'
+import NotatkiStrumien from '@/components/deal/NotatkiStrumien.vue'
 import OsdDotacjaTab from '@/components/deal/OsdDotacjaTab.vue'
 import PlikiTab from '@/components/deal/PlikiTab.vue'
 import { MONTAZ, TRIFY } from '@/utils/aktualizacje'
@@ -556,9 +562,16 @@ const tabs = computed(() => {
       condition: () => zakladki.kredyt,
     },
     {
+      // Strumień wpisów o kredycie na wkład własny (ops#361), tylko Czyste
+      // Powietrze, przed Finansowaniem Trify. Baza: `Volteo Notatka`,
+      // zakładka `WkladWlasny`. Hash/kotwica to name.toLowerCase().
+      name: 'WkladWlasny', label: __('Finansowanie wkładu własnego'), icon: KredytIcon,
+      condition: () => doc.value?.custom_rodzaj_umowy === 'Czyste Powietrze',
+    },
+    {
       // Strumień wpisów o finansowaniu Trify, tylko Czyste Powietrze (pozytywna
       // równość jak AudytCP). Dla linii OZE odpowiednikiem jest zakładka Kredyt.
-      name: 'Trify', label: __('Trify'), icon: TrifyIcon,
+      name: 'Trify', label: __('Finansowanie Trify'), icon: TrifyIcon,
       condition: () => doc.value?.custom_rodzaj_umowy === 'Czyste Powietrze',
     },
     {

@@ -42,6 +42,17 @@ const TYPY_MONTAZ = [...TYPY_BAZA, 'Termin montażu']
 // się pokrywa, zmieniać każdy osobno jeśli kiedyś się rozjadą).
 const TYPY_TRIFY = ['Notatka', 'Wniosek Trify', 'Decyzja Trify', 'Umowa Trify', 'Wypłata Trify', 'Problem']
 
+// Finansowanie wkładu własnego (Czyste Powietrze, ops#361): kredyt bankowy na
+// wkład własny klienta, własny zestaw typów (lustro crm/volteo_notatki.py).
+const TYPY_WKLAD_WLASNY = [
+  'Notatka',
+  'Wniosek kredytowy',
+  'Decyzja banku',
+  'Umowa kredytowa',
+  'Wypłata',
+  'Problem',
+]
+
 // Klucz -> { etykieta, typy, placeholder, pusty }. `etykieta`/`placeholder`/
 // `pusty` to surowy polski tekst - tłumaczenie przez __() dzieje się w
 // komponencie (NIGDY na poziomie modułu, pułapka eager chunk, patrz
@@ -94,6 +105,12 @@ export const ZAKLADKI = {
     typy: TYPY_TRIFY,
     placeholder: 'Np. Złożono wniosek Trify 03.09… (@ aby wspomnieć użytkownika)',
     pusty: 'Brak notatek Trify.',
+  },
+  WkladWlasny: {
+    etykieta: 'Finansowanie wkładu własnego',
+    typy: TYPY_WKLAD_WLASNY,
+    placeholder: 'Np. Złożono wniosek kredytowy w banku… (@ aby wspomnieć użytkownika)',
+    pusty: 'Brak wpisów o finansowaniu wkładu własnego.',
   },
 }
 
@@ -212,6 +229,7 @@ export const ETYKIETY_ZRODEL = {
   OSD: 'OSD',
   Dotacja: 'Dotacja',
   Trify: 'Trify',
+  WkladWlasny: 'Finansowanie wkładu własnego',
   Audyt: 'Audyt',
   AudytCP: 'Audyt CP',
   // Rozmowa zadań szansy (`Comment` na `CRM Task`, `crm.api.zadania_rozmowa`).
@@ -306,6 +324,13 @@ export const KOLORY_ZRODEL = {
     tlo: 'bg-cyan-100 dark:bg-cyan-900/40',
     tekst: 'text-cyan-800 dark:text-cyan-200',
     kwadracik: 'bg-cyan-600',
+  },
+  // Finansowanie wkładu własnego (CP): orange istnieje w presecie frappe-ui.
+  WkladWlasny: {
+    krawedz: 'border-l-orange-600',
+    tlo: 'bg-orange-100 dark:bg-orange-900/40',
+    tekst: 'text-orange-800 dark:text-orange-200',
+    kwadracik: 'bg-orange-600',
   },
   // Odstępstwo od makiety: brief sugerował rose, niedostępny w tym projekcie
   // (patrz komentarz wyżej) - pink jest najbliższym odpowiednikiem. Audyt i

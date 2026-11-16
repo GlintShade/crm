@@ -87,8 +87,14 @@ def get_hash(notification):
 
 	if notification.type == "Mention" and notification.notification_type_doctype == "Volteo Notatka":
 		# wzmianka w notatce (issue #198): tak samo jak Trify, hash to nazwa
-		# zakładki notatek, nie nazwa dokumentu
+		# zakładki notatek, nie nazwa dokumentu. Notatka zakładki CP
+		# "WkladWlasny" (ops#361) ma własną zakładkę na szansie, więc kotwica
+		# to jej nazwa (useActiveTabManager: name.toLowerCase()).
 		_hash = "#notatki"
+		if notification.notification_type_doc:
+			zakladka = frappe.db.get_value("Volteo Notatka", notification.notification_type_doc, "zakladka")
+			if zakladka == "WkladWlasny":
+				_hash = "#wkladwlasny"
 
 	if notification.type == "Mention" and notification.notification_type_doctype == "Volteo Audyt":
 		# wzmianka w komentarzu audytu OZE (issue #205): tak samo jak

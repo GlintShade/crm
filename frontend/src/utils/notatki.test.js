@@ -25,9 +25,9 @@ import {
 } from './notatki'
 
 describe('ZAKLADKI', () => {
-  it('zna wszystkie osiem zakładek strumienia notatek', () => {
+  it('zna wszystkie dziewięć zakładek strumienia notatek', () => {
     expect(Object.keys(ZAKLADKI).sort()).toEqual(
-      ['Dotacja', 'Faktury', 'Kredyt', 'Montaz', 'OSD', 'Trify', 'Umowa', 'Zestaw'].sort(),
+      ['Dotacja', 'Faktury', 'Kredyt', 'Montaz', 'OSD', 'Trify', 'Umowa', 'WkladWlasny', 'Zestaw'].sort(),
     )
   })
 
@@ -60,6 +60,18 @@ describe('typyDla', () => {
       'Dokument',
       'Termin montażu',
     ])
+  })
+
+  it('WkladWlasny ma własny zestaw typów i etykietę', () => {
+    expect(typyDla('WkladWlasny')).toEqual([
+      'Notatka',
+      'Wniosek kredytowy',
+      'Decyzja banku',
+      'Umowa kredytowa',
+      'Wypłata',
+      'Problem',
+    ])
+    expect(ZAKLADKI.WkladWlasny.etykieta).toBe('Finansowanie wkładu własnego')
   })
 
   it('Trify ma własny, odrębny zestaw typów', () => {
@@ -234,7 +246,7 @@ describe('OZE_RODZAJE / czyOze', () => {
 })
 
 describe('ETYKIETY_ZRODEL', () => {
-  it('zna wszystkie jedenaście źródeł feedu (osiem zakładek plus Audyt/AudytCP/Zadanie)', () => {
+  it('zna wszystkie dwanaście źródeł feedu (dziewięć zakładek plus Audyt/AudytCP/Zadanie)', () => {
     expect(Object.keys(ETYKIETY_ZRODEL).sort()).toEqual(
       [...Object.keys(ZAKLADKI), 'Audyt', 'AudytCP', 'Zadanie'].sort(),
     )

@@ -83,6 +83,7 @@ ZAKLADKI: tuple[str, ...] = (
 	"OSD",
 	"Dotacja",
 	"Trify",
+	"WkladWlasny",
 )
 """Wartosci pola Select `zakladka`, co do litery jak `name` zakladek w
 `Deal.vue` (Montaz bez ogonka -- etykieta „Montaż” zyje wylacznie w
@@ -100,6 +101,7 @@ ETYKIETY_ZAKLADEK: dict[str, str] = {
 	"OSD": "OSD",
 	"Dotacja": "Dotacja",
 	"Trify": "Trify",
+	"WkladWlasny": "Finansowanie wkładu własnego",
 }
 """Etykieta wyswietlana dla kazdej zakladki -- jedyna roznica wzgledem
 `ZAKLADKI` to `Montaz` -> „Montaż”, reszta jak nazwa wartosci Select."""
@@ -134,6 +136,16 @@ TYPY_PER_ZAKLADKA: dict[str, tuple[str, ...]] = {
 		"Decyzja Trify",
 		"Umowa Trify",
 		"Wypłata Trify",
+		"Problem",
+	),
+	# WkladWlasny (issue ops#361, Czyste Powietrze): kredyt bankowy na wklad
+	# wlasny klienta, wlasny slownik typow, nie dziedziczy bazy.
+	"WkladWlasny": (
+		"Notatka",
+		"Wniosek kredytowy",
+		"Decyzja banku",
+		"Umowa kredytowa",
+		"Wypłata",
 		"Problem",
 	),
 }
@@ -365,7 +377,7 @@ def odfiltruj_zmigrowane(rekordy: list[dict], zmigrowane_nazwy) -> list[dict]:
 
 ZRODLA_FEEDU: tuple[str, ...] = (*ZAKLADKI, "Audyt", "AudytCP", "Zadanie")
 """Kolejnosc i zestaw wszystkich mozliwych wartosci `zrodlo` w feedzie:
-osiem zakladek `Volteo Notatka` (kolejnosc `ZAKLADKI`) plus dwa dodatkowe
+dziewiec zakladek `Volteo Notatka` (kolejnosc `ZAKLADKI`) plus dwa dodatkowe
 zrodla komentarzy watku Audytu (OZE i CP) plus komentarze rozmowy zadan
 szansy (`Zadanie`, `crm.volteo_zadania_rozmowa`). `Zadanie` NIE nalezy do
 `ZAKLADKI` -- to nie jest ani zakladka notatek, ani wartosc pola `zakladka`
