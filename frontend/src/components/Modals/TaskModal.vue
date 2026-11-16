@@ -73,7 +73,10 @@
           />
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-[1fr_250px]">
+        <div
+          class="grid grid-cols-1 sm:grid-cols-[1fr_250px]"
+          :class="ladowanie ? 'pointer-events-none opacity-60' : ''"
+        >
           <!-- Lewa kolumna: treść -->
           <div class="flex min-w-0 flex-col gap-4 px-4 pb-2 sm:px-6">
             <FormControl
@@ -248,6 +251,7 @@
             variant="solid"
             :label="editMode ? __('Save') : __('Create')"
             :loading="editMode ? document.save.loading : _create.loading"
+            :disabled="ladowanie"
             @click="editMode ? update() : create()"
           />
           <Button variant="subtle" :label="__('Cancel')" @click="show = false" />
@@ -277,7 +281,7 @@ import {
   nazwyUzytkownikowDoPrzypisania,
 } from '@/utils/zadania'
 import { TextEditor, Tooltip, createEditorButton, createResource } from 'frappe-ui'
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 
 const props = defineProps({
   doctypeTitle: { type: String, default: '' },
@@ -427,6 +431,12 @@ async function create() {
 }
 
 function update() {
+  // Nic do zapisania: frappe-ui nie wysyla wtedy zadnego zadania i nie woła
+  // onSuccess, wiec okno zostawalo otwarte bez komunikatu. Zamykamy je.
+  if (JSON.stringify(document.doc) === JSON.stringify(document.originalDoc)) {
+    show.value = false
+    return
+  }
   document.save.submit(null, {
     onSuccess: (d) => {
       emit('afterUpdate', d)
@@ -438,15 +448,42 @@ function update() {
   })
 }
 
+// Tryb edycji: dokument siedzi w documentsCache przez cala sesje przegladarki
+// (data/document.js), wiec przy otwarciu przeladowujemy go z serwera, a okno
+// jest zablokowane do konca ladowania (zeby klik statusu nie trafil w stary
+// stan i nie zostal nadpisany odpowiedzia serwera).
+const ladowanie = ref(Boolean(props.docname))
+
 onMounted(async () => {
-  document.doc = {
-    ...document.doc,
-    ...props.defaults,
+  if (!props.docname) {
+    // `defaults` scalamy WYLACZNIE przy tworzeniu. W trybie edycji
+    // nadpisywaly one status/priorytet istniejacego zadania (np. z
+    // Modals/CallLogDetailModal.vue).
+    document.doc = {
+      ...document.doc,
+      ...props.defaults,
+    }
+  } else {
+    try {
+      await document.reload()
+    } finally {
+      ladowanie.value = false
+    }
   }
   // Load-bearing dla CRMTask.onRender() (doctypes/crm_task/form.js): przy
   // tworzeniu z defaults, reference_doctype/reference_docname arrive tutaj,
   // PO konstrukcji useDocument() - bez tego drugiego triggerOnRender()
   // document.actions zostaje puste, patrz komentarz w nagłówku pliku.
   await triggerOnRender()
+})
+
+// Zamkniecie okna bez zapisu nie zostawia niezapisanych zmian w pamieci
+// sesji: DoctypeModals.vue montuje okno przez v-if, wiec to odpala sie przy
+// kazdym zamknieciu. Po udanym zapisie originalDoc rowna sie doc, wiec
+// przywrocenie jest wtedy neutralne.
+onBeforeUnmount(() => {
+  if (props.docname && document.originalDoc) {
+    document.doc = JSON.parse(JSON.stringify(document.originalDoc))
+  }
 })
 </script>

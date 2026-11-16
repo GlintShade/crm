@@ -239,6 +239,13 @@ function zapiszStatus(task, status) {
   })
 }
 
+// Odmowa serwera przy zmianie statusu (ikona na karcie, cofniecie,
+// przywrocenie) byla niewidoczna: promise konczyl sie nieobsluzonym bledem.
+function bladStatusu(err) {
+  toast.error(err?.messages?.[0] || __('Nie udało się zmienić statusu zadania.'))
+  tasks.reload()
+}
+
 function updateTaskStatus(status, task) {
   const koniec = ['Done', 'Canceled'].includes(status)
   const bylOtwarty = !['Done', 'Canceled'].includes(task.status)
@@ -255,17 +262,17 @@ function updateTaskStatus(status, task) {
       wyczyscPrzejsciowe(task.name)
     }
     tasks.reload()
-  })
+  }).catch(bladStatusu)
 }
 
 function cofnijStatus(task) {
   const poprzedni = przejsciowe[task.name]?.poprzedni || 'Todo'
   wyczyscPrzejsciowe(task.name)
-  zapiszStatus(task, poprzedni).then(() => tasks.reload())
+  zapiszStatus(task, poprzedni).then(() => tasks.reload()).catch(bladStatusu)
 }
 
 function przywrocZadanie(task) {
-  zapiszStatus(task, 'Todo').then(() => tasks.reload())
+  zapiszStatus(task, 'Todo').then(() => tasks.reload()).catch(bladStatusu)
 }
 
 onBeforeUnmount(wyczyscWszystkiePrzejsciowe)

@@ -1326,6 +1326,10 @@ function updateKanbanSettings(data) {
       name: data.item,
       fieldname: view.value.column_field,
       value: data.to,
+    }).catch((err) => {
+      // Kanban sluzy tez szansom i leadom, stad komunikat ogolny.
+      toast.error(err?.messages?.[0] || __('Nie udało się zapisać zmiany.'))
+      list.value.reload()
     })
     return
   }
