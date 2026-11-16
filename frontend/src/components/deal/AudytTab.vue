@@ -353,7 +353,9 @@
                   :docname="dealId"
                   :disabled="false"
                   allow-video
+                  :wiele-max="MAX_DODATKOWYCH - zdjeciaDodatkowe.length"
                   @change="onExtraPhotoAdd"
+                  @change-many="onExtraPhotosAddMany"
                 />
               </div>
             </div>
@@ -511,6 +513,7 @@ import AttachmentItem from '@/components/AttachmentItem.vue'
 import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
 import AudytIcon from '@/components/Icons/AudytIcon.vue'
 import AudytPhotoSlot from '@/components/deal/AudytPhotoSlot.vue'
+import { dolaczZdjecia, komunikatLimitu } from '@/utils/audytWielePlikow'
 import AudytPodgladZdjec from '@/components/deal/AudytPodgladZdjec.vue'
 import AudytPasekDecyzji from '@/components/deal/AudytPasekDecyzji.vue'
 import AudytVerdictControls from '@/components/deal/AudytVerdictControls.vue'
@@ -1093,6 +1096,21 @@ async function onExtraPhotoChange(index, fileUrl) {
     ? prevList.map((u, i) => (i === index ? fileUrl : u))
     : prevList.filter((_, i) => i !== index)
   zdjeciaDodatkowe.value = nextList
+  await persistExtraPhotos(prevList)
+}
+
+const MAX_DODATKOWYCH = 5
+
+// Wiele plików naraz z jednego okna wysyłki: jeden zapis listy zamiast
+// zapisu na plik (brak konfliktu `modified`).
+async function onExtraPhotosAddMany(urle) {
+  if (!mozeZapisywac.value || !urle?.length) return
+  const prevList = zdjeciaDodatkowe.value
+  const { lista, dodane, pominiete } = dolaczZdjecia(prevList, urle, MAX_DODATKOWYCH)
+  if (pominiete) toast.error(komunikatLimitu(pominiete, MAX_DODATKOWYCH))
+  if (!dodane.length) return
+  dodane.forEach((u) => trackOldFile(null, u))
+  zdjeciaDodatkowe.value = lista
   await persistExtraPhotos(prevList)
 }
 

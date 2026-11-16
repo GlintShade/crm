@@ -187,9 +187,13 @@ const props = defineProps({
   kompakt: { type: Boolean, default: false },
   // Ukrywa narzedzie Usun w zwyklej karcie (handlowiec w trybie poprawek).
   bezUsuwania: { type: Boolean, default: false },
+  // Tylko dla pustego kafelka "dodaj": maks. liczba plików wybieranych naraz
+  // (0 = jeden plik, jak dotąd). Przy > 0 okno wysyłki pozwala wybrać wiele
+  // plików, a rodzic dostaje wszystkie udane adresy w zdarzeniu `changeMany`.
+  wieleMax: { type: Number, default: 0 },
 })
 
-const emit = defineEmits(['change', 'preview'])
+const emit = defineEmits(['change', 'changeMany', 'preview'])
 
 const showUploader = ref(false)
 
@@ -224,9 +228,9 @@ const uploaderOptions = computed(() => {
   if (props.allowVideo) allowedFileTypes.push(...TYPY_PLIKOW_WIDEO)
   return {
     folder: 'Home/Attachments',
-    allowMultiple: false,
+    allowMultiple: props.wieleMax > 1,
     restrictions: {
-      maxNumberOfFiles: 1,
+      maxNumberOfFiles: props.wieleMax > 1 ? props.wieleMax : 1,
       allowedFileTypes,
     },
   }
@@ -242,7 +246,10 @@ const isVideoValue = computed(() => jestWideo(props.value))
 const fileNameFromUrl = computed(() => nazwaPlikuZUrl(props.value))
 
 function onAfterUpload(uploadedFiles) {
-  if (uploadedFiles && uploadedFiles.length) {
+  if (!uploadedFiles || !uploadedFiles.length) return
+  if (props.wieleMax > 1) {
+    emit('changeMany', uploadedFiles.map((f) => f.file_url).filter(Boolean))
+  } else {
     emit('change', uploadedFiles[0].file_url)
   }
 }

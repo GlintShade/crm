@@ -225,7 +225,9 @@
               :docname="dealId"
               :disabled="false"
               allow-video
+              :wiele-max="MAX_ZDJEC - zdjeciaList.length"
               @change="onZdjecieAdd"
+              @change-many="onZdjeciaAddMany"
             />
           </div>
           <AudytVerdictControls
@@ -352,6 +354,7 @@ import AttachmentItem from '@/components/AttachmentItem.vue'
 import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
 import AudytIcon from '@/components/Icons/AudytIcon.vue'
 import AudytPhotoSlot from '@/components/deal/AudytPhotoSlot.vue'
+import { dolaczZdjecia, komunikatLimitu } from '@/utils/audytWielePlikow'
 import AudytPodgladZdjec from '@/components/deal/AudytPodgladZdjec.vue'
 import AudytVerdictControls from '@/components/deal/AudytVerdictControls.vue'
 import { usersStore } from '@/stores/users.js'
@@ -559,6 +562,18 @@ async function onZdjecieChange(index, fileUrl) {
     ? prevList.map((u, i) => (i === index ? fileUrl : u))
     : prevList.filter((_, i) => i !== index)
   zdjeciaList.value = nextList
+  await persistZdjecia(prevList)
+}
+
+// Wiele plików naraz z jednego okna wysyłki, jeden zapis listy.
+async function onZdjeciaAddMany(urle) {
+  if (readOnly.value || !urle?.length) return
+  const prevList = zdjeciaList.value
+  const { lista, dodane, pominiete } = dolaczZdjecia(prevList, urle, MAX_ZDJEC)
+  if (pominiete) toast.error(komunikatLimitu(pominiete, MAX_ZDJEC))
+  if (!dodane.length) return
+  dodane.forEach((u) => trackOldFile(null, u))
+  zdjeciaList.value = lista
   await persistZdjecia(prevList)
 }
 
