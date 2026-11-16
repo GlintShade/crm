@@ -15,12 +15,13 @@ Decyzje projektowe:
 
 * Okres w rejestrze (`okres = {"wg", "od", "do"}`) filtrowany po stronie Pythona na
   datach (nie SQL): `podpisanie` -> `Volteo Rozliczenie.data_podpisania`, `wyplata` ->
-  `data_wyplaty`, `utworzenie` -> data `CRM Deal.creation`, `oznaczenie` -> data
-  `oznaczono`. Wiersze bez daty bazowej NIE wchodzą do listy rejestru. Kafelki liczą
-  się z TEGO SAMEGO zestawu filtrów, ale wiersz bez daty bazowej dostaje datę zastępczą:
-  `data_podpisania`, a gdy i ta pusta, data `CRM Deal.creation`, żeby "Do wypłaty w
-  okresie" nie zerowało się dla nierozliczonych (nie mają `data_wyplaty`). Kafelki
-  liczą cały zestaw, lista rejestru jest przycinana do `LIMIT_WIERSZY`.
+  `data_wyplaty` ("Wypłacono dnia", data faktyczna), `termin` -> `termin_wyplaty`
+  (data planowana), `utworzenie` -> data `CRM Deal.creation`, `oznaczenie` -> data
+  `oznaczono`. JEDNA reguła daty dla listy i kafelków (`data_okresu` w rdzeniu): data z
+  wybranej osi, a gdy pusta, data podpisania umowy, a gdy i ta pusta, data utworzenia
+  szansy. Wiersz trafia więc do obu zbiorów albo do żadnego. Bez okresu (`okres = None`,
+  "Wszystkie okresy") wchodzą wszystkie wiersze. Kafelki liczą cały zestaw, lista
+  rejestru jest przycinana do `LIMIT_WIERSZY`.
 * "Do wypłaty" w sumach grup i kafelkach to wyłącznie status `Do wypłaty`
   (wstrzymane liczy się osobno w `szans_z_otwartym`); `podsumowanie.pozostalo` szansy
   to natomiast `sumy()["do_wyplaty"]` z rdzenia (Do wypłaty + Wstrzymane).
@@ -52,6 +53,7 @@ from crm.rozliczenia import (
 from crm.rozliczenia import nalicz as nalicz_wiersze
 from crm.volteo_aktywnosc import zapisz_slad
 from crm.volteo_rozliczenie import (
+	OSIE_OKRESU,
 	ROLE,
 	STATUS_DO_WYPLATY,
 	STATUS_NIE_DOTYCZY,
@@ -60,6 +62,7 @@ from crm.volteo_rozliczenie import (
 	ZNACZNIK_ROZLICZENIE,
 	_data,
 	_kwota,
+	data_okresu,
 	data_podpisania,
 	formatuj_kwote,
 	kwoty_odbiorcow,
@@ -68,13 +71,14 @@ from crm.volteo_rozliczenie import (
 	sumy,
 	tekst_sladu,
 	waliduj_kwote,
+	waliduj_termin,
 	waliduj_wyplate,
 )
 
 LIMIT_WIERSZY = 2000
 LIMIT_POBRANIA = 20000
 LIMIT_HISTORII = 50
-OKRES_WG = ("podpisanie", "wyplata", "utworzenie", "oznaczenie")
+OKRES_WG = OSIE_OKRESU
 GRUPOWANIA = ("osoba", "szansa")
 STATUSY_USTAWIALNE = (STATUS_DO_WYPLATY, STATUS_WSTRZYMANE, STATUS_NIE_DOTYCZY)
 _AKCJA_STATUSU = {
@@ -91,7 +95,8 @@ NAGLOWEK_CSV = [
 	"Odbiorca",
 	"Kwota",
 	"Status",
-	"Data wypłaty",
+	"Termin wypłaty",
+	"Wypłacono dnia",
 	"Oznaczył",
 	"Uwaga",
 ]
@@ -407,6 +412,48 @@ def usun_odbiorce(nazwa: str) -> dict[str, Any]:
 	return _widok_szansy(deal)
 
 
+@frappe.whitelist()
+def ustaw_termin(nazwy: list[str], termin: str | None = None) -> dict[str, Any]:
+	"""Planowany termin wypłaty dla wierszy `Do wypłaty` (pusty `termin` = wyczyść). Jedna
+	akcja dla zakładki (1 wiersz) i rejestru (N wierszy). Wiersze w innym statusie są
+	pomijane (wypłacony wiersz zachowuje termin jako historię planu). Jeden ślad na
+	szansę, oznaczony `ZNACZNIK_ROZLICZENIE`, więc widoczny tylko dla administracji."""
+	_wymagaj_admina()
+	komunikat = waliduj_termin(termin)
+	if komunikat:
+		frappe.throw(komunikat)
+	data = _data(termin)
+	unikalne = list(dict.fromkeys(nazwy or []))
+	if not unikalne:
+		frappe.throw(_("Nie wybrano żadnych wierszy."))
+	wiersze = [_wiersz(n) for n in unikalne]
+	do_zmiany = [w for w in wiersze if w.status == STATUS_DO_WYPLATY]
+	if not do_zmiany:
+		frappe.throw(_("Termin można ustawić tylko dla wierszy w statusie Do wypłaty."))
+	pierwszy_na_szanse: dict[str, Any] = {}
+	liczba_na_szanse: dict[str, int] = defaultdict(int)
+	for w in do_zmiany:
+		w.termin_wyplaty = data
+		w.save()
+		pierwszy_na_szanse.setdefault(w.deal, w)
+		liczba_na_szanse[w.deal] += 1
+	kto = _kto()
+	for deal, w in pierwszy_na_szanse.items():
+		_slad(
+			deal,
+			tekst_sladu(
+				"termin" if data else "termin_wyczyszczony",
+				w.rola,
+				w.odbiorca_nazwa,
+				w.kwota,
+				data,
+				kto,
+				partia_n=liczba_na_szanse[deal] - 1,
+			),
+		)
+	return {"ustawiono": len(do_zmiany), "pominieto": len(wiersze) - len(do_zmiany)}
+
+
 # --- rejestr i eksport ----------------------------------------------------------------
 
 
@@ -433,8 +480,8 @@ def _zakres(okres: dict | None) -> tuple[str, datetime.date, datetime.date] | No
 
 
 def _pobierz(filtry: dict | None, okres: dict | None) -> tuple[list[dict], list[dict]]:
-	"""Zwraca `(lista, kafelki)`: wzbogacone wiersze spełniające filtry i okres wg daty
-	bazowej (lista) oraz wg daty z fallbackiem (kafelki). Posortowane po szansie."""
+	"""Zwraca `(lista, kafelki)`: wzbogacone wiersze spełniające filtry i okres wg jednej
+	reguły daty `data_okresu` (lista i kafelki to ten sam zbiór). Posortowane po szansie."""
 	filtry = filtry or {}
 	zakres = _zakres(okres)
 	warunki: dict[str, Any] = {}
@@ -476,6 +523,7 @@ def _pobierz(filtry: dict | None, okres: dict | None) -> tuple[list[dict], list[
 		bazowe = {
 			"podpisanie": _data(w.get("data_podpisania")),
 			"wyplata": _data(w.get("data_wyplaty")),
+			"termin": _data(w.get("termin_wyplaty")),
 			"utworzenie": utworzenie,
 			"oznaczenie": _data(w.get("oznaczono")),
 		}
@@ -490,11 +538,9 @@ def _pobierz(filtry: dict | None, okres: dict | None) -> tuple[list[dict], list[
 			kafelki.append(wzbogacony)
 			continue
 		wg, od, do = zakres
-		data_listy = bazowe[wg]
-		if data_listy is not None and od <= data_listy <= do:
+		data = data_okresu(bazowe, wg)
+		if data is not None and od <= data <= do:
 			lista.append(wzbogacony)
-		data_kafelka = data_listy or bazowe["podpisanie"] or utworzenie
-		if data_kafelka is not None and od <= data_kafelka <= do:
 			kafelki.append(wzbogacony)
 	klucz = lambda x: (str(x.get("deal")), str(x.get("rola")))  # noqa: E731
 	return sorted(lista, key=klucz), kafelki
@@ -525,6 +571,7 @@ def _wiersz_rejestru(w: dict) -> dict[str, Any]:
 		"odbiorca_nazwa": w["odbiorca_nazwa"],
 		"kwota": w["kwota"],
 		"status": w["status"],
+		"termin_wyplaty": w.get("termin_wyplaty"),
 		"data_wyplaty": w["data_wyplaty"],
 	}
 
@@ -595,6 +642,7 @@ def eksport_csv(filtry: dict | None = None, okres: dict | None = None) -> str:
 				_komorka(w["odbiorca_nazwa"]),
 				_str(w["kwota"]).replace(".", ","),
 				_komorka(w["status"]),
+				_data(w.get("termin_wyplaty")).isoformat() if _data(w.get("termin_wyplaty")) else "",
 				_data(w["data_wyplaty"]).isoformat() if _data(w["data_wyplaty"]) else "",
 				_komorka(get_fullname(w["oznaczyl"]) if w.get("oznaczyl") else ""),
 				_komorka(w.get("uwaga")),
