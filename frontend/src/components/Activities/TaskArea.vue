@@ -31,7 +31,7 @@
             <span class="min-w-0 flex-1 truncate">{{
               task.status === 'Canceled'
                 ? __('Anulowane')
-                : __('Zrobione')
+                : __('Wykonane')
             }}</span>
             <button
               type="button"

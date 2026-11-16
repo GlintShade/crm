@@ -8,11 +8,12 @@ import {
   tloWybranegoPriorytetu,
   kropkaStatusu,
   nazwyUzytkownikowDoPrzypisania,
+  czyTlumaczycOpcje,
 } from '@/utils/zadania'
 
 describe('STATUSY_ZADANIA / PRIORYTETY_ZADANIA', () => {
   it('lustrzy crm_task.json (status)', () => {
-    expect(STATUSY_ZADANIA).toEqual(['Backlog', 'Todo', 'In Progress', 'Done', 'Canceled'])
+    expect(STATUSY_ZADANIA).toEqual(['Todo', 'In Progress', 'Done', 'Canceled'])
   })
 
   it('lustrzy crm_task.json (priority)', () => {
@@ -21,10 +22,6 @@ describe('STATUSY_ZADANIA / PRIORYTETY_ZADANIA', () => {
 })
 
 describe('kolorStatusuZadania', () => {
-  it('Backlog -> gray', () => {
-    expect(kolorStatusuZadania('Backlog')).toBe('gray')
-  })
-
   it('Todo -> orange', () => {
     expect(kolorStatusuZadania('Todo')).toBe('orange')
   })
@@ -125,5 +122,19 @@ describe('nazwyUzytkownikowDoPrzypisania (ops#208, filtr Przypisano do w TaskMod
 
   it('nie-tablica (np. przypadkowy obiekt) -> pusta tablica, nie wyjatek', () => {
     expect(nazwyUzytkownikowDoPrzypisania({})).toEqual([])
+  })
+})
+
+describe('czyTlumaczycOpcje', () => {
+  it('prawda dla CRM Task status i priority', () => {
+    expect(czyTlumaczycOpcje('CRM Task', 'status')).toBe(true)
+    expect(czyTlumaczycOpcje('CRM Task', 'priority')).toBe(true)
+  })
+
+  it('falsz dla innych pol i doctype', () => {
+    expect(czyTlumaczycOpcje('CRM Task', 'title')).toBe(false)
+    expect(czyTlumaczycOpcje('CRM Deal', 'status')).toBe(false)
+    expect(czyTlumaczycOpcje(undefined, 'status')).toBe(false)
+    expect(czyTlumaczycOpcje('CRM Task', undefined)).toBe(false)
   })
 })

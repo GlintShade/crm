@@ -147,13 +147,13 @@ class TestCRMTask(FrappeTestCase):
 
 	def test_task_status_workflow_and_filtering(self):
 		"""Test task status transitions and filtering by status"""
-		statuses = ["Backlog", "Todo", "In Progress", "Done", "Canceled"]
+		statuses = ["Todo", "In Progress", "Done", "Canceled"]
 
-		task = create_test_task(title="Status Workflow Task", status="Backlog")
+		task = create_test_task(title="Status Workflow Task", status="Todo")
 		initial_name = task.name
 
 		# Test status transitions up to Done
-		for status in statuses[1:4]:  # Backlog -> Todo -> In Progress -> Done
+		for status in statuses[0:3]:  # Todo -> In Progress -> Done
 			task.status = status
 			task.save()
 			task.reload()
@@ -168,7 +168,7 @@ class TestCRMTask(FrappeTestCase):
 		task2 = create_test_task(title="Active Task", status="In Progress")
 		active_tasks = frappe.get_all(
 			"CRM Task",
-			filters={"status": ["in", ["Backlog", "Todo", "In Progress"]]},
+			filters={"status": ["in", ["Todo", "In Progress"]]},
 			fields=["name"],
 		)
 		active_task_names = [str(t.name) for t in active_tasks]

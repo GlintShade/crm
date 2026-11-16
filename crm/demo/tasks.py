@@ -69,7 +69,7 @@ def create_demo_tasks(lead_names, demo_users):
 		{
 			"title": "Confirm annual plan details",
 			"priority": "Low",
-			"status": "Backlog",
+			"status": "Todo",
 			"assigned_to": session_user,
 			"due_date": today + timedelta(days=10),
 			"reference_doctype": "CRM Lead",
