@@ -36,20 +36,53 @@
       </ListHeaderItem>
     </ListHeader>
     <ListRows
-      v-slot="{ idx, column, item }"
+      v-slot="{ idx, column, item, row }"
       class="mx-3 sm:mx-5"
       :rows="rows"
       doctype="CRM Task"
+      :rowClass="klasaWiersza"
     >
-      <div v-if="column.key === 'due_date' && item">
-        <Tooltip :text="item && formatDate(item, 'ddd, MMM D, YYYY | hh:mm a')">
-          <div class="flex items-center gap-2 truncate text-base">
-            <div><CalendarIcon /></div>
-            <div class="truncate">
-              {{ formatDate(item, 'D MMM, hh:mm a') }}
+      <div
+        v-if="column.key === 'due_date' && item"
+        :title="formatujTermin(item)"
+      >
+        <div class="flex items-center gap-2 truncate text-base">
+          <div
+            :class="
+              czyPrzeterminowane(row.due_date, row.status)
+                ? 'text-ink-red-4'
+                : ''
+            "
+          >
+            <component
+              :is="
+                czyPrzeterminowane(row.due_date, row.status)
+                  ? AlertIcon
+                  : CalendarIcon
+              "
+              class="size-4"
+            />
+          </div>
+          <div class="flex min-w-0 flex-col">
+            <div
+              class="truncate"
+              :class="
+                czyPrzeterminowane(row.due_date, row.status)
+                  ? 'font-semibold text-ink-red-4'
+                  : ''
+              "
+            >
+              {{ formatujTerminKrotko(item) }}
+            </div>
+            <div
+              v-if="czyPrzeterminowane(row.due_date, row.status)"
+              class="truncate text-xs text-ink-red-4"
+              data-testid="zadanie-po-terminie-tekst"
+            >
+              {{ tekstPoTerminie(row.due_date) }}
             </div>
           </div>
-        </Tooltip>
+        </div>
       </div>
       <ListRowItem
         v-else
@@ -76,7 +109,19 @@
         </template>
         <template #default="{ label }">
           <div
-            v-if="['modified', 'creation'].includes(column.key)"
+            v-if="column.key === '_klient'"
+            class="overflow-hidden"
+            data-testid="zadanie-klient"
+          >
+            <span v-if="item" class="truncate font-medium text-ink-gray-9">
+              {{ item }}
+            </span>
+            <span v-else class="truncate italic text-ink-gray-4">
+              {{ __('brak klienta') }}
+            </span>
+          </div>
+          <div
+            v-else-if="['modified', 'creation'].includes(column.key)"
             class="truncate text-base"
             @click="
               (event) =>
@@ -191,12 +236,10 @@ import RatingInput from '@/components/Controls/RatingInput.vue'
 import ListBulkActions from '@/components/ListBulkActions.vue'
 import ListRows from '@/components/ListViews/ListRows.vue'
 import ListFooterVolteo from '@/components/ListFooterVolteo.vue'
-import {
-  formatDate,
-  isTranslatable,
-  formatDuration,
-  sanitizeHTML,
-} from '@/utils'
+import AlertIcon from '~icons/lucide/circle-alert'
+import { formatujTermin, formatujTerminKrotko } from '@/utils/dataPolska'
+import { czyPrzeterminowane, tekstPoTerminie } from '@/utils/zadaniaLista'
+import { isTranslatable, formatDuration, sanitizeHTML } from '@/utils'
 import {
   Avatar,
   ListView,
@@ -246,6 +289,15 @@ function getLabel(label, column) {
   return label
 }
 
+// Wiersz zadania po terminie: tlo z tokenu frappe-ui `bg-surface-red-1` (w
+// ciemnym motywie token sam zmienia wartosc). Klasa `zadanie-po-terminie` sluzy
+// stylom ponizej, ktore przywracaja stany zaznaczenia i najechania.
+function klasaWiersza(row) {
+  return czyPrzeterminowane(row.due_date, row.status)
+    ? 'bg-surface-red-1 zadanie-po-terminie'
+    : ''
+}
+
 const isLikeFilterApplied = computed(() => {
   return list.value.params?.filters?._liked_by ? true : false
 })
@@ -272,3 +324,22 @@ defineExpose({
   ),
 })
 </script>
+
+<style scoped>
+/*
+  Korzen wiersza (ListRow.vue z frappe-ui) sam niesie tlo zaznaczenia
+  (`bg-surface-gray-2`) i najechania (`hover:bg-surface-sidebar`). Czerwone tlo
+  z `bg-surface-red-1` ma byc widoczne w stanie spoczynku, ale nie moze
+  zakrywac zaznaczenia ani najechania, wiec te stany dostaja wlasne, mocniejsze
+  reguly (tokeny, bez palety i bez hex).
+*/
+:deep(.zadanie-po-terminie:hover) {
+  background-color: rgb(var(--surface-red-2));
+}
+:deep(.zadanie-po-terminie.bg-surface-gray-2) {
+  background-color: rgb(var(--surface-gray-2));
+}
+:deep(.zadanie-po-terminie.bg-surface-gray-2:hover) {
+  background-color: rgb(var(--surface-gray-3));
+}
+</style>

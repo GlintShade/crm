@@ -27,6 +27,33 @@
       allowedViews: ['list', 'kanban'],
     }"
   />
+  <div
+    v-if="$route.params.viewType !== 'kanban'"
+    class="flex items-center px-3 pb-1 pt-2 sm:px-5"
+    data-testid="zadania-zakladki"
+  >
+    <div
+      class="inline-flex shrink-0 items-center overflow-hidden rounded border border-outline-gray-2"
+    >
+      <button
+        v-for="(zakladka, index) in ZAKLADKI_ZADAN"
+        :key="zakladka.klucz"
+        type="button"
+        class="flex h-7 items-center gap-1.5 whitespace-nowrap px-2 text-base transition-colors"
+        :class="[
+          zakladka.klucz === aktywnaZakladka
+            ? 'bg-surface-gray-4 text-ink-gray-9'
+            : 'text-ink-gray-6 hover:bg-surface-gray-2',
+          index > 0 && 'border-l border-outline-gray-2',
+        ]"
+        :aria-pressed="zakladka.klucz === aktywnaZakladka"
+        :data-testid="`zadania-zakladka-${zakladka.klucz}`"
+        @click="wybierzZakladke(zakladka.klucz)"
+      >
+        {{ __(zakladka.etykieta) }}
+      </button>
+    </div>
+  </div>
   <KanbanView
     v-if="$route.params.viewType == 'kanban' && rows.length"
     v-model="tasks"
@@ -200,11 +227,16 @@ import { getMeta } from '@/stores/meta'
 import { usersStore } from '@/stores/users'
 import { formatDate } from '@/utils'
 import { czyTlumaczycOpcje } from '@/utils/zadania'
+import {
+  ZAKLADKI_ZADAN,
+  filtryDlaZakladki,
+  zakladkaZFiltra,
+} from '@/utils/zadaniaLista'
 import { timestampCell } from '@/composables/useTimelinePreferences'
 import { useOnboarding, useTelemetry } from 'frappe-ui/frappe'
 import { Tooltip, Avatar, TextEditor, Dropdown, call, toast } from 'frappe-ui'
-import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 const { getFormattedPercent, getFormattedFloat, getFormattedCurrency } =
   getMeta('CRM Task')
@@ -213,6 +245,7 @@ const { updateOnboardingStep } = useOnboarding('frappecrm')
 const { capture } = useTelemetry()
 
 const router = useRouter()
+const route = useRoute()
 
 const tasksListView = ref(null)
 
@@ -313,9 +346,53 @@ function parseRows(rows, columns = []) {
         }
       }
     })
+    // Kolumna "Klient" (pseudo-pole `_klient`, ops#357): zawsze tekst.
+    _rows._klient = task._klient || ''
     return _rows
   })
 }
+
+// Zakladki Aktywne / Wykonane / Anulowane (ops#357) to zwykly filtr statusu:
+// podswietlona jest ta, ktorej odpowiada biezacy filtr; przy innym filtrze
+// zadna.
+const aktywnaZakladka = computed(() =>
+  zakladkaZFiltra(tasks.value?.params?.filters?.status),
+)
+
+function wybierzZakladke(klucz) {
+  if (!viewControls.value) return
+  const filtry = tasks.value?.params?.filters || {}
+  // `getParams` PRZED `updateFilter`: odswieza tozsamosc widoku (wzorzec
+  // `wyczyscWidok()` z WidokiLeadowPasek.vue).
+  viewControls.value.getParams()
+  viewControls.value.updateFilter(filtryDlaZakladki(filtry, klucz))
+}
+
+// Kazde wejscie na strone zaczyna od zakladki Aktywne (decyzja wlasciciela),
+// takze gdy poprzednio zapisano inny filtr statusu. Odpala sie RAZ na montaz,
+// po pierwszym zakonczonym zaladowaniu listy (wczesniej ViewControls i tak
+// przeladowalby parametry z zapisanego widoku). Zapisany widok (`?view=`) i
+// Kanban nigdy nie sa nadpisywane; pozostale filtry uzytkownika zostaja.
+let widzianoLadowanie = false
+let wejscieObsluzone = false
+watch(
+  () => tasks.value?.loading,
+  (laduje) => {
+    if (wejscieObsluzone) return
+    if (laduje) {
+      widzianoLadowanie = true
+      return
+    }
+    if (!widzianoLadowanie || !tasks.value?.data?.data) return
+    if (route.params.viewType === 'kanban') return
+    wejscieObsluzone = true
+    if (route.query.view) return
+    const filtry = tasks.value?.params?.filters || {}
+    if (zakladkaZFiltra(filtry.status) !== 'aktywne') {
+      wybierzZakladke('aktywne')
+    }
+  },
+)
 
 const { showModal } = useDoctypeModal()
 
