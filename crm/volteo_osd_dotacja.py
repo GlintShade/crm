@@ -89,6 +89,7 @@ zakładek od paczki b68 (chunk B3), patrz docstring modułu."""
 STATUSY: dict[str, tuple[str, ...]] = {
 	"OSD": (
 		"Nie rozpoczęto",
+		"Kompletowanie dokumentów",
 		"Zgłoszenie wysłane",
 		"Uwagi OSD",
 		"Umowa przyłączeniowa",
@@ -113,6 +114,7 @@ do tej krotki, bez osobnego sprawdzenia."""
 KOLORY: dict[str, dict[str, str]] = {
 	"OSD": {
 		"Nie rozpoczęto": "gray",
+		"Kompletowanie dokumentów": "blue",
 		"Zgłoszenie wysłane": "blue",
 		"Uwagi OSD": "blue",
 		"Umowa przyłączeniowa": "blue",

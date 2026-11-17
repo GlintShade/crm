@@ -72,11 +72,12 @@ class TestStatusy(unittest.TestCase):
 		for zakladka in ZAKLADKI:
 			self.assertNotIn("", STATUSY[zakladka])
 
-	def test_d_osd_szesc_statusow_w_kolejnosci(self: "TestStatusy") -> None:
+	def test_d_osd_siedem_statusow_w_kolejnosci(self: "TestStatusy") -> None:
 		self.assertEqual(
 			STATUSY["OSD"],
 			(
 				"Nie rozpoczęto",
+				"Kompletowanie dokumentów",
 				"Zgłoszenie wysłane",
 				"Uwagi OSD",
 				"Umowa przyłączeniowa",
@@ -117,7 +118,7 @@ class TestKolory(unittest.TestCase):
 			self.assertEqual(KOLORY[zakladka]["Nie rozpoczęto"], "gray")
 
 	def test_d_statusy_w_trakcie_osd_sa_niebieskie(self: "TestKolory") -> None:
-		for status in ("Zgłoszenie wysłane", "Uwagi OSD", "Umowa przyłączeniowa", "Licznik wymieniony"):
+		for status in ("Kompletowanie dokumentów", "Zgłoszenie wysłane", "Uwagi OSD", "Umowa przyłączeniowa", "Licznik wymieniony"):
 			self.assertEqual(KOLORY["OSD"][status], "blue")
 
 	def test_e_statusy_w_trakcie_dotacja_sa_niebieskie(self: "TestKolory") -> None:

@@ -16,6 +16,7 @@
 export const STATUSY = {
   OSD: [
     'Nie rozpoczęto',
+    'Kompletowanie dokumentów',
     'Zgłoszenie wysłane',
     'Uwagi OSD',
     'Umowa przyłączeniowa',
@@ -40,6 +41,7 @@ export const STATUSY = {
 export const KOLORY = {
   OSD: {
     'Nie rozpoczęto': 'gray',
+    'Kompletowanie dokumentów': 'blue',
     'Zgłoszenie wysłane': 'blue',
     'Uwagi OSD': 'blue',
     'Umowa przyłączeniowa': 'blue',
