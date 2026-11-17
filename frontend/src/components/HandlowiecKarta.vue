@@ -1,6 +1,6 @@
 <!--
   Karta "Handlowiec" w panelu bocznym szansy i leada (ops#366): zbudowana jak
-  karta "Klient" (KartaSekcji, awatar z inicjalem, e-mail, klikalny telefon).
+  karta "Klient" (KartaSekcji, imie i nazwisko bez awatara, e-mail, klikalny telefon).
   Tylko backoffice i administratorzy: dla handlowca i CC komponent sie nie
   renderuje, wiec nie wola tez endpointu (serwer i tak zwroci 403).
   Zrodlo: deal_owner (szansa) albo lead_owner (lead), przekazane jako `wlasciciel`.
@@ -22,11 +22,6 @@
         class="flex min-w-0 items-center gap-2 text-base leading-5 text-ink-gray-9"
         data-testid="handlowiec-tylko-nazwa"
       >
-        <div
-          class="flex h-6 w-6 shrink-0 select-none items-center justify-center rounded-full bg-surface-gray-3 text-sm uppercase text-ink-gray-9"
-        >
-          {{ nazwaWlasciciela?.[0] }}
-        </div>
         <span class="truncate">{{ nazwaWlasciciela }}</span>
       </div>
       <div v-else-if="blad" class="text-[12.5px] text-ink-gray-5" data-testid="handlowiec-blad">
@@ -37,18 +32,6 @@
       </div>
       <div v-else class="flex min-w-0 flex-col gap-2" data-testid="handlowiec-dane">
         <div class="flex min-w-0 items-center gap-2 text-base leading-5 text-ink-gray-9">
-          <Avatar
-            v-if="dane.user_image"
-            :label="dane.full_name"
-            :image="dane.user_image"
-            size="md"
-          />
-          <div
-            v-else
-            class="flex h-6 w-6 shrink-0 select-none items-center justify-center rounded-full bg-surface-gray-3 text-sm uppercase text-ink-gray-9"
-          >
-            {{ dane.full_name?.[0] }}
-          </div>
           <span class="truncate">{{ dane.full_name }}</span>
         </div>
         <div v-if="dane.email" class="flex min-w-0 items-center gap-2 text-sm text-ink-gray-7">
@@ -69,7 +52,7 @@
 <script setup>
 import KartaSekcji from '@/components/KartaSekcji.vue'
 import TelefonLink from '@/components/TelefonLink.vue'
-import { Avatar, LoadingIndicator, createResource } from 'frappe-ui'
+import { LoadingIndicator, createResource } from 'frappe-ui'
 import { usersStore } from '@/stores/users'
 import { useStanSekcjiPanelu } from '@/composables/useStanSekcjiPanelu'
 import { SEKCJA_HANDLOWIEC } from '@/utils/stanSekcjiPanelu'
