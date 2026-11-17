@@ -915,6 +915,14 @@ def _wyslij_dokument(nazwa: str, konfig: dict[str, Any]) -> dict[str, Any]:
 		wartosci_zapisu["signer2_name"] = drugi_podpisujacy["full_name"] if drugi_podpisujacy else None
 		wartosci_zapisu["signer2_email"] = drugi_podpisujacy["email"] if drugi_podpisujacy else None
 
+	# ops#371: nowy proces to nowy stan, więc stan blokady formularza (pierwszy podpis
+	# i odblokowanie) jest czyszczony; tylko doctypy, które te pola mają.
+	if frappe.get_meta(konfig["doctype"]).has_field("autenti_pierwszy_podpis"):
+		wartosci_zapisu["autenti_pierwszy_podpis"] = None
+		wartosci_zapisu["formularz_odblokowany"] = 0
+		wartosci_zapisu["formularz_odblokowal"] = None
+		wartosci_zapisu["formularz_odblokowano_dnia"] = None
+
 	_zapisz_stan_autenti(konfig, nazwa, deal, wartosci_zapisu)
 	frappe.db.commit()
 
@@ -997,21 +1005,82 @@ def autenti_send_kredyt(kredyt: str | None = None) -> dict[str, Any]:
 	return _wyslij_dokument(kredyt, KONFIG_KREDYT)
 
 
-def _zdalny_status_bezpiecznie(client: AutentiClient, doc_id: str) -> str | None:
-	"""Odpytuje `AutentiClient.get_status(doc_id)` i zwraca sam status, traktując
-	odpowiedź 404 (proces nie istnieje już po stronie Autenti) jako `None`, zamiast
-	pozwalać jej propagować jako wyjątek. Każdy inny błąd HTTP jest przepuszczany
-	dalej -- wołający nie ma jak bezpiecznie odróżnić "proces naprawdę nie
-	istnieje" od "chwilowa awaria API", więc tylko 404 jest tu interpretowane
-	jako sygnał, a nie usterka.
+def _zdalna_odpowiedz_bezpiecznie(
+	client: AutentiClient, doc_id: str, timeout: Any = None
+) -> dict[str, Any] | None:
+	"""Pełna odpowiedź `GET /document-processes/{id}` (status i strony), z 404 (proces
+	nie istnieje już po stronie Autenti) zamienionym na `None`. Każdy inny błąd HTTP
+	jest przepuszczany dalej -- wołający nie ma jak bezpiecznie odróżnić "proces
+	naprawdę nie istnieje" od "chwilowa awaria API", więc tylko 404 jest tu
+	interpretowane jako sygnał, a nie usterka. Jedno żądanie (ops#371: z tej samej
+	odpowiedzi poller czyta i status, i podpisy stron).
 	"""
 	try:
-		return client.get_status(doc_id).get("status")
+		odpowiedz = client.get_status(doc_id, timeout=timeout) if timeout else client.get_status(doc_id)
 	except requests.HTTPError as exc:
 		response = exc.response
 		if response is not None and response.status_code == 404:
 			return None
 		raise
+	return odpowiedz if isinstance(odpowiedz, dict) else {}
+
+
+def _zdalny_status_bezpiecznie(client: AutentiClient, doc_id: str) -> str | None:
+	"""Sam status procesu (`_zdalna_odpowiedz_bezpiecznie` ze 404 jako `None`)."""
+	odpowiedz = _zdalna_odpowiedz_bezpiecznie(client, doc_id)
+	return odpowiedz.get("status") if odpowiedz else None
+
+
+def _zapisz_pierwszy_podpis(
+	konfig: dict[str, Any], nazwa: str, deal: str, odpowiedz: dict[str, Any] | None
+) -> str | None:
+	"""Gdy odpowiedź Autenti niesie podpis, a `autenti_pierwszy_podpis` dokumentu jest
+	jeszcze puste: zapisuje je (czas lokalny, `db.set_value` bez `modified`), wypycha
+	zdarzenie realtime (`_zapisz_stan_autenti`), dodaje jeden ślad w Aktywności szansy
+	i COMMITUJE (wołający może zaraz rzucić wyjątek, który wycofałby transakcję).
+	Zwraca czas pierwszego podpisu (lokalny napis) albo `None`, gdy podpisu brak.
+
+	Tylko doctypy, które mają to pole (`Volteo Umowa`); `Volteo Kredyt` jest
+	pomijany (osobna decyzja, ops#371). Idempotentne: kolejne wywołanie, gdy pole
+	jest już ustawione, niczego nie zmienia i nie dodaje śladu.
+	"""
+	if not frappe.get_meta(konfig["doctype"]).has_field("autenti_pierwszy_podpis"):
+		return None
+	znacznik = logika.pierwszy_podpis(odpowiedz)
+	if not znacznik:
+		return None
+	czas_lokalny = logika.utc_na_czas_serwisu(znacznik)
+	if not czas_lokalny:
+		return None
+
+	zapisany = frappe.db.get_value(konfig["doctype"], nazwa, "autenti_pierwszy_podpis")
+	if zapisany:
+		return czas_lokalny
+
+	_zapisz_stan_autenti(konfig, nazwa, deal, {"autenti_pierwszy_podpis": czas_lokalny})
+	frappe.db.commit()
+	_slad_z_atrybucja(deal, tekst_sladu("umowa_pierwszy_podpis"))
+	frappe.db.commit()
+	return czas_lokalny
+
+
+def sprawdz_pierwszy_podpis_na_zywo(deal: str) -> str | None:
+	"""Pyta Autenti na żywo (krótki timeout) o podpisy umowy `deal` i, gdy jest
+	podpis, zapisuje go (`_zapisz_pierwszy_podpis`). Używane przez bramkę zapisu
+	formularza (`crm.api.umowa`), żeby domknąć okno 10 minut pollera (ops#371).
+
+	Zwraca czas pierwszego podpisu albo `None` (brak podpisu, także proces 404).
+	Każdy błąd łączności jest PRZEPUSZCZANY: bramka zapisu zamyka się przy błędzie.
+	"""
+	umowa = frappe.db.get_value(
+		UMOWA_DOCTYPE, deal, ["autenti_document_id"], as_dict=True
+	)
+	doc_id = umowa.autenti_document_id if umowa else None
+	if not doc_id:
+		return None
+	client = AutentiClient()
+	odpowiedz = _zdalna_odpowiedz_bezpiecznie(client, doc_id, timeout=(3, 6))
+	return _zapisz_pierwszy_podpis(KONFIG_UMOWA, deal, deal, odpowiedz)
 
 
 def _zapisz_stan_autenti(konfig: dict[str, Any], nazwa: str, deal: str, aktualizacja: dict[str, Any]) -> None:
@@ -1469,7 +1538,18 @@ def _odpytaj_wyslane(client: AutentiClient, konfig: dict[str, Any]) -> None:
 
 	for wiersz in wiersze:
 		try:
-			zdalny_status = _zdalny_status_bezpiecznie(client, wiersz.autenti_document_id)
+			odpowiedz = _zdalna_odpowiedz_bezpiecznie(client, wiersz.autenti_document_id)
+			zdalny_status = odpowiedz.get("status") if odpowiedz else None
+			# ops#371: z tej samej odpowiedzi (jedno żądanie) wykrywamy pierwszy podpis i
+			# blokujemy formularz umowy; błąd tego zapisu nie może zatrzymać obsługi statusu.
+			try:
+				_zapisz_pierwszy_podpis(konfig, wiersz.name, wiersz.deal, odpowiedz)
+			except Exception:
+				frappe.log_error(
+					title="Autenti: zapis pierwszego podpisu nie powiódł się",
+					message=f"{konfig['doctype']}: {wiersz.name}\n{frappe.get_traceback()}",
+				)
+				frappe.db.commit()
 			nowy_status = logika.STATUS_MAP.get(zdalny_status) if zdalny_status else None
 			if not nowy_status:
 				if zdalny_status in logika.PENDING_REMOTE_STATUSES:

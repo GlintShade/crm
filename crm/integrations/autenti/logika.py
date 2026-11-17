@@ -18,7 +18,8 @@ komunikaty dla użytkownika. Każda z tych funkcji jest czysta (bez `frappe`),
 żeby dało się je przetestować lokalnym `unittest` bez działającego bencha.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 STATUS_MAP = {
 	"COMPLETED": "Podpisana",
@@ -518,3 +519,79 @@ def wybierz_id_podpisanego_pliku(pliki: list[dict]) -> str | None:
 		if plik.get("filePurpose") == "SIGNED_CONTENT_FILE":
 			return plik.get("id")
 	return None
+
+
+ZDARZENIE_PODPISU = "EVENT_CLASSIFIER-UNIQUE_TYPE:SIGNATURE_APPLICATION"
+"""`eventType` zdarzenia złożenia podpisu w odpowiedzi `GET /document-processes/{id}`
+(ops#371). Samo obejrzenie dokumentu (`DOCUMENT_VIEW`) nie jest podpisem."""
+
+STREFA_SERWISU = "Europe/Warsaw"
+
+
+def _parsuj_znacznik_utc(wartosc: object) -> datetime | None:
+	"""Parsuje znacznik czasu Autenti ("2026-10-23T15:46:37.456Z") do świadomego strefy
+	datetime w UTC; wszystko, co nie jest poprawnym znacznikiem tekstowym, daje `None`."""
+	if not isinstance(wartosc, str) or not wartosc.strip():
+		return None
+	tekst = wartosc.strip()
+	if tekst.endswith(("Z", "z")):
+		tekst = tekst[:-1] + "+00:00"
+	try:
+		wynik = datetime.fromisoformat(tekst)
+	except ValueError:
+		return None
+	if wynik.tzinfo is None:
+		wynik = wynik.replace(tzinfo=timezone.utc)
+	return wynik.astimezone(timezone.utc)
+
+
+def pierwszy_podpis(odpowiedz: object) -> str | None:
+	"""Najwcześniejszy `timestamp` zdarzenia złożenia podpisu wśród stron `SIGNER`
+	w odpowiedzi `GET /document-processes/{id}` Autenti (ops#371), albo `None`.
+
+	Podpis to strona z `role == "SIGNER"` mająca zdarzenie
+	`ZDARZENIE_PODPISU`. Obejrzenie dokumentu (`DOCUMENT_VIEW`) oraz
+	`participationStatus == "COMPLETED"` u stron VIEWER/SENDER NIE są podpisem.
+	Zwracany jest oryginalny napis znacznika (UTC, np. "2026-10-23T15:46:37.456Z").
+	Odporne na brak kluczy i zły kształt danych: zdarzenia bez poprawnego znacznika
+	tekstowego są pomijane.
+	"""
+	if not isinstance(odpowiedz, dict):
+		return None
+	strony = odpowiedz.get("parties")
+	if not isinstance(strony, list):
+		return None
+
+	najwczesniejszy: tuple[datetime, str] | None = None
+	for strona in strony:
+		if not isinstance(strona, dict) or strona.get("role") != "SIGNER":
+			continue
+		zdarzenia = strona.get("events")
+		if not isinstance(zdarzenia, list):
+			continue
+		for zdarzenie in zdarzenia:
+			if not isinstance(zdarzenie, dict) or zdarzenie.get("eventType") != ZDARZENIE_PODPISU:
+				continue
+			surowy = zdarzenie.get("timestamp")
+			sparsowany = _parsuj_znacznik_utc(surowy)
+			if sparsowany is None:
+				continue
+			if najwczesniejszy is None or sparsowany < najwczesniejszy[0]:
+				najwczesniejszy = (sparsowany, str(surowy))
+	return najwczesniejszy[1] if najwczesniejszy else None
+
+
+def utc_na_czas_serwisu(znacznik_utc: str | None) -> str | None:
+	"""Zamienia znacznik UTC z Autenti na lokalny (Europe/Warsaw) napis
+	"RRRR-MM-DD GG:MM:SS" bez strefy, w formacie pola Datetime Frappe (ops#371).
+	Nieparsowalne wejście daje `None`."""
+	sparsowany = _parsuj_znacznik_utc(znacznik_utc)
+	if sparsowany is None:
+		return None
+	return sparsowany.astimezone(ZoneInfo(STREFA_SERWISU)).strftime("%Y-%m-%d %H:%M:%S")
+
+
+KOMUNIKAT_BLOKADA_FORMULARZA = (
+	"Formularz umowy jest zablokowany, bo umowa została podpisana w Autenti. Odblokować może administrator."
+)
+KOMUNIKAT_BRAK_SPRAWDZENIA_PODPISOW = "Nie udało się sprawdzić podpisów w Autenti. Spróbuj ponownie za chwilę."

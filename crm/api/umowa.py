@@ -37,13 +37,17 @@ from crm.volteo_pipeline import OZE_RODZAJE
 from crm.volteo_umowa import (
 	KLIMATYZACJA,
 	KOCIOL,
+	POLA_FORMULARZA_CP,
+	POLA_FORMULARZA_OZE,
 	POMPA_CIEPLA,
 	ROZBUDOWA,
 	brakujace_dane_klienta,
 	brakujace_pola,
 	cechy_umowy,
+	czy_formularz_zablokowany,
 	czy_propagowac_zgody,
 	czy_rodzaj_bez_wzoru_umowy,
+	czy_sprawdzac_podpisy_na_zywo,
 	czy_synchronizowac_wplate,
 	czy_umowa_podwojna,
 	czy_zapis_jako_przypisany,
@@ -54,6 +58,7 @@ from crm.volteo_umowa import (
 	miejsce_i_pokrycie,
 	opis_konfiguracji,
 	ppoz_wymagane,
+	zbuduj_blokade,
 )
 from crm.volteo_umowa_cp import (
 	WARIANTY_WYNAGRODZENIA,
@@ -185,42 +190,7 @@ frontendu, który czyta je wprost z `prefill.custom_ppoz` (surowy klucz Deal,
 zostaje w `prefill` bez mapowania, jak każdy wpis `_DEAL_POLA_PREFILL`).
 """
 
-_DANE_POLA_DOZWOLONE = [
-	"adres_zam_jak_montaz",
-	"typ_budynku",
-	"powierzchnia_prog",
-	"powierzchnia_m2",
-	"finansowanie",
-	"wklad_wlasny_pln",
-	"internet",
-	"instalacja_odgromowa",
-	"moc_przylaczeniowa_kw",
-	"liczba_faz",
-	"osd",
-	"przekop_gruntowy",
-	"przekop_mb",
-	"istniejaca_pv",
-	"istniejaca_pv_moc_inwertera_kw",
-	"istniejaca_pv_moc_kwp",
-	"istniejaca_pv_producent_inwertera",
-	"adres_zam_ulica",
-	"adres_zam_nr_domu",
-	"adres_zam_nr_mieszkania",
-	"adres_zam_kod",
-	"adres_zam_miasto",
-	"adres_montaz_ulica",
-	"adres_montaz_nr_domu",
-	"adres_montaz_nr_mieszkania",
-	"adres_montaz_kod",
-	"adres_montaz_miasto",
-	"dodatkowy_kabel",
-	"dodatkowy_kabel_m",
-	"zgoda_kontakt_telefoniczny",
-	"zgoda_dzialania_promocyjne",
-	"zgoda_realizacja_przed_odstapieniem",
-	"drugi_zamawiajacy",
-	"istniejacy_me_pojemnosc_kwh",
-]
+_DANE_POLA_DOZWOLONE = list(POLA_FORMULARZA_OZE)
 """Jedyne pola `Volteo Umowa`, jakie `volteo_umowa_save` przyjmuje od klienta.
 
 Nigdy nie robimy ślepego ``doc.update(dane)`` z danych przesłanych przez przeglądarkę —
@@ -261,12 +231,7 @@ koercji zapisałby się jako zgoda udzielona, mimo że przedstawiciel jej nie za
 liczbowe (``"0"``/``"1"``); nieparsowalne wejście pada na bezpieczne domyślne 0.
 """
 
-_DANE_POLA_DOZWOLONE_CP = [
-	"wynagrodzenie_wariant",
-	"zgoda_przetwarzanie_danych",
-	"zgoda_kontakt_telefoniczny",
-	"zgoda_dzialania_promocyjne",
-]
+_DANE_POLA_DOZWOLONE_CP = list(POLA_FORMULARZA_CP)
 """Jedyne pola `Volteo Umowa` przyjmowane od klienta dla umowy obsługi dotacji CP
 (ops#212) - odpowiednik `_DANE_POLA_DOZWOLONE` dla OZE, ale krótszy: umowa CP nie
 ma adresu montażu, finansowania ani drugiego Zamawiającego. `zgoda_kontakt_telefoniczny`
@@ -314,6 +279,69 @@ def _sprawdz_dostep_do_szansy(deal: str, tryb: str) -> None:
 		frappe.throw(_("Szansa sprzedaży nie istnieje."), frappe.DoesNotExistError)
 	if not frappe.has_permission("CRM Deal", tryb, deal):
 		frappe.throw(_("Brak uprawnień do tej szansy sprzedaży."), frappe.PermissionError)
+
+
+def _moze_odblokowac() -> bool:
+	"""Czy wywołujący ma rolę odblokowującą formularz (`crm.api.koszty.ADMIN_ROLE`).
+
+	Import wewnątrz funkcji: `crm.api.koszty` importuje ten moduł (cykl na poziomie
+	modułu). `frappe.get_roles("Administrator")` zwraca wszystkie role, więc
+	Administrator przechodzi.
+	"""
+	from crm.api.koszty import ADMIN_ROLE
+
+	return bool(ADMIN_ROLE & set(frappe.get_roles(frappe.session.user)))
+
+
+def _blokada(umowa_doc: "frappe.model.document.Document | None") -> dict[str, Any]:
+	"""Klucz `blokada` odpowiedzi API (ops#371); brak umowy daje stan niezablokowany."""
+	if umowa_doc is None:
+		return zbuduj_blokade(None, None, 0, None, None, _moze_odblokowac())
+	odblokowal = umowa_doc.get("formularz_odblokowal")
+	return zbuduj_blokade(
+		umowa_doc.get("autenti_status"),
+		umowa_doc.get("autenti_pierwszy_podpis"),
+		umowa_doc.get("formularz_odblokowany"),
+		frappe.utils.get_fullname(odblokowal) if odblokowal else None,
+		umowa_doc.get("formularz_odblokowano_dnia"),
+		_moze_odblokowac(),
+	)
+
+
+def _sprawdz_blokade_zapisu(umowa_doc: "frappe.model.document.Document") -> None:
+	"""Bramka zapisu formularza (ops#371), wołana PRZED jakąkolwiek zmianą dokumentu.
+
+	Zablokowany formularz: czytelna odmowa. Dodatkowo domyka okno 10 minut pollera:
+	dla "Wysłana" bez zapisanego podpisu, przy włączonej integracji, pyta Autenti
+	na żywo; podpis jest zapisywany (z commitem, żeby odmowa go nie wycofała) i
+	zapis odmawiany, błąd łączności zamyka bramkę.
+	"""
+	status = umowa_doc.get("autenti_status")
+	podpis = umowa_doc.get("autenti_pierwszy_podpis")
+	odblokowany = umowa_doc.get("formularz_odblokowany")
+	if czy_formularz_zablokowany(status, podpis, odblokowany):
+		frappe.throw(_(autenti_logika.KOMUNIKAT_BLOKADA_FORMULARZA))
+
+	wlaczona = autenti_logika.czy_wlaczone(
+		(frappe.db.get_singles_dict("Volteo Autenti Settings") or {}).get("enabled")
+	)
+	if not czy_sprawdzac_podpisy_na_zywo(
+		status, podpis, odblokowany, wlaczona, bool(umowa_doc.get("autenti_document_id"))
+	):
+		return
+
+	from crm.integrations.autenti.api import sprawdz_pierwszy_podpis_na_zywo
+
+	try:
+		wynik = sprawdz_pierwszy_podpis_na_zywo(umowa_doc.name)
+	except Exception:
+		frappe.log_error(
+			title="Volteo Umowa: sprawdzenie podpisów w Autenti nie powiodło się",
+			message=frappe.get_traceback(),
+		)
+		frappe.throw(_(autenti_logika.KOMUNIKAT_BRAK_SPRAWDZENIA_PODPISOW))
+	if wynik:
+		frappe.throw(_(autenti_logika.KOMUNIKAT_BLOKADA_FORMULARZA))
 
 
 def _blad_ogolny() -> NoReturn:
@@ -930,6 +958,7 @@ def volteo_umowa_get(deal: str) -> dict[str, Any]:
 		"prefill_drugi": _prefill_drugi(umowa_doc),
 		"wyliczenia": _wyliczenia(deal_doc, umowa_doc),
 		"wzor": _opis_wzoru(deal_doc, umowa_doc),
+		"blokada": _blokada(umowa_doc),
 	}
 
 
@@ -998,6 +1027,7 @@ def volteo_umowa_create(deal: str) -> dict[str, Any]:
 		"prefill_drugi": _prefill_drugi(umowa_doc),
 		"wyliczenia": _wyliczenia(deal_doc, umowa_doc),
 		"wzor": _opis_wzoru(deal_doc, umowa_doc),
+		"blokada": _blokada(umowa_doc),
 	}
 
 
@@ -1062,6 +1092,8 @@ def volteo_umowa_save(deal: str, dane: dict[str, Any]) -> dict[str, Any]:
 	if umowa_doc is None:
 		frappe.throw(_("Najpierw wygeneruj umowę dla tej szansy sprzedaży."))
 
+	_sprawdz_blokade_zapisu(umowa_doc)
+
 	if _czy_cp(deal_doc):
 		_zapisz_dane_cp(deal_doc, umowa_doc, dane)
 	else:
@@ -1090,7 +1122,71 @@ def volteo_umowa_save(deal: str, dane: dict[str, Any]) -> dict[str, Any]:
 		"prefill_drugi": _prefill_drugi(umowa_doc),
 		"wyliczenia": _wyliczenia(deal_doc, umowa_doc),
 		"wzor": _opis_wzoru(deal_doc, umowa_doc),
+		"blokada": _blokada(umowa_doc),
 	}
+
+
+@frappe.whitelist()
+@rate_limit(limit=20, seconds=60)
+def volteo_umowa_odblokuj(deal: str) -> dict[str, Any]:
+	"""Odblokowuje zablokowany formularz umowy (ops#371). Tylko `ADMIN_ROLE`
+	(System Manager, Volteo Core Admin); wymaga też odczytu szansy. Odmowa dla
+	formularza, który nie jest zablokowany. Zapis czterech pól przez
+	`frappe.db.set_value` (strażnik `validate` nie przepuszcza ich przez `save()`).
+	"""
+	if not _moze_odblokowac():
+		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
+	_sprawdz_dostep_do_szansy(deal, "read")
+
+	umowa_doc = _pobierz_umowe(deal)
+	if umowa_doc is None:
+		frappe.throw(_("Najpierw wygeneruj umowę dla tej szansy sprzedaży."))
+	if not czy_formularz_zablokowany(
+		umowa_doc.get("autenti_status"),
+		umowa_doc.get("autenti_pierwszy_podpis"),
+		umowa_doc.get("formularz_odblokowany"),
+	):
+		frappe.throw(_("Formularz umowy nie jest zablokowany."))
+
+	frappe.db.set_value(
+		DOCTYPE,
+		deal,
+		{
+			"formularz_odblokowany": 1,
+			"formularz_odblokowal": frappe.session.user,
+			"formularz_odblokowano_dnia": frappe.utils.now(),
+		},
+		update_modified=False,
+	)
+	zapisz_slad(deal, tekst_sladu("umowa_odblokowano"))
+	umowa_doc = _pobierz_umowe(deal)
+	return {"umowa": _umowa_do_dict(umowa_doc), "blokada": _blokada(umowa_doc)}
+
+
+@frappe.whitelist()
+@rate_limit(limit=20, seconds=60)
+def volteo_umowa_zablokuj(deal: str) -> dict[str, Any]:
+	"""Ponownie blokuje odblokowany formularz umowy (ops#371). Ta sama bramka ról co
+	`volteo_umowa_odblokuj`; odmowa, gdy formularz nie jest odblokowany."""
+	if not _moze_odblokowac():
+		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
+	_sprawdz_dostep_do_szansy(deal, "read")
+
+	umowa_doc = _pobierz_umowe(deal)
+	if umowa_doc is None:
+		frappe.throw(_("Najpierw wygeneruj umowę dla tej szansy sprzedaży."))
+	if not cint(umowa_doc.get("formularz_odblokowany")):
+		frappe.throw(_("Formularz umowy nie jest odblokowany."))
+
+	frappe.db.set_value(
+		DOCTYPE,
+		deal,
+		{"formularz_odblokowany": 0, "formularz_odblokowal": None, "formularz_odblokowano_dnia": None},
+		update_modified=False,
+	)
+	zapisz_slad(deal, tekst_sladu("umowa_zablokowano"))
+	umowa_doc = _pobierz_umowe(deal)
+	return {"umowa": _umowa_do_dict(umowa_doc), "blokada": _blokada(umowa_doc)}
 
 
 def _synchronizuj_wplate_z_umowy(

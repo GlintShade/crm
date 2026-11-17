@@ -310,6 +310,8 @@ doc_events = {
 	# "Volteo Audyt CP" wyżej. after_insert, nie on_update: Backend ma prawo
 	# write na ten doctype, więc edycja istniejącego wpisu nie może ponownie
 	# wysłać powiadomienia o wzmiance.
+	# ops#371: blokada formularza umowy po pierwszym podpisie w Autenti.
+	"Volteo Umowa": {"validate": ["crm.permissions.umowa_blokada.validate"]},
 	# Rozliczenia prowizji (ops#280) -- doctype tworzy ops (issue ops#279).
 	"Volteo Rozliczenie": {
 		"validate": ["crm.rozliczenia.waliduj_wiersz"],

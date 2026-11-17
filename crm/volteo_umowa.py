@@ -542,3 +542,179 @@ def kontakty_do_zgod(podstawowy: str | None, drugi: str | None) -> list[str]:
 		if kontakt and kontakt not in wynik:
 			wynik.append(kontakt)
 	return wynik
+
+
+POLA_FORMULARZA_OZE = [
+	"adres_zam_jak_montaz",
+	"typ_budynku",
+	"powierzchnia_prog",
+	"powierzchnia_m2",
+	"finansowanie",
+	"wklad_wlasny_pln",
+	"internet",
+	"instalacja_odgromowa",
+	"moc_przylaczeniowa_kw",
+	"liczba_faz",
+	"osd",
+	"przekop_gruntowy",
+	"przekop_mb",
+	"istniejaca_pv",
+	"istniejaca_pv_moc_inwertera_kw",
+	"istniejaca_pv_moc_kwp",
+	"istniejaca_pv_producent_inwertera",
+	"adres_zam_ulica",
+	"adres_zam_nr_domu",
+	"adres_zam_nr_mieszkania",
+	"adres_zam_kod",
+	"adres_zam_miasto",
+	"adres_montaz_ulica",
+	"adres_montaz_nr_domu",
+	"adres_montaz_nr_mieszkania",
+	"adres_montaz_kod",
+	"adres_montaz_miasto",
+	"dodatkowy_kabel",
+	"dodatkowy_kabel_m",
+	"zgoda_kontakt_telefoniczny",
+	"zgoda_dzialania_promocyjne",
+	"zgoda_realizacja_przed_odstapieniem",
+	"drugi_zamawiajacy",
+	"istniejacy_me_pojemnosc_kwh",
+]
+"""Pola formularza umowy OZE przyjmowane od klienta (kanon; `crm.api.umowa` czyta stąd).
+Ta sama lista służy strażnikowi blokady formularza (ops#371)."""
+
+POLA_FORMULARZA_CP = [
+	"wynagrodzenie_wariant",
+	"zgoda_przetwarzanie_danych",
+	"zgoda_kontakt_telefoniczny",
+	"zgoda_dzialania_promocyjne",
+]
+"""Pola formularza umowy obsługi dotacji CP (kanon, ops#212 i ops#371)."""
+
+
+# --- ops#371: blokada formularza umowy po pierwszym podpisie w Autenti ---------
+
+POLA_BLOKADY = (
+	"autenti_pierwszy_podpis",
+	"formularz_odblokowany",
+	"formularz_odblokowal",
+	"formularz_odblokowano_dnia",
+)
+"""Cztery pola stanu blokady na `Volteo Umowa`. Zmieniają się WYŁĄCZNIE przez
+`frappe.db.set_value` (poller, wysyłka, odblokowanie); każdy `save()`, który je
+zmienia, jest odrzucany przez strażnika (`crm/permissions/umowa_blokada.py`)."""
+
+BLOKADA_PODPISANA = "podpisana"
+BLOKADA_PODPIS_CZESCIOWY = "podpis_czesciowy"
+
+
+def czy_formularz_zablokowany(
+	autenti_status: str | None, pierwszy_podpis: object, odblokowany: object
+) -> bool:
+	"""Czy formularz umowy jest zablokowany do edycji (ops#371).
+
+	Prawda, gdy NIE jest odblokowany i (status "Podpisana", także bez zapisanego
+	`pierwszy_podpis`, czyli umowy podpisane przed wdrożeniem, albo status "Wysłana"
+	z ustawionym `pierwszy_podpis`). Każdy inny przypadek: fałsz.
+	"""
+	return powod_blokady(autenti_status, pierwszy_podpis, odblokowany) is not None
+
+
+def _czy_prawda(wartosc: object) -> bool:
+	"""Check z bazy bywa 0/1, "0"/"1", None; "0" nie może liczyć się jako prawda."""
+	if wartosc is None or isinstance(wartosc, bool):
+		return bool(wartosc)
+	try:
+		return int(str(wartosc).strip() or 0) != 0
+	except ValueError:
+		return True
+
+
+def powod_blokady(autenti_status: str | None, pierwszy_podpis: object, odblokowany: object) -> str | None:
+	"""`"podpisana"`, `"podpis_czesciowy"` albo `None` (brak blokady)."""
+	if _czy_prawda(odblokowany):
+		return None
+	if autenti_status == "Podpisana":
+		return BLOKADA_PODPISANA
+	if autenti_status == "Wysłana" and pierwszy_podpis:
+		return BLOKADA_PODPIS_CZESCIOWY
+	return None
+
+
+def zbuduj_blokade(
+	autenti_status: str | None,
+	pierwszy_podpis: object,
+	odblokowany: object,
+	odblokowal: str | None,
+	odblokowano_dnia: object,
+	moze_odblokowac: bool,
+) -> dict[str, Any]:
+	"""Klucz `blokada` odpowiedzi API (kontrakt dla frontendu, ops#371).
+
+	`odblokowal` to już czytelna nazwa osoby (rozwiązuje ją adapter). Daty idą jako
+	napisy "RRRR-MM-DD GG:MM:SS" albo `None`.
+	"""
+	powod = powod_blokady(autenti_status, pierwszy_podpis, odblokowany)
+	return {
+		"zablokowany": powod is not None,
+		"powod": powod,
+		"pierwszy_podpis": str(pierwszy_podpis)[:19] if pierwszy_podpis else None,
+		"odblokowany": _czy_prawda(odblokowany),
+		"odblokowal": odblokowal or None,
+		"odblokowano_dnia": str(odblokowano_dnia)[:19] if odblokowano_dnia else None,
+		"moze_odblokowac": bool(moze_odblokowac),
+	}
+
+
+def _normalizuj_wartosc_pola(wartosc: Any) -> Any:
+	"""Sprowadza wartość pola do postaci porównywalnej: None i "" są równe, liczby i
+	napisy liczbowe ("1", 1, 1.0, Decimal) są równe, reszta po przycięciu napisu."""
+	if wartosc is None:
+		return None
+	if isinstance(wartosc, bool):
+		return Decimal(int(wartosc))
+	if isinstance(wartosc, (int, float, Decimal)):
+		try:
+			return Decimal(str(wartosc)).normalize()
+		except InvalidOperation:
+			return str(wartosc)
+	tekst = str(wartosc).strip()
+	if tekst == "":
+		return None
+	try:
+		return Decimal(tekst).normalize()
+	except InvalidOperation:
+		return tekst
+
+
+def pola_zmienione(przed: dict[str, Any], po: dict[str, Any], pola: Any) -> list[str]:
+	"""Pola z `pola`, których wartość różni się między `przed` i `po` (po normalizacji).
+
+	Brak klucza liczy się jak `None`. Używane przez strażnika blokady (ops#371).
+	"""
+	return [
+		pole
+		for pole in pola
+		if _normalizuj_wartosc_pola(przed.get(pole)) != _normalizuj_wartosc_pola(po.get(pole))
+	]
+
+
+def czy_sprawdzac_podpisy_na_zywo(
+	autenti_status: str | None,
+	pierwszy_podpis: object,
+	odblokowany: object,
+	integracja_wlaczona: bool,
+	ma_id_procesu: bool,
+) -> bool:
+	"""Czy zapis formularza ma zapytać Autenti na żywo o podpisy (okno 10 min pollera).
+
+	Tylko dla "Wysłana" bez zapisanego podpisu, niezablokowanego ręcznie, przy
+	włączonej integracji i znanym id procesu.
+	"""
+	return (
+		autenti_status == "Wysłana"
+		and not pierwszy_podpis
+		and not _czy_prawda(odblokowany)
+		and integracja_wlaczona
+		and ma_id_procesu
+	)

@@ -174,9 +174,12 @@ class AutentiClient:
 		"""Withdraw the document process."""
 		return self._perform_action(doc_id, "EVENT_CLASSIFIER-UNIQUE_TYPE:DOCUMENT_WITHDRAWAL")
 
-	def get_status(self, doc_id: str) -> dict:
-		"""Return the current status of a document process."""
-		resp = self._request("GET", f"/document-processes/{doc_id}")
+	def get_status(self, doc_id: str, timeout=None) -> dict:
+		"""Return the current status of a document process (full response, with parties).
+
+		`timeout` (optional) overrides DEFAULT_TIMEOUT for callers in a user request.
+		"""
+		resp = self._request("GET", f"/document-processes/{doc_id}", timeout=timeout or self.DEFAULT_TIMEOUT)
 		return resp.json()
 
 	def get_document_files(self, doc_id: str) -> list:

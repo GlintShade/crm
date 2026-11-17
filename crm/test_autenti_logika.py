@@ -25,10 +25,12 @@ from crm.integrations.autenti.logika import (
 	nazwa_pliku_kredytu_podpisanego,
 	nazwa_pliku_podpisanego,
 	nazwa_pliku_umowy,
+	pierwszy_podpis,
 	prefiks_pliku_kredytu,
 	tytul_dokumentu,
 	tytul_dokumentu_kredytu,
 	tytul_umowy_obslugi_dotacji,
+	utc_na_czas_serwisu,
 	wybierz_id_podpisanego_pliku,
 	zbuduj_odbiorcow,
 )
@@ -875,6 +877,105 @@ class TestAutentiLogika(unittest.TestCase):
 
 		self.assertEqual([o["zrodlo"] for o in wynik], ["klient", "prezes"])
 		self.assertEqual(wynik[1]["role"], "SIGNER")
+
+
+_PODPIS = "EVENT_CLASSIFIER-UNIQUE_TYPE:SIGNATURE_APPLICATION"
+_WIDOK = "EVENT_CLASSIFIER-UNIQUE_TYPE:DOCUMENT_VIEW"
+
+
+class TestPierwszyPodpis(unittest.TestCase):
+	def test_czesciowy_podpis(self: "TestPierwszyPodpis") -> None:
+		odpowiedz = {
+			"status": "PROCESSING",
+			"parties": [
+				{
+					"role": "SIGNER",
+					"participationStatus": "COMPLETED",
+					"events": [
+						{"timestamp": "2026-10-23T15:46:04.777Z", "eventType": _WIDOK},
+						{"timestamp": "2026-10-23T15:46:37.456Z", "eventType": _PODPIS},
+					],
+				},
+				{
+					"role": "SIGNER",
+					"participationStatus": "PENDING",
+					"events": [{"timestamp": "2026-11-07T08:49:42.433Z", "eventType": _WIDOK}],
+				},
+				{"role": "VIEWER", "participationStatus": "COMPLETED", "events": []},
+				{"role": "SENDER", "participationStatus": "COMPLETED", "events": []},
+			],
+		}
+		self.assertEqual(pierwszy_podpis(odpowiedz), "2026-10-23T15:46:37.456Z")
+
+	def test_komplet_zwraca_najwczesniejszy(self: "TestPierwszyPodpis") -> None:
+		odpowiedz = {
+			"parties": [
+				{"role": "SIGNER", "events": [{"timestamp": "2026-10-25T10:00:00.000Z", "eventType": _PODPIS}]},
+				{"role": "SIGNER", "events": [{"timestamp": "2026-10-24T09:00:00.000Z", "eventType": _PODPIS}]},
+			]
+		}
+		self.assertEqual(pierwszy_podpis(odpowiedz), "2026-10-24T09:00:00.000Z")
+
+	def test_sam_widok_to_nie_podpis(self: "TestPierwszyPodpis") -> None:
+		odpowiedz = {
+			"parties": [
+				{
+					"role": "SIGNER",
+					"participationStatus": "PENDING",
+					"events": [{"timestamp": "2026-11-07T08:49:42.433Z", "eventType": _WIDOK}],
+				}
+			]
+		}
+		self.assertIsNone(pierwszy_podpis(odpowiedz))
+
+	def test_viewer_i_sender_nie_licza_sie(self: "TestPierwszyPodpis") -> None:
+		odpowiedz = {
+			"parties": [
+				{
+					"role": "VIEWER",
+					"participationStatus": "COMPLETED",
+					"events": [{"timestamp": "2026-10-02T18:31:23.870Z", "eventType": _PODPIS}],
+				},
+				{"role": "SENDER", "participationStatus": "COMPLETED", "events": [{"timestamp": "x", "eventType": _PODPIS}]},
+			]
+		}
+		self.assertIsNone(pierwszy_podpis(odpowiedz))
+
+	def test_puste_i_smieci(self: "TestPierwszyPodpis") -> None:
+		for wejscie in (
+			None,
+			[],
+			"x",
+			42,
+			{},
+			{"parties": None},
+			{"parties": "x"},
+			{"parties": []},
+			{"parties": [None, 3, "s", {"role": "SIGNER"}]},
+			{"parties": [{"role": "SIGNER", "events": "x"}]},
+			{"parties": [{"role": "SIGNER", "events": [None, 1, {"eventType": _PODPIS}]}]},
+			{"parties": [{"role": "SIGNER", "events": [{"eventType": _PODPIS, "timestamp": 123}]}]},
+			{"parties": [{"role": "SIGNER", "events": [{"eventType": _PODPIS, "timestamp": "nie data"}]}]},
+		):
+			self.assertIsNone(pierwszy_podpis(wejscie), msg=repr(wejscie))
+
+	def test_smiecie_obok_poprawnego_zdarzenia(self: "TestPierwszyPodpis") -> None:
+		odpowiedz = {
+			"parties": [
+				None,
+				{"role": "SIGNER", "events": [{"eventType": _PODPIS, "timestamp": "zle"}, {"eventType": _PODPIS, "timestamp": "2026-10-23T15:46:37Z"}]},
+			]
+		}
+		self.assertEqual(pierwszy_podpis(odpowiedz), "2026-10-23T15:46:37Z")
+
+	def test_utc_na_czas_serwisu_lato_i_zima(self: "TestPierwszyPodpis") -> None:
+		self.assertEqual(utc_na_czas_serwisu("2026-10-23T15:46:37.456Z"), "2026-10-23 17:46:37")
+		self.assertEqual(utc_na_czas_serwisu("2026-12-01T15:46:37Z"), "2026-12-01 16:46:37")
+		self.assertEqual(utc_na_czas_serwisu("2026-10-25T00:30:00Z"), "2026-10-25 02:30:00")
+
+	def test_utc_na_czas_serwisu_smieci(self: "TestPierwszyPodpis") -> None:
+		self.assertIsNone(utc_na_czas_serwisu(None))
+		self.assertIsNone(utc_na_czas_serwisu("abc"))
 
 
 if __name__ == "__main__":

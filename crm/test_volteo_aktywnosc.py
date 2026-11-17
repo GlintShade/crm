@@ -652,6 +652,13 @@ class TestTekstSladu(unittest.TestCase):
 	def test_g_autenti_pdf(self: "TestTekstSladu") -> None:
 		self.assertEqual(tekst_sladu("autenti_pdf", dokument="umowę"), "podpięto podpisany PDF (umowę)")
 
+	def test_umowa_blokada_slady(self: "TestTekstSladu") -> None:
+		self.assertEqual(
+			tekst_sladu("umowa_pierwszy_podpis"), "Autenti: pierwszy podpis na umowie, formularz zablokowany"
+		)
+		self.assertEqual(tekst_sladu("umowa_odblokowano"), "odblokowano formularz umowy")
+		self.assertEqual(tekst_sladu("umowa_zablokowano"), "ponownie zablokowano formularz umowy")
+
 	def test_h_umowa_utworzono(self: "TestTekstSladu") -> None:
 		self.assertEqual(tekst_sladu("umowa_utworzono"), "utworzono umowę (formularz roboczy)")
 

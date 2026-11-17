@@ -3,14 +3,19 @@ from decimal import Decimal
 
 from crm.volteo_umowa import (
 	KONSTRUKCJA_MONTAZ,
+	POLA_BLOKADY,
+	POLA_FORMULARZA_CP,
+	POLA_FORMULARZA_OZE,
 	PROG_PPOZ_KW,
 	RODZAJE_BEZ_WZORU,
 	RODZAJE_NOWE,
 	brakujace_dane_klienta,
 	brakujace_pola,
 	cechy_umowy,
+	czy_formularz_zablokowany,
 	czy_propagowac_zgody,
 	czy_rodzaj_bez_wzoru_umowy,
+	czy_sprawdzac_podpisy_na_zywo,
 	czy_synchronizowac_wplate,
 	czy_umowa_podwojna,
 	czy_zapis_jako_przypisany,
@@ -20,8 +25,11 @@ from crm.volteo_umowa import (
 	kwota_kredytu,
 	miejsce_i_pokrycie,
 	opis_konfiguracji,
+	pola_zmienione,
+	powod_blokady,
 	ppoz_wymagane,
 	wymagane_pola,
+	zbuduj_blokade,
 )
 
 
@@ -978,3 +986,83 @@ class TestWzoryUrzadzen(unittest.TestCase):
 	def test_zadny_rodzaj_nie_jest_bez_wzoru(self: "TestWzoryUrzadzen") -> None:
 		for rodzaj, _kod, _cecha in self._RODZAJE:
 			self.assertFalse(czy_rodzaj_bez_wzoru_umowy(rodzaj))
+
+
+class TestBlokadaFormularza(unittest.TestCase):
+	"""ops#371: reguła blokady formularza umowy po pierwszym podpisie w Autenti."""
+
+	PODPIS = "2026-10-23 17:46:37"
+
+	def test_tabela_prawdy(self: "TestBlokadaFormularza") -> None:
+		# (status, pierwszy_podpis, odblokowany) -> (zablokowany, powod)
+		przypadki = [
+			(("Podpisana", None, 0), (True, "podpisana")),
+			(("Podpisana", self.PODPIS, 0), (True, "podpisana")),
+			(("Wysłana", self.PODPIS, 0), (True, "podpis_czesciowy")),
+			(("Wysłana", None, 0), (False, None)),
+			(("Wysłana", "", 0), (False, None)),
+			(("Podpisana", self.PODPIS, 1), (False, None)),
+			(("Wysłana", self.PODPIS, 1), (False, None)),
+			(("Podpisana", None, "1"), (False, None)),
+			(("Podpisana", None, "0"), (True, "podpisana")),
+			((None, None, 0), (False, None)),
+			(("", self.PODPIS, 0), (False, None)),
+			(("Wysyłanie", self.PODPIS, 0), (False, None)),
+			(("Błąd", self.PODPIS, 0), (False, None)),
+			(("Odrzucona", self.PODPIS, 0), (False, None)),
+			(("Wygasła", self.PODPIS, 0), (False, None)),
+			(("Wycofana", self.PODPIS, 0), (False, None)),
+		]
+		for wejscie, (zablokowany, powod) in przypadki:
+			with self.subTest(wejscie=wejscie):
+				self.assertEqual(czy_formularz_zablokowany(*wejscie), zablokowany)
+				self.assertEqual(powod_blokady(*wejscie), powod)
+
+	def test_zbuduj_blokade_ksztalt(self: "TestBlokadaFormularza") -> None:
+		wynik = zbuduj_blokade("Wysłana", self.PODPIS, 0, None, None, True)
+		self.assertEqual(
+			wynik,
+			{
+				"zablokowany": True,
+				"powod": "podpis_czesciowy",
+				"pierwszy_podpis": self.PODPIS,
+				"odblokowany": False,
+				"odblokowal": None,
+				"odblokowano_dnia": None,
+				"moze_odblokowac": True,
+			},
+		)
+
+	def test_zbuduj_blokade_odblokowana(self: "TestBlokadaFormularza") -> None:
+		wynik = zbuduj_blokade("Podpisana", None, 1, "Jan Kowalski", "2026-11-17 10:00:00.123456", False)
+		self.assertFalse(wynik["zablokowany"])
+		self.assertIsNone(wynik["powod"])
+		self.assertTrue(wynik["odblokowany"])
+		self.assertEqual(wynik["odblokowal"], "Jan Kowalski")
+		self.assertEqual(wynik["odblokowano_dnia"], "2026-11-17 10:00:00")
+		self.assertFalse(wynik["moze_odblokowac"])
+
+	def test_pola_zmienione_normalizacja(self: "TestBlokadaFormularza") -> None:
+		przed = {"a": None, "b": 1, "c": "x", "d": 0, "e": Decimal("12.50")}
+		po = {"a": "", "b": "1", "c": " x ", "d": 0.0, "e": "12.5"}
+		self.assertEqual(pola_zmienione(przed, po, ["a", "b", "c", "d", "e"]), [])
+		po2 = {"a": "y", "b": 2, "c": "x", "d": 1, "e": "12.6"}
+		self.assertEqual(pola_zmienione(przed, po2, ["a", "b", "c", "d", "e"]), ["a", "b", "d", "e"])
+		self.assertEqual(pola_zmienione({}, {"z": 1}, ["z"]), ["z"])
+
+	def test_pola_zmienione_ignoruje_pola_spoza_listy(self: "TestBlokadaFormularza") -> None:
+		self.assertEqual(pola_zmienione({"a": 1}, {"a": 2}, ["b"]), [])
+
+	def test_listy_pol_nie_zawieraja_pol_blokady(self: "TestBlokadaFormularza") -> None:
+		for pole in POLA_BLOKADY:
+			self.assertNotIn(pole, POLA_FORMULARZA_OZE)
+			self.assertNotIn(pole, POLA_FORMULARZA_CP)
+
+	def test_sprawdzanie_na_zywo(self: "TestBlokadaFormularza") -> None:
+		self.assertTrue(czy_sprawdzac_podpisy_na_zywo("Wysłana", None, 0, True, True))
+		self.assertFalse(czy_sprawdzac_podpisy_na_zywo("Wysłana", self.PODPIS, 0, True, True))
+		self.assertFalse(czy_sprawdzac_podpisy_na_zywo("Wysłana", None, 1, True, True))
+		self.assertFalse(czy_sprawdzac_podpisy_na_zywo("Wysłana", None, 0, False, True))
+		self.assertFalse(czy_sprawdzac_podpisy_na_zywo("Wysłana", None, 0, True, False))
+		self.assertFalse(czy_sprawdzac_podpisy_na_zywo("Podpisana", None, 0, True, True))
+		self.assertFalse(czy_sprawdzac_podpisy_na_zywo(None, None, 0, True, True))
