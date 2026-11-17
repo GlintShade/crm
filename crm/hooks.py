@@ -140,6 +140,7 @@ permission_query_conditions = {
 	"Volteo Kredyt": "crm.permissions.faktura_visibility.get_kredyt_permission_query_conditions",
 	"Volteo Umowa": "crm.permissions.faktura_visibility.get_umowa_permission_query_conditions",
 	"Volteo Notatka": "crm.permissions.faktura_visibility.get_notatka_permission_query_conditions",
+	"Comment": "crm.permissions.powiazane_visibility.get_comment_permission_query_conditions",
 	"Volteo Audyt": "crm.permissions.audyt_visibility.get_audyt_permission_query_conditions",
 	"Volteo Audyt CP": "crm.permissions.audyt_visibility.get_audyt_cp_permission_query_conditions",
 	"FCRM Note": "crm.permissions.child_visibility.get_note_permission_query_conditions",
@@ -166,6 +167,7 @@ has_permission = {
 	"Volteo Kredyt": "crm.permissions.faktura_visibility.has_kredyt_permission",
 	"Volteo Umowa": "crm.permissions.faktura_visibility.has_umowa_permission",
 	"Volteo Notatka": "crm.permissions.faktura_visibility.has_notatka_permission",
+	"Comment": "crm.permissions.powiazane_visibility.has_comment_permission",
 	"Volteo Audyt": "crm.permissions.audyt_visibility.has_audyt_permission",
 	"Volteo Audyt CP": "crm.permissions.audyt_visibility.has_audyt_cp_permission",
 	"FCRM Note": [
