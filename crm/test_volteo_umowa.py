@@ -20,6 +20,7 @@ from crm.volteo_umowa import (
 	czy_umowa_podwojna,
 	czy_wymagac_dostepu_do_drugiego,
 	czy_zapis_jako_przypisany,
+	czy_zapis_przez_api,
 	docelowa_wplata,
 	kod_szablonu,
 	kontakty_do_zgod,
@@ -246,6 +247,20 @@ class TestCzyZapisJakoPrzypisany(unittest.TestCase):
 			self.assertFalse(czy_zapis_jako_przypisany(puste, "a@x.pl"))
 			self.assertFalse(czy_zapis_jako_przypisany("a@x.pl", puste))
 			self.assertFalse(czy_zapis_jako_przypisany(puste, puste))
+
+
+class TestCzyZapisPrzezApi(unittest.TestCase):
+	def test_autor_albo_deal_owner(self: "TestCzyZapisPrzezApi") -> None:
+		self.assertTrue(czy_zapis_przez_api("a@x.pl", "a@x.pl", "b@x.pl"))
+		self.assertTrue(czy_zapis_przez_api("b@x.pl", "a@x.pl", "b@x.pl"))
+
+	def test_falsz_dla_innych(self: "TestCzyZapisPrzezApi") -> None:
+		self.assertFalse(czy_zapis_przez_api("c@x.pl", "a@x.pl", "b@x.pl"))
+
+	def test_falsz_dla_pustych(self: "TestCzyZapisPrzezApi") -> None:
+		for puste in (None, ""):
+			self.assertFalse(czy_zapis_przez_api(puste, puste, puste))
+			self.assertFalse(czy_zapis_przez_api(puste, "a@x.pl", "a@x.pl"))
 
 
 class TestCzyWymagacDostepuDoDrugiego(unittest.TestCase):

@@ -1,6 +1,13 @@
 import unittest
 
-from crm.volteo_umowa_widocznosc import PTYPY_ODCZYTU, ZAPIS_TYLKO_AUTOR, czy_autor, czy_odczyt, decyzja
+from crm.volteo_umowa_widocznosc import (
+	PTYPY_ODCZYTU,
+	ZAPIS_TYLKO_AUTOR,
+	ZAPIS_TYLKO_PRZEZ_API,
+	czy_autor,
+	czy_odczyt,
+	decyzja,
+)
 
 PTYPY_ZAPISU = ("write", "create", "delete", "submit", "cancel", "amend")
 
@@ -16,6 +23,7 @@ class TestCzyOdczyt(unittest.TestCase):
 
 	def test_znacznik(self: "TestCzyOdczyt") -> None:
 		self.assertIs(ZAPIS_TYLKO_AUTOR, True)
+		self.assertIs(ZAPIS_TYLKO_PRZEZ_API, True)
 
 
 class TestCzyAutor(unittest.TestCase):
@@ -39,23 +47,26 @@ class TestDecyzja(unittest.TestCase):
 		for p in PTYPY_ODCZYTU:
 			self.assertFalse(decyzja(p, False, True, "a@x.pl", "a@x.pl"), p)
 
-	def test_zapis_autor(self: "TestDecyzja") -> None:
-		for p in PTYPY_ZAPISU:
-			self.assertTrue(decyzja(p, True, True, "a@x.pl", "a@x.pl"), p)
+	def test_zapis_autor_zamkniety(self: "TestDecyzja") -> None:
+		for p in ("write", "delete", "submit", "cancel", "amend", "import"):
+			self.assertFalse(decyzja(p, True, True, "a@x.pl", "a@x.pl"), p)
 
-	def test_zapis_nie_autor_przypisany(self: "TestDecyzja") -> None:
+	def test_create_autor_z_zapisem_szansy(self: "TestDecyzja") -> None:
+		self.assertTrue(decyzja("create", True, True, "a@x.pl", "a@x.pl"))
+
+	def test_create_bez_zapisu_szansy(self: "TestDecyzja") -> None:
+		self.assertFalse(decyzja("create", True, False, "a@x.pl", "a@x.pl"))
+		self.assertFalse(decyzja("create", True, False, "a@x.pl", None))
+
+	def test_create_nie_autor(self: "TestDecyzja") -> None:
+		self.assertFalse(decyzja("create", True, True, "a@x.pl", "b@x.pl"))
+
+	def test_zapis_nie_autor_przypisany_i_przelozony(self: "TestDecyzja") -> None:
 		for p in PTYPY_ZAPISU:
 			self.assertFalse(decyzja(p, True, True, "a@x.pl", "b@x.pl"), p)
-
-	def test_zapis_przelozony(self: "TestDecyzja") -> None:
-		for p in PTYPY_ZAPISU:
 			self.assertFalse(decyzja(p, True, False, "a@x.pl", "b@x.pl"), p)
 
-	def test_zapis_autor_stracil_zapis_szansy(self: "TestDecyzja") -> None:
-		for p in PTYPY_ZAPISU:
-			self.assertFalse(decyzja(p, True, False, "a@x.pl", "a@x.pl"), p)
-
-	def test_zapis_pusty_autor(self: "TestDecyzja") -> None:
+	def test_create_pusty_autor(self: "TestDecyzja") -> None:
 		self.assertTrue(decyzja("create", True, True, "a@x.pl", None))
 		self.assertFalse(decyzja("create", True, False, "a@x.pl", None))
 
