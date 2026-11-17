@@ -132,6 +132,7 @@ before_uninstall = "crm.uninstall.before_uninstall"
 # Permissions evaluated in scripted ways
 
 permission_query_conditions = {
+	"Address": "crm.permissions.address_visibility.get_address_permission_query_conditions",
 	"CRM Lead": "crm.permissions.org_hierarchy.get_lead_permission_query_conditions",
 	"CRM Deal": "crm.permissions.org_hierarchy.get_deal_permission_query_conditions",
 	"Contact": "crm.permissions.contact_visibility.get_contact_permission_query_conditions",
@@ -147,6 +148,7 @@ permission_query_conditions = {
 }
 
 has_permission = {
+	"Address": "crm.permissions.address_visibility.has_address_permission",
 	"CRM Lead": [
 		"crm.permissions.org_hierarchy.has_lead_permission",
 		"crm.permissions.delete_lockdown.block_nonadmin_delete",
