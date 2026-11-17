@@ -190,7 +190,6 @@
           @updateField="updateField"
         />
         <TasksSection doctype="CRM Lead" :docname="leadId" karty />
-        <HandlowiecKarta doctype="CRM Lead" :wlasciciel="doc.lead_owner" />
         <NotatkiLeadaPanel :docname="leadId" @dodano="reload = true" />
         <div
           v-if="sections.data"
@@ -211,7 +210,11 @@
             @reload="sections.reload"
             @beforeFieldChange="beforeStatusChange"
             @afterFieldChange="reloadResources"
-          />
+          >
+            <template #po-sekcjach>
+              <HandlowiecKarta doctype="CRM Lead" :wlasciciel="doc.lead_owner" bezOdstepow />
+            </template>
+          </SidePanelLayout>
         </div>
       </div>
       <div class="mt-auto shrink-0 border-t p-2">
