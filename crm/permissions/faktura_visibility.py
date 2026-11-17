@@ -70,6 +70,17 @@ exclusively through `crm.api.notatki.dodaj` with `deal` populated up front,
 so a row with no `deal` is malformed, and an unresolved/deleted/inaccessible
 parent deal must hide the note, never show it -- notes can carry mentions and
 free text about a client, the same confidentiality bar as Trify/Kredyt.
+
+`Volteo Umowa` (ops#378) is the fifth doctype scoped here, fail-closed like
+Trify/Kredyt, but with a different job. Its DocPerm for `Volteo D2D Sales`
+stays read/write/create with `if_owner = 1`, so the author of a contract
+record kept read and write access through the generic Frappe API
+(`frappe.client.get`, `set_value`, lists) even after losing access to the
+deal (for example after an adviser change). This hook only NARROWS that: a
+record is usable only while its parent deal is, so an author without access
+to the deal loses the contract. It grants nothing: a rep who is assigned to
+the deal but is not the author is still served by the contract API
+(`crm.api.umowa.volteo_umowa_save`, ops#370), not by DocPerm.
 """
 
 import frappe
@@ -204,4 +215,17 @@ def has_notatka_permission(doc, ptype, user):
 	# D2D and Backend to read+create with no write/delete and no `if_owner`
 	# (visibility is scoped by the parent deal, not by ownership); this is
 	# the deal-scoping layer underneath that, not a substitute for it.
+	return _has_deal_scoped_permission(doc, ptype, user, fail_open=False)
+
+
+def get_umowa_permission_query_conditions(user=None):
+	return _deal_scoped_query_conditions("Volteo Umowa", user or frappe.session.user)
+
+
+def has_umowa_permission(doc, ptype, user):
+	user = user or frappe.session.user
+
+	# ops#378: same shape as Kredyt (ptype matters, empty deal fails CLOSED).
+	# DocPerm keeps `if_owner = 1` for D2D; this hook only narrows it, so an
+	# author who lost access to the deal loses the contract record too.
 	return _has_deal_scoped_permission(doc, ptype, user, fail_open=False)
