@@ -127,12 +127,20 @@
             <Button
               variant="solid"
               :label="__('Zapisz')"
-              :disabled="saving"
+              :disabled="saving || zablokowany"
               :loading="saving"
               @click="saveForm"
             />
           </div>
         </div>
+
+        <!-- Blokada formularza po pierwszym podpisie w Autenti (ops#371) -->
+        <UmowaBlokadaBaner
+          :blokada="blokada"
+          :zajety="przelaczaBlokade"
+          @odblokuj="odblokuj"
+          @zablokuj="zablokuj"
+        />
 
         <!-- Autenti timestamps - small muted line under the header/badges -->
         <div
@@ -273,7 +281,7 @@
               type="select"
               :label="__('Wariant wynagrodzenia')"
               :options="wariantOpcje"
-              :disabled="saving"
+              :disabled="saving || zablokowany"
               v-model="form.wynagrodzenie_wariant"
             />
           </div>
@@ -294,19 +302,19 @@
             <FormControl
               type="checkbox"
               :label="__('Zgoda na przetwarzanie danych osobowych w celu zawarcia i realizacji umowy')"
-              :disabled="saving"
+              :disabled="saving || zablokowany"
               v-model="form.zgoda_przetwarzanie_danych"
             />
             <FormControl
               type="checkbox"
               :label="__('Zgoda na kontakt telefoniczny')"
-              :disabled="saving"
+              :disabled="saving || zablokowany"
               v-model="form.zgoda_kontakt_telefoniczny"
             />
             <FormControl
               type="checkbox"
               :label="__('Zgoda na działania promocyjne')"
-              :disabled="saving"
+              :disabled="saving || zablokowany"
               v-model="form.zgoda_dzialania_promocyjne"
             />
           </div>
@@ -320,9 +328,12 @@
 import UmowaIcon from '@/components/Icons/UmowaIcon.vue'
 import TelefonLink from '@/components/TelefonLink.vue'
 import { Badge, Button, FormControl, call, toast } from 'frappe-ui'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { formatujParaKwot, wariantOptions } from '@/utils/umowaCpForm'
 import { useAutenti } from '@/composables/useAutenti'
+import { stanBlokady } from '@/utils/umowaBlokada'
+import UmowaBlokadaBaner from '@/components/deal/UmowaBlokadaBaner.vue'
+import { globalStore } from '@/stores/global'
 
 const props = defineProps({
   dealId: { type: String, required: true },
@@ -389,6 +400,75 @@ onMounted(() => {
   loadUmowa()
 })
 
+// --- Blokada formularza (ops#371) ------------------------------------------------
+// Brak klucza `blokada` w odpowiedzi (stary backend) = null = zachowanie jak dotychczas.
+const { $dialog } = globalStore()
+const blokada = ref(null)
+const zablokowany = computed(() => stanBlokady(blokada.value).zablokowany)
+const przelaczaBlokade = ref(false)
+function ustawBlokade(data) {
+  if (data && Object.prototype.hasOwnProperty.call(data, 'blokada')) {
+    blokada.value = data.blokada || null
+  }
+}
+// Ciche odswiezenie samej blokady (bez przeladowania formularza).
+async function odswiezBlokade() {
+  if (!umowa.value) return
+  try {
+    ustawBlokade(await call('crm.api.umowa.volteo_umowa_get', { deal: props.dealId }))
+  } catch (err) {
+    console.error(err)
+  }
+}
+
+function odblokuj() {
+  $dialog({
+    title: __('Odblokować formularz umowy?'),
+    message: __(
+      'Umowa jest podpisana w Autenti. Po odblokowaniu dane w formularzu mogą różnić się od podpisanego dokumentu.',
+    ),
+    actions: [
+      {
+        label: __('Odblokuj formularz'),
+        variant: 'solid',
+        onClick: async (close) => {
+          przelaczaBlokade.value = true
+          try {
+            ustawBlokade(
+              await call('crm.api.umowa.volteo_umowa_odblokuj', { deal: props.dealId }),
+            )
+            toast.success(__('Formularz umowy odblokowany.'))
+            close()
+          } catch (err) {
+            toast.error(extractErrorMessage(err))
+          } finally {
+            przelaczaBlokade.value = false
+          }
+        },
+      },
+    ],
+  })
+}
+
+async function zablokuj() {
+  if (przelaczaBlokade.value) return
+  przelaczaBlokade.value = true
+  try {
+    ustawBlokade(await call('crm.api.umowa.volteo_umowa_zablokuj', { deal: props.dealId }))
+    toast.success(__('Formularz umowy zablokowany.'))
+  } catch (err) {
+    toast.error(extractErrorMessage(err))
+  } finally {
+    przelaczaBlokade.value = false
+  }
+}
+
+// Push z serwera o stanie Autenti (useAutenti podmienia `autenti` wholesale):
+// odswiez blokade bez przeladowania strony.
+watch(autenti, () => {
+  if (!loading.value) odswiezBlokade()
+})
+
 // Same reading rule as UmowaTab.vue's extractBrakujace(): the missing-
 // fields list always travels inside `wyliczenia.brakujace_pola`, never a
 // top-level `brakujace` key; Array.isArray guards a wrong/absent key into
@@ -409,6 +489,7 @@ async function loadUmowa() {
     const data = await call('crm.api.umowa.volteo_umowa_get', { deal: props.dealId })
     umowa.value = data?.umowa || null
     wyliczenia.value = data?.wyliczenia || {}
+    ustawBlokade(data)
     brakujace.value = extractBrakujace(data)
     brakujaceKlienta.value = extractBrakujaceKlienta(data)
     if (umowa.value) hydrateForm(umowa.value)
@@ -475,6 +556,7 @@ async function createUmowa() {
     const data = await call('crm.api.umowa.volteo_umowa_create', { deal: props.dealId })
     umowa.value = data?.umowa || null
     wyliczenia.value = data?.wyliczenia || {}
+    ustawBlokade(data)
     brakujace.value = extractBrakujace(data)
     brakujaceKlienta.value = extractBrakujaceKlienta(data)
     if (umowa.value) hydrateForm(umowa.value)
@@ -499,7 +581,7 @@ function buildPayload() {
 }
 
 async function saveForm() {
-  if (saving.value || !umowa.value) return
+  if (saving.value || !umowa.value || zablokowany.value) return
   saving.value = true
   saveState.value = 'saving'
   try {
@@ -509,6 +591,7 @@ async function saveForm() {
     })
     umowa.value = data?.umowa || umowa.value
     wyliczenia.value = data?.wyliczenia || wyliczenia.value
+    ustawBlokade(data)
     brakujace.value = extractBrakujace(data)
     brakujaceKlienta.value = extractBrakujaceKlienta(data)
     hydrateForm(umowa.value)
@@ -521,6 +604,8 @@ async function saveForm() {
   } catch (err) {
     saveState.value = 'error'
     toast.error(extractErrorMessage(err))
+    // Odmowa serwera (m.in. blokada po podpisie): pobierz aktualny stan blokady.
+    odswiezBlokade()
   } finally {
     saving.value = false
   }

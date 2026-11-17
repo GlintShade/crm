@@ -137,12 +137,20 @@
             <Button
               variant="solid"
               :label="__('Zapisz')"
-              :disabled="saving"
+              :disabled="saving || zablokowany"
               :loading="saving"
               @click="saveForm"
             />
           </div>
         </div>
+
+        <!-- Blokada formularza po pierwszym podpisie w Autenti (ops#371) -->
+        <UmowaBlokadaBaner
+          :blokada="blokada"
+          :zajety="przelaczaBlokade"
+          @odblokuj="odblokuj"
+          @zablokuj="zablokuj"
+        />
 
         <!-- Wzór (b69, ops#252): badge z nazwą wzoru albo baner z powodem
         odmowy (`wzor.powod` z serwera, dosłownie). Odświeżany po każdym
@@ -170,7 +178,11 @@
         2026-09-03 "szansa ma zawsze jednego klienta" decision, untouched
         by this tab. -->
         <div class="rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-4">
-          <Switch v-model="dwaZamawiajacy" :label="__('Umowa na dwie osoby')" />
+          <Switch
+            v-model="dwaZamawiajacy"
+            :label="__('Umowa na dwie osoby')"
+            :disabled="zablokowany"
+          />
 
           <div v-if="dwaZamawiajacy" class="mt-4 flex flex-col gap-4">
             <div class="max-w-sm">
@@ -184,6 +196,7 @@
                   doctype="Contact"
                   :filters="drugiZamawiajacyFilters"
                   :placeholder="__('Wybierz kontakt')"
+                  :disabled="zablokowany"
                 />
                 <Button
                   v-if="mozeDodacNowegoKlienta"
@@ -367,7 +380,7 @@
                 :options="f.options"
                 :step="f.step"
                 :required="!!f.required"
-                :disabled="saving"
+                :disabled="saving || zablokowany"
                 v-model="form[f.fieldname]"
               />
             </div>
@@ -505,6 +518,9 @@ import { kwotaKredytuPodglad } from '@/utils/kwotaKredytu'
 import { ppozWymagane } from '@/utils/pvForm'
 import { useAutenti } from '@/composables/useAutenti'
 import { canSend } from '@/utils/autentiStatus'
+import { stanBlokady } from '@/utils/umowaBlokada'
+import UmowaBlokadaBaner from '@/components/deal/UmowaBlokadaBaner.vue'
+import { globalStore } from '@/stores/global'
 import { czyOzePv, umowaTylkoBaner, umowaWPrzygotowaniu } from '@/utils/rodzajUmowy'
 import {
   dodatkiDoPokazania,
@@ -537,6 +553,71 @@ const tylkoBaner = computed(() => umowaTylkoBaner(props.rodzaj))
 const wzor = ref(null)
 const wzorOpis = computed(() => opisWzoru(wzor.value))
 // Brak `wzor` (starszy payload) nie blokuje przycisku, serwer i tak rozstrzyga.
+// --- Blokada formularza (ops#371) ------------------------------------------------
+// `blokada` z odpowiedzi get/create/save/odblokuj/zablokuj. Brak klucza
+// (stary backend) = null = zachowanie jak dotychczas.
+const { $dialog } = globalStore()
+const blokada = ref(null)
+const zablokowany = computed(() => stanBlokady(blokada.value).zablokowany)
+const przelaczaBlokade = ref(false)
+function ustawBlokade(data) {
+  if (data && Object.prototype.hasOwnProperty.call(data, 'blokada')) {
+    blokada.value = data.blokada || null
+  }
+}
+// Ciche odswiezenie samej blokady (bez przeladowania formularza, zeby nie
+// nadpisac tego, co uzytkownik wlasnie wpisuje).
+async function odswiezBlokade() {
+  if (tylkoBaner.value || !umowa.value) return
+  try {
+    ustawBlokade(await call('crm.api.umowa.volteo_umowa_get', { deal: props.dealId }))
+  } catch (err) {
+    console.error(err)
+  }
+}
+
+function odblokuj() {
+  $dialog({
+    title: __('Odblokować formularz umowy?'),
+    message: __(
+      'Umowa jest podpisana w Autenti. Po odblokowaniu dane w formularzu mogą różnić się od podpisanego dokumentu.',
+    ),
+    actions: [
+      {
+        label: __('Odblokuj formularz'),
+        variant: 'solid',
+        onClick: async (close) => {
+          przelaczaBlokade.value = true
+          try {
+            ustawBlokade(
+              await call('crm.api.umowa.volteo_umowa_odblokuj', { deal: props.dealId }),
+            )
+            toast.success(__('Formularz umowy odblokowany.'))
+            close()
+          } catch (err) {
+            toast.error(extractErrorMessage(err))
+          } finally {
+            przelaczaBlokade.value = false
+          }
+        },
+      },
+    ],
+  })
+}
+
+async function zablokuj() {
+  if (przelaczaBlokade.value) return
+  przelaczaBlokade.value = true
+  try {
+    ustawBlokade(await call('crm.api.umowa.volteo_umowa_zablokuj', { deal: props.dealId }))
+    toast.success(__('Formularz umowy zablokowany.'))
+  } catch (err) {
+    toast.error(extractErrorMessage(err))
+  } finally {
+    przelaczaBlokade.value = false
+  }
+}
+
 const wzorDostepny = computed(() => !wzorOpis.value || wzorOpis.value.dostepny)
 
 // --- Definicja formularza ------------------------------------------------------
@@ -738,7 +819,7 @@ const komunikatBrakuEmaila = computed(() => {
 const showNowyKlientModal = ref(false)
 const nowyKlientContact = ref({})
 const mozeDodacNowegoKlienta = computed(
-  () => dwaZamawiajacy.value && canSend(autentiStatus.value),
+  () => dwaZamawiajacy.value && canSend(autentiStatus.value) && !zablokowany.value,
 )
 
 // Called from ContactModal's `afterInsert` once the new Contact is actually
@@ -765,6 +846,11 @@ function zaladujJesliPotrzeba() {
   loadUmowa()
 }
 onMounted(zaladujJesliPotrzeba)
+// Push z serwera o stanie Autenti (useAutenti przeladowuje status i podmienia
+// `autenti` wholesale): odswiez blokade bez przeladowania strony.
+watch(autenti, () => {
+  if (!loading.value) odswiezBlokade()
+})
 watch(tylkoBaner, zaladujJesliPotrzeba)
 
 // The missing-fields list travels inside `wyliczenia.brakujace_pola` on
@@ -804,6 +890,7 @@ async function loadUmowa() {
     prefillDrugi.value = data?.prefill_drugi || {}
     wyliczenia.value = data?.wyliczenia || {}
     wzor.value = data?.wzor || null
+    ustawBlokade(data)
     brakujace.value = extractBrakujace(data)
     brakujaceKlienta.value = extractBrakujaceKlienta(data)
     brakujaceDrugiego.value = extractBrakujaceDrugiego(data)
@@ -903,6 +990,7 @@ async function createUmowa() {
     prefillDrugi.value = data?.prefill_drugi || {}
     wyliczenia.value = data?.wyliczenia || {}
     wzor.value = data?.wzor || null
+    ustawBlokade(data)
     brakujace.value = extractBrakujace(data)
     brakujaceKlienta.value = extractBrakujaceKlienta(data)
     brakujaceDrugiego.value = extractBrakujaceDrugiego(data)
@@ -938,7 +1026,7 @@ function buildPayload() {
 // contact reports "Klient dodany i wybrany..." instead of the generic save
 // message, without duplicating the save call/state handling here.
 async function saveForm(opts = {}) {
-  if (saving.value || !umowa.value) return
+  if (saving.value || !umowa.value || zablokowany.value) return
   saving.value = true
   saveState.value = 'saving'
   try {
@@ -951,6 +1039,7 @@ async function saveForm(opts = {}) {
     prefillDrugi.value = data?.prefill_drugi || prefillDrugi.value
     wyliczenia.value = data?.wyliczenia || wyliczenia.value
     wzor.value = data?.wzor || wzor.value
+    ustawBlokade(data)
     brakujace.value = extractBrakujace(data)
     brakujaceKlienta.value = extractBrakujaceKlienta(data)
     brakujaceDrugiego.value = extractBrakujaceDrugiego(data)
@@ -979,6 +1068,8 @@ async function saveForm(opts = {}) {
   } catch (err) {
     saveState.value = 'error'
     toast.error(extractErrorMessage(err))
+    // Odmowa serwera (m.in. blokada po podpisie): pobierz aktualny stan blokady.
+    odswiezBlokade()
   } finally {
     saving.value = false
   }
