@@ -1050,16 +1050,14 @@ def _zwaliduj_i_dopnij_drugiego_zamawiajacego(
 	pojedyncza, częstszy przypadek) jest no-opem.
 
 	ops#377: nowo wskazany kontakt (inny niż `zapisany`, czyli wartość z umowy przed
-	tym zapisem, i jeszcze niepodpięty do szansy) musi być czytelny dla wywołującego.
+	tym zapisem) musi być czytelny dla wywołującego.
 	Brak prawa daje ten sam komunikat co kontakt nieistniejący.
 	"""
 	drugi = umowa_doc.get("drugi_zamawiajacy")
 	if not drugi:
 		return
 
-	wymaga_dostepu = czy_wymagac_dostepu_do_drugiego(
-		drugi, zapisany, [wiersz.contact for wiersz in deal_doc.contacts]
-	)
+	wymaga_dostepu = czy_wymagac_dostepu_do_drugiego(drugi, zapisany)
 	if not frappe.db.exists("Contact", drugi) or (
 		wymaga_dostepu and not frappe.has_permission("Contact", "read", drugi)
 	):

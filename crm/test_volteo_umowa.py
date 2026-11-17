@@ -253,23 +253,17 @@ class TestCzyWymagacDostepuDoDrugiego(unittest.TestCase):
 
 	def test_falsz_dla_pustego_nowego(self: "TestCzyWymagacDostepuDoDrugiego") -> None:
 		for pusty in (None, ""):
-			self.assertFalse(czy_wymagac_dostepu_do_drugiego(pusty, "K1", ["K2"]))
+			self.assertFalse(czy_wymagac_dostepu_do_drugiego(pusty, "K1"))
 
 	def test_falsz_gdy_rowny_zapisanemu(self: "TestCzyWymagacDostepuDoDrugiego") -> None:
-		self.assertFalse(czy_wymagac_dostepu_do_drugiego("K1", "K1", []))
+		self.assertFalse(czy_wymagac_dostepu_do_drugiego("K1", "K1"))
 
-	def test_falsz_gdy_juz_w_kontaktach_szansy(self: "TestCzyWymagacDostepuDoDrugiego") -> None:
-		self.assertFalse(czy_wymagac_dostepu_do_drugiego("K1", None, ["K0", "K1"]))
+	def test_prawda_gdy_rozny_od_zapisanego(self: "TestCzyWymagacDostepuDoDrugiego") -> None:
+		self.assertTrue(czy_wymagac_dostepu_do_drugiego("K1", "K0"))
 
-	def test_prawda_dla_obcego(self: "TestCzyWymagacDostepuDoDrugiego") -> None:
-		self.assertTrue(czy_wymagac_dostepu_do_drugiego("K1", "K0", ["K2"]))
-
-	def test_prawda_gdy_zapisany_none(self: "TestCzyWymagacDostepuDoDrugiego") -> None:
-		self.assertTrue(czy_wymagac_dostepu_do_drugiego("K1", None, ["K2"]))
-
-	def test_prawda_gdy_kontakty_puste(self: "TestCzyWymagacDostepuDoDrugiego") -> None:
-		self.assertTrue(czy_wymagac_dostepu_do_drugiego("K1", "", []))
-		self.assertTrue(czy_wymagac_dostepu_do_drugiego("K1", "", None))
+	def test_prawda_gdy_zapisany_pusty(self: "TestCzyWymagacDostepuDoDrugiego") -> None:
+		self.assertTrue(czy_wymagac_dostepu_do_drugiego("K1", None))
+		self.assertTrue(czy_wymagac_dostepu_do_drugiego("K1", ""))
 
 
 class TestCzySynchronizowacWplate(unittest.TestCase):
