@@ -109,6 +109,7 @@
           v-model="doc"
           @updateField="updateField"
         />
+        <HandlowiecKarta doctype="CRM Deal" :wlasciciel="doc.deal_owner" startZwiniete />
         <TasksSection doctype="CRM Deal" :docname="dealId" karty startZwiniete />
         <div
           v-if="sections.data"
@@ -371,6 +372,7 @@ import SidePanelLayout from '@/components/SidePanelLayout.vue'
 import PanelNaglowek from '@/components/PanelNaglowek.vue'
 import SLASection from '@/components/SLASection.vue'
 import TasksSection from '@/components/TasksSection.vue'
+import HandlowiecKarta from '@/components/HandlowiecKarta.vue'
 import CustomActions from '@/components/CustomActions.vue'
 import SidebarLink from '@/components/SidebarLink.vue'
 import {

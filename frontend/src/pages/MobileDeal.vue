@@ -71,6 +71,7 @@
             v-model="doc"
             @updateField="updateField"
           />
+          <HandlowiecKarta doctype="CRM Deal" :wlasciciel="doc.deal_owner" startZwiniete />
           <div
             v-if="sections.data"
             class="flex flex-1 flex-col justify-between overflow-hidden"
@@ -336,6 +337,7 @@ import ContactModal from '@/components/Modals/ContactModal.vue'
 import Section from '@/components/CollapsibleSection.vue'
 import Link from '@/components/Controls/Link.vue'
 import SidePanelLayout from '@/components/SidePanelLayout.vue'
+import HandlowiecKarta from '@/components/HandlowiecKarta.vue'
 import SLASection from '@/components/SLASection.vue'
 import CustomActions from '@/components/CustomActions.vue'
 import { setupCustomizations, isTranslatable } from '@/utils'

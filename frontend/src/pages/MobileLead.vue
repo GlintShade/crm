@@ -93,6 +93,7 @@
             v-model="doc"
             @updateField="updateField"
           />
+          <HandlowiecKarta doctype="CRM Lead" :wlasciciel="doc.lead_owner" />
           <div
             v-if="sections.data"
             class="flex flex-1 flex-col justify-between overflow-hidden"
@@ -173,6 +174,7 @@ import LostReasonModal from '@/components/Modals/LostReasonModal.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import Activities from '@/components/Activities/Activities.vue'
 import SidePanelLayout from '@/components/SidePanelLayout.vue'
+import HandlowiecKarta from '@/components/HandlowiecKarta.vue'
 import KomentarzeLeadaSekcja from '@/components/KomentarzeLeadaSekcja.vue'
 import {
   czySekcjaSpotkanie,

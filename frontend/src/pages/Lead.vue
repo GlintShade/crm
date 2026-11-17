@@ -189,6 +189,7 @@
           v-model="doc"
           @updateField="updateField"
         />
+        <HandlowiecKarta doctype="CRM Lead" :wlasciciel="doc.lead_owner" />
         <TasksSection doctype="CRM Lead" :docname="leadId" karty />
         <NotatkiLeadaPanel :docname="leadId" @dodano="reload = true" />
         <div
@@ -296,6 +297,7 @@ import { SEKCJA_NOTATKI, WIDOK_SZCZEGOLY } from '@/utils/stanSekcjiPanelu'
 import PanelNaglowek from '@/components/PanelNaglowek.vue'
 import SLASection from '@/components/SLASection.vue'
 import TasksSection from '@/components/TasksSection.vue'
+import HandlowiecKarta from '@/components/HandlowiecKarta.vue'
 import NotatkiLeadaPanel from '@/components/NotatkiLeadaPanel.vue'
 import CustomActions from '@/components/CustomActions.vue'
 import SidebarLink from '@/components/SidebarLink.vue'

@@ -99,6 +99,8 @@ export function domyslnieOtwartaKarta({ startZwiniete = false, pierwszaWidoczna 
 export const SEKCJA_ZADANIA = '__zadania'
 // Karta Notatki w panelu leada (NotatkiLeadaPanel), ten sam zapis (ops#328).
 export const SEKCJA_NOTATKI = '__notatki'
+// Karta Handlowiec w panelu szansy i leada (HandlowiecKarta, ops#366).
+export const SEKCJA_HANDLOWIEC = '__handlowiec'
 
 /** Czy sekcja ma byc otwarta: zapis uzytkownika, a bez zapisu `domyslny`. */
 export function rozstrzygnijOtwarcie(stan, nazwa, domyslny) {
