@@ -413,6 +413,9 @@ override_whitelisted_methods = {
 	"frappe.client.insert": "crm.api.volteo_zapis_guard.insert",
 	"frappe.client.save": "crm.api.volteo_zapis_guard.save",
 	"frappe.client.submit": "crm.api.volteo_zapis_guard.submit",
+	# ops#372: run_doc_method i runserverobj dokladaja dokument do odpowiedzi bez filtra
+	"run_doc_method": "crm.api.volteo_zapis_guard.run_doc_method",
+	"runserverobj": "crm.api.volteo_zapis_guard.run_doc_method",
 }
 #
 # each overriding function accepts a `data` argument;
@@ -440,7 +443,7 @@ before_request = [
 	"crm.api.oswiadczenie.before_request",
 	"crm.api.volteo_zapis_guard.before_request",  # ops#180
 ]
-# after_request = ["crm.utils.after_request"]
+after_request = ["crm.api.volteo_zapis_guard.after_request"]  # ops#372
 
 # Job Events
 # ----------
