@@ -101,7 +101,7 @@ def submit(doc: str | dict[str, Any]):
 	return _odfiltruj(_rdzen_submit(doc))
 
 
-@frappe.whitelist(methods=["POST", "PUT"])
+@frappe.whitelist()
 def run_doc_method(
 	method: str,
 	docs: Any = None,
@@ -112,7 +112,9 @@ def run_doc_method(
 ):
 	"""Strażnik nad `frappe.handler.run_doc_method` (ops#372): rdzeń dokleja
 	dokument do `frappe.response.docs` bez filtra pól permlevel. Adnotacje `Any`
-	celowo, żeby walidacja typów nie zmieniła zachowania Desk."""
+	celowo, żeby walidacja typów nie zmieniła zachowania Desk. Rdzeń nie ogranicza
+	metod HTTP dla `run_doc_method`, więc wrapper też nie; Guest nie ma dostępu (rdzeń
+	go dopuszczał, potem i tak wymagał odczytu dokumentu)."""
 	wynik = _rdzen_run_doc_method(method, docs=docs, dt=dt, dn=dn, arg=arg, args=args)
 	for doc in frappe.response.get("docs") or []:
 		if isinstance(doc, Document):
