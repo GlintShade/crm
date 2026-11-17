@@ -5,6 +5,7 @@ from crm.volteo_widocznosc_powiazana import (
 	nazwa_tabeli,
 	polacz_haki,
 	warunek_bez_znacznikow,
+	warunek_pliku,
 	warunek_powiazania,
 )
 
@@ -112,6 +113,38 @@ class TestBezZnacznikow(unittest.TestCase):
 	def test_procent_w_znaczniku(self: "TestBezZnacznikow") -> None:
 		with self.assertRaises(ValueError):
 			warunek_bez_znacznikow("Comment", "content", ["50%"])
+
+
+class TestWarunekPliku(unittest.TestCase):
+	def test_pusty_powiazanie(self: "TestWarunekPliku") -> None:
+		self.assertEqual(warunek_pliku("u@x.pl", ""), "")
+
+	def test_ksztalt(self: "TestWarunekPliku") -> None:
+		w = warunek_pliku("u@x.pl", "(p)")
+		self.assertEqual(
+			w,
+			"(`tabFile`.`is_private` = 0 OR `tabFile`.`owner` = 'u@x.pl' "
+			"OR `tabFile`.`is_folder` = 1 OR (p))",
+		)
+
+	def test_bez_procenta(self: "TestWarunekPliku") -> None:
+		self.assertNotIn("%", warunek_pliku("u@x.pl", "(p)"))
+
+	def test_apostrof_uzytkownika(self: "TestWarunekPliku") -> None:
+		self.assertIn("'o\\'x@x.pl'", warunek_pliku("o'x@x.pl", "(p)"))
+
+	def test_zly_uzytkownik(self: "TestWarunekPliku") -> None:
+		with self.assertRaises(ValueError):
+			warunek_pliku("a%b", "(p)")
+
+	def test_zagniezdzenie_z_powiazaniem(self: "TestWarunekPliku") -> None:
+		pow_ = warunek_powiazania(
+			"File", "attached_to_doctype", "attached_to_name", {"CRM Deal": "a OR b", "Comment": "c"}
+		)
+		w = warunek_pliku("u@x.pl", pow_)
+		self.assertIn("WHERE (a OR b)", w)
+		self.assertIn("FROM `tabComment` WHERE (c)", w)
+		self.assertTrue(w.startswith("(") and w.endswith(")"))
 
 
 if __name__ == "__main__":
