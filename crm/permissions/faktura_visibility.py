@@ -71,21 +71,27 @@ so a row with no `deal` is malformed, and an unresolved/deleted/inaccessible
 parent deal must hide the note, never show it -- notes can carry mentions and
 free text about a client, the same confidentiality bar as Trify/Kredyt.
 
-`Volteo Umowa` (ops#378) is the fifth doctype scoped here, fail-closed like
-Trify/Kredyt, but with a different job. Its DocPerm for `Volteo D2D Sales`
-stays read/write/create with `if_owner = 1`, so the author of a contract
-record kept read and write access through the generic Frappe API
-(`frappe.client.get`, `set_value`, lists) even after losing access to the
-deal (for example after an adviser change). This hook only NARROWS that: a
-record is usable only while its parent deal is, so an author without access
-to the deal loses the contract. It grants nothing: a rep who is assigned to
-the deal but is not the author is still served by the contract API
-(`crm.api.umowa.volteo_umowa_save`, ops#370), not by DocPerm.
+`Volteo Umowa` (ops#378, ops#380) is the fifth doctype scoped here,
+fail-closed like Trify/Kredyt, and carries its own read and write rule.
+Read: whoever can see the parent deal can read its contract and download its
+private files (the signed PDF is attached to the record). Once
+`ops/crm-umowa-widocznosc.py` (run AFTER the image) removes `if_owner` from the
+DocPerm of `Volteo D2D Sales`, DocPerm alone no longer limits anything, so this
+hook is the only thing limiting read to deal visibility and write to the
+author. Write through the generic API (`set_value`, `save`, `insert`,
+`delete`): only the author of the record, and only while he still has write
+access to the deal (the decision lives in the frappe-free
+`crm.volteo_umowa_widocznosc`). The hook is correct both before the DocPerm
+change (`if_owner = 1`, DocPerm narrows further) and after it. A rep who is
+assigned to the deal but is not the author still saves the form through
+`crm.api.umowa.volteo_umowa_save` (ops#370), which authorises itself and does
+not rely on DocPerm.
 """
 
 import frappe
 
 from crm.permissions.org_hierarchy import BYPASS_ROLES, get_deal_permission_query_conditions
+from crm.volteo_umowa_widocznosc import czy_odczyt, decyzja
 
 # BYPASS_ROLES is defined in org_hierarchy.py (shared with CRM Lead / CRM
 # Deal / Contact scoping) so the modules can't drift apart on which roles
@@ -225,7 +231,15 @@ def get_umowa_permission_query_conditions(user=None):
 def has_umowa_permission(doc, ptype, user):
 	user = user or frappe.session.user
 
-	# ops#378: same shape as Kredyt (ptype matters, empty deal fails CLOSED).
-	# DocPerm keeps `if_owner = 1` for D2D; this hook only narrows it, so an
-	# author who lost access to the deal loses the contract record too.
-	return _has_deal_scoped_permission(doc, ptype, user, fail_open=False)
+	# ops#380: read by deal visibility, write only for the author who still
+	# has write on the deal. Same fail-closed behaviour for an empty deal.
+	if user == "Administrator" or set(frappe.get_roles(user)) & BYPASS_ROLES:
+		return True
+
+	widzi = _has_deal_scoped_permission(doc, "read", user, fail_open=False)
+	if czy_odczyt(ptype):
+		return widzi
+
+	pisze = _has_deal_scoped_permission(doc, ptype, user, fail_open=False)
+	autor = doc.get("owner") if isinstance(doc, dict) else getattr(doc, "owner", None)
+	return decyzja(ptype, widzi, pisze, user, autor)
