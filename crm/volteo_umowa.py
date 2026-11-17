@@ -359,6 +359,16 @@ def czy_zapis_jako_przypisany(uzytkownik: str | None, deal_owner: str | None) ->
 	return bool(uzytkownik) and bool(deal_owner) and uzytkownik == deal_owner
 
 
+def czy_wymagac_dostepu_do_drugiego(nowy: str | None, zapisany: str | None) -> bool:
+	"""Czy `drugi_zamawiajacy` z zapisu wymaga prawa odczytu kontaktu (ops#377).
+
+	Prawda, gdy `nowy` jest niepusty i różni się od wartości już zapisanej na umowie.
+	Niezmieniony wybór (np. nowy doradca zapisuje formularz z istniejącym drugim
+	Zamawiającym) nie wymaga sprawdzenia.
+	"""
+	return bool(nowy) and nowy != zapisany
+
+
 def czy_synchronizowac_wplate(autenti_status: str | None) -> bool:
 	"""Czy zapis formularza umowy może przepisać wpłatę własną i raty na szansę (ops#369).
 

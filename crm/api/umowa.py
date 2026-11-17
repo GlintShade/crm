@@ -50,6 +50,7 @@ from crm.volteo_umowa import (
 	czy_sprawdzac_podpisy_na_zywo,
 	czy_synchronizowac_wplate,
 	czy_umowa_podwojna,
+	czy_wymagac_dostepu_do_drugiego,
 	czy_zapis_jako_przypisany,
 	docelowa_wplata,
 	kod_szablonu,
@@ -1034,6 +1035,7 @@ def volteo_umowa_create(deal: str) -> dict[str, Any]:
 def _zwaliduj_i_dopnij_drugiego_zamawiajacego(
 	deal_doc: "frappe.model.document.Document",
 	umowa_doc: "frappe.model.document.Document",
+	zapisany: str | None = None,
 ) -> None:
 	"""Waliduje `drugi_zamawiajacy` (ops#168) i, gdy trzeba, dopina go do szansy.
 
@@ -1046,12 +1048,19 @@ def _zwaliduj_i_dopnij_drugiego_zamawiajacego(
 	go jako wiersz NIE-podstawowy (`is_primary=0`), nigdy nie zamieniamy ani nie
 	dotykamy istniejącego podstawowego wiersza. Pusty `drugi_zamawiajacy` (umowa
 	pojedyncza, częstszy przypadek) jest no-opem.
+
+	ops#377: nowo wskazany kontakt (inny niż `zapisany`, czyli wartość z umowy przed
+	tym zapisem) musi być czytelny dla wywołującego.
+	Brak prawa daje ten sam komunikat co kontakt nieistniejący.
 	"""
 	drugi = umowa_doc.get("drugi_zamawiajacy")
 	if not drugi:
 		return
 
-	if not frappe.db.exists("Contact", drugi):
+	wymaga_dostepu = czy_wymagac_dostepu_do_drugiego(drugi, zapisany)
+	if not frappe.db.exists("Contact", drugi) or (
+		wymaga_dostepu and not frappe.has_permission("Contact", "read", drugi)
+	):
 		frappe.throw(_("Wskazany drugi Zamawiający nie istnieje."))
 
 	podstawowy = _podstawowy_kontakt(deal_doc)
@@ -1340,6 +1349,7 @@ def _zapisz_dane_oze(
 	mogła dispatchować na rodzaj umowy - zachowanie dla linii PV/magazyn jest
 	bajt w bajt takie samo jak przed tym zadaniem.
 	"""
+	zapisany_drugi = umowa_doc.get("drugi_zamawiajacy")
 	for pole in _DANE_POLA_DOZWOLONE:
 		if pole not in dane:
 			continue
@@ -1356,7 +1366,7 @@ def _zapisz_dane_oze(
 	# ops#168: musi biec PO pętli powyżej (żeby widzieć świeżo ustawiony
 	# `drugi_zamawiajacy`) i PRZED `umowa_doc.save()` niżej, rzuca od razu na
 	# nieprawidłowym wyborze, zanim cokolwiek trafi do bazy.
-	_zwaliduj_i_dopnij_drugiego_zamawiajacego(deal_doc, umowa_doc)
+	_zwaliduj_i_dopnij_drugiego_zamawiajacego(deal_doc, umowa_doc, zapisany_drugi)
 
 	dane_do_brakow = {pole: umowa_doc.get(pole) for pole in _DANE_POLA_DOZWOLONE}
 	dane_do_brakow["roz_bateria_szt"] = deal_doc.get("custom_oze_rozbudowa_bateria")

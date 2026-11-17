@@ -18,6 +18,7 @@ from crm.volteo_umowa import (
 	czy_sprawdzac_podpisy_na_zywo,
 	czy_synchronizowac_wplate,
 	czy_umowa_podwojna,
+	czy_wymagac_dostepu_do_drugiego,
 	czy_zapis_jako_przypisany,
 	docelowa_wplata,
 	kod_szablonu,
@@ -245,6 +246,24 @@ class TestCzyZapisJakoPrzypisany(unittest.TestCase):
 			self.assertFalse(czy_zapis_jako_przypisany(puste, "a@x.pl"))
 			self.assertFalse(czy_zapis_jako_przypisany("a@x.pl", puste))
 			self.assertFalse(czy_zapis_jako_przypisany(puste, puste))
+
+
+class TestCzyWymagacDostepuDoDrugiego(unittest.TestCase):
+	"""ops#377: kiedy drugi Zamawiający wymaga prawa odczytu kontaktu."""
+
+	def test_falsz_dla_pustego_nowego(self: "TestCzyWymagacDostepuDoDrugiego") -> None:
+		for pusty in (None, ""):
+			self.assertFalse(czy_wymagac_dostepu_do_drugiego(pusty, "K1"))
+
+	def test_falsz_gdy_rowny_zapisanemu(self: "TestCzyWymagacDostepuDoDrugiego") -> None:
+		self.assertFalse(czy_wymagac_dostepu_do_drugiego("K1", "K1"))
+
+	def test_prawda_gdy_rozny_od_zapisanego(self: "TestCzyWymagacDostepuDoDrugiego") -> None:
+		self.assertTrue(czy_wymagac_dostepu_do_drugiego("K1", "K0"))
+
+	def test_prawda_gdy_zapisany_pusty(self: "TestCzyWymagacDostepuDoDrugiego") -> None:
+		self.assertTrue(czy_wymagac_dostepu_do_drugiego("K1", None))
+		self.assertTrue(czy_wymagac_dostepu_do_drugiego("K1", ""))
 
 
 class TestCzySynchronizowacWplate(unittest.TestCase):

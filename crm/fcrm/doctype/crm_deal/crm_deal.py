@@ -460,6 +460,15 @@ def add_contact(deal: str, contact: str):
 	if not frappe.has_permission("CRM Deal", "write", deal):
 		frappe.throw(_("Not allowed to add contact to Deal"), frappe.PermissionError)
 
+	# ops#377: kontakt musi istnieć i być czytelny dla wywołującego; jeden komunikat
+	# dla obu przypadków, żeby endpoint nie zdradzał istnienia kontaktów.
+	if (
+		not contact
+		or not frappe.db.exists("Contact", contact)
+		or not frappe.has_permission("Contact", "read", contact)
+	):
+		frappe.throw(_("Brak dostępu do wybranego kontaktu."), frappe.PermissionError)
+
 	deal = frappe.get_cached_doc("CRM Deal", deal)
 	deal.append("contacts", {"contact": contact})
 	deal.save()
