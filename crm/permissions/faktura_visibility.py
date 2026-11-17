@@ -77,15 +77,16 @@ Read: whoever can see the parent deal can read its contract and download its
 private files (the signed PDF is attached to the record). Once
 `ops/crm-umowa-widocznosc.py` (run AFTER the image) removes `if_owner` from the
 DocPerm of `Volteo D2D Sales`, DocPerm alone no longer limits anything, so this
-hook is the only thing limiting read to deal visibility and write to the
-author. Write through the generic API (`set_value`, `save`, `insert`,
-`delete`): only the author of the record, and only while he still has write
-access to the deal (the decision lives in the frappe-free
-`crm.volteo_umowa_widocznosc`). The hook is correct both before the DocPerm
-change (`if_owner = 1`, DocPerm narrows further) and after it. A rep who is
-assigned to the deal but is not the author still saves the form through
-`crm.api.umowa.volteo_umowa_save` (ops#370), which authorises itself and does
-not rely on DocPerm.
+hook is the only thing limiting read to deal visibility. Write through the
+generic API (`set_value`, `save`, `delete`) is closed for non-bypass users:
+only creating the record is allowed (the author, with write access to the
+deal); the decision lives in the frappe-free `crm.volteo_umowa_widocznosc`.
+Reps save the form only through `crm.api.umowa.volteo_umowa_save` (ops#370),
+which authorises the author and the assigned rep itself and does not rely on
+DocPerm; closing the generic write also stops an author from clearing
+`autenti_status` to bypass the signed-form lock (ops#371). The hook is correct
+both before the DocPerm change (`if_owner = 1`, DocPerm narrows further) and
+after it.
 """
 
 import frappe
@@ -231,8 +232,8 @@ def get_umowa_permission_query_conditions(user=None):
 def has_umowa_permission(doc, ptype, user):
 	user = user or frappe.session.user
 
-	# ops#380: read by deal visibility, write only for the author who still
-	# has write on the deal. Same fail-closed behaviour for an empty deal.
+	# ops#380: read by deal visibility; generic write closed for non-bypass
+	# users except creating the record (see `decyzja`). Empty deal fails closed.
 	if user == "Administrator" or set(frappe.get_roles(user)) & BYPASS_ROLES:
 		return True
 

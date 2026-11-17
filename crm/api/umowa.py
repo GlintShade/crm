@@ -51,7 +51,7 @@ from crm.volteo_umowa import (
 	czy_synchronizowac_wplate,
 	czy_umowa_podwojna,
 	czy_wymagac_dostepu_do_drugiego,
-	czy_zapis_jako_przypisany,
+	czy_zapis_przez_api,
 	docelowa_wplata,
 	kod_szablonu,
 	kontakty_do_zgod,
@@ -1108,11 +1108,11 @@ def volteo_umowa_save(deal: str, dane: dict[str, Any]) -> dict[str, Any]:
 	else:
 		_zapisz_dane_oze(deal_doc, umowa_doc, dane)
 
-	# ops#370: DocPerm `Volteo Umowa` dla handlowca ma `if_owner=1`, więc aktualny
-	# `deal_owner` nie mógłby zapisać umowy założonej przez inne konto. Bramki wyżej
-	# (rola + prawo zapisu do szansy) już przeszły, a przypisanie do szansy jest
-	# autoryzacją wystarczającą; nikt inny nie dostaje tu żadnego obejścia.
-	if czy_zapis_jako_przypisany(frappe.session.user, deal_doc.get("deal_owner")):
+	# ops#370, ops#380: hak `has_umowa_permission` zamyka zapis rekordu ogólną ścieżką,
+	# więc to API autoryzuje zapis samo: autor rekordu albo aktualny `deal_owner`
+	# (bramki wyżej: rola + prawo zapisu do szansy). Role bypass przechodzą zwykłą
+	# ścieżką uprawnień; przełożony niebędący żadnym z nich dostaje odmowę z `save()`.
+	if czy_zapis_przez_api(frappe.session.user, umowa_doc.owner, deal_doc.get("deal_owner")):
 		umowa_doc.flags.ignore_permissions = True
 	try:
 		umowa_doc.save()

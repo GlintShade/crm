@@ -359,6 +359,15 @@ def czy_zapis_jako_przypisany(uzytkownik: str | None, deal_owner: str | None) ->
 	return bool(uzytkownik) and bool(deal_owner) and uzytkownik == deal_owner
 
 
+def czy_zapis_przez_api(uzytkownik: str | None, autor: str | None, deal_owner: str | None) -> bool:
+	"""Czy `volteo_umowa_save` ma autoryzować zapis samo (ops#370, ops#380).
+
+	Prawda, gdy wywołujący jest niepusty i jest autorem rekordu umowy albo aktualnym
+	`deal_owner`. Dla nich API pomija DocPerm (hak zamyka zapis ogólną ścieżką).
+	"""
+	return bool(uzytkownik) and (uzytkownik == autor or czy_zapis_jako_przypisany(uzytkownik, deal_owner))
+
+
 def czy_wymagac_dostepu_do_drugiego(nowy: str | None, zapisany: str | None) -> bool:
 	"""Czy `drugi_zamawiajacy` z zapisu wymaga prawa odczytu kontaktu (ops#377).
 
