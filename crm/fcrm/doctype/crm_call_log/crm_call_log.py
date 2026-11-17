@@ -5,7 +5,7 @@ import frappe
 from frappe import _, generate_hash
 from frappe.model.document import Document
 
-from crm.integrations.api import get_contact_by_phone_number
+from crm.integrations.api import kontakt_po_numerze
 from crm.utils import seconds_to_duration
 
 
@@ -152,7 +152,7 @@ def parse_call_log(call):
 	call["_duration"] = seconds_to_duration(call.get("duration"))
 	if call.get("type") == "Incoming":
 		call["activity_type"] = "incoming_call"
-		contact = get_contact_by_phone_number(call.get("from"))
+		contact = kontakt_po_numerze(call.get("from"))
 		receiver = (
 			frappe.db.get_values("User", call.get("receiver"), ["full_name", "user_image"])[0]
 			if call.get("receiver")
@@ -168,7 +168,7 @@ def parse_call_log(call):
 		}
 	elif call.get("type") == "Outgoing":
 		call["activity_type"] = "outgoing_call"
-		contact = get_contact_by_phone_number(call.get("to"))
+		contact = kontakt_po_numerze(call.get("to"))
 		caller = (
 			frappe.db.get_values("User", call.get("caller"), ["full_name", "user_image"])[0]
 			if call.get("caller")

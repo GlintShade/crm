@@ -4,7 +4,7 @@ import frappe
 from frappe import _
 from werkzeug.wrappers import Response
 
-from crm.integrations.api import get_contact_by_phone_number
+from crm.integrations.api import kontakt_po_numerze
 
 from .twilio_handler import IncomingCall, Twilio, TwilioCallDetails
 
@@ -98,7 +98,7 @@ def create_call_log(call_details: TwilioCallDetails):
 
 
 def link(contact_number, call_log):
-	contact = get_contact_by_phone_number(contact_number)
+	contact = kontakt_po_numerze(contact_number)
 	if contact.get("name"):
 		doctype = "Contact"
 		docname = contact.get("name")
