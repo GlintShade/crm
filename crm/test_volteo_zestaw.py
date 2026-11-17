@@ -447,6 +447,45 @@ class TestPrzeliczCene(unittest.TestCase):
 		self.assertEqual(z.waliduj_cene(wejscie()), [])
 
 
+class TestPrzeliczRaty(unittest.TestCase):
+	"""ops#369: jeden wzor rat dla `przelicz_cene` i synchronizacji wplaty z umowy."""
+
+	GOLDEN: ClassVar[list] = [
+		# (nadpisania wejscia, procent miesieczny, rata_brutto, po_dotacji, po_uldze), z kodu sprzed refaktoru
+		({}, 1, "647.38", "512.20", "450.73"),
+		({"wplata_wlasna": 10000}, 1, "503.90", "368.73", "307.26"),
+		({"wplata_wlasna": 15000, "okres_lat": 15}, 0.9, "338.60", "232.69", "184.53"),
+		({"wplata_wlasna": 99999}, 1, "0.00", "0.00", "0.00"),
+		({"okres_lat": 0, "wplata_wlasna": 5000}, 1, "0.00", "0.00", "0.00"),
+		({"wplata_wlasna": 5000}, 0, "334.35", "255.84", "220.14"),
+	]
+
+	def test_przelicz_cene_identyczne_z_kodem_sprzed_refaktoru(self):
+		for nadpisania, i, rb, rd, ru in self.GOLDEN:
+			with self.subTest(nadpisania=nadpisania, i=i):
+				o = z.przelicz_cene(wejscie(**nadpisania), {"pmt_oprocentowanie_mies": i})
+				self.assertEqual((o["rata_brutto"], o["rata_po_dotacji"], o["rata_po_uldze"]), (D(rb), D(rd), D(ru)))
+
+	def test_przelicz_raty_zgodne_z_przelicz_cene(self):
+		o = z.przelicz_cene(wejscie(wplata_wlasna=10000), STALE)
+		raty = z.przelicz_raty(
+			o["brutto"], o["cena_po_dotacji"], o["cena_po_uldze"], 10, 10000, "indywidualny", STALE
+		)
+		self.assertEqual(raty, (o["rata_brutto"], o["rata_po_dotacji"], o["rata_po_uldze"]))
+
+	def test_firma_i_okres_zero_daja_zera(self):
+		zera = (D(0), D(0), D(0))
+		self.assertEqual(z.przelicz_raty(60000, 50000, 45000, 10, 5000, "firma", STALE), zera)
+		self.assertEqual(z.przelicz_raty(60000, 50000, 45000, 0, 5000, "indywidualny", STALE), zera)
+
+	def test_wplata_wieksza_niz_cena_daje_zero_i_wyniki_w_groszach(self):
+		raty = z.przelicz_raty(60000, 50000, 45000, 10, 60000, "indywidualny", STALE)
+		self.assertEqual(raty[0], D(0))
+		for r in z.przelicz_raty(60000, 50000, 45000, 10, 10000, "indywidualny", STALE):
+			self.assertIsInstance(r, D)
+			self.assertEqual(r.as_tuple().exponent, -2)
+
+
 class TestPodstawaBrutto(unittest.TestCase):
 	def _w(self, **kw):
 		return wejscie(**{"podstawa": "brutto", "brutto": 45122.40, **kw})

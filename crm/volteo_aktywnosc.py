@@ -234,6 +234,22 @@ def etykieta_wnioskodawcy(nazwisko: str | None, imiona: str | None) -> str:
 	return pelna or "bez wnioskodawcy"
 
 
+def _zl(kwota: object) -> str:
+	"""Kwota po polsku: spacja jako separator tysięcy, przecinek, dwa miejsca, "zł"."""
+	from decimal import ROUND_HALF_UP, Decimal
+
+	d = Decimal(str(kwota or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+	calosc, _, grosze = f"{d:.2f}".partition(".")
+	znak = "-" if calosc.startswith("-") else ""
+	cyfry = calosc.lstrip("-")
+	grupy = []
+	while len(cyfry) > 3:
+		grupy.insert(0, cyfry[-3:])
+		cyfry = cyfry[:-3]
+	grupy.insert(0, cyfry)
+	return f"{znak}{' '.join(grupy)},{grosze} zł"
+
+
 def tekst_sladu(rodzaj: str, **dane: object) -> str:
 	"""Autorytatywne, bezosobowe polskie teksty śladów — feed pokazuje je po pogrubionym
 	autorze, jak istniejące `compose_volteo_linked_text` w `crm/api/activities.py`
@@ -353,6 +369,11 @@ def tekst_sladu(rodzaj: str, **dane: object) -> str:
 		return (
 			f"{ZNACZNIK_CC} {dane['cc_full_name']} przekazał lead handlowcowi "
 			f"{dane['handlowiec_full_name']}"
+		)
+
+	if rodzaj == "wplata_z_umowy":
+		return (
+			f"wpłata własna {_zl(dane['stara'])} → {_zl(dane['nowa'])} (z umowy), raty przeliczone"
 		)
 
 	raise ValueError(f"Nieznany rodzaj śladu: {rodzaj!r}")
