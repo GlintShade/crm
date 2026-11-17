@@ -274,6 +274,15 @@ def tekst_sladu(rodzaj: str, **dane: object) -> str:
 	if rodzaj == "autenti_pdf":
 		return f"podpięto podpisany PDF ({dane['dokument']})"
 
+	if rodzaj == "umowa_pierwszy_podpis":
+		return "Autenti: pierwszy podpis na umowie, formularz zablokowany"
+
+	if rodzaj == "umowa_odblokowano":
+		return "odblokowano formularz umowy"
+
+	if rodzaj == "umowa_zablokowano":
+		return "ponownie zablokowano formularz umowy"
+
 	if rodzaj == "umowa_utworzono":
 		return "utworzono umowę (formularz roboczy)"
 
