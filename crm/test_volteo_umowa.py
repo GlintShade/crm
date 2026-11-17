@@ -13,6 +13,7 @@ from crm.volteo_umowa import (
 	czy_rodzaj_bez_wzoru_umowy,
 	czy_synchronizowac_wplate,
 	czy_umowa_podwojna,
+	czy_zapis_jako_przypisany,
 	docelowa_wplata,
 	kod_szablonu,
 	kontakty_do_zgod,
@@ -224,6 +225,18 @@ class TestKwotaKredytu(unittest.TestCase):
 		wynik = kwota_kredytu(Decimal("100.005"), Decimal("0"), "Kredyt + gotówka")
 		self.assertEqual(wynik, Decimal("100.01"))
 		self.assertEqual(wynik.as_tuple().exponent, -2)
+
+
+class TestCzyZapisJakoPrzypisany(unittest.TestCase):
+	def test_prawda_tylko_dla_rownych_niepustych(self: "TestCzyZapisJakoPrzypisany") -> None:
+		self.assertTrue(czy_zapis_jako_przypisany("a@x.pl", "a@x.pl"))
+
+	def test_falsz_dla_innych_i_pustych(self: "TestCzyZapisJakoPrzypisany") -> None:
+		self.assertFalse(czy_zapis_jako_przypisany("a@x.pl", "b@x.pl"))
+		for puste in (None, ""):
+			self.assertFalse(czy_zapis_jako_przypisany(puste, "a@x.pl"))
+			self.assertFalse(czy_zapis_jako_przypisany("a@x.pl", puste))
+			self.assertFalse(czy_zapis_jako_przypisany(puste, puste))
 
 
 class TestCzySynchronizowacWplate(unittest.TestCase):

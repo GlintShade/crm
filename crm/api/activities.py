@@ -15,6 +15,7 @@ from crm.fcrm.doctype.crm_fields_layout.crm_fields_layout import get_permlevel_a
 from crm.permissions.org_hierarchy import BYPASS_ROLES, czy_autor_ma_role_cc
 from crm.volteo_aktywnosc import (
 	OKNO_GRUPOWANIA_S,
+	PREFIKS_SLADU_WPLATY,
 	ROLA_D2D,
 	ZNACZNIK_D2D_UKRYTY,
 	bez_znacznika,
@@ -24,6 +25,7 @@ from crm.volteo_aktywnosc import (
 	grupuj,
 	linie_z_wersji,
 	maskuj_autora_cc,
+	pola_umowy_do_pokazania,
 	tekst_widoczny_dla,
 )
 from crm.volteo_notatki import PREFIKS_ZNACZNIKA as _PREFIKS_ZNACZNIKA_NOTATKI
@@ -825,6 +827,31 @@ VOLTEO_LINKED_SOURCES = [
 CUSTOM_ZESTAW_FIELDNAME = "custom_zestaw"
 
 
+def _slady_przepisania_wplaty(deal: str) -> list[tuple]:
+	"""Pary `(creation, owner)` śladów przepisania wpłaty z umowy na szansę (ops#369)."""
+	try:
+		return [
+			(c.creation, c.owner)
+			for c in frappe.get_all(
+				"Comment",
+				filters={
+					"reference_doctype": "CRM Deal",
+					"reference_name": deal,
+					"comment_type": "Info",
+					"content": ["like", f"{PREFIKS_SLADU_WPLATY}%"],
+				},
+				fields=["creation", "owner"],
+				limit_page_length=LIMIT_KOMENTARZY_AUDYTU,
+			)
+		]
+	except Exception:
+		frappe.log_error(
+			title="Volteo linked activities: failed to list deposit sync traces",
+			message=f"deal={deal}\n{frappe.get_traceback()}",
+		)
+		return []
+
+
 def get_volteo_linked_activities(name: str):
 	"""Creation + change events for the deal's linked Volteo records.
 
@@ -987,14 +1014,25 @@ def get_volteo_linked_activities(name: str):
 				)
 				continue
 
+			slady_wplaty = None
 			for version in versions:
 				try:
 					summary = None
 					try:
 						vdata = json.loads(version.data)
-						summary = summarize_version_changes(
-							vdata, fields_map, skip_fields=source.get("skip_version_fields")
-						)
+						skip_fields = source.get("skip_version_fields")
+						if dt == "Volteo Umowa":
+							# ops#369: zapis umowy, który przepisał wpłatę na szansę, ma w feedzie
+							# jedną linię (ślad szansy), więc pola wpłaty znikają z linii umowy.
+							if slady_wplaty is None:
+								slady_wplaty = _slady_przepisania_wplaty(name)
+							zmienione = [c[0] for c in (vdata.get("changed") or []) if c]
+							ukryte = set(zmienione) - set(
+								pola_umowy_do_pokazania(zmienione, version.creation, version.owner, slady_wplaty)
+							)
+							if ukryte:
+								skip_fields = set(skip_fields or ()) | ukryte
+						summary = summarize_version_changes(vdata, fields_map, skip_fields=skip_fields)
 					except Exception:
 						summary = None  # unrecognised payload -> still emit a generic event below
 

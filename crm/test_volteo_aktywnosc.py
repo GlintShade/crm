@@ -22,6 +22,7 @@ from crm.volteo_aktywnosc import (
 	grupuj,
 	linie_z_wersji,
 	maskuj_autora_cc,
+	pola_umowy_do_pokazania,
 	roznice_plikow_audytu,
 	tekst_sladu,
 	tekst_widoczny_dla,
@@ -567,6 +568,45 @@ class TestRozniceplikowAudytu(unittest.TestCase):
 		self.assertEqual(nowe, nowe_kopia)
 
 
+class TestPolaUmowyDoPokazania(unittest.TestCase):
+	T0 = "2026-11-17 10:00:00.000000"
+
+	def test_pasujacy_slad_usuwa_pola_wplaty(self: "TestPolaUmowyDoPokazania") -> None:
+		wynik = pola_umowy_do_pokazania(
+			["wklad_wlasny_pln", "kwota_kredytu_pln", "finansowanie"],
+			self.T0,
+			"a@x.pl",
+			[("2026-11-17 10:00:02.500000", "a@x.pl")],
+		)
+		self.assertEqual(wynik, ["finansowanie"])
+
+	def test_tylko_pola_wplaty_daja_pusta_liste(self: "TestPolaUmowyDoPokazania") -> None:
+		wynik = pola_umowy_do_pokazania(
+			["wklad_wlasny_pln", "kwota_kredytu_pln"], self.T0, "a@x.pl", [(self.T0, "a@x.pl")]
+		)
+		self.assertEqual(wynik, [])
+
+	def test_bez_sladu_inny_autor_lub_za_daleko_pola_zostaja(self: "TestPolaUmowyDoPokazania") -> None:
+		pola = ["wklad_wlasny_pln", "kwota_kredytu_pln"]
+		self.assertEqual(pola_umowy_do_pokazania(pola, self.T0, "a@x.pl", []), pola)
+		self.assertEqual(pola_umowy_do_pokazania(pola, self.T0, "a@x.pl", [(self.T0, "b@x.pl")]), pola)
+		self.assertEqual(
+			pola_umowy_do_pokazania(pola, self.T0, "a@x.pl", [("2026-11-17 10:00:30", "a@x.pl")]), pola
+		)
+
+	def test_pola_bez_wplaty_nietkniete_i_obsluga_datetime(self: "TestPolaUmowyDoPokazania") -> None:
+		t = datetime.datetime(2026, 11, 17, 10, 0, 0)
+		self.assertEqual(pola_umowy_do_pokazania(["finansowanie"], t, "a@x.pl", [(t, "a@x.pl")]), ["finansowanie"])
+		self.assertEqual(
+			pola_umowy_do_pokazania(["wklad_wlasny_pln"], t, "a@x.pl", [(t + datetime.timedelta(seconds=3), "a@x.pl")]),
+			[],
+		)
+
+	def test_zly_format_czasu_nie_ukrywa_pol(self: "TestPolaUmowyDoPokazania") -> None:
+		pola = ["wklad_wlasny_pln"]
+		self.assertEqual(pola_umowy_do_pokazania(pola, "zly", "a@x.pl", [(self.T0, "a@x.pl")]), pola)
+
+
 class TestTekstSladu(unittest.TestCase):
 	def test_a_podzadanie_bez_notatki(self: "TestTekstSladu") -> None:
 		self.assertEqual(
@@ -590,11 +630,11 @@ class TestTekstSladu(unittest.TestCase):
 		self.assertEqual(tekst_sladu("autenti_wyslano", dokument="umowę"), "wysłano umowę do podpisu Autenti")
 		self.assertEqual(
 			tekst_sladu("wplata_z_umowy", stara="15000", nowa="10000.5"),
-			"wpłata własna 15 000,00 zł → 10 000,50 zł (z umowy), raty przeliczone",
+			"zmieniono wpłatę własną względem oferty z 15 000,00 zł na 10 000,50 zł",
 		)
 		self.assertEqual(
 			tekst_sladu("wplata_z_umowy", stara=None, nowa="1234567.891"),
-			"wpłata własna 0,00 zł → 1 234 567,89 zł (z umowy), raty przeliczone",
+			"zmieniono wpłatę własną względem oferty z 0,00 zł na 1 234 567,89 zł",
 		)
 
 	def test_e_autenti_wyslano_kredyt(self: "TestTekstSladu") -> None:
