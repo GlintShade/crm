@@ -109,8 +109,8 @@
           v-model="doc"
           @updateField="updateField"
         />
-        <HandlowiecKarta doctype="CRM Deal" :wlasciciel="doc.deal_owner" startZwiniete />
         <TasksSection doctype="CRM Deal" :docname="dealId" karty startZwiniete />
+        <HandlowiecKarta doctype="CRM Deal" :wlasciciel="doc.deal_owner" startZwiniete />
         <div
           v-if="sections.data"
           class="flex flex-1 flex-col justify-between overflow-hidden"

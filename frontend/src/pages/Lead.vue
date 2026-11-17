@@ -189,8 +189,8 @@
           v-model="doc"
           @updateField="updateField"
         />
-        <HandlowiecKarta doctype="CRM Lead" :wlasciciel="doc.lead_owner" />
         <TasksSection doctype="CRM Lead" :docname="leadId" karty />
+        <HandlowiecKarta doctype="CRM Lead" :wlasciciel="doc.lead_owner" />
         <NotatkiLeadaPanel :docname="leadId" @dodano="reload = true" />
         <div
           v-if="sections.data"

@@ -6,7 +6,7 @@
   Zrodlo: deal_owner (szansa) albo lead_owner (lead), przekazane jako `wlasciciel`.
 -->
 <template>
-  <div v-if="widoczna" class="shrink-0 px-3 pb-2 pt-3">
+  <div v-if="widoczna" class="shrink-0 px-3 pb-2 pt-1">
     <KartaSekcji
       :label="__('Handlowiec')"
       :nazwa="SEKCJA_HANDLOWIEC"
