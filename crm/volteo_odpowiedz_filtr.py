@@ -14,6 +14,21 @@ from typing import Any
 
 PODSTAWA_TRESCI_JSON = "application/json"
 ZNACZNIK_DOKUMENTU = b'"doctype"'
+KLUCZE_HISTORII_DOCINFO = (
+	"versions",
+	"comments",
+	"info_logs",
+	"attachment_logs",
+	"assignment_logs",
+	"like_logs",
+	"workflow_logs",
+	"communications",
+	"automated_messages",
+	"views",
+	"energy_point_logs",
+	"additional_timeline_content",
+	"milestones",
+)
 
 
 def czy_filtrowac(typ_tresci: str | None, tresc: bytes | None) -> bool:
@@ -66,3 +81,24 @@ def odfiltruj(
 		elif isinstance(wezel, (list, tuple)):
 			stos.extend(v for v in wezel if isinstance(v, (dict, list, tuple)))
 	return wyzerowane
+
+
+def oczysc_docinfo(struktura: Any) -> int:
+	"""Czyści historię w `struktura["docinfo"]` (tylko najwyższy poziom odpowiedzi).
+
+	Każdy klucz z `KLUCZE_HISTORII_DOCINFO` o niepustej wartości (lista albo
+	słownik) dostaje pustą listę, bo Version i ślady Info niosą wartości pól
+	tajnych oraz tożsamość CC. Mutuje w miejscu. Zwraca liczbę wyczyszczonych
+	kluczy; inne kształty dają 0."""
+	if not isinstance(struktura, dict):
+		return 0
+	docinfo = struktura.get("docinfo")
+	if not isinstance(docinfo, dict):
+		return 0
+	wyczyszczone = 0
+	for klucz in KLUCZE_HISTORII_DOCINFO:
+		wartosc = docinfo.get(klucz)
+		if isinstance(wartosc, (list, dict)) and wartosc:
+			docinfo[klucz] = []
+			wyczyszczone += 1
+	return wyczyszczone

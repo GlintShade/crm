@@ -3,7 +3,7 @@
 
 import unittest
 
-from crm.volteo_odpowiedz_filtr import czy_filtrowac, odfiltruj
+from crm.volteo_odpowiedz_filtr import czy_filtrowac, oczysc_docinfo, odfiltruj
 
 TAJNE = {
 	("CRM Deal", None): {"koszty"},
@@ -156,6 +156,38 @@ class TestCzyFiltrowac(unittest.TestCase):
 	def test_pusta_tresc(self):
 		self.assertFalse(czy_filtrowac("application/json", b""))
 		self.assertFalse(czy_filtrowac("application/json", None))
+
+
+class TestOczyscDocinfo(unittest.TestCase):
+	def test_czysci_wersje_i_komentarze(self):
+		d = {"docinfo": {"versions": [{"data": "x"}], "comments": [1], "info_logs": {"a": 1}}}
+		self.assertEqual(oczysc_docinfo(d), 3)
+		self.assertEqual(d["docinfo"], {"versions": [], "comments": [], "info_logs": []})
+
+	def test_puste_nie_liczone(self):
+		d = {"docinfo": {"versions": [], "comments": {}, "views": None}}
+		self.assertEqual(oczysc_docinfo(d), 0)
+
+	def test_brak_docinfo(self):
+		self.assertEqual(oczysc_docinfo({"message": 1}), 0)
+
+	def test_docinfo_nie_slownik(self):
+		self.assertEqual(oczysc_docinfo({"docinfo": [1]}), 0)
+
+	def test_struktura_nie_slownik(self):
+		self.assertEqual(oczysc_docinfo([{"docinfo": {"versions": [1]}}]), 0)
+		self.assertEqual(oczysc_docinfo(None), 0)
+
+	def test_klucze_spoza_listy_nietkniete(self):
+		d = {"docinfo": {"attachments": [1], "shared": [2], "versions": [3], "name": "A"}}
+		self.assertEqual(oczysc_docinfo(d), 1)
+		self.assertEqual(d["docinfo"]["attachments"], [1])
+		self.assertEqual(d["docinfo"]["shared"], [2])
+
+	def test_zagniezdzone_nie_ruszane(self):
+		d = {"message": {"docinfo": {"versions": [1]}}}
+		self.assertEqual(oczysc_docinfo(d), 0)
+		self.assertEqual(d["message"]["docinfo"]["versions"], [1])
 
 
 if __name__ == "__main__":

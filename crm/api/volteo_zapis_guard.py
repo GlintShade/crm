@@ -24,7 +24,9 @@ Rozwiązanie:
     kto nie jest Administratorem ani System Managerem (decyzja w
     `crm.volteo_zapis_rest.czy_zapis_rest`);
   - `run_doc_method` filtruje dokumenty doklejone do `frappe.response.docs`;
-  - `after_request` filtruje gotową odpowiedź JSON (fail-closed).
+  - `after_request` filtruje gotową odpowiedź JSON (fail-closed);
+  - historia w `docinfo` (Version, komentarze, ślady Info) zostaje tylko dla
+    administracji, bo niesie wartości pól tajnych oraz tożsamość CC.
 
 To jest bramka bezpieczeństwa: żaden wyjątek nie jest połykany (fail-closed).
 """
@@ -41,8 +43,10 @@ from frappe.client import submit as _rdzen_submit
 from frappe.handler import run_doc_method as _rdzen_run_doc_method
 from frappe.model.document import Document
 
-from crm.volteo_odpowiedz_filtr import czy_filtrowac, odfiltruj
+from crm.volteo_odpowiedz_filtr import czy_filtrowac, oczysc_docinfo, odfiltruj
 from crm.volteo_zapis_rest import czy_zapis_rest
+
+ROLE_PELNEJ_HISTORII = frozenset({"System Manager", "Volteo Core Admin"})
 
 
 def _ma_pola_permlevel(doctype: str) -> bool:
@@ -141,7 +145,8 @@ def _tajne_pola_dla_uzytkownika(doctype: str, parenttype: str | None) -> frozens
 
 
 def after_request(response=None, request=None) -> None:
-	"""Hook `after_request` (ops#372): zeruje pola permlevel w odpowiedzi JSON.
+	"""Hook `after_request` (ops#372): zeruje pola permlevel w odpowiedzi JSON i
+	czyści historię w `docinfo` dla kogoś bez roli System Manager i Volteo Core Admin.
 
 	Frappe połyka wyjątki z `after_request` i wysłałby odpowiedź bez filtra, więc
 	każdy błąd kończy się podmianą odpowiedzi na 500 (fail-closed)."""
@@ -155,7 +160,10 @@ def after_request(response=None, request=None) -> None:
 		if not czy_filtrowac(response.content_type, tresc):
 			return
 		obiekt = json.loads(tresc)
-		if odfiltruj(obiekt, _tajne_pola_dla_uzytkownika):
+		zmiany = odfiltruj(obiekt, _tajne_pola_dla_uzytkownika)
+		if not (ROLE_PELNEJ_HISTORII & set(frappe.get_roles())):
+			zmiany += oczysc_docinfo(obiekt)
+		if zmiany:
 			response.set_data(json.dumps(obiekt, separators=(",", ":")))
 	except Exception:
 		try:
