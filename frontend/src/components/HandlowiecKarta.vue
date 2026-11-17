@@ -6,7 +6,10 @@
   Zrodlo: deal_owner (szansa) albo lead_owner (lead), przekazane jako `wlasciciel`.
 -->
 <template>
-  <div v-if="widoczna" class="shrink-0 px-3 pb-2 pt-1">
+  <div
+    v-if="widoczna"
+    :class="bezOdstepow ? 'shrink-0' : 'section-border shrink-0 border-t p-1 sm:p-3'"
+  >
     <KartaSekcji
       :label="__('Handlowiec')"
       :nazwa="SEKCJA_HANDLOWIEC"
@@ -64,6 +67,9 @@ const props = defineProps({
   // E-mail (name) przypisanego handlowca: deal_owner albo lead_owner.
   wlasciciel: { type: String, default: '' },
   startZwiniete: { type: Boolean, default: false },
+  // Wewnatrz SidePanelLayout w wariancie kart odstepy daje juz kontener
+  // (sections-karty: gap-2 px-3 pb-3).
+  bezOdstepow: { type: Boolean, default: false },
 })
 
 const { isVolteoAdmin, isBackend, getUser } = usersStore()

@@ -590,6 +590,9 @@
            danej sekcji (zakladka Szczegoly leada: Komentarze pod Spotkaniem). -->
       <slot name="po-sekcji" v-bind="{ section }" />
     </template>
+    <!-- VOLTEO (ops#366): miejsce po ostatniej sekcji, w tym samym kontenerze
+         przewijania (karta Handlowiec). Bez uzycia nic nie renderuje. -->
+    <slot name="po-sekcjach" />
   </div>
   <SidePanelModal
     v-if="showSidePanelModal"

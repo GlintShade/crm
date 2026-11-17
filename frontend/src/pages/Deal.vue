@@ -110,7 +110,6 @@
           @updateField="updateField"
         />
         <TasksSection doctype="CRM Deal" :docname="dealId" karty startZwiniete />
-        <HandlowiecKarta doctype="CRM Deal" :wlasciciel="doc.deal_owner" startZwiniete />
         <div
           v-if="sections.data"
           class="flex flex-1 flex-col justify-between overflow-hidden"
@@ -255,6 +254,9 @@
                   {{ __('No Contacts Added') }}
                 </div>
               </div>
+            </template>
+            <template #po-sekcjach>
+              <HandlowiecKarta doctype="CRM Deal" :wlasciciel="doc.deal_owner" startZwiniete bezOdstepow />
             </template>
           </SidePanelLayout>
         </div>

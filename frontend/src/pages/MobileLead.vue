@@ -93,7 +93,6 @@
             v-model="doc"
             @updateField="updateField"
           />
-          <HandlowiecKarta doctype="CRM Lead" :wlasciciel="doc.lead_owner" />
           <div
             v-if="sections.data"
             class="flex flex-1 flex-col justify-between overflow-hidden"
@@ -121,6 +120,9 @@
                   v-if="czySekcjaSpotkanie(section)"
                   :docname="leadId"
                 />
+              </template>
+              <template #po-sekcjach>
+                <HandlowiecKarta doctype="CRM Lead" :wlasciciel="doc.lead_owner" />
               </template>
             </SidePanelLayout>
           </div>
