@@ -10,6 +10,7 @@ Cała logika zależna od frameworka (zapis do dokumentu, whitelisted API) mieszk
 gdzie indziej — tu tylko czyste funkcje.
 """
 
+from collections.abc import Iterable
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
@@ -357,6 +358,23 @@ def czy_zapis_jako_przypisany(uzytkownik: str | None, deal_owner: str | None) ->
 	pomija `if_owner` z DocPerm `Volteo Umowa` (autoryzacja na poziomie API).
 	"""
 	return bool(uzytkownik) and bool(deal_owner) and uzytkownik == deal_owner
+
+
+def czy_wymagac_dostepu_do_drugiego(
+	nowy: str | None,
+	zapisany: str | None,
+	kontakty_szansy: Iterable[str] | None,
+) -> bool:
+	"""Czy `drugi_zamawiajacy` z zapisu wymaga prawa odczytu kontaktu (ops#377).
+
+	Prawda tylko, gdy `nowy` jest niepusty, różni się od wartości już zapisanej na
+	umowie i nie jest jeszcze kontaktem szansy. Niezmieniony wybór (np. nowy doradca
+	zapisuje formularz z istniejącym drugim Zamawiającym) i kontakt już dopięty do
+	szansy nie wymagają sprawdzenia.
+	"""
+	if not nowy or nowy == zapisany:
+		return False
+	return nowy not in set(kontakty_szansy or ())
 
 
 def czy_synchronizowac_wplate(autenti_status: str | None) -> bool:
