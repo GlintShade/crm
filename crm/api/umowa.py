@@ -44,6 +44,7 @@ from crm.volteo_umowa import (
 	cechy_umowy,
 	czy_propagowac_zgody,
 	czy_rodzaj_bez_wzoru_umowy,
+	czy_synchronizowac_wplate,
 	czy_umowa_podwojna,
 	docelowa_wplata,
 	kod_szablonu,
@@ -1071,9 +1072,12 @@ def volteo_umowa_save(deal: str, dane: dict[str, Any]) -> dict[str, Any]:
 		_blad_ogolny()
 
 	_propaguj_zgody(deal_doc, umowa_doc)
-	_synchronizuj_wplate_z_umowy(deal_doc, umowa_doc)
+	wplata_na_szansie = _synchronizuj_wplate_z_umowy(deal_doc, umowa_doc)
+	if wplata_na_szansie == "zmieniona":
+		deal_doc.reload()
 
 	return {
+		"wplata_na_szansie": wplata_na_szansie,
 		"umowa": _umowa_do_dict(umowa_doc),
 		"prefill": _prefill(deal_doc),
 		"prefill_drugi": _prefill_drugi(umowa_doc),
@@ -1084,15 +1088,17 @@ def volteo_umowa_save(deal: str, dane: dict[str, Any]) -> dict[str, Any]:
 
 def _synchronizuj_wplate_z_umowy(
 	deal_doc: "frappe.model.document.Document", umowa_doc: "frappe.model.document.Document"
-) -> None:
+) -> str:
 	"""ops#369 (wariant C): po zapisie umowy OZE szansa przejmuje z niej wpłatę własną,
 	a trzy prognozowane raty są przeliczane tym samym wzorem co "Edytuj zestaw"
 	(`crm.volteo_zestaw.przelicz_raty`). Umowa jest źródłem prawdy dla wpłaty.
 
 	Zmienia na szansie DOKŁADNIE cztery pola (`custom_wplata_wlasna`, `custom_rata_brutto`,
 	`custom_rata_po_dotacji`, `custom_rata_po_uldze`), tylko gdy docelowa wpłata różni się
-	od zapisanej (porównanie w groszach). Czyste Powietrze i rodzaje spoza procesu OZE
-	są pomijane. Zapis idzie przez `doc.save()` z `ignore_permissions` (powstaje `Version`,
+	od zapisanej (porównanie w groszach). Czyste Powietrze, rodzaje spoza procesu OZE
+	oraz umowy w statusie z `SEND_BLOCKED_STATUSES` (`czy_synchronizowac_wplate`) są pomijane.
+	Zwraca "zmieniona" (szansa zapisana), "bez_zmian" (nic do zrobienia, także pominięcia)
+	albo "blad" (wyjątek, wycofane do savepointu i zalogowane). Zapis idzie przez `doc.save()` z `ignore_permissions` (powstaje `Version`,
 	strażnik cen w `CRMDeal.validate` jest tu tylko ominięty, nie odmawia).
 
 	Błąd synchronizacji NIE przerywa zapisu umowy (ta jest już zapisana): zapis na szansie
@@ -1102,14 +1108,16 @@ def _synchronizuj_wplate_z_umowy(
 	savepoint_utworzony = False
 	try:
 		if _czy_cp(deal_doc) or deal_doc.get("custom_rodzaj_umowy") not in OZE_RODZAJE:
-			return
+			return "bez_zmian"
+		if not czy_synchronizowac_wplate(umowa_doc.get("autenti_status")):
+			return "bez_zmian"
 		docelowa = docelowa_wplata(umowa_doc.get("finansowanie"), umowa_doc.get("wklad_wlasny_pln"))
 		if docelowa is None:
-			return
+			return "bez_zmian"
 		deal = frappe.get_doc("CRM Deal", deal_doc.name)
 		stara = _decimal_z_pola(deal.get("custom_wplata_wlasna"))
 		if stara == docelowa:
-			return
+			return "bez_zmian"
 		ustawienia = frappe.db.get_singles_dict("Volteo Kalkulator Stale") or {}
 		raty = przelicz_raty(
 			deal.get("deal_value"),
@@ -1127,10 +1135,12 @@ def _synchronizuj_wplate_z_umowy(
 		deal.flags.ignore_permissions = True
 		deal.save()
 		zapisz_slad(deal.name, tekst_sladu("wplata_z_umowy", stara=stara, nowa=docelowa))
+		return "zmieniona"
 	except Exception:
 		if savepoint_utworzony:
 			frappe.db.rollback(save_point="volteo_wplata_z_umowy")
 		frappe.log_error(title="volteo_umowa_save: nie udało się przepisać wpłaty własnej na szansę")
+		return "blad"
 
 
 def _decimal_z_pola(wartosc: Any) -> Decimal:

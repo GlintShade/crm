@@ -350,6 +350,17 @@ def _jest_puste(wartosc: Any, pole: str) -> bool:
 	return False
 
 
+def czy_synchronizowac_wplate(autenti_status: str | None) -> bool:
+	"""Czy zapis formularza umowy może przepisać wpłatę własną i raty na szansę (ops#369).
+
+	Te same semantyki co `czy_propagowac_zgody` (ops#170): fałsz dla `SEND_BLOCKED_STATUSES`
+	("Wysyłanie"/"Wysłana"/"Podpisana"), bo umowa wysłana do podpisu albo podpisana nie
+	może po cichu zmieniać kwot na szansie; prawda dla `None`/pustego i dla statusów
+	terminalnych nie-sukcesu ("Błąd", "Odrzucona", "Wygasła", "Wycofana").
+	"""
+	return czy_propagowac_zgody(autenti_status)
+
+
 def czy_propagowac_zgody(autenti_status: str | None) -> bool:
 	"""Czy `_propaguj_zgody` (`crm/api/umowa.py`) powinno nadpisać zgody na karcie(-ach) kontaktu.
 

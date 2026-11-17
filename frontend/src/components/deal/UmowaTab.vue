@@ -406,7 +406,7 @@
             <div class="mt-1 text-xs text-ink-gray-4">
               {{
                 __(
-                  'Wartość orientacyjna, liczona jako wartość oferty minus wkład własny. Serwer przelicza ją ponownie i jest rozstrzygający.',
+                  'Wartość orientacyjna: przy kredycie 100% cała wartość oferty, przy kredycie z wkładem własnym wartość oferty minus wkład własny. Serwer przelicza ją ponownie i jest rozstrzygający.',
                 )
               }}
             </div>
@@ -958,7 +958,17 @@ async function saveForm(opts = {}) {
     saveState.value = 'saved'
     // ops#369: serwer przepisuje wpłatę własną z umowy na szansę i przelicza raty,
     // więc odśwież dokument szansy (panel boczny); Zestaw ładuje dane przy wejściu w zakładkę.
-    getCachedDocumentResource('CRM Deal', props.dealId)?.reload()
+    // Brak klucza (stary backend) zachowuje się jak dawniej.
+    if (data?.wplata_na_szansie === 'zmieniona') {
+      getCachedDocumentResource('CRM Deal', props.dealId)?.reload()
+      toast.success(__('Wpłata własna i raty na szansie zaktualizowane z umowy.'))
+    } else if (data?.wplata_na_szansie === 'blad') {
+      toast.warning(
+        __(
+          'Umowa zapisana, ale nie udało się przepisać wpłaty własnej na szansę. Zgłoś to administratorowi.',
+        ),
+      )
+    }
     if (opts.successMessage) {
       toast.success(opts.successMessage)
     } else if (brakujace.value.length) {
