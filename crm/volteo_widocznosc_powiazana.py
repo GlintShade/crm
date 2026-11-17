@@ -81,3 +81,15 @@ def warunek_bez_znacznikow(tabela: str, pole_tresci: str, znaczniki: Iterable[st
 		return ""
 	kol = _kolumna(nazwa_tabeli(tabela), pole_tresci)
 	return "(" + " AND ".join(f"LOCATE({literal_sql(m)}, ifnull({kol}, '')) = 0" for m in lista) + ")"
+
+
+def warunek_pliku(user: str, powiazanie: str) -> str:
+	"""Warunek listy File: publiczny, wlasny, folder albo dokument odniesienia
+	widoczny. Pusty `powiazanie` (brak ograniczen) daje pusty warunek."""
+	if not powiazanie:
+		return ""
+	t = nazwa_tabeli("File")
+	return (
+		f"({_kolumna(t, 'is_private')} = 0 OR {_kolumna(t, 'owner')} = {literal_sql(user)} "
+		f"OR {_kolumna(t, 'is_folder')} = 1 OR {powiazanie})"
+	)

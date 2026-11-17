@@ -2,17 +2,23 @@
 # For license information, please see license.txt
 
 """
-Widocznosc listy `Comment` (ops#374).
+Widocznosc list `Comment` (ops#374) i `File` (ops#373).
 
-Rdzen Frappe zawęża liste Comment tylko do DOCTYPE'ow, ktore uzytkownik moze
+Rdzen Frappe zaweza liste Comment tylko do DOCTYPE'ow, ktore uzytkownik moze
 czytac, nie do konkretnych dokumentow, wiec handlowiec widzial komentarze do
-cudzych szans, audytow i leadow oraz sladu wewnetrzne. Pojedynczy odczyt jest
+cudzych szans, audytow i leadow oraz slady wewnetrzne. Pojedynczy odczyt jest
 juz poprawnie delegowany do dokumentu odniesienia, brakowalo listy.
 
 Haki `permission_query_conditions` jednego doctype'u sa laczone przez AND, wiec
 nasz warunek tylko zaweza. Hak `has_permission` zwraca wylacznie `False` albo
 `None` (nigdy `True`): nasze haki biegna pierwsze (odwrocona kolejnosc), a
 `True` zablokowalby kontrole rdzenia na dokumencie odniesienia.
+Dla `File` rdzen tez sprawdza tylko doctype dokumentu, do ktorego plik jest
+dolaczony; hak zaweza liste do plikow dokumentow widocznych (plik dolaczony do
+komentarza dziedziczy widocznosc komentarza przez `warunek_hakow("Comment")`).
+`has_permission` dla `File` celowo nie jest dodawany: rdzen sprawdza pojedynczy
+plik poprawnie, a `crm.api.montaz.uprawnienie_pliku_protokolu` zostaje jedynym
+hakiem forka.
 Warunki SQL nie zawieraja znaku procenta (db_query formatuje je przez `%`).
 """
 
@@ -28,10 +34,9 @@ from crm.volteo_widocznosc_powiazana import (
 	literal_sql,
 	polacz_haki,
 	warunek_bez_znacznikow,
+	warunek_pliku,
 	warunek_powiazania,
 )
-
-ROLA_CC = "Volteo Call Center"
 
 
 def _cache(nazwa: str) -> dict:
@@ -109,9 +114,11 @@ def _admin_role() -> set[str]:
 
 
 def _autorzy_cc_sql() -> str:
+	from crm.permissions.org_hierarchy import ROLA_CALL_CENTER
+
 	return (
 		"SELECT `parent` FROM `tabHas Role` WHERE `parenttype` = 'User' "
-		f"AND `role` = {literal_sql(ROLA_CC)} AND `parent` != 'Administrator'"
+		f"AND `role` = {literal_sql(ROLA_CALL_CENTER)} AND `parent` != 'Administrator'"
 	)
 
 
@@ -171,3 +178,16 @@ def has_comment_permission(doc, ptype: str = "read", user: str | None = None, de
 			if autor and czy_autor_ma_role_cc(autor):
 				return False
 	return None
+
+
+def get_file_permission_query_conditions(user: str | None = None, doctype: str | None = None) -> str:
+	user = user or frappe.session.user
+	if user == "Administrator":
+		return ""
+	powiazanie = warunek_powiazania(
+		"File",
+		"attached_to_doctype",
+		"attached_to_name",
+		warunki_typow("File", "attached_to_doctype", user),
+	)
+	return warunek_pliku(user, powiazanie)

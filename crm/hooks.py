@@ -142,6 +142,7 @@ permission_query_conditions = {
 	"Volteo Umowa": "crm.permissions.faktura_visibility.get_umowa_permission_query_conditions",
 	"Volteo Notatka": "crm.permissions.faktura_visibility.get_notatka_permission_query_conditions",
 	"Comment": "crm.permissions.powiazane_visibility.get_comment_permission_query_conditions",
+	"File": "crm.permissions.powiazane_visibility.get_file_permission_query_conditions",
 	"Volteo Audyt": "crm.permissions.audyt_visibility.get_audyt_permission_query_conditions",
 	"Volteo Audyt CP": "crm.permissions.audyt_visibility.get_audyt_cp_permission_query_conditions",
 	"FCRM Note": "crm.permissions.child_visibility.get_note_permission_query_conditions",
