@@ -200,7 +200,14 @@ def get_recording_url(call_log_name: str):
 
 
 def _czytelny(doctype: str, name: str, tylko_widoczne: bool) -> bool:
-	return not tylko_widoczne or bool(frappe.has_permission(doctype, "read", name))
+	if not tylko_widoczne:
+		return True
+	try:
+		return bool(frappe.has_permission(doctype, "read", name))
+	except frappe.DoesNotExistError:
+		# osierocony wiersz (np. CRM Contacts wskazujacy na usuniety dokument): nieczytelny
+		frappe.clear_last_message()
+		return False
 
 
 def get_contact(
