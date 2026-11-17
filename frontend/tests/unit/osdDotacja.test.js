@@ -7,9 +7,10 @@ describe('osdDotacja', () => {
       expect(Object.keys(STATUSY).sort()).toEqual(['Dotacja', 'OSD'])
     })
 
-    it('OSD has the 6 owner-specified statuses in order', () => {
+    it('OSD has the 7 owner-specified statuses in order', () => {
       expect(STATUSY.OSD).toEqual([
         'Nie rozpoczęto',
+        'Kompletowanie dokumentów',
         'Zgłoszenie wysłane',
         'Uwagi OSD',
         'Umowa przyłączeniowa',
@@ -57,6 +58,7 @@ describe('osdDotacja', () => {
 
     it('in-progress OSD statuses are blue (owner rule: in-progress is always blue)', () => {
       for (const status of [
+        'Kompletowanie dokumentów',
         'Zgłoszenie wysłane',
         'Uwagi OSD',
         'Umowa przyłączeniowa',
