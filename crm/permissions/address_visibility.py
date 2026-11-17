@@ -1,8 +1,8 @@
 """
 Widocznosc dokumentu Address (ops#376).
 
-Adres jest widoczny dla niepriwilejowanego uzytkownika na trzy sposoby:
-powiazany z widocznym klientem/szansa/leadem (pole `Contact.address` lub wiersz
+Adres jest widoczny dla nieuprzywilejowanego uzytkownika na cztery sposoby:
+wskazany przez organizacje (`CRM Organization.address`, nie zawezane), powiazany z widocznym klientem/szansa/leadem (pole `Contact.address` lub wiersz
 Dynamic Link), powiazany z typem, ktory nie jest dla niego zawezony, albo jest
 jego wlasny i jeszcze z niczym niepowiazany. Ostatnia galez jest potrzebna, bo
 w UI nowy adres powstaje PRZED zapisem kontaktu (`Contact.vue::showAddressModal`).
@@ -57,7 +57,7 @@ def get_address_permission_query_conditions(user=None, doctype=None):
 def has_address_permission(doc, ptype="read", user=None, debug=False):
 	if not user:
 		user = frappe.session.user
-	name = getattr(doc, "name", None)
+	name = doc.get("name") if isinstance(doc, dict) else getattr(doc, "name", None)
 	if ptype in PTYPY_BEZ_OGRANICZEN or not name:
 		return None
 	warunek = _warunek(user)

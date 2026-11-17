@@ -3,8 +3,9 @@ Widocznosc dokumentu Address (ops#376): czysta skladnia SQL, bez `import frappe`
 
 Adres jest widoczny, gdy: (a) wskazuje go widoczny klient (`Contact.address`),
 (b) ma wiersz Dynamic Link do widocznego rekordu, (c) ma wiersz Dynamic Link
-do typu, ktory nie jest zawezony dla tego uzytkownika, albo (d) jest wlasny
-i jeszcze z niczym niepowiazany (przeplyw nowego adresu: najpierw Address,
+do typu, ktory nie jest zawezony dla tego uzytkownika, (d) jest wlasny
+i jeszcze z niczym niepowiazany, albo (e) wskazuje go organizacja
+(`CRM Organization.address`, organizacje nie sa zawezane) (przeplyw nowego adresu: najpierw Address,
 potem zapis kontaktu).
 """
 
@@ -47,11 +48,17 @@ def warunek_adresu(user: str, warunki_typow: dict[str, str]) -> str:
 		c += f" AND `link_doctype` NOT IN ({lista})"
 	galezie.append(c + ")")
 
+	# e. adres organizacji: organizacje nie sa zawezane
+	galezie.append(
+		"`tabAddress`.`name` IN (SELECT `address` FROM `tabCRM Organization` WHERE ifnull(`address`,'') != '')"
+	)
+
 	# d. wlasny adres jeszcze z niczym niepowiazany
 	galezie.append(
 		f"(`tabAddress`.`owner` = {literal_sql(user)} "
 		"AND `tabAddress`.`name` NOT IN (SELECT `parent` FROM `tabDynamic Link` WHERE `parenttype` = 'Address') "
-		"AND `tabAddress`.`name` NOT IN (SELECT `address` FROM `tabContact` WHERE ifnull(`address`,'') != ''))"
+		"AND `tabAddress`.`name` NOT IN (SELECT `address` FROM `tabContact` WHERE ifnull(`address`,'') != '') "
+		"AND `tabAddress`.`name` NOT IN (SELECT `address` FROM `tabCRM Organization` WHERE ifnull(`address`,'') != ''))"
 	)
 
 	wynik = "(" + " OR ".join(galezie) + ")"

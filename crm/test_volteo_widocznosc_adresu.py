@@ -83,6 +83,17 @@ class TestWarunek(unittest.TestCase):
 		self.assertIn("create", PTYPY_BEZ_OGRANICZEN)
 		self.assertNotIn("read", PTYPY_BEZ_OGRANICZEN)
 
-	def test_trzy_galezie_przy_pustym_slowniku(self: "TestWarunek") -> None:
+	def test_cztery_galezie_przy_pustym_slowniku(self: "TestWarunek") -> None:
 		w = warunek_adresu("u@x.pl", {})
-		self.assertEqual(w.count(" OR "), 2)
+		self.assertEqual(w.count(" OR "), 3)
+
+
+class TestOrganizacja(unittest.TestCase):
+	def test_galaz_organizacji_w_kazdym_przypadku(self: "TestOrganizacja") -> None:
+		for slownik in ({}, {"Contact": "x=1"}, WSZYSTKIE):
+			w = warunek_adresu("u@x.pl", slownik)
+			self.assertIn("IN (SELECT `address` FROM `tabCRM Organization`", w)
+
+	def test_galaz_d_wyklucza_organizacje(self: "TestOrganizacja") -> None:
+		w = warunek_adresu("u@x.pl", {})
+		self.assertIn("NOT IN (SELECT `address` FROM `tabCRM Organization`", w)
