@@ -61,14 +61,27 @@ def _ma_pola_permlevel(doctype: str) -> bool:
 	return False
 
 
+def _czytelny(doctype: str, name: str) -> bool:
+	"""Czy wywolujacy ma odczyt dokumentu, ktory wlasnie zapisal. Brak
+	dokumentu (usuniety albo przemianowany w trakcie) traktujemy jak brak odczytu."""
+	try:
+		return bool(frappe.has_permission(doctype, "read", name))
+	except frappe.DoesNotExistError:
+		return False
+
+
 def _odfiltruj(wynik: Any) -> Any:
 	"""Zwraca `wynik` po `apply_fieldlevel_read_permissions`. Nie-słownik albo
 	słownik bez `doctype` i `name` wraca bez zmian. Administrator i doctype bez
-	pól permlevel > 0: szybka ścieżka bez zmian."""
+	pól permlevel > 0: szybka ścieżka bez zmian. Dokument, którego wywołujący
+	nie może czytać (np. cudze `CRM Notification`), wraca tylko jako `doctype`
+	i `name`, bez treści."""
 	if not isinstance(wynik, dict) or not wynik.get("doctype") or not wynik.get("name"):
 		return wynik
 	if frappe.session.user == "Administrator":
 		return wynik
+	if not _czytelny(wynik["doctype"], wynik["name"]):
+		return {"doctype": wynik["doctype"], "name": wynik["name"]}
 	if not _ma_pola_permlevel(wynik["doctype"]):
 		return wynik
 	doc = frappe.get_doc(wynik["doctype"], wynik["name"])
