@@ -146,6 +146,7 @@ permission_query_conditions = {
 	"Volteo Audyt CP": "crm.permissions.audyt_visibility.get_audyt_cp_permission_query_conditions",
 	"FCRM Note": "crm.permissions.child_visibility.get_note_permission_query_conditions",
 	"CRM Task": "crm.permissions.child_visibility.get_task_permission_query_conditions",
+	"CRM Notification": "crm.permissions.notification_visibility.get_notification_permission_query_conditions",
 }
 
 has_permission = {
@@ -181,6 +182,7 @@ has_permission = {
 		"crm.permissions.delete_lockdown.block_nonadmin_delete",
 	],
 	"CRM Organization": "crm.permissions.delete_lockdown.block_nonadmin_delete",
+	"CRM Notification": "crm.permissions.notification_visibility.has_notification_permission",
 }
 
 # DocType Class
