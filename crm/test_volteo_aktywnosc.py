@@ -588,6 +588,14 @@ class TestTekstSladu(unittest.TestCase):
 
 	def test_d_autenti_wyslano_umowe(self: "TestTekstSladu") -> None:
 		self.assertEqual(tekst_sladu("autenti_wyslano", dokument="umowę"), "wysłano umowę do podpisu Autenti")
+		self.assertEqual(
+			tekst_sladu("wplata_z_umowy", stara="15000", nowa="10000.5"),
+			"wpłata własna 15 000,00 zł → 10 000,50 zł (z umowy), raty przeliczone",
+		)
+		self.assertEqual(
+			tekst_sladu("wplata_z_umowy", stara=None, nowa="1234567.891"),
+			"wpłata własna 0,00 zł → 1 234 567,89 zł (z umowy), raty przeliczone",
+		)
 
 	def test_e_autenti_wyslano_kredyt(self: "TestTekstSladu") -> None:
 		self.assertEqual(

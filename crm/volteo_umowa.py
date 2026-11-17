@@ -170,6 +170,25 @@ def kwota_kredytu(brutto: Any, wklad_wlasny: Any, finansowanie: Any) -> Decimal:
 	return roznica.quantize(_KWOTA_KWANT, rounding=ROUND_HALF_UP)
 
 
+def docelowa_wplata(finansowanie: Any, wklad_wlasny_pln: Any) -> Decimal | None:
+	"""Wplata wlasna, jaka szansa ma przejac z umowy OZE (ops#369), albo `None` = nie zmieniaj.
+
+	- `"Kredyt + gotówka"`: `wklad_wlasny_pln` (grosze, nigdy ujemna); pole puste albo
+	  niesparsowalne (formularz jeszcze niewypelniony) daje `None`, bo brak wpisu nie
+	  jest decyzja handlowca o wplacie 0.
+	- `"Kredyt 100%"`: `0` (caly brutto idzie na kredyt, zgodnie z `kwota_kredytu`).
+	- `"Gotówka 100%"`, puste i nierozpoznane finansowanie: `None`.
+	"""
+	if finansowanie == "Kredyt 100%":
+		return _ZERO.quantize(_KWOTA_KWANT)
+	if finansowanie == "Kredyt + gotówka":
+		wklad = _sparsuj_decimal(wklad_wlasny_pln)
+		if wklad is None:
+			return None
+		return max(wklad, _ZERO).quantize(_KWOTA_KWANT, rounding=ROUND_HALF_UP)
+	return None
+
+
 _WYMAGANE_BEZ_WARUNKOW: tuple[str, ...] = (
 	"adres_zam_jak_montaz",
 	"typ_budynku",

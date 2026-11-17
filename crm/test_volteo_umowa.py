@@ -12,6 +12,7 @@ from crm.volteo_umowa import (
 	czy_propagowac_zgody,
 	czy_rodzaj_bez_wzoru_umowy,
 	czy_umowa_podwojna,
+	docelowa_wplata,
 	kod_szablonu,
 	kontakty_do_zgod,
 	kwota_kredytu,
@@ -222,6 +223,28 @@ class TestKwotaKredytu(unittest.TestCase):
 		wynik = kwota_kredytu(Decimal("100.005"), Decimal("0"), "Kredyt + gotówka")
 		self.assertEqual(wynik, Decimal("100.01"))
 		self.assertEqual(wynik.as_tuple().exponent, -2)
+
+
+class TestDocelowaWplata(unittest.TestCase):
+	"""ops#369: jaka wplata z umowy przechodzi na szanse."""
+
+	def test_kredyt_plus_gotowka_bierze_wklad(self: "TestDocelowaWplata") -> None:
+		self.assertEqual(docelowa_wplata("Kredyt + gotówka", "10000"), Decimal("10000.00"))
+		self.assertEqual(docelowa_wplata("Kredyt + gotówka", Decimal("4049.335")), Decimal("4049.34"))
+		self.assertEqual(docelowa_wplata("Kredyt + gotówka", 0), Decimal("0.00"))
+
+	def test_kredyt_100_daje_zero_niezaleznie_od_wkladu(self: "TestDocelowaWplata") -> None:
+		self.assertEqual(docelowa_wplata("Kredyt 100%", "6000"), Decimal("0.00"))
+		self.assertEqual(docelowa_wplata("Kredyt 100%", None), Decimal("0.00"))
+
+	def test_gotowka_100_puste_i_nierozpoznane_bez_zmiany(self: "TestDocelowaWplata") -> None:
+		for fin in ("Gotówka 100%", "", None, "inne"):
+			self.assertIsNone(docelowa_wplata(fin, "10000"))
+
+	def test_pusty_lub_zly_wklad_bez_zmiany_ujemny_do_zera(self: "TestDocelowaWplata") -> None:
+		for w in (None, "", " ", "abc"):
+			self.assertIsNone(docelowa_wplata("Kredyt + gotówka", w))
+		self.assertEqual(docelowa_wplata("Kredyt + gotówka", "-5"), Decimal("0.00"))
 
 
 class TestKwotaKredytuFinansowanieBramka(unittest.TestCase):

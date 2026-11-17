@@ -489,9 +489,19 @@ import UmowaIcon from '@/components/Icons/UmowaIcon.vue'
 import TelefonLink from '@/components/TelefonLink.vue'
 import ContactModal from '@/components/Modals/ContactModal.vue'
 import NotatkiStrumien from '@/components/deal/NotatkiStrumien.vue'
-import { Badge, Button, FormControl, Switch, call, createResource, toast } from 'frappe-ui'
+import {
+  Badge,
+  Button,
+  FormControl,
+  Switch,
+  call,
+  createResource,
+  getCachedDocumentResource,
+  toast,
+} from 'frappe-ui'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { formatPlnAmount } from '@/utils/money'
+import { kwotaKredytuPodglad } from '@/utils/kwotaKredytu'
 import { ppozWymagane } from '@/utils/pvForm'
 import { useAutenti } from '@/composables/useAutenti'
 import { canSend } from '@/utils/autentiStatus'
@@ -838,11 +848,9 @@ function hydrateForm(u) {
 const showKwotaKredytu = computed(
   () => form.finansowanie === 'Kredyt 100%' || form.finansowanie === 'Kredyt + gotówka',
 )
-const kwotaKredytu = computed(() => {
-  const dealValue = Number(prefill.value?.deal_value) || 0
-  const wklad = Number(form.wklad_wlasny_pln) || 0
-  return Math.max(0, dealValue - wklad)
-})
+const kwotaKredytu = computed(() =>
+  kwotaKredytuPodglad(prefill.value?.deal_value, form.wklad_wlasny_pln, form.finansowanie),
+)
 const kwotaKredytuDisplay = computed(() => formatPlnAmount(kwotaKredytu.value))
 
 // ops#194: ta sama reguła co na serwerze (`crm/volteo_umowa.py::ppoz_wymagane`),
@@ -948,6 +956,9 @@ async function saveForm(opts = {}) {
     brakujaceDrugiego.value = extractBrakujaceDrugiego(data)
     hydrateForm(umowa.value)
     saveState.value = 'saved'
+    // ops#369: serwer przepisuje wpłatę własną z umowy na szansę i przelicza raty,
+    // więc odśwież dokument szansy (panel boczny); Zestaw ładuje dane przy wejściu w zakładkę.
+    getCachedDocumentResource('CRM Deal', props.dealId)?.reload()
     if (opts.successMessage) {
       toast.success(opts.successMessage)
     } else if (brakujace.value.length) {

@@ -463,6 +463,37 @@ def _rata(kwota_raty: Decimal, wplata: Decimal, i: Decimal, factor: Decimal, mon
 	return principal * i * factor / (factor - 1)
 
 
+def przelicz_raty(
+	brutto: Any,
+	cena_po_dotacji: Any,
+	cena_po_uldze: Any,
+	okres_lat: Any,
+	wplata: Any,
+	typ_klienta: Any,
+	stale: dict | None,
+) -> tuple[Decimal, Decimal, Decimal]:
+	"""Trzy prognozowane raty (od brutto, ceny po dotacji, ceny po uldze), w groszach.
+
+	JEDEN wzor dla `przelicz_cene` ("Edytuj zestaw") i synchronizacji wplaty z umowy
+	(ops#369). Rata liczona od `cena - wplata` (annuita miesieczna z
+	`stale["pmt_oprocentowanie_mies"]`, procent miesieczny); okres 0 lat albo klient
+	inny niz osoba fizyczna daja trzy zera.
+	"""
+	if not _typ_indywidualny(typ_klienta):
+		return _ZERO, _ZERO, _ZERO
+	months = int(kwota(okres_lat)) * 12
+	wpl = _grosze(kwota(wplata))
+	i = kwota((stale or {}).get("pmt_oprocentowanie_mies")) / 100
+	with localcontext() as ctx:
+		ctx.prec = 60
+		factor = (1 + i) ** months if months > 0 else Decimal(1)
+		return (
+			_grosze(_rata(_grosze(kwota(brutto)), wpl, i, factor, months)),
+			_grosze(_rata(_grosze(kwota(cena_po_dotacji)), wpl, i, factor, months)),
+			_grosze(_rata(_grosze(kwota(cena_po_uldze)), wpl, i, factor, months)),
+		)
+
+
 def przelicz_cene(wejscie: dict, stale: dict) -> dict:
 	"""Lancuch pochodnych ceny w `Decimal` (2 miejsca), wzor z `ops/crm-kalkulator-bom.py`.
 
@@ -485,8 +516,6 @@ def przelicz_cene(wejscie: dict, stale: dict) -> dict:
 	indywidualny = _typ_indywidualny(wejscie.get("typ_klienta"))
 	okres_lat = int(kwota(wejscie.get("okres_lat")))
 	wplata = _grosze(kwota(wejscie.get("wplata_wlasna")))
-	months = okres_lat * 12
-
 	if indywidualny:
 		dotacja = _grosze(kwota(wejscie.get("dotacja")))
 		ulga_pct = kwota(wejscie.get("ulga_pct"))
@@ -494,13 +523,9 @@ def przelicz_cene(wejscie: dict, stale: dict) -> dict:
 		cena_po_dotacji = brutto - dotacja
 		ulga_kwota = _grosze((cena_po_dotacji - dodatki) * ulga_pct / 100)
 		cena_po_uldze = cena_po_dotacji - ulga_kwota
-		i = kwota((stale or {}).get("pmt_oprocentowanie_mies")) / 100
-		with localcontext() as ctx:
-			ctx.prec = 60
-			factor = (1 + i) ** months if months > 0 else Decimal(1)
-			rata_brutto = _grosze(_rata(brutto, wplata, i, factor, months))
-			rata_po_dotacji = _grosze(_rata(cena_po_dotacji, wplata, i, factor, months))
-			rata_po_uldze = _grosze(_rata(cena_po_uldze, wplata, i, factor, months))
+		rata_brutto, rata_po_dotacji, rata_po_uldze = przelicz_raty(
+			brutto, cena_po_dotacji, cena_po_uldze, okres_lat, wplata, wejscie.get("typ_klienta"), stale
+		)
 	else:
 		dotacja = ulga_kwota = rata_brutto = rata_po_dotacji = rata_po_uldze = _ZERO
 		ulga_pct = _ZERO

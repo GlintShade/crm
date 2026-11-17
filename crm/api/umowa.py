@@ -19,7 +19,7 @@ czterech endpointów rozgałęzia się na `_czy_cp(deal_doc)` DOPIERO PO
 """
 
 import json
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, NoReturn
 
 import frappe
@@ -33,6 +33,7 @@ from crm.integrations.autenti import logika as autenti_logika
 from crm.permissions.file_nazwy_systemowe import plik_systemowy
 from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad
 from crm.volteo_naming import code_for
+from crm.volteo_pipeline import OZE_RODZAJE
 from crm.volteo_umowa import (
 	KLIMATYZACJA,
 	KOCIOL,
@@ -44,6 +45,7 @@ from crm.volteo_umowa import (
 	czy_propagowac_zgody,
 	czy_rodzaj_bez_wzoru_umowy,
 	czy_umowa_podwojna,
+	docelowa_wplata,
 	kod_szablonu,
 	kontakty_do_zgod,
 	kwota_kredytu,
@@ -66,6 +68,7 @@ from crm.volteo_umowa_render import (
 	zloz_umowe,
 )
 from crm.volteo_umowa_render_cp import sciezka_szablonu_cp, zloz_umowe_cp
+from crm.volteo_zestaw import przelicz_raty
 
 DOCTYPE = "Volteo Umowa"
 
@@ -1068,6 +1071,7 @@ def volteo_umowa_save(deal: str, dane: dict[str, Any]) -> dict[str, Any]:
 		_blad_ogolny()
 
 	_propaguj_zgody(deal_doc, umowa_doc)
+	_synchronizuj_wplate_z_umowy(deal_doc, umowa_doc)
 
 	return {
 		"umowa": _umowa_do_dict(umowa_doc),
@@ -1076,6 +1080,62 @@ def volteo_umowa_save(deal: str, dane: dict[str, Any]) -> dict[str, Any]:
 		"wyliczenia": _wyliczenia(deal_doc, umowa_doc),
 		"wzor": _opis_wzoru(deal_doc, umowa_doc),
 	}
+
+
+def _synchronizuj_wplate_z_umowy(
+	deal_doc: "frappe.model.document.Document", umowa_doc: "frappe.model.document.Document"
+) -> None:
+	"""ops#369 (wariant C): po zapisie umowy OZE szansa przejmuje z niej wpłatę własną,
+	a trzy prognozowane raty są przeliczane tym samym wzorem co "Edytuj zestaw"
+	(`crm.volteo_zestaw.przelicz_raty`). Umowa jest źródłem prawdy dla wpłaty.
+
+	Zmienia na szansie DOKŁADNIE cztery pola (`custom_wplata_wlasna`, `custom_rata_brutto`,
+	`custom_rata_po_dotacji`, `custom_rata_po_uldze`), tylko gdy docelowa wpłata różni się
+	od zapisanej (porównanie w groszach). Czyste Powietrze i rodzaje spoza procesu OZE
+	są pomijane. Zapis idzie przez `doc.save()` z `ignore_permissions` (powstaje `Version`,
+	strażnik cen w `CRMDeal.validate` jest tu tylko ominięty, nie odmawia).
+
+	Błąd synchronizacji NIE przerywa zapisu umowy (ta jest już zapisana): zapis na szansie
+	jest objęty savepointem, który przy błędzie jest wycofywany (żadna połowiczna zmiana
+	nie trafi do bazy razem z umową), a błąd trafia do `frappe.log_error`.
+	"""
+	savepoint_utworzony = False
+	try:
+		if _czy_cp(deal_doc) or deal_doc.get("custom_rodzaj_umowy") not in OZE_RODZAJE:
+			return
+		docelowa = docelowa_wplata(umowa_doc.get("finansowanie"), umowa_doc.get("wklad_wlasny_pln"))
+		if docelowa is None:
+			return
+		deal = frappe.get_doc("CRM Deal", deal_doc.name)
+		stara = _decimal_z_pola(deal.get("custom_wplata_wlasna"))
+		if stara == docelowa:
+			return
+		ustawienia = frappe.db.get_singles_dict("Volteo Kalkulator Stale") or {}
+		raty = przelicz_raty(
+			deal.get("deal_value"),
+			deal.get("custom_cena_po_dotacji"),
+			deal.get("custom_cena_po_uldze"),
+			deal.get("custom_okres_lat"),
+			docelowa,
+			deal.get("custom_typ_klienta"),
+			{"pmt_oprocentowanie_mies": ustawienia.get("pmt_oprocentowanie_mies")},
+		)
+		frappe.db.savepoint("volteo_wplata_z_umowy")
+		savepoint_utworzony = True
+		deal.custom_wplata_wlasna = docelowa
+		deal.custom_rata_brutto, deal.custom_rata_po_dotacji, deal.custom_rata_po_uldze = raty
+		deal.flags.ignore_permissions = True
+		deal.save()
+		zapisz_slad(deal.name, tekst_sladu("wplata_z_umowy", stara=stara, nowa=docelowa))
+	except Exception:
+		if savepoint_utworzony:
+			frappe.db.rollback(save_point="volteo_wplata_z_umowy")
+		frappe.log_error(title="volteo_umowa_save: nie udało się przepisać wpłaty własnej na szansę")
+
+
+def _decimal_z_pola(wartosc: Any) -> Decimal:
+	"""Wartość pola kwotowego szansy jako `Decimal` w groszach (puste/None = 0)."""
+	return Decimal(str(wartosc or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 def _zapisz_dane_cp(
