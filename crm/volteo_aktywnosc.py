@@ -372,9 +372,7 @@ def tekst_sladu(rodzaj: str, **dane: object) -> str:
 		)
 
 	if rodzaj == "wplata_z_umowy":
-		return (
-			f"wpłata własna {_zl(dane['stara'])} → {_zl(dane['nowa'])} (z umowy), raty przeliczone"
-		)
+		return f"{PREFIKS_SLADU_WPLATY} z {_zl(dane['stara'])} na {_zl(dane['nowa'])}"
 
 	raise ValueError(f"Nieznany rodzaj śladu: {rodzaj!r}")
 
@@ -547,6 +545,48 @@ def _parsuj_creation(creation: object) -> datetime.datetime:
 		except (TypeError, ValueError):
 			continue
 	raise ValueError(f"Nieobsługiwany format creation: {creation!r}")
+
+
+PREFIKS_SLADU_WPLATY = "zmieniono wpłatę własną względem oferty"
+"""Stały początek śladu przepisania wpłaty z umowy na szansę (ops#369); po nim rozpoznaje
+go `pola_umowy_do_pokazania`. Ślad jest widoczny dla każdego, kto widzi szansę."""
+
+POLA_UMOWY_WPLATY: frozenset[str] = frozenset({"wklad_wlasny_pln", "kwota_kredytu_pln"})
+"""Pola `Volteo Umowa`, które przy przepisaniu wpłaty tłumaczy już jedna linia śladu."""
+
+OKNO_SLADU_WPLATY_S = 10
+"""Maksymalna różnica czasu (s) między `Version` umowy a śladem przepisania wpłaty."""
+
+
+def pola_umowy_do_pokazania(
+	zmienione: Iterable[str],
+	czas_wersji: object,
+	autor_wersji: str | None,
+	slady_wplaty: Iterable[tuple[object, str | None]],
+	okno_s: int = OKNO_SLADU_WPLATY_S,
+) -> list[str]:
+	"""Które zmienione pola wiersza `Version` umowy pokazać w Aktywności (ops#369).
+
+	Gdy ten sam zapis umowy przepisał wpłatę na szansę, feed ma mieć JEDNĄ linię
+	(ślad `PREFIKS_SLADU_WPLATY`), więc pola `POLA_UMOWY_WPLATY` znikają z linii umowy.
+	Dopasowanie: ślad tego samego autora i w odległości do `okno_s` sekund od wersji
+	(`slady_wplaty` to pary `(creation, owner)`). Bez pasującego śladu (umowa wysłana
+	lub podpisana, "Gotówka 100%", zwykły zapis) zwraca wszystkie pola bez zmian.
+	"""
+	pola = list(zmienione)
+	if not any(p in POLA_UMOWY_WPLATY for p in pola):
+		return pola
+	try:
+		t_wersji = _parsuj_creation(czas_wersji)
+		pasuje = any(
+			autor == autor_wersji and abs((_parsuj_creation(t) - t_wersji).total_seconds()) <= okno_s
+			for t, autor in slady_wplaty
+		)
+	except ValueError:
+		return pola
+	if not pasuje:
+		return pola
+	return [p for p in pola if p not in POLA_UMOWY_WPLATY]
 
 
 def grupuj(wpisy: list[dict], okno_s: int = OKNO_GRUPOWANIA_S) -> list[dict]:

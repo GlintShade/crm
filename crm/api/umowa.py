@@ -46,6 +46,7 @@ from crm.volteo_umowa import (
 	czy_rodzaj_bez_wzoru_umowy,
 	czy_synchronizowac_wplate,
 	czy_umowa_podwojna,
+	czy_zapis_jako_przypisany,
 	docelowa_wplata,
 	kod_szablonu,
 	kontakty_do_zgod,
@@ -1066,6 +1067,12 @@ def volteo_umowa_save(deal: str, dane: dict[str, Any]) -> dict[str, Any]:
 	else:
 		_zapisz_dane_oze(deal_doc, umowa_doc, dane)
 
+	# ops#370: DocPerm `Volteo Umowa` dla handlowca ma `if_owner=1`, więc aktualny
+	# `deal_owner` nie mógłby zapisać umowy założonej przez inne konto. Bramki wyżej
+	# (rola + prawo zapisu do szansy) już przeszły, a przypisanie do szansy jest
+	# autoryzacją wystarczającą; nikt inny nie dostaje tu żadnego obejścia.
+	if czy_zapis_jako_przypisany(frappe.session.user, deal_doc.get("deal_owner")):
+		umowa_doc.flags.ignore_permissions = True
 	try:
 		umowa_doc.save()
 	except Exception:
@@ -1098,8 +1105,13 @@ def _synchronizuj_wplate_z_umowy(
 	od zapisanej (porównanie w groszach). Czyste Powietrze, rodzaje spoza procesu OZE
 	oraz umowy w statusie z `SEND_BLOCKED_STATUSES` (`czy_synchronizowac_wplate`) są pomijane.
 	Zwraca "zmieniona" (szansa zapisana), "bez_zmian" (nic do zrobienia, także pominięcia)
-	albo "blad" (wyjątek, wycofane do savepointu i zalogowane). Zapis idzie przez `doc.save()` z `ignore_permissions` (powstaje `Version`,
-	strażnik cen w `CRMDeal.validate` jest tu tylko ominięty, nie odmawia).
+	albo "blad" (wyjątek, wycofane do savepointu i zalogowane).
+
+	Cztery pola idą bezpośrednim `db_set` (bez `save()`, więc bez `Version` na szansie i bez
+	strażnika cen z `CRMDeal.validate`): bumpuje `modified`/`modified_by` i powiadamia
+	otwarty dokument (`notify=True`). Jedyny ślad w Aktywności to jedna linia
+	`tekst_sladu("wplata_z_umowy")`; wiersz `Version` samej umowy nie wypisuje wtedy pól
+	wpłaty (patrz `crm.volteo_aktywnosc.pola_umowy_do_pokazania`).
 
 	Błąd synchronizacji NIE przerywa zapisu umowy (ta jest już zapisana): zapis na szansie
 	jest objęty savepointem, który przy błędzie jest wycofywany (żadna połowiczna zmiana
@@ -1130,10 +1142,15 @@ def _synchronizuj_wplate_z_umowy(
 		)
 		frappe.db.savepoint("volteo_wplata_z_umowy")
 		savepoint_utworzony = True
-		deal.custom_wplata_wlasna = docelowa
-		deal.custom_rata_brutto, deal.custom_rata_po_dotacji, deal.custom_rata_po_uldze = raty
-		deal.flags.ignore_permissions = True
-		deal.save()
+		deal.db_set(
+			{
+				"custom_wplata_wlasna": docelowa,
+				"custom_rata_brutto": raty[0],
+				"custom_rata_po_dotacji": raty[1],
+				"custom_rata_po_uldze": raty[2],
+			},
+			notify=True,
+		)
 		zapisz_slad(deal.name, tekst_sladu("wplata_z_umowy", stara=stara, nowa=docelowa))
 		return "zmieniona"
 	except Exception:

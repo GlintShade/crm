@@ -350,6 +350,15 @@ def _jest_puste(wartosc: Any, pole: str) -> bool:
 	return False
 
 
+def czy_zapis_jako_przypisany(uzytkownik: str | None, deal_owner: str | None) -> bool:
+	"""Czy wywołujący jest aktualnie przypisanym do szansy handlowcem (ops#370).
+
+	Prawda tylko, gdy oba loginy są niepuste i równe; dla niej `volteo_umowa_save`
+	pomija `if_owner` z DocPerm `Volteo Umowa` (autoryzacja na poziomie API).
+	"""
+	return bool(uzytkownik) and bool(deal_owner) and uzytkownik == deal_owner
+
+
 def czy_synchronizowac_wplate(autenti_status: str | None) -> bool:
 	"""Czy zapis formularza umowy może przepisać wpłatę własną i raty na szansę (ops#369).
 
