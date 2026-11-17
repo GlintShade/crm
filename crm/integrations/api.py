@@ -123,10 +123,7 @@ def add_task_to_call_log(call_sid: str, task: dict):
 	return _task
 
 
-@frappe.whitelist()
-def get_contact_lead_or_deal_from_number(number: str):
-	"""Get contact, lead or deal from the given number."""
-	contact = get_contact_by_phone_number(number)
+def _rekord_z_kontaktu(contact):
 	if contact.get("name"):
 		doctype = "Contact"
 		docname = contact.get("name")
@@ -140,15 +137,43 @@ def get_contact_lead_or_deal_from_number(number: str):
 	return None, None
 
 
-@frappe.whitelist()
-def get_contact_by_phone_number(phone_number: str):
-	"""Get contact by phone number."""
+def _kontakt_po_numerze(phone_number, tylko_widoczne):
 	number = parse_phone_number(phone_number)
 
 	if number.get("is_valid"):
-		return get_contact(number.get("national_number"), number.get("country"))
+		return get_contact(
+			number.get("national_number"), number.get("country"), tylko_widoczne=tylko_widoczne
+		)
 	else:
-		return get_contact(phone_number, number.get("country"), exact_match=True)
+		return get_contact(
+			phone_number, number.get("country"), exact_match=True, tylko_widoczne=tylko_widoczne
+		)
+
+
+def kontakt_po_numerze(phone_number: str):
+	"""Wewnetrzne (bez whitelisty, bez ograniczen): kontakt po numerze, dla webhookow i hookow."""
+	return _kontakt_po_numerze(phone_number, False)
+
+
+def rekord_po_numerze(number: str):
+	"""Wewnetrzne (bez whitelisty, bez ograniczen): (nazwa, doctype) rekordu po numerze."""
+	return _rekord_z_kontaktu(kontakt_po_numerze(number))
+
+
+@frappe.whitelist()
+def get_contact_lead_or_deal_from_number(number: str):
+	"""Get contact, lead or deal from the given number.
+
+	ops#36: zwraca tylko rekordy czytelne dla wywolujacego."""
+	return _rekord_z_kontaktu(_kontakt_po_numerze(number, True))
+
+
+@frappe.whitelist()
+def get_contact_by_phone_number(phone_number: str):
+	"""Get contact by phone number.
+
+	ops#36: zwraca tylko rekordy czytelne dla wywolujacego."""
+	return _kontakt_po_numerze(phone_number, True)
 
 
 @frappe.whitelist()
@@ -174,7 +199,13 @@ def get_recording_url(call_log_name: str):
 	return response
 
 
-def get_contact(phone_number: str, country: str = "IN", exact_match: bool = False):
+def _czytelny(doctype: str, name: str, tylko_widoczne: bool) -> bool:
+	return not tylko_widoczne or bool(frappe.has_permission(doctype, "read", name))
+
+
+def get_contact(
+	phone_number: str, country: str = "IN", exact_match: bool = False, tylko_widoczne: bool = False
+):
 	if not phone_number:
 		return {"mobile_no": phone_number}
 
@@ -216,6 +247,8 @@ def get_contact(phone_number: str, country: str = "IN", exact_match: bool = Fals
 	if len(contacts):
 		# Check if the contact is associated with a deal
 		for contact in contacts:
+			if not _czytelny("Contact", contact.name, tylko_widoczne):
+				continue
 			if frappe.db.exists("CRM Contacts", {"contact": contact.name, "is_primary": 1}):
 				deal = frappe.db.get_value(
 					"CRM Contacts", {"contact": contact.name, "is_primary": 1}, "parent"
@@ -223,7 +256,8 @@ def get_contact(phone_number: str, country: str = "IN", exact_match: bool = Fals
 				if are_same_phone_number(
 					contact.matched_phone, phone_number, country, validate=not exact_match
 				):
-					contact["deal"] = deal
+					if _czytelny("CRM Deal", deal, tylko_widoczne):
+						contact["deal"] = deal
 					return contact
 
 	# Else, Check if the number is associated with a lead
@@ -243,14 +277,18 @@ def get_contact(phone_number: str, country: str = "IN", exact_match: bool = Fals
 
 	if len(leads):
 		for lead in leads:
+			if not _czytelny("CRM Lead", lead.name, tylko_widoczne):
+				continue
 			if are_same_phone_number(lead.mobile_no, phone_number, country, validate=not exact_match):
 				lead["lead"] = lead.name
 				lead["full_name"] = lead.lead_name
 				return lead
 
-	if len(contacts) and are_same_phone_number(
-		contacts[0].matched_phone, phone_number, country, validate=not exact_match
-	):
-		return contacts[0]
+	for contact in contacts:
+		if not _czytelny("Contact", contact.name, tylko_widoczne):
+			continue
+		if are_same_phone_number(contact.matched_phone, phone_number, country, validate=not exact_match):
+			return contact
+		break
 
 	return {"mobile_no": phone_number}
