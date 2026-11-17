@@ -406,6 +406,11 @@ override_whitelisted_methods = {
 	"frappe.desk.reportview.get_count": "crm.api.volteo_filtry_guard.reportview_get_count",
 	"frappe.desk.reportview.export_query": "crm.api.volteo_filtry_guard.export_query",
 	"frappe.desk.search.search_link": "crm.api.volteo_filtry_guard.search_link",
+	# ops#180: odpowiedz zapisu bez pol permlevel
+	"frappe.client.set_value": "crm.api.volteo_zapis_guard.set_value",
+	"frappe.client.insert": "crm.api.volteo_zapis_guard.insert",
+	"frappe.client.save": "crm.api.volteo_zapis_guard.save",
+	"frappe.client.submit": "crm.api.volteo_zapis_guard.submit",
 }
 #
 # each overriding function accepts a `data` argument;
@@ -429,7 +434,10 @@ ignore_links_on_delete = ["Failed Lead Sync Log"]
 # First-login NDA gate: blocks /api/* for users created after the deploy-time
 # cutoff who haven't signed the confidentiality declaration yet (fail-open on
 # any error -- see crm.api.oswiadczenie._wymaga_oswiadczenia).
-before_request = ["crm.api.oswiadczenie.before_request"]
+before_request = [
+	"crm.api.oswiadczenie.before_request",
+	"crm.api.volteo_zapis_guard.before_request",  # ops#180
+]
 # after_request = ["crm.utils.after_request"]
 
 # Job Events
