@@ -203,12 +203,32 @@ def add_comment(reference_doctype: str, reference_name: str, content: str, attac
 	return comment
 
 
+def _sprawdz_zalaczniki(attachments: Iterable[str | dict]) -> None:
+	"""VOLTEO (ops#43): zalacznik podany jako nazwa pliku musi byc czytelny dla wywolujacego.
+
+	Ten sam komunikat dla "nie istnieje", "folder" i "brak dostepu", zeby odpowiedz
+	nie byla wyrocznia istnienia plikow."""
+	for a in attachments:
+		if not isinstance(a, str):
+			continue
+		if not a or not frappe.db.exists("File", a):
+			frappe.throw(_("Nieprawidłowy załącznik."), frappe.PermissionError)
+		plik = frappe.get_doc("File", a)
+		if plik.is_folder or not plik.has_permission("read"):
+			frappe.throw(_("Nieprawidłowy załącznik."), frappe.PermissionError)
+
+
 def add_attachments(name: str, attachments: Iterable[str | dict]) -> None:
 	"""Add attachments to the given Comment
 
 	:param name: Comment name
 	:param attachments: File names or dicts with keys "fname" and "fcontent"
 	"""
+	# VOLTEO (ops#43): zrodlo kazdego zalacznika-nazwy sprawdzamy PRZED petla,
+	# czyli przed pierwszym zapisem. Petla nizej kopiuje `file_url` z `ignore_permissions`,
+	# a nowy wiersz File ma wlasciciela = wywolujacy, wiec bez sprawdzenia
+	# wywolujacy pobralby cudzy prywatny plik.
+	_sprawdz_zalaczniki(attachments)
 	# loop through attachments
 	for a in attachments:
 		if isinstance(a, str):
