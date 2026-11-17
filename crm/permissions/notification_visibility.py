@@ -5,13 +5,19 @@
 Widocznosc dzwoneczka `CRM Notification` tylko dla adresata (ops#375).
 
 Wczesniej DocPerm roli `Sales User` pozwalal kazdemu handlowcowi czytac przez
-`frappe.client.get_list` cudze powiadomienia razem z trescia. Ten modul zawęza
+`frappe.client.get_list` cudze powiadomienia razem z trescia. Ten modul zaweza
 liste (permission_query_conditions) i pojedyncze dokumenty (has_permission) do
 wierszy, w ktorych `to_user` to biezacy uzytkownik.
 
 Wyjatki: tylko `Administrator` i rola `System Manager`. Backoffice
 (`Volteo Backend`) celowo NIE jest wyjatkiem. Logika decyzji siedzi w
 `crm.volteo_powiadomienia_widocznosc` (bez frappe, z testami).
+
+Hak ogranicza tylko ODCZYT (read, select, report, export, print, email, share).
+Zapis i usuwanie zostaja pod DocPerm: usuniecie szansy, leada albo zadania
+odlacza cudze powiadomienia przez `frappe.has_permission(..., "write", name)`
+w `crm.api.doc.remove_linked_doc_reference`, wiec odmowa zapisu zepsulaby
+kasowanie.
 
 Hak `has_permission` zwraca wylacznie `False` albo `None`, nigdy `True`:
 pierwszy wynik jest ostateczny, wiec `True` nadawaloby uprawnienia ponad DocPerm.

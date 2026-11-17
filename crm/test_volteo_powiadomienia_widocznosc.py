@@ -1,6 +1,7 @@
 import unittest
 
 from crm.volteo_powiadomienia_widocznosc import (
+	PTYPY_ODCZYTU,
 	czy_adresat,
 	czy_widzi_wszystkie,
 	decyzja_dokumentu,
@@ -41,11 +42,18 @@ class TestDecyzjaDokumentu(unittest.TestCase):
 		self.assertIsNone(decyzja_dokumentu(A, ["Sales User"], "read", "N1", A))
 
 	def test_nie_adresat_odmowa(self: "TestDecyzjaDokumentu") -> None:
-		for ptype in ("read", "write", "delete", "share", "export"):
+		for ptype in sorted(PTYPY_ODCZYTU):
 			self.assertIs(decyzja_dokumentu(A, ["Sales User"], ptype, "N1", B), False)
 
-	def test_create_bez_opinii(self: "TestDecyzjaDokumentu") -> None:
-		self.assertIsNone(decyzja_dokumentu(A, ["Sales User"], "create", "N1", B))
+	def test_ptypy_odczytu_dla_adresata_i_wyjatkow(self: "TestDecyzjaDokumentu") -> None:
+		for ptype in sorted(PTYPY_ODCZYTU):
+			self.assertIsNone(decyzja_dokumentu(A, ["Sales User"], ptype, "N1", A))
+			self.assertIsNone(decyzja_dokumentu(A, ["System Manager"], ptype, "N1", B))
+			self.assertIsNone(decyzja_dokumentu("Administrator", [], ptype, "N1", B))
+
+	def test_zapis_i_usuwanie_bez_opinii(self: "TestDecyzjaDokumentu") -> None:
+		for ptype in ("write", "delete", "create", "submit"):
+			self.assertIsNone(decyzja_dokumentu(A, ["Sales User"], ptype, "N1", B))
 
 	def test_niezapisany_dokument_bez_opinii(self: "TestDecyzjaDokumentu") -> None:
 		self.assertIsNone(decyzja_dokumentu(A, ["Sales User"], "read", None, B))
@@ -55,7 +63,7 @@ class TestDecyzjaDokumentu(unittest.TestCase):
 		self.assertIsNone(decyzja_dokumentu(A, ["System Manager"], "read", "N1", B))
 
 	def test_administrator_bez_opinii(self: "TestDecyzjaDokumentu") -> None:
-		self.assertIsNone(decyzja_dokumentu("Administrator", [], "delete", "N1", B))
+		self.assertIsNone(decyzja_dokumentu("Administrator", [], "read", "N1", B))
 
 	def test_backoffice_odmowa(self: "TestDecyzjaDokumentu") -> None:
 		self.assertIs(decyzja_dokumentu(A, ["Volteo Backend"], "read", "N1", B), False)
@@ -66,7 +74,7 @@ class TestDecyzjaDokumentu(unittest.TestCase):
 	def test_nigdy_true(self: "TestDecyzjaDokumentu") -> None:
 		for user in (A, "Administrator"):
 			for role in ([], ["Sales User"], ["System Manager"], ["Volteo Backend"]):
-				for ptype in ("read", "write", "create", "delete"):
+				for ptype in ("read", "write", "create", "delete", "share"):
 					for nazwa in (None, "N1"):
 						for to_user in (None, A, B):
 							self.assertIsNot(decyzja_dokumentu(user, role, ptype, nazwa, to_user), True)

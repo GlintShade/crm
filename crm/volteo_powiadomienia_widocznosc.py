@@ -1,15 +1,18 @@
 """Widocznosc dzwoneczka `CRM Notification` (ops#375), czysta logika bez frappe.
 
 Powiadomienie jest wylacznie dla adresata (`to_user`). Wszyscy poza
-administratorem systemu widza i zmieniaja tylko swoje wiersze. Adapter z
+administratorem systemu widza tylko swoje wiersze. Adapter z
 `import frappe` jest w `crm/permissions/notification_visibility.py`.
 """
 
 ROLE_WSZYSTKIE_POWIADOMIENIA = frozenset({"System Manager"})
 """Role, ktore widza powiadomienia wszystkich. Celowo bez `Volteo Backend`."""
 
-PTYPY_BEZ_OGRANICZEN = frozenset({"create"})
-"""Tworzenie zostaje bez opinii: powiadomienie powstaje dla kogos innego."""
+PTYPY_ODCZYTU = frozenset({"read", "select", "report", "export", "print", "email", "share"})
+"""Tylko te rodzaje dostepu sa odmawiane nie-adresatowi. Zapis i usuwanie
+zostaja pod DocPerm jak dotad: usuniecie szansy, leada albo zadania odlacza
+cudze powiadomienia przez `frappe.has_permission(doctype, "write", name)` w
+`crm.api.doc.remove_linked_doc_reference`, a potem `frappe.delete_doc`."""
 
 
 def czy_widzi_wszystkie(user: str, role) -> bool:
@@ -32,7 +35,7 @@ def decyzja_dokumentu(user: str, role, ptype: str, nazwa: str | None, to_user: s
 	"""
 	if czy_widzi_wszystkie(user, role):
 		return None
-	if ptype in PTYPY_BEZ_OGRANICZEN:
+	if ptype not in PTYPY_ODCZYTU:
 		return None
 	if not nazwa:
 		return None
