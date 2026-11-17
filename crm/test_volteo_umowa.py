@@ -11,6 +11,7 @@ from crm.volteo_umowa import (
 	cechy_umowy,
 	czy_propagowac_zgody,
 	czy_rodzaj_bez_wzoru_umowy,
+	czy_synchronizowac_wplate,
 	czy_umowa_podwojna,
 	docelowa_wplata,
 	kod_szablonu,
@@ -223,6 +224,16 @@ class TestKwotaKredytu(unittest.TestCase):
 		wynik = kwota_kredytu(Decimal("100.005"), Decimal("0"), "Kredyt + gotówka")
 		self.assertEqual(wynik, Decimal("100.01"))
 		self.assertEqual(wynik.as_tuple().exponent, -2)
+
+
+class TestCzySynchronizowacWplate(unittest.TestCase):
+	def test_prawda_dla_pustego_i_nieudanych(self: "TestCzySynchronizowacWplate") -> None:
+		for st in (None, "", "Błąd", "Odrzucona", "Wygasła", "Wycofana"):
+			self.assertTrue(czy_synchronizowac_wplate(st), st)
+
+	def test_falsz_dla_zablokowanych(self: "TestCzySynchronizowacWplate") -> None:
+		for st in ("Wysyłanie", "Wysłana", "Podpisana"):
+			self.assertFalse(czy_synchronizowac_wplate(st), st)
 
 
 class TestDocelowaWplata(unittest.TestCase):
