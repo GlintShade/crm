@@ -1095,9 +1095,11 @@ def _synchronizuj_wplate_z_umowy(
 	są pomijane. Zapis idzie przez `doc.save()` z `ignore_permissions` (powstaje `Version`,
 	strażnik cen w `CRMDeal.validate` jest tu tylko ominięty, nie odmawia).
 
-	Błąd synchronizacji NIE przerywa zapisu umowy (ta jest już zapisana): trafia do
-	`frappe.log_error`, a szansa zostaje bez zmian.
+	Błąd synchronizacji NIE przerywa zapisu umowy (ta jest już zapisana): zapis na szansie
+	jest objęty savepointem, który przy błędzie jest wycofywany (żadna połowiczna zmiana
+	nie trafi do bazy razem z umową), a błąd trafia do `frappe.log_error`.
 	"""
+	savepoint_utworzony = False
 	try:
 		if _czy_cp(deal_doc) or deal_doc.get("custom_rodzaj_umowy") not in OZE_RODZAJE:
 			return
@@ -1118,12 +1120,16 @@ def _synchronizuj_wplate_z_umowy(
 			deal.get("custom_typ_klienta"),
 			{"pmt_oprocentowanie_mies": ustawienia.get("pmt_oprocentowanie_mies")},
 		)
+		frappe.db.savepoint("volteo_wplata_z_umowy")
+		savepoint_utworzony = True
 		deal.custom_wplata_wlasna = docelowa
 		deal.custom_rata_brutto, deal.custom_rata_po_dotacji, deal.custom_rata_po_uldze = raty
 		deal.flags.ignore_permissions = True
 		deal.save()
 		zapisz_slad(deal.name, tekst_sladu("wplata_z_umowy", stara=stara, nowa=docelowa))
 	except Exception:
+		if savepoint_utworzony:
+			frappe.db.rollback(save_point="volteo_wplata_z_umowy")
 		frappe.log_error(title="volteo_umowa_save: nie udało się przepisać wpłaty własnej na szansę")
 
 
