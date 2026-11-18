@@ -308,6 +308,7 @@
 
 <script setup>
 import { reactive, ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { dodajPodzialke } from '@/utils/mapaPodzialka'
 import { createResource, toast, Button, Dialog, ErrorMessage, FormControl, Switch } from 'frappe-ui'
 import {
   kolorReguly,
@@ -576,6 +577,7 @@ async function inicjujMape() {
     attribution:
       '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(mapa)
+  dodajPodzialke(L, mapa)
   warstwa = L.featureGroup().addTo(mapa)
   rysujMape()
 }

@@ -251,6 +251,7 @@ import {
 } from 'frappe-ui'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { dodajPodzialke } from '@/utils/mapaPodzialka'
 
 const props = defineProps({
   // Zasób ViewControls (crm.api.doc.get_data) - patrz docstring pliku. Ten
@@ -738,6 +739,7 @@ async function initMap() {
     attribution:
       '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(mapInstance)
+  dodajPodzialke(L, mapInstance)
 
   markerLayer = utworzWarstweMarkerow().addTo(mapInstance)
 

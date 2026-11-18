@@ -135,3 +135,13 @@
   border: 2px solid transparent;
   background-clip: content-box;
 }
+
+/* Podzialka liniowa map Leaflet (ops#382). Celowo POZA @layer: leaflet.css jest
+   nielayerowany i ladowany pozniej, wiec reguly w warstwie zawsze by przegraly.
+   Dwie klasy w selektorze bija pojedyncza klase Leaflet. Kolory z tokenow motywu
+   (pelne wartosci oklch, wiec var() bez rgb()). */
+.leaflet-control-scale .leaflet-control-scale-line {
+  background-color: color-mix(in oklch, var(--surface-elevation-1) 85%, transparent);
+  color: var(--ink-gray-9);
+  border-color: var(--ink-gray-6);
+}
