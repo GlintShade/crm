@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  MAKS_ETAPOW_BEZ_ZWARCIA,
   czyZwarty,
   czasOd,
   tekstEtapu,
@@ -74,26 +75,49 @@ describe('etykietaStatusu', () => {
 })
 
 describe('nastepnyKrok', () => {
-  it('OZE: etykieta i zakładka z jednego wpisu', () => {
+  const STEPS_OZE = [
+    'Lead',
+    'Umowa Wygenerowana',
+    'Umowa Podpisana',
+    'Finansowanie',
+    'Weryfikacja Backoffice',
+    'Montaż',
+    'Obsługa pomontażowa',
+    'Wygrana - zakończona',
+  ].map((status, index) => ({ status, index }))
+
+  it('OZE: etapy 1 i 2 mają etykietę i zakładkę z jednego wpisu (bez steps)', () => {
     expect(nastepnyKrok('OZE', 'Lead')).toEqual({ etykieta: 'Wygeneruj umowę', zakladka: 'Umowa' })
     expect(nastepnyKrok('OZE', 'Umowa Wygenerowana')).toEqual({
       etykieta: 'Wyślij do podpisu',
       zakladka: 'Umowa',
     })
-    expect(nastepnyKrok('OZE', 'Umowa Podpisana').zakladka).toBe('Kredyt')
-    expect(nastepnyKrok('OZE', 'Finansowanie')).toEqual({
-      etykieta: 'Prześlij audyt',
-      zakladka: 'Audyt',
+    expect(nastepnyKrok('OZE', 'Lead', null, STEPS_OZE).zakladka).toBe('Umowa')
+  })
+  it('OZE: od etapu 3 wpis powstaje z następnego kroku w steps', () => {
+    const oczekiwane = {
+      'Umowa Podpisana': 'Finansowanie',
+      Finansowanie: 'Weryfikacja Backoffice',
+      'Weryfikacja Backoffice': 'Montaż',
+      Montaż: 'Obsługa pomontażowa',
+      'Obsługa pomontażowa': 'Wygrana - zakończona',
+    }
+    Object.entries(oczekiwane).forEach(([status, nast]) => {
+      expect(nastepnyKrok('OZE', status, null, STEPS_OZE)).toEqual({
+        etykieta: `Następny etap: ${nast}`,
+        etap: nast,
+      })
     })
   })
-  it('OZE: weryfikacja to tekst bez przycisku', () => {
-    const k = nastepnyKrok('OZE', 'Weryfikacja Backoffice')
-    expect(k.tekst).toBe('Czeka na weryfikację backoffice')
-    expect(k.zakladka).toBeUndefined()
+  it('OZE: bez steps etapy od 3 dają null, ostatni etap też', () => {
+    ;['Umowa Podpisana', 'Finansowanie', 'Weryfikacja Backoffice', 'Montaż', 'Obsługa pomontażowa'].forEach(
+      (status) => expect(nastepnyKrok('OZE', status)).toBeNull(),
+    )
+    expect(nastepnyKrok('OZE', 'Wygrana - zakończona', null, STEPS_OZE)).toBeNull()
   })
-  it('OZE: status terminalny i nieznany dają null', () => {
-    expect(nastepnyKrok('OZE', 'Przegrana')).toBeNull()
-    expect(nastepnyKrok('OZE', 'toString')).toBeNull()
+  it('OZE: status poza procesem i nieznany dają null', () => {
+    expect(nastepnyKrok('OZE', 'Przegrana', null, STEPS_OZE)).toBeNull()
+    expect(nastepnyKrok('OZE', 'toString', null, STEPS_OZE)).toBeNull()
   })
   it('CP: tylko notatka serwera', () => {
     const notes = { Dokumentacja: 'Umowa na obsługę dotacji, GOPS, pełnomocnictwo' }
@@ -119,7 +143,7 @@ describe('procesDlaRodzaju', () => {
 describe('menu etapu', () => {
   it('podpowiedzi automatycznych etapów', () => {
     expect(podpowiedzEtapu('OZE', 'Umowa Podpisana')).toBe('zwykle sam, po podpisie w Autenti')
-    expect(podpowiedzEtapu('OZE', 'Weryfikacja Backoffice')).toBe('sam, po przesłaniu audytu')
+    expect(podpowiedzEtapu('OZE', 'Weryfikacja Backoffice')).toBeNull()
     expect(podpowiedzEtapu('OZE', 'Lead')).toBeNull()
     expect(podpowiedzEtapu('CP', 'Lead')).toBeNull()
   })
@@ -152,6 +176,17 @@ describe('pasek etapów', () => {
     expect(czyZwarty(5, 800)).toBe(false)
     expect(czyZwarty(5, 400)).toBe(true)
     expect(czyZwarty(5, 0)).toBe(false)
+  })
+  it('8 etapów OZE zachowuje się jak dotąd 5, 12 etapów CP bez zmian', () => {
+    expect(MAKS_ETAPOW_BEZ_ZWARCIA).toBe(8)
+    expect(czyZwarty(8, 1200)).toBe(false)
+    expect(czyZwarty(8, 600)).toBe(true)
+    expect(czyZwarty(9, 2000)).toBe(true)
+    expect(czyZwarty(12, 2000)).toBe(true)
+    expect(czyZwarty(8, 1200, 90, 6)).toBe(true)
+  })
+  it('numer etapu OZE', () => {
+    expect(tekstNumeruEtapu(2, 8)).toBe('Etap 3 z 8')
   })
   it('teksty stanu', () => {
     expect(czasOd('dziś')).toBe('od dziś')
@@ -187,6 +222,8 @@ describe('wariant paska', () => {
 describe('rzędy paska', () => {
   it('jeden rząd tylko gdy nieaktywny segment ma dość miejsca', () => {
     expect(liczbaRzedowPaska(5, 100)).toBe(1)
+    expect(liczbaRzedowPaska(8, 100)).toBe(1)
+    expect(liczbaRzedowPaska(8, 1000)).toBe(1)
     expect(liczbaRzedowPaska(12, 1400)).toBe(1)
     expect(liczbaRzedowPaska(12, 790)).toBe(2)
     expect(liczbaRzedowPaska(12, 0)).toBe(1)

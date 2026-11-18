@@ -26,7 +26,11 @@
 // Zasada projektu zabrania literalnego znaku takiego myslnika w plikach
 // autorstwa tej sesji, wiec dopasowanie idzie przez escape, nie przez
 // wklejony znak.
-const NAZWY_TERMINALNE = new Set(['Wygrana \u2013 monta\u017c', 'Przegrana'])
+// Jedyny status terminalny poza procesem to "Przegrana"; wygrana jest ostatnim
+// etapem procesu ("Wygrana - zakończona"). Stara nazwa wygranej zostaje w
+// zbiorze wyłącznie jako zabezpieczenie przejściowe: do usunięcia po migracji b92
+// (inaczej stara baza pokazałaby 9 segmentów).
+const NAZWY_TERMINALNE = new Set(['Przegrana', 'Wygrana \u2013 monta\u017c'])
 
 /**
  * Odcina z KONCA tablicy nazwy statusow terminalnych, zostawiajac sama
@@ -62,9 +66,9 @@ export function liczbaSegmentow(grupy, rodzaj) {
  * Liczba wypelnionych segmentow (licznik) dla statusu biezacej szansy.
  *
  * Status W procesie -> jego pozycja (1-based, `indexOf + 1`). Status POZA
- * procesem typu Won -> pelny pasek (np. OZE "Wygrana [en dash] montaż"; dla CP
- * "Projekt rozliczony" jest natomiast W PROCESIE - ostatni krok, wiec
- * trafia w pierwsza galaz, nie w te). Typu Lost albo nieznany -> pusty
+ * procesem typu Won -> pelny pasek (obcy status typu Won; OZE "Wygrana -
+ * zakonczona" i CP "Projekt rozliczony" sa natomiast W PROCESIE - ostatni
+ * krok, wiec trafiaja w pierwsza galaz, nie w te). Typu Lost albo nieznany -> pusty
  * pasek (0). Rodzaj bez procesu (pusty/nieznany, "XX") -> 0 (wolajacy i
  * tak nie renderuje paska wtedy, patrz `liczbaSegmentow` zwracajace 0 dla
  * tego samego wejscia).

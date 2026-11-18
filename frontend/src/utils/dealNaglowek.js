@@ -90,9 +90,15 @@ export function etykietaStatusu(nazwa) {
 }
 
 /**
+ * Największa liczba etapów, przy której pasek nie przechodzi od razu w formę
+ * zwartą (OZE ma 8 etapów, CP 12).
+ */
+export const MAKS_ETAPOW_BEZ_ZWARCIA = 8
+
+/**
  * Czy pasek etapów ma przejść w formę zwartą (etykiety tylko przy bieżącym i
  * następnym etapie, resztę mówi linia tekstu pod paskiem): za dużo etapów
- * (Czyste Powietrze, 12) albo na jeden etap przypada za mało szerokości.
+ * (Czyste Powietrze, 12; powyżej `maxEtapow`, domyślnie 8) albo na jeden etap przypada za mało szerokości.
  *
  * @param {number} liczba - liczba etapów procesu
  * @param {number} szerokosc - szerokość kontenera paska w px (0 = jeszcze nieznana)
@@ -100,7 +106,7 @@ export function etykietaStatusu(nazwa) {
  * @param {number} [maxEtapow]
  * @returns {boolean}
  */
-export function czyZwarty(liczba, szerokosc, minNaEtap = 90, maxEtapow = 6) {
+export function czyZwarty(liczba, szerokosc, minNaEtap = 90, maxEtapow = MAKS_ETAPOW_BEZ_ZWARCIA) {
   if (liczba > maxEtapow) return true
   if (!szerokosc || liczba <= 0) return false
   return szerokosc / liczba < minNaEtap
@@ -188,7 +194,7 @@ export function tekstNumeruEtapu(biezacy, liczba) {
  * Ile rzędów segmentów ma mieć pasek etapów w formie zwartej: jeden, gdy
  * nieaktywny segment ma co najmniej `minSegment` px (przy aktywnym
  * `mnoznik` razy szerszym), inaczej dwa (pierwsza i druga połowa etapów).
- * Procesy do 6 etapów zawsze w jednym rzędzie.
+ * Procesy do `MAKS_ETAPOW_BEZ_ZWARCIA` (8) etapów zawsze w jednym rzędzie.
  *
  * @param {number} liczba - liczba etapów
  * @param {number} szerokosc - szerokość obszaru segmentów w px (0 = nieznana)
@@ -197,7 +203,7 @@ export function tekstNumeruEtapu(biezacy, liczba) {
  */
 export function liczbaRzedowPaska(liczba, szerokosc, opcje = {}) {
   const { odstep = 6, mnoznik = 1.5, minSegment = 80 } = opcje
-  if (liczba <= 6 || !szerokosc) return 1
+  if (liczba <= MAKS_ETAPOW_BEZ_ZWARCIA || !szerokosc) return 1
   const nieaktywny = (szerokosc - (liczba - 1) * odstep) / (liczba - 1 + mnoznik)
   return nieaktywny >= minSegment ? 1 : 2
 }

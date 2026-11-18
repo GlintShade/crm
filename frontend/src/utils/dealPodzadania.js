@@ -240,3 +240,122 @@ export function applyOptimistic(mapa, klucz, wpis) {
   }
   return next
 }
+
+// ---------------------------------------------------------------------------
+// OZE (ops#381): pozycje zależne od formy finansowania, licznik etapu,
+// etykiety stanów. Lustro `PODZADANIA_OZE` / `czy_pozycja_dla_formy` z
+// `crm/volteo_pipeline.py`.
+// ---------------------------------------------------------------------------
+
+/** Dozwolone wartości `CRM Deal.custom_finansowanie_forma` (puste = nie wybrano). */
+export const FORMY_FINANSOWANIA = ['100% Gotówka', '100% Kredyt', 'Gotówka + Kredyt']
+
+/**
+ * Etykiety stanów dla OZE: te same klucze i motywy co {@link STAN_META}.
+ * Etykiety CP zostają w `STAN_META` bez zmian.
+ */
+export const STAN_META_OZE = {
+  brak: { ...STAN_META.brak, label: 'Brak statusu' },
+  waiting: { ...STAN_META.waiting, label: 'Oczekuje' },
+  accepted: { ...STAN_META.accepted, label: 'Zaakceptowano' },
+  error: { ...STAN_META.error, label: 'Błąd' },
+  nd: { ...STAN_META.nd, label: 'Nie dotyczy' },
+}
+
+/**
+ * Wpis metadanych stanu dla procesu: `STAN_META_OZE` dla 'OZE', inaczej
+ * `STAN_META`. Nieznany stan daje wpis `brak`.
+ *
+ * @param {'OZE'|'CP'|null|undefined} proces
+ * @param {string|null|undefined} stan
+ * @returns {{theme: string, label: string, muted?: boolean}}
+ */
+export function metaStanu(proces, stan) {
+  const tabela = proces === 'OZE' ? STAN_META_OZE : STAN_META
+  return Object.hasOwn(tabela, stan ?? '') ? tabela[stan] : tabela.brak
+}
+
+/**
+ * Czy pozycja jest widoczna dla formy finansowania. Brak pola `formy` (albo
+ * nie-tablica) = zawsze widoczna; pusta forma ukrywa pozycje z `formy`.
+ * Lustro `czy_pozycja_dla_formy`.
+ *
+ * @param {{formy?: string[]}|null|undefined} def
+ * @param {string|null|undefined} forma
+ * @returns {boolean}
+ */
+export function czyPozycjaDlaFormy(def, forma) {
+  const formy = def?.formy
+  if (!Array.isArray(formy)) return true
+  return !!forma && formy.includes(forma)
+}
+
+/**
+ * Pozycje widoczne dla formy finansowania (nowa tablica, wejście bez zmian).
+ *
+ * @param {object[]|null|undefined} zadania
+ * @param {string|null|undefined} forma
+ * @returns {object[]}
+ */
+export function pozycjeDlaFormy(zadania, forma) {
+  if (!Array.isArray(zadania)) return []
+  return zadania.filter((def) => czyPozycjaDlaFormy(def, forma))
+}
+
+/**
+ * Licznik etapu OZE z pozycji JUŻ przefiltrowanych przez {@link pozycjeDlaFormy}:
+ * `razem` = pozycje, których stan nie jest `nd`; `ok` = `accepted`; `err` = `error`.
+ *
+ * @param {object[]|null|undefined} zadania
+ * @param {Object<string, object>|null|undefined} mapa
+ * @returns {{ok: number, err: number, razem: number}}
+ */
+export function podsumowanieEtapu(zadania, mapa) {
+  const lista = Array.isArray(zadania) ? zadania : []
+  return lista.reduce(
+    (acc, def) => {
+      const stan = stanFor(mapa, def?.klucz)
+      if (stan === 'nd') return acc
+      return {
+        ok: acc.ok + (stan === 'accepted' ? 1 : 0),
+        err: acc.err + (stan === 'error' ? 1 : 0),
+        razem: acc.razem + 1,
+      }
+    },
+    { ok: 0, err: 0, razem: 0 },
+  )
+}
+
+/**
+ * Tekst licznika: "3/7 zaakceptowane", plus " \u00b7 błędy: 1" przy `err > 0`.
+ * Pusty string dla null/undefined.
+ *
+ * @param {{ok: number, err: number, razem: number}|null|undefined} podsumowanie
+ * @returns {string}
+ */
+export function tekstLicznika(podsumowanie) {
+  if (!podsumowanie) return ''
+  const { ok, err, razem } = podsumowanie
+  const baza = `${ok}/${razem} zaakceptowane`
+  return err > 0 ? `${baza} \u00b7 błędy: ${err}` : baza
+}
+
+/**
+ * Nowa mapa stanów bez wpisów pozycji Finansowania, które nie należą do
+ * wybranej formy (optymistyczna aktualizacja po zmianie formy). Pozycje bez
+ * `formy` i klucze spoza katalogu zostają. Wejście bez zmian.
+ *
+ * @param {Object<string, object>|null|undefined} mapa
+ * @param {object[]|null|undefined} zadaniaFinansowania
+ * @param {string|null|undefined} forma
+ * @returns {Object<string, object>}
+ */
+export function wyczyscPoZmianieFormy(mapa, zadaniaFinansowania, forma) {
+  const wynik = { ...(mapa || {}) }
+  ;(Array.isArray(zadaniaFinansowania) ? zadaniaFinansowania : []).forEach((def) => {
+    if (Array.isArray(def?.formy) && !czyPozycjaDlaFormy(def, forma)) {
+      delete wynik[def.klucz]
+    }
+  })
+  return wynik
+}
