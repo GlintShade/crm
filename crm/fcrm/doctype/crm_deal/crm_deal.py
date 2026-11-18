@@ -13,7 +13,7 @@ from crm.fcrm.doctype.utils import add_or_remove_lost_reason_section_in_sidepane
 from crm.permissions.org_hierarchy import BYPASS_ROLES
 from crm.permissions.poprzedni_wlasciciel import odbierz_dostep_poprzedniemu_wlascicielowi
 from crm.volteo_lista_szans import FILTER_FIELDS_DEAL, SORT_FIELDS_DEAL
-from crm.volteo_pipeline import etap_nr, grupa_for, pipeline_for
+from crm.volteo_pipeline import etap_nr, grupa_for, parsuj_podzadania, pipeline_for
 from crm.volteo_zestaw import POLA_CENY, POLE_ZESTAWU, czy_moze_edytowac_zestaw, zmienione_pola_chronione
 
 
@@ -103,6 +103,7 @@ class CRMDeal(Document):
 
 	def validate(self):
 		self.guard_zestaw_i_ceny()
+		self.guard_podzadania()
 		self.validate_status()
 		self.set_etap_nr()
 		self.nalicz_rozliczenia_jesli_spelnione()
@@ -156,6 +157,31 @@ class CRMDeal(Document):
 		)
 		if zmienione:
 			frappe.throw(_("Zestaw i cenę szansy może zmieniać tylko administrator."), frappe.PermissionError)
+
+	def guard_podzadania(self):
+		"""Forma finansowania i statusy pozycji podprocesu zmienia tylko backoffice (ops#384).
+
+		Wzor jak `guard_zestaw_i_ceny`: nowa szansa, `flags.ignore_permissions`, Administrator
+		i konta z rola z `BYPASS_ROLES` omijaja straznik. Zapisy API ida przez `db.set_value`,
+		wiec go nie dotykaja. Pola, ktorych nie ma jeszcze w meta, sa pomijane.
+		"""
+		if self.is_new() or self.flags.ignore_permissions:
+			return
+		if frappe.session.user == "Administrator" or set(frappe.get_roles()) & BYPASS_ROLES:
+			return
+		przed = self.get_doc_before_save()
+		if przed is None:
+			return
+		meta = frappe.get_meta("CRM Deal")
+		zmieniono = False
+		if meta.has_field("custom_finansowanie_forma"):
+			zmieniono = _forma_zmieniona(przed.get("custom_finansowanie_forma"), self.get("custom_finansowanie_forma"))
+		if not zmieniono and meta.has_field("custom_podzadania_json"):
+			zmieniono = parsuj_podzadania(przed.get("custom_podzadania_json")) != parsuj_podzadania(
+				self.get("custom_podzadania_json")
+			)
+		if zmieniono:
+			frappe.throw(_("Statusy pozycji podprocesu może zmieniać tylko backoffice."), frappe.PermissionError)
 
 	def validate_status(self):
 		if self.is_new() and not self.status:
@@ -691,3 +717,8 @@ def create_deal(doc: dict):
 	deal.assign_agent(owner)
 
 	return deal.name
+
+
+def _forma_zmieniona(przed: str | None, po: str | None) -> bool:
+	"""Czy forma finansowania sie zmienila (pusty string i None sa rowne)."""
+	return (przed or "") != (po or "")
