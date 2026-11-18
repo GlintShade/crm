@@ -35,8 +35,10 @@ from frappe import _
 from crm.permissions.org_hierarchy import BYPASS_ROLES
 from crm.volteo_aktywnosc import tekst_sladu, zapisz_slad
 from crm.volteo_pipeline import (
+	FORMY_FINANSOWANIA,
 	NOTATKI,
 	OZE_RODZAJE,
+	czy_pozycja_dla_formy,
 	dozwolone_stany,
 	grupa_for,
 	is_forward,
@@ -47,6 +49,7 @@ from crm.volteo_pipeline import (
 	podzadania_for,
 	podzadanie_def,
 	step_index,
+	wyczysc_po_zmianie_formy,
 )
 from crm.volteo_zadania import dane_zadania, filtr_duplikatu, tytul_zadania
 
@@ -120,10 +123,23 @@ def volteo_pipeline_get(deal: str) -> dict[str, Any]:
 	}
 
 
+def _pole_formy_istnieje() -> bool:
+	"""Czy `CRM Deal.custom_finansowanie_forma` istnieje w meta (przed skryptem ops: nie)."""
+	return bool(frappe.get_meta("CRM Deal").has_field("custom_finansowanie_forma"))
+
+
+def _forma_szansy(deal: str) -> str | None:
+	"""Forma finansowania szansy albo `None` (puste pole lub pole jeszcze nie istnieje)."""
+	if not _pole_formy_istnieje():
+		return None
+	return frappe.db.get_value("CRM Deal", deal, "custom_finansowanie_forma") or None
+
+
 @frappe.whitelist()
 def volteo_podzadania_get(deal: str) -> dict[str, Any]:
 	"""Zwraca bieżący STAN podzadań tej szansy (`crm.volteo_pipeline.parsuj_podzadania`
-	na `custom_podzadania_json`), plus czy wywołujący ma prawo go zmieniać.
+	na `custom_podzadania_json`), formę finansowania (`forma`, `None` gdy brak albo gdy
+	pole jeszcze nie istnieje) oraz to, czy wywołujący ma prawo go zmieniać.
 
 	Wymaga tylko `read` do szansy (jak `volteo_pipeline_get`) — samo podglądanie stanu
 	podzadań (waiting/accepted/error/nd) nie jest tajemnicą kosztową/prowizyjną, więc
@@ -139,6 +155,7 @@ def volteo_podzadania_get(deal: str) -> dict[str, Any]:
 	return {
 		"stan": parsuj_podzadania(raw),
 		"editable": bool(set(frappe.get_roles()) & BYPASS_ROLES),
+		"forma": _forma_szansy(deal),
 	}
 
 
@@ -150,7 +167,7 @@ def volteo_podzadania_set(
 	data: str | None = None,
 	note: str | None = None,
 ) -> dict[str, Any]:
-	"""Ustawia (albo cofa, dla `stan="brak"`) stan jednego podzadania CP w mapie
+	"""Ustawia (albo cofa, dla `stan="brak"`) stan jednej pozycji podprocesu (OZE albo CP) w mapie
 	`custom_podzadania_json` tej szansy — read-modify-write jak `volteo_audyt_set_verdict`
 	w `ops/crm-audyt.py`, ale jako zwykłe API forka (importy dozwolone, to nie Server Script).
 
@@ -187,6 +204,9 @@ def volteo_podzadania_set(
 	if definicja is None:
 		frappe.throw(_("Nieznane zadanie: {0}").format(zadanie))
 
+	if definicja.get("formy") and not czy_pozycja_dla_formy(definicja, _forma_szansy(deal)):
+		frappe.throw(_("Ta pozycja nie należy do wybranej formy finansowania."))
+
 	stany_ok = dozwolone_stany(definicja) | {"brak"}
 	if stan not in stany_ok:
 		frappe.throw(_("Nieprawidłowy stan podzadania: {0}").format(stan))
@@ -208,10 +228,11 @@ def volteo_podzadania_set(
 	raw = frappe.db.get_value("CRM Deal", deal, "custom_podzadania_json")
 	mapa_biezaca = parsuj_podzadania(raw)
 	mapa = dict(mapa_biezaca)
+	rodzaj_sladu = "pozycja_etapu" if pipeline_key_for(rodzaj) == "OZE" else "podzadanie"
 
 	if stan == "brak":
 		mapa.pop(zadanie, None)
-		tekst_komentarza = tekst_sladu("podzadanie", label=definicja["label"], stan=None, cofnieto=True)
+		tekst_komentarza = tekst_sladu(rodzaj_sladu, label=definicja["label"], stan=None, cofnieto=True)
 	else:
 		wpis = {"stan": stan, "by": frappe.session.user, "at": frappe.utils.now()}
 		if data:
@@ -220,12 +241,57 @@ def volteo_podzadania_set(
 			wpis["note"] = note
 		mapa[zadanie] = wpis
 
-		tekst_komentarza = tekst_sladu("podzadanie", label=definicja["label"], stan=stan, note=note)
+		tekst_komentarza = tekst_sladu(rodzaj_sladu, label=definicja["label"], stan=stan, note=note)
 
 	frappe.db.set_value("CRM Deal", deal, "custom_podzadania_json", json.dumps(mapa), update_modified=False)
 	zapisz_slad(deal, tekst_komentarza)
 
 	return {"ok": True, "zadanie": zadanie, "stan": stan, "stan_mapa": mapa}
+
+
+@frappe.whitelist()
+def volteo_finansowanie_forma_set(deal: str, forma: str) -> dict[str, Any]:
+	"""Ustawia formę finansowania szansy OZE (`custom_finansowanie_forma`) i usuwa z mapy
+	`custom_podzadania_json` wpisy pozycji Finansowania, które nie należą do nowej formy
+	(`wyczysc_po_zmianie_formy`). Pusty `forma` czyści wybór.
+
+	Kolejność sprawdzeń jak w `volteo_podzadania_set`: rola `BYPASS_ROLES` → istnienie
+	szansy + prawo `write` → pole istnieje w meta → rodzaj OZE → `forma` pusta albo jedna
+	z `FORMY_FINANSOWANIA`. Gdy forma się nie zmieniła, nic nie zapisuje i nie dodaje śladu.
+	Oba pola idą jednym `db.set_value(..., update_modified=False)`.
+
+	Front woła po PEŁNEJ ścieżce `crm.api.pipeline.volteo_finansowanie_forma_set`.
+	"""
+	if not (set(frappe.get_roles()) & BYPASS_ROLES):
+		frappe.throw(_("Brak uprawnień do zmiany formy finansowania."), frappe.PermissionError)
+
+	_sprawdz_dostep_do_szansy(deal, "write")
+
+	if not _pole_formy_istnieje():
+		frappe.throw(_("Pole formy finansowania nie jest jeszcze dostępne. Uruchom skrypt ops."))
+
+	rodzaj = frappe.db.get_value("CRM Deal", deal, "custom_rodzaj_umowy")
+	if rodzaj not in OZE_RODZAJE:
+		frappe.throw(_("Forma finansowania dotyczy tylko szans OZE."))
+
+	forma = (forma or "").strip()
+	if forma and forma not in FORMY_FINANSOWANIA:
+		frappe.throw(_("Nieprawidłowa forma finansowania: {0}").format(forma))
+
+	mapa_biezaca = parsuj_podzadania(frappe.db.get_value("CRM Deal", deal, "custom_podzadania_json"))
+	if (_forma_szansy(deal) or "") == forma:
+		return {"ok": True, "forma": forma or None, "stan_mapa": mapa_biezaca}
+
+	nowa_mapa = wyczysc_po_zmianie_formy(mapa_biezaca, forma or None)
+	frappe.db.set_value(
+		"CRM Deal",
+		deal,
+		{"custom_finansowanie_forma": forma or None, "custom_podzadania_json": json.dumps(nowa_mapa)},
+		update_modified=False,
+	)
+	zapisz_slad(deal, tekst_sladu("finansowanie_forma", forma=forma or None))
+
+	return {"ok": True, "forma": forma or None, "stan_mapa": nowa_mapa}
 
 
 @frappe.whitelist()

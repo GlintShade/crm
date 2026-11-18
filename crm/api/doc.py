@@ -38,6 +38,7 @@ from crm.volteo_lista_szans import (
 	tokeny_bezpieczne,
 	wzory_tagu,
 )
+from crm.volteo_pipeline import parsuj_podzadania, podsumowanie_szansy
 from crm.volteo_usuwanie import AUTENTI_STATUSY_BLOKADY, OFERTA_STATUSY_BLOKADY
 from crm.volteo_zadania_lista import (
 	DOCTYPE_ZADANIA,
@@ -102,7 +103,9 @@ _POLA_ZAWSZE_DOZWOLONE = POLA_ZAWSZE_DOZWOLONE | frozenset(_CHILD_TABLE_FIELDS)
 # klucz kolumny "Klient" z default_list_data() na CRM Task (ops#357). Reszta
 # pseudo-pol (name, _assign, _liked_by, _comments...) jest juz w
 # _POLA_ZAWSZE_DOZWOLONE powyzej.
-_POLA_LISTY_ZAWSZE_DOZWOLONE = _POLA_ZAWSZE_DOZWOLONE | frozenset({"_comment_count", KLUCZ_KLIENTA})
+# ops#384: licznik pozycji podprocesu OZE doklejany do wierszy listy szans.
+KLUCZ_PODZADAN = "_podzadania"
+_POLA_LISTY_ZAWSZE_DOZWOLONE = _POLA_ZAWSZE_DOZWOLONE | frozenset({"_comment_count", KLUCZ_KLIENTA, KLUCZ_PODZADAN})
 
 
 def _pola_dozwolone(doctype: str, parenttype: str | None = None) -> set[str]:
@@ -1303,6 +1306,48 @@ def _dolacz_pola_decyzyjne_lead(doctype: str, rows: list) -> None:
 	rows.extend(_odfiltruj_niedozwolone_klucze(doctype, dodatkowe))
 
 
+def _dolacz_podzadania_szans(doctype: str, data: list) -> None:
+	"""ops#384: dolacza do wierszy listy `CRM Deal` klucz `_podzadania` ({ok, err, razem} albo None).
+
+	Jedno `get_all` po nazwach wierszy strony (nazwy pochodza z zapytania, ktore juz przeszlo
+	uprawnienia, wiec to nie rozszerza widocznosci). Surowy JSON nie trafia do wiersza. Gdy
+	ktores z pol custom nie istnieje w meta, kazdy wiersz dostaje None; blad jednego wiersza
+	nie psuje listy.
+	"""
+	if doctype != "CRM Deal":
+		return
+	meta = frappe.get_meta(doctype)
+	zrodlo: dict = {}
+	nazwy = [d.get("name") for d in data if d.get("name")]
+	if nazwy and meta.has_field("custom_podzadania_json") and meta.has_field("custom_finansowanie_forma"):
+		for wiersz in frappe.get_all(
+			doctype,
+			filters={"name": ["in", nazwy]},
+			fields=[
+				"name",
+				"status",
+				"custom_rodzaj_umowy",
+				"custom_podzadania_json",
+				"custom_finansowanie_forma",
+			],
+		):
+			zrodlo[wiersz.name] = wiersz
+	for d in data:
+		wiersz = zrodlo.get(d.get("name"))
+		podsumowanie = None
+		if wiersz is not None:
+			try:
+				podsumowanie = podsumowanie_szansy(
+					wiersz.get("custom_rodzaj_umowy"),
+					wiersz.get("status"),
+					parsuj_podzadania(wiersz.get("custom_podzadania_json")),
+					wiersz.get("custom_finansowanie_forma") or None,
+				)
+			except Exception:
+				podsumowanie = None
+		d[KLUCZ_PODZADAN] = podsumowanie
+
+
 @frappe.whitelist()
 def get_data(
 	doctype: str,
@@ -1483,6 +1528,7 @@ def get_data(
 			or []
 		)
 		data = parse_list_data(data, doctype)
+		_dolacz_podzadania_szans(doctype, data)
 
 		if chce_licznik_komentarzy:
 			nazwy = [d.get("name") for d in data if d.get("name")]
