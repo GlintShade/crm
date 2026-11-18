@@ -135,6 +135,8 @@
                 class="self-center"
                 :otwarty="etapOtwarty === el.status"
                 :licznik="licznik(el.status)"
+                :ostrzezenie="licznikOstrzezenie(el.status)"
+                :testid="proces === 'OZE' ? 'naglowek-licznik' : 'etap-podzadania'"
                 @toggle="przelaczEtap(el.status)"
               />
             </li>
@@ -201,7 +203,7 @@
           >
            <div
             class="flex min-w-0 flex-col"
-            :class="liczbaEtapow > 6 ? 'w-full gap-2.5' : 'w-[90%] gap-1.5'"
+            :class="liczbaEtapow > MAKS_ETAPOW_BEZ_ZWARCIA ? 'w-full gap-2.5' : 'w-[90%] gap-1.5'"
             data-testid="pasek-grupa"
            >
             <!-- Każda etykieta stoi bezpośrednio pod własnym paskiem (ta sama
@@ -245,6 +247,8 @@
                   v-if="maPodzadania(el.status)"
                   :otwarty="etapOtwarty === el.status"
                   :licznik="licznik(el.status)"
+                  :ostrzezenie="licznikOstrzezenie(el.status)"
+                  :testid="proces === 'OZE' ? 'naglowek-licznik' : 'etap-podzadania'"
                   @toggle="przelaczEtap(el.status)"
                 />
               </div>
@@ -253,7 +257,7 @@
           </div>
         </div>
         <div
-          v-if="wariant === 'pasek' && biezacy >= 0 && liczbaEtapow > 6"
+          v-if="wariant === 'pasek' && biezacy >= 0 && liczbaEtapow > MAKS_ETAPOW_BEZ_ZWARCIA"
           class="mt-2.5 mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"
           data-testid="naglowek-etap-tekst"
         >
@@ -290,6 +294,15 @@
           :label="przyciskNastepnego.etykieta"
           data-testid="naglowek-nastepny"
           @click="przejdzDoZakladki(przyciskNastepnego.indeks)"
+        />
+        <Button
+          v-else-if="przyciskEtapu"
+          variant="solid"
+          theme="blue"
+          class="!text-white hover:!bg-blue-600 active:!bg-blue-700"
+          :label="przyciskEtapu.etykieta"
+          data-testid="naglowek-nastepny-etap"
+          @click="przejdzDoNastepnegoEtapu"
         />
         <span
           v-else-if="nastepny?.tekst && !(wariant === 'pasek' && zwarty)"
@@ -350,10 +363,12 @@ import {
   rodzajZmianyEtapu,
   terminalneStatusy,
 } from '@/utils/dealPipeline'
+import { tekstLicznika } from '@/utils/dealPodzadania'
 import {
   czasOd,
   czasWEtapie,
   czyZwarty,
+  MAKS_ETAPOW_BEZ_ZWARCIA,
   liczbaRzedowPaska,
   normalizujWariant,
   podzielNaRzedy,
@@ -525,13 +540,23 @@ function maPodzadania(nazwa) {
 }
 function licznik(nazwa) {
   const l = liczniki.value?.[nazwa]
-  return l ? `${l.zrobione}/${l.wszystkie}` : ''
+  if (!l) return ''
+  if (proces.value === 'OZE') {
+    // Finansowanie bez wybranej formy: pozycji jeszcze nie ma, chip to podpowiedź.
+    if (l.brakFormy) return __('wybierz formę finansowania')
+    return tekstLicznika({ ok: l.ok ?? 0, err: l.err ?? 0, razem: l.razem ?? 0 })
+  }
+  return `${l.zrobione}/${l.wszystkie}`
+}
+// Kolor ostrzegawczy chipa OZE, gdy etap ma pozycje w błędzie.
+function licznikOstrzezenie(nazwa) {
+  return proces.value === 'OZE' && (liczniki.value?.[nazwa]?.err ?? 0) > 0
 }
 
 // --- Następny krok -----------------------------------------------------------
 const nastepny = computed(() => {
   if (tryb.value !== 'progress') return null
-  return nastepnyKrok(proces.value, status.value, payload.value?.notes)
+  return nastepnyKrok(proces.value, status.value, payload.value?.notes, payload.value?.steps)
 })
 
 // Nazwa logiczna zakładki -> realna zakładka tej szansy (Umowa/UmowaCP itd.).
@@ -546,6 +571,19 @@ const przyciskNastepnego = computed(() => {
   const indeks = indeksZakladki(n.zakladka)
   return indeks >= 0 ? { etykieta: n.etykieta, indeks } : null
 })
+// OZE od etapu 3: przycisk "Następny etap: X" zmienia status od razu (ścieżka
+// `dalej` w `wybierz`, z toastem "Cofnij"). Tylko gdy etap docelowy jest wśród
+// dozwolonych opcji statusu tej szansy.
+const przyciskEtapu = computed(() => {
+  const n = nastepny.value
+  if (!n?.etap) return null
+  if (!props.opcjeStatusow.some((o) => o.value === n.etap)) return null
+  return { etykieta: `${__('Następny etap')}: ${__(n.etap)}`, etap: n.etap, indeks: biezacy.value + 1 }
+})
+function przejdzDoNastepnegoEtapu() {
+  const k = przyciskEtapu.value
+  if (k) wybierz({ nazwa: k.etap, indeks: k.indeks })
+}
 function przejdzDoZakladki(indeks) {
   tabIndex.value = indeks
 }
@@ -639,6 +677,8 @@ const PodControl = defineComponent({
   props: {
     otwarty: { type: Boolean, default: false },
     licznik: { type: String, default: '' },
+    ostrzezenie: { type: Boolean, default: false },
+    testid: { type: String, default: 'etap-podzadania' },
   },
   emits: ['toggle'],
   setup(p, { emit: emitCtl }) {
@@ -647,7 +687,7 @@ const PodControl = defineComponent({
         'button',
         {
           type: 'button',
-          'data-testid': 'etap-podzadania',
+          'data-testid': p.testid,
           'aria-expanded': p.otwarty,
           'aria-label': __('Pokaż zadania etapu'),
           title: __('Pokaż zadania etapu'),
@@ -655,7 +695,9 @@ const PodControl = defineComponent({
             'mt-0.5 flex shrink-0 cursor-pointer items-center gap-0.5 self-start rounded px-1 text-[11px] leading-4 ' +
             (p.otwarty
               ? 'bg-surface-gray-3 text-ink-gray-9'
-              : 'text-ink-gray-5 hover:bg-surface-gray-2'),
+              : p.ostrzezenie
+                ? 'bg-surface-red-2 text-ink-red-8 hover:bg-surface-red-3'
+                : 'text-ink-gray-5 hover:bg-surface-gray-2'),
           onClick: () => emitCtl('toggle'),
         },
         [
