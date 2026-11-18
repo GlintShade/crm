@@ -6,7 +6,9 @@ const PROCES_OZE = [
   'Umowa Podpisana',
   'Finansowanie',
   'Weryfikacja Backoffice',
-  'Wygrana – montaż',
+  'Montaż',
+  'Obsługa pomontażowa',
+  'Wygrana - zakończona',
   'Przegrana',
 ]
 

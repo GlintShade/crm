@@ -9,6 +9,13 @@ import {
   buildPodzadaniePayload,
   entryFromPayload,
   applyOptimistic,
+  FORMY_FINANSOWANIA,
+  STAN_META_OZE,
+  metaStanu,
+  pozycjeDlaFormy,
+  podsumowanieEtapu,
+  tekstLicznika,
+  wyczyscPoZmianieFormy,
 } from '@/utils/dealPodzadania'
 
 describe('Podzadania procesu CP — czysta logika (dealPodzadania)', () => {
@@ -405,6 +412,139 @@ describe('Podzadania procesu CP — czysta logika (dealPodzadania)', () => {
       // Na błędzie serwera wołający po prostu wraca do `before` — sam `before`
       // pozostał niezmutowany przez cały czas.
       expect(before).toEqual({ 'dok:a': { stan: 'waiting' } })
+    })
+  })
+})
+
+describe('Podzadania OZE (ops#381)', () => {
+  const GOT = '100% Gotówka'
+  const KRE = '100% Kredyt'
+  const MIX = 'Gotówka + Kredyt'
+  const fin = [
+    { klucz: 'oze_fin:formularz_kredytowy', formy: [KRE, MIX] },
+    { klucz: 'oze_fin:kredyt_procesowany', formy: [KRE, MIX] },
+    { klucz: 'oze_fin:kredyt_odrzucony', formy: [KRE, MIX] },
+    { klucz: 'oze_fin:kredyt_podpisany', formy: [KRE, MIX] },
+    { klucz: 'oze_fin:proforma', formy: [GOT, MIX] },
+    { klucz: 'oze_fin:platnosc_klienta', formy: [GOT, MIX] },
+  ]
+  const klucze = (lista) => lista.map((d) => d.klucz)
+
+  it('FORMY_FINANSOWANIA: trzy wartości z kontraktu', () => {
+    expect(FORMY_FINANSOWANIA).toEqual([GOT, KRE, MIX])
+  })
+
+  describe('pozycjeDlaFormy', () => {
+    it('gotówka: 2 pozycje', () => {
+      expect(klucze(pozycjeDlaFormy(fin, GOT))).toEqual(['oze_fin:proforma', 'oze_fin:platnosc_klienta'])
+    })
+    it('kredyt: 4 pozycje', () => {
+      expect(pozycjeDlaFormy(fin, KRE)).toHaveLength(4)
+    })
+    it('gotówka + kredyt: 6 pozycji', () => {
+      expect(pozycjeDlaFormy(fin, MIX)).toHaveLength(6)
+    })
+    it('pusta lub nieznana forma: 0 pozycji z `formy`', () => {
+      expect(pozycjeDlaFormy(fin, '')).toHaveLength(0)
+      expect(pozycjeDlaFormy(fin, null)).toHaveLength(0)
+      expect(pozycjeDlaFormy(fin, 'Inna')).toHaveLength(0)
+    })
+    it('brak pola `formy` = zawsze widoczna, także przy pustej formie', () => {
+      const lista = [{ klucz: 'a' }, { klucz: 'b', formy: [GOT] }]
+      expect(klucze(pozycjeDlaFormy(lista, ''))).toEqual(['a'])
+      expect(klucze(pozycjeDlaFormy(lista, GOT))).toEqual(['a', 'b'])
+    })
+    it('nie mutuje wejścia i toleruje nie-tablicę', () => {
+      const kopia = JSON.stringify(fin)
+      pozycjeDlaFormy(fin, GOT)
+      expect(JSON.stringify(fin)).toBe(kopia)
+      expect(pozycjeDlaFormy(null, GOT)).toEqual([])
+    })
+  })
+
+  describe('podsumowanieEtapu (wektory z Pythona)', () => {
+    const def = (n) => Array.from({ length: n }, (_, i) => ({ klucz: `k${i}` }))
+    it('(a) 3 pozycje, 2 accepted, 1 bez wpisu', () => {
+      const mapa = { k0: { stan: 'accepted' }, k1: { stan: 'accepted' } }
+      expect(podsumowanieEtapu(def(3), mapa)).toEqual({ ok: 2, err: 0, razem: 3 })
+    })
+    it('(b) 8 pozycji, 4 accepted, 1 nd, 1 waiting', () => {
+      const mapa = {
+        k0: { stan: 'accepted' },
+        k1: { stan: 'accepted' },
+        k2: { stan: 'accepted' },
+        k3: { stan: 'accepted' },
+        k4: { stan: 'nd' },
+        k5: { stan: 'waiting' },
+      }
+      expect(podsumowanieEtapu(def(8), mapa)).toEqual({ ok: 4, err: 0, razem: 7 })
+    })
+    it('(c) 4 pozycje, 1 accepted, 1 error', () => {
+      const mapa = { k0: { stan: 'accepted' }, k1: { stan: 'error' } }
+      expect(podsumowanieEtapu(def(4), mapa)).toEqual({ ok: 1, err: 1, razem: 4 })
+    })
+    it('pusta lista i brak mapy', () => {
+      expect(podsumowanieEtapu([], {})).toEqual({ ok: 0, err: 0, razem: 0 })
+      expect(podsumowanieEtapu(null, null)).toEqual({ ok: 0, err: 0, razem: 0 })
+    })
+  })
+
+  describe('tekstLicznika', () => {
+    it('bez błędów', () => {
+      expect(tekstLicznika({ ok: 3, err: 0, razem: 7 })).toBe('3/7 zaakceptowane')
+    })
+    it('z błędami', () => {
+      expect(tekstLicznika({ ok: 3, err: 1, razem: 7 })).toBe('3/7 zaakceptowane \u00b7 błędy: 1')
+    })
+    it('null daje pusty tekst', () => {
+      expect(tekstLicznika(null)).toBe('')
+      expect(tekstLicznika(undefined)).toBe('')
+    })
+  })
+
+  describe('STAN_META_OZE i metaStanu', () => {
+    it('te same klucze i motywy co STAN_META, etykiety OZE', () => {
+      expect(Object.keys(STAN_META_OZE)).toEqual(Object.keys(STAN_META))
+      Object.keys(STAN_META).forEach((k) => expect(STAN_META_OZE[k].theme).toBe(STAN_META[k].theme))
+      expect(STAN_META_OZE.nd.muted).toBe(true)
+      expect(Object.fromEntries(Object.entries(STAN_META_OZE).map(([k, v]) => [k, v.label]))).toEqual({
+        brak: 'Brak statusu',
+        waiting: 'Oczekuje',
+        accepted: 'Zaakceptowano',
+        error: 'Błąd',
+        nd: 'Nie dotyczy',
+      })
+    })
+    it('metaStanu: OZE z tabeli OZE, inaczej CP bez zmian', () => {
+      expect(metaStanu('OZE', 'accepted').label).toBe('Zaakceptowano')
+      expect(metaStanu('CP', 'accepted').label).toBe('Załatwione')
+      expect(metaStanu(null, 'accepted')).toBe(STAN_META.accepted)
+      expect(metaStanu('OZE', 'cos')).toBe(STAN_META_OZE.brak)
+      expect(STAN_META.accepted.label).toBe('Załatwione')
+    })
+  })
+
+  describe('wyczyscPoZmianieFormy', () => {
+    const mapa = {
+      'oze_fin:formularz_kredytowy': { stan: 'accepted' },
+      'oze_fin:proforma': { stan: 'waiting' },
+      'oze_up:akceptacja_klienta': { stan: 'accepted' },
+    }
+    it('usuwa wpisy pozycji spoza nowej formy, reszta zostaje, bez mutacji', () => {
+      const kopia = JSON.stringify(mapa)
+      const wynik = wyczyscPoZmianieFormy(mapa, fin, GOT)
+      expect(Object.keys(wynik)).toEqual(['oze_fin:proforma', 'oze_up:akceptacja_klienta'])
+      expect(JSON.stringify(mapa)).toBe(kopia)
+      expect(wynik).not.toBe(mapa)
+    })
+    it('pusta forma usuwa wszystkie pozycje z `formy`', () => {
+      expect(Object.keys(wyczyscPoZmianieFormy(mapa, fin, ''))).toEqual(['oze_up:akceptacja_klienta'])
+    })
+    it('forma mieszana nie usuwa nic', () => {
+      expect(Object.keys(wyczyscPoZmianieFormy(mapa, fin, MIX))).toHaveLength(3)
+    })
+    it('null-safe', () => {
+      expect(wyczyscPoZmianieFormy(null, null, GOT)).toEqual({})
     })
   })
 })

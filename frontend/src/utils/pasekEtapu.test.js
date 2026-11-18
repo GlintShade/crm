@@ -7,17 +7,21 @@ import { pipelineOnly, liczbaSegmentow, segmentyWypelnione } from '@/utils/pasek
 // autorstwa tej sesji, wiec dopasowanie idzie przez escape, nie przez
 // wklejony znak - jedna stala, uzywana wszedzie w tym pliku, zamiast
 // powtarzac escape w kazdym miejscu z osobna.
+const NAZWA_WYGRANA = 'Wygrana - zako\u0144czona'
+// Stara nazwa, obsluzona tylko jako zabezpieczenie przejsciowe (do usuniecia po migracji b92).
 const NAZWA_WYGRANA_MONTAZ = 'Wygrana \u2013 monta\u017c'
 
-// Lustro crm.volteo_pipeline.PIPELINE_OZE / PIPELINE_CP / TERMINALE (5 + 2
-// kroki OZE, 12 + 1 krok CP; grupa_for = pipeline + terminale).
+// Lustro crm.volteo_pipeline.PIPELINE_OZE / PIPELINE_CP / TERMINALE (8 + 1
+// krok OZE, 12 + 1 krok CP; grupa_for = pipeline + terminale).
 const GRUPA_OZE = [
   'Lead',
   'Umowa Wygenerowana',
   'Umowa Podpisana',
   'Finansowanie',
   'Weryfikacja Backoffice',
-  NAZWA_WYGRANA_MONTAZ,
+  'Montaż',
+  'Obsługa pomontażowa',
+  NAZWA_WYGRANA,
   'Przegrana',
 ]
 
@@ -43,14 +47,16 @@ const GRUPY = {
 }
 
 describe('pipelineOnly', () => {
-  it('odcina oba statusy terminalne OZE, zostaje 5 krokow procesu', () => {
-    expect(pipelineOnly(GRUPA_OZE)).toEqual([
-      'Lead',
-      'Umowa Wygenerowana',
-      'Umowa Podpisana',
-      'Finansowanie',
-      'Weryfikacja Backoffice',
-    ])
+  it('odcina tylko "Przegrana" dla OZE, wygrana jest ostatnim krokiem - 8 krokow procesu', () => {
+    const wynik = pipelineOnly(GRUPA_OZE)
+    expect(wynik).toHaveLength(8)
+    expect(wynik[0]).toBe('Lead')
+    expect(wynik[wynik.length - 1]).toBe(NAZWA_WYGRANA)
+  })
+
+  it('stara nazwa wygranej (zabezpieczenie przejsciowe) nadal jest odcinana, 5 krokow', () => {
+    const stara = ['Lead', 'Umowa Wygenerowana', 'Umowa Podpisana', 'Finansowanie', 'Weryfikacja Backoffice', NAZWA_WYGRANA_MONTAZ, 'Przegrana']
+    expect(pipelineOnly(stara)).toHaveLength(5)
   })
 
   it('odcina tylko "Przegrana" dla CP, "Projekt rozliczony" (Won) zostaje w procesie - 12 krokow', () => {
@@ -74,8 +80,8 @@ describe('pipelineOnly', () => {
 })
 
 describe('liczbaSegmentow', () => {
-  it('5 dla OZE, 12 dla CP - liczone z danych, nie hardkodowane', () => {
-    expect(liczbaSegmentow(GRUPY, 'Fotowoltaika')).toBe(5)
+  it('8 dla OZE, 12 dla CP - liczone z danych, nie hardkodowane', () => {
+    expect(liczbaSegmentow(GRUPY, 'Fotowoltaika')).toBe(8)
     expect(liczbaSegmentow(GRUPY, 'Czyste Powietrze')).toBe(12)
   })
 
@@ -96,10 +102,15 @@ describe('segmentyWypelnione', () => {
     expect(
       segmentyWypelnione(GRUPY, 'Fotowoltaika', 'Weryfikacja Backoffice', 'Ongoing'),
     ).toBe(5)
+    expect(segmentyWypelnione(GRUPY, 'Fotowoltaika', 'Obsługa pomontażowa', 'Ongoing')).toBe(7)
   })
 
-  it('OZE status wygrany poza procesem (Won) -> pelny pasek', () => {
-    expect(segmentyWypelnione(GRUPY, 'Fotowoltaika', NAZWA_WYGRANA_MONTAZ, 'Won')).toBe(5)
+  it('OZE "Wygrana - zakonczona" (W procesie, typ Won) -> 8 wypelnionych', () => {
+    expect(segmentyWypelnione(GRUPY, 'Fotowoltaika', NAZWA_WYGRANA, 'Won')).toBe(8)
+  })
+
+  it('obcy status typu Won poza procesem -> pelny pasek (8)', () => {
+    expect(segmentyWypelnione(GRUPY, 'Fotowoltaika', NAZWA_WYGRANA_MONTAZ, 'Won')).toBe(8)
   })
 
   it('OZE "Przegrana" (poza procesem, Lost) -> pusty pasek', () => {

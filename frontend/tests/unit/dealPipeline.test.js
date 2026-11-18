@@ -18,11 +18,18 @@ const stepsPvMe = [
 
 // Proces CP: „Projekt rozliczony" jest jednocześnie 12. (tu: ostatnim)
 // krokiem procesu ORAZ statusem typu Won (b49 F1) — w przeciwieństwie do
-// OZE, gdzie „Wygrana – montaż" jest CAŁKOWICIE POZA `steps`.
+// OZE, gdzie „Wygrana - zakończona" jest również ostatnim krokiem procesu
+// i statusem typu Won.
 const stepsCp = [
   { status: 'Nowy', index: 0 },
   { status: 'Wniosek', index: 1 },
   { status: 'Projekt rozliczony', index: 2 },
+]
+
+const stepsOzeWygrana = [
+  { status: 'Lead', index: 0 },
+  { status: 'Montaż', index: 1 },
+  { status: 'Wygrana - zakończona', index: 2 },
 ]
 
 function shapePayload(overrides = {}) {
@@ -123,9 +130,15 @@ describe('Pipeline dealu — logika węzłów paska etapów (dealPipeline)', () 
       expect(bandMode(payload, 'Wniosek', 'Recycled')).toBe('progress')
     })
 
-    it('regresja: status Won POZA steps (OZE „Wygrana – montaż") nadal daje "won" przez drugą gałąź', () => {
-      const payload = shapePayload() // steps = stepsPvMe, nie zawiera „Wygrana – montaż"
-      expect(bandMode(payload, 'Wygrana – montaż', 'Won')).toBe('won')
+    it('OZE „Wygrana - zakończona" W procesie (pasmo won)', () => {
+      const payload = shapePayload({ steps: stepsOzeWygrana })
+      expect(bandMode(payload, 'Wygrana - zakończona', 'Won')).toBe('won')
+      expect(bandMode(payload, 'Montaż', 'Ongoing')).toBe('progress')
+    })
+
+    it('regresja: obcy status Won POZA steps nadal daje "won" przez drugą gałąź', () => {
+      const payload = shapePayload() // steps = stepsPvMe, nie zawiera tego statusu
+      expect(bandMode(payload, 'Obcy status wygrany', 'Won')).toBe('won')
     })
   })
 
@@ -291,15 +304,20 @@ describe('Pipeline dealu — logika węzłów paska etapów (dealPipeline)', () 
       expect(offPipelineBadge(payload, 'Projekt rozliczony', 'Won')).toBeNull()
     })
 
-    it('regresja: status Won POZA steps (OZE „Wygrana – montaż") nadal pokazuje odznakę jak dotychczas', () => {
-      const payload = shapePayload() // steps = stepsPvMe, nie zawiera „Wygrana – montaż"
-      expect(offPipelineBadge(payload, 'Wygrana – montaż', 'Won')).toBe('Wygrana – montaż')
+    it('OZE „Wygrana - zakończona" W procesie nie dostaje odznaki', () => {
+      const payload = shapePayload({ steps: stepsOzeWygrana })
+      expect(offPipelineBadge(payload, 'Wygrana - zakończona', 'Won')).toBeNull()
+    })
+
+    it('regresja: obcy status Won POZA steps nadal pokazuje odznakę jak dotychczas', () => {
+      const payload = shapePayload() // steps = stepsPvMe, nie zawiera tego statusu
+      expect(offPipelineBadge(payload, 'Obcy status wygrany', 'Won')).toBe('Obcy status wygrany')
     })
   })
 
   describe('grupaForRodzaj', () => {
     const config = {
-      Fotowoltaika: ['Nowy', 'Kalkulacja', 'Umowa', 'Wygrana – montaż', 'Przegrana'],
+      Fotowoltaika: ['Nowy', 'Kalkulacja', 'Umowa', 'Wygrana - zakończona', 'Przegrana'],
       'Czyste Powietrze': ['Nowy', 'Wniosek', 'Wygrana', 'Przegrana'],
     }
 
@@ -308,7 +326,7 @@ describe('Pipeline dealu — logika węzłów paska etapów (dealPipeline)', () 
         'Nowy',
         'Kalkulacja',
         'Umowa',
-        'Wygrana – montaż',
+        'Wygrana - zakończona',
         'Przegrana',
       ])
     })

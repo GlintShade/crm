@@ -53,11 +53,11 @@ export function currentIndexFor(steps, status) {
  * - 'progress' ,  `status` jest jednym z kroków procesu, a `statusType`
  *   nie jest `'Won'` (niezależnie od tego, co mówi migawkowe
  *   `payload.current_index` ,  ono jest nieużywane).
- * - 'won' ,  albo status POZA procesem ze `statusType === 'Won'` (np. OZE
- *   „Wygrana - montaż"), albo status W procesie ze `statusType === 'Won'`
- *   (np. CP „Projekt rozliczony", ostatni krok procesu, który jest
- *   jednocześnie statusem typu Won ,  cały pasek renderuje się wtedy na
- *   zielono zamiast jako zwykły krok „current").
+ * - 'won' ,  albo status POZA procesem ze `statusType === 'Won'` (obcy status
+ *   typu Won, np. ze starej bazy), albo status W procesie ze `statusType === 'Won'`
+ *   (wygraną jest ostatni etap procesu: OZE „Wygrana - zakończona", CP
+ *   „Projekt rozliczony"; cały pasek renderuje się wtedy na zielono zamiast
+ *   jako zwykły krok „current").
  * - 'lost' ,  status POZA procesem, `statusType === 'Lost'`.
  * - 'unknown' ,  status POZA procesem, a `statusType` inny/nieznany
  *   (obcy status spoza Lost/Won, albo store statusów jeszcze nie załadowany).
@@ -147,8 +147,9 @@ export function nextStepNote(payload, status, statusType) {
  * ('lost' / 'won' / 'unknown'); w trybie 'progress'/'hidden' brak odznaki.
  *
  * Status W procesie (`steps`) nigdy nie dostaje odznaki, nawet gdy jego
- * `statusType === 'Won'` sprawia, że `bandMode` zwraca 'won' (np. CP
- * „Projekt rozliczony" ,  12. krok procesu, jednocześnie status typu Won).
+ * `statusType === 'Won'` sprawia, że `bandMode` zwraca 'won' (OZE
+ * „Wygrana - zakończona" i CP „Projekt rozliczony" ,  ostatni krok procesu,
+ * jednocześnie status typu Won).
  * Bez tego guarda cały zielony pasek miałby obok zdublowaną odznakę z tym
  * samym statusem ,  guard sprawdzony PRZED odczytaniem `mode`, żeby ten
  * przypadek nie musiał przechodzić przez gałąź 'won' poniżej.
@@ -263,31 +264,40 @@ export function procesDlaRodzaju(rodzaj) {
 // `zakladka` to nazwa LOGICZNA (Umowa/Kredyt/Audyt); komponent mapuje ją na
 // realną zakładkę szansy (Umowa albo UmowaCP itd.). `tekst` bez zakładki to
 // wpis informacyjny (bez przycisku), `ikona` wskazuje ikonę lucide.
+// Od etapu 3 (`Umowa Podpisana`) wpis powstaje z następnego kroku procesu
+// (`steps`), patrz {@link nastepnyKrok}: `{ etykieta: 'Następny etap: X', etap: 'X' }`
+// (bez `zakladka`; komponent zmienia status na `etap`).
 const NASTEPNY_KROK_OZE = {
   Lead: { etykieta: 'Wygeneruj umowę', zakladka: 'Umowa' },
   'Umowa Wygenerowana': { etykieta: 'Wyślij do podpisu', zakladka: 'Umowa' },
-  'Umowa Podpisana': { etykieta: 'Uzupełnij wniosek kredytowy', zakladka: 'Kredyt' },
-  Finansowanie: { etykieta: 'Prześlij audyt', zakladka: 'Audyt' },
-  'Weryfikacja Backoffice': {
-    tekst: 'Czeka na weryfikację backoffice',
-    ikona: 'clock',
-  },
 }
+
+// Indeks etapu procesu OZE (0-based), od którego następny krok budowany jest z `steps`.
+const PIERWSZY_ETAP_Z_STEPS = 2
 
 /**
  * Następny krok dla procesu i statusu: `{ etykieta, zakladka }` (przycisk),
+ * `{ etykieta, etap }` (przycisk zmiany etapu, OZE od etapu 3),
  * `{ tekst, ikona? }` (informacja bez przycisku) albo null.
  * CP nie ma przycisku; pokazuje tylko notatkę serwera dla bieżącego statusu.
+ * Dla OZE od etapu 3 wpis budowany jest z `steps`; bez `steps` albo przy
+ * ostatnim etapie (wygrana) zwraca null.
  *
  * @param {'OZE'|'CP'|null|undefined} proces
  * @param {string|null|undefined} status
  * @param {Object<string,string>|null|undefined} notes - `payload.notes` (dla CP)
- * @returns {{etykieta: string, zakladka: string}|{tekst: string, ikona?: string}|null}
+ * @param {Array<{status: string, index: number}>|null|undefined} [steps] - `payload.steps` (dla OZE od etapu 3)
+ * @returns {{etykieta: string, zakladka: string}|{etykieta: string, etap: string}|{tekst: string, ikona?: string}|null}
  */
-export function nastepnyKrok(proces, status, notes) {
+export function nastepnyKrok(proces, status, notes, steps) {
   if (!proces || !status) return null
   if (proces === 'OZE') {
-    return Object.hasOwn(NASTEPNY_KROK_OZE, status) ? NASTEPNY_KROK_OZE[status] : null
+    if (Object.hasOwn(NASTEPNY_KROK_OZE, status)) return NASTEPNY_KROK_OZE[status]
+    const biezacy = currentIndexFor(steps, status)
+    if (biezacy < PIERWSZY_ETAP_Z_STEPS) return null
+    const nastepny = steps.find((s) => s?.index === biezacy + 1)
+    if (!nastepny?.status) return null
+    return { etykieta: `Następny etap: ${nastepny.status}`, etap: nastepny.status }
   }
   if (proces === 'CP') {
     const note = notes?.[status]
@@ -301,7 +311,6 @@ export function nastepnyKrok(proces, status, notes) {
 const PODPOWIEDZI_ETAPOW = {
   OZE: {
     'Umowa Podpisana': 'zwykle sam, po podpisie w Autenti',
-    'Weryfikacja Backoffice': 'sam, po przesłaniu audytu',
   },
 }
 
