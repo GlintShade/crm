@@ -24,8 +24,8 @@ Od b49 CP ma własny, 12-krokowy proces (`PIPELINE_CP`) — patrz katalog
 podzadań `PODZADANIA_CP` niżej za mini-zadaniami per krok. Ostatni krok,
 „Projekt rozliczony”, niesie `type=Won` na wierszu `CRM Deal Status` — CP ma
 teraz status wygranej WEWNĄTRZ procesu, nie jako osobny terminal (inaczej
-niż OZE, gdzie status wygranej z `TERMINALE["OZE"]` jest terminalem poza
-procesem).
+niż OZE, gdzie jedynym terminalem poza procesem jest „Przegrana”; od ops#381
+wygrana OZE to ostatni krok procesu, „Wygrana - zakończona”).
 
 Poza procesem żyją statusy TERMINALNE (`TERMINALE`) — wybieralne w
 rozwijanej liście sprawy, ale renderowane jako stan pasma odznaki
@@ -61,8 +61,12 @@ PIPELINE_OZE: tuple[str, ...] = (
 	"Umowa Podpisana",
 	"Finansowanie",
 	"Weryfikacja Backoffice",
+	"Montaż",
+	"Obsługa pomontażowa",
+	"Wygrana - zakończona",
 )
 """Proces statusów dla linii OZE (fotowoltaika + magazyny energii), w kolejności przejścia.
+8 kroków (ops#381); etapy 3 do 7 mają katalog pozycji `PODZADANIA_OZE`.
 
 Od 2026-09-24 (decyzja właściciela, ops#181) „Finansowanie" poprzedza „Weryfikacja Backoffice"
 (wcześniej było odwrotnie). Skrypt ops `ops/crm-audyt.py` (Server Script) duplikuje prefiks tego
@@ -86,18 +90,39 @@ PIPELINE_CP: tuple[str, ...] = (
 „Projekt rozliczony”, niesie `type=Won` na wierszu `CRM Deal Status` — patrz docstring modułu."""
 
 TERMINALE: dict[str, tuple[str, ...]] = {
-	"OZE": ("Wygrana – montaż", "Przegrana"),
+	"OZE": ("Przegrana",),
 	"CP": ("Przegrana",),
 }
 """Statusy terminalne per proces — wybieralne w rozwijanej liście sprawy, renderowane jako
 stan pasma odznaki (wygrana/przegrana), nigdy jako ponumerowany krok; CP nie ma osobnego
-terminala wygranej, bo „wygraność” niesie ostatni krok procesu („Projekt rozliczony”)."""
+terminala wygranej, bo „wygraność” niesie ostatni krok procesu („Projekt rozliczony”); to samo
+od ops#381 dotyczy OZE („Wygrana - zakończona”)."""
 
 NOTATKI: dict[str, dict[str, str]] = {
-	"OZE": {"Finansowanie": "Uzupełnij audyt i wyślij do weryfikacji."},
+	"OZE": {},
 	"CP": {"Dokumentacja": "Umowa na obsługę dotacji, GOPS, pełnomocnictwo"},
 }
 """Notatka „co dalej” per proces i status bieżący; brak wpisu oznacza brak notatki."""
+
+FORMY_FINANSOWANIA: tuple[str, ...] = ("100% Gotówka", "100% Kredyt", "Gotówka + Kredyt")
+"""Dozwolone wartości `CRM Deal.custom_finansowanie_forma` (puste = nie wybrano)."""
+
+_FORMY_KREDYT = ("100% Kredyt", "Gotówka + Kredyt")
+_FORMY_GOTOWKA = ("100% Gotówka", "Gotówka + Kredyt")
+
+
+def _poz(klucz: str, label: str, formy: tuple[str, ...] | None = None) -> dict:
+	"""Pozycja katalogu OZE: weryfikacja ze stanem ND, opcjonalnie ograniczona do form."""
+	wpis = {
+		"klucz": klucz,
+		"label": label,
+		"typ": "weryfikacja",
+		"z_data": False,
+		"nd_dozwolone": True,
+	}
+	if formy is not None:
+		wpis["formy"] = formy
+	return wpis
 
 
 STANY_PODZADAN: tuple[str, ...] = ("waiting", "accepted", "error", "nd")
@@ -355,6 +380,52 @@ podzadań mają wzorzec `<prefiks>:<zadanie>` — ten sam wzorzec (`pole:`/`foto
 techniczny w `frontend/src/utils/audytWeryfikacja.js`, stabilny pod przyszły sync z
 `Volteo Audyt`. „Lead” i „Projekt rozliczony” celowo bez wpisu — brak podzadań na tych etapach."""
 
+PODZADANIA_OZE: dict[str, tuple[dict, ...]] = {
+	"Umowa Podpisana": (
+		_poz("oze_up:akceptacja_klienta", "Akceptacja klienta"),
+		_poz("oze_up:akceptacja_handlowca", "Akceptacja handlowca"),
+		_poz("oze_up:akceptacja_firmy", "Akceptacja firmy"),
+	),
+	"Finansowanie": (
+		_poz("oze_fin:formularz_kredytowy", "Podpisany formularz kredytowy", _FORMY_KREDYT),
+		_poz("oze_fin:kredyt_procesowany", "Kredyt procesowany", _FORMY_KREDYT),
+		_poz("oze_fin:kredyt_odrzucony", "Kredyt odrzucony", _FORMY_KREDYT),
+		_poz("oze_fin:kredyt_podpisany", "Kredyt podpisany", _FORMY_KREDYT),
+		_poz("oze_fin:proforma", "Wystawiona proforma", _FORMY_GOTOWKA),
+		_poz("oze_fin:platnosc_klienta", "Zaksięgowana płatność klienta", _FORMY_GOTOWKA),
+	),
+	"Weryfikacja Backoffice": (
+		_poz("oze_wer:audyt_w_przygotowaniu", "Audyt w przygotowaniu"),
+		_poz("oze_wer:projekt_do_przygotowania", "Projekt budowlany do przygotowania"),
+		_poz("oze_wer:projekt_w_przygotowaniu", "Projekt budowlany w przygotowaniu"),
+		_poz("oze_wer:projekt_wyslany", "Projekt budowlany wysłany do klienta"),
+		_poz("oze_wer:audyt_odrzucony_klient", "Audyt niezaakceptowany z powodu klienta"),
+		_poz("oze_wer:audyt_odrzucony_handlowiec", "Audyt niezaakceptowany z powodu handlowca"),
+		_poz("oze_wer:audyt_odrzucony_firma", "Audyt niezaakceptowany z powodu firmy"),
+	),
+	"Montaż": (
+		_poz("oze_mon:projekt_zaakceptowany", "Projekt budowlany zaakceptowany"),
+		_poz("oze_mon:sprzet_zamowiony", "Sprzęt zamówiony"),
+		_poz("oze_mon:sprzet_u_klienta", "Sprzęt u klienta"),
+		_poz("oze_mon:montaz_zlecony", "Montaż zlecony"),
+		_poz("oze_mon:montaz_niedokonczony", "Montaż niedokończony z powodu problemów"),
+		_poz("oze_mon:montaz_zakonczony", "Montaż zakończony"),
+		_poz("oze_mon:faktura_koncowa", "Faktura końcowa wystawiona"),
+		_poz("oze_mon:platnosc_100", "100% płatności"),
+	),
+	"Obsługa pomontażowa": (
+		_poz("oze_pom:karty_do_wyslania", "Karty katalogowe i gwarancyjne do wysłania"),
+		_poz("oze_pom:dokumenty_osd", "Kompletowanie dokumentów do OSD"),
+		_poz("oze_pom:zgloszenie_osd", "Zgłoszenie do OSD wysłane"),
+		_poz("oze_pom:dotacja_w_przygotowaniu", "OSD wysłane, dotacja w przygotowaniu"),
+		_poz("oze_pom:dokumenty_dotacji", "Dokumenty do dotacji wysłane"),
+	),
+}
+"""Katalog pozycji podprocesu OZE, keyed nazwą statusu procesu (`PIPELINE_OZE`); ten sam
+kształt i mechanizm co `PODZADANIA_CP`, plus opcjonalny klucz `formy` (krotka form
+finansowania, w których pozycja jest widoczna; brak klucza = zawsze widoczna). „Lead”,
+„Umowa Wygenerowana” i „Wygrana - zakończona” celowo bez wpisu."""
+
 
 def pipeline_key_for(rodzaj: str | None) -> str | None:
 	"""Zwraca klucz procesu ("OZE"/"CP") dla rodzaju umowy, albo None gdy nieznany/pusty/brak."""
@@ -449,7 +520,7 @@ def notatka_for(rodzaj: str | None, status: str | None) -> str | None:
 def is_forward(rodzaj: str | None, current: str | None, target: str) -> bool:
 	"""Zwraca True tylko, gdy `current` i `target` są w procesie danego rodzaju i `current` poprzedza `target`.
 
-	Status bieżący spoza procesu (np. "Przegrana", "Wygrana montaż") zawsze daje False —
+	Status bieżący spoza procesu (np. "Przegrana") zawsze daje False,
 	automatyzacja nigdy nie ma przesuwać takiej sprawy dalej. Brak procesu dla rodzaju daje False.
 	"""
 	proces = pipeline_for(rodzaj)
@@ -463,9 +534,10 @@ def is_forward(rodzaj: str | None, current: str | None, target: str) -> bool:
 
 
 def podzadania_for(rodzaj: str | None) -> dict[str, tuple[dict, ...]]:
-	"""Zwraca katalog podzadań (`PODZADANIA_CP`) dla „Czyste Powietrze”, pusty dict dla
-	pozostałych rodzajów — OZE (i każdy inny/nieznany/pusty rodzaj) na razie nie ma katalogu
-	podzadań."""
+	"""Zwraca katalog podzadań: `PODZADANIA_OZE` dla rodzajów OZE, `PODZADANIA_CP` dla
+	„Czyste Powietrze”, pusty dict dla każdego innego/nieznanego/pustego rodzaju."""
+	if rodzaj in OZE_RODZAJE:
+		return PODZADANIA_OZE
 	if rodzaj == "Czyste Powietrze":
 		return PODZADANIA_CP
 	return {}
@@ -473,7 +545,7 @@ def podzadania_for(rodzaj: str | None) -> dict[str, tuple[dict, ...]]:
 
 def podzadanie_def(rodzaj: str | None, klucz: str) -> dict | None:
 	"""Płaski lookup definicji podzadania po jego kluczu, niezależnie od etapu, do którego
-	należy. Zwraca kopię definicji (bez ryzyka mutacji `PODZADANIA_CP` przez wołającego), albo
+	należy. Zwraca kopię definicji (bez ryzyka mutacji katalogu przez wołającego), albo
 	None, gdy rodzaj nie ma takiego podzadania (w tym gdy nie ma katalogu podzadań w ogóle)."""
 	for zadania in podzadania_for(rodzaj).values():
 		for zadanie in zadania:
@@ -526,3 +598,62 @@ def parsuj_podzadania(raw: object) -> dict[str, dict]:
 			continue
 		wynik[klucz] = dict(wpis)
 	return wynik
+
+
+def czy_pozycja_dla_formy(definicja: dict, forma: str | None) -> bool:
+	"""Czy pozycja katalogu jest widoczna dla formy finansowania. Brak klucza `formy` w
+	definicji oznacza „zawsze widoczna”; inaczej forma musi należeć do `formy` (pusta forma
+	daje False)."""
+	if "formy" not in definicja:
+		return True
+	return bool(forma) and forma in definicja["formy"]
+
+
+def pozycje_etapu(rodzaj: str | None, etap: str | None, forma: str | None = None) -> tuple[dict, ...]:
+	"""Pozycje katalogu danego etapu widoczne dla `forma`. Dla CP forma jest ignorowana
+	(żadna pozycja CP nie ma `formy`). Nieznany rodzaj lub etap bez katalogu daje ()."""
+	pozycje = podzadania_for(rodzaj).get(etap, ())
+	return tuple(p for p in pozycje if czy_pozycja_dla_formy(p, forma))
+
+
+def wyczysc_po_zmianie_formy(mapa: dict, forma: str | None) -> dict:
+	"""NOWY dict bez wpisów pozycji katalogu OZE, które mają `formy` i nie należą do `forma`.
+	Wpisy CP i wpisy nieznane zostają nietknięte; wejście nie jest mutowane."""
+	ograniczone = {
+		p["klucz"]: p
+		for zadania in PODZADANIA_OZE.values()
+		for p in zadania
+		if "formy" in p
+	}
+	wynik: dict = {}
+	for klucz, wpis in mapa.items():
+		definicja = ograniczone.get(klucz)
+		if definicja is not None and not czy_pozycja_dla_formy(definicja, forma):
+			continue
+		wynik[klucz] = wpis
+	return wynik
+
+
+def podsumowanie_etapu(pozycje: tuple[dict, ...] | list[dict], mapa: dict) -> dict[str, int]:
+	"""Licznik etapu `{ok, err, razem}`: `razem` to pozycje, których stan nie jest `nd`
+	(pozycja bez wpisu liczy się do `razem`), `ok` = accepted, `err` = error."""
+	ok = err = razem = 0
+	for pozycja in pozycje:
+		wpis = mapa.get(pozycja["klucz"])
+		stan = wpis.get("stan") if isinstance(wpis, dict) else None
+		if stan == "nd":
+			continue
+		razem += 1
+		if stan == "accepted":
+			ok += 1
+		elif stan == "error":
+			err += 1
+	return {"ok": ok, "err": err, "razem": razem}
+
+
+def podsumowanie_szansy(rodzaj: str | None, status: str | None, mapa: dict, forma: str | None) -> dict | None:
+	"""Licznik dla listy szans: None, gdy rodzaj nie jest OZE albo etap nie ma pozycji;
+	inaczej `podsumowanie_etapu`. W „Finansowanie” przy pustej formie wynik to zera."""
+	if rodzaj not in OZE_RODZAJE or status not in PODZADANIA_OZE:
+		return None
+	return podsumowanie_etapu(pozycje_etapu(rodzaj, status, forma), mapa)

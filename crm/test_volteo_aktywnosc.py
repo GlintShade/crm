@@ -626,6 +626,36 @@ class TestTekstSladu(unittest.TestCase):
 			"cofnięto stan podzadania: Audyt zlecony",
 		)
 
+	def test_c2_pozycja_etapu_bez_notatki(self: "TestTekstSladu") -> None:
+		self.assertEqual(
+			tekst_sladu("pozycja_etapu", label="Sprz\u0119t u klienta", stan="accepted"),
+			"oznaczono pozycj\u0119 \u201eSprz\u0119t u klienta\u201d: Zaakceptowano",
+		)
+		for stan, etykieta in (
+			("waiting", "Oczekuje"),
+			("error", "B\u0142\u0105d"),
+			("nd", "Nie dotyczy"),
+		):
+			self.assertTrue(tekst_sladu("pozycja_etapu", label="X", stan=stan).endswith(f": {etykieta}"))
+
+	def test_c3_pozycja_etapu_z_notatka_i_cofnieta(self: "TestTekstSladu") -> None:
+		self.assertEqual(
+			tekst_sladu("pozycja_etapu", label="X", stan="error", note="brak kontaktu"),
+			"oznaczono pozycj\u0119 \u201eX\u201d: B\u0142\u0105d, notatka: \u201ebrak kontaktu\u201d",
+		)
+		self.assertEqual(
+			tekst_sladu("pozycja_etapu", label="X", stan="accepted", cofnieto=True),
+			"wyczyszczono status pozycji \u201eX\u201d",
+		)
+
+	def test_c4_finansowanie_forma(self: "TestTekstSladu") -> None:
+		self.assertEqual(
+			tekst_sladu("finansowanie_forma", forma="100% Kredyt"),
+			"ustawiono form\u0119 finansowania: 100% Kredyt",
+		)
+		self.assertEqual(tekst_sladu("finansowanie_forma", forma=""), "wyczyszczono form\u0119 finansowania")
+		self.assertEqual(tekst_sladu("finansowanie_forma", forma=None), "wyczyszczono form\u0119 finansowania")
+
 	def test_d_autenti_wyslano_umowe(self: "TestTekstSladu") -> None:
 		self.assertEqual(tekst_sladu("autenti_wyslano", dokument="umowę"), "wysłano umowę do podpisu Autenti")
 		self.assertEqual(
