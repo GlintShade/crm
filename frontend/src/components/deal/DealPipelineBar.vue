@@ -213,6 +213,14 @@
           {{ etapPodsumowanie.zrobione }}/{{ etapPodsumowanie.wszystkie }}
         </span>
       </div>
+      <div
+        v-if="czyOze && powodPodgladu"
+        class="mb-2 text-center text-xs text-ink-gray-5"
+        data-testid="etap-tylko-podglad"
+        :data-powod="powodPodgladu.powod"
+      >
+        {{ powodPodgladu.tekst }}
+      </div>
       <!-- Stopień I: forma finansowania (tylko OZE, tylko etap Finansowanie).
            Przyciski zawijają się (flex-wrap), więc mieszczą się na 390 px. -->
       <div
@@ -248,13 +256,6 @@
         <span v-if="!forma" class="text-xs text-ink-gray-5" data-testid="finansowanie-brak-formy">
           {{ __('Wybierz formę finansowania, żeby zobaczyć pozycje.') }}
         </span>
-      </div>
-      <div
-        v-if="czyOze && etapMinionyOze"
-        class="mb-2 text-center text-xs text-ink-gray-5"
-        data-testid="etap-tylko-podglad"
-      >
-        {{ __('etap zakończony, tylko podgląd') }}
       </div>
       <div class="flex flex-wrap justify-center gap-2">
         <template v-for="def in etapZadania" :key="def.klucz">
@@ -770,6 +771,30 @@ const mozeEdytowac = computed(() => {
 const etapMinionyOze = computed(() => {
   const idx = currentIndexFor(payload.value?.steps, rozwinietyEtap.value)
   return idx >= 0 && currentIndex.value >= 0 && idx < currentIndex.value
+})
+
+// Dlaczego pozycje OZE w rozwiniętym etapie są tylko do podglądu (null, gdy
+// można je edytować). Kolejność ma znaczenie: przegrana, czytelnik, etap
+// miniony, etap przyszły.
+const powodPodgladu = computed(() => {
+  if (!czyOze.value || !rozwinietyEtap.value) return null
+  if (statusType.value === 'Lost') {
+    return { powod: 'przegrana', tekst: __('Szansa przegrana, pozycje tylko do podglądu.') }
+  }
+  if (!editable.value) {
+    return { powod: 'czytelnik', tekst: __('Pozycje oznacza backoffice. Tutaj widzisz ich status.') }
+  }
+  if (etapMinionyOze.value) {
+    return { powod: 'miniony', tekst: __('etap zakończony, tylko podgląd') }
+  }
+  const idx = currentIndexFor(payload.value?.steps, rozwinietyEtap.value)
+  if (idx >= 0 && currentIndex.value >= 0 && idx > currentIndex.value) {
+    return {
+      powod: 'przyszly',
+      tekst: __('Ten etap jeszcze się nie zaczął. Pozycje oznaczysz, gdy szansa przejdzie do tego etapu.'),
+    }
+  }
+  return null
 })
 
 function metaPozycji(klucz) {
