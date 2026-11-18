@@ -201,9 +201,60 @@
       />
       <div class="mb-2 flex items-center justify-center gap-2">
         <span class="text-sm font-medium text-ink-gray-8">{{ __(rozwinietyEtap) }}</span>
-        <span class="text-xs text-ink-gray-5">
+        <span
+          v-if="czyOze"
+          class="text-xs text-ink-gray-5"
+          :class="{ 'text-ink-red-8': etapPodsumowanieOze.err > 0 }"
+          data-testid="panel-licznik"
+        >
+          {{ tekstLicznikaPanelu }}
+        </span>
+        <span v-else class="text-xs text-ink-gray-5">
           {{ etapPodsumowanie.zrobione }}/{{ etapPodsumowanie.wszystkie }}
         </span>
+      </div>
+      <!-- Stopień I: forma finansowania (tylko OZE, tylko etap Finansowanie).
+           Przyciski zawijają się (flex-wrap), więc mieszczą się na 390 px. -->
+      <div
+        v-if="czyOze && rozwinietyEtap === 'Finansowanie'"
+        class="mb-3 flex flex-col gap-1.5"
+        data-testid="finansowanie-stopien-1"
+      >
+        <span class="text-xs font-medium text-ink-gray-6">{{ __('Stopień I: forma finansowania') }}</span>
+        <div v-if="mozeEdytowac" class="flex flex-wrap gap-1.5">
+          <button
+            v-for="f in FORMY_FINANSOWANIA"
+            :key="f"
+            type="button"
+            class="min-h-10 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors sm:min-h-0"
+            :class="
+              forma === f
+                ? 'border-outline-blue-3 bg-surface-blue-2 text-ink-blue-8'
+                : 'border-outline-gray-3 bg-surface-base text-ink-gray-7 hover:bg-surface-gray-3'
+            "
+            :disabled="busyForma"
+            :aria-pressed="forma === f"
+            data-testid="forma-finansowania"
+            :data-forma="f"
+            @click="ustawForme(f)"
+          >
+            {{ __(f) }}
+          </button>
+        </div>
+        <span v-else class="text-sm text-ink-gray-8" data-testid="forma-finansowania-tekst">
+          {{ forma ? __(forma) : __('Nie wybrano formy finansowania') }}
+        </span>
+        <span class="mt-1 text-xs font-medium text-ink-gray-6">{{ __('Stopień II') }}</span>
+        <span v-if="!forma" class="text-xs text-ink-gray-5" data-testid="finansowanie-brak-formy">
+          {{ __('Wybierz formę finansowania, żeby zobaczyć pozycje.') }}
+        </span>
+      </div>
+      <div
+        v-if="czyOze && etapMinionyOze"
+        class="mb-2 text-center text-xs text-ink-gray-5"
+        data-testid="etap-tylko-podglad"
+      >
+        {{ __('etap zakończony, tylko podgląd') }}
       </div>
       <div class="flex flex-wrap justify-center gap-2">
         <template v-for="def in etapZadania" :key="def.klucz">
@@ -211,7 +262,13 @@
                `editable` jest prawdą SERWERA po załadowaniu, patrz komentarz
                przy `stanResource` w <script>): prostokąt tylko do odczytu,
                bez popovera. -->
-          <div v-if="!editable" :class="pillClass(stanFor(mapaZadan, def.klucz))">
+          <div
+            v-if="!mozeEdytowac"
+            :class="pillClass(stanFor(mapaZadan, def.klucz))"
+            data-testid="pozycja-podprocesu"
+            :data-klucz="def.klucz"
+            :data-stan="stanFor(mapaZadan, def.klucz)"
+          >
             <span
               v-if="def.z_data && mapaZadan[def.klucz]?.data"
               class="lucide-calendar size-3 shrink-0"
@@ -238,6 +295,9 @@
               <button
                 type="button"
                 :class="pillClass(stanFor(mapaZadan, def.klucz))"
+                data-testid="pozycja-podprocesu"
+                :data-klucz="def.klucz"
+                :data-stan="stanFor(mapaZadan, def.klucz)"
                 @click="togglePopover"
               >
                 <span
@@ -276,10 +336,10 @@
                 <div class="flex items-start justify-between gap-2">
                   <span class="text-sm font-medium text-ink-gray-8">{{ __(def.label) }}</span>
                   <Badge
-                    :theme="STAN_META[stanFor(mapaZadan, def.klucz)].theme"
+                    :theme="metaPozycji(def.klucz).theme"
                     variant="subtle"
                     size="sm"
-                    :label="__(STAN_META[stanFor(mapaZadan, def.klucz)].label)"
+                    :label="__(metaPozycji(def.klucz).label)"
                   />
                 </div>
                 <div class="flex flex-wrap gap-1.5">
@@ -288,8 +348,8 @@
                     :key="stan"
                     size="sm"
                     variant="subtle"
-                    :theme="STAN_META[stan].theme"
-                    :label="__(STAN_META[stan].label)"
+                    :theme="metaStanu(proces, stan).theme"
+                    :label="__(metaStanu(proces, stan).label)"
                     :disabled="busyZadania[def.klucz]"
                     @click="ustawStan(def.klucz, stan)"
                   />
@@ -357,9 +417,16 @@ import {
   nodeStateForMode,
   stepNumber,
   offPipelineBadge,
+  procesDlaRodzaju,
 } from '@/utils/dealPipeline'
+import { MAKS_ETAPOW_BEZ_ZWARCIA } from '@/utils/dealNaglowek'
 import {
-  STAN_META,
+  FORMY_FINANSOWANIA,
+  metaStanu,
+  podsumowanieEtapu,
+  pozycjeDlaFormy,
+  tekstLicznika,
+  wyczyscPoZmianieFormy,
   parsePodzadania,
   stanFor,
   dozwoloneStany,
@@ -405,6 +472,12 @@ const payload = computed(() => resource.data || null)
 // zasilana tym samym payloadem) traktują undefined statusType jako 'unknown').
 const statusType = computed(() => getDealStatus?.(props.status)?.type)
 
+// Proces szansy ('OZE' | 'CP' | null). Wszystkie zmiany ops#381 (forma
+// finansowania, etykiety stanów OZE, licznik ok/err, tryb tylko-podgląd)
+// dotyczą wyłącznie OZE; ścieżki CP zostają bez zmian.
+const proces = computed(() => procesDlaRodzaju(props.rodzaj))
+const czyOze = computed(() => proces.value === 'OZE')
+
 const currentIndex = computed(() => currentIndexFor(payload.value?.steps, props.status))
 const mode = computed(() => bandMode(payload.value, props.status, statusType.value))
 const badgeLabel = computed(() => offPipelineBadge(payload.value, props.status, statusType.value))
@@ -417,7 +490,7 @@ const badgeLabel = computed(() => offPipelineBadge(payload.value, props.status, 
 // poza triggerem refetcha — i gwarantuje zero zmian wizualnych na OZE (5
 // kroków, zawsze `capWidth === true`, więc etykiety/gap/cap zostają dokładnie
 // takie jak przed tym issue).
-const capWidth = computed(() => (payload.value?.steps?.length ?? 0) <= 6)
+const capWidth = computed(() => (payload.value?.steps?.length ?? 0) <= MAKS_ETAPOW_BEZ_ZWARCIA)
 
 const badgeTheme = computed(() => {
   if (mode.value === 'lost') return 'red'
@@ -596,7 +669,12 @@ onUnmounted(() => {
 // Katalog podzadań rozwiniętego etapu, prosto z payloadu serwera (kształt —
 // patrz nagłówek pliku). `[]`, gdy pas jest zwinięty albo etap nie ma
 // podzadań (tasksForStage jest null-safe względem obu argumentów).
-const etapZadania = computed(() => tasksForStage(payload.value?.subtasks, rozwinietyEtap.value))
+// Dla OZE tylko pozycje widoczne dla bieżącej formy finansowania (`forma`
+// niżej); dla CP bez filtra.
+const etapZadania = computed(() => {
+  const defs = tasksForStage(payload.value?.subtasks, rozwinietyEtap.value)
+  return czyOze.value ? pozycjeDlaFormy(defs, forma.value) : defs
+})
 
 // -----------------------------------------------------------------------
 // Stan podzadań (b49 F3) — pobranie, edytowalność, zapis optymistyczny.
@@ -620,10 +698,14 @@ const stanResource = createResource({
 // klucze na istniejącym reactive obiekcie. Template czyta `mapaZadan` bez
 // `.value` — Vue odwija top-level ref automatycznie w wyrażeniach szablonu.
 const mapaZadan = ref(parsePodzadania(stanResource.data?.stan))
+// Forma finansowania szansy (OZE): string albo null. Jawny stan w `ref`,
+// ustawiany z odpowiedzi serwera i optymistycznie przy zmianie formy.
+const forma = ref(stanResource.data?.forma || null)
 watch(
   () => stanResource.data,
   (data) => {
     mapaZadan.value = parsePodzadania(data?.stan)
+    forma.value = data?.forma || null
   },
 )
 
@@ -632,16 +714,35 @@ watch(
 // (nie w callbacku, więc kolejność deklaracji ma tu znaczenie, w
 // przeciwieństwie do funkcji niżej wołanych dopiero z handlerów).
 const etapPodsumowanie = computed(() => stageSummary(etapZadania.value, mapaZadan.value))
+const etapPodsumowanieOze = computed(() => podsumowanieEtapu(etapZadania.value, mapaZadan.value))
+// W Finansowaniu bez wybranej formy nie ma pozycji, więc zamiast "0/0" panel
+// nie pokazuje licznika.
+const tekstLicznikaPanelu = computed(() =>
+  rozwinietyEtap.value === 'Finansowanie' && !forma.value
+    ? ''
+    : tekstLicznika(etapPodsumowanieOze.value),
+)
 
-// Liczniki zrobione/wszystkie dla KAŻDEGO etapu z katalogu podzadań, dla
-// nagłówka szansy (DealNaglowek.vue), który pokazuje je pod etapami.
+// Liczniki dla KAŻDEGO etapu z katalogu podzadań, dla nagłówka szansy
+// (DealNaglowek.vue), który pokazuje je pod etapami. Klucze `zrobione` i
+// `wszystkie` zostają dla CP; dla OZE dochodzą `ok`, `err`, `razem` (z pozycji
+// widocznych dla formy) oraz `brakFormy` (Finansowanie bez wybranej formy).
 const liczniki = computed(() => {
   const katalog = payload.value?.subtasks || {}
   return Object.fromEntries(
-    Object.keys(katalog).map((etap) => [
-      etap,
-      stageSummary(tasksForStage(katalog, etap), mapaZadan.value),
-    ]),
+    Object.keys(katalog).map((etap) => {
+      const defs = tasksForStage(katalog, etap)
+      if (!czyOze.value) return [etap, stageSummary(defs, mapaZadan.value)]
+      const widoczne = pozycjeDlaFormy(defs, forma.value)
+      return [
+        etap,
+        {
+          ...stageSummary(widoczne, mapaZadan.value),
+          ...podsumowanieEtapu(widoczne, mapaZadan.value),
+          brakFormy: etap === 'Finansowanie' && !forma.value,
+        },
+      ]
+    }),
   )
 })
 watch(liczniki, (v) => emit('liczniki', v), { immediate: true, deep: true })
@@ -655,6 +756,59 @@ watch(liczniki, (v) => emit('liczniki', v), { immediate: true, deep: true })
 // gating, więc popover nie renderuje się dla nikogo bez roli backoffice/
 // core-admin nawet gdyby boot-flaga była (błędnie) `false` dla repa.
 const editable = computed(() => stanResource.data?.editable ?? !window.volteo_is_rep)
+
+// Czy pozycje (i wybór formy) są teraz do edycji. CP: tak jak dotąd, wg
+// `editable`. OZE: dodatkowo tylko w BIEŻĄCYM etapie szansy i tylko gdy szansa
+// nie jest Przegrana; etapy minione i przyszłe to podgląd.
+const mozeEdytowac = computed(() => {
+  if (!editable.value) return false
+  if (!czyOze.value) return true
+  return rozwinietyEtap.value === props.status && statusType.value !== 'Lost'
+})
+
+// Etap rozwinięty jest wcześniejszy niż bieżący (dopisek "tylko podgląd").
+const etapMinionyOze = computed(() => {
+  const idx = currentIndexFor(payload.value?.steps, rozwinietyEtap.value)
+  return idx >= 0 && currentIndex.value >= 0 && idx < currentIndex.value
+})
+
+function metaPozycji(klucz) {
+  return metaStanu(proces.value, stanFor(mapaZadan.value, klucz))
+}
+
+const busyForma = ref(false)
+
+// Zmiana formy finansowania: zapis optymistyczny (forma + wyczyszczona mapa),
+// po odpowiedzi mapa z serwera, przy błędzie rollback obu wartości.
+async function ustawForme(nowa) {
+  if (!mozeEdytowac.value || busyForma.value || nowa === forma.value) return
+  const formaPrzed = forma.value
+  const mapaPrzed = mapaZadan.value
+  const katalog = tasksForStage(payload.value?.subtasks, 'Finansowanie')
+  busyForma.value = true
+  katalog.forEach((def) => {
+    if (!pozycjeDlaFormy([def], nowa).length) {
+      cancelNoteTimer(def.klucz)
+      delete draftZadan[def.klucz]
+    }
+  })
+  forma.value = nowa
+  mapaZadan.value = wyczyscPoZmianieFormy(mapaPrzed, katalog, nowa)
+  try {
+    const res = await call('crm.api.pipeline.volteo_finansowanie_forma_set', {
+      deal: props.dealId,
+      forma: nowa,
+    })
+    forma.value = res?.forma || null
+    mapaZadan.value = parsePodzadania(res?.stan_mapa)
+  } catch (err) {
+    forma.value = formaPrzed
+    mapaZadan.value = mapaPrzed
+    toast.error(extractErrorMessage(err))
+  } finally {
+    busyForma.value = false
+  }
+}
 
 // Formularz (data/notatka) w otwartym popoverze czyta z lokalnego draftu
 // zamiast wprost z `mapaZadan`, bo "brak" (żaden wpis jeszcze) nie ma
@@ -707,7 +861,7 @@ function cancelNoteTimer(klucz) {
 // tylko zmienione pole). Nigdy `resource.reload()` — ten sam race co przy
 // statusie procesu (patrz nagłówek pliku).
 async function persist(klucz, { stan, data, note, zData }) {
-  if (!editable.value || busyZadania[klucz]) return
+  if (!mozeEdytowac.value || busyZadania[klucz]) return
 
   const payload = buildPodzadaniePayload({ zadanie: klucz, stan, data, note, zData })
   busyZadania[klucz] = true
@@ -835,7 +989,7 @@ const PILL_THEME_CLASSES = {
 // `py-1.5`/`gap-1.5`), so desktop stays pixel-identical to pre-F4: this is
 // the padding-only approach the issue asks for, not an icon/text resize.
 function pillClass(stan) {
-  const meta = STAN_META[stan] || STAN_META.brak
+  const meta = metaStanu(proces.value, stan)
   const theme = PILL_THEME_CLASSES[meta.theme] || PILL_THEME_CLASSES.gray
   const border = meta.muted ? 'border-dashed opacity-70' : 'border-solid'
   return `inline-flex min-h-10 items-center gap-2 rounded-md border px-3 py-2 text-xs sm:min-h-0 sm:gap-1.5 sm:px-2.5 sm:py-1.5 ${theme} ${border}`
