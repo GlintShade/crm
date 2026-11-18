@@ -90,15 +90,16 @@ export function etykietaStatusu(nazwa) {
 }
 
 /**
- * Największa liczba etapów, przy której pasek nie przechodzi od razu w formę
- * zwartą (OZE ma 8 etapów, CP 12).
+ * Największa liczba etapów w jednym rzędzie z pełnymi etykietami. Procesy z
+ * większą liczbą etapów (OZE 8, Czyste Powietrze 12) używają formy zwartej,
+ * zależnej od szerokości.
  */
-export const MAKS_ETAPOW_BEZ_ZWARCIA = 8
+export const MAKS_ETAPOW_BEZ_ZWARCIA = 6
 
 /**
  * Czy pasek etapów ma przejść w formę zwartą (etykiety tylko przy bieżącym i
  * następnym etapie, resztę mówi linia tekstu pod paskiem): za dużo etapów
- * (Czyste Powietrze, 12; powyżej `maxEtapow`, domyślnie 8) albo na jeden etap przypada za mało szerokości.
+ * (OZE 8, Czyste Powietrze 12; powyżej `maxEtapow`, domyślnie 6) albo na jeden etap przypada za mało szerokości.
  *
  * @param {number} liczba - liczba etapów procesu
  * @param {number} szerokosc - szerokość kontenera paska w px (0 = jeszcze nieznana)
@@ -194,7 +195,7 @@ export function tekstNumeruEtapu(biezacy, liczba) {
  * Ile rzędów segmentów ma mieć pasek etapów w formie zwartej: jeden, gdy
  * nieaktywny segment ma co najmniej `minSegment` px (przy aktywnym
  * `mnoznik` razy szerszym), inaczej dwa (pierwsza i druga połowa etapów).
- * Procesy do `MAKS_ETAPOW_BEZ_ZWARCIA` (8) etapów zawsze w jednym rzędzie.
+ * Procesy do `MAKS_ETAPOW_BEZ_ZWARCIA` (6) etapów zawsze w jednym rzędzie; dłuższe procesy (OZE 8, CP 12) zależnie od szerokości.
  *
  * @param {number} liczba - liczba etapów
  * @param {number} szerokosc - szerokość obszaru segmentów w px (0 = nieznana)
