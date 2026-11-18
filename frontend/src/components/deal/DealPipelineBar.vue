@@ -759,23 +759,17 @@ watch(liczniki, (v) => emit('liczniki', v), { immediate: true, deep: true })
 const editable = computed(() => stanResource.data?.editable ?? !window.volteo_is_rep)
 
 // Czy pozycje (i wybór formy) są teraz do edycji. CP: tak jak dotąd, wg
-// `editable`. OZE: dodatkowo tylko w BIEŻĄCYM etapie szansy i tylko gdy szansa
-// nie jest Przegrana; etapy minione i przyszłe to podgląd.
+// `editable`. OZE (decyzja właściciela 2026-11-18): backoffice oznacza pozycje
+// w KAŻDYM etapie szansy, nie tylko w bieżącym; blokada tylko dla czytelnika
+// (`editable` false) i dla szansy Przegranej.
 const mozeEdytowac = computed(() => {
   if (!editable.value) return false
   if (!czyOze.value) return true
-  return rozwinietyEtap.value === props.status && statusType.value !== 'Lost'
+  return statusType.value !== 'Lost'
 })
 
-// Etap rozwinięty jest wcześniejszy niż bieżący (dopisek "tylko podgląd").
-const etapMinionyOze = computed(() => {
-  const idx = currentIndexFor(payload.value?.steps, rozwinietyEtap.value)
-  return idx >= 0 && currentIndex.value >= 0 && idx < currentIndex.value
-})
-
-// Dlaczego pozycje OZE w rozwiniętym etapie są tylko do podglądu (null, gdy
-// można je edytować). Kolejność ma znaczenie: przegrana, czytelnik, etap
-// miniony, etap przyszły.
+// Dlaczego pozycje OZE są tylko do podglądu (null, gdy można je edytować):
+// szansa przegrana albo czytelnik bez prawa edycji.
 const powodPodgladu = computed(() => {
   if (!czyOze.value || !rozwinietyEtap.value) return null
   if (statusType.value === 'Lost') {
@@ -783,16 +777,6 @@ const powodPodgladu = computed(() => {
   }
   if (!editable.value) {
     return { powod: 'czytelnik', tekst: __('Pozycje oznacza backoffice. Tutaj widzisz ich status.') }
-  }
-  if (etapMinionyOze.value) {
-    return { powod: 'miniony', tekst: __('etap zakończony, tylko podgląd') }
-  }
-  const idx = currentIndexFor(payload.value?.steps, rozwinietyEtap.value)
-  if (idx >= 0 && currentIndex.value >= 0 && idx > currentIndex.value) {
-    return {
-      powod: 'przyszly',
-      tekst: __('Ten etap jeszcze się nie zaczął. Pozycje oznaczysz, gdy szansa przejdzie do tego etapu.'),
-    }
   }
   return null
 })
