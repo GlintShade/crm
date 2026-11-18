@@ -468,6 +468,8 @@ function parseRows(rows, columns = []) {
           // (utils/pasekEtapu.js).
           theme: getDealStatus(deal.status)?.motyw,
           type: getDealStatus(deal.status)?.type,
+          // ops#388: licznik podprocesu OZE ({ok, err, razem} albo null).
+          podzadania: deal._podzadania ?? null,
         }
       } else if (row == 'custom_rodzaj_umowy') {
         // VOLTEO (b65): kolumna "Rodzaj" listy Umowy - kod krótki w

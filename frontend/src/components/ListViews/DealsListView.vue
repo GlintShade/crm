@@ -173,23 +173,42 @@
             v-else-if="column.key === 'status'"
             class="flex w-full flex-col gap-1 overflow-hidden py-1 leading-tight"
           >
-            <Badge
-              variant="subtle"
-              class="w-fit"
-              :theme="item?.theme"
-              size="md"
-              :label="item?.label"
-              @click="
-                (event) =>
-                  emit('applyFilter', {
-                    event,
-                    idx,
-                    column,
-                    item,
-                    firstColumn: columns[0],
-                  })
-              "
-            />
+            <div class="flex min-w-0 items-center gap-2">
+              <Badge
+                variant="subtle"
+                class="w-fit shrink-0"
+                :theme="item?.theme"
+                size="md"
+                :label="item?.label"
+                @click="
+                  (event) =>
+                    emit('applyFilter', {
+                      event,
+                      idx,
+                      column,
+                      item,
+                      firstColumn: columns[0],
+                    })
+                "
+              />
+              <Tooltip
+                v-if="licznikPodprocesu(item)"
+                :text="licznikPodprocesu(item)"
+                class="min-w-0"
+              >
+                <span
+                  class="block truncate text-xs"
+                  :class="
+                    item.podzadania.err > 0
+                      ? 'text-ink-red-8'
+                      : 'text-ink-gray-6'
+                  "
+                  data-testid="lista-licznik-podprocesu"
+                >
+                  {{ licznikPodprocesu(item) }}
+                </span>
+              </Tooltip>
+            </div>
             <PasekEtapu
               v-if="segmentyDlaWiersza(row) > 0"
               :etap="wypelnioneDlaWiersza(row)"
@@ -387,6 +406,7 @@ import ListFooterVolteo from '@/components/ListFooterVolteo.vue'
 import { isTranslatable, formatDuration } from '@/utils'
 import { liczbaSegmentow, segmentyWypelnione } from '@/utils/pasekEtapu'
 import { kropkiOdbiorcow } from '@/utils/rozliczenia'
+import { tekstLicznika } from '@/utils/dealPodzadania'
 import {
   Avatar,
   ListView,
@@ -591,6 +611,14 @@ function dealRoute(row) {
     params: { dealId: row.name },
     query: { view: route.query.view, viewType: route.params.viewType },
   }
+}
+
+// Licznik podprocesu OZE obok odznaki etapu (ops#388): tylko gdy wiersz niesie
+// obiekt {ok, err, razem} z razem > 0; CP i szanse bez pozycji dostają ''.
+function licznikPodprocesu(item) {
+  const p = item?.podzadania
+  if (!p || typeof p !== 'object' || !(p.razem > 0)) return ''
+  return tekstLicznika(p)
 }
 
 // Pasek postępu procesu pod odznaką statusu (kolumna "Etap procesu",
