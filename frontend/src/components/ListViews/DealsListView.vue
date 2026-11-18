@@ -176,11 +176,10 @@
             <div class="flex min-w-0 items-center gap-2">
               <Badge
                 variant="subtle"
-                class="min-w-0 max-w-full !block truncate"
+                class="min-w-0 max-w-full"
                 :title="item?.label"
                 :theme="item?.theme"
                 size="md"
-                :label="item?.label"
                 @click="
                   (event) =>
                     emit('applyFilter', {
@@ -191,7 +190,9 @@
                       firstColumn: columns[0],
                     })
                 "
-              />
+              >
+                <span class="min-w-0 truncate">{{ item?.label }}</span>
+              </Badge>
               <Tooltip
                 v-if="licznikPodprocesu(item)"
                 :text="licznikPodprocesu(item)"
