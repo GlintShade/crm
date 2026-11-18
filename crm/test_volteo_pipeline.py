@@ -2,13 +2,16 @@ import json
 import unittest
 
 from crm.volteo_pipeline import (
+	FORMY_FINANSOWANIA,
 	NOTATKI,
 	OZE_RODZAJE,
 	PIPELINE_CP,
 	PIPELINE_OZE,
 	PODZADANIA_CP,
+	PODZADANIA_OZE,
 	STANY_PODZADAN,
 	TERMINALE,
+	czy_pozycja_dla_formy,
 	dozwolone_stany,
 	etap_nr,
 	grupa_for,
@@ -17,9 +20,13 @@ from crm.volteo_pipeline import (
 	parsuj_podzadania,
 	pipeline_for,
 	pipeline_key_for,
+	podsumowanie_etapu,
+	podsumowanie_szansy,
 	podzadania_for,
 	podzadanie_def,
+	pozycje_etapu,
 	step_index,
+	wyczysc_po_zmianie_formy,
 )
 
 
@@ -56,6 +63,7 @@ class TestVolteoPipeline(unittest.TestCase):
 		self.assertEqual(step_index("Fotowoltaika", "Lead"), 0)
 		self.assertEqual(step_index("Fotowoltaika", "Umowa Wygenerowana"), 1)
 		self.assertEqual(step_index("Fotowoltaika", "Finansowanie"), 3)
+		self.assertEqual(step_index("Fotowoltaika", "Wygrana - zako\u0144czona"), 7)
 
 	def test_d2_pipeline_oze_kolejnosc_finansowanie_przed_weryfikacja(self: "TestVolteoPipeline") -> None:
 		# Regresja ops#181 (2026-09-24, decyzja właściciela): "Finansowanie" poprzedza
@@ -68,8 +76,12 @@ class TestVolteoPipeline(unittest.TestCase):
 				"Umowa Podpisana",
 				"Finansowanie",
 				"Weryfikacja Backoffice",
+				"Monta\u017c",
+				"Obs\u0142uga pomonta\u017cowa",
+				"Wygrana - zako\u0144czona",
 			),
 		)
+		self.assertEqual(len(PIPELINE_OZE), 8)
 
 	def test_e_step_index_pierwszy_środkowy_ostatni_cp(self: "TestVolteoPipeline") -> None:
 		# Proces CP ma od b49 12 kroków (patrz PIPELINE_CP) — Lead pierwszy,
@@ -103,16 +115,18 @@ class TestVolteoPipeline(unittest.TestCase):
 		self.assertEqual(step_index("Czyste Powietrze", "Oferta Właściwa"), -1)
 
 	def test_g_statusy_poza_procesem_dają_minus_jeden(self: "TestVolteoPipeline") -> None:
+		stara_wygrana = "Wygrana " + chr(0x2013) + " monta\u017c"
 		self.assertEqual(step_index("Fotowoltaika", "Przegrana"), -1)
-		self.assertEqual(step_index("Fotowoltaika", "Wygrana – montaż"), -1)
+		self.assertEqual(step_index("Fotowoltaika", stara_wygrana), -1)
 		self.assertEqual(step_index("Czyste Powietrze", "Przegrana"), -1)
-		self.assertEqual(step_index("Czyste Powietrze", "Wygrana – montaż"), -1)
+		self.assertEqual(step_index("Czyste Powietrze", stara_wygrana), -1)
 
 	def test_h_status_poza_procesem_jako_bieżący_daje_false(self: "TestVolteoPipeline") -> None:
 		self.assertFalse(is_forward("Fotowoltaika", "Przegrana", "Umowa Wygenerowana"))
-		self.assertFalse(is_forward("Fotowoltaika", "Wygrana – montaż", "Umowa Wygenerowana"))
+		stara_wygrana = "Wygrana " + chr(0x2013) + " monta\u017c"
+		self.assertFalse(is_forward("Fotowoltaika", stara_wygrana, "Umowa Wygenerowana"))
 		self.assertFalse(is_forward("Czyste Powietrze", "Przegrana", "Dokumentacja"))
-		self.assertFalse(is_forward("Czyste Powietrze", "Wygrana – montaż", "Dokumentacja"))
+		self.assertFalse(is_forward("Czyste Powietrze", stara_wygrana, "Dokumentacja"))
 
 	def test_i_is_forward_do_przodu_prawda(self: "TestVolteoPipeline") -> None:
 		self.assertTrue(is_forward("Fotowoltaika", "Lead", "Umowa Wygenerowana"))
@@ -130,21 +144,19 @@ class TestVolteoPipeline(unittest.TestCase):
 
 	def test_l_is_forward_cel_poza_procesem_fałsz(self: "TestVolteoPipeline") -> None:
 		self.assertFalse(is_forward("Fotowoltaika", "Lead", "Przegrana"))
-		self.assertFalse(is_forward("Czyste Powietrze", "Lead", "Wygrana – montaż"))
+		self.assertFalse(is_forward("Czyste Powietrze", "Lead", "Wygrana - zako\u0144czona"))
 
 	def test_l2_is_forward_bieżący_terminalny_zawsze_fałsz(self: "TestVolteoPipeline") -> None:
 		# Terminale NIE są w procesie, więc jako status bieżący dają zawsze False,
 		# niezależnie od tego, że target jest dalej w procesie.
-		self.assertFalse(is_forward("Fotowoltaika", "Wygrana – montaż", "Finansowanie"))
+		self.assertFalse(is_forward("Fotowoltaika", "Przegrana", "Finansowanie"))
 		self.assertFalse(is_forward("Czyste Powietrze", "Przegrana", "Realizacja"))
 
 	def test_m_notatka_for_zwraca_zdefiniowane_notatki(self: "TestVolteoPipeline") -> None:
 		# Od 2026-09-24 (ops#181) notatka "co dalej" siedzi pod "Finansowanie", bo audyt
 		# następuje TERAZ po finansowaniu, nie po podpisaniu umowy.
-		self.assertEqual(
-			notatka_for("Fotowoltaika", "Finansowanie"),
-			"Uzupełnij audyt i wyślij do weryfikacji.",
-		)
+		# ops#381: audyt nie zmienia już etapu, więc OZE nie ma notatki pod "Finansowanie".
+		self.assertIsNone(notatka_for("Fotowoltaika", "Finansowanie"))
 		self.assertEqual(
 			notatka_for("Czyste Powietrze", "Dokumentacja"),
 			"Umowa na obsługę dotacji, GOPS, pełnomocnictwo",
@@ -162,9 +174,10 @@ class TestVolteoPipeline(unittest.TestCase):
 	def test_p_grupa_for_oze(self: "TestVolteoPipeline") -> None:
 		for rodzaj in OZE_RODZAJE:
 			grupa = grupa_for(rodzaj)
-			self.assertEqual(len(grupa), 7)
-			self.assertEqual(grupa, (*PIPELINE_OZE, "Wygrana – montaż", "Przegrana"))
-			self.assertEqual(grupa[-2:], ("Wygrana – montaż", "Przegrana"))
+			self.assertEqual(len(grupa), 9)
+			self.assertEqual(grupa, (*PIPELINE_OZE, "Przegrana"))
+			self.assertEqual(grupa[-2:], ("Wygrana - zako\u0144czona", "Przegrana"))
+			self.assertEqual(TERMINALE["OZE"], ("Przegrana",))
 
 	def test_q_grupa_for_cp(self: "TestVolteoPipeline") -> None:
 		grupa = grupa_for("Czyste Powietrze")
@@ -236,8 +249,11 @@ class TestVolteoPipeline(unittest.TestCase):
 	def test_w_podzadania_for_cp_zwraca_cały_katalog(self: "TestVolteoPipeline") -> None:
 		self.assertEqual(podzadania_for("Czyste Powietrze"), PODZADANIA_CP)
 
-	def test_x_podzadania_for_oze_i_nieznane_dają_pusty_dict(self: "TestVolteoPipeline") -> None:
-		for rodzaj in (*OZE_RODZAJE, None, "", "Nieznany"):
+	def test_x_podzadania_for_oze_zwraca_katalog_a_nieznane_pusty_dict(self: "TestVolteoPipeline") -> None:
+		for rodzaj in OZE_RODZAJE:
+			self.assertEqual(podzadania_for(rodzaj), PODZADANIA_OZE)
+			self.assertTrue(podzadania_for(rodzaj))
+		for rodzaj in (None, "", "Nieznany"):
 			self.assertEqual(podzadania_for(rodzaj), {})
 
 	def test_y_podzadanie_def_zwraca_definicję_po_kluczu(self: "TestVolteoPipeline") -> None:
@@ -250,6 +266,7 @@ class TestVolteoPipeline(unittest.TestCase):
 	def test_z_podzadanie_def_nieznany_klucz_lub_rodzaj_daje_none(self: "TestVolteoPipeline") -> None:
 		self.assertIsNone(podzadanie_def("Czyste Powietrze", "brak:takiego"))
 		self.assertIsNone(podzadanie_def("Fotowoltaika", "dok:zdjecia"))
+		self.assertIsNone(podzadanie_def("Czyste Powietrze", "oze_mon:sprzet_u_klienta"))
 		self.assertIsNone(podzadanie_def(None, "dok:zdjecia"))
 
 	def test_aa_podzadanie_def_zwraca_kopię_nie_referencję(self: "TestVolteoPipeline") -> None:
@@ -326,8 +343,10 @@ class TestVolteoPipeline(unittest.TestCase):
 		self.assertEqual(etap_nr("Fotowoltaika", "Umowa Podpisana"), 3)
 		self.assertEqual(etap_nr("Fotowoltaika", "Finansowanie"), 4)
 		self.assertEqual(etap_nr("Fotowoltaika", "Weryfikacja Backoffice"), 5)
-		self.assertEqual(etap_nr("Fotowoltaika", "Wygrana – montaż"), 6)
-		self.assertEqual(etap_nr("Fotowoltaika", "Przegrana"), 7)
+		self.assertEqual(etap_nr("Fotowoltaika", "Monta\u017c"), 6)
+		self.assertEqual(etap_nr("Fotowoltaika", "Obs\u0142uga pomonta\u017cowa"), 7)
+		self.assertEqual(etap_nr("Fotowoltaika", "Wygrana - zako\u0144czona"), 8)
+		self.assertEqual(etap_nr("Fotowoltaika", "Przegrana"), 9)
 
 	def test_aq_etap_nr_cp_wartości_jawne(self: "TestVolteoPipeline") -> None:
 		self.assertEqual(etap_nr("Czyste Powietrze", "Lead"), 101)
@@ -368,6 +387,142 @@ class TestVolteoPipeline(unittest.TestCase):
 		najwyzszy_oze = max(etap_nr("Fotowoltaika", s) for s in grupa_for("Fotowoltaika"))
 		najnizszy_cp = min(etap_nr("Czyste Powietrze", s) for s in grupa_for("Czyste Powietrze"))
 		self.assertLess(najwyzszy_oze, najnizszy_cp)
+
+	# --- Katalog pozycji OZE (ops#381) --------------------------------------
+
+	def test_aw_etapy_katalogu_oze_w_pipeline_oze(self: "TestVolteoPipeline") -> None:
+		for etap in PODZADANIA_OZE:
+			self.assertIn(etap, PIPELINE_OZE)
+		self.assertEqual(
+			tuple(PODZADANIA_OZE),
+			(
+				"Umowa Podpisana",
+				"Finansowanie",
+				"Weryfikacja Backoffice",
+				"Monta\u017c",
+				"Obs\u0142uga pomonta\u017cowa",
+			),
+		)
+
+	def test_ax_klucze_oze_unikalne_i_rozłączne_z_cp(self: "TestVolteoPipeline") -> None:
+		klucze = [z["klucz"] for zadania in PODZADANIA_OZE.values() for z in zadania]
+		self.assertEqual(len(klucze), 29)
+		self.assertEqual(len(klucze), len(set(klucze)))
+		klucze_cp = {z["klucz"] for zadania in PODZADANIA_CP.values() for z in zadania}
+		self.assertFalse(set(klucze) & klucze_cp)
+
+	def test_ay_formy_pozycji_należą_do_form_finansowania(self: "TestVolteoPipeline") -> None:
+		self.assertEqual(FORMY_FINANSOWANIA, ("100% Got\u00f3wka", "100% Kredyt", "Got\u00f3wka + Kredyt"))
+		for zadania in PODZADANIA_OZE.values():
+			for z in zadania:
+				self.assertEqual(z["typ"], "weryfikacja")
+				self.assertTrue(z["nd_dozwolone"])
+				self.assertFalse(z["z_data"])
+				for forma in z.get("formy", ()):
+					self.assertIn(forma, FORMY_FINANSOWANIA)
+
+	def test_az_pozycje_etapu_finansowanie_wg_formy(self: "TestVolteoPipeline") -> None:
+		def klucze(forma):
+			return [p["klucz"] for p in pozycje_etapu("Fotowoltaika", "Finansowanie", forma)]
+
+		self.assertEqual(
+			klucze("100% Kredyt"),
+			[
+				"oze_fin:formularz_kredytowy",
+				"oze_fin:kredyt_procesowany",
+				"oze_fin:kredyt_odrzucony",
+				"oze_fin:kredyt_podpisany",
+			],
+		)
+		self.assertEqual(klucze("100% Got\u00f3wka"), ["oze_fin:proforma", "oze_fin:platnosc_klienta"])
+		self.assertEqual(len(klucze("Got\u00f3wka + Kredyt")), 6)
+		self.assertEqual(klucze("Got\u00f3wka + Kredyt")[0], "oze_fin:formularz_kredytowy")
+		self.assertEqual(klucze("Got\u00f3wka + Kredyt")[-1], "oze_fin:platnosc_klienta")
+		self.assertEqual(klucze(None), [])
+		self.assertEqual(klucze(""), [])
+
+	def test_ba_pozycje_etapu_inne_etapy_i_cp(self: "TestVolteoPipeline") -> None:
+		self.assertEqual(len(pozycje_etapu("Fotowoltaika", "Monta\u017c")), 8)
+		self.assertEqual(pozycje_etapu("Fotowoltaika", "Lead"), ())
+		self.assertEqual(pozycje_etapu("Nieznany", "Monta\u017c"), ())
+		cp = pozycje_etapu("Czyste Powietrze", "Dokumentacja", "100% Kredyt")
+		self.assertEqual(cp, PODZADANIA_CP["Dokumentacja"])
+
+	def test_bb_czy_pozycja_dla_formy(self: "TestVolteoPipeline") -> None:
+		self.assertTrue(czy_pozycja_dla_formy({"klucz": "x"}, None))
+		ograniczona = {"klucz": "x", "formy": ("100% Kredyt",)}
+		self.assertTrue(czy_pozycja_dla_formy(ograniczona, "100% Kredyt"))
+		self.assertFalse(czy_pozycja_dla_formy(ograniczona, "100% Got\u00f3wka"))
+		self.assertFalse(czy_pozycja_dla_formy(ograniczona, None))
+		self.assertFalse(czy_pozycja_dla_formy(ograniczona, ""))
+
+	def test_bc_wyczysc_po_zmianie_formy(self: "TestVolteoPipeline") -> None:
+		mapa = {
+			"oze_fin:proforma": {"stan": "accepted"},
+			"oze_fin:kredyt_podpisany": {"stan": "waiting"},
+			"oze_mon:sprzet_zamowiony": {"stan": "accepted"},
+			"dok:zdjecia": {"stan": "accepted"},
+			"nieznany:klucz": {"stan": "error"},
+		}
+		przed = json.dumps(mapa, sort_keys=True)
+		wynik = wyczysc_po_zmianie_formy(mapa, "100% Kredyt")
+		self.assertEqual(json.dumps(mapa, sort_keys=True), przed)
+		self.assertIsNot(wynik, mapa)
+		self.assertEqual(
+			set(wynik),
+			{"oze_fin:kredyt_podpisany", "oze_mon:sprzet_zamowiony", "dok:zdjecia", "nieznany:klucz"},
+		)
+		self.assertEqual(
+			set(wyczysc_po_zmianie_formy(mapa, "")),
+			{"oze_mon:sprzet_zamowiony", "dok:zdjecia", "nieznany:klucz"},
+		)
+		self.assertEqual(len(wyczysc_po_zmianie_formy(mapa, "Got\u00f3wka + Kredyt")), 5)
+
+	def test_bd_podsumowanie_etapu_wektory(self: "TestVolteoPipeline") -> None:
+		pozycje = PODZADANIA_OZE["Umowa Podpisana"]
+		mapa = {
+			"oze_up:akceptacja_klienta": {"stan": "accepted"},
+			"oze_up:akceptacja_handlowca": {"stan": "accepted"},
+		}
+		self.assertEqual(podsumowanie_etapu(pozycje, mapa), {"ok": 2, "err": 0, "razem": 3})
+
+		pozycje = PODZADANIA_OZE["Monta\u017c"]
+		mapa = {p["klucz"]: {"stan": "accepted"} for p in pozycje[:4]}
+		mapa[pozycje[4]["klucz"]] = {"stan": "nd"}
+		mapa[pozycje[5]["klucz"]] = {"stan": "waiting"}
+		self.assertEqual(podsumowanie_etapu(pozycje, mapa), {"ok": 4, "err": 0, "razem": 7})
+
+		pozycje = pozycje_etapu("Fotowoltaika", "Finansowanie", "100% Kredyt")
+		mapa = {
+			pozycje[0]["klucz"]: {"stan": "accepted"},
+			pozycje[1]["klucz"]: {"stan": "error"},
+		}
+		self.assertEqual(podsumowanie_etapu(pozycje, mapa), {"ok": 1, "err": 1, "razem": 4})
+
+	def test_be_podsumowanie_szansy(self: "TestVolteoPipeline") -> None:
+		self.assertIsNone(podsumowanie_szansy("Czyste Powietrze", "Dokumentacja", {}, None))
+		self.assertIsNone(podsumowanie_szansy("Fotowoltaika", "Lead", {}, None))
+		self.assertIsNone(podsumowanie_szansy("Nieznany", "Monta\u017c", {}, None))
+		self.assertEqual(
+			podsumowanie_szansy("Fotowoltaika", "Finansowanie", {}, None),
+			{"ok": 0, "err": 0, "razem": 0},
+		)
+		self.assertEqual(
+			podsumowanie_szansy("Fotowoltaika", "Finansowanie", {}, "100% Got\u00f3wka"),
+			{"ok": 0, "err": 0, "razem": 2},
+		)
+		self.assertEqual(
+			podsumowanie_szansy("Klimatyzacja", "Monta\u017c", {"oze_mon:platnosc_100": {"stan": "accepted"}}, None),
+			{"ok": 1, "err": 0, "razem": 8},
+		)
+
+	def test_bf_wywołania_oze_nie_mutują_katalogu(self: "TestVolteoPipeline") -> None:
+		przed = {e: tuple(dict(z) for z in zs) for e, zs in PODZADANIA_OZE.items()}
+		definicja = podzadanie_def("Fotowoltaika", "oze_fin:proforma")
+		self.assertEqual(definicja["formy"], ("100% Got\u00f3wka", "Got\u00f3wka + Kredyt"))
+		definicja["label"] = "ZMIENIONE"
+		pozycje_etapu("Fotowoltaika", "Finansowanie", "100% Kredyt")
+		self.assertEqual({e: tuple(dict(z) for z in zs) for e, zs in PODZADANIA_OZE.items()}, przed)
 
 
 if __name__ == "__main__":

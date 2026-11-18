@@ -250,6 +250,15 @@ def _zl(kwota: object) -> str:
 	return f"{znak}{' '.join(grupy)},{grosze} zł"
 
 
+ETYKIETY_STANOW_POZYCJI: dict[str, str] = {
+	"waiting": "Oczekuje",
+	"accepted": "Zaakceptowano",
+	"error": "Błąd",
+	"nd": "Nie dotyczy",
+}
+"""Kod stanu pozycji podprocesu OZE na etykietę do śladu w Aktywności."""
+
+
 def tekst_sladu(rodzaj: str, **dane: object) -> str:
 	"""Autorytatywne, bezosobowe polskie teksty śladów — feed pokazuje je po pogrubionym
 	autorze, jak istniejące `compose_volteo_linked_text` w `crm/api/activities.py`
@@ -264,6 +273,23 @@ def tekst_sladu(rodzaj: str, **dane: object) -> str:
 		if note:
 			text += f' — „{note}”'
 		return text
+
+	if rodzaj == "pozycja_etapu":
+		label = dane["label"]
+		if dane.get("cofnieto"):
+			return f"wyczyszczono status pozycji „{label}”"
+		stan = ETYKIETY_STANOW_POZYCJI.get(dane["stan"], dane["stan"])
+		text = f"oznaczono pozycję „{label}”: {stan}"
+		note = dane.get("note")
+		if note:
+			text += f", notatka: „{note}”"
+		return text
+
+	if rodzaj == "finansowanie_forma":
+		forma = dane.get("forma")
+		if forma:
+			return f"ustawiono formę finansowania: {forma}"
+		return "wyczyszczono formę finansowania"
 
 	if rodzaj == "autenti_wyslano":
 		return f"wysłano {dane['dokument']} do podpisu Autenti"
