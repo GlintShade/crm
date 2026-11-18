@@ -197,15 +197,11 @@
                 class="min-w-0"
               >
                 <span
-                  class="block truncate text-xs"
-                  :class="
-                    item.podzadania.err > 0
-                      ? 'text-ink-red-8'
-                      : 'text-ink-gray-6'
-                  "
+                  class="block shrink-0 rounded-full px-2 py-0.5 text-xs font-medium"
+                  :class="klasaLicznika(item.podzadania)"
                   data-testid="lista-licznik-podprocesu"
                 >
-                  {{ licznikPodprocesu(item) }}
+                  {{ krotkiLicznik(item.podzadania) }}
                 </span>
               </Tooltip>
             </div>
@@ -619,6 +615,19 @@ function licznikPodprocesu(item) {
   const p = item?.podzadania
   if (!p || typeof p !== 'object' || !(p.razem > 0)) return ''
   return tekstLicznika(p)
+}
+
+// Krotka etykieta pigulki: tylko "k/n" (pelny tekst jest w tooltipie).
+function krotkiLicznik(p) {
+  return `${p.ok}/${p.razem}`
+}
+
+// Kolor pigulki: czerwona przy bledach, zielona gdy wszystko zaakceptowane,
+// w pozostalych przypadkach neutralna szara.
+function klasaLicznika(p) {
+  if (p.err > 0) return 'bg-surface-red-2 text-ink-red-8'
+  if (p.razem > 0 && p.ok === p.razem) return 'bg-surface-green-2 text-ink-green-8'
+  return 'bg-surface-gray-2 text-ink-gray-7'
 }
 
 // Pasek postępu procesu pod odznaką statusu (kolumna "Etap procesu",
