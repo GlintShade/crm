@@ -136,12 +136,23 @@
                 :otwarty="etapOtwarty === el.status"
                 :licznik="licznik(el.status)"
                 :ostrzezenie="licznikOstrzezenie(el.status)"
-                :testid="proces === 'OZE' ? 'naglowek-licznik' : 'etap-podzadania'"
                 @toggle="przelaczEtap(el.status)"
               />
             </li>
           </ol>
         </div>
+
+        <button
+          v-if="chipLicznika"
+          type="button"
+          class="mt-2 inline-flex max-w-full cursor-pointer items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] leading-4"
+          :class="chipLicznika.klasa"
+          :aria-expanded="etapOtwarty === status"
+          data-testid="naglowek-licznik"
+          @click="przelaczEtap(status)"
+        >
+          {{ chipLicznika.tekst }}
+        </button>
 
         <!-- Forma zwarta: pełny tekst stanu pod paskiem -->
         <div
@@ -191,6 +202,17 @@
             >
               {{ etykietaStatusu(__(status)) }}
             </div>
+            <button
+              v-if="chipLicznika"
+              type="button"
+              class="mt-1 inline-flex max-w-full cursor-pointer items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] leading-4"
+              :class="chipLicznika.klasa"
+              :aria-expanded="etapOtwarty === status"
+              data-testid="naglowek-licznik"
+              @click="przelaczEtap(status)"
+            >
+              {{ chipLicznika.tekst }}
+            </button>
             <div class="mt-0.5 min-h-[18px] text-[13px] text-ink-gray-7">
               {{ tryb === 'progress' && czas ? czasOd(czas) : '' }}
             </div>
@@ -248,8 +270,7 @@
                   :otwarty="etapOtwarty === el.status"
                   :licznik="licznik(el.status)"
                   :ostrzezenie="licznikOstrzezenie(el.status)"
-                  :testid="proces === 'OZE' ? 'naglowek-licznik' : 'etap-podzadania'"
-                  @toggle="przelaczEtap(el.status)"
+                    @toggle="przelaczEtap(el.status)"
                 />
               </div>
             </div>
@@ -542,12 +563,26 @@ function licznik(nazwa) {
   const l = liczniki.value?.[nazwa]
   if (!l) return ''
   if (proces.value === 'OZE') {
-    // Finansowanie bez wybranej formy: pozycji jeszcze nie ma, chip to podpowiedź.
-    if (l.brakFormy) return __('wybierz formę finansowania')
-    return tekstLicznika({ ok: l.ok ?? 0, err: l.err ?? 0, razem: l.razem ?? 0 })
+    // Krótki licznik pod segmentem; bez formy finansowania sama strzałka.
+    return l.brakFormy ? '' : `${l.ok ?? 0}/${l.razem ?? 0}`
   }
   return `${l.zrobione}/${l.wszystkie}`
 }
+// Chip z pełnym tekstem licznika bieżącego etapu (tylko OZE w toku).
+const chipLicznika = computed(() => {
+  if (proces.value !== 'OZE' || tryb.value !== 'progress') return null
+  if (!maPodzadania(status.value)) return null
+  const l = liczniki.value?.[status.value]
+  if (!l) return null
+  if (l.brakFormy) {
+    return { tekst: __('wybierz formę finansowania'), klasa: 'bg-surface-blue-2 text-ink-blue-8' }
+  }
+  const tekst = tekstLicznika({ ok: l.ok ?? 0, err: l.err ?? 0, razem: l.razem ?? 0 })
+  return {
+    tekst,
+    klasa: (l.err ?? 0) > 0 ? 'bg-surface-red-2 text-ink-red-8' : 'bg-surface-gray-2 text-ink-gray-7',
+  }
+})
 // Kolor ostrzegawczy chipa OZE, gdy etap ma pozycje w błędzie.
 function licznikOstrzezenie(nazwa) {
   return proces.value === 'OZE' && (liczniki.value?.[nazwa]?.err ?? 0) > 0
@@ -678,7 +713,6 @@ const PodControl = defineComponent({
     otwarty: { type: Boolean, default: false },
     licznik: { type: String, default: '' },
     ostrzezenie: { type: Boolean, default: false },
-    testid: { type: String, default: 'etap-podzadania' },
   },
   emits: ['toggle'],
   setup(p, { emit: emitCtl }) {
@@ -687,7 +721,7 @@ const PodControl = defineComponent({
         'button',
         {
           type: 'button',
-          'data-testid': p.testid,
+          'data-testid': 'etap-podzadania',
           'aria-expanded': p.otwarty,
           'aria-label': __('Pokaż zadania etapu'),
           title: __('Pokaż zadania etapu'),
