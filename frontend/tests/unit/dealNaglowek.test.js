@@ -177,13 +177,12 @@ describe('pasek etapów', () => {
     expect(czyZwarty(5, 400)).toBe(true)
     expect(czyZwarty(5, 0)).toBe(false)
   })
-  it('8 etapów OZE zachowuje się jak dotąd 5, 12 etapów CP bez zmian', () => {
-    expect(MAKS_ETAPOW_BEZ_ZWARCIA).toBe(8)
-    expect(czyZwarty(8, 1200)).toBe(false)
-    expect(czyZwarty(8, 600)).toBe(true)
+  it('procesy powyżej 6 etapów (OZE 8, CP 12) używają formy zwartej', () => {
+    expect(MAKS_ETAPOW_BEZ_ZWARCIA).toBe(6)
+    expect(czyZwarty(8, 1200)).toBe(true)
     expect(czyZwarty(9, 2000)).toBe(true)
     expect(czyZwarty(12, 2000)).toBe(true)
-    expect(czyZwarty(8, 1200, 90, 6)).toBe(true)
+    expect(czyZwarty(5, 800)).toBe(false)
   })
   it('numer etapu OZE', () => {
     expect(tekstNumeruEtapu(2, 8)).toBe('Etap 3 z 8')
@@ -222,8 +221,10 @@ describe('wariant paska', () => {
 describe('rzędy paska', () => {
   it('jeden rząd tylko gdy nieaktywny segment ma dość miejsca', () => {
     expect(liczbaRzedowPaska(5, 100)).toBe(1)
-    expect(liczbaRzedowPaska(8, 100)).toBe(1)
+    expect(liczbaRzedowPaska(6, 100)).toBe(1)
+    expect(liczbaRzedowPaska(6, 50)).toBe(1)
     expect(liczbaRzedowPaska(8, 1000)).toBe(1)
+    expect(liczbaRzedowPaska(8, 500)).toBe(2)
     expect(liczbaRzedowPaska(12, 1400)).toBe(1)
     expect(liczbaRzedowPaska(12, 790)).toBe(2)
     expect(liczbaRzedowPaska(12, 0)).toBe(1)
