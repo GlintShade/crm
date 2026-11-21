@@ -26,3 +26,12 @@ export function klasaWiersza(k) {
 export function przelacz(aktywna, kliknieta) {
   return aktywna === kliknieta ? null : kliknieta
 }
+
+/** Styl ramki karty kalendarza: kolor obwódki kategorii; Standard (biały) dostaje cienki ciemny pierścień. */
+export function stylRamki(k) {
+  const c = kolorKategorii(k)
+  if (!c) return null
+  return k === 'Standard'
+    ? { borderColor: c.wypelnienie, boxShadow: `0 0 0 1px ${c.obwodka}` }
+    : { borderColor: c.obwodka }
+}

@@ -100,7 +100,11 @@
         v-if="!widoczni.length"
         class="py-10 text-center text-sm text-ink-gray-5"
       >
-        {{ __('Brak handlowców do wyświetlenia.') }}
+        {{
+          props.pasek && kategoriaAktywna
+            ? __('Brak handlowców w tej kategorii.')
+            : __('Brak handlowców do wyświetlenia.')
+        }}
       </div>
 
       <!-- Tablica: siatka kart -->
@@ -224,6 +228,7 @@ import EdycjaGrafiku from '@/components/kalendarz/EdycjaGrafiku.vue'
 import GrafikZespolu from '@/components/kalendarz/GrafikZespolu.vue'
 import PrzelacznikSegmentowy from '@/components/kalendarz/PrzelacznikSegmentowy.vue'
 import { sessionStore } from '@/stores/session'
+import { useKategoriaFiltr } from '@/composables/useKategoriaFiltr'
 import { useKalendarzLive } from '@/composables/useKalendarzLive'
 import {
   dniTygodnia,
@@ -250,7 +255,7 @@ const OPCJE_ORIENTACJI = [
 // Pasek nawigacji (strzałki, Dziś, etykieta zakresu, Tydzień/Dzień, Nowe
 // spotkanie) rysuje ten komponent tylko z propem `pasek` (widok w Leadach);
 // strona /kalendarz trzyma go w swoim LayoutHeader i czyta stan przez expose.
-defineProps({
+const props = defineProps({
   pasek: { type: Boolean, default: false },
 })
 
@@ -295,19 +300,26 @@ const etykieta = computed(() =>
     : etykietaZakresu(okres.value.od, okres.value.do),
 )
 
+// Pigułka kategorii (ops#393) tylko w Leadach (`pasek`); kolejność z serwera.
+const { aktywna: kategoriaAktywna } = useKategoriaFiltr()
+const baza = computed(() =>
+  props.pasek && kategoriaAktywna.value
+    ? handlowcy.value.filter((h) => h.kategoria === kategoriaAktywna.value)
+    : handlowcy.value,
+)
 const opcjeHandlowcow = computed(() =>
-  handlowcy.value.map((h) => ({ value: h.user, label: h.full_name })),
+  baza.value.map((h) => ({ value: h.user, label: h.full_name })),
 )
 const wybranyHandlowiec = computed(() => {
-  const jest = handlowcy.value.some((h) => h.user === stan.handlowiec)
-  return jest ? stan.handlowiec : handlowcy.value[0]?.user || ''
+  const jest = baza.value.some((h) => h.user === stan.handlowiec)
+  return jest ? stan.handlowiec : baza.value[0]?.user || ''
 })
 const widoczni = computed(() => {
   if (zakres.value === 'wlasny') return handlowcy.value.slice(0, 1)
   if (stan.tryb === 'jeden')
-    return handlowcy.value.filter((h) => h.user === wybranyHandlowiec.value)
-  if (!stan.filtr.length) return handlowcy.value
-  return handlowcy.value.filter((h) => stan.filtr.includes(h.user))
+    return baza.value.filter((h) => h.user === wybranyHandlowiec.value)
+  if (!stan.filtr.length) return baza.value
+  return baza.value.filter((h) => stan.filtr.includes(h.user))
 })
 
 // Wspólna oś godzin kart tablicy (spotkania wszystkich widocznych handlowców),
