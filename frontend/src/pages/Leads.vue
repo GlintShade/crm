@@ -3,6 +3,7 @@
     <template #left-header>
       <ViewBreadcrumbs v-model="viewControls" routeName="Leads" />
       <WidokiLeadowPasek tryb="typ" />
+      <PigulkaKategorii />
     </template>
     <template #right-header>
       <CustomActions
@@ -29,7 +30,7 @@
       v-model:resizeColumn="triggerResize"
       v-model:updatedPageCount="updatedPageCount"
       doctype="CRM Lead"
-      :filters="{ converted: 0 }"
+      :filters="filtryListy"
       :options="{
         allowedViews: ['list', 'mapa', 'kalendarz', 'group_by', 'kanban'],
         // VOLTEO (owner feedback 2026-10-05): pasek szybkich filtrów Leadów ma
@@ -333,7 +334,9 @@ import { rozbijTagi } from '@/utils/tagiProduktow'
 import { useOnboarding, useTelemetry } from 'frappe-ui/frappe'
 import { Avatar, Tooltip, Dropdown, dayjsLocal } from 'frappe-ui'
 import { useRoute } from 'vue-router'
-import { ref, computed, reactive, h } from 'vue'
+import { ref, computed, reactive, h, watch } from 'vue'
+import PigulkaKategorii from '@/components/PigulkaKategorii.vue'
+import { useKategoriaFiltr } from '@/composables/useKategoriaFiltr'
 
 const { getFormattedPercent, getFormattedFloat, getFormattedCurrency } =
   getMeta('CRM Lead')
@@ -371,6 +374,24 @@ function onColumnWidthUpdated(payload) {
 }
 const updatedPageCount = ref(20)
 const viewControls = ref(null)
+
+// ops#393: pigułka kategorii. Zmiana propsa `filters` sama nie przeładowuje listy
+// (getParams() jest czytane tylko przy reload), więc przeładowujemy tą samą ścieżką.
+const { aktywna: kategoriaAktywna } = useKategoriaFiltr()
+const filtryListy = computed(() =>
+  kategoriaAktywna.value
+    ? { converted: 0, volteo_kategoria: kategoriaAktywna.value }
+    : { converted: 0 },
+)
+watch(
+  kategoriaAktywna,
+  () => {
+    if (!viewControls.value || !leads.value) return
+    leads.value.params = viewControls.value.getParams()
+    leads.value.reload()
+  },
+  { flush: 'post' },
+)
 
 function getRow(name, field) {
   function getValue(value) {
@@ -572,6 +593,8 @@ function parseRows(rows, columns = []) {
           image: getUser(user).user_image,
           label: getUser(user).full_name,
         }))
+      } else if (row == '_handlowiec_terenu') {
+        _rows[row] = lead._handlowiec_terenu || ''
       } else if (['modified', 'creation'].includes(row)) {
         const komorka = timestampCell(lead[row])
         // Prosba wlasciciela 2026-10-31: "Data utworzenia" do 48 h od
@@ -610,6 +633,7 @@ function parseRows(rows, columns = []) {
     _rows['_note_count'] = lead._note_count
     _rows['_task_count'] = lead._task_count
     _rows['_comment_count'] = lead._comment_count
+    _rows['_kategoria'] = lead._kategoria || ''
     return _rows
   })
 }

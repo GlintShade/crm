@@ -59,6 +59,7 @@
       v-slot="{ column, item, row }"
       :rows="rows"
       doctype="CRM Lead"
+      :rowClass="(row) => klasaWiersza(row._kategoria)"
     >
       <ListRowItem :item="item" :align="column.align" class="overflow-hidden">
         <template #prefix>
@@ -321,6 +322,7 @@ import {
 import { sessionStore } from '@/stores/session'
 import { usersStore } from '@/stores/users'
 import { ref, computed, watch } from 'vue'
+import { klasaWiersza } from '@/utils/kategorieHandlowcow'
 
 // Kolumny CC z ikona w naglowku i kontrolka wypelniajaca komorke: naglowek
 // jest wysrodkowany, a komorka zajmuje cala szerokosc (bez odstepu prefiksu).
@@ -522,3 +524,17 @@ defineExpose({
   ),
 })
 </script>
+
+<style scoped>
+/* ops#393: pasek kategorii handlowca (inset, wiec siatka sie nie przesuwa) */
+:deep(.kat-priorytet) {
+  box-shadow: inset 4px 0 0 #e2ab12;
+}
+:deep(.kat-standard) {
+  box-shadow: inset 4px 0 0 #ffffff, inset 5px 0 0 #3b4252;
+}
+:deep(.kat-nie-umawiac) {
+  box-shadow: inset 4px 0 0 #6f7783;
+  opacity: 0.6;
+}
+</style>

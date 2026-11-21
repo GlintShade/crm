@@ -10,3 +10,19 @@ const KOLORY = {
 export function kolorKategorii(k) {
   return KOLORY[k] ? { ...KOLORY[k] } : null
 }
+
+const SLUGI = { Priorytet: 'priorytet', Standard: 'standard', 'Nie umawiać': 'nie-umawiac' }
+
+export function slugKategorii(k) {
+  return SLUGI[k] || ''
+}
+
+/** Klasa paska wiersza listy (style w LeadsListView.vue); brak kategorii: bez klasy. */
+export function klasaWiersza(k) {
+  return SLUGI[k] ? `kat-${SLUGI[k]}` : ''
+}
+
+/** Klik w aktywną kategorię wyłącza filtr (null), inaczej wybiera klikniętą. */
+export function przelacz(aktywna, kliknieta) {
+  return aktywna === kliknieta ? null : kliknieta
+}
