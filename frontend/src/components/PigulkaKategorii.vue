@@ -24,7 +24,7 @@
             borderColor: kolorKategorii(k).obwodka,
           }"
         />
-        <span>{{ __(k) }}</span>
+        <span>{{ k }}</span>
       </button>
     </div>
   </div>
