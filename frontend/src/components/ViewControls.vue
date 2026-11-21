@@ -665,11 +665,13 @@ function extractErrorMessage(err) {
   return ''
 }
 
+let stopPrzycinanie
 list.value = createResource({
   url: 'crm.api.doc.get_data',
   params: getParams(),
   cache: [props.doctype, route.query.view, route.params.viewType],
   onSuccess(data) {
+    stopPrzycinanie?.()
     // VOLTEO (issue #100): patrz komentarz w getParams() -- sama typWidokuDoZapisu()
     // aliasy, żeby nigdy nie zapisać 'mapa' jako view_type.
     let cv = getView(
@@ -713,14 +715,20 @@ list.value = createResource({
   },
 })
 
-onMounted(() =>
-  useDebounceFn(() => {
-    // zapis z IndexedDB wraca asynchronicznie, przed pierwszym reload
-    const przyciete = przytnijZapisanaListe(list.value.data)
-    if (przyciete !== list.value.data) list.value.setData(przyciete)
-    reload()
-  }, 100)(),
+// ops#389: przytnij zapis z pamieci/IndexedDB ZANIM wyrenderuja sie wiersze.
+// Nie przycinamy podczas pobierania (loading): swieza odpowiedz, tez po
+// "load more", ma zostac cala.
+stopPrzycinanie = watch(
+  () => list.value?.data,
+  (d) => {
+    if (list.value.loading) return
+    const p = przytnijZapisanaListe(d)
+    if (p !== d) list.value.setData(p)
+  },
+  { flush: 'sync', immediate: true },
 )
+
+onMounted(() => useDebounceFn(reload, 100)())
 
 const isLoading = computed(() => list.value?.loading)
 

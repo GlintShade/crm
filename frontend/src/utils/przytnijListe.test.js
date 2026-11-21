@@ -12,6 +12,10 @@ describe('przytnijZapisanaListe', () => {
     expect(r.row_count).toBe(100)
     expect(d.data).toHaveLength(300)
   })
+  it('ponowne przyciecie zwraca ten sam obiekt', () => {
+    const r = przytnijZapisanaListe({ data: rows(300), page_length: 300, page_length_count: 100 })
+    expect(przytnijZapisanaListe(r)).toBe(r)
+  })
   it('zostawia mala liste bez zmian', () => {
     const d = { data: rows(20), page_length: 20, page_length_count: 20 }
     expect(przytnijZapisanaListe(d)).toBe(d)
