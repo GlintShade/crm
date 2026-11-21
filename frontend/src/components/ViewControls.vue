@@ -716,12 +716,13 @@ list.value = createResource({
 })
 
 // ops#389: przytnij zapis z pamieci/IndexedDB ZANIM wyrenderuja sie wiersze.
-// Nie przycinamy podczas pobierania (loading): swieza odpowiedz, tez po
-// "load more", ma zostac cala.
+// Swieza odpowiedz ma page_length rowne zadanemu w params (tez po "load more"),
+// wiec jej nie ruszamy; zapis z poprzedniej wizyty ma inny page_length.
+// (transform nie rozroznia: setData, czyli tez przywracanie z IndexedDB, go wola.)
 stopPrzycinanie = watch(
   () => list.value?.data,
   (d) => {
-    if (list.value.loading) return
+    if (d?.page_length === list.value.params?.page_length) return
     const p = przytnijZapisanaListe(d)
     if (p !== d) list.value.setData(p)
   },
