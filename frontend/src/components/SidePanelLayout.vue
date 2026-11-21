@@ -580,6 +580,37 @@
                       </div>
                     </div>
                   </div>
+                  <!-- ops#397: stala data utworzenia leada, zawsze tam, gdzie
+                       widac pole czasu do kontaktu (D2D go nie widzi). -->
+                  <div
+                    v-if="
+                      field.fieldname === 'custom_czas_do_kontaktu' &&
+                      field.visible &&
+                      doc.creation
+                    "
+                    :class="
+                      karty
+                        ? 'field flex min-w-0 flex-col gap-1 leading-5'
+                        : 'field flex items-center gap-2 px-3 leading-5'
+                    "
+                  >
+                    <div
+                      :class="[
+                        'text-sm text-ink-gray-5',
+                        karty ? 'px-2' : 'w-[35%] min-w-20 shrink-0 truncate',
+                      ]"
+                    >
+                      {{ __('Utworzony') }}
+                    </div>
+                    <div
+                      :class="[
+                        'min-h-[28px] items-center px-2 py-1 text-base tabular-nums',
+                        karty ? 'text-ink-gray-7' : 'w-[65%] text-ink-gray-5',
+                      ]"
+                    >
+                      {{ formatujDataGodzine(doc.creation) }}
+                    </div>
+                  </div>
                 </template>
               </component>
             </slot>
@@ -663,6 +694,7 @@ import { flt } from '@/utils/numberFormat.js'
 import { Tooltip, DatePicker, TimePicker, Switch, dayjsLocal } from 'frappe-ui'
 import { useDocument } from '@/data/document'
 import { probyKontaktuDoWyswietlenia } from '@/utils/leadyInline'
+import { formatujDataGodzine } from '@/utils/dataPolska'
 import {
   czesciPodpowiedzi,
   czyPokazacPodpowiedz,
