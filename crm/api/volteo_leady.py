@@ -119,6 +119,8 @@ from frappe import _
 from frappe.utils import cint
 
 from crm.api.doc import (
+	KLUCZ_KATEGORII,
+	_kategorie_leadow_teraz,
 	_normalizuj_zakres_dnia,
 	_podstaw_dzis,
 	_podstaw_me,
@@ -130,6 +132,7 @@ from crm.api.doc import (
 from crm.api.komentarze import liczby_zmian_komentarzy
 from crm.permissions.org_hierarchy import BYPASS_ROLES, _ma_linie_leady, czy_autor_ma_role_cc
 from crm.volteo_aktywnosc import czy_dokument_maskuje_cc, maskuj_autora_cc, tekst_sladu, zapisz_slad
+from crm.volteo_kategorie import moze_widziec
 from crm.volteo_leady_telefon import normalizuj_filtr_telefonu
 from crm.volteo_przydzial import normalizuj_wartosci_geo
 
@@ -711,6 +714,11 @@ def mapa(
 	filters = _normalizuj_zakres_dnia(filters, "CRM Lead")
 	filters = {**filters, **default_filters}
 
+	# VOLTEO (ops#393): mapa nie ukrywa leadow wg kategorii, tylko je przygasza po stronie
+	# frontendu, wiec filtr `volteo_kategoria` (z `filters` i `default_filters`) jest tu
+	# zawsze usuwany, takze dla uprawnionych.
+	filters.pop(KLUCZ_KATEGORII, None)
+
 	filters = rozwin_grupy("CRM Lead", filters)
 
 	# VOLTEO (issue ops#150): rozwiniecie filtrow po polach "produktow
@@ -753,12 +761,20 @@ def mapa(
 	if frappe.get_meta("CRM Lead").has_field("custom_geo_dokladnosc"):
 		fields.append("custom_geo_dokladnosc")
 
-	return frappe.get_list(
+	piny = frappe.get_list(
 		"CRM Lead",
 		fields=fields,
 		filters=filtry_tuples,
 		limit_page_length=0,
 	)
+	# VOLTEO (ops#393): `_kategoria` pinu tylko dla rol z `moze_widziec`; inni dostaja
+	# odpowiedz bez zmian. Kategorie liczone raz na zadanie (nie per pin).
+	if moze_widziec(frappe.get_roles()):
+		kategorie = _kategorie_leadow_teraz()[0]
+		for pin in piny:
+			k = kategorie.get(pin.get("name"))
+			pin["_kategoria"] = k[0] if k else ""
+	return piny
 
 
 @frappe.whitelist()

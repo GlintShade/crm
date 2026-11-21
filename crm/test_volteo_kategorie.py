@@ -11,6 +11,7 @@ from crm.volteo_kategorie import (
 	moze_widziec,
 	moze_zapisac,
 	okreg_kampanii,
+	sortuj_handlowcow,
 	teren_z_wiersza,
 	waliduj_teren,
 )
@@ -187,6 +188,25 @@ class TestWaliduj(unittest.TestCase):
 
 	def test_bez_srodka_promien_ignorowany(self):
 		self.assertEqual(waliduj_teren({"teren_lat": 0, "teren_lng": 0, "promien_km": 0}), [])
+
+
+class TestSortujHandlowcow(unittest.TestCase):
+	def test_kolejnosc_kategorii_i_nazwy(self):
+		wpisy = [
+			{"user": "a", "full_name": "Zofia", "kategoria": ""},
+			{"user": "b", "full_name": "Ola", "kategoria": "Nie umawiać"},
+			{"user": "c", "full_name": "marek", "kategoria": "Standard"},
+			{"user": "d", "full_name": "Jan", "kategoria": "Priorytet"},
+			{"user": "e", "full_name": "Adam", "kategoria": "Standard"},
+			{"user": "f", "full_name": "Ewa", "kategoria": "Priorytet"},
+			{"user": "g", "full_name": "Basia"},
+		]
+		self.assertEqual([w["user"] for w in sortuj_handlowcow(wpisy)], ["f", "d", "e", "c", "b", "g", "a"])
+
+	def test_nie_zmienia_wejscia(self):
+		wpisy = [{"full_name": "B", "kategoria": ""}, {"full_name": "A", "kategoria": "Priorytet"}]
+		sortuj_handlowcow(wpisy)
+		self.assertEqual(wpisy[0]["full_name"], "B")
 
 
 if __name__ == "__main__":
