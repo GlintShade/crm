@@ -10,7 +10,7 @@
     :class="[
       'flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm',
       stan.zablokowany
-        ? 'border-outline-red-3 bg-surface-red-2 text-ink-red-8'
+        ? 'border-outline-gray-2 bg-surface-gray-2 text-ink-gray-8'
         : 'border-outline-amber-3 bg-surface-amber-2 text-ink-amber-8',
     ]"
   >
