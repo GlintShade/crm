@@ -380,6 +380,7 @@ import {
   usePageMeta,
 } from 'frappe-ui'
 import { computed, ref, onMounted, watch, h, markRaw } from 'vue'
+import { przytnijZapisanaListe } from '@/utils/przytnijListe'
 import { useRouter, useRoute } from 'vue-router'
 import { useDebounceFn } from '@vueuse/core'
 import { isMobileView } from '@/composables/settings'
@@ -634,7 +635,8 @@ function getParams() {
     kanban_fields: kanban_fields,
     columns: columns,
     rows: rows,
-    page_length: pageLength.value,
+    // pierwsze zadanie po wejsciu: wybrany rozmiar, nie suma po "load more" (ops#389)
+    page_length: pageLengthCount.value ?? pageLength.value,
     page_length_count: pageLengthCount.value,
   }
 }
@@ -711,7 +713,14 @@ list.value = createResource({
   },
 })
 
-onMounted(() => useDebounceFn(reload, 100)())
+onMounted(() =>
+  useDebounceFn(() => {
+    // zapis z IndexedDB wraca asynchronicznie, przed pierwszym reload
+    const przyciete = przytnijZapisanaListe(list.value.data)
+    if (przyciete !== list.value.data) list.value.setData(przyciete)
+    reload()
+  }, 100)(),
+)
 
 const isLoading = computed(() => list.value?.loading)
 
