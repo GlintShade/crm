@@ -363,7 +363,7 @@ function rysuj(przesun = false) {
   const kolor = kolorKategorii(wiersze.value.find((x) => x.user === dialog.user)?.kategoria)
   const barwa = kolor ? kolor.obwodka : '#2563eb'
   const promien = Number(dialog.promien)
-  L.marker([dialog.lat, dialog.lng]).addTo(warstwa)
+  L.circleMarker([dialog.lat, dialog.lng], { radius: 6, color: barwa, weight: 2, fillColor: barwa, fillOpacity: 1 }).addTo(warstwa)
   if (Number.isFinite(promien) && promien > 0) {
     L.circle([dialog.lat, dialog.lng], {
       radius: promien * 1000,
