@@ -151,6 +151,19 @@ def kategorie_leadow(
 	return wynik
 
 
+def sortuj_handlowcow(wpisy: Iterable[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+	"""Kolejność handlowców w kalendarzu: Priorytet, Standard, Nie umawiać, bez kategorii;
+	w grupie po `full_name` (bez rozróżniania wielkości liter). Wpis ma klucze `kategoria`
+	(`""` gdy brak) i `full_name`."""
+
+	def klucz(w: Mapping[str, Any]) -> tuple[int, str]:
+		k = _tekst(w.get("kategoria"))
+		ranga = KATEGORIE.index(k) if k in KATEGORIE else len(KATEGORIE)
+		return (ranga, _tekst(w.get("full_name")).casefold())
+
+	return sorted(wpisy, key=klucz)
+
+
 def waliduj_teren(dane: Mapping[str, Any]) -> list[str]:
 	"""Lista komunikatów po polsku; pusta, gdy ustawienia są poprawne."""
 	bledy: list[str] = []

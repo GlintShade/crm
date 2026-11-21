@@ -21,6 +21,7 @@ Frontend wola te metody PELNA sciezka kropkowana `crm.api.kalendarz.<metoda>`.
 import frappe
 from frappe import _
 
+from crm.api.kategorie_handlowcow import wczytaj_tereny
 from crm.api.volteo_leady import _aktywni_d2d_reprezentanci
 from crm.volteo_kalendarz import (
 	DNI_TYGODNIA,
@@ -44,6 +45,7 @@ from crm.volteo_kalendarz import (
 	zakres_kalendarza,
 	zakres_tygodnia,
 )
+from crm.volteo_kategorie import moze_widziec, sortuj_handlowcow
 
 # Minimalna projekcja: nigdy `custom_cc` ani pola permlevel 2/3.
 POLA_SPOTKANIA = [
@@ -147,6 +149,12 @@ def spotkania(od: str, do: str, handlowcy: str | list | None = None) -> dict:
 		wszyscy = [{"user": r["name"], "full_name": r["full_name"]} for r in _aktywni_d2d_reprezentanci()]
 		wybrani = przetnij_handlowcow(normalizuj_handlowcow(handlowcy), [h["user"] for h in wszyscy])
 		handlowcy_wiersze = [h for h in wszyscy if h["user"] in wybrani]
+		# VOLTEO (ops#393): kategoria i kolejnosc tylko dla rol z `moze_widziec`.
+		if moze_widziec(frappe.get_roles()):
+			kategorie = {t.handlowiec: t.kategoria for t in wczytaj_tereny()}
+			handlowcy_wiersze = sortuj_handlowcow(
+				[{**h, "kategoria": kategorie.get(h["user"], "")} for h in handlowcy_wiersze]
+			)
 
 	maile = [h["user"] for h in handlowcy_wiersze]
 	wiersze = []
