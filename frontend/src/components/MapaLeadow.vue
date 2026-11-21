@@ -176,7 +176,7 @@
             borderColor: kolorKategorii(k).obwodka,
           }"
         />
-        <span class="text-ink-gray-7">{{ __(k) }}</span>
+        <span class="text-ink-gray-7">{{ k }}</span>
       </div>
     </div>
 
