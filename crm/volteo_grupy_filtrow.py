@@ -43,12 +43,12 @@ from collections.abc import Mapping, Sequence
 KLUCZ_GRUP = "volteo_grupy"
 
 # Limity walidowane przez `waliduj_grupy` - patrz issue #129 ("limity 5
-# grup x 10 warunków"). Czysto UX/bezpieczeństwo (chroni przed zapytaniem
+# grup x 10 warunków"; od ops#399 limit grup to 10). Czysto UX/bezpieczeństwo (chroni przed zapytaniem
 # `name in [...]` o nieograniczonym koszcie w `rozwin_grupy`); to samo
 # ograniczenie jest luźno powtórzone we froncie (`grupyFiltrow.js`) jako
 # podpowiedź UI, ale TEN moduł jest jedynym autorytatywnym źródłem -
 # backend waliduje niezależnie od tego, co wysłał frontend.
-MAX_GRUP = 5
+MAX_GRUP = 10
 MAX_WARUNKOW_W_GRUPIE = 10
 
 

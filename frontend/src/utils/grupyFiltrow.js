@@ -36,7 +36,7 @@
 // testowalne bezpośrednio przez vitest.
 
 export const KLUCZ_GRUP = 'volteo_grupy'
-export const MAX_GRUP = 5
+export const MAX_GRUP = 10
 export const MAX_WARUNKOW_W_GRUPIE = 10
 
 /**
