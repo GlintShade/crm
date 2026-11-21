@@ -321,6 +321,7 @@ def _scal_z_istniejacym(dane: dict) -> str | None:
 			"custom_posiadane_produkty",
 			"custom_zasady_dotacji",
 			"custom_produkt_procesu",
+			"custom_kampania_fb",
 		],
 		as_dict=True,
 	)

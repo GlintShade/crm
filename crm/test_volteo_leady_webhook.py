@@ -889,9 +889,23 @@ class TestPonowneZgloszenie(unittest.TestCase):
 			"custom_posiadane_produkty": "ME",
 			"custom_zasady_dotacji": "Stare zasady",
 			"custom_produkt_procesu": "PC",
+			"custom_kampania_fb": "Stara, 01.10",
 		}
 		wynik = pola_do_scalenia(ist, self.nowy)
 		self.assertEqual(list(wynik), ["custom_uwagi_import"])
+
+	def test_kampania_fb_tylko_gdy_pusta(self):
+		self.assertEqual(self.nowy["custom_kampania_fb"], "GORZÓW")
+		for pusta in ("", None):
+			wynik = pola_do_scalenia({"custom_kampania_fb": pusta}, self.nowy)
+			self.assertEqual(wynik["custom_kampania_fb"], "GORZÓW")
+		wynik = pola_do_scalenia({"custom_kampania_fb": "Inna, 01.10"}, self.nowy)
+		self.assertNotIn("custom_kampania_fb", wynik)
+
+	def test_kampania_fb_w_nowym_leadzie(self):
+		w = zbuduj_leada_z_webhooka(ladunek(kampania="[S][KAMPANIA LEADOWA][WROCŁAW][27.10.2026]"), DZIS)
+		self.assertEqual(w["custom_kampania_fb"], "Wrocław, 27.10")
+		self.assertNotIn("custom_kampania_fb", zbuduj_leada_z_webhooka(ladunek(kampania=""), DZIS))
 
 	def test_nowy_bez_tagu_nie_zapisuje_pustego(self):
 		nowy = zbuduj_leada_z_webhooka(ladunek(posiada_pv="", system_rozliczen="", produkt=""), DZIS)
