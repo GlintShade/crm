@@ -15,6 +15,9 @@ export const KOLOR_OBWODKI = '#ffffff'
 
 export const STYL_PINEZKI = Object.freeze({ radius: 6, weight: 1, fillOpacity: 0.92 })
 export const STYL_PINEZKI_WYBRANEJ = Object.freeze({ radius: 11, weight: 2.5, fillOpacity: 1 })
+// Przygaszona (poza aktywną kategorią, ops#393): mała szara kropka.
+export const STYL_PINEZKI_PRZYGASZONEJ = Object.freeze({ radius: 3, weight: 0.5, fillOpacity: 0.5 })
+export const KOLOR_PRZYGASZONEJ = '#9aa1ab'
 
 /**
  * Opcje stylu dla warstwy pinezki (konstruktor podklasy L.CircleMarker /
@@ -27,9 +30,18 @@ export const STYL_PINEZKI_WYBRANEJ = Object.freeze({ radius: 11, weight: 2.5, fi
  *
  * @param {string} kolor
  * @param {boolean} wybrany
+ * @param {boolean} [przygaszony] mała szara kropka, ignorowane dla wybranej
  * @returns {{radius: number, weight: number, fillOpacity: number, color: string, fillColor: string, wybrany: boolean}}
  */
-export function stylPinezki(kolor, wybrany = false) {
+export function stylPinezki(kolor, wybrany = false, przygaszony = false) {
+  if (przygaszony && !wybrany) {
+    return {
+      ...STYL_PINEZKI_PRZYGASZONEJ,
+      color: KOLOR_OBWODKI,
+      fillColor: KOLOR_PRZYGASZONEJ,
+      wybrany: false,
+    }
+  }
   const baza = wybrany ? STYL_PINEZKI_WYBRANEJ : STYL_PINEZKI
   return {
     ...baza,

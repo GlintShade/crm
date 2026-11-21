@@ -3,6 +3,7 @@ import {
   KOLOR_OBWODKI,
   KOLOR_WYBRANEJ,
   STYL_PINEZKI,
+  STYL_PINEZKI_PRZYGASZONEJ,
   STYL_PINEZKI_WYBRANEJ,
   geometriaPinezki,
   kropkaPinezki,
@@ -65,6 +66,22 @@ describe('stylPinezki', () => {
     const wybrany = stylPinezki('#000000', true)
     expect(wybrany.radius).toBeGreaterThan(domyslny.radius)
     expect(wybrany.weight).toBeGreaterThan(domyslny.weight)
+  })
+})
+
+describe('stylPinezki przygaszona', () => {
+  it('daje małą szarą kropkę z fillOpacity 0.5, niezależnie od koloru leada', () => {
+    const styl = stylPinezki('#dc2626', false, true)
+    expect(styl.radius).toBe(3)
+    expect(styl.fillColor).toBe('#9aa1ab')
+    expect(styl.fillOpacity).toBe(0.5)
+    expect(styl.radius).toBeLessThan(STYL_PINEZKI.radius)
+    expect(styl.wybrany).toBe(false)
+    expect(Object.isFrozen(STYL_PINEZKI_PRZYGASZONEJ)).toBe(true)
+  })
+
+  it('wybrana ma pierwszeństwo przed przygaszeniem', () => {
+    expect(stylPinezki('#dc2626', true, true)).toEqual(stylPinezki('#dc2626', true))
   })
 })
 

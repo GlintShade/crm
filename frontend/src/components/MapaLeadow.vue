@@ -163,6 +163,23 @@
       </div>
     </div>
 
+    <!-- Legenda kategorii handlowców (ops#393), tylko dla ról z dostępem. -->
+    <div
+      v-if="kategorieWidoczne"
+      class="flex flex-wrap items-center gap-3 border-b border-outline-gray-2 px-4 py-2 text-sm"
+    >
+      <div v-for="k in KATEGORIE" :key="k" class="flex items-center gap-1.5">
+        <span
+          class="h-2 w-2 shrink-0 rounded-full border"
+          :style="{
+            backgroundColor: kolorKategorii(k).wypelnienie,
+            borderColor: kolorKategorii(k).obwodka,
+          }"
+        />
+        <span class="text-ink-gray-7">{{ __(k) }}</span>
+      </div>
+    </div>
+
     <!-- Mapa -->
     <div class="relative isolate min-h-0 flex-1">
       <div
@@ -240,6 +257,8 @@ import {
   sciezkaPinezki,
   stylPinezki,
 } from '@/utils/mapaPinezka'
+import { useKategoriaFiltr } from '@/composables/useKategoriaFiltr'
+import { KATEGORIE, kolorKategorii } from '@/utils/kategorieHandlowcow'
 import {
   Button,
   ErrorMessage,
@@ -546,6 +565,13 @@ const leadyPrzefiltrowane = computed(() => {
 
 watch(leadyPrzefiltrowane, () => rysujMarkery())
 
+// Kategorie handlowców (ops#393): okręgi terenów, filtr pigułką, legenda.
+const { aktywna: aktywnaKategoria, widoczne: kategorieWidoczne, tereny } = useKategoriaFiltr()
+// Przygaszone tylko gdy pigułka włączona i pin niesie klucz _kategoria (handlowiec go nie dostaje).
+function przygaszonyLead(lead) {
+  return !!aktywnaKategoria.value && '_kategoria' in lead && lead._kategoria !== aktywnaKategoria.value
+}
+
 // --- Panel "Szybki podgląd" (issue #97, L08) ------------------------------
 
 const wybranyLead = ref(null)
@@ -623,6 +649,7 @@ function jitterOffset(name, sol) {
 let L = null
 let mapInstance = null
 let markerLayer = null
+let terenLayer = null
 let dopasowanoWidok = false
 // Nazwa leada -> { marker, lead }, przebudowywana przy każdym rysujMarkery().
 // Pozwala ustawStylWybranego() zmienić styl JEDNEGO markera in-place (klik
@@ -741,10 +768,63 @@ async function initMap() {
   }).addTo(mapInstance)
   dodajPodzialke(L, mapInstance)
 
+  // Warstwa terenów dodana PRZED markerami; dodatkowo rysujTereny() robi bringToBack.
+  terenLayer = L.featureGroup().addTo(mapInstance)
   markerLayer = utworzWarstweMarkerow().addTo(mapInstance)
 
+  rysujTereny()
   rysujMarkery()
 }
+
+// Okręgi terenów i pinezki handlowców (ops#393). Kolejność: Nie umawiać,
+// Standard, Priorytet (Priorytet na wierzchu), pinezki handlowców nad okręgami.
+// Wspólny canvas rysuje warstwy w kolejności dodania, a markery leadów (także te
+// dodane później przez markercluster) lądują za nimi, więc po dodaniu robimy
+// bringToBack na całej liście od końca: okręgi i pinezki handlowców są pod pinami leadów.
+function rysujTereny() {
+  if (!L || !mapInstance || !terenLayer) return
+  terenLayer.clearLayers()
+  const aktywna = aktywnaKategoria.value
+  const kolejnosc = ['Nie umawiać', 'Standard', 'Priorytet']
+  const lista = tereny.value
+    .filter((t) => t.lat != null && t.lng != null && kolorKategorii(t.kategoria))
+    .filter((t) => !aktywna || t.kategoria === aktywna)
+    .sort((a, b) => kolejnosc.indexOf(a.kategoria) - kolejnosc.indexOf(b.kategoria))
+  const okregi = []
+  const pinezki = []
+  for (const t of lista) {
+    const { wypelnienie, obwodka } = kolorKategorii(t.kategoria)
+    const srodek = [Number(t.lat), Number(t.lng)]
+    okregi.push(
+      L.circle(srodek, {
+        radius: Number(t.promien_km) * 1000,
+        color: obwodka,
+        weight: 2,
+        opacity: 1,
+        fillColor: wypelnienie,
+        fillOpacity: 0.45,
+        interactive: false,
+      }),
+    )
+    pinezki.push(
+      L.circleMarker(srodek, {
+        radius: 7,
+        color: obwodka,
+        weight: 2,
+        fillColor: wypelnienie,
+        fillOpacity: 1,
+      }).bindTooltip(`${t.full_name}, ${t.kategoria}`),
+    )
+  }
+  const wszystkie = [...okregi, ...pinezki]
+  wszystkie.forEach((l) => l.addTo(terenLayer))
+  for (const l of [...wszystkie].reverse()) l.bringToBack()
+}
+
+watch([tereny, aktywnaKategoria, kategorieWidoczne], () => {
+  rysujTereny()
+  rysujMarkery()
+})
 
 // Warstwa markerów zależna od ustawienia "Klastrowanie przy oddaleniu":
 // L.markerClusterGroup gdy włączone, zwykły L.featureGroup jak dotąd gdy
@@ -798,6 +878,7 @@ function przebudujWarstwe() {
   }
   markerLayer = utworzWarstweMarkerow().addTo(mapInstance)
   rysujMarkery()
+  rysujTereny()
 }
 
 function rysujMarkery() {
@@ -814,7 +895,7 @@ function rysujMarkery() {
 
     const kolor = kolorLeada(lead)
     const wybrany = lead.name === wybranyLead.value?.name
-    const marker = new PinezkaLeada([lat, lng], stylPinezki(kolor, wybrany))
+    const marker = new PinezkaLeada([lat, lng], stylPinezki(kolor, wybrany, przygaszonyLead(lead)))
     // Dymek nad główką, nie na czubku pinezki -- direction 'top' domyślnie
     // stawia dolną krawędź dymku dokładnie na kotwicy (czubku), a główka
     // pinezki jest NAD kotwicą, więc bez dodatkowego przesunięcia dymek
@@ -925,7 +1006,7 @@ function pobierzCelFallbackiem() {
 function ustawStylWybranego(nazwa, wybrany) {
   const wpis = markeryPoNazwie.get(nazwa)
   if (!wpis) return
-  wpis.marker.setStyle(stylPinezki(kolorLeada(wpis.lead), wybrany))
+  wpis.marker.setStyle(stylPinezki(kolorLeada(wpis.lead), wybrany, przygaszonyLead(wpis.lead)))
   if (wybrany) wpis.marker.bringToFront()
 }
 
@@ -1183,6 +1264,7 @@ function destroyMap() {
     mapInstance.remove()
     mapInstance = null
     markerLayer = null
+    terenLayer = null
   }
 }
 
