@@ -13,3 +13,24 @@ describe('kategorieHandlowcow', () => {
     expect(kolorKategorii('x')).toBeNull()
   })
 })
+
+import { klasaWiersza, przelacz, slugKategorii } from '@/utils/kategorieHandlowcow'
+
+describe('kategorieHandlowcow: pasek i pigułka', () => {
+  it('klasaWiersza daje klasę per kategoria, brak kategorii bez klasy', () => {
+    expect(klasaWiersza('Priorytet')).toBe('kat-priorytet')
+    expect(klasaWiersza('Standard')).toBe('kat-standard')
+    expect(klasaWiersza('Nie umawiać')).toBe('kat-nie-umawiac')
+    expect(klasaWiersza('')).toBe('')
+    expect(klasaWiersza(undefined)).toBe('')
+  })
+  it('slugKategorii', () => {
+    expect(slugKategorii('Nie umawiać')).toBe('nie-umawiac')
+    expect(slugKategorii('x')).toBe('')
+  })
+  it('przelacz: klik w aktywną wyłącza, inaczej wybiera', () => {
+    expect(przelacz('Priorytet', 'Priorytet')).toBeNull()
+    expect(przelacz(null, 'Standard')).toBe('Standard')
+    expect(przelacz('Priorytet', 'Standard')).toBe('Standard')
+  })
+})

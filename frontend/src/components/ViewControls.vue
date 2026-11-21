@@ -574,6 +574,10 @@ watch(updatedPageCount, (value) => {
   updatePageLength(value)
 })
 
+// ops#393: kolumna wstrzykiwana przez serwer (nie pole bazy), nigdy do zapisanego widoku.
+const bezKolumnyTerenu = (c) =>
+  Array.isArray(c) ? c.filter((k) => k?.key !== '_handlowiec_terenu') : c
+
 function getParams() {
   // VOLTEO (issue #100): Mapa i Tabela dzielą jeden standardowy widok --
   // typWidokuDoZapisu('mapa') === 'list' znajduje TEN SAM zapisany widok
@@ -694,7 +698,7 @@ list.value = createResource({
       title_field: data.title_field,
       kanban_columns: data.kanban_columns,
       kanban_fields: data.kanban_fields,
-      columns: data.columns,
+      columns: bezKolumnyTerenu(data.columns),
       rows: data.rows,
       page_length: params.page_length ?? data.page_length,
       page_length_count: params.page_length_count ?? data.page_length_count,
@@ -1337,7 +1341,7 @@ function updateGroupBy(group_by_field) {
 function updateColumns(obj) {
   if (!obj) {
     obj = {
-      columns: list.value.data.columns,
+      columns: bezKolumnyTerenu(list.value.data.columns),
       rows: list.value.data.rows,
       isDefault: false,
     }
@@ -1348,7 +1352,7 @@ function updateColumns(obj) {
   }
   defaultParams.value.columns = view.value.columns = obj.isDefault
     ? ''
-    : obj.columns
+    : bezKolumnyTerenu(obj.columns)
   defaultParams.value.rows = view.value.rows = obj.isDefault ? '' : obj.rows
   view.value.load_default_columns = obj.isDefault
 
