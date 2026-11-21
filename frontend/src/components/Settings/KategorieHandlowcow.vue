@@ -5,7 +5,7 @@
       <p class="text-p-sm text-ink-gray-5">
         {{
           __(
-            'Kategoria, teren i okręg kampanii FB handlowca decydują, w jakiej kolejności CC dzwoni do leadów. Zmiana zapisuje się od razu.',
+            'Handlowcy są pogrupowani według kategorii, od najwyższego priorytetu. Zmiana kategorii lub okręgu zapisuje się od razu i przenosi handlowca do właściwej karty.',
           )
         }}
       </p>
@@ -17,21 +17,42 @@
     <div v-else-if="!wiersze.length" class="rounded-lg border p-3 text-p-sm text-ink-gray-5">
       {{ __('Brak aktywnych handlowców.') }}
     </div>
-    <div v-else class="flex flex-col gap-2" data-testid="kategorie-lista">
+    <div v-else class="flex flex-col gap-4" data-testid="kategorie-lista">
       <div
-        v-for="w in wiersze"
-        :key="w.user"
-        class="flex flex-wrap items-center gap-3 rounded-lg border p-3"
-        :data-testid="'kategoria-wiersz-' + w.user"
+        class="grid grid-cols-[minmax(0,1.3fr)_9.5rem_minmax(0,1.4fr)_9.5rem] gap-3 px-3 text-xs text-ink-gray-5"
       >
-        <div class="flex w-48 shrink-0 items-center gap-2">
+        <span>{{ __('Handlowiec') }}</span>
+        <span>{{ __('Kategoria') }}</span>
+        <span>{{ __('Teren') }}</span>
+        <span>{{ __('Okręg kampanii FB') }}</span>
+      </div>
+      <div
+        v-for="g in grupy"
+        :key="g.kategoria || 'brak'"
+        class="rounded-lg border border-outline-gray-2"
+        :data-testid="'kategoria-karta-' + (slugKategorii(g.kategoria) || 'brak')"
+      >
+        <div
+          class="flex items-center gap-2 border-b border-outline-gray-2 bg-surface-gray-1 px-3 py-2"
+        >
           <span
             class="inline-block h-3 w-3 shrink-0 rounded-full border"
-            :style="stylKropki(w.kategoria)"
+            :class="g.kategoria ? '' : 'border-dashed'"
+            :style="stylKropki(g.kategoria)"
           />
-          <span class="truncate text-p-base text-ink-gray-8">{{ w.full_name || w.user }}</span>
+          <span class="text-base font-medium text-ink-gray-8">{{ g.tytul }}</span>
+          <span class="text-p-sm text-ink-gray-5">{{ g.wiersze.length }}</span>
         </div>
-        <div class="w-40">
+        <div v-if="!g.wiersze.length" class="px-3 py-3 text-p-sm text-ink-gray-5">
+          {{ __('Brak handlowców w tej kategorii.') }}
+        </div>
+        <div
+          v-for="w in g.wiersze"
+          :key="w.user"
+          class="grid grid-cols-[minmax(0,1.3fr)_9.5rem_minmax(0,1.4fr)_9.5rem] items-center gap-3 border-b border-outline-gray-2 px-3 py-2 last:border-b-0"
+          :data-testid="'kategoria-wiersz-' + w.user"
+        >
+          <span class="truncate text-p-base text-ink-gray-8">{{ w.full_name || w.user }}</span>
           <FormControl
             type="select"
             :modelValue="w.kategoria"
@@ -39,18 +60,16 @@
             :disabled="Boolean(zapisuje[w.user])"
             @update:modelValue="(v) => zmien(w, { kategoria: v })"
           />
-        </div>
-        <div class="flex min-w-48 flex-1 items-center gap-2">
-          <span class="flex-1 truncate text-p-sm text-ink-gray-6">{{ opisTerenu(w) }}</span>
-          <Button
-            variant="subtle"
-            size="sm"
-            :label="__('Ustaw teren')"
-            :disabled="Boolean(zapisuje[w.user])"
-            @click="otworz(w)"
-          />
-        </div>
-        <div class="w-44">
+          <div class="flex min-w-0 items-center gap-2">
+            <span class="flex-1 truncate text-p-sm text-ink-gray-6">{{ opisTerenu(w) }}</span>
+            <Button
+              variant="subtle"
+              size="sm"
+              :label="__('Ustaw teren')"
+              :disabled="Boolean(zapisuje[w.user])"
+              @click="otworz(w)"
+            />
+          </div>
           <FormControl
             type="select"
             :modelValue="w.okreg"
@@ -139,7 +158,7 @@ import { reactive, ref, computed, watch, nextTick, onMounted, onBeforeUnmount } 
 import { createResource, toast, Button, Dialog, ErrorMessage, FormControl } from 'frappe-ui'
 import { dodajPodzialke } from '@/utils/mapaPodzialka'
 import { etykietaKandydata } from '@/utils/regulyPrzydzialu'
-import { KATEGORIE, kolorKategorii } from '@/utils/kategorieHandlowcow'
+import { KATEGORIE, kolorKategorii, slugKategorii } from '@/utils/kategorieHandlowcow'
 
 const API = 'crm.api.kategorie_handlowcow.'
 const OKREGI = ['Wrocław', 'Gorzów', 'Szczecin', 'Trójmiasto']
@@ -171,6 +190,15 @@ const dialog = reactive({
   zapisuje: false,
 })
 
+const grupy = computed(() =>
+  [...KATEGORIE, ''].map((kategoria) => ({
+    kategoria,
+    tytul: kategoria || __('Bez kategorii'),
+    wiersze: wiersze.value
+      .filter((w) => (KATEGORIE.includes(w.kategoria) ? w.kategoria : '') === kategoria)
+      .sort((a, b) => (a.full_name || a.user).localeCompare(b.full_name || b.user, 'pl')),
+  })),
+)
 const maSrodek = computed(() => Boolean(dialog.lat || dialog.lng))
 const opisWyboru = computed(() =>
   maSrodek.value
