@@ -716,13 +716,12 @@ list.value = createResource({
 })
 
 // ops#389: przytnij zapis z pamieci/IndexedDB ZANIM wyrenderuja sie wiersze.
-// Swieza odpowiedz ma page_length rowne zadanemu w params (tez po "load more"),
-// wiec jej nie ruszamy; zapis z poprzedniej wizyty ma inny page_length.
-// (transform nie rozroznia: setData, czyli tez przywracanie z IndexedDB, go wola.)
+// Swieza odpowiedz przychodzi przy loading=true i echuje zadane page_length, wiec zostaje
+// (tez po "load more"); powrot na liste w SPA i zapis z IndexedDB sa przycinane.
 stopPrzycinanie = watch(
   () => list.value?.data,
   (d) => {
-    if (d?.page_length === list.value.params?.page_length) return
+    if (list.value.loading && d?.page_length === list.value.params?.page_length) return
     const p = przytnijZapisanaListe(d)
     if (p !== d) list.value.setData(p)
   },
