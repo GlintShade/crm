@@ -489,6 +489,7 @@ def zbuduj_leada_z_webhooka(ladunek: Mapping[str, Any], dzisiaj: str) -> dict[st
 		"custom_posiadane_produkty": posiada,
 		"custom_zasady_dotacji": zasady,
 		"facebook_form_id": _tekst(dane.get("facebook_form_id")),
+		"custom_kampania_fb": kampania,
 	}
 	return {**wynik, **{k: v for k, v in opcjonalne.items() if v}}
 
@@ -543,6 +544,7 @@ POLA_TAGOW_DO_UZUPELNIENIA: tuple[str, ...] = (
 	"custom_posiadane_produkty",
 	"custom_zasady_dotacji",
 	"custom_produkt_procesu",
+	"custom_kampania_fb",
 )
 """Pola, ktore ponowne zgloszenie FB uzupelnia na istniejacym leadzie, wylacznie gdy sa puste (ops#324)."""
 

@@ -444,6 +444,31 @@ def powiaty_filtra(wojewodztwa: str | list[str] | None = None) -> list[str]:
 	)
 
 
+@frappe.whitelist()
+def kampanie_fb_filtra(wojewodztwa: str | list[str] | None = None) -> list[str]:
+	"""Unikalne kampanie FB (`custom_kampania_fb`) WIDOCZNYCH wolajacemu leadow,
+	posortowane, opcjonalnie zawezone do wojewodztw -- zasila pole "Kampania FB"
+	na pasku szybkich filtrow leadow (ops#392, `POLA_WARTOSCI_LEAD`). Model
+	uprawnien i `get_list` jak w `powiaty_filtra`; leady bez kampanii pomija."""
+	if not frappe.has_permission("CRM Lead", "read"):
+		frappe.throw(_("Brak uprawnień do odczytu leadów."), frappe.PermissionError)
+
+	wojewodztwa_lista = _normalizuj_liste_lub_string(wojewodztwa)
+
+	filters: dict = {"custom_kampania_fb": ["is", "set"]}
+	if wojewodztwa_lista:
+		filters["custom_voivodeship"] = ["in", wojewodztwa_lista]
+
+	return frappe.get_list(
+		"CRM Lead",
+		filters=filters,
+		pluck="custom_kampania_fb",
+		distinct=True,
+		order_by="custom_kampania_fb asc",
+		limit_page_length=0,
+	)
+
+
 def _waliduj_handlowca(handlowiec: str) -> None:
 	"""Waliduje, że `handlowiec` to istniejące, włączone konto z rolą `Volteo D2D
 	Sales` i dostępem do modułu Leady (`custom_linia_leady`). Wydzielone z `przydziel`

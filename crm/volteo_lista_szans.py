@@ -609,6 +609,12 @@ POLA_WARTOSCI_LEAD: dict[str, dict[str, str]] = {
 		"zalezy_od": "custom_voivodeship",
 		"parametr": "wojewodztwa",
 	},
+	# Kampania FB (ops#392): lista kampanii zawezana tym samym wojewodztwem co powiat.
+	"custom_kampania_fb": {
+		"url": "crm.api.volteo_leady.kampanie_fb_filtra",
+		"zalezy_od": "custom_voivodeship",
+		"parametr": "wojewodztwa",
+	},
 }
 """Mapa fieldname -> konfiguracja endpointu wartosci z serwera, dla pol
 `CRM Lead` z wielokrotnym wyborem, ktorych katalog opcji pochodzi z
