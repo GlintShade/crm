@@ -1,7 +1,9 @@
 <template>
   <LayoutHeader>
     <template #left-header>
-      <ViewBreadcrumbs v-model="viewControls" routeName="Leads" />
+      <div class="flex shrink-0 items-center sm:min-w-[12.5rem]">
+        <ViewBreadcrumbs v-model="viewControls" routeName="Leads" />
+      </div>
       <WidokiLeadowPasek tryb="typ" />
       <PigulkaKategorii />
     </template>
