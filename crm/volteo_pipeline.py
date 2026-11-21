@@ -417,7 +417,7 @@ PODZADANIA_OZE: dict[str, tuple[dict, ...]] = {
 		_poz("oze_pom:karty_do_wyslania", "Karty katalogowe i gwarancyjne do wysłania"),
 		_poz("oze_pom:dokumenty_osd", "Kompletowanie dokumentów do OSD"),
 		_poz("oze_pom:zgloszenie_osd", "Zgłoszenie do OSD wysłane"),
-		_poz("oze_pom:dotacja_w_przygotowaniu", "OSD wysłane, dotacja w przygotowaniu"),
+		_poz("oze_pom:dotacja_w_przygotowaniu", "Dokumenty dotacji w przygotowaniu"),
 		_poz("oze_pom:dokumenty_dotacji", "Dokumenty do dotacji wysłane"),
 	),
 }
