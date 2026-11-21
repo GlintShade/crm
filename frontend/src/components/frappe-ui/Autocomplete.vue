@@ -305,5 +305,5 @@ const inputClasses = computed(() => {
   ]
 })
 
-defineExpose({ query })
+defineExpose({ query, showOptions })
 </script>

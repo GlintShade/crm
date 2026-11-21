@@ -105,6 +105,9 @@ const props = defineProps({
   // leadow (LeadInlineCell.vue) zapis idzie przez przekaz_handlowcowi, ktore
   // nie obsluguje pustej wartosci. Domyslnie false, jak dotychczas.
   hideClear: { type: Boolean, default: false },
+  // ops#389: gdy true, search_link rusza dopiero przy pierwszym otwarciu
+  // dropdownu (lista z setkami wierszy nie odpala setek zapytan na starcie).
+  lazyOptions: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['update:modelValue', 'change'])
@@ -411,8 +414,19 @@ function stripHtml(html) {
     .trim()
 }
 
+const otwarty = ref(!props.lazyOptions)
+watch(
+  () => autocomplete.value?.showOptions,
+  (open) => {
+    if (!open || otwarty.value) return
+    otwarty.value = true
+    reload('', true)
+  },
+)
+
 function reload(val, force = false) {
   if (!props.doctype) return
+  if (!otwarty.value) return
   // Ops#72: dopóki userScope jest aktywny a lista poddrzewa jeszcze nie
   // dotarła, effectiveFilters zwraca null — nie odpalamy wyszukiwania, żeby
   // pierwszy dropdown przez moment nie pokazał wszystkich użytkowników.
