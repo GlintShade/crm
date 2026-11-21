@@ -43,7 +43,7 @@
 <script setup>
 import Link from '@/components/Controls/Link.vue'
 import QuickFilterCheckList from '@/components/Controls/QuickFilterCheckList.vue'
-import { FormControl, DatePicker, createResource } from 'frappe-ui'
+import { FormControl, DatePicker } from 'frappe-ui'
 import { useDebounceFn } from '@vueuse/core'
 import { etykietaMoje } from '@/utils/etykietaMoje'
 import { opcjeEtapu } from '@/utils/etapFiltr'
@@ -72,12 +72,8 @@ const filter = reactive(props.filter)
 
 // Ten sam współdzielony fetch (cache klucz jak w Deal.vue/Filter.vue dla
 // `volteo_pipeline_grupy`) — config nie zależy od konkretnej szansy.
-const { dealStatuses } = statusesStore()
-const grupyStatusow = createResource({
-  url: 'crm.api.pipeline.volteo_pipeline_grupy',
-  cache: ['volteo-pipeline-grupy'],
-  auto: true,
-})
+const { dealStatuses, grupyStatusow, zaladujGrupyStatusow } = statusesStore()
+zaladujGrupyStatusow()
 
 function isKnownStatus(name) {
   return Boolean(dealStatuses.data?.some((s) => s.name === name))

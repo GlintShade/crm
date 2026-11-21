@@ -380,6 +380,7 @@ import {
   usePageMeta,
 } from 'frappe-ui'
 import { computed, ref, onMounted, watch, h, markRaw } from 'vue'
+import { przytnijZapisanaListe } from '@/utils/przytnijListe'
 import { useRouter, useRoute } from 'vue-router'
 import { useDebounceFn } from '@vueuse/core'
 import { isMobileView } from '@/composables/settings'
@@ -634,7 +635,8 @@ function getParams() {
     kanban_fields: kanban_fields,
     columns: columns,
     rows: rows,
-    page_length: pageLength.value,
+    // pierwsze zadanie po wejsciu: wybrany rozmiar, nie suma po "load more" (ops#389)
+    page_length: pageLengthCount.value ?? pageLength.value,
     page_length_count: pageLengthCount.value,
   }
 }
@@ -663,11 +665,13 @@ function extractErrorMessage(err) {
   return ''
 }
 
+let stopPrzycinanie
 list.value = createResource({
   url: 'crm.api.doc.get_data',
   params: getParams(),
   cache: [props.doctype, route.query.view, route.params.viewType],
   onSuccess(data) {
+    stopPrzycinanie?.()
     // VOLTEO (issue #100): patrz komentarz w getParams() -- sama typWidokuDoZapisu()
     // aliasy, żeby nigdy nie zapisać 'mapa' jako view_type.
     let cv = getView(
@@ -710,6 +714,19 @@ list.value = createResource({
     )
   },
 })
+
+// ops#389: przytnij zapis z pamieci/IndexedDB ZANIM wyrenderuja sie wiersze.
+// Swieza odpowiedz przychodzi przy loading=true i echuje zadane page_length, wiec zostaje
+// (tez po "load more"); powrot na liste w SPA i zapis z IndexedDB sa przycinane.
+stopPrzycinanie = watch(
+  () => list.value?.data,
+  (d) => {
+    if (list.value.loading && d?.page_length === list.value.params?.page_length) return
+    const p = przytnijZapisanaListe(d)
+    if (p !== d) list.value.setData(p)
+  },
+  { flush: 'sync', immediate: true },
+)
 
 onMounted(() => useDebounceFn(reload, 100)())
 

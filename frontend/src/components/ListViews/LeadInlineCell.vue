@@ -253,6 +253,7 @@
       :userScope="true"
       :hideMe="true"
       :hideClear="true"
+      :lazyOptions="true"
       :disabled="zapisywanie"
       :placeholder="__('Wybierz handlowca')"
       @change="zapiszHandlowca"

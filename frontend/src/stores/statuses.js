@@ -3,7 +3,7 @@ import { parseColor, isTranslatable } from '@/utils'
 import { motywDlaKoloru } from '@/utils/motywOdznaki'
 import { defineStore } from 'pinia'
 import { useTelemetry } from 'frappe-ui/frappe'
-import { createListResource } from 'frappe-ui'
+import { createListResource, createResource } from 'frappe-ui'
 import { reactive, h } from 'vue'
 
 export const statusesStore = defineStore('crm-statuses', () => {
@@ -118,9 +118,22 @@ export const statusesStore = defineStore('crm-statuses', () => {
     return options
   }
 
+  // ops#389: jedno pobranie dla wszystkich QuickFilterField (14 do 16 instancji
+  // na liscie), leniwe: rusza dopiero przy pierwszym uzyciu.
+  const grupyStatusow = createResource({
+    url: 'crm.api.pipeline.volteo_pipeline_grupy',
+    cache: ['volteo-pipeline-grupy'],
+  })
+  function zaladujGrupyStatusow() {
+    if (grupyStatusow.loading || grupyStatusow.fetched) return
+    grupyStatusow.fetch()
+  }
+
   return {
     leadStatuses,
     dealStatuses,
+    grupyStatusow,
+    zaladujGrupyStatusow,
     communicationStatuses,
     getLeadStatus,
     getDealStatus,
