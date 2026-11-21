@@ -489,7 +489,7 @@ def zbuduj_leada_z_webhooka(ladunek: Mapping[str, Any], dzisiaj: str) -> dict[st
 		"custom_posiadane_produkty": posiada,
 		"custom_zasady_dotacji": zasady,
 		"facebook_form_id": _tekst(dane.get("facebook_form_id")),
-		"custom_kampania_fb": kampania,
+		"custom_kampania_fb": kampania_do_filtra(kampania),
 	}
 	return {**wynik, **{k: v for k, v in opcjonalne.items() if v}}
 
@@ -621,6 +621,11 @@ def linia_ponownego_zgloszenia(dane: Mapping[str, Any], istniejacy: Mapping[str,
 def juz_scalone(uwagi_istniejace: str | None, facebook_lead_id: str) -> bool:
 	"""Czy Uwagi istniejacego leada juz zawieraja to zgloszenie (idempotencja retry Make)."""
 	return _znacznik_zgloszenia(facebook_lead_id) in (uwagi_istniejace or "")
+
+
+def kampania_do_filtra(kampania: Any) -> str:
+	"""Kampania bez przecinkow i z jedna spacja (przecinek dzieli wartosci filtra wielokrotnego)."""
+	return " ".join(_tekst(kampania).replace(",", " ").split())
 
 
 def kampania_z_uwag(uwagi: str | None) -> str:

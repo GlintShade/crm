@@ -16,6 +16,7 @@ from crm.volteo_leady_webhook import (
 	dane_z_kodu_pocztowego,
 	juz_scalone,
 	kampania_czytelna,
+	kampania_do_filtra,
 	kampania_z_uwag,
 	klucz_limitu,
 	limit_przekroczony,
@@ -902,9 +903,15 @@ class TestPonowneZgloszenie(unittest.TestCase):
 		wynik = pola_do_scalenia({"custom_kampania_fb": "Inna, 01.10"}, self.nowy)
 		self.assertNotIn("custom_kampania_fb", wynik)
 
+	def test_kampania_do_filtra(self):
+		self.assertEqual(kampania_do_filtra("Wrocław, 27.10"), "Wrocław 27.10")
+		self.assertEqual(kampania_do_filtra("A,,  B  ,C"), "A B C")
+		self.assertEqual(kampania_do_filtra(""), "")
+		self.assertEqual(kampania_do_filtra(None), "")
+
 	def test_kampania_fb_w_nowym_leadzie(self):
 		w = zbuduj_leada_z_webhooka(ladunek(kampania="[S][KAMPANIA LEADOWA][WROCŁAW][27.10.2026]"), DZIS)
-		self.assertEqual(w["custom_kampania_fb"], "Wrocław, 27.10")
+		self.assertEqual(w["custom_kampania_fb"], "Wrocław 27.10")
 		self.assertNotIn("custom_kampania_fb", zbuduj_leada_z_webhooka(ladunek(kampania=""), DZIS))
 
 	def test_nowy_bez_tagu_nie_zapisuje_pustego(self):
