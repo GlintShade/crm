@@ -11,7 +11,13 @@
 -->
 <template>
   <div
-    class="rounded-xl border border-outline-gray-2 bg-surface-base p-3.5 text-xs"
+    class="rounded-xl bg-surface-base p-3.5 text-xs"
+    :class="[
+      ramka ? 'border-2' : 'border border-outline-gray-2',
+      handlowiec.kategoria === 'Nie umawiać' ? 'opacity-60' : '',
+    ]"
+    :style="ramka"
+    :data-kategoria="slugKategorii(handlowiec.kategoria) || null"
   >
     <NaglowekKarty
       :handlowiec="handlowiec"
@@ -19,6 +25,7 @@
       :etykieta-zakresu="etykietaZakresu"
       :chip="chip"
       :brak-grafiku="grafikWlaczony && dostepnosc === null"
+      :kategoria="handlowiec.kategoria || ''"
       @przesun="(k) => $emit('przesun', k)"
     >
       <template v-if="edycja" #akcje>
@@ -200,6 +207,7 @@
 </template>
 
 <script setup>
+import { slugKategorii, stylRamki } from '@/utils/kategorieHandlowcow'
 import { computed, ref } from 'vue'
 import { Button, FeatherIcon } from 'frappe-ui'
 import NaglowekKarty from '@/components/kalendarz/NaglowekKarty.vue'
@@ -270,6 +278,7 @@ function pozaGrafikiem(s) {
 }
 
 const kolor = computed(() => kolorHandlowca(props.kolorIndex))
+const ramka = computed(() => stylRamki(props.handlowiec.kategoria))
 const os = computed(() => props.osZewnetrzna || osGodzin(props.spotkania))
 const wymiary = computed(() => wymiaryTorow(props.duzy))
 const etykietyGodzin = computed(() =>

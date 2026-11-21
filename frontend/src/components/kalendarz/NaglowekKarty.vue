@@ -15,8 +15,24 @@
       {{ inicjaly(handlowiec.full_name) }}
     </span>
     <div class="min-w-0 flex-1">
-      <div class="truncate text-sm font-semibold text-ink-gray-9">
-        {{ handlowiec.full_name }}
+      <div class="flex min-w-0 items-center gap-1.5">
+        <span class="min-w-0 truncate text-sm font-semibold text-ink-gray-9">
+          {{ handlowiec.full_name }}
+        </span>
+        <span
+          v-if="kategoria"
+          class="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-outline-gray-2 px-2 py-0.5 text-xs font-medium text-ink-gray-7"
+          data-testid="kalendarz-kategoria"
+        >
+          <span
+            class="h-2 w-2 rounded-full"
+            :style="{
+              background: kolorKategorii(kategoria)?.wypelnienie,
+              boxShadow: `0 0 0 1px ${kolorKategorii(kategoria)?.obwodka}`,
+            }"
+          />
+          {{ kategoria }}
+        </span>
       </div>
       <div class="truncate text-xs text-ink-gray-5">{{ etykietaZakresu }}</div>
     </div>
@@ -63,6 +79,7 @@
 
 <script setup>
 import { FeatherIcon } from 'frappe-ui'
+import { kolorKategorii } from '@/utils/kategorieHandlowcow'
 import { inicjaly } from '@/utils/kalendarz'
 
 defineProps({
@@ -71,6 +88,7 @@ defineProps({
   etykietaZakresu: { type: String, default: '' },
   chip: { type: Object, required: true },
   brakGrafiku: { type: Boolean, default: false },
+  kategoria: { type: String, default: '' },
 })
 
 defineEmits(['przesun'])
