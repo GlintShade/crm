@@ -141,6 +141,7 @@
   <div
     v-else
     class="flex items-start justify-between gap-2 px-5 py-4"
+    :class="{ 'overflow-x-auto': dwaWierszeAktywne }"
     :style="dwaWierszeAktywne ? gridStyleDwaWiersze : null"
   >
     <div
@@ -150,7 +151,11 @@
       <div
         v-for="filter in quickFilterList"
         :key="filter.fieldname"
-        :class="dwaWierszeAktywne ? 'min-w-0 overflow-hidden' : 'm-1 min-w-36'"
+        :class="
+          dwaWierszeAktywne
+            ? 'min-w-0 overflow-hidden rounded border border-outline-gray-2'
+            : 'm-1 min-w-36'
+        "
       >
         <QuickFilterField
           class="w-full"
@@ -1166,7 +1171,10 @@ const pokazZmianyWidoku = computed(() =>
 // zrzucie jako ucięty przycisk "zmiany" zachodzący na "Województwo"). S=6
 // (z K rosnącym do 10) daje ok. 688px dostępnej szerokości, z wyraźnym
 // zapasem.
-const przyciskiSpanDwaWiersze = computed(() => (pokazZmianyWidoku.value ? 6 : 2))
+// ops#391: S=3 (nie 2) i kolumny nie węższe niż 6.75rem, żeby grupa
+// przycisków (ok. 278 do 334px) nigdy nie zachodziła na komórkę filtra;
+// gdy okno jest węższe od K kolumn, pasek przewija się poziomo.
+const przyciskiSpanDwaWiersze = computed(() => (pokazZmianyWidoku.value ? 6 : 3))
 
 // K: liczba kolumn gridu, dobrana tak, żeby n filtrów ZAWSZE zmieściło się
 // w pozostałych komórkach dwóch wierszy: (K - S) wolnych w wierszu 1 +
@@ -1182,7 +1190,7 @@ const liczbaKolumnDwaWiersze = computed(() => {
 
 const gridStyleDwaWiersze = computed(() => ({
   display: 'grid',
-  gridTemplateColumns: `repeat(${liczbaKolumnDwaWiersze.value}, minmax(0, 1fr))`,
+  gridTemplateColumns: `repeat(${liczbaKolumnDwaWiersze.value}, minmax(6.75rem, 1fr))`,
   gridAutoFlow: 'row dense',
 }))
 
