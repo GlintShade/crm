@@ -62,6 +62,7 @@ import SettingsIcon from '@/components/Icons/SettingsIcon.vue'
 import SettingsIcon2 from '@/components/Icons/SettingsIcon2.vue'
 import Users from '@/components/Settings/Users.vue'
 import VolteoUsers from '@/components/Settings/VolteoUsers.vue'
+import KategorieHandlowcow from '@/components/Settings/KategorieHandlowcow.vue'
 import KartyPaneli from '@/components/Settings/KartyPaneli.vue'
 import Automatyzacje from '@/components/Settings/Automatyzacje.vue'
 import DyzurySms from '@/components/Settings/DyzurySms.vue'
@@ -174,6 +175,12 @@ const tabs = computed(() => {
           label: __('Konta Volteo'),
           icon: 'user-plus',
           component: markRaw(VolteoUsers),
+          condition: () => isVolteoAdmin(),
+        },
+        {
+          label: __('Kategorie handlowców'),
+          icon: 'map-pin',
+          component: markRaw(KategorieHandlowcow),
           condition: () => isVolteoAdmin(),
         },
         {
