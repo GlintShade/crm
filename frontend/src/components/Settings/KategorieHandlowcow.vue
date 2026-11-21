@@ -19,7 +19,7 @@
     </div>
     <div v-else class="flex flex-col gap-4" data-testid="kategorie-lista">
       <div
-        class="grid grid-cols-[minmax(0,1.3fr)_9.5rem_minmax(0,1.4fr)_9.5rem] gap-3 px-3 text-xs text-ink-gray-5"
+        class="grid grid-cols-[minmax(0,1fr)_8.5rem_minmax(0,1.9fr)_8.5rem] gap-3 px-3 text-xs text-ink-gray-5"
       >
         <span>{{ __('Handlowiec') }}</span>
         <span>{{ __('Kategoria') }}</span>
@@ -37,7 +37,7 @@
         >
           <span
             class="inline-block h-3 w-3 shrink-0 rounded-full border"
-            :class="g.kategoria ? '' : 'border-dashed'"
+            :class="g.kategoria ? '' : 'border-dashed border-outline-gray-5'"
             :style="stylKropki(g.kategoria)"
           />
           <span class="text-base font-medium text-ink-gray-8">{{ g.tytul }}</span>
@@ -49,7 +49,7 @@
         <div
           v-for="w in g.wiersze"
           :key="w.user"
-          class="grid grid-cols-[minmax(0,1.3fr)_9.5rem_minmax(0,1.4fr)_9.5rem] items-center gap-3 border-b border-outline-gray-2 px-3 py-2 last:border-b-0"
+          class="grid grid-cols-[minmax(0,1fr)_8.5rem_minmax(0,1.9fr)_8.5rem] items-center gap-3 border-b border-outline-gray-2 px-3 py-2 last:border-b-0"
           :data-testid="'kategoria-wiersz-' + w.user"
         >
           <span class="truncate text-p-base text-ink-gray-8">{{ w.full_name || w.user }}</span>
@@ -61,7 +61,7 @@
             @update:modelValue="(v) => zmien(w, { kategoria: v })"
           />
           <div class="flex min-w-0 items-center gap-2">
-            <span class="flex-1 truncate text-p-sm text-ink-gray-6">{{ opisTerenu(w) }}</span>
+            <span class="flex-1 truncate text-p-sm text-ink-gray-6" :title="opisTerenu(w)">{{ opisTerenu(w) }}</span>
             <Button
               variant="subtle"
               size="sm"
