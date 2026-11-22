@@ -567,9 +567,14 @@ watch(leadyPrzefiltrowane, () => rysujMarkery())
 
 // Kategorie handlowców (ops#393): okręgi terenów, filtr pigułką, legenda.
 const { aktywna: aktywnaKategoria, widoczne: kategorieWidoczne, tereny } = useKategoriaFiltr()
-// Przygaszone tylko gdy pigułka włączona i pin niesie klucz _kategoria (handlowiec go nie dostaje).
+// Przygaszone tylko gdy pigułka włączona, pin niesie klucz _kategoria (handlowiec go nie dostaje)
+// i żadna z kategorii leada (`_kategorie`, ops#406) nie jest wybrana.
 function przygaszonyLead(lead) {
-  return !!aktywnaKategoria.value && '_kategoria' in lead && lead._kategoria !== aktywnaKategoria.value
+  return (
+    !!aktywnaKategoria.value &&
+    '_kategoria' in lead &&
+    !(lead._kategorie || []).includes(aktywnaKategoria.value)
+  )
 }
 
 // --- Panel "Szybki podgląd" (issue #97, L08) ------------------------------

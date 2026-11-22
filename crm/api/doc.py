@@ -710,7 +710,7 @@ KLUCZ_HANDLOWCA_TERENU = "_handlowiec_terenu"
 
 
 def _kategorie_leadow_teraz() -> tuple[dict, dict]:
-	"""`({lead: (kategoria, handlowiec)}, {user: pelna nazwa})` dla nieskonwertowanych leadow.
+	"""`({lead: {kategoria: handlowiec}}, {user: pelna nazwa})` dla nieskonwertowanych leadow.
 
 	Jedno `get_all` plus jedno `wczytaj_tereny()` na zadanie (nie per wiersz). `get_all` bez
 	uprawnien jest tu bezpieczne: to tylko mapa nazw na kategorie, a wiersze listy i tak
@@ -728,8 +728,20 @@ def _kategorie_leadow_teraz() -> tuple[dict, dict]:
 	return kategorie_leadow(leady, tereny), {t.handlowiec: t.nazwa_handlowca for t in tereny}
 
 
+def _wybrane_kategorie(wartosc) -> list[str]:
+	"""Wartosc filtra `volteo_kategoria` (tekst, `['=', x]`, `['in', lista]` albo sama lista)
+	na liste kategorii w kolejnosci `KATEGORIE`. Nieznana kategoria rzuca blad."""
+	if isinstance(wartosc, (list, tuple)) and len(wartosc) == 2 and wartosc[0] in ("=", "in"):
+		wartosc = wartosc[1]
+	wybrane = list(wartosc) if isinstance(wartosc, (list, tuple, set)) else [wartosc]
+	if any(k not in KATEGORIE for k in wybrane):
+		frappe.throw(_("Nieznana kategoria handlowca."))
+	return [k for k in KATEGORIE if k in wybrane]
+
+
 def _rozwin_filtr_kategorii(filters: dict, kategorie: tuple[dict, dict] | None) -> dict:
-	"""Rozwija filtr `volteo_kategoria` (CRM Lead) na `name in [...]`; wolac PRZED
+	"""Rozwija filtr `volteo_kategoria` (CRM Lead) na `name in [...]`: lead pasuje, gdy
+	nalezy do ktorejkolwiek z wybranych kategorii (ops#406/#407); wolac PRZED
 	`_sprawdz_filtry`. Klucz jest zawsze usuwany. `kategorie` None (uzytkownik bez roli
 	z `moze_widziec`) oznacza ciche pominiecie filtra. Pusta lista daje `[""]`, nie
 	wszystkie wiersze. Istniejacy filtr po `name` jest przecinany; nierozpoznany
@@ -740,11 +752,8 @@ def _rozwin_filtr_kategorii(filters: dict, kategorie: tuple[dict, dict] | None) 
 	wartosc = wynik.pop(KLUCZ_KATEGORII)
 	if kategorie is None:
 		return wynik
-	if isinstance(wartosc, (list, tuple)) and len(wartosc) == 2 and wartosc[0] == "=":
-		wartosc = wartosc[1]
-	if wartosc not in KATEGORIE:
-		frappe.throw(_("Nieznana kategoria handlowca."))
-	nazwy = {n for n, (k, _h) in kategorie[0].items() if k == wartosc}
+	wybrane = set(_wybrane_kategorie(wartosc))
+	nazwy = {n for n, ks in kategorie[0].items() if wybrane & ks.keys()}
 	if "name" in wynik:
 		istniejacy = _nazwy_istniejacego_filtra_name(wynik["name"])
 		if istniejacy is None:
@@ -755,15 +764,20 @@ def _rozwin_filtr_kategorii(filters: dict, kategorie: tuple[dict, dict] | None) 
 	return wynik
 
 
-def _dolacz_kategorie_leadow(data: list, columns: list, kategorie: tuple[dict, dict]) -> None:
-	"""Dopisuje `_kategoria` i `_handlowiec_terenu` do wierszy listy leadow oraz kolumne
-	"Handlowiec terenu" zaraz po `lead_owner` (inaczej na koncu). Kolumna powstaje tylko w
-	odpowiedzi; klucz przysylany z powrotem przez klienta wycina `_odfiltruj_niedozwolone_*`."""
+def _dolacz_kategorie_leadow(
+	data: list, columns: list, kategorie: tuple[dict, dict], wybrane: list[str] | None = None
+) -> None:
+	"""Dopisuje `_kategoria` (kategoria glowna) i `_handlowiec_terenu` do wierszy listy
+	leadow oraz kolumne "Handlowiec terenu" zaraz po `lead_owner` (inaczej na koncu).
+	Przy aktywnym filtrze (`wybrane`) handlowiec terenu to najlepszy z wybranych kategorii,
+	bez filtra najlepszy ogolnie. Kolumna powstaje tylko w odpowiedzi; klucz przysylany z
+	powrotem przez klienta wycina `_odfiltruj_niedozwolone_*`."""
 	mapa, nazwy = kategorie
 	for d in data:
-		k = mapa.get(d.get("name"))
-		d["_kategoria"] = k[0] if k else ""
-		d[KLUCZ_HANDLOWCA_TERENU] = nazwy.get(k[1], "") if k else ""
+		ks = mapa.get(d.get("name")) or {}
+		d["_kategoria"] = next(iter(ks), "")
+		pasujace = [k for k in (wybrane or ks) if k in ks]
+		d[KLUCZ_HANDLOWCA_TERENU] = nazwy.get(ks[pasujace[0]], "") if pasujace else ""
 	kolumna = {
 		"label": _("Handlowiec terenu"),
 		"key": KLUCZ_HANDLOWCA_TERENU,
@@ -1498,9 +1512,12 @@ def get_data(
 	# Mapa kategorii liczona raz na zadanie, tylko dla uprawnionych rol; dla pozostalych
 	# klucz jest po cichu usuwany. Kanban nie pokazuje kategorii, wiec liczy tylko filtr.
 	kategorie = None
+	wybrane_kategorie = None
 	if doctype == "CRM Lead":
 		if moze_widziec(frappe.get_roles()) and (KLUCZ_KATEGORII in filters or view_type != "kanban"):
 			kategorie = _kategorie_leadow_teraz()
+			if KLUCZ_KATEGORII in filters:
+				wybrane_kategorie = _wybrane_kategorie(filters[KLUCZ_KATEGORII])
 		filters = frappe._dict(_rozwin_filtr_kategorii(filters, kategorie))
 
 	# Blokada filtrowania po polu bez uprawnien odczytu (permlevel > 0) — patrz
@@ -1611,7 +1628,7 @@ def get_data(
 		data = parse_list_data(data, doctype)
 		_dolacz_podzadania_szans(doctype, data)
 		if kategorie is not None:
-			_dolacz_kategorie_leadow(data, columns, kategorie)
+			_dolacz_kategorie_leadow(data, columns, kategorie, wybrane_kategorie)
 
 		if chce_licznik_komentarzy:
 			nazwy = [d.get("name") for d in data if d.get("name")]

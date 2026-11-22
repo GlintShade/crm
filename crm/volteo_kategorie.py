@@ -94,29 +94,29 @@ def teren_z_wiersza(wiersz: Mapping[str, Any]) -> Teren | None:
 	)
 
 
-def kategoria_leada(
+def kategorie_leada(
 	lat: Any,
 	lng: Any,
 	kampania: Any,
 	wlasciciel: Any,
 	tereny: Iterable[Teren],
-) -> tuple[str, str] | None:
-	"""`(kategoria, handlowiec)` leada albo None, gdy nic nie pasuje.
+) -> dict[str, str]:
+	"""`{kategoria: handlowiec}` w kolejności rangi (pierwszy klucz = kategoria główna).
 
-	Właściciel z kategorią `Nie umawiać` wygrywa zawsze. Inaczej wśród terenów, w których
-	lead leży (odległość <= promień) albo których okręg zgadza się z kampanią, wygrywa
-	wyższa kategoria, przy remisie bliższy środek (teren bez środka jest najdalej),
-	na końcu nazwa konta (stabilny wynik).
+	Lead należy do KAŻDEJ kategorii, której teren (promień albo okręg kampanii) go obejmuje
+	(ops#406). W kategorii wygrywa bliższy środek (teren bez środka jest najdalej), potem
+	nazwa konta (stabilny wynik). Właściciel z kategorią `Nie umawiać` wygrywa zawsze i
+	wyklucza pozostałe.
 	"""
 	tereny = list(tereny)
 	wlasciciel_txt = _tekst(wlasciciel)
 	for t in tereny:
 		if t.handlowiec == wlasciciel_txt and t.kategoria == NIE_UMAWIAC:
-			return (NIE_UMAWIAC, t.handlowiec)
+			return {NIE_UMAWIAC: t.handlowiec}
 	okreg = okreg_kampanii(kampania)
 	szer, dlug = _liczba(lat), _liczba(lng)
 	maja_wsp = ma_wspolrzedne(szer, dlug)
-	pasujace: list[tuple[int, float, str, Teren]] = []
+	najlepsi: dict[str, tuple[float, str]] = {}
 	for t in tereny:
 		odl = float("inf")
 		wsrodku = False
@@ -125,28 +125,39 @@ def kategoria_leada(
 			wsrodku = odl <= t.promien_km
 		if not (wsrodku or (okreg and t.okreg == okreg)):
 			continue
-		pasujace.append((KATEGORIE.index(t.kategoria), odl, t.handlowiec, t))
-	if not pasujace:
-		return None
-	_, _, _, najlepszy = min(pasujace, key=lambda p: p[:3])
-	return (najlepszy.kategoria, najlepszy.handlowiec)
+		kandydat = (odl, t.handlowiec)
+		if t.kategoria not in najlepsi or kandydat < najlepsi[t.kategoria]:
+			najlepsi[t.kategoria] = kandydat
+	return {k: najlepsi[k][1] for k in KATEGORIE if k in najlepsi}
+
+
+def kategoria_leada(
+	lat: Any,
+	lng: Any,
+	kampania: Any,
+	wlasciciel: Any,
+	tereny: Iterable[Teren],
+) -> tuple[str, str] | None:
+	"""Kategoria główna leada: `(kategoria, handlowiec)` albo None, gdy nic nie pasuje."""
+	wszystkie = kategorie_leada(lat, lng, kampania, wlasciciel, tereny)
+	return next(iter(wszystkie.items()), None)
 
 
 def kategorie_leadow(
 	leady: Iterable[Mapping[str, Any]], tereny: Iterable[Teren]
-) -> dict[str, tuple[str, str]]:
-	"""`name` leada -> `(kategoria, handlowiec)`; leady bez kategorii pomijane."""
+) -> dict[str, dict[str, str]]:
+	"""`name` leada -> `{kategoria: handlowiec}` (kolejność rangi); leady bez kategorii pomijane."""
 	tereny = list(tereny)
-	wynik: dict[str, tuple[str, str]] = {}
+	wynik: dict[str, dict[str, str]] = {}
 	for lead in leady:
-		k = kategoria_leada(
+		k = kategorie_leada(
 			lead.get("custom_lat"),
 			lead.get("custom_lng"),
 			lead.get("custom_kampania_fb"),
 			lead.get("lead_owner"),
 			tereny,
 		)
-		if k is not None:
+		if k:
 			wynik[_tekst(lead.get("name"))] = k
 	return wynik
 
