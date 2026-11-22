@@ -192,7 +192,7 @@
       <!-- Podpis terenu pod kursorem (ops#408): imiona i nazwiska handlowców. -->
       <div
         v-if="podpisTerenu"
-        class="pointer-events-none absolute z-[1000] whitespace-pre rounded border border-outline-gray-2 bg-surface-modal px-2 py-1 text-sm text-ink-gray-8 shadow-md"
+        class="pointer-events-none absolute z-[1000] whitespace-pre rounded border border-outline-gray-2 bg-surface-elevation-2 px-2 py-1 text-sm text-ink-gray-8 shadow-md"
         :style="{ left: podpisTerenu.x + 14 + 'px', top: podpisTerenu.y + 14 + 'px' }"
         data-testid="podpis-terenu"
       >
