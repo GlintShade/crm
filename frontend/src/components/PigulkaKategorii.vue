@@ -8,12 +8,12 @@
         type="button"
         class="flex h-7 items-center gap-1.5 whitespace-nowrap px-1.5 text-base transition-colors sm:px-2"
         :class="[
-          k === aktywna
+          aktywna.includes(k)
             ? 'bg-surface-gray-4 text-ink-gray-9'
             : 'text-ink-gray-6 hover:bg-surface-gray-2',
           index > 0 && 'border-l border-outline-gray-2',
         ]"
-        :aria-pressed="k === aktywna"
+        :aria-pressed="aktywna.includes(k)"
         :data-testid="`pigulka-${slugKategorii(k)}`"
         @click="aktywna = przelacz(aktywna, k)"
       >

@@ -571,9 +571,9 @@ const { aktywna: aktywnaKategoria, widoczne: kategorieWidoczne, tereny } = useKa
 // i żadna z kategorii leada (`_kategorie`, ops#406) nie jest wybrana.
 function przygaszonyLead(lead) {
   return (
-    !!aktywnaKategoria.value &&
+    aktywnaKategoria.value.length > 0 &&
     '_kategoria' in lead &&
-    !(lead._kategorie || []).includes(aktywnaKategoria.value)
+    !(lead._kategorie || []).some((k) => aktywnaKategoria.value.includes(k))
   )
 }
 
@@ -793,7 +793,7 @@ function rysujTereny() {
   const kolejnosc = ['Nie umawiać', 'Standard', 'Priorytet']
   const lista = tereny.value
     .filter((t) => t.lat != null && t.lng != null && kolorKategorii(t.kategoria))
-    .filter((t) => !aktywna || t.kategoria === aktywna)
+    .filter((t) => !aktywna.length || aktywna.includes(t.kategoria))
     .sort((a, b) => kolejnosc.indexOf(a.kategoria) - kolejnosc.indexOf(b.kategoria))
   const okregi = []
   const pinezki = []

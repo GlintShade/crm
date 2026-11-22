@@ -17,16 +17,19 @@ function uzytkownik() {
 
 export function useKategoriaFiltr() {
   if (!stan) {
-    const zapisana = useStorage(`volteo.leady.kategoria:${uzytkownik()}`, '')
+    const zapisana = useStorage(`volteo.leady.kategorie:${uzytkownik()}`, [])
     const zasob = createResource({ url: 'crm.api.kategorie_handlowcow.tereny', auto: true })
     const widoczne = computed(() => zasob.data?.widoczne === true)
     const tereny = computed(() => (widoczne.value ? zasob.data?.tereny || [] : []))
-    // Bez widoczności (handlowiec) lub przed wczytaniem terenów filtr jest wyłączony.
+    // Tablica wybranych kategorii (pusta = filtr wyłączony). Bez widoczności (handlowiec)
+    // lub przed wczytaniem terenów zawsze pusta.
     const aktywna = computed({
       get: () =>
-        widoczne.value && KATEGORIE.includes(zapisana.value) ? zapisana.value : null,
-      set: (k) => {
-        zapisana.value = k || ''
+        widoczne.value && Array.isArray(zapisana.value)
+          ? KATEGORIE.filter((k) => zapisana.value.includes(k))
+          : [],
+      set: (lista) => {
+        zapisana.value = KATEGORIE.filter((k) => (lista || []).includes(k))
       },
     })
     stan = { aktywna, widoczne, tereny }
