@@ -7,6 +7,7 @@ from crm.volteo_kategorie import (
 	KATEGORIE,
 	Teren,
 	kategoria_leada,
+	kategorie_leada,
 	kategorie_leadow,
 	moze_widziec,
 	moze_zapisac,
@@ -107,6 +108,25 @@ class TestKategoriaLeada(unittest.TestCase):
 	def test_brak_terenow(self):
 		self.assertIsNone(kategoria_leada(*GORZOW, "Gorzów", "x", []))
 
+	def test_nakladajace_sie_tereny_daja_obie_kategorie(self):
+		t = [teren("a", "Standard", GORZOW, 100), teren("b", "Priorytet", GORZOW, 70)]
+		self.assertEqual(
+			kategorie_leada(*MIEDZYRZECZ, "", "", t), {"Priorytet": "b", "Standard": "a"}
+		)
+		self.assertEqual(list(kategorie_leada(*MIEDZYRZECZ, "", "", t)), ["Priorytet", "Standard"])
+
+	def test_poza_mniejszym_terenem_zostaje_druga_kategoria(self):
+		t = [teren("a", "Standard", GORZOW, 100), teren("b", "Priorytet", GORZOW, 30)]
+		self.assertEqual(kategorie_leada(*MIEDZYRZECZ, "", "", t), {"Standard": "a"})
+
+	def test_w_kategorii_wygrywa_blizszy_srodek(self):
+		t = [teren("daleki", "Standard", ZIELONA, 100), teren("bliski", "Standard", GORZOW, 100)]
+		self.assertEqual(kategorie_leada(*MIEDZYRZECZ, "", "", t), {"Standard": "bliski"})
+
+	def test_nie_umawiac_wlasciciela_wyklucza_inne(self):
+		t = [teren("w", "Nie umawiać", GORZOW, 70), teren("p", "Priorytet", GORZOW, 70)]
+		self.assertEqual(kategorie_leada(*MIEDZYRZECZ, "", "w", t), {"Nie umawiać": "w"})
+
 
 class TestKategorieLeadow(unittest.TestCase):
 	def test_slownik(self):
@@ -116,7 +136,7 @@ class TestKategorieLeadow(unittest.TestCase):
 			{"name": "L2", "custom_lat": ZIELONA[0], "custom_lng": ZIELONA[1]},
 			{"name": "L3", "custom_kampania_fb": "x", "lead_owner": "a"},
 		]
-		self.assertEqual(kategorie_leadow(leady, t), {"L1": ("Priorytet", "a")})
+		self.assertEqual(kategorie_leadow(leady, t), {"L1": {"Priorytet": "a"}})
 
 
 class TestTerenZWiersza(unittest.TestCase):

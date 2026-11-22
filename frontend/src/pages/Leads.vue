@@ -381,8 +381,8 @@ const viewControls = ref(null)
 // (getParams() jest czytane tylko przy reload), więc przeładowujemy tą samą ścieżką.
 const { aktywna: kategoriaAktywna } = useKategoriaFiltr()
 const filtryListy = computed(() =>
-  kategoriaAktywna.value
-    ? { converted: 0, volteo_kategoria: kategoriaAktywna.value }
+  kategoriaAktywna.value.length
+    ? { converted: 0, volteo_kategoria: ['in', kategoriaAktywna.value] }
     : { converted: 0 },
 )
 watch(

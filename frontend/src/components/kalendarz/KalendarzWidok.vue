@@ -101,7 +101,7 @@
         class="py-10 text-center text-sm text-ink-gray-5"
       >
         {{
-          props.pasek && kategoriaAktywna
+          props.pasek && kategoriaAktywna.length
             ? __('Brak handlowców w tej kategorii.')
             : __('Brak handlowców do wyświetlenia.')
         }}
@@ -303,8 +303,8 @@ const etykieta = computed(() =>
 // Pigułka kategorii (ops#393) tylko w Leadach (`pasek`); kolejność z serwera.
 const { aktywna: kategoriaAktywna } = useKategoriaFiltr()
 const baza = computed(() =>
-  props.pasek && kategoriaAktywna.value
-    ? handlowcy.value.filter((h) => h.kategoria === kategoriaAktywna.value)
+  props.pasek && kategoriaAktywna.value.length
+    ? handlowcy.value.filter((h) => kategoriaAktywna.value.includes(h.kategoria))
     : handlowcy.value,
 )
 const opcjeHandlowcow = computed(() =>

@@ -189,6 +189,15 @@
         <LoadingIndicator class="size-8" />
       </div>
       <div :id="mapId" class="h-full w-full" />
+      <!-- Podpis terenu pod kursorem (ops#408): imiona i nazwiska handlowców. -->
+      <div
+        v-if="podpisTerenu"
+        class="pointer-events-none absolute z-[1000] whitespace-pre rounded border border-outline-gray-2 bg-surface-modal px-2 py-1 text-sm text-ink-gray-8 shadow-md"
+        :style="{ left: podpisTerenu.x + 14 + 'px', top: podpisTerenu.y + 14 + 'px' }"
+        data-testid="podpis-terenu"
+      >
+        {{ podpisTerenu.nazwy.join('\n') }}
+      </div>
 
       <!-- VOLTEO (issue #97, L08): panel "Szybki podglad" po kliknieciu
            pinezki -- LeadSzybkiPodglad.vue pozycjonuje sie sam (absolute
@@ -567,9 +576,14 @@ watch(leadyPrzefiltrowane, () => rysujMarkery())
 
 // Kategorie handlowców (ops#393): okręgi terenów, filtr pigułką, legenda.
 const { aktywna: aktywnaKategoria, widoczne: kategorieWidoczne, tereny } = useKategoriaFiltr()
-// Przygaszone tylko gdy pigułka włączona i pin niesie klucz _kategoria (handlowiec go nie dostaje).
+// Przygaszone tylko gdy pigułka włączona, pin niesie klucz _kategoria (handlowiec go nie dostaje)
+// i żadna z kategorii leada (`_kategorie`, ops#406) nie jest wybrana.
 function przygaszonyLead(lead) {
-  return !!aktywnaKategoria.value && '_kategoria' in lead && lead._kategoria !== aktywnaKategoria.value
+  return (
+    aktywnaKategoria.value.length > 0 &&
+    '_kategoria' in lead &&
+    !(lead._kategorie || []).some((k) => aktywnaKategoria.value.includes(k))
+  )
 }
 
 // --- Panel "Szybki podgląd" (issue #97, L08) ------------------------------
@@ -650,11 +664,16 @@ let L = null
 let mapInstance = null
 let markerLayer = null
 let terenLayer = null
+// Narysowane okręgi terenów (do podpisu pod kursorem, ops#408) i pinezki handlowców.
+let narysowaneTereny = []
+let pinezkiHandlowcow = []
 let dopasowanoWidok = false
 // Nazwa leada -> { marker, lead }, przebudowywana przy każdym rysujMarkery().
 // Pozwala ustawStylWybranego() zmienić styl JEDNEGO markera in-place (klik
 // w inną pinezkę, zamknięcie panelu) bez przebudowy całej warstwy.
 let markeryPoNazwie = new Map()
+// Ciemna obwódka i środek znaku pinezki handlowca (ops#408), czytelna na jasnych kafelkach mapy.
+const KOLOR_OBWODKI_HANDLOWCA = '#1f2937'
 // Podklasa L.CircleMarker rysująca pinezkę (patrz utworzKlasePinezki niżej) --
 // tworzona raz, dopiero gdy `L` jest już dostępne (klasa dziedziczy po
 // L.CircleMarker, więc nie da się jej zbudować przed leniwym importem).
@@ -737,6 +756,19 @@ function utworzKlasePinezki(Lref) {
       kropkaPinezki(ctx, p.x, p.y, r)
       ctx.fillStyle = KOLOR_OBWODKI
       ctx.fill()
+
+      // Pinezka handlowca (ops#408): większa biała kropka z ciemnym środkiem,
+      // inna niż pełna biała kropka pinów leadów.
+      if (this.options.handlowiec) {
+        ctx.beginPath()
+        ctx.arc(p.x, p.y + g.srodekY, g.kropkaR * 1.5, 0, Math.PI * 2, false)
+        ctx.fillStyle = KOLOR_OBWODKI
+        ctx.fill()
+        ctx.beginPath()
+        ctx.arc(p.x, p.y + g.srodekY, g.kropkaR * 0.8, 0, Math.PI * 2, false)
+        ctx.fillStyle = KOLOR_OBWODKI_HANDLOWCA
+        ctx.fill()
+      }
     },
   })
 }
@@ -772,15 +804,20 @@ async function initMap() {
   terenLayer = L.featureGroup().addTo(mapInstance)
   markerLayer = utworzWarstweMarkerow().addTo(mapInstance)
 
+  mapInstance.on('mousemove', pokazPodpisTerenu)
+  mapInstance.on('mouseout dragstart zoomstart', () => {
+    podpisTerenu.value = null
+  })
+  mapInstance.on('zoomend moveend', () => setTimeout(pinezkiHandlowcowNaWierzch, 0))
+
   rysujTereny()
   rysujMarkery()
 }
 
-// Okręgi terenów i pinezki handlowców (ops#393). Kolejność: Nie umawiać,
-// Standard, Priorytet (Priorytet na wierzchu), pinezki handlowców nad okręgami.
-// Wspólny canvas rysuje warstwy w kolejności dodania, a markery leadów (także te
-// dodane później przez markercluster) lądują za nimi, więc po dodaniu robimy
-// bringToBack na całej liście od końca: okręgi i pinezki handlowców są pod pinami leadów.
+// Okręgi terenów i pinezki handlowców (ops#393, #408). Okręgi: Nie umawiać,
+// Standard, Priorytet (Priorytet na wierzchu), wszystkie pod pinami leadów
+// (bringToBack). Pinezki handlowców są nad pinami leadów (bringToFront).
+// Wspólny canvas rysuje warstwy w kolejności dodania.
 function rysujTereny() {
   if (!L || !mapInstance || !terenLayer) return
   terenLayer.clearLayers()
@@ -788,10 +825,11 @@ function rysujTereny() {
   const kolejnosc = ['Nie umawiać', 'Standard', 'Priorytet']
   const lista = tereny.value
     .filter((t) => t.lat != null && t.lng != null && kolorKategorii(t.kategoria))
-    .filter((t) => !aktywna || t.kategoria === aktywna)
+    .filter((t) => !aktywna.length || aktywna.includes(t.kategoria))
     .sort((a, b) => kolejnosc.indexOf(a.kategoria) - kolejnosc.indexOf(b.kategoria))
   const okregi = []
   const pinezki = []
+  narysowaneTereny = []
   for (const t of lista) {
     const { wypelnienie, obwodka } = kolorKategorii(t.kategoria)
     const srodek = [Number(t.lat), Number(t.lng)]
@@ -806,19 +844,52 @@ function rysujTereny() {
         interactive: false,
       }),
     )
+    narysowaneTereny.push({
+      srodek: L.latLng(srodek),
+      promienM: Number(t.promien_km) * 1000,
+      nazwa: t.full_name,
+      kategoria: t.kategoria,
+    })
+    // Pinezka handlowca: ten sam kształt co pin leada, ok. 1,8 razy większa, ciemna
+    // obwódka, kolor kategorii.
     pinezki.push(
-      L.circleMarker(srodek, {
-        radius: 7,
-        color: obwodka,
-        weight: 2,
+      new PinezkaLeada(srodek, {
+        radius: Math.round(STYL_PINEZKI.radius * 1.8),
+        color: KOLOR_OBWODKI_HANDLOWCA,
+        weight: 3,
         fillColor: wypelnienie,
         fillOpacity: 1,
-      }).bindTooltip(`${t.full_name}, ${t.kategoria}`),
+        handlowiec: true,
+      }).bindTooltip(`${t.full_name}, ${t.kategoria}`, {
+        direction: 'top',
+        offset: L.point(0, geometriaPinezki(Math.round(STYL_PINEZKI.radius * 1.8)).srodekY - 11),
+      }),
     )
   }
-  const wszystkie = [...okregi, ...pinezki]
-  wszystkie.forEach((l) => l.addTo(terenLayer))
-  for (const l of [...wszystkie].reverse()) l.bringToBack()
+  okregi.forEach((l) => l.addTo(terenLayer))
+  pinezki.forEach((l) => l.addTo(terenLayer))
+  for (const l of [...okregi].reverse()) l.bringToBack()
+  pinezkiHandlowcow = pinezki
+  pinezkiHandlowcowNaWierzch()
+}
+
+// Pinezki handlowców nad pinami leadów, także tymi, które markercluster dorysuje
+// po zoomie lub przesunięciu (wspólny canvas rysuje w kolejności dodania).
+function pinezkiHandlowcowNaWierzch() {
+  for (const p of pinezkiHandlowcow) p.bringToFront()
+}
+
+// Podpis pod kursorem: pełne nazwy handlowców, w których okręgach leży kursor
+// (Priorytet, Standard, Nie umawiać). Liczony z pozycji kursora, bo okręgi są
+// `interactive: false` i nie blokują klików w piny.
+const podpisTerenu = ref(null)
+function pokazPodpisTerenu(e) {
+  const trafione = narysowaneTereny
+    .filter((t) => mapInstance.distance(e.latlng, t.srodek) <= t.promienM)
+    .sort((a, b) => KATEGORIE.indexOf(a.kategoria) - KATEGORIE.indexOf(b.kategoria))
+  podpisTerenu.value = trafione.length
+    ? { x: e.containerPoint.x, y: e.containerPoint.y, nazwy: trafione.map((t) => t.nazwa) }
+    : null
 }
 
 watch([tereny, aktywnaKategoria, kategorieWidoczne], () => {
@@ -919,6 +990,7 @@ function rysujMarkery() {
     if (wybrany) marker.bringToFront()
   }
 
+  pinezkiHandlowcowNaWierzch()
   skupNaCelu()
   dopasujWidokDoPinezek()
 }
@@ -1265,6 +1337,9 @@ function destroyMap() {
     mapInstance = null
     markerLayer = null
     terenLayer = null
+    narysowaneTereny = []
+    pinezkiHandlowcow = []
+    podpisTerenu.value = null
   }
 }
 

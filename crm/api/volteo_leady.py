@@ -772,8 +772,9 @@ def mapa(
 	if moze_widziec(frappe.get_roles()):
 		kategorie = _kategorie_leadow_teraz()[0]
 		for pin in piny:
-			k = kategorie.get(pin.get("name"))
-			pin["_kategoria"] = k[0] if k else ""
+			ks = list(kategorie.get(pin.get("name")) or ())
+			pin["_kategoria"] = ks[0] if ks else ""
+			pin["_kategorie"] = ks
 	return piny
 
 

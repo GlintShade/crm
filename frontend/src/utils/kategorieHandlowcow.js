@@ -22,9 +22,11 @@ export function klasaWiersza(k) {
   return SLUGI[k] ? `kat-${SLUGI[k]}` : ''
 }
 
-/** Klik w aktywną kategorię wyłącza filtr (null), inaczej wybiera klikniętą. */
-export function przelacz(aktywna, kliknieta) {
-  return aktywna === kliknieta ? null : kliknieta
+/** Klik dodaje kategorię do wyboru albo ją usuwa; nowa tablica w kolejności KATEGORIE (pusta = filtr wyłączony). */
+export function przelacz(aktywne, kliknieta) {
+  const wybrane = new Set(aktywne)
+  if (!wybrane.delete(kliknieta)) wybrane.add(kliknieta)
+  return KATEGORIE.filter((k) => wybrane.has(k))
 }
 
 /** Styl ramki karty kalendarza: kolor obwódki kategorii; Standard (biały) dostaje cienki ciemny pierścień. */

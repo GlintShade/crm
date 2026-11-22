@@ -28,10 +28,16 @@ describe('kategorieHandlowcow: pasek i pigułka', () => {
     expect(slugKategorii('Nie umawiać')).toBe('nie-umawiac')
     expect(slugKategorii('x')).toBe('')
   })
-  it('przelacz: klik w aktywną wyłącza, inaczej wybiera', () => {
-    expect(przelacz('Priorytet', 'Priorytet')).toBeNull()
-    expect(przelacz(null, 'Standard')).toBe('Standard')
-    expect(przelacz('Priorytet', 'Standard')).toBe('Standard')
+  it('przelacz: klik dodaje albo usuwa kategorię, wynik w kolejności KATEGORIE', () => {
+    expect(przelacz([], 'Standard')).toEqual(['Standard'])
+    expect(przelacz(['Standard'], 'Priorytet')).toEqual(['Priorytet', 'Standard'])
+    expect(przelacz(['Priorytet', 'Standard'], 'Priorytet')).toEqual(['Standard'])
+    expect(przelacz(['Priorytet'], 'Priorytet')).toEqual([])
+  })
+  it('przelacz: nie zmienia wejścia', () => {
+    const wejscie = ['Standard']
+    przelacz(wejscie, 'Priorytet')
+    expect(wejscie).toEqual(['Standard'])
   })
 })
 
