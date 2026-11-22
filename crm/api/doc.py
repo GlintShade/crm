@@ -1479,9 +1479,24 @@ def get_data(
 		default_filters = frappe.parse_json(default_filters)
 		filters.update(default_filters)
 
+	# VOLTEO (ops#393, ops#409): filtr kategorii handlowca (`volteo_kategoria`) na `name in [...]`.
+	# MUSI isc PRZED rozwin_grupy: ta dokleja filtry spoza grup do kazdej grupy i
+	# wola frappe.get_list, wiec pseudo-pole trafiloby do SQL (blad 1054). Po
+	# rozwinieciu grupy dostaja zwykle `name in [...]`, a unia grup zostaje przecieta.
+	# Mapa kategorii liczona raz na zadanie, tylko dla uprawnionych rol; dla pozostalych
+	# klucz jest po cichu usuwany. Kanban nie pokazuje kategorii, wiec liczy tylko filtr.
+	kategorie = None
+	wybrane_kategorie = None
+	if doctype == "CRM Lead":
+		if moze_widziec(frappe.get_roles()) and (KLUCZ_KATEGORII in filters or view_type != "kanban"):
+			kategorie = _kategorie_leadow_teraz()
+			if KLUCZ_KATEGORII in filters:
+				wybrane_kategorie = _wybrane_kategorie(filters[KLUCZ_KATEGORII])
+		filters = frappe._dict(_rozwin_filtr_kategorii(filters, kategorie))
+
 	# VOLTEO (issue #129): rozwija ewentualny klucz "volteo_grupy" (grupy
 	# filtrów ORAZ/ALBO) na zwykly filtr "name in [...]" -- PO scaleniu
-	# default_filters (rozwin_grupy dokleja "filtry_bez_grup", ktore juz je
+	# default_filters i PO rozwinieciu filtra kategorii (ops#409) (rozwin_grupy dokleja "filtry_bez_grup", ktore juz je
 	# zawiera, do KAZDEJ grupy, patrz jej docstring), PRZED _sprawdz_filtry
 	# nizej (ktora nie zna tego klucza i odrzucilaby go jak kazde inne
 	# nieznane pole). Bez klucza w filters ta funkcja jest no-opem.
@@ -1507,18 +1522,6 @@ def get_data(
 	# _sprawdz_filtry nizej.
 	if doctype == "CRM Lead":
 		filters = frappe._dict(normalizuj_filtr_telefonu(filters))
-
-	# VOLTEO (ops#393): filtr kategorii handlowca (`volteo_kategoria`) na `name in [...]`.
-	# Mapa kategorii liczona raz na zadanie, tylko dla uprawnionych rol; dla pozostalych
-	# klucz jest po cichu usuwany. Kanban nie pokazuje kategorii, wiec liczy tylko filtr.
-	kategorie = None
-	wybrane_kategorie = None
-	if doctype == "CRM Lead":
-		if moze_widziec(frappe.get_roles()) and (KLUCZ_KATEGORII in filters or view_type != "kanban"):
-			kategorie = _kategorie_leadow_teraz()
-			if KLUCZ_KATEGORII in filters:
-				wybrane_kategorie = _wybrane_kategorie(filters[KLUCZ_KATEGORII])
-		filters = frappe._dict(_rozwin_filtr_kategorii(filters, kategorie))
 
 	# Blokada filtrowania po polu bez uprawnien odczytu (permlevel > 0) — patrz
 	# ops#79. Walidujemy PO scaleniu default_filters i podstawieniu @me/@dzis,
