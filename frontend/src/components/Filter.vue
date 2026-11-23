@@ -49,13 +49,9 @@
                     {{ i == 0 ? __('Where') : __('And') }}
                   </div>
                   <div class="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      class="h-4 w-4 shrink-0 cursor-pointer rounded border-outline-gray-3"
-                      :checked="!f.nieaktywny"
-                      :title="__('Włącz lub wyłącz warunek')"
-                      @change="przelaczWiersz(f)"
-                    />
+                    <div class="ml-3 flex items-center" :title="__('Włącz lub wyłącz warunek')">
+                      <Checkbox :modelValue="!f.nieaktywny" @update:modelValue="przelaczWiersz(f)" />
+                    </div>
                     <Button
                       class="flex"
                       variant="ghost"
@@ -173,13 +169,9 @@
                   </div>
                 </div>
                 <div class="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    class="h-4 w-4 shrink-0 cursor-pointer rounded border-outline-gray-3"
-                    :checked="!f.nieaktywny"
-                    :title="__('Włącz lub wyłącz warunek')"
-                    @change="przelaczWiersz(f)"
-                  />
+                  <div class="ml-3 flex items-center" :title="__('Włącz lub wyłącz warunek')">
+                    <Checkbox :modelValue="!f.nieaktywny" @update:modelValue="przelaczWiersz(f)" />
+                  </div>
                   <Button
                     class="flex"
                     variant="ghost"
@@ -246,13 +238,9 @@
                     {{ __('Grupa {0}', [gi + 1]) }}
                   </div>
                   <div class="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      class="h-4 w-4 shrink-0 cursor-pointer rounded border-outline-gray-3"
-                      :checked="!grupa.wylaczona"
-                      :title="__('Włącz lub wyłącz grupę')"
-                      @change="przelaczGrupeOkna(gi)"
-                    />
+                    <div class="ml-3 flex items-center" :title="__('Włącz lub wyłącz grupę')">
+                      <Checkbox :modelValue="!grupa.wylaczona" @update:modelValue="przelaczGrupeOkna(gi)" />
+                    </div>
                     <Button
                       variant="ghost"
                       icon="lucide-x"
@@ -314,13 +302,9 @@
                       />
                     </div>
                   </div>
-                  <input
-                    type="checkbox"
-                    class="h-4 w-4 shrink-0 cursor-pointer rounded border-outline-gray-3"
-                    :checked="!f.nieaktywny"
-                    :title="__('Włącz lub wyłącz warunek')"
-                    @change="przelaczWarunekGrupy(gi, fi)"
-                  />
+                  <div class="ml-1 flex items-center" :title="__('Włącz lub wyłącz warunek')">
+                    <Checkbox :modelValue="!f.nieaktywny" @update:modelValue="przelaczWarunekGrupy(gi, fi)" />
+                  </div>
                   <Button
                     class="flex"
                     variant="ghost"
@@ -414,6 +398,7 @@ import {
   zbudujPrzewod,
 } from '@/utils/grupyFiltrow'
 import {
+  Checkbox,
   FormControl,
   MultiSelect,
   createResource,
