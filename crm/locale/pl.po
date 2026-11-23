@@ -10743,3 +10743,11 @@ msgstr "Usuń wpis"
 
 msgid "Edytuj opis"
 msgstr "Edytuj opis"
+
+# ops#410
+msgid "Włącz lub wyłącz warunek"
+msgstr "Włącz lub wyłącz warunek"
+
+# ops#410
+msgid "Włącz lub wyłącz grupę"
+msgstr "Włącz lub wyłącz grupę"

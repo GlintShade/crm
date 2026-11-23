@@ -39,17 +39,30 @@
               :key="i"
               class="mb-4 sm:mb-3"
             >
-              <div v-if="isMobileView" class="flex flex-col gap-2">
+              <div
+                v-if="isMobileView"
+                class="flex flex-col gap-2"
+                :class="{ 'opacity-50': f.nieaktywny }"
+              >
                 <div class="-mb-2 flex w-full items-center justify-between">
                   <div class="text-base text-ink-gray-5">
                     {{ i == 0 ? __('Where') : __('And') }}
                   </div>
-                  <Button
-                    class="flex"
-                    variant="ghost"
-                    icon="lucide-x"
-                    @click="removeFilter(i)"
-                  />
+                  <div class="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      class="h-4 w-4 shrink-0 cursor-pointer rounded border-outline-gray-3"
+                      :checked="!f.nieaktywny"
+                      :title="__('Włącz lub wyłącz warunek')"
+                      @change="przelaczWiersz(f)"
+                    />
+                    <Button
+                      class="flex"
+                      variant="ghost"
+                      icon="lucide-x"
+                      @click="removeFilter(i)"
+                    />
+                  </div>
                 </div>
                 <div id="fieldname" class="w-full">
                   <Autocomplete
@@ -102,7 +115,10 @@
                 </div>
               </div>
               <div v-else class="flex items-center justify-between gap-2">
-                <div class="flex items-center gap-2">
+                <div
+                  class="flex items-center gap-2"
+                  :class="{ 'opacity-50': f.nieaktywny }"
+                >
                   <div class="w-13 pl-2 text-end text-base text-ink-gray-5">
                     {{ i == 0 ? __('Where') : __('And') }}
                   </div>
@@ -156,12 +172,21 @@
                     </div>
                   </div>
                 </div>
-                <Button
-                  class="flex"
-                  variant="ghost"
-                  icon="lucide-x"
-                  @click="removeFilter(i)"
-                />
+                <div class="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    class="h-4 w-4 shrink-0 cursor-pointer rounded border-outline-gray-3"
+                    :checked="!f.nieaktywny"
+                    :title="__('Włącz lub wyłącz warunek')"
+                    @change="przelaczWiersz(f)"
+                  />
+                  <Button
+                    class="flex"
+                    variant="ghost"
+                    icon="lucide-x"
+                    @click="removeFilter(i)"
+                  />
+                </div>
               </div>
             </div>
           </template>
@@ -189,7 +214,7 @@
               </template>
             </Autocomplete>
             <Button
-              v-if="liczbaWarunkow"
+              v-if="liczbaWierszy"
               class="!text-ink-gray-5"
               variant="ghost"
               :label="__('Clear All Filters')"
@@ -220,22 +245,32 @@
                   <div class="text-sm-medium text-ink-gray-7">
                     {{ __('Grupa {0}', [gi + 1]) }}
                   </div>
-                  <Button
-                    variant="ghost"
-                    icon="lucide-x"
-                    :tooltip="__('Usuń grupę')"
-                    @click="removeGroup(gi)"
-                  />
+                  <div class="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      class="h-4 w-4 shrink-0 cursor-pointer rounded border-outline-gray-3"
+                      :checked="!grupa.wylaczona"
+                      :title="__('Włącz lub wyłącz grupę')"
+                      @change="przelaczGrupeOkna(gi)"
+                    />
+                    <Button
+                      variant="ghost"
+                      icon="lucide-x"
+                      :tooltip="__('Usuń grupę')"
+                      @click="removeGroup(gi)"
+                    />
+                  </div>
                 </div>
                 <div
-                  v-for="(f, fi) in grupa"
+                  v-for="(f, fi) in grupa.warunki"
                   :key="'volteo-warunek-' + gi + '-' + fi"
                   class="mb-2 flex items-center gap-2"
+                  :class="{ 'opacity-50': f.nieaktywny || grupa.wylaczona }"
                 >
                   <div id="fieldname" class="!min-w-[120px] flex-1">
                     <Autocomplete
                       :value="f.field.fieldname"
-                      :options="availableGroupFilters(gi)"
+                      :options="availableGroupFilters(gi, f.fieldname)"
                       :placeholder="__('First Name')"
                       @change="(e) => updateGroupFilter(e, gi, fi)"
                     />
@@ -279,6 +314,13 @@
                       />
                     </div>
                   </div>
+                  <input
+                    type="checkbox"
+                    class="h-4 w-4 shrink-0 cursor-pointer rounded border-outline-gray-3"
+                    :checked="!f.nieaktywny"
+                    :title="__('Włącz lub wyłącz warunek')"
+                    @change="przelaczWarunekGrupy(gi, fi)"
+                  />
                   <Button
                     class="flex"
                     variant="ghost"
@@ -359,11 +401,17 @@ import {
   dodajGrupe,
   dodajWarunekDoGrupy,
   liczbaWarunkowLacznie,
-  polaczGrupy,
+  liczbaWierszyLacznie,
+  nowaGrupa,
+  odtworzGrupy,
+  odtworzWspolne,
   podmienWarunekWGrupy,
+  przelaczGrupe,
+  przelaczWarunekWGrupie,
+  uporzadkujWgPoprzednich,
   usunGrupe,
   usunWarunekZGrupy,
-  wydzielGrupy,
+  zbudujPrzewod,
 } from '@/utils/grupyFiltrow'
 import {
   FormControl,
@@ -470,7 +518,9 @@ const filtersPochodne = computed(() => {
   if (props.default_filters) {
     allFilters = removeCommonFilters(props.default_filters, allFilters)
   }
-  return convertFilters(filterableFields.data, allFilters)
+  // ops#410: do wierszy z echa dochodza wiersze wylaczone (KLUCZ_NIEAKTYWNE).
+  const wiersze = (dict) => Array.from(convertFilters(filterableFields.data, dict))
+  return new Set(odtworzWspolne(wiersze(allFilters), allFilters, wiersze))
 })
 
 function scalFiltryZPustymi(nowe, stare) {
@@ -480,7 +530,8 @@ function scalFiltryZPustymi(nowe, stare) {
       !fieldnamesNowe.has(f.fieldname) &&
       czyPustyWarunekWielokrotny(f.operator, f.value),
   )
-  return new Set([...nowe, ...brakujacePuste])
+  // ops#410: kolejnosc jak w oknie, zeby wylaczony wiersz nie skakal na dol.
+  return new Set(uporzadkujWgPoprzednich([...nowe, ...brakujacePuste], stare))
 }
 
 const filters = ref(filtersPochodne.value)
@@ -545,8 +596,9 @@ function wyliczGrupy() {
   if (!list.value?.data || !filterableFields.data) return []
   let allFilters = list.value?.params?.filters || list.value.data?.params?.filters
   if (!allFilters) return []
-  const { grupy: surowe } = wydzielGrupy(allFilters)
-  return surowe.map(grupaZDict)
+  // ops#410: grupy z zrzutu KLUCZ_NIEAKTYWNE (grupy i warunki wylaczone)
+  // albo, dla starych zapisow, z `volteo_grupy`.
+  return odtworzGrupy(allFilters, grupaZDict)
 }
 
 // `computed`, nie ręcznie wyliczone źródła `watch`: Vue śledzi WSZYSTKIE
@@ -562,25 +614,26 @@ function wyliczGrupy() {
 // odtworzenie z powrotem z `list.value.params.filters` mogłoby zgubić.
 function scalGrupyZPustymi(nowe, stare) {
   const listaStarych = stare || []
-  const wynik = nowe.map((noweWarunki, i) => {
-    const fieldnamesNowe = new Set(noweWarunki.map((w) => w.fieldname))
-    const brakujace = (listaStarych[i] || []).filter(
+  const wynik = nowe.map((nowa, i) => {
+    const fieldnamesNowe = new Set(nowa.warunki.map((w) => w.fieldname))
+    const brakujace = (listaStarych[i]?.warunki || []).filter(
       (w) =>
         !fieldnamesNowe.has(w.fieldname) &&
         czyPustyWarunekWielokrotny(w.operator, w.value),
     )
-    return [...noweWarunki, ...brakujace]
+    return { ...nowa, warunki: [...nowa.warunki, ...brakujace] }
   })
   // Grupa, w której WSZYSTKIE warunki były puste, znika z przewodu
   // CAŁKOWICIE (patrz komentarz przy deklaracji `grupy` wyżej) -- nie ma
   // już żadnego odpowiednika w `nowe`. Dokładamy ją z powrotem na końcu,
   // jeśli nadal wszystkie jej warunki są puste.
   for (let i = nowe.length; i < listaStarych.length; i++) {
-    const warunkiGrupy = listaStarych[i] || []
+    const staraGrupa = listaStarych[i]
+    const warunkiGrupy = staraGrupa?.warunki || []
     const calaPusta =
       warunkiGrupy.length > 0 &&
       warunkiGrupy.every((w) => czyPustyWarunekWielokrotny(w.operator, w.value))
-    if (calaPusta) wynik.push(warunkiGrupy)
+    if (calaPusta) wynik.push(staraGrupa)
   }
   return wynik
 }
@@ -1107,17 +1160,22 @@ function zbudujWarunek(data) {
   }
 }
 
-function availableGroupFilters(groupIndex) {
+// `wlasnePole`: pole wiersza, ktory ta lista obsluguje. Musi zostac na liscie,
+// inaczej Autocomplete nie znajduje opcji dla wybranej wartosci i pokazuje
+// surowy fieldname zamiast etykiety.
+function availableGroupFilters(groupIndex, wlasnePole) {
   if (!filterableFields.data) return []
-  const uzyte = new Set((grupy.value[groupIndex] || []).map((f) => f.fieldname))
-  return filterableFields.data.filter((field) => !uzyte.has(field.fieldname))
+  const uzyte = new Set((grupy.value[groupIndex]?.warunki || []).map((f) => f.fieldname))
+  return filterableFields.data.filter(
+    (field) => field.fieldname === wlasnePole || !uzyte.has(field.fieldname),
+  )
 }
 
 function addGroup() {
   if (grupy.value.length >= MAX_GRUP) return
   const pierwszePole = filterableFields.data?.[0]
   if (!pierwszePole) return
-  grupy.value = dodajGrupe(grupy.value, [zbudujWarunek(pierwszePole)])
+  grupy.value = dodajGrupe(grupy.value, nowaGrupa([zbudujWarunek(pierwszePole)]))
   apply()
 }
 
@@ -1128,7 +1186,7 @@ function removeGroup(groupIndex) {
 
 function setGroupFilter(data, groupIndex) {
   if (!data) return
-  if ((grupy.value[groupIndex]?.length ?? 0) >= MAX_WARUNKOW_W_GRUPIE) return
+  if ((grupy.value[groupIndex]?.warunki.length ?? 0) >= MAX_WARUNKOW_W_GRUPIE) return
   grupy.value = dodajWarunekDoGrupy(grupy.value, groupIndex, zbudujWarunek(data))
   apply()
 }
@@ -1141,6 +1199,24 @@ function updateGroupFilter(data, groupIndex, condIndex) {
 
 function removeGroupFilter(groupIndex, condIndex) {
   grupy.value = usunWarunekZGrupy(grupy.value, groupIndex, condIndex)
+  apply()
+}
+
+// ops#410: wlaczanie/wylaczanie warunku i grupy bez kasowania ich z okna.
+// Wiersz wspolny jest mutowany wprost (jak wartosc/operator, patrz
+// updateValue); grupy zmieniaja sie niemutujaco przez helpery.
+function przelaczWiersz(f) {
+  f.nieaktywny = !f.nieaktywny
+  apply()
+}
+
+function przelaczGrupeOkna(groupIndex) {
+  grupy.value = przelaczGrupe(grupy.value, groupIndex)
+  apply()
+}
+
+function przelaczWarunekGrupy(groupIndex, condIndex) {
+  grupy.value = przelaczWarunekWGrupie(grupy.value, groupIndex, condIndex)
   apply()
 }
 
@@ -1258,45 +1334,23 @@ function apply() {
   // UI), tylko wyłączony z tego, co ląduje w emitowanym słowniku.
   const niePusty = (f) => !czyPustyWarunekWielokrotny(f.operator, f.value)
 
-  let _filters = []
-  filters.value.forEach((f) => {
-    if (!niePusty(f)) return
-    _filters.push({
-      fieldname: f.fieldname,
-      operator: f.operator,
-      value: f.value,
-    })
-  })
-  const filtryWspolne = parseFilters(_filters)
-
-  // Issue #129: każda grupa serializowana tą samą `parseFilters` co
-  // filtry wspólne wyżej (ten sam kształt wiersza, ten sam operatorMap/
-  // transformIn), a `polaczGrupy` doklada wynik pod `volteo_grupy` --
-  // pomijając grupy o zerowej liczbie warunków (patrz jej JSDoc). Od tej
-  // poprawki to już NIE jest tylko teoretyczny przypadek: warunek
-  // wielokrotnego wyboru bez wartości jest wyżej pomijany tak samo jak dla
-  // filtrów wspólnych, więc grupa, w której to był JEDYNY warunek,
-  // serializuje się do {} i `polaczGrupy` ją odsiewa -- poprawne, bo pusta
-  // grupa ALBO nie może dopasować WSZYSTKICH wierszy (zepsułoby to
-  // semantykę sumy OR), ale oznacza też, że sama grupa zniknie z popupu do
-  // czasu zaznaczenia w niej czegokolwiek, tak jak każda inna pusta grupa.
-  // Tak jak `_filters` wyżej: kopie zwykłych obiektów, NIE same wiersze
-  // z `grupy.value` -- `transformIn` w `parseFilters` mutuje `.value` (np.
-  // dokleja "%...%"), a wiersze w `grupy.value` muszą zostać nietknięte,
-  // żeby edycja w popupie nadal pokazywała wartość wpisaną przez
-  // użytkownika, nie jej opakowaną, "przewodową" postać.
-  const grupyWire = grupy.value.map((warunki) =>
+  // ops#410: do serwera ida tylko wiersze aktywne (aktywne grupy, aktywne
+  // warunki); wylaczone laduja pod KLUCZ_NIEAKTYWNE (patrz zbudujPrzewod).
+  // Tak jak wczesniej `parseFilters` dostaje KOPIE zwyklych obiektow, nie
+  // wiersze z `filters`/`grupy`: `transformIn` mutuje `.value` (np. dokleja
+  // "%...%"), a wiersze w oknie musza zachowac wartosc wpisana przez
+  // uzytkownika. Pusta grupa nie serializuje sie (patrz `polaczGrupy`).
+  const doPrzewodu = (wiersze) =>
     parseFilters(
-      warunki
-        .filter(niePusty)
-        .map((f) => ({ fieldname: f.fieldname, operator: f.operator, value: f.value })),
-    ),
-  )
+      wiersze.map((f) => ({ fieldname: f.fieldname, operator: f.operator, value: f.value })),
+    )
 
-  emit('update', polaczGrupy(filtryWspolne, grupyWire))
+  emit('update', zbudujPrzewod(filters.value, grupy.value, doPrzewodu, (f) => !niePusty(f)))
 }
 
-const liczbaWarunkow = computed(() => liczbaWarunkowLacznie(filters.value.size, grupy.value))
+const liczbaWarunkow = computed(() => liczbaWarunkowLacznie(filters.value, grupy.value))
+// Wszystkie wiersze okna, takze wylaczone: pokazuje przycisk „Wyczysc".
+const liczbaWierszy = computed(() => liczbaWierszyLacznie(filters.value, grupy.value))
 
 function parseFilters(filters) {
   const filtersArray = Array.from(filters)

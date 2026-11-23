@@ -42,6 +42,15 @@ from collections.abc import Mapping, Sequence
 # każde inne nieznane pole - fail closed bez żadnej zmiany w tamtym module.
 KLUCZ_GRUP = "volteo_grupy"
 
+# ops#410: drugi zarezerwowany klucz. Frontend (okno „Filtr") zapisuje pod nim
+# wylaczone (odznaczone) warunki i grupy razem z filtrami widoku, zeby
+# przezyly zamkniecie okna i przeladowanie. To WYLACZNIE dane okna: nigdy nie
+# filtruje. `wydziel_grupy` wycina go razem z `KLUCZ_GRUP` w kazdym miejscu,
+# gdzie serwer czyta filtry (`rozwin_grupy` w get_data, mapie, przydziel_cc),
+# PRZED jakimkolwiek zapytaniem i `_sprawdz_filtry` (pseudo-klucz w SQL to
+# blad 1054, patrz ops#409).
+KLUCZ_NIEAKTYWNE = "volteo_nieaktywne"
+
 # Limity walidowane przez `waliduj_grupy` - patrz issue #129 ("limity 5
 # grup x 10 warunków"; od ops#399 limit grup to 10). Czysto UX/bezpieczeństwo (chroni przed zapytaniem
 # `name in [...]` o nieograniczonym koszcie w `rozwin_grupy`); to samo
@@ -68,7 +77,11 @@ def wydziel_grupy(filters: Mapping[str, object] | None) -> tuple[dict, list]:
 	if not filters or not isinstance(filters, Mapping):
 		return {}, []
 
-	filtry_bez_grup = {klucz: wartosc for klucz, wartosc in filters.items() if klucz != KLUCZ_GRUP}
+	filtry_bez_grup = {
+		klucz: wartosc
+		for klucz, wartosc in filters.items()
+		if klucz not in (KLUCZ_GRUP, KLUCZ_NIEAKTYWNE)
+	}
 	grupy = filters.get(KLUCZ_GRUP, [])
 	if grupy is None:
 		grupy = []
