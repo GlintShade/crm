@@ -2,10 +2,15 @@
   wybor osoby odpowiedzialnej, lista z wyszukiwaniem i awatarami (klik przelacza,
   lista zostaje otwarta), wybrani jako chipy POD polem. Wartosc: wiersze `[{user}]`. -->
 <template>
-  <div class="min-w-0">
+  <div ref="korzen" class="min-w-0">
     <!-- Panel przez Popover (teleport do #frappeui-popper-root), wiec kolumna z
       overflow go nie przycina; to samo robi Autocomplete wyboru osoby odpowiedzialnej. -->
-    <Popover v-model:show="otwarte" class="w-full" placement="bottom-start">
+    <Popover
+      v-model:show="otwarte"
+      class="w-full"
+      placement="bottom-start"
+      :hide-on-blur="false"
+    >
       <template #target="{ togglePopover }">
         <button
           type="button"
@@ -19,6 +24,7 @@
       </template>
       <template #body>
         <div
+          data-wybor-osob-panel
           class="mt-1 rounded-lg bg-surface-elevation-2 p-1.5 text-base shadow-2xl"
           @keydown.esc.stop="otwarte = false"
         >
@@ -93,7 +99,7 @@ import {
 } from '@/utils/wyborOsob'
 import Popover from '@/components/frappe-ui/Popover.vue'
 import { FeatherIcon } from 'frappe-ui'
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const props = defineProps({
   modelValue: { type: Array, default: () => [] },
@@ -105,8 +111,22 @@ const emit = defineEmits(['update:modelValue'])
 
 const { getUser, users } = usersStore()
 const poleSzukaj = ref(null)
+const korzen = ref(null)
 const otwarte = ref(false)
 const szukaj = ref('')
+
+// Zamykanie przy kliku poza polem i panelem decydujemy na `mousedown`, zanim zmiana
+// wyboru przerysuje liste. Wlasne `hideOnBlur` Popovera (listener na `click`) uznawalo
+// klik w opcje za zewnetrzny, bo po przerysowaniu kliknity wezel bywa juz odpiety od
+// panelu. Dlatego Popover ma `hide-on-blur=false`, a panel jest rozpoznawany po atrybucie.
+function poza(e) {
+  if (!otwarte.value) return
+  const cel = e.target
+  if (korzen.value?.contains(cel) || cel?.closest?.('[data-wybor-osob-panel]')) return
+  otwarte.value = false
+}
+onMounted(() => document.addEventListener('mousedown', poza, true))
+onBeforeUnmount(() => document.removeEventListener('mousedown', poza, true))
 
 // Po otwarciu fokus na wyszukiwarce (zwykly <input>, nie komponent frappe-ui).
 watch(otwarte, (o) => {
