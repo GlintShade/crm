@@ -4,9 +4,11 @@ from crm.volteo_powiadomienia_zadan import (
 	autor_wzmiankowany,
 	czy_zadanie_automatyczne,
 	etykieta_statusu,
+	nowo_dodani,
 	tekst_powiadomienia,
 	wybierz_odbiorce,
 	wybierz_odbiorcow,
+	wyczysc_do_wiadomosci,
 	wykryj_zdarzenia,
 )
 
@@ -127,6 +129,52 @@ class TestTekst(unittest.TestCase):
 		self.assertEqual(etykieta_statusu("Done"), "Wykonane")
 		self.assertEqual(etykieta_statusu("Inny"), "Inny")
 		self.assertEqual(etykieta_statusu(None), "")
+
+
+class TestDoWiadomosci(unittest.TestCase):
+	AKTYWNI = frozenset({"a@x", "b@x", "c@x", "d@x"})
+
+	def test_wyczysc_duplikaty_puste_i_wykonawca(self: "TestDoWiadomosci") -> None:
+		self.assertEqual(
+			wyczysc_do_wiadomosci(["d@x", None, "", "c@x", "d@x", "b@x"], "b@x"), ["d@x", "c@x"]
+		)
+		self.assertEqual(wyczysc_do_wiadomosci(None, "b@x"), [])
+		self.assertEqual(wyczysc_do_wiadomosci(["b@x"], None), ["b@x"])
+
+	def test_wyczysc_nie_mutuje(self: "TestDoWiadomosci") -> None:
+		wejscie = ["b@x", "c@x"]
+		wyczysc_do_wiadomosci(wejscie, "b@x")
+		self.assertEqual(wejscie, ["b@x", "c@x"])
+
+	def test_nowo_dodani(self: "TestDoWiadomosci") -> None:
+		self.assertEqual(nowo_dodani(["a@x"], ["a@x", "b@x", "b@x"]), ["b@x"])
+		self.assertEqual(nowo_dodani(None, ["a@x"]), ["a@x"])
+		self.assertEqual(nowo_dodani(["a@x"], ["a@x"]), [])
+		self.assertEqual(nowo_dodani(["a@x"], []), [])
+
+	def test_trzecia_grupa_odbiorcow(self: "TestDoWiadomosci") -> None:
+		self.assertEqual(
+			wybierz_odbiorcow("a@x", ["b@x"], "z@x", self.AKTYWNI, False, do_wiadomosci=["c@x", "d@x"]),
+			["a@x", "b@x", "c@x", "d@x"],
+		)
+
+	def test_dw_pomija_aktora_nieaktywnych_i_duplikat(self: "TestDoWiadomosci") -> None:
+		self.assertEqual(
+			wybierz_odbiorcow("a@x", [], "c@x", {"a@x", "c@x"}, False, do_wiadomosci=["c@x", "d@x", "a@x"]),
+			["a@x"],
+		)
+
+	def test_dw_dostaje_przy_zadaniu_automatycznym(self: "TestDoWiadomosci") -> None:
+		self.assertEqual(
+			wybierz_odbiorcow("a@x", ["b@x"], "z@x", self.AKTYWNI, True, do_wiadomosci=["c@x"]),
+			["b@x", "c@x"],
+		)
+
+	def test_bez_dw_jak_dotad(self: "TestDoWiadomosci") -> None:
+		self.assertEqual(wybierz_odbiorcow("a@x", ["b@x"], "z@x", self.AKTYWNI, False), ["a@x", "b@x"])
+
+	def test_tekst_dw(self: "TestDoWiadomosci") -> None:
+		self.assertIn("dodał(a) Cię do wiadomości w zadaniu", tekst_powiadomienia("dw", "Jan", "Zad"))
 
 
 if __name__ == "__main__":

@@ -756,7 +756,7 @@ async function exportRows() {
   // "_klient" (kolumna "Klient" listy Zadan) to pseudo-pole liczone po stronie
   // serwera w get_data, nie kolumna bazy: eksport go nie zna (ops#357).
   let fields = JSON.stringify(
-    list.value.data.columns.map((f) => f.key).filter((k) => k !== '_klient'),
+    list.value.data.columns.map((f) => f.key).filter((k) => k !== '_klient' && k !== '_dw'),
   )
 
   // ops#410: rdzen Frappe (export_query) nie zna klucza z wylaczonymi

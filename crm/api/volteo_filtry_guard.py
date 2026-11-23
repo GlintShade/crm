@@ -56,7 +56,7 @@ from frappe.desk import reportview as _rdzen_reportview
 from frappe.desk.search import search_link as _rdzen_search_link
 
 from crm.api.doc import _rozwin_filtr_klienta, _sprawdz_filtry
-from crm.volteo_zadania_lista import DOCTYPE_ZADANIA, KLUCZ_KLIENTA
+from crm.volteo_zadania_lista import DOCTYPE_ZADANIA, KLUCZE_PSEUDO_FILTRA
 
 # _sprawdz_filtry jest oznaczona jako prywatna konwencja jednego podkreslenia
 # (nie jest API poza modulem doc.py), ale ops#79/#80 celowo dzieli ja miedzy
@@ -153,14 +153,14 @@ def _filtry_z_rozwinietym_klientem(doctype: str, filters: object) -> object:
 	`crm.api.doc._rozwin_filtr_klienta` zamienia go na `name in [...]` (tak jak
 	robi to `get_data`), a ten wrapper robi to samo dla endpointow rdzenia,
 	PRZED walidacja. Tylko `CRM Task` i tylko dict (albo JSON-string z dictem)
-	z kluczem `_klient`; kazdy inny ksztalt (np. lista krotek) wraca bez zmian
+	z kluczem `_klient`, `_dw` albo `_rola_ja` (ops#411); kazdy inny ksztalt (np. lista krotek) wraca bez zmian
 	i `_klient` w nim nadal konczy sie odmowa, jak kazde nieznane pole. Wynik
 	to nowy dict; argument nie jest mutowany. Rozwiniecie tylko ZAWEZA wynik,
 	bo rdzen i tak odczytuje zadania z uprawnieniami uzytkownika."""
 	if doctype != DOCTYPE_ZADANIA:
 		return filters
 	parsed = _sparsowane_filtry(filters)
-	if not isinstance(parsed, dict) or KLUCZ_KLIENTA not in parsed:
+	if not isinstance(parsed, dict) or not any(k in parsed for k in KLUCZE_PSEUDO_FILTRA):
 		return filters
 	return _rozwin_filtr_klienta(doctype, parsed)
 

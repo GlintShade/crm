@@ -22,7 +22,8 @@ ZNACZNIK_ZADANIA_AUTOMATYCZNEGO = "[volteo:zadanie-auto]"
 PREFIKSY_TYTULU_AUDYTU: tuple[str, ...] = ("Audyt OZE: ", "Audyt CP: ")
 """Tytuly zadan audytu sprzed wdrozenia znacznika (uznawane za automatyczne)."""
 
-ZDARZENIA: tuple[str, ...] = ("wpis", "status", "termin", "wykonawca")
+ZDARZENIA: tuple[str, ...] = ("wpis", "status", "termin", "wykonawca", "dw")
+"""`dw` (ops#411): osoba dodana do "Do wiadomosci"; dostaje ja tylko nowo dodana."""
 
 _MENTION_RE = re.compile(r"<span[^>]*data-type=[\"']mention[\"'][^>]*>", re.IGNORECASE)
 _DATA_ID_RE = re.compile(r"data-id=[\"']([^\"']*)[\"']", re.IGNORECASE)
@@ -88,14 +89,17 @@ def wybierz_odbiorcow(
 	aktywni: set[str] | frozenset[str],
 	automatyczne: bool,
 	pomin: set[str] | None = None,
+	do_wiadomosci: list[str | None] | None = None,
 ) -> list[str]:
 	"""Odbiorcy dzwonka o zdarzeniu na zadaniu (ops#360): autor (tylko zadanie
 	reczne) oraz wykonawcy (pole `assigned_to` i osoby z otwartym ToDo; takze przy
 	zadaniu automatycznym). Kazdy raz (bez duplikatow, kolejnosc: autor, wykonawcy),
 	nigdy aktor, tylko konta z `aktywni`, nikt z `pomin` (np. nowy wykonawca przy
-	zmianie wykonawcy, ktory dostaje juz dzwonek przypisania)."""
+	zmianie wykonawcy, ktory dostaje juz dzwonek przypisania). Trzecia grupa
+	(ops#411): osoby "Do wiadomosci" (`do_wiadomosci`), traktowane jak wykonawcy,
+	takze przy zadaniu automatycznym."""
 	pomin = pomin or set()
-	kandydaci: list[str | None] = [None if automatyczne else autor, *wykonawcy]
+	kandydaci: list[str | None] = [None if automatyczne else autor, *wykonawcy, *(do_wiadomosci or [])]
 	wynik: list[str] = []
 	for kandydat in kandydaci:
 		if (
@@ -109,6 +113,24 @@ def wybierz_odbiorcow(
 			continue
 		wynik.append(kandydat)
 	return wynik
+
+
+def wyczysc_do_wiadomosci(osoby: list[str | None] | None, wykonawca: str | None) -> list[str]:
+	"""Lista "Do wiadomosci" po zapisie (ops#411): bez pustych wpisow, bez
+	duplikatow (kolejnosc pierwszego wystapienia) i bez osoby odpowiedzialnej
+	(`assigned_to`), ktora nie moze byc w obu rolach naraz. Zwraca nowa liste."""
+	wynik: list[str] = []
+	for osoba in osoby or []:
+		osoba = (osoba or "").strip()
+		if osoba and osoba != (wykonawca or "") and osoba not in wynik:
+			wynik.append(osoba)
+	return wynik
+
+
+def nowo_dodani(przed: list[str | None] | None, po: list[str | None] | None) -> list[str]:
+	"""Osoby z listy `po`, ktorych nie bylo na liscie `przed` (ops#411)."""
+	byli = set(przed or [])
+	return [osoba for osoba in dict.fromkeys(po or []) if osoba and osoba not in byli]
 
 
 def autor_wzmiankowany(tresc: str | None, uzytkownik: str | None) -> bool:
@@ -142,6 +164,7 @@ def tekst_powiadomienia(
 		"status": "zmienił(a) status zadania",
 		"termin": "zmienił(a) termin zadania",
 		"wykonawca": "zmienił(a) osobę przypisaną do zadania",
+		"dw": "dodał(a) Cię do wiadomości w zadaniu",
 	}[zdarzenie]
 	dopisek = ""
 	if nowa_wartosc:

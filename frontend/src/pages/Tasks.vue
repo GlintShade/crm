@@ -53,6 +53,25 @@
         {{ __(zakladka.etykieta) }}
       </button>
     </div>
+    <!-- ops#411: dwa szybkie filtry rol. Oba wlaczone = suma (jeden filtr serwera). -->
+    <div class="ml-3 inline-flex shrink-0 items-center gap-1.5">
+      <button
+        v-for="rola in ROLE_ZADAN"
+        :key="rola.klucz"
+        type="button"
+        class="flex h-7 items-center whitespace-nowrap rounded border px-2 text-base transition-colors"
+        :class="
+          stanRolUzytkownika[rola.klucz]
+            ? 'border-outline-gray-3 bg-surface-gray-4 text-ink-gray-9'
+            : 'border-outline-gray-2 text-ink-gray-6 hover:bg-surface-gray-2'
+        "
+        :aria-pressed="stanRolUzytkownika[rola.klucz]"
+        :data-testid="`zadania-rola-${rola.klucz}`"
+        @click="przelaczRole(rola.klucz)"
+      >
+        {{ __(rola.etykieta) }}
+      </button>
+    </div>
   </div>
   <KanbanView
     v-if="$route.params.viewType == 'kanban' && rows.length"
@@ -224,12 +243,16 @@ import EmptyState from '@/components/ListViews/EmptyState.vue'
 import KanbanView from '@/components/Kanban/KanbanView.vue'
 import { useDoctypeModal } from '@/composables/doctypeModal'
 import { getMeta } from '@/stores/meta'
+import { sessionStore } from '@/stores/session'
 import { usersStore } from '@/stores/users'
 import { formatDate } from '@/utils'
 import { czyTlumaczycOpcje } from '@/utils/zadania'
 import {
   ZAKLADKI_ZADAN,
+  filtryDlaRol,
   filtryDlaZakladki,
+  stanRol,
+  tekstDoWiadomosci,
   zakladkaZFiltra,
 } from '@/utils/zadaniaLista'
 import { timestampCell } from '@/composables/useTimelinePreferences'
@@ -241,6 +264,7 @@ import { useRoute, useRouter } from 'vue-router'
 const { getFormattedPercent, getFormattedFloat, getFormattedCurrency } =
   getMeta('CRM Task')
 const { getUser } = usersStore()
+const session = sessionStore()
 const { updateOnboardingStep } = useOnboarding('frappecrm')
 const { capture } = useTelemetry()
 
@@ -356,6 +380,10 @@ function parseRows(rows, columns = []) {
     })
     // Kolumna "Klient" (pseudo-pole `_klient`, ops#357): zawsze tekst.
     _rows._klient = task._klient || ''
+    // Kolumna "Do wiadomosci" (pseudo-pole `_dw`, ops#411): nazwiska z loginow.
+    _rows._dw = tekstDoWiadomosci(
+      (task._dw || []).map((u) => getUser(u).full_name || u),
+    )
     return _rows
   })
 }
@@ -366,6 +394,24 @@ function parseRows(rows, columns = []) {
 const aktywnaZakladka = computed(() =>
   zakladkaZFiltra(tasks.value?.params?.filters?.status),
 )
+
+// Szybkie filtry rol (ops#411): "Moje (odpowiedzialny)" i "Do mojej wiadomosci".
+const ROLE_ZADAN = [
+  { klucz: 'moje', etykieta: 'Moje (odpowiedzialny)' },
+  { klucz: 'dw', etykieta: 'Do mojej wiadomości' },
+]
+const stanRolUzytkownika = computed(() =>
+  stanRol(tasks.value?.params?.filters, session.user),
+)
+
+function przelaczRole(klucz) {
+  if (!viewControls.value || !session.user) return
+  const stan = { ...stanRolUzytkownika.value, [klucz]: !stanRolUzytkownika.value[klucz] }
+  viewControls.value.getParams()
+  viewControls.value.updateFilter(
+    filtryDlaRol(tasks.value?.params?.filters || {}, session.user, stan),
+  )
+}
 
 function wybierzZakladke(klucz) {
   if (!viewControls.value) return

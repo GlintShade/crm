@@ -1,9 +1,13 @@
 import unittest
 
 from crm.volteo_zadania_lista import (
+	KLUCZ_DW,
 	KLUCZ_KLIENTA,
+	KLUCZ_ROLA_JA,
+	filtr_dw,
 	klient_zadania,
 	nazwy_powiazan,
+	polacz_filtr_name,
 	tekst_filtra_klienta,
 	uklad_paska_z_klientem,
 	zawez_nazwy_zadan,
@@ -161,6 +165,43 @@ class TestUkladPaskaZKlientem(unittest.TestCase):
 		uklad = ["title"]
 		uklad_paska_z_klientem(uklad, "CRM Task")
 		self.assertEqual(uklad, ["title"])
+
+
+class TestDoWiadomosciFiltr(unittest.TestCase):
+	def test_klucze(self: "TestDoWiadomosciFiltr") -> None:
+		self.assertEqual((KLUCZ_DW, KLUCZ_ROLA_JA), ("_dw", "_rola_ja"))
+
+	def test_filtr_dw_ksztalty(self: "TestDoWiadomosciFiltr") -> None:
+		self.assertEqual(filtr_dw("a@x"), ("in", ["a@x"]))
+		self.assertEqual(filtr_dw(["=", "a@x"]), ("in", ["a@x"]))
+		self.assertEqual(filtr_dw(["!=", "a@x"]), ("not in", ["a@x"]))
+		self.assertEqual(filtr_dw(["IN", ["a@x", " b@x ", ""]]), ("in", ["a@x", "b@x"]))
+		self.assertEqual(filtr_dw(["not in", ["a@x"]]), ("not in", ["a@x"]))
+
+	def test_filtr_dw_nieobslugiwane(self: "TestDoWiadomosciFiltr") -> None:
+		for wartosc in (None, "", [], ["in", []], ["like", "%a%"], ["in", "a@x"], {"a": 1}, 5, ["in", [1, None]]):
+			self.assertIsNone(filtr_dw(wartosc), wartosc)
+
+	def test_polacz_bez_istniejacego(self: "TestDoWiadomosciFiltr") -> None:
+		self.assertEqual(polacz_filtr_name(None, "in", [3, 4]), ("in", [3, 4]))
+		self.assertEqual(polacz_filtr_name(None, "not in", [3]), ("not in", [3]))
+
+	def test_polacz_in_in(self: "TestDoWiadomosciFiltr") -> None:
+		self.assertEqual(polacz_filtr_name(("in", {"3", 5}), "in", [3, 4]), ("in", [3]))
+
+	def test_polacz_in_notin(self: "TestDoWiadomosciFiltr") -> None:
+		self.assertEqual(polacz_filtr_name(("in", {3, 5}), "not in", ["3"]), ("in", [5]))
+
+	def test_polacz_notin_in(self: "TestDoWiadomosciFiltr") -> None:
+		self.assertEqual(polacz_filtr_name(("not in", {3}), "in", [3, 4]), ("in", [4]))
+
+	def test_polacz_notin_notin(self: "TestDoWiadomosciFiltr") -> None:
+		self.assertEqual(polacz_filtr_name(("not in", {3}), "not in", [3, 4]), ("not in", [3, 4]))
+
+	def test_polacz_nie_mutuje(self: "TestDoWiadomosciFiltr") -> None:
+		nazwy, zbior = [3, 4], {3}
+		polacz_filtr_name(("in", zbior), "in", nazwy)
+		self.assertEqual((nazwy, zbior), ([3, 4], {3}))
 
 
 if __name__ == "__main__":

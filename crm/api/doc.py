@@ -42,15 +42,20 @@ from crm.volteo_lista_szans import (
 from crm.volteo_pipeline import parsuj_podzadania, podsumowanie_szansy
 from crm.volteo_usuwanie import AUTENTI_STATUSY_BLOKADY, OFERTA_STATUSY_BLOKADY
 from crm.volteo_zadania_lista import (
+	DOCTYPE_DW,
 	DOCTYPE_ZADANIA,
+	KLUCZ_DW,
 	KLUCZ_KLIENTA,
+	KLUCZ_ROLA_JA,
+	KLUCZE_PSEUDO_FILTRA,
 	LIMIT_POWIAZAN,
 	LIMIT_ZADAN,
+	filtr_dw,
 	klient_zadania,
 	nazwy_powiazan,
+	polacz_filtr_name,
 	tekst_filtra_klienta,
 	uklad_paska_z_klientem,
-	zawez_nazwy_zadan,
 )
 
 # Bezpiecznik rozmiaru unii w `rozwin_grupy` (issue #129): patrz jej
@@ -106,7 +111,7 @@ _POLA_ZAWSZE_DOZWOLONE = POLA_ZAWSZE_DOZWOLONE | frozenset(_CHILD_TABLE_FIELDS)
 # _POLA_ZAWSZE_DOZWOLONE powyzej.
 # ops#384: licznik pozycji podprocesu OZE doklejany do wierszy listy szans.
 KLUCZ_PODZADAN = "_podzadania"
-_POLA_LISTY_ZAWSZE_DOZWOLONE = _POLA_ZAWSZE_DOZWOLONE | frozenset({"_comment_count", KLUCZ_KLIENTA, KLUCZ_PODZADAN})
+_POLA_LISTY_ZAWSZE_DOZWOLONE = _POLA_ZAWSZE_DOZWOLONE | frozenset({"_comment_count", KLUCZ_KLIENTA, KLUCZ_DW, KLUCZ_PODZADAN})
 
 
 def _pola_dozwolone(doctype: str, parenttype: str | None = None) -> set[str]:
@@ -666,14 +671,34 @@ def _rozwin_filtr_klienta(doctype: str, filters: dict) -> dict:
 	rozwiniecie moze wylacznie ZAWEZIC to, co uzytkownik i tak widzi.
 
 	Zwraca NOWY dict, `filters` nie jest mutowany."""
-	if doctype != DOCTYPE_ZADANIA or KLUCZ_KLIENTA not in filters:
+	if doctype != DOCTYPE_ZADANIA or not any(k in filters for k in KLUCZE_PSEUDO_FILTRA):
 		return filters
 
 	wynik = dict(filters)
-	tekst = tekst_filtra_klienta(wynik.pop(KLUCZ_KLIENTA))
-	if tekst is None:
-		return wynik
+	tekst = tekst_filtra_klienta(wynik.pop(KLUCZ_KLIENTA, None))
+	if tekst is not None:
+		_zastosuj_nazwy_zadan(wynik, "in", _nazwy_zadan_klienta(tekst), "po kliencie")
 
+	# ops#411: "Do wiadomosci" (`_dw`) i suma rol (`_rola_ja`). Oba klucze znikaja
+	# z wyniku (pseudo-pole nigdy nie trafia do SQL), zastepuje je `name in/not in`.
+	dw = filtr_dw(wynik.pop(KLUCZ_DW, None))
+	if dw is not None:
+		rodzaj, uzytkownicy = dw
+		_zastosuj_nazwy_zadan(wynik, rodzaj, _nazwy_zadan_dw(uzytkownicy), "po „Do wiadomości”")
+	if wynik.pop(KLUCZ_ROLA_JA, None):
+		# Zawsze biezacy uzytkownik sesji, nigdy wartosc od klienta: unia
+		# "assigned_to = ja" i "jestem w Do wiadomosci" to warunek ALBO, ktorego
+		# dwa AND-owane filtry nie wyraza, wiec serwer wylicza zbior nazw.
+		ja = frappe.session.user
+		nazwy = frappe.get_all(
+			DOCTYPE_ZADANIA, filters={"assigned_to": ja}, pluck="name", limit_page_length=LIMIT_ZADAN
+		)
+		_zastosuj_nazwy_zadan(wynik, "in", [*nazwy, *_nazwy_zadan_dw([ja])], "„Moje”")
+	return wynik
+
+
+def _nazwy_zadan_klienta(tekst: str) -> list:
+	"""Nazwy zadan powiazanych z szansami i leadami, ktorych `lead_name` zawiera `tekst`."""
 	wzorzec = f"%{tekst}%"
 	nazwy_zadan: list = []
 	for doctype_rodzica in ("CRM Deal", "CRM Lead"):
@@ -691,16 +716,40 @@ def _rozwin_filtr_klienta(doctype: str, filters: dict) -> dict:
 			pluck="name",
 			limit_page_length=LIMIT_ZADAN,
 		)
+	return nazwy_zadan
 
+
+def _nazwy_zadan_dw(uzytkownicy: list[str]) -> list:
+	"""Nazwy zadan, w ktorych ktorykolwiek z `uzytkownicy` jest "Do wiadomosci" (ops#411).
+	`get_all` bez uprawnien: tylko wylicza zbior nazw, odczyt wierszy idzie nadal przez
+	`get_list` z uprawnieniami, wiec rozwiniecie moze wylacznie ZAWEZIC widok. Tabela
+	moze jeszcze nie istniec (obraz przed `bench migrate`): wtedy pusty zbior."""
+	if not frappe.db.table_exists(DOCTYPE_DW):
+		return []
+	return list(
+		dict.fromkeys(
+			frappe.get_all(
+				DOCTYPE_DW,
+				filters={"parenttype": DOCTYPE_ZADANIA, "user": ["in", uzytkownicy]},
+				pluck="parent",
+				limit_page_length=LIMIT_ZADAN,
+			)
+		)
+	)
+
+
+def _zastosuj_nazwy_zadan(wynik: dict, rodzaj: str, nazwy: list, opis: str) -> None:
+	"""Dokleja `name in/not in nazwy` do `wynik` (mutuje ten lokalny dict), przecinajac z
+	istniejacym filtrem po `name` (`polacz_filtr_name`). Pusty wynik `in` to `[""]` (pusty
+	`in` pasowalby do wszystkiego). Nieobslugiwany ksztalt istniejacego filtra po `name`
+	(np. "like") rzuca czytelny blad zamiast po cichu zgubic warunek."""
+	istniejacy = None
 	if "name" in wynik:
 		istniejacy = _nazwy_istniejacego_filtra_name(wynik["name"])
 		if istniejacy is None:
-			frappe.throw(_("Filtra po kliencie nie można połączyć z innym filtrem po nazwie zadania."))
-		rodzaj, zbior = istniejacy
-		nazwy_zadan = zawez_nazwy_zadan(nazwy_zadan, rodzaj, zbior)
-
-	wynik["name"] = ["in", nazwy_zadan or [""]]
-	return wynik
+			frappe.throw(_("Filtra {0} nie można połączyć z innym filtrem po nazwie zadania.").format(opis))
+	rodzaj_wyniku, zbior = polacz_filtr_name(istniejacy, rodzaj, nazwy)
+	wynik["name"] = [rodzaj_wyniku, zbior or [""]]
 
 
 # ops#393: kategoria handlowca na liscie leadow. Klucz filtra (pseudo-pole, nie DocField)
@@ -1090,6 +1139,21 @@ def get_filterable_fields(doctype: str, scope: str = "list"):
 		for field in fields
 		if field.get("fieldname") in permitted
 	]
+
+	# ops#411: pseudo-pole "Do wiadomosci" (nie DocField): filtr rozwijany na `name in/not in`
+	# w `_rozwin_filtr_klienta`, PRZED strazniczym `_sprawdz_filtry`.
+	if doctype == DOCTYPE_ZADANIA and scope == "list":
+		fields = [
+			*fields,
+			{
+				"fieldname": KLUCZ_DW,
+				"fieldtype": "Link",
+				"options": "User",
+				"label": "Do wiadomości",
+				"name": KLUCZ_DW,
+				"value": KLUCZ_DW,
+			},
+		]
 
 	return fields
 
@@ -1618,6 +1682,13 @@ def get_data(
 				if pole not in sql_rows:
 					sql_rows.append(pole)
 
+		# VOLTEO (ops#411): "_dw" (kolumna "Do wiadomosci" listy Zadan) to osoby z
+		# tabeli potomnej, nie kolumna SQL: wycinamy z pol, doklejamy po zapytaniu.
+		chce_dw = doctype == "CRM Task" and KLUCZ_DW in rows
+		sql_rows = [row for row in sql_rows if row != KLUCZ_DW]
+		if chce_dw and "name" not in sql_rows:
+			sql_rows.append("name")
+
 		data = (
 			frappe.get_list(
 				doctype,
@@ -1653,6 +1724,8 @@ def get_data(
 
 		if chce_klienta:
 			_dolacz_klienta_zadan(data)
+		if chce_dw:
+			_dolacz_dw_zadan(data)
 
 	if view_type == "kanban":
 		if not rows:
@@ -1703,8 +1776,8 @@ def get_data(
 		kanban_fields = _odfiltruj_niedozwolone_klucze(doctype, kanban_fields)
 		# VOLTEO (ops#357): kanban nie liczy "_klient", a zapisany klucz nie moze
 		# trafic do SQL (`fields=rows` nizej).
-		rows = [row for row in rows if row != KLUCZ_KLIENTA]
-		kanban_fields = [row for row in kanban_fields if row != KLUCZ_KLIENTA]
+		rows = [row for row in rows if row not in (KLUCZ_KLIENTA, KLUCZ_DW)]
+		kanban_fields = [row for row in kanban_fields if row not in (KLUCZ_KLIENTA, KLUCZ_DW)]
 		_dolacz_pola_decyzyjne_lead(doctype, rows)
 
 		for kc in kanban_columns:
@@ -1872,6 +1945,26 @@ def _dolacz_klienta_zadan(data: list) -> None:
 		d[KLUCZ_KLIENTA] = klient_zadania(
 			d.get("reference_doctype"), d.get("reference_docname"), klienci_szans, klienci_leadow
 		)
+
+
+def _dolacz_dw_zadan(data: list) -> None:
+	"""Dopisuje `_dw` (lista loginow osob "Do wiadomosci") do kazdego wiersza listy
+	`CRM Task` (ops#411), jednym zapytaniem zbiorczym. `get_all` bez uprawnien jest tu
+	bezpieczne: wiersze `data` to zadania, ktore uzytkownik juz widzi (`get_list`), a lista
+	osob jest polem tych zadan."""
+	nazwy = [str(d["name"]) for d in data if d.get("name") is not None]
+	osoby: dict[str, list[str]] = {}
+	if nazwy and frappe.db.table_exists(DOCTYPE_DW):
+		for w in frappe.get_all(
+			DOCTYPE_DW,
+			filters={"parenttype": DOCTYPE_ZADANIA, "parent": ["in", nazwy]},
+			fields=["parent", "user"],
+			order_by="idx asc",
+			limit_page_length=0,
+		):
+			osoby.setdefault(str(w.parent), []).append(w.user)
+	for d in data:
+		d[KLUCZ_DW] = osoby.get(str(d.get("name")), [])
 
 
 def parse_list_data(data, doctype):

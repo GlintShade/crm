@@ -167,3 +167,70 @@ export function filtryDlaZakladki(filtry, klucz) {
     : zakladka.status
   return kopia
 }
+
+// ops#411: osoby "Do wiadomosci" na liscie zadan.
+
+/**
+ * Tekst kolumny "Do wiadomosci": do dwoch nazwisk, reszta jako "+N"
+ * ("Jan Kowalski, Anna Nowak +2"). Pusta lista daje pusty tekst.
+ *
+ * @param {string[]} nazwiska pelne nazwy osob (kolejnosc z serwera)
+ * @returns {string}
+ */
+export function tekstDoWiadomosci(nazwiska) {
+  const lista = (Array.isArray(nazwiska) ? nazwiska : []).filter(Boolean)
+  const reszta = lista.length - 2
+  const poczatek = lista.slice(0, 2).join(', ')
+  return reszta > 0 ? `${poczatek} +${reszta}` : poczatek
+}
+
+const KLUCZE_ROL = ['assigned_to', '_dw', '_rola_ja']
+
+function czyMoje(wartosc, ja) {
+  if (wartosc === ja) return true
+  return (
+    Array.isArray(wartosc) &&
+    ((wartosc[0] === '=' && wartosc[1] === ja) ||
+      (String(wartosc[0]).toLowerCase() === 'in' &&
+        Array.isArray(wartosc[1]) &&
+        wartosc[1].length === 1 &&
+        wartosc[1][0] === ja))
+  )
+}
+
+/**
+ * Stan dwoch szybkich filtrow rol z filtrow listy: `moje` (jestem osoba
+ * odpowiedzialna) i `dw` (jestem w "Do wiadomosci"). Suma obu to jeden filtr
+ * serwera `_rola_ja`, wiec tez zapala oba przyciski.
+ *
+ * @param {object} filtry biezace filtry listy
+ * @param {string} ja login biezacego uzytkownika
+ * @returns {{moje: boolean, dw: boolean}}
+ */
+export function stanRol(filtry, ja) {
+  const f = filtry || {}
+  if (!ja) return { moje: false, dw: false }
+  if (f._rola_ja) return { moje: true, dw: true }
+  return { moje: czyMoje(f.assigned_to, ja), dw: czyMoje(f._dw, ja) }
+}
+
+/**
+ * NOWY obiekt filtrow z filtrami rol ustawionymi wg `moje` i `dw` (inne filtry
+ * zostaja). Tylko "moje": `assigned_to = ja`; tylko "dw": `_dw = ja`; oba: jeden
+ * filtr `_rola_ja` (serwer bierze biezacego uzytkownika z sesji, wartosc `1`
+ * jest tylko znacznikiem), bo suma "albo" nie da sie zapisac jako dwa filtry
+ * laczone "i". Zadne: bez filtrow rol. Nie mutuje argumentu.
+ *
+ * @param {object} filtry biezace filtry listy
+ * @param {string} ja login biezacego uzytkownika
+ * @param {{moje: boolean, dw: boolean}} stan zadany stan przyciskow
+ * @returns {object}
+ */
+export function filtryDlaRol(filtry, ja, { moje, dw }) {
+  const kopia = { ...(filtry || {}) }
+  KLUCZE_ROL.forEach((k) => delete kopia[k])
+  if (moje && dw) kopia._rola_ja = 1
+  else if (moje) kopia.assigned_to = ja
+  else if (dw) kopia._dw = ja
+  return kopia
+}
