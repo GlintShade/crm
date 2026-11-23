@@ -270,7 +270,7 @@
                   <div id="fieldname" class="!min-w-[120px] flex-1">
                     <Autocomplete
                       :value="f.field.fieldname"
-                      :options="availableGroupFilters(gi)"
+                      :options="availableGroupFilters(gi, f.fieldname)"
                       :placeholder="__('First Name')"
                       @change="(e) => updateGroupFilter(e, gi, fi)"
                     />
@@ -1160,10 +1160,15 @@ function zbudujWarunek(data) {
   }
 }
 
-function availableGroupFilters(groupIndex) {
+// `wlasnePole`: pole wiersza, ktory ta lista obsluguje. Musi zostac na liscie,
+// inaczej Autocomplete nie znajduje opcji dla wybranej wartosci i pokazuje
+// surowy fieldname zamiast etykiety.
+function availableGroupFilters(groupIndex, wlasnePole) {
   if (!filterableFields.data) return []
   const uzyte = new Set((grupy.value[groupIndex]?.warunki || []).map((f) => f.fieldname))
-  return filterableFields.data.filter((field) => !uzyte.has(field.fieldname))
+  return filterableFields.data.filter(
+    (field) => field.fieldname === wlasnePole || !uzyte.has(field.fieldname),
+  )
 }
 
 function addGroup() {
