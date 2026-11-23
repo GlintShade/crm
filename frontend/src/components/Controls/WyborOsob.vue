@@ -2,52 +2,58 @@
   wybor osoby odpowiedzialnej, lista z wyszukiwaniem i awatarami (klik przelacza,
   lista zostaje otwarta), wybrani jako chipy POD polem. Wartosc: wiersze `[{user}]`. -->
 <template>
-  <div ref="korzen" class="relative min-w-0">
-    <button
-      type="button"
-      class="flex h-7 w-full items-center justify-between gap-2 rounded bg-surface-gray-2 px-2 text-left text-base text-ink-gray-4 transition-colors hover:bg-surface-gray-3"
-      data-testid="wybor-osob-pole"
-      @click="otwarte = !otwarte"
-    >
-      <span class="truncate">{{ placeholder || __('Dodaj osoby') }}</span>
-      <FeatherIcon name="chevron-down" class="h-4 w-4 shrink-0" />
-    </button>
-
-    <div
-      v-if="otwarte"
-      class="absolute left-0 right-0 z-10 mt-1 rounded-lg bg-surface-modal p-1.5 shadow-2xl ring-1 ring-black ring-opacity-5"
-      @keydown.esc.stop="otwarte = false"
-    >
-      <input
-        v-model="szukaj"
-        type="text"
-        class="form-input mb-1 w-full"
-        :placeholder="__('Szukaj osoby')"
-        data-testid="wybor-osob-szukaj"
-        @keydown.esc.stop="otwarte = false"
-      />
-      <div class="max-h-[12rem] overflow-y-auto">
-        <div v-if="!opcje.length" class="px-2 py-1 text-base text-ink-gray-5">
-          {{ __('Brak wyników') }}
-        </div>
+  <div class="min-w-0">
+    <!-- Panel przez Popover (teleport do #frappeui-popper-root), wiec kolumna z
+      overflow go nie przycina; to samo robi Autocomplete wyboru osoby odpowiedzialnej. -->
+    <Popover v-model:show="otwarte" class="w-full" placement="bottom-start">
+      <template #target="{ togglePopover }">
         <button
-          v-for="o in opcje"
-          :key="o.name"
           type="button"
-          class="flex w-full min-w-0 items-center gap-2 rounded px-2 py-1 text-left text-base text-ink-gray-8 hover:bg-surface-gray-3"
-          :title="o.name"
-          @click="przelacz(o.name)"
+          class="flex h-7 w-full items-center justify-between gap-2 rounded bg-surface-gray-2 px-2 text-left text-base text-ink-gray-4 transition-colors hover:bg-surface-gray-3"
+          data-testid="wybor-osob-pole"
+          @click="togglePopover()"
         >
-          <UserAvatar :user="o.name" size="sm" />
-          <span class="min-w-0 flex-1 truncate">{{ o.full_name || o.name }}</span>
-          <FeatherIcon
-            v-if="wybrane.includes(o.name)"
-            name="check"
-            class="h-4 w-4 shrink-0"
-          />
+          <span class="truncate">{{ placeholder || __('Dodaj osoby') }}</span>
+          <FeatherIcon name="chevron-down" class="h-4 w-4 shrink-0" />
         </button>
-      </div>
-    </div>
+      </template>
+      <template #body>
+        <div
+          class="mt-1 rounded-lg bg-surface-elevation-2 p-1.5 text-base shadow-2xl"
+          @keydown.esc.stop="otwarte = false"
+        >
+          <input
+            ref="poleSzukaj"
+            v-model="szukaj"
+            type="text"
+            class="form-input mb-1 w-full"
+            :placeholder="__('Szukaj osoby')"
+            data-testid="wybor-osob-szukaj"
+          />
+          <div class="max-h-[12rem] overflow-y-auto">
+            <div v-if="!opcje.length" class="px-2 py-1 text-base text-ink-gray-5">
+              {{ __('Brak wyników') }}
+            </div>
+            <button
+              v-for="o in opcje"
+              :key="o.name"
+              type="button"
+              class="flex w-full min-w-0 items-center gap-2 rounded px-2 py-1 text-left text-base text-ink-gray-8 hover:bg-surface-gray-3"
+              :title="o.name"
+              @click="przelacz(o.name)"
+            >
+              <UserAvatar :user="o.name" size="sm" />
+              <span class="min-w-0 flex-1 truncate">{{ o.full_name || o.name }}</span>
+              <FeatherIcon
+                v-if="wybrane.includes(o.name)"
+                name="check"
+                class="h-4 w-4 shrink-0"
+              />
+            </button>
+          </div>
+        </div>
+      </template>
+    </Popover>
 
     <div
       v-if="chipy.length"
@@ -85,9 +91,9 @@ import {
   opcjeOsob,
   przelaczOsobe,
 } from '@/utils/wyborOsob'
-import { onClickOutside } from '@vueuse/core'
+import Popover from '@/components/frappe-ui/Popover.vue'
 import { FeatherIcon } from 'frappe-ui'
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 
 const props = defineProps({
   modelValue: { type: Array, default: () => [] },
@@ -98,11 +104,15 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue'])
 
 const { getUser, users } = usersStore()
-const korzen = ref(null)
+const poleSzukaj = ref(null)
 const otwarte = ref(false)
 const szukaj = ref('')
 
-onClickOutside(korzen, () => (otwarte.value = false))
+// Po otwarciu fokus na wyszukiwarce (zwykly <input>, nie komponent frappe-ui).
+watch(otwarte, (o) => {
+  if (o) nextTick(() => poleSzukaj.value?.focus())
+  else szukaj.value = ''
+})
 
 // `users.data?.crmUsers` wprost (nie destrukturyzowany computed), jak w TaskModal.vue.
 const opcje = computed(() =>
