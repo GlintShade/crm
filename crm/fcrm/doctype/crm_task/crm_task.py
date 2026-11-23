@@ -16,7 +16,11 @@ from crm.volteo_powiadomienia_zadan import (
 	wybierz_odbiorcow,
 	wykryj_zdarzenia,
 )
-from crm.volteo_zadania_tresc import POLA_TRESCI, czy_zmiana_tresci_dozwolona
+from crm.volteo_zadania_tresc import (
+	POLA_TRESCI,
+	czy_zmiana_tresci_dozwolona,
+	wartosci_do_zapisu,
+)
 
 
 class CRMTask(Document):
@@ -97,13 +101,12 @@ class CRMTask(Document):
 		przed = None if self.is_new() else self.get_doc_before_save()
 		if not przed or self.flags.get("volteo_tresc_systemowa"):
 			return
-		if not czy_zmiana_tresci_dozwolona(
-			przed.owner,
-			frappe.session.user,
-			{pole: przed.get(pole) for pole in POLA_TRESCI},
-			{pole: self.get(pole) for pole in POLA_TRESCI},
-		):
+		stare = {pole: przed.get(pole) for pole in POLA_TRESCI}
+		nowe = {pole: self.get(pole) for pole in POLA_TRESCI}
+		if not czy_zmiana_tresci_dozwolona(przed.owner, frappe.session.user, stare, nowe):
 			frappe.throw(_("Tytuł i opis zadania może zmienić tylko autor zadania."), frappe.PermissionError)
+		for pole, wartosc in wartosci_do_zapisu(przed.owner, frappe.session.user, stare, nowe).items():
+			self.set(pole, wartosc)
 
 	def unassign_from_previous_user(self, user: str | None):
 		if user:

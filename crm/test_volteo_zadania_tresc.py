@@ -1,6 +1,6 @@
 import unittest
 
-from crm.volteo_zadania_tresc import czy_zmiana_tresci_dozwolona, normalizuj
+from crm.volteo_zadania_tresc import czy_zmiana_tresci_dozwolona, normalizuj, wartosci_do_zapisu
 
 PRZED = {"title": "Zadzwon", "description": "<p>Opis</p>"}
 
@@ -34,6 +34,11 @@ class TestZadaniaTresc(unittest.TestCase):
 	def test_brak_wlasciciela_nie_daje_prawa_pustemu_uzytkownikowi(self):
 		po = {**PRZED, "title": "Inny"}
 		self.assertFalse(czy_zmiana_tresci_dozwolona(None, None, PRZED, po))
+
+	def test_nie_autor_dostaje_zapisane_wartosci(self):
+		po = {**PRZED, "description": "<p>Opis</p>\n"}
+		self.assertEqual(wartosci_do_zapisu("a@x.pl", "b@x.pl", PRZED, po), PRZED)
+		self.assertEqual(wartosci_do_zapisu("a@x.pl", "a@x.pl", PRZED, po), po)
 
 
 if __name__ == "__main__":
