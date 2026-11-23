@@ -209,15 +209,28 @@ def historia(komentarz: str) -> list[dict]:
 	zmiany): `{kto, kto_nazwa, kiedy, przed, po}`. Czyta wiersze `Version`
 	komentarza (`Comment.track_changes = 1`), niczego nie zapisuje."""
 	_wpis_zadania(komentarz)
+	return _historia_wersji("Comment", komentarz, "content")
 
+
+@frappe.whitelist()
+def historia_opisu(zadanie: str) -> list[dict]:
+	"""Wczesniejsze wersje opisu zadania (ops#412), ten sam ksztalt co `historia`.
+	Z wierszy `Version` `CRM Task` (`track_changes = 1`); historia zaczyna sie od
+	wlaczenia sledzenia, bez wstecznego uzupelniania."""
+	_sprawdz_zadanie(zadanie)
+	return _historia_wersji(DOCTYPE_ZADANIA, zadanie, "description")
+
+
+def _historia_wersji(doctype: str, nazwa: str, pole: str) -> list[dict]:
 	zmiany = zmiany_tresci(
 		frappe.get_all(
 			"Version",
-			filters={"ref_doctype": "Comment", "docname": komentarz},
+			filters={"ref_doctype": doctype, "docname": nazwa},
 			fields=["owner", "creation", "data"],
 			order_by="creation asc",
 			limit_page_length=0,
-		)
+		),
+		pole,
 	)
 	if not zmiany:
 		return []

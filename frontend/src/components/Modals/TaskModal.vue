@@ -98,7 +98,14 @@
           >
             <!-- Lewa kolumna: treść -->
             <div class="flex min-w-0 flex-col gap-4 px-4 pb-2 sm:min-h-0 sm:flex-1 sm:px-6">
+              <!-- ops#412: tytul i opis istniejacego zadania zmienia tylko autor
+              (serwer odrzuca zapis kogo innego); reszta widzi tekst do odczytu. -->
+              <div v-if="tylkoDoOdczytu">
+                <div class="mb-2 text-sm text-ink-gray-5">{{ __('Title') }}</div>
+                <div class="text-base text-ink-gray-8" data-testid="zadanie-tytul-odczyt">{{ doc.title }}</div>
+              </div>
               <FormControl
+                v-else
                 type="text"
                 :label="__('Title')"
                 v-model="doc.title"
@@ -106,8 +113,36 @@
               />
 
               <div>
-                <div class="mb-2 text-sm text-ink-gray-5">{{ __('Description') }}</div>
+                <div class="mb-2 flex items-center gap-1 text-sm text-ink-gray-5">
+                  {{ __('Description') }}
+                  <Button
+                    v-if="editMode && jestAutorem && !opisEdycja"
+                    icon="lucide-pencil"
+                    variant="ghost"
+                    class="!h-6 !w-6"
+                    :tooltip="__('Edytuj opis')"
+                    data-testid="zadanie-opis-edytuj"
+                    @click="opisEdycja = true"
+                  />
+                  <Button
+                    v-if="liczbaZmianOpisu > 0"
+                    icon="lucide-history"
+                    variant="ghost"
+                    class="!h-6 !w-6"
+                    :tooltip="__('Historia zmian')"
+                    data-testid="zadanie-opis-historia"
+                    @click="historiaOpisuOtwarta = true"
+                  />
+                </div>
+                <!-- eslint-disable-next-line vue/no-v-html -->
+                <div
+                  v-if="editMode && !opisEdycja"
+                  class="prose-sm max-h-[11rem] min-h-[3rem] max-w-none overflow-y-auto rounded-lg border border-outline-gray-2 px-3 py-2"
+                  data-testid="zadanie-opis-odczyt"
+                  v-html="sanitizeHTML(doc.description || '')"
+                />
                 <TextEditor
+                  v-else
                   ref="opisEditor"
                   :content="doc.description"
                   :editor-class="[
@@ -117,6 +152,13 @@
                   :mentions="mentionsKonfig"
                   :placeholder="__('Description')"
                   @change="doc.description = $event"
+                />
+                <HistoriaWpisuDialog
+                  v-if="editMode"
+                  v-model:open="historiaOpisuOtwarta"
+                  :komentarz="String(doc.name)"
+                  endpoint="crm.api.zadania_rozmowa.historia_opisu"
+                  parametr="zadanie"
                 />
               </div>
 
@@ -291,7 +333,7 @@ import DateTimePickerSiatka from '@/components/Controls/DateTimePickerSiatka.vue
 import UserAvatar from '@/components/UserAvatar.vue'
 import { useDocument } from '@/data/document'
 import { usersStore } from '@/stores/users'
-import { getFormat } from '@/utils'
+import { getFormat, sanitizeHTML } from '@/utils'
 import { przyciskiWedlugListy } from '@/utils/edytorPrzyciski'
 import { formatujTermin, terminWzgledny } from '@/utils/dataPolska'
 import {
@@ -324,6 +366,7 @@ const show = defineModel({ type: Boolean })
 // JSON, marka ProEnergy nigdy sie nie ustawia). Patrz komentarz na koncu
 // composables/useTimelinePreferences.js.
 const ZadanieRozmowa = defineAsyncComponent(() => import('@/components/ZadanieRozmowa.vue'))
+const HistoriaWpisuDialog = defineAsyncComponent(() => import('@/components/HistoriaWpisuDialog.vue'))
 
 const emit = defineEmits(['afterInsert', 'afterUpdate'])
 
@@ -338,6 +381,24 @@ const { document, triggerOnRender, triggerOnBeforeCreate } = useDocument(
 
 const doc = computed(() => document.doc || {})
 const editMode = computed(() => Boolean(document.doc?.name))
+
+// ops#412: tytul i opis istniejacego zadania edytuje tylko autor (owner).
+// Uzytkownika bierzemy z ciasteczka (jak stores/session.js, bez importu sklepu).
+const uzytkownik = new URLSearchParams(window.document.cookie.split('; ').join('&')).get('user_id')
+const jestAutorem = computed(() => !editMode.value || doc.value.owner === uzytkownik)
+const tylkoDoOdczytu = computed(() => editMode.value && !jestAutorem.value)
+const opisEdycja = ref(false)
+const historiaOpisuOtwarta = ref(false)
+const liczbaZmianOpisu = ref(0)
+
+async function wczytajLiczbeZmianOpisu() {
+  try {
+    const zmiany = await call('crm.api.zadania_rozmowa.historia_opisu', { zadanie: String(doc.value.name) })
+    liczbaZmianOpisu.value = (zmiany || []).length
+  } catch {
+    liczbaZmianOpisu.value = 0
+  }
+}
 const error = ref(null)
 
 // PUŁAPKA frappe-ui (patrz komentarz w NotatkiStrumien.vue/AktualizacjeTab.vue
@@ -537,6 +598,7 @@ onMounted(async () => {
     } finally {
       ladowanie.value = false
     }
+    wczytajLiczbeZmianOpisu()
   }
   // Load-bearing dla CRMTask.onRender() (doctypes/crm_task/form.js): przy
   // tworzeniu z defaults, reference_doctype/reference_docname arrive tutaj,
