@@ -251,6 +251,7 @@
     :options="{
       rowCount: options.rowCount,
       totalCount: options.totalCount,
+      grupy: options.grupy,
     }"
     @loadMore="emit('loadMore')"
   />
@@ -359,6 +360,7 @@ const emit = defineEmits([
   'applyLikeFilter',
   'likeDoc',
   'selectionsChanged',
+  'inlineSaved',
 ])
 
 const route = useRoute()
@@ -478,6 +480,8 @@ const uwagiPopupLinie = computed(() =>
 // duplikowania tej logiki tutaj. Podmiana jest niemutowalna: nowa tablica z
 // jednym nowym obiektem wiersza (patrz nowaListaZPodmienionymPolem).
 function onInlineSaved(row, { fieldname, value }) {
+  // ops#413: przy grupowaniu wiersz zyje w danych grupy, nie w list.data.data
+  emit('inlineSaved', row.name)
   if (!list.value?.data?.data) return
   list.value.data.data = nowaListaZPodmienionymPolem(
     list.value.data.data,

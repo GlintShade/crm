@@ -5,6 +5,7 @@ import { sessionStore } from '@/stores/session'
 import { viewsStore } from '@/stores/views'
 import { isStaleChunkError, shouldReload } from '@/utils/chunkReload'
 import { czyZablokowana } from '@/utils/strazTras'
+import { typTrasyWidoku } from '@/utils/grupowanieListy'
 
 let personaChecked = false
 export const PERSONA_DONE_KEY = 'crm_persona_captured'
@@ -454,23 +455,32 @@ router.beforeEach(async (to, from, next) => {
     // 'kalendarz' (ops#318) tak samo jak 'mapa': znany typ trasy, nigdy zapisany.
     const standardViewTypes = ['list', 'kanban', 'group_by', 'mapa', 'kalendarz']
 
-    if (!viewType) {
-      const doctypeMap = {
-        Leads: 'CRM Lead',
-        Deals: 'CRM Deal',
-        Contacts: 'Contact',
-        Organizations: 'CRM Organization',
-        Notes: 'FCRM Note',
-        Tasks: 'CRM Task',
-        'Call Logs': 'CRM Call Log',
-      }
+    const doctypeMap = {
+      Leads: 'CRM Lead',
+      Deals: 'CRM Deal',
+      Contacts: 'Contact',
+      Organizations: 'CRM Organization',
+      Notes: 'FCRM Note',
+      Tasks: 'CRM Task',
+      'Call Logs': 'CRM Call Log',
+    }
 
+    if (viewType === 'group_by') {
+      // ops#413: grupowanie to opcja widoku Lista. Stara trasa /view/group_by otwiera
+      // liste z polem grupy zapisanym w standardowym widoku group_by (jesli jest).
+      const pole = standardViews.value?.[doctypeMap[to.name] + ' group_by']?.group_by_field
+      next({
+        name: to.name,
+        params: { viewType: 'list' },
+        query: pole && !to.query?.grupuj ? { ...to.query, grupuj: pole } : to.query,
+      })
+    } else if (!viewType) {
       const doctype = doctypeMap[to.name]
       let defaultViewType = 'list'
 
       let globalDefault = getDefaultView()
       if (globalDefault && globalDefault.route_name === to.name) {
-        defaultViewType = globalDefault.type || 'list'
+        defaultViewType = typTrasyWidoku(globalDefault.type || 'list')
         if (globalDefault.name && !globalDefault.is_standard) {
           next({
             name: to.name,
@@ -484,7 +494,7 @@ router.beforeEach(async (to, from, next) => {
       for (const viewType of standardViewTypes) {
         const standardView = standardViews.value?.[doctype + ' ' + viewType]
         if (standardView?.is_default) {
-          defaultViewType = viewType
+          defaultViewType = typTrasyWidoku(viewType)
           break
         }
       }
@@ -504,7 +514,7 @@ router.beforeEach(async (to, from, next) => {
       if (view) {
         next({
           name: to.name,
-          params: { viewType: view.type || 'list' },
+          params: { viewType: typTrasyWidoku(view.type || 'list') },
           query: { ...to.query, view: view.name },
         })
       } else {

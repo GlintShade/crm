@@ -34,7 +34,8 @@
       doctype="CRM Lead"
       :filters="filtryListy"
       :options="{
-        allowedViews: ['list', 'mapa', 'kalendarz', 'group_by', 'kanban'],
+        allowedViews: ['list', 'mapa', 'kalendarz', 'kanban'],
+        grupowanie: true,
         // VOLTEO (owner feedback 2026-10-05): pasek szybkich filtrów Leadów ma
         // zawsze dokładnie dwa wiersze (grid, patrz ViewControls.vue), bo 14
         // filtrów w jednym flex-wrap dawało 3-4 nierówne wiersze. Inne listy
@@ -275,7 +276,9 @@
       resizeColumn: true,
       rowCount: leads.data.row_count,
       totalCount: leads.data.total_count,
+      grupy: grupowanie?.aktywne.value ? grupowanie.sumy.value : null,
     }"
+    @inlineSaved="() => grupowanie?.aktywne.value && grupowanie.odswiez()"
     @loadMore="() => loadMore++"
     @columnWidthUpdated="onColumnWidthUpdated"
     @updatePageCount="(count) => (updatedPageCount = count)"
@@ -287,7 +290,7 @@
     "
   />
   <EmptyState
-    v-else-if="leads.data && !rows.length"
+    v-else-if="leads.data && !rows.length && !grupowanie?.oczekuje.value"
     name="Leads"
     :icon="LeadsIcon"
   />
@@ -376,6 +379,8 @@ function onColumnWidthUpdated(payload) {
 }
 const updatedPageCount = ref(20)
 const viewControls = ref(null)
+// ops#413: grupowanie listy (stan i dane w ViewControls, tu tylko wiersze grup)
+const grupowanie = computed(() => viewControls.value?.grupowanie)
 
 // ops#393: pigułka kategorii. Zmiana propsa `filters` sama nie przeładowuje listy
 // (getParams() jest czytane tylko przy reload), więc przeładowujemy tą samą ścieżką.
@@ -408,13 +413,8 @@ function getRow(name, field) {
 // Rows
 const rows = computed(() => {
   if (!leads.value?.data?.data) return []
-  if (leads.value.data.view_type === 'group_by') {
-    if (!leads.value?.data.group_by_field?.fieldname) return []
-    return getGroupedByRows(
-      leads.value?.data.data,
-      leads.value?.data.group_by_field,
-      leads.value.data.columns,
-    )
+  if (grupowanie.value?.aktywne.value) {
+    return grupowanie.value.wiersze((r) => parseRows(r, leads.value.data.columns))
   } else if (leads.value.data.view_type === 'kanban') {
     return getKanbanRows(leads.value.data.data, leads.value.data.fields)
   } else {
@@ -438,38 +438,6 @@ const columns = computed(() => {
 
   return _columns
 })
-
-function getGroupedByRows(listRows, groupByField, columns) {
-  let groupedRows = []
-
-  groupByField.options?.forEach((option) => {
-    let filteredRows
-
-    if (!option) {
-      filteredRows = listRows.filter((row) => !row[groupByField.fieldname])
-    } else {
-      filteredRows = listRows.filter(
-        (row) => row[groupByField.fieldname] == option,
-      )
-    }
-
-    let groupDetail = {
-      label: groupByField.label,
-      group: option || __(' '),
-      collapsed: false,
-      rows: parseRows(filteredRows, columns),
-    }
-    if (groupByField.fieldname == 'status') {
-      groupDetail.icon = () =>
-        h(IndicatorIcon, {
-          class: getLeadStatus(option)?.color,
-        })
-    }
-    groupedRows.push(groupDetail)
-  })
-
-  return groupedRows || listRows
-}
 
 function getKanbanRows(data, columns) {
   let _rows = []

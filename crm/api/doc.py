@@ -1235,7 +1235,8 @@ def get_group_counts(
 	if not frappe.has_permission(doctype, "read"):
 		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
 	opis = _wymagaj_pola_grupowania(doctype, group_field)
-	filters, _kategorie, _wybrane = _przygotuj_filtry(doctype, frappe._dict(filters), default_filters, "list")
+	# "kanban": liczniki nie doklejaja kategorii do wierszy, wiec mapa kategorii liczy sie tylko przy filtrze
+	filters, _kategorie, _wybrane = _przygotuj_filtry(doctype, frappe._dict(filters), default_filters, "kanban")
 
 	razem = frappe.get_list(doctype, filters=filters, fields=[COUNT_NAME])[0].total_count
 	rodzaj = opis["kind"]

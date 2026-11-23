@@ -62,7 +62,7 @@ POLA: dict[str, tuple[tuple[str, str, str], ...]] = {
 	),
 	DOCTYPE_ZADANIA: (
 		("assigned_to", "Osoba odpowiedzialna", "user"),
-		("status", "Status", "select"),
+		("status", "Status", "status"),
 		("priority", "Priorytet", "select"),
 		("due_date", "Termin wykonania po dniu", "dzien"),
 		("start_date", "Data rozpoczęcia", "dzien"),

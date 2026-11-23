@@ -25,6 +25,7 @@
     doctype="CRM Task"
     :options="{
       allowedViews: ['list', 'kanban'],
+      grupowanie: true,
     }"
   />
   <div
@@ -210,6 +211,7 @@
       resizeColumn: true,
       rowCount: tasks.data.row_count,
       totalCount: tasks.data.total_count,
+      grupy: grupowanie?.aktywne.value ? grupowanie.sumy.value : null,
     }"
     @loadMore="() => loadMore++"
     @columnWidthUpdated="onColumnWidthUpdated"
@@ -223,7 +225,7 @@
     "
   />
   <EmptyState
-    v-else-if="tasks.data && !rows.length"
+    v-else-if="tasks.data && !rows.length && !grupowanie?.oczekuje.value"
     name="Tasks"
     :icon="Email2Icon"
   />
@@ -279,6 +281,8 @@ const loadMore = ref(1)
 const triggerResize = ref(1)
 const updatedPageCount = ref(20)
 const viewControls = ref(null)
+// ops#413: grupowanie listy (stan i dane w ViewControls, tu tylko wiersze grup)
+const grupowanie = computed(() => viewControls.value?.grupowanie)
 
 // Trwaly zapis szerokosci kolumny tylko na potwierdzonym, odebouncowanym
 // zdarzeniu `save` (frappe-ui emituje je raz, 1 s po ostatnim ruchu myszy), nigdy
@@ -304,6 +308,10 @@ const rows = computed(() => {
 
   if (tasks.value.data.view_type === 'kanban') {
     return getKanbanRows(tasks.value.data.data, tasks.value.data.fields)
+  }
+
+  if (grupowanie.value?.aktywne.value) {
+    return grupowanie.value.wiersze((r) => parseRows(r, tasks.value.data.columns))
   }
 
   return parseRows(tasks.value?.data.data, tasks.value?.data.columns)

@@ -10751,3 +10751,79 @@ msgstr "Włącz lub wyłącz warunek"
 # ops#410
 msgid "Włącz lub wyłącz grupę"
 msgstr "Włącz lub wyłącz grupę"
+
+# ops#413
+msgid "Grupuj"
+msgstr "Grupuj"
+
+# ops#413
+msgid "Grupuj: {0}"
+msgstr "Grupuj: {0}"
+
+# ops#413
+msgid "Bez grupowania"
+msgstr "Bez grupowania"
+
+# ops#413
+msgid "Grupuj według"
+msgstr "Grupuj według"
+
+# ops#413
+msgid "Pokaż puste grupy"
+msgstr "Pokaż puste grupy"
+
+# ops#413
+msgid "Zwiń wszystkie grupy"
+msgstr "Zwiń wszystkie grupy"
+
+# ops#413
+msgid "Rozwiń wszystkie grupy"
+msgstr "Rozwiń wszystkie grupy"
+
+# ops#413
+msgid "Rozwiń grupę"
+msgstr "Rozwiń grupę"
+
+# ops#413
+msgid "Zwiń grupę"
+msgstr "Zwiń grupę"
+
+# ops#413
+msgid "Ładowanie..."
+msgstr "Ładowanie..."
+
+# ops#413
+msgid "Pokaż kolejne"
+msgstr "Pokaż kolejne"
+
+# ops#413
+msgid "pokazano {0} z {1}"
+msgstr "pokazano {0} z {1}"
+
+# ops#413
+msgid "na grupę"
+msgstr "na grupę"
+
+# ops#413
+msgid "razem {0}, grup {1}"
+msgstr "razem {0}, grup {1}"
+
+# ops#413
+msgid "Nie udało się wczytać grup."
+msgstr "Nie udało się wczytać grup."
+
+# ops#413
+msgid "Zawęź filtry do {0} leadów, aby grupować"
+msgstr "Zawęź filtry do {0} leadów, aby grupować"
+
+# ops#413
+msgid "Nieprawidłowa grupa listy."
+msgstr "Nieprawidłowa grupa listy."
+
+# ops#413
+msgid "Grupowanie nie działa w widoku Kanban."
+msgstr "Grupowanie nie działa w widoku Kanban."
+
+# ops#413
+msgid "Brak uprawnień do grupowania po polu {0}"
+msgstr "Brak uprawnień do grupowania po polu {0}"
