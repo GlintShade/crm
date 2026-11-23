@@ -425,6 +425,9 @@ override_whitelisted_methods = {
 	# ops#372: run_doc_method i runserverobj dokladaja dokument do odpowiedzi bez filtra
 	"run_doc_method": "crm.api.volteo_zapis_guard.run_doc_method",
 	"runserverobj": "crm.api.volteo_zapis_guard.run_doc_method",
+	# ops#420: konta z drugim skladnikiem bez logowania linkiem i auto-logowania po resecie hasla
+	"frappe.www.login.login_via_key": "crm.api.volteo_2fa_guard.login_via_key",
+	"frappe.core.doctype.user.user.update_password": "crm.api.volteo_2fa_guard.update_password",
 }
 #
 # each overriding function accepts a `data` argument;
