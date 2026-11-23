@@ -1636,7 +1636,7 @@ def get_data(
 	view_type = view.get("view_type") if view else None
 	group_by_field = view.get("group_by_field") if view else None
 
-	# Blokada grupowania po polu bez uprawnien odczytu (permlevel > 0) — patrz
+	# Blokada grupowania po polu bez uprawnien odczytu (permlevel > 0), patrz
 	# ops#79. Walidujemy natychmiast po ekstrakcji, przed jakimkolwiek uzyciem
 	# group_by_field (dopisanie do rows nizej, potem do fields=rows w
 	# frappe.get_list).
