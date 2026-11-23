@@ -10740,3 +10740,11 @@ msgstr "Usuń notatkę"
 
 msgid "Usuń wpis"
 msgstr "Usuń wpis"
+
+# ops#410
+msgid "Włącz lub wyłącz warunek"
+msgstr "Włącz lub wyłącz warunek"
+
+# ops#410
+msgid "Włącz lub wyłącz grupę"
+msgstr "Włącz lub wyłącz grupę"

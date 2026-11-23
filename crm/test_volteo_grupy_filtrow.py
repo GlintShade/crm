@@ -2,6 +2,7 @@ import unittest
 
 from crm.volteo_grupy_filtrow import (
 	KLUCZ_GRUP,
+	KLUCZ_NIEAKTYWNE,
 	MAX_GRUP,
 	MAX_WARUNKOW_W_GRUPIE,
 	klucze_z_grup,
@@ -16,6 +17,24 @@ class TestWydzielGrupy(unittest.TestCase):
 		filtry_bez_grup, grupy = wydziel_grupy(filtry)
 		self.assertEqual(filtry_bez_grup, filtry)
 		self.assertEqual(grupy, [])
+
+	def test_ops410_klucz_nieaktywne_jest_wycinany_i_nie_trafia_do_filtrow(
+		self: "TestWydzielGrupy",
+	) -> None:
+		filtry = {
+			"custom_cc": "@me",
+			KLUCZ_NIEAKTYWNE: {"wspolne": {"status": "Nowy"}, "grupy": [{"wylaczona": True}]},
+		}
+		filtry_bez_grup, grupy = wydziel_grupy(filtry)
+		self.assertEqual(filtry_bez_grup, {"custom_cc": "@me"})
+		self.assertEqual(grupy, [])
+		self.assertIn(KLUCZ_NIEAKTYWNE, filtry)
+
+	def test_ops410_klucz_nieaktywne_razem_z_grupami(self: "TestWydzielGrupy") -> None:
+		filtry = {KLUCZ_GRUP: [{"status": "Nowy"}], KLUCZ_NIEAKTYWNE: {"wspolne": {"a": 1}}}
+		filtry_bez_grup, grupy = wydziel_grupy(filtry)
+		self.assertEqual(filtry_bez_grup, {})
+		self.assertEqual(grupy, [{"status": "Nowy"}])
 
 	def test_b_nie_mutuje_oryginalnego_slownika(self: "TestWydzielGrupy") -> None:
 		filtry = {"status": "Odłożony", KLUCZ_GRUP: [{"a": 1}]}

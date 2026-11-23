@@ -347,6 +347,7 @@ import ViewModal from '@/components/Modals/ViewModal.vue'
 import Autocomplete from '@/components/frappe-ui/Autocomplete.vue'
 import SortBy from '@/components/SortBy.vue'
 import Filter from '@/components/Filter.vue'
+import { KLUCZ_NIEAKTYWNE } from '@/utils/grupyFiltrow'
 import GroupBy from '@/components/GroupBy.vue'
 import FadedScrollableDiv from '@/components/FadedScrollableDiv.vue'
 import ColumnSettings from '@/components/ColumnSettings.vue'
@@ -758,10 +759,13 @@ async function exportRows() {
     list.value.data.columns.map((f) => f.key).filter((k) => k !== '_klient'),
   )
 
-  let filters = JSON.stringify({
+  // ops#410: rdzen Frappe (export_query) nie zna klucza z wylaczonymi
+  // warunkami okna "Filtr"; wylaczone warunki i tak nie filtruja.
+  const { [KLUCZ_NIEAKTYWNE]: _nieaktywne, ...filtryEksportu } = {
     ...props.filters,
     ...list.value.params.filters,
-  })
+  }
+  let filters = JSON.stringify(filtryEksportu)
 
   let order_by = list.value.params.order_by
   let page_length = list.value.params.page_length
