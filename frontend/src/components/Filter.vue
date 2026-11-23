@@ -50,7 +50,7 @@
                   </div>
                   <div class="flex items-center gap-2">
                     <div class="ml-3 flex items-center" :title="__('Włącz lub wyłącz warunek')">
-                      <Checkbox :modelValue="!f.nieaktywny" @update:modelValue="przelaczWiersz(f)" />
+                      <Checkbox :modelValue="!f.nieaktywny" @update:modelValue="(v) => przelaczWiersz(f, v)" />
                     </div>
                     <Button
                       class="flex"
@@ -170,7 +170,7 @@
                 </div>
                 <div class="flex items-center gap-2">
                   <div class="ml-3 flex items-center" :title="__('Włącz lub wyłącz warunek')">
-                    <Checkbox :modelValue="!f.nieaktywny" @update:modelValue="przelaczWiersz(f)" />
+                    <Checkbox :modelValue="!f.nieaktywny" @update:modelValue="(v) => przelaczWiersz(f, v)" />
                   </div>
                   <Button
                     class="flex"
@@ -234,12 +234,15 @@
               </div>
               <div class="mb-2 rounded border border-outline-gray-2 p-2">
                 <div class="mb-2 flex items-center justify-between">
-                  <div class="text-sm-medium text-ink-gray-7">
+                  <div
+                    class="text-sm-medium text-ink-gray-7"
+                    :class="{ 'opacity-50': grupa.wylaczona }"
+                  >
                     {{ __('Grupa {0}', [gi + 1]) }}
                   </div>
                   <div class="flex items-center gap-2">
                     <div class="ml-3 flex items-center" :title="__('Włącz lub wyłącz grupę')">
-                      <Checkbox :modelValue="!grupa.wylaczona" @update:modelValue="przelaczGrupeOkna(gi)" />
+                      <Checkbox :modelValue="!grupa.wylaczona" @update:modelValue="(v) => przelaczGrupeOkna(gi, v)" />
                     </div>
                     <Button
                       variant="ghost"
@@ -303,7 +306,7 @@
                     </div>
                   </div>
                   <div class="ml-1 flex items-center" :title="__('Włącz lub wyłącz warunek')">
-                    <Checkbox :modelValue="!f.nieaktywny" @update:modelValue="przelaczWarunekGrupy(gi, fi)" />
+                    <Checkbox :modelValue="!f.nieaktywny" @update:modelValue="(v) => przelaczWarunekGrupy(gi, fi, v)" />
                   </div>
                   <Button
                     class="flex"
@@ -1190,17 +1193,23 @@ function removeGroupFilter(groupIndex, condIndex) {
 // ops#410: wlaczanie/wylaczanie warunku i grupy bez kasowania ich z okna.
 // Wiersz wspolny jest mutowany wprost (jak wartosc/operator, patrz
 // updateValue); grupy zmieniaja sie niemutujaco przez helpery.
-function przelaczWiersz(f) {
-  f.nieaktywny = !f.nieaktywny
+// Handlery przyjmuja docelowy stan (`wlaczony`) i sa idempotentne: frappe-ui
+// Checkbox emituje `update:modelValue` DWA razy na jedno klikniecie (raz z
+// defineModel, raz recznie), wiec przelaczanie bez parametru cofalo sie samo.
+function przelaczWiersz(f, wlaczony) {
+  if (!f.nieaktywny === wlaczony) return
+  f.nieaktywny = !wlaczony
   apply()
 }
 
-function przelaczGrupeOkna(groupIndex) {
+function przelaczGrupeOkna(groupIndex, wlaczony) {
+  if (!grupy.value[groupIndex]?.wylaczona === wlaczony) return
   grupy.value = przelaczGrupe(grupy.value, groupIndex)
   apply()
 }
 
-function przelaczWarunekGrupy(groupIndex, condIndex) {
+function przelaczWarunekGrupy(groupIndex, condIndex, wlaczony) {
+  if (!grupy.value[groupIndex]?.warunki[condIndex]?.nieaktywny === wlaczony) return
   grupy.value = przelaczWarunekWGrupie(grupy.value, groupIndex, condIndex)
   apply()
 }
