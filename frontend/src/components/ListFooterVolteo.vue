@@ -1,7 +1,11 @@
 <template>
   <ListFooter v-model="pageLengthCount" :options="options">
     <template #right>
-      <div class="flex items-center">
+      <div v-if="options.grupy" class="flex items-center gap-1 text-base text-ink-gray-5">
+        {{ __('na grupę') }} &middot;
+        {{ __('razem {0}, grup {1}', [options.grupy.razem, options.grupy.liczbaGrup]) }}
+      </div>
+      <div v-else class="flex items-center">
         <Button v-if="showLoadMore" :label="__('Load More')" @click="emit('loadMore')" />
         <div v-if="showLoadMore" class="mx-3 h-[80%] border-l" />
         <div class="flex items-center gap-1 text-base text-ink-gray-5">

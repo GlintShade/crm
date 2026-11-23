@@ -38,6 +38,7 @@ class CRMViewSettings(Document):
 		title_field: DF.Data | None
 		type: DF.Literal["list", "group_by", "kanban"]
 		user: DF.Link | None
+		volteo_grupowanie: DF.Code | None
 	# end: auto-generated types
 
 	pass
@@ -74,6 +75,7 @@ def create(view: dict):
 	doc.filters = json.dumps(view.filters)
 	doc.order_by = view.order_by
 	doc.group_by_field = view.group_by_field
+	doc.volteo_grupowanie = view.volteo_grupowanie or ""
 	doc.column_field = view.column_field
 	doc.title_field = view.title_field
 	doc.kanban_columns = json.dumps(view.kanban_columns)
@@ -109,6 +111,7 @@ def update(view: dict):
 	doc.filters = json.dumps(filters)
 	doc.order_by = view.order_by
 	doc.group_by_field = view.group_by_field
+	doc.volteo_grupowanie = view.volteo_grupowanie or ""
 	doc.column_field = view.column_field
 	doc.title_field = view.title_field
 	doc.kanban_columns = json.dumps(kanban_columns)
@@ -247,6 +250,8 @@ def create_or_update_standard_view(view: dict):
 		doc.filters = json.dumps(filters)
 		doc.order_by = view.order_by or "modified desc"
 		doc.group_by_field = view.group_by_field or "owner"
+		if "volteo_grupowanie" in view:  # set_as_default nie niesie tego pola
+			doc.volteo_grupowanie = view.volteo_grupowanie or ""
 		doc.column_field = view.column_field
 		doc.title_field = view.title_field
 		doc.kanban_columns = json.dumps(kanban_columns)
@@ -274,6 +279,7 @@ def create_or_update_standard_view(view: dict):
 		doc.filters = json.dumps(filters)
 		doc.order_by = view.order_by or "modified desc"
 		doc.group_by_field = view.group_by_field or "owner"
+		doc.volteo_grupowanie = view.volteo_grupowanie or ""
 		doc.column_field = view.column_field
 		doc.title_field = view.title_field
 		doc.kanban_columns = json.dumps(kanban_columns)

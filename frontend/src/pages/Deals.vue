@@ -25,7 +25,8 @@
     v-model:updatedPageCount="updatedPageCount"
     doctype="CRM Deal"
     :options="{
-      allowedViews: ['list', 'group_by', 'kanban'],
+      allowedViews: ['list', 'kanban'],
+      grupowanie: true,
     }"
   />
   <KanbanView
@@ -221,6 +222,7 @@
       rowCount: deals.data.row_count,
       totalCount: deals.data.total_count,
       rowHeight: 44,
+      grupy: grupowanie?.aktywne.value ? grupowanie.sumy.value : null,
     }"
     @loadMore="() => loadMore++"
     @columnWidthUpdated="onColumnWidthUpdated"
@@ -232,7 +234,7 @@
     "
   />
   <EmptyState
-    v-else-if="deals.data && !rows.length"
+    v-else-if="deals.data && !rows.length && !grupowanie?.oczekuje.value"
     name="Deals"
     :icon="DealsIcon"
   />
@@ -302,6 +304,8 @@ const loadMore = ref(1)
 const triggerResize = ref(1)
 const updatedPageCount = ref(20)
 const viewControls = ref(null)
+// ops#413: grupowanie listy (stan i dane w ViewControls, tu tylko wiersze grup)
+const grupowanie = computed(() => viewControls.value?.grupowanie)
 
 // Zmiana szerokosci kolumny przeciaganiem naglowka (runda 4 klik-testu,
 // 2026 09 29). DealsListView.vue juz zmutowalo `deals.data.columns[i].width`
@@ -344,13 +348,8 @@ function getRow(name, field) {
 // Rows
 const rows = computed(() => {
   if (!deals.value?.data?.data) return []
-  if (deals.value.data.view_type === 'group_by') {
-    if (!deals.value?.data.group_by_field?.fieldname) return []
-    return getGroupedByRows(
-      deals.value?.data.data,
-      deals.value?.data.group_by_field,
-      deals.value.data.columns,
-    )
+  if (grupowanie.value?.aktywne.value) {
+    return grupowanie.value.wiersze((r) => parseRows(r, deals.value.data.columns))
   } else if (deals.value.data.view_type === 'kanban') {
     return getKanbanRows(deals.value.data.data, deals.value.data.fields)
   } else {
@@ -372,38 +371,6 @@ const columns = computed(() => {
 
   return _columns
 })
-
-function getGroupedByRows(listRows, groupByField, columns) {
-  let groupedRows = []
-
-  groupByField.options?.forEach((option) => {
-    let filteredRows
-
-    if (!option) {
-      filteredRows = listRows.filter((row) => !row[groupByField.fieldname])
-    } else {
-      filteredRows = listRows.filter(
-        (row) => row[groupByField.fieldname] == option,
-      )
-    }
-
-    let groupDetail = {
-      label: groupByField.label,
-      group: option || __(' '),
-      collapsed: false,
-      rows: parseRows(filteredRows, columns),
-    }
-    if (groupByField.fieldname == 'status') {
-      groupDetail.icon = () =>
-        h(IndicatorIcon, {
-          class: getDealStatus(option)?.color,
-        })
-    }
-    groupedRows.push(groupDetail)
-  })
-
-  return groupedRows || listRows
-}
 
 function getKanbanRows(data, columns) {
   let _rows = []

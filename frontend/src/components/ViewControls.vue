@@ -12,12 +12,10 @@
             :default_filters="filters"
             @update="updateFilter"
           />
-          <GroupBy
-            v-if="route.params.viewType === 'group_by'"
-            v-model="list"
-            :doctype="doctype"
+          <GrupujMenu
+            v-if="mozeGrupowac"
+            :grupowanie="grupowanie"
             :hideLabel="isMobileView"
-            @update="updateGroupBy"
           />
         </div>
 
@@ -189,18 +187,13 @@
           :loading="isLoading"
           @click="reload()"
         />
-        <GroupBy
-          v-if="route.params.viewType === 'group_by'"
-          v-model="list"
-          :doctype="doctype"
-          @update="updateGroupBy"
-        />
         <Filter
           v-model="list"
           :doctype="doctype"
           :default_filters="filters"
           @update="updateFilter"
         />
+        <GrupujMenu v-if="mozeGrupowac" :grupowanie="grupowanie" />
         <SortBy
           v-if="!['kanban', 'mapa'].includes(route.params.viewType)"
           v-model="list"
@@ -333,7 +326,6 @@
 <script setup>
 import ListIcon from '@/components/Icons/ListIcon.vue'
 import KanbanIcon from '@/components/Icons/KanbanIcon.vue'
-import GroupByIcon from '@/components/Icons/GroupByIcon.vue'
 import QuickFilterField from '@/components/QuickFilterField.vue'
 import RefreshIcon from '@/components/Icons/RefreshIcon.vue'
 import EditIcon from '@/components/Icons/EditIcon.vue'
@@ -348,7 +340,9 @@ import Autocomplete from '@/components/frappe-ui/Autocomplete.vue'
 import SortBy from '@/components/SortBy.vue'
 import Filter from '@/components/Filter.vue'
 import { KLUCZ_NIEAKTYWNE } from '@/utils/grupyFiltrow'
-import GroupBy from '@/components/GroupBy.vue'
+import GrupujMenu from '@/components/GrupujMenu.vue'
+import { useGrupowanieListy } from '@/composables/useGrupowanieListy'
+import { serializujStan, typTrasyWidoku } from '@/utils/grupowanieListy'
 import FadedScrollableDiv from '@/components/FadedScrollableDiv.vue'
 import ColumnSettings from '@/components/ColumnSettings.vue'
 import KanbanSettings from '@/components/Kanban/KanbanSettings.vue'
@@ -460,11 +454,6 @@ function getViewType() {
       label: __('List'),
       icon: markRaw(ListIcon),
     },
-    group_by: {
-      name: 'group_by',
-      label: __('Group By'),
-      icon: markRaw(GroupByIcon),
-    },
     kanban: {
       name: 'kanban',
       label: __('Kanban'),
@@ -546,6 +535,7 @@ const view = ref({
   icon: '',
   filters: {},
   order_by: 'modified desc',
+  volteo_grupowanie: '',
   column_field: 'status',
   title_field: '',
   kanban_columns: '',
@@ -593,7 +583,7 @@ function getParams() {
     props.doctype,
   )
   const view_name = _view?.name || ''
-  const view_type = _view?.type || typWidokuDoZapisu(route.params.viewType) || 'list'
+  const view_type = typTrasyWidoku(_view?.type || typWidokuDoZapisu(route.params.viewType) || 'list')
   const filters = (_view?.filters && JSON.parse(_view.filters)) || {}
   const order_by = _view?.order_by || 'modified desc'
   const group_by_field = _view?.group_by_field || 'owner'
@@ -612,6 +602,7 @@ function getParams() {
     filters: filters,
     order_by: order_by,
     group_by_field: group_by_field,
+    volteo_grupowanie: _view?.volteo_grupowanie || '',
     column_field: column_field,
     title_field: title_field,
     kanban_columns: kanban_columns,
@@ -692,7 +683,7 @@ list.value = createResource({
       default_filters: props.filters,
       view: {
         custom_view_name: cv?.name || '',
-        view_type: cv?.type || typWidokuDoZapisu(route.params.viewType) || 'list',
+        view_type: typTrasyWidoku(cv?.type || typWidokuDoZapisu(route.params.viewType) || 'list'),
         group_by_field: params?.view?.group_by_field || 'owner',
       },
       column_field: data.column_field,
@@ -736,6 +727,29 @@ stopPrzycinanie = watch(
 onMounted(() => useDebounceFn(reload, 100)())
 
 const isLoading = computed(() => list.value?.loading)
+
+// ops#413: grupowanie to opcja widoku Lista (Umowy, Leady, Zadania), nie osobny typ
+// widoku. Stan (pole, "pokaz puste", zwiniete grupy) zyje w widoku uzytkownika
+// (`CRM View Settings.volteo_grupowanie`), tak jak filtry i kolumny.
+const widokListy = computed(() => (route.params.viewType || 'list') === 'list')
+const mozeGrupowac = computed(() => !!props.options.grupowanie && widokListy.value)
+const zapiszStandardowyWidok = useDebounceFn(() => createOrUpdateStandardView(), 600)
+const grupowanie = useGrupowanieListy({
+  doctype: props.doctype,
+  list,
+  widokListy: mozeGrupowac,
+  widok: () => getView(route.query.view, typWidokuDoZapisu(route.params.viewType), props.doctype),
+  poleZPrzekierowania: () => route.query.grupuj || null,
+  zapisz(stan, { lekka }) {
+    view.value.volteo_grupowanie = serializujStan(stan)
+    // zwiniecia nie oznaczaja widoku jako zmienionego (nazwany widok zapisuje je
+    // dopiero przy "Zapisz zmiany" innej zmiany); standardowy widok zapisuje sie sam
+    if (!lekka) viewUpdated.value = true
+    if (route.query.view) return
+    if (!defaultParams.value) defaultParams.value = getParams()
+    zapiszStandardowyWidok()
+  },
+})
 
 function reload() {
   if (isLoading.value) return
@@ -840,23 +854,10 @@ if (allowedViews.includes('kanban')) {
     },
   })
 }
-if (allowedViews.includes('group_by')) {
-  standardViews.push({
-    name: 'group_by',
-    label: __(props.options?.defaultViewName) || __('Group By'),
-    icon: markRaw(GroupByIcon),
-    onClick() {
-      viewUpdated.value = false
-      router.push({ name: route.name, params: { viewType: 'group_by' } })
-    },
-  })
-}
 
 function getIcon(icon, type) {
   if (isEmoji(icon)) {
     return h('div', icon)
-  } else if (!icon && type === 'group_by') {
-    return markRaw(GroupByIcon)
   } else if (!icon && type === 'kanban') {
     return markRaw(KanbanIcon)
   }
@@ -885,7 +886,7 @@ const viewsDropdownOptions = computed(() => {
         viewUpdated.value = false
         router.push({
           name: route.name,
-          params: { viewType: view.type },
+          params: { viewType: typTrasyWidoku(view.type) },
           query: { view: view.name },
         })
       }
@@ -1199,7 +1200,10 @@ const pokazZmianyWidoku = computed(() =>
 // ops#391: S=3 (nie 2) i kolumny nie węższe niż 6.75rem, żeby grupa
 // przycisków (ok. 278 do 334px) nigdy nie zachodziła na komórkę filtra;
 // gdy okno jest węższe od K kolumn, pasek przewija się poziomo.
-const przyciskiSpanDwaWiersze = computed(() => (pokazZmianyWidoku.value ? 6 : 3))
+// ops#413: przycisk "Grupuj: <pole>" to ok. 2 dodatkowe komorki (do ok. 215px).
+const przyciskiSpanDwaWiersze = computed(
+  () => (pokazZmianyWidoku.value ? 6 : 3) + (mozeGrupowac.value ? 2 : 0),
+)
 
 // K: liczba kolumn gridu, dobrana tak, żeby n filtrów ZAWSZE zmieściło się
 // w pozostałych komórkach dwóch wierszy: (K - S) wolnych w wierszu 1 +
@@ -1320,21 +1324,6 @@ function updateSort(order_by) {
   list.value.params = defaultParams.value
   list.value.params.order_by = order_by
   view.value.order_by = order_by
-  list.value.reload()
-
-  if (!route.query.view) {
-    createOrUpdateStandardView()
-  }
-}
-
-function updateGroupBy(group_by_field) {
-  viewUpdated.value = true
-  if (!defaultParams.value) {
-    defaultParams.value = getParams()
-  }
-  list.value.params = defaultParams.value
-  list.value.params.view.group_by_field = group_by_field
-  view.value.group_by_field = group_by_field
   list.value.reload()
 
   if (!route.query.view) {
@@ -1465,6 +1454,7 @@ function createOrUpdateStandardView() {
       filters: defaultParams.value.filters,
       order_by: defaultParams.value.order_by,
       group_by_field: defaultParams.value.view?.group_by_field,
+      volteo_grupowanie: view.value.volteo_grupowanie,
       column_field: defaultParams.value.column_field,
       title_field: defaultParams.value.title_field,
       kanban_columns: defaultParams.value.kanban_columns,
@@ -1687,6 +1677,7 @@ function fetchAndUpdateKanbanColumns(v) {
 
 function cancelChanges() {
   reload()
+  grupowanie.przywroc()
   viewUpdated.value = false
 }
 
@@ -1699,6 +1690,7 @@ function saveView() {
     filters: defaultParams.value.filters,
     order_by: defaultParams.value.order_by,
     group_by_field: defaultParams.value.view.group_by_field,
+    volteo_grupowanie: view.value.volteo_grupowanie,
     column_field: defaultParams.value.column_field,
     title_field: defaultParams.value.title_field,
     kanban_columns: defaultParams.value.kanban_columns,
@@ -1765,6 +1757,7 @@ function likeDoc({ name, liked }) {
 }
 
 defineExpose({
+  grupowanie,
   applyFilter,
   applyLikeFilter,
   likeDoc,

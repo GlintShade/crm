@@ -1,20 +1,7 @@
 <template>
   <div v-if="showGroupedRows" class="mx-3 mt-2 h-full overflow-y-auto sm:mx-5">
     <div v-for="group in reactivieRows" :key="group.group">
-      <ListGroupHeader :group="group">
-        <div
-          class="my-2 flex items-center gap-2 text-base-medium text-ink-gray-8"
-        >
-          <div>{{ __(group.label) }} -</div>
-          <div class="flex items-center gap-1">
-            <component :is="group.icon" v-if="group.icon" />
-            <div v-if="group.group == ' '" class="text-ink-gray-4">
-              {{ __('Empty') }}
-            </div>
-            <div v-else>{{ group.group }}</div>
-          </div>
-        </div>
-      </ListGroupHeader>
+      <GrupaNaglowek :group="group" :doctype="doctype" />
       <ListGroupRows :group="group">
         <ListRow
           v-for="row in group.rows"
@@ -25,6 +12,26 @@
         >
           <slot v-bind="{ idx, column, item, row }" />
         </ListRow>
+        <div
+          v-if="group.loading && !group.rows.length"
+          class="px-2 py-3 text-base text-ink-gray-5"
+        >
+          {{ __('Ładowanie...') }}
+        </div>
+        <div
+          v-if="group.hasMore"
+          class="flex items-center gap-2 border-t px-2 pt-2 text-base"
+        >
+          <Button
+            variant="ghost"
+            :label="__('Pokaż kolejne')"
+            :loading="group.loading"
+            @click="group.onMore()"
+          />
+          <span class="text-ink-gray-5">
+            {{ __('pokazano {0} z {1}', [group.loaded, group.count]) }}
+          </span>
+        </div>
       </ListGroupRows>
     </div>
   </div>
@@ -48,7 +55,8 @@
 
 <script setup>
 import { useStorage } from '@vueuse/core'
-import { ListRows, ListRow, ListGroupHeader, ListGroupRows } from 'frappe-ui'
+import { Button, ListRows, ListRow, ListGroupRows } from 'frappe-ui'
+import GrupaNaglowek from '@/components/ListViews/GrupaNaglowek.vue'
 import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue'
 
 const props = defineProps({

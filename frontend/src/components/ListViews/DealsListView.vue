@@ -380,6 +380,7 @@
     :options="{
       rowCount: options.rowCount,
       totalCount: options.totalCount,
+      grupy: options.grupy,
     }"
     @loadMore="emit('loadMore')"
   />

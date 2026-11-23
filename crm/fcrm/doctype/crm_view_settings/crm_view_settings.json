@@ -27,6 +27,7 @@
   "rows",
   "group_by_tab",
   "group_by_field",
+  "volteo_grupowanie",
   "kanban_tab",
   "kanban_section",
   "column_field",
@@ -134,6 +135,13 @@
    "fieldname": "group_by_field",
    "fieldtype": "Data",
    "label": "Group By Field"
+  },
+  {
+   "description": "Grupowanie listy (ops#413): JSON {pole, pokazPuste, zwiniete}",
+   "fieldname": "volteo_grupowanie",
+   "fieldtype": "Code",
+   "label": "Grupowanie listy",
+   "options": "JSON"
   },
   {
    "fieldname": "list_section",

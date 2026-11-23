@@ -170,11 +170,10 @@ const aktywnyTyp = computed(() =>
     : 'list',
 )
 
-// Oba tryby maja sens tylko dla Lista/Mapa - na Kanban i Grupuj wg znikaja
-// calkowicie (te widoki nie maja odpowiednika w segmentowanym przelaczniku).
-const pokazPasek = computed(
-  () => !['kanban', 'group_by'].includes(route.params.viewType),
-)
+// Oba tryby maja sens tylko dla Lista/Mapa - na Kanban znikaja calkowicie (ten
+// widok nie ma odpowiednika w segmentowanym przelaczniku). Grupowanie (ops#413)
+// to opcja widoku Lista, wiec przelacznik i chipy zostaja widoczne.
+const pokazPasek = computed(() => route.params.viewType !== 'kanban')
 
 // Kalendarz (ops#318) nie używa filtrów listy: rząd zapisanych filtrów znika.
 const czyKalendarz = computed(() => route.params.viewType === 'kalendarz')
