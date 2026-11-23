@@ -2,62 +2,65 @@
   wybor osoby odpowiedzialnej, lista z wyszukiwaniem i awatarami (klik przelacza,
   lista zostaje otwarta), wybrani jako chipy POD polem. Wartosc: wiersze `[{user}]`. -->
 <template>
-  <div class="min-w-0">
-    <!-- Panel przez Popover (teleport do #frappeui-popper-root), wiec kolumna z
-      overflow go nie przycina; to samo robi Autocomplete wyboru osoby odpowiedzialnej. -->
-    <Popover
-      v-model:show="otwarte"
-      class="w-full"
-      placement="bottom-start"
+  <div ref="korzen" class="min-w-0">
+    <button
+      type="button"
+      class="flex h-7 w-full items-center justify-between gap-2 rounded bg-surface-gray-2 px-2 text-left text-base text-ink-gray-4 transition-colors hover:bg-surface-gray-3"
+      data-testid="wybor-osob-pole"
+      :aria-expanded="otwarte"
+      @click="otwarte = !otwarte"
+      @keydown.esc.stop="otwarte = false"
     >
-      <template #target="{ togglePopover }">
-        <button
-          type="button"
-          class="flex h-7 w-full items-center justify-between gap-2 rounded bg-surface-gray-2 px-2 text-left text-base text-ink-gray-4 transition-colors hover:bg-surface-gray-3"
-          data-testid="wybor-osob-pole"
-          @click="togglePopover()"
-        >
-          <span class="truncate">{{ placeholder || __('Dodaj osoby') }}</span>
-          <FeatherIcon name="chevron-down" class="h-4 w-4 shrink-0" />
-        </button>
-      </template>
-      <template #body>
-        <div
-          class="pointer-events-auto mt-1 rounded-lg bg-surface-elevation-2 p-1.5 text-base shadow-2xl"
-          @keydown.esc.stop="otwarte = false"
-        >
-          <input
-            ref="poleSzukaj"
-            v-model="szukaj"
-            type="text"
-            class="form-input mb-1 w-full"
-            :placeholder="__('Szukaj osoby')"
-            data-testid="wybor-osob-szukaj"
-          />
-          <div class="max-h-[12rem] overflow-y-auto">
-            <div v-if="!opcje.length" class="px-2 py-1 text-base text-ink-gray-5">
-              {{ __('Brak wyników') }}
-            </div>
-            <button
-              v-for="o in opcje"
-              :key="o.name"
-              type="button"
-              class="flex w-full min-w-0 items-center gap-2 rounded px-2 py-1 text-left text-base text-ink-gray-8 hover:bg-surface-gray-3"
-              :title="o.name"
-              @click="przelacz(o.name)"
-            >
-              <UserAvatar :user="o.name" size="sm" />
-              <span class="min-w-0 flex-1 truncate">{{ o.full_name || o.name }}</span>
-              <FeatherIcon
-                v-if="wybrane.includes(o.name)"
-                name="check"
-                class="h-4 w-4 shrink-0"
-              />
-            </button>
-          </div>
+      <span class="truncate">{{ placeholder || __('Dodaj osoby') }}</span>
+      <FeatherIcon
+        name="chevron-down"
+        class="h-4 w-4 shrink-0 transition-transform"
+        :class="otwarte ? 'rotate-180' : ''"
+      />
+    </button>
+
+    <!-- Lista INLINE pod polem (bez teleportu): w otwartym oknie zadania (Dialog) panel
+      w #frappeui-popper-root dostawal pointer-events: none, a klik w niego byl dla Dialogu
+      "poza oknem" i zamykal je. W normalnym przeplywie nic nie przycina i nie zaslania
+      chipow: lista rozpycha kolumne, a ta przewija sie pionowo. -->
+    <div
+      v-if="otwarte"
+      class="mt-1 min-w-0 rounded-lg bg-surface-elevation-2 p-1.5 text-base shadow-sm ring-1 ring-outline-gray-2"
+      data-testid="wybor-osob-lista"
+      @keydown.esc.stop="otwarte = false"
+    >
+      <input
+        ref="poleSzukaj"
+        v-model="szukaj"
+        type="text"
+        class="form-input mb-1 w-full"
+        :placeholder="__('Szukaj osoby')"
+        data-testid="wybor-osob-szukaj"
+      />
+      <div class="max-h-[12rem] overflow-y-auto overflow-x-hidden">
+        <div v-if="!opcje.length" class="px-2 py-1 text-base text-ink-gray-5">
+          {{ __('Brak wyników') }}
         </div>
-      </template>
-    </Popover>
+        <button
+          v-for="o in opcje"
+          :key="o.name"
+          type="button"
+          class="flex w-full min-w-0 items-center gap-2 rounded px-2 py-1 text-left text-base text-ink-gray-8 hover:bg-surface-gray-3"
+          :title="o.name"
+          :data-testid="`wybor-osob-opcja-${o.name}`"
+          @click="przelacz(o.name)"
+        >
+          <UserAvatar :user="o.name" size="sm" />
+          <span class="min-w-0 flex-1 truncate">{{ o.full_name || o.name }}</span>
+          <FeatherIcon
+            v-if="wybrane.includes(o.name)"
+            name="check"
+            class="h-4 w-4 shrink-0"
+            data-testid="wybor-osob-check"
+          />
+        </button>
+      </div>
+    </div>
 
     <div
       v-if="chipy.length"
@@ -95,9 +98,8 @@ import {
   opcjeOsob,
   przelaczOsobe,
 } from '@/utils/wyborOsob'
-import Popover from '@/components/frappe-ui/Popover.vue'
 import { FeatherIcon } from 'frappe-ui'
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const props = defineProps({
   modelValue: { type: Array, default: () => [] },
@@ -112,9 +114,14 @@ const poleSzukaj = ref(null)
 const otwarte = ref(false)
 const szukaj = ref('')
 
-// Otwarte okno zadania (Dialog) ustawia `pointer-events: none` na body, a panel jest
-// teleportowany do #frappeui-popper-root poza trescia okna, wiec bez `pointer-events-auto`
-// klik przechodzi przez panel na element pod nim.
+const korzen = ref(null)
+// Klik poza polem i lista (ale wewnatrz okna) zamyka liste; chipy tez sa "w srodku".
+function poza(e) {
+  if (otwarte.value && !korzen.value?.contains(e.target)) otwarte.value = false
+}
+onMounted(() => document.addEventListener('mousedown', poza, true))
+onBeforeUnmount(() => document.removeEventListener('mousedown', poza, true))
+
 // Po otwarciu fokus na wyszukiwarce (zwykly <input>, nie komponent frappe-ui).
 watch(otwarte, (o) => {
   if (o) nextTick(() => poleSzukaj.value?.focus())
