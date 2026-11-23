@@ -12,11 +12,16 @@ from crm.volteo_powiadomienia_zadan import (
 	autor_wzmiankowany,
 	czy_zadanie_automatyczne,
 	etykieta_statusu,
+	nowo_dodani,
 	tekst_powiadomienia,
 	wybierz_odbiorcow,
+	wyczysc_do_wiadomosci,
 	wykryj_zdarzenia,
 )
 from crm.volteo_zadania_tresc import POLA_TRESCI, czy_zmiana_tresci_dozwolona
+
+POLE_DW = "custom_do_wiadomosci"
+"""Table MultiSelect "Do wiadomosci" (ops#411): Custom Field z ops, wiersze `Volteo Zadanie DW`."""
 
 
 class CRMTask(Document):
@@ -44,6 +49,16 @@ class CRMTask(Document):
 		self.assign_to()
 		if self.flags.get("volteo_zadanie_automatyczne"):
 			self.zapisz_znacznik_automatycznego()
+		# ops#411: jeden dzwonek "Dodano Cie do wiadomosci" dla kazdej osoby z nowego zadania.
+		self.powiadom_dodanych(nowo_dodani([], _do_wiadomosci(self)))
+
+	def powiadom_dodanych(self, nowi: list[str]):
+		if not nowi:
+			return
+		try:
+			powiadom_o_zdarzeniu(self, "dw", tylko=nowi)
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), "CRM Task: powiadomienie Do wiadomosci")
 
 	def zapisz_znacznik_automatycznego(self):
 		"""Trwaly znacznik zadania automatycznego (ops#360): `Comment` typu `Info`.
@@ -74,6 +89,9 @@ class CRMTask(Document):
 			for zdarzenie in zdarzenia:
 				pomin = zmiana_wykonawcy if zdarzenie == "wykonawca" else None
 				powiadom_o_zdarzeniu(self, zdarzenie, pomin=pomin)
+			self.powiadom_dodanych(
+				nowo_dodani([w.user for w in przed.get(POLE_DW) or []], _do_wiadomosci(self))
+			)
 		except Exception:
 			frappe.log_error(frappe.get_traceback(), "CRM Task: powiadomienie autora zadania")
 
@@ -84,12 +102,25 @@ class CRMTask(Document):
 
 	def validate(self):
 		self.pilnuj_autora_tresci()
+		self.pilnuj_do_wiadomosci()
 		if self.is_new() or not self.assigned_to:
 			return
 
 		if self.get_doc_before_save().assigned_to != self.assigned_to:
 			self.unassign_from_previous_user(self.get_doc_before_save().assigned_to)
 			self.assign_to()
+
+	def pilnuj_do_wiadomosci(self):
+		"""ops#411: ta sama osoba nie jest naraz odpowiedzialna i "Do wiadomosci", a lista
+		nie ma duplikatow: serwer cicho usuwa nadmiar, bez bledu. Pole jeszcze nie istnieje
+		(skrypt ops nie ruszyl), wiec `get` daje None: nic do zrobienia."""
+		wiersze = self.get(POLE_DW)
+		if wiersze is None:
+			return
+		osoby = [w.user for w in wiersze]
+		czyste = wyczysc_do_wiadomosci(osoby, self.assigned_to)
+		if czyste != osoby:
+			self.set(POLE_DW, [{"user": u} for u in czyste])
 
 	def pilnuj_autora_tresci(self):
 		"""ops#412: tytul i opis istniejacego zadania zmienia tylko autor. Caly zapis
@@ -154,10 +185,16 @@ class CRMTask(Document):
 				"width": "8rem",
 			},
 			{
-				"label": "Assigned To",
+				"label": "Osoba odpowiedzialna",
 				"type": "Link",
 				"key": "assigned_to",
 				"width": "10rem",
+			},
+			{
+				"label": "Do wiadomości",
+				"type": "Data",
+				"key": "_dw",
+				"width": "11rem",
 			},
 			{
 				"label": "Szansa",
@@ -222,8 +259,17 @@ def _wykonawcy(zadanie) -> list[str]:
 	return [zadanie.get("assigned_to"), *todo]
 
 
+def _do_wiadomosci(zadanie) -> list[str]:
+	"""Osoby z listy "Do wiadomosci" zadania (ops#411); pusta lista, gdy pole nie istnieje."""
+	return [w.user for w in zadanie.get(POLE_DW) or [] if w.user]
+
+
 def powiadom_o_zdarzeniu(
-	zadanie, zdarzenie: str, tresc_wpisu: str | None = None, pomin: set[str] | None = None
+	zadanie,
+	zdarzenie: str,
+	tresc_wpisu: str | None = None,
+	pomin: set[str] | None = None,
+	tylko: list[str] | None = None,
 ) -> None:
 	"""Wstawia po jednym `CRM Notification` dla kazdego odbiorcy zdarzenia
 	`zdarzenie` (wpis, status, termin, wykonawca) dokonanego przez biezacego
@@ -232,17 +278,24 @@ def powiadom_o_zdarzeniu(
 	wygrywa (powiadomi go `crm.api.comment.notify_mentions`). Maskowanie CC per
 	odbiorca jak w `crm.api.todo.notify_assigned_user`. Wstawia wiersz bezposrednio,
 	a nie przez `notify_user`, bo jego dedup po tresci gubilby powtorzone, rownie
-	brzmiace zdarzenia (np. dwa razy "Wykonane")."""
+	brzmiace zdarzenia (np. dwa razy "Wykonane"). Osoby "Do wiadomosci" (ops#411) dostaja
+	te same zdarzenia co wykonawca. `tylko` (zdarzenie `dw`): dzwonek dostaja wylacznie te
+	osoby, czyli swiezo dodane."""
 	from crm.permissions.org_hierarchy import BYPASS_ROLES, czy_autor_ma_role_cc
 	from crm.volteo_aktywnosc import czy_dokument_maskuje_cc
 	from crm.volteo_powiadomienia import nazwa_przydzielajacego
 
 	aktor = frappe.session.user
-	kandydaci = {zadanie.owner, *_wykonawcy(zadanie)} - {None, ""}
+	wykonawcy = _wykonawcy(zadanie)
+	dw = _do_wiadomosci(zadanie)
+	kandydaci = {zadanie.owner, *wykonawcy, *dw, *(tylko or [])} - {None, ""}
 	aktywni = {u for u in kandydaci if frappe.db.get_value("User", u, "enabled")}
-	odbiorcy = wybierz_odbiorcow(
-		zadanie.owner, _wykonawcy(zadanie), aktor, aktywni, _czy_automatyczne(zadanie), pomin
-	)
+	if tylko is not None:
+		odbiorcy = wybierz_odbiorcow(None, tylko, aktor, aktywni, False)
+	else:
+		odbiorcy = wybierz_odbiorcow(
+			zadanie.owner, wykonawcy, aktor, aktywni, _czy_automatyczne(zadanie), pomin, dw
+		)
 
 	nowa_wartosc = None
 	if zdarzenie == "status":

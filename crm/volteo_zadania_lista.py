@@ -116,3 +116,53 @@ def uklad_paska_z_klientem(uklad: list, doctype: str) -> list:
 	else:
 		indeks = 0
 	return [*uklad[:indeks], KLUCZ_KLIENTA, *uklad[indeks:]]
+
+
+# ops#411: osoby "Do wiadomosci" na liscie Zadan. Oba klucze to pseudo-pola (nie
+# DocFieldy): `_dw` to kolumna (lista nazw uzytkownikow doklejana po zapytaniu) i
+# filtr (rozwijany na `name in/not in [...]`); `_rola_ja` to sam filtr, suma
+# "jestem osoba odpowiedzialna ALBO jestem na liscie Do wiadomosci".
+DOCTYPE_DW = "Volteo Zadanie DW"
+KLUCZ_DW = "_dw"
+KLUCZ_ROLA_JA = "_rola_ja"
+KLUCZE_PSEUDO_FILTRA = (KLUCZ_KLIENTA, KLUCZ_DW, KLUCZ_ROLA_JA)
+
+
+def filtr_dw(wartosc: object) -> tuple[str, list[str]] | None:
+	"""`(rodzaj, uzytkownicy)` z wartosci filtra `_dw`: `"in"` ("jest w") albo
+	`"not in"` ("nie jest w"). Rozpoznaje skalar, `["=", u]`, `["!=", u]`,
+	`["in", [...]]`, `["not in", [...]]` (operator bez wzgledu na wielkosc liter).
+	Kazdy inny ksztalt albo pusta lista dostaje None (filtr po prostu znika)."""
+	if isinstance(wartosc, str):
+		operator, argument = "=", wartosc
+	elif isinstance(wartosc, (list, tuple)) and len(wartosc) == 2 and isinstance(wartosc[0], str):
+		operator, argument = wartosc[0].strip().lower(), wartosc[1]
+	else:
+		return None
+	if operator in ("=", "!=") and isinstance(argument, str):
+		argument = [argument]
+	if operator not in ("=", "!=", "in", "not in") or not isinstance(argument, (list, tuple)):
+		return None
+	uzytkownicy = [u.strip() for u in argument if isinstance(u, str) and u.strip()]
+	if not uzytkownicy:
+		return None
+	return ("not in" if operator in ("!=", "not in") else "in"), uzytkownicy
+
+
+def polacz_filtr_name(istniejacy: tuple[str, set] | None, rodzaj: str, nazwy: list) -> tuple[str, list]:
+	"""Wynikowy filtr po `name` z istniejacego (`(rodzaj, zbior)` albo None) i
+	nowego (`rodzaj` in / not in, `nazwy`). Nazwy zadan to liczby, a filtr z
+	zewnatrz bywa tekstem, wiec porownanie idzie po `str()`; zwracane sa
+	oryginalne wartosci (kolejnosc zachowana). Nowa lista, argumenty nietkniete."""
+	if istniejacy is None:
+		return rodzaj, list(nazwy)
+	rodzaj_e, zbior_e = istniejacy
+	e = {str(n) for n in zbior_e}
+	n_str = {str(n) for n in nazwy}
+	if rodzaj_e == "in" and rodzaj == "in":
+		return "in", [n for n in nazwy if str(n) in e]
+	if rodzaj_e == "in":  # in E, not in N
+		return "in", [n for n in sorted(zbior_e, key=str) if str(n) not in n_str]
+	if rodzaj == "in":  # not in E, in N
+		return "in", [n for n in nazwy if str(n) not in e]
+	return "not in", [*sorted(zbior_e, key=str), *[n for n in nazwy if str(n) not in e]]

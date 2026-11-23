@@ -121,6 +121,14 @@
             </span>
           </div>
           <div
+            v-else-if="column.key === '_dw'"
+            class="overflow-hidden"
+            data-testid="zadanie-do-wiadomosci"
+            :title="item"
+          >
+            <span class="truncate text-base">{{ item }}</span>
+          </div>
+          <div
             v-else-if="['modified', 'creation'].includes(column.key)"
             class="truncate text-base"
             @click="

@@ -219,13 +219,13 @@
               </div>
 
               <div>
-                <div class="mb-2 text-sm text-ink-gray-5">{{ __('Assigned To') }}</div>
+                <div class="mb-2 text-sm text-ink-gray-5">{{ __('Osoba odpowiedzialna') }}</div>
                 <Link
                   class="form-control"
                   :value="doc.assigned_to && getUser(doc.assigned_to).full_name"
                   doctype="User"
                   :filters="przypisanyFiltry"
-                  :placeholder="__('Select {0}', [__('Assigned To')])"
+                  :placeholder="__('Select {0}', [__('Osoba odpowiedzialna')])"
                   :hideMe="true"
                   @change="(v) => (doc.assigned_to = v)"
                 >
@@ -248,6 +248,18 @@
                     </Tooltip>
                   </template>
                 </Link>
+              </div>
+
+              <!-- ops#411: osoby "Do wiadomosci" (Table MultiSelect `custom_do_wiadomosci`,
+                wiersze `{user}`): dostaja dzwonek przy zmianach i widza zadanie bez
+                dostepu do szansy lub leada. Serwer usuwa z listy osobe odpowiedzialna. -->
+              <div data-testid="zadanie-do-wiadomosci-pole">
+                <div class="mb-2 text-sm text-ink-gray-5">{{ __('Do wiadomości') }}</div>
+                <TableMultiselectInput
+                  v-model="doc.custom_do_wiadomosci"
+                  doctype="Volteo Zadanie DW"
+                  @change="(v) => (doc.custom_do_wiadomosci = v)"
+                />
               </div>
 
               <div>
@@ -366,6 +378,8 @@ const show = defineModel({ type: Boolean })
 // JSON, marka ProEnergy nigdy sie nie ustawia). Patrz komentarz na koncu
 // composables/useTimelinePreferences.js.
 const ZadanieRozmowa = defineAsyncComponent(() => import('@/components/ZadanieRozmowa.vue'))
+// TableMultiselectInput laduje sie leniwie z tego samego powodu (eager graf, ops#411).
+const TableMultiselectInput = defineAsyncComponent(() => import('@/components/Controls/TableMultiselectInput.vue'))
 const HistoriaWpisuDialog = defineAsyncComponent(() => import('@/components/HistoriaWpisuDialog.vue'))
 
 const emit = defineEmits(['afterInsert', 'afterUpdate'])

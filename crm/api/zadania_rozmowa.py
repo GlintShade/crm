@@ -19,7 +19,9 @@ whitelist w zadaniu HTTP.
 Model uprawnien (krytyczny): KAZDY endpoint najpierw sprawdza odczyt zadania
 (`_sprawdz_zadanie`) -- hook `crm.permissions.child_visibility` zawęża
 `CRM Task` do widocznosci rodzica (szansa/lead; zadanie bez powiazania widzi
-tylko wlasciciel i osoba przypisana, plus role z BYPASS_ROLES) -- i dopiero PO
+tylko wlasciciel i osoba przypisana, plus role z BYPASS_ROLES; ops#411: plus osoby
+z "Do wiadomosci", ktore dostaja WYLACZNIE odczyt zadania, wiec bramka `read` wpuszcza je
+do rozmowy, a zapis pol zadania zostaje dla nich zamkniety) -- i dopiero PO
 tej bramce czyta `Comment`/`Version`/`File` przez `get_all`. `get_all` po
 jawnej bramce jest tu celowe, ten sam wzorzec i uzasadnienie co
 `crm.api.volteo_leady.komentarze`: straznik filtrow (`crm.api.volteo_filtry_guard`)

@@ -65,6 +65,8 @@ from crm.permissions.org_hierarchy import (
 # Deal / Contact / Volteo Faktura scoping) so the modules can't drift apart
 # on which roles see everything.
 
+DOCTYPE_DW = "Volteo Zadanie DW"
+
 _REFERENCE_DOCTYPE_FIELD = "reference_doctype"
 _REFERENCE_DOCNAME_FIELD = "reference_docname"
 
@@ -140,8 +142,30 @@ def get_note_permission_query_conditions(user=None):
 	return _get_child_permission_query_conditions("FCRM Note", user)
 
 
+def _do_wiadomosci_istnieje(zadanie, user: str) -> bool:
+	"""Czy `user` jest na liscie "Do wiadomosci" zadania (ops#411). Tabela moze jeszcze
+	nie istniec (obraz przed `bench migrate`): wtedy nikt nie jest."""
+	return bool(
+		zadanie
+		and frappe.db.table_exists(DOCTYPE_DW)
+		and frappe.db.exists(DOCTYPE_DW, {"parent": str(zadanie), "parenttype": "CRM Task", "user": user})
+	)
+
+
 def get_task_permission_query_conditions(user=None):
-	return _get_child_permission_query_conditions("CRM Task", user)
+	"""Zadania widoczne wg rodzica (`_get_child_permission_query_conditions`) ALBO
+	zadania, w ktorych uzytkownik jest na liscie "Do wiadomosci" (ops#411): to daje mu
+	odczyt WYLACZNIE tego zadania, nigdy szansy ani leada."""
+	user = user or frappe.session.user
+	warunki = _get_child_permission_query_conditions("CRM Task", user)
+	if not warunki or not frappe.db.table_exists(DOCTYPE_DW):
+		return warunki
+	# `user` pochodzi z sesji, ale trafia do SQL przez interpolacje: zawsze `escape`.
+	return (
+		f"(({warunki}) or exists (select 1 from `tab{DOCTYPE_DW}` dw "
+		f"where dw.`parent` = `tabCRM Task`.`name` and dw.`parenttype` = 'CRM Task' "
+		f"and dw.`user` = {frappe.db.escape(user)}))"
+	)
 
 
 def _has_child_permission(doc, ptype, user, doctype: str) -> bool:
@@ -191,4 +215,12 @@ def has_note_permission(doc, ptype, user=None):
 
 
 def has_task_permission(doc, ptype, user=None):
-	return _has_child_permission(doc, ptype, user, "CRM Task")
+	if _has_child_permission(doc, ptype, user, "CRM Task"):
+		return True
+	# ops#411: osoba z "Do wiadomosci" czyta zadanie (i pisze w jego rozmowie, ktora
+	# wymaga tylko odczytu), ale NIE zmienia jego pol: kazdy inny `ptype` niz "read"
+	# (write, delete, share...) zostaje odrzucony jak dla kazdego bez tytulu do zadania.
+	if ptype != "read":
+		return False
+	nazwa = doc.get("name") if isinstance(doc, dict) else getattr(doc, "name", None)
+	return _do_wiadomosci_istnieje(nazwa, user or frappe.session.user)

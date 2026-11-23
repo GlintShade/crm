@@ -183,6 +183,91 @@ class TestChildVisibility(FrappeTestCase):
 		self.assertTrue(get_task_permission_query_conditions("rep1@child.test"))
 
 	# ------------------------------------------------------------------
+	# ops#411: osoby "Do wiadomosci" na zadaniu. Dostaja odczyt TEGO zadania
+	# (lista i pojedynczy dokument), nigdy zapis ani dostep do szansy/leada.
+	# Wiersz tabeli potomnej wstawiany wprost (`add_dw`), wiec testy nie
+	# wymagaja Custom Field `custom_do_wiadomosci`, tylko `bench migrate`.
+	# ------------------------------------------------------------------
+
+	def test_dw_user_reads_task_on_foreign_lead(self):
+		lead = make_lead("rep1@child.test")
+		task = make_task("CRM Lead", lead.name)
+		self.assertFalse(has_task_permission(task, "read", "outsider@child.test"))
+		add_dw(task, "outsider@child.test")
+		self.assertTrue(has_task_permission(task, "read", "outsider@child.test"))
+
+	def test_dw_user_cannot_write_delete_or_share_task(self):
+		lead = make_lead("rep1@child.test")
+		task = make_task("CRM Lead", lead.name)
+		add_dw(task, "outsider@child.test")
+		for ptype in ("write", "delete", "share", "submit", "cancel"):
+			self.assertFalse(has_task_permission(task, ptype, "outsider@child.test"), ptype)
+
+	def test_dw_grants_no_access_to_parent_lead_or_deal(self):
+		lead = make_lead("rep1@child.test")
+		deal = make_deal("rep1@child.test")
+		task_lead = make_task("CRM Lead", lead.name)
+		task_deal = make_task("CRM Deal", deal.name)
+		add_dw(task_lead, "outsider@child.test")
+		add_dw(task_deal, "outsider@child.test")
+		self.assertTrue(has_task_permission(task_deal, "read", "outsider@child.test"))
+		self.assertFalse(frappe.has_permission("CRM Lead", "read", doc=lead.name, user="outsider@child.test"))
+		self.assertFalse(frappe.has_permission("CRM Deal", "read", doc=deal.name, user="outsider@child.test"))
+
+	def test_dw_is_per_task_and_per_user(self):
+		lead = make_lead("rep1@child.test")
+		task = make_task("CRM Lead", lead.name)
+		other = make_task("CRM Lead", lead.name)
+		add_dw(task, "outsider@child.test")
+		self.assertFalse(has_task_permission(other, "read", "outsider@child.test"))
+		self.assertFalse(has_task_permission(task, "read", "rep2@child.test"))
+
+	def test_removing_dw_row_removes_access(self):
+		lead = make_lead("rep1@child.test")
+		task = make_task("CRM Lead", lead.name)
+		add_dw(task, "outsider@child.test")
+		frappe.db.delete("Volteo Zadanie DW", {"parent": str(task.name), "user": "outsider@child.test"})
+		self.assertFalse(has_task_permission(task, "read", "outsider@child.test"))
+
+	def test_dw_does_not_change_access_of_entitled_user(self):
+		lead = make_lead("rep1@child.test")
+		task = make_task("CRM Lead", lead.name)
+		add_dw(task, "outsider@child.test")
+		self.assertTrue(has_task_permission(task, "write", "rep1@child.test"))
+		self.assertFalse(has_task_permission(task, "read", "rep2@child.test"))
+
+	def test_task_list_for_dw_user_contains_only_listed_tasks(self):
+		lead = make_lead("rep1@child.test")
+		listed = make_task("CRM Lead", lead.name)
+		hidden = make_task("CRM Lead", lead.name)
+		add_dw(listed, "outsider@child.test")
+		frappe.set_user("outsider@child.test")
+		try:
+			names = {str(n) for n in frappe.get_list("CRM Task", pluck="name")}
+		finally:
+			frappe.set_user("Administrator")
+		self.assertIn(str(listed.name), names)
+		self.assertNotIn(str(hidden.name), names)
+
+	def test_task_list_without_dw_unchanged_for_outsider(self):
+		lead = make_lead("rep1@child.test")
+		task = make_task("CRM Lead", lead.name)
+		frappe.set_user("outsider@child.test")
+		try:
+			names = {str(n) for n in frappe.get_list("CRM Task", pluck="name")}
+		finally:
+			frappe.set_user("Administrator")
+		self.assertNotIn(str(task.name), names)
+
+	def test_query_conditions_escape_the_user(self):
+		conditions = get_task_permission_query_conditions("o'brien@child.test")
+		self.assertIn("Volteo Zadanie DW", conditions)
+		self.assertNotIn("= 'o'brien", conditions)
+
+	def test_note_conditions_have_no_dw_clause(self):
+		self.assertNotIn("Volteo Zadanie DW", get_note_permission_query_conditions("rep1@child.test"))
+
+	# ------------------------------------------------------------------
 	# Delete stays admin-only regardless of read visibility (delete_lockdown
 	# is registered alongside has_note_permission / has_task_permission in
 	# crm/hooks.py, and must run last / win for ptype="delete").
@@ -199,8 +284,22 @@ class TestChildVisibility(FrappeTestCase):
 		self.assertTrue(block_nonadmin_delete(note, "delete", "Administrator"))
 
 
+def add_dw(task, user):
+	"""Wiersz "Do wiadomosci" (ops#411) wstawiony wprost do tabeli potomnej zadania."""
+	return frappe.get_doc(
+		{
+			"doctype": "Volteo Zadanie DW",
+			"parent": str(task.name),
+			"parenttype": "CRM Task",
+			"parentfield": "custom_do_wiadomosci",
+			"user": user,
+		}
+	).insert(ignore_permissions=True)
+
+
 def delete_test_documents():
 	"""Remove notes/tasks/deals/leads created by the test users."""
+	frappe.db.delete("Volteo Zadanie DW", {"user": ("in", TEST_USERS)})
 	frappe.db.delete("FCRM Note", {"reference_docname": ("in", _deal_and_lead_names())})
 	frappe.db.delete("CRM Task", {"reference_docname": ("in", _deal_and_lead_names())})
 	frappe.db.delete("FCRM Note", {"owner": ("in", TEST_USERS)})

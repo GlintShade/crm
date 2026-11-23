@@ -2,7 +2,10 @@ import { describe, it, expect } from 'vitest'
 import {
   ZAKLADKI_ZADAN,
   czyPrzeterminowane,
+  filtryDlaRol,
   filtryDlaZakladki,
+  stanRol,
+  tekstDoWiadomosci,
   tekstPoTerminie,
   zakladkaZFiltra,
 } from './zadaniaLista'
@@ -187,5 +190,59 @@ describe('filtryDlaZakladki', () => {
     const wynik = filtryDlaZakladki(filtry, 'nic')
     expect(wynik).toEqual(filtry)
     expect(wynik).not.toBe(filtry)
+  })
+})
+
+describe('tekstDoWiadomosci', () => {
+  it('puste wejscie daje pusty tekst', () => {
+    expect(tekstDoWiadomosci([])).toBe('')
+    expect(tekstDoWiadomosci(undefined)).toBe('')
+  })
+
+  it('do dwoch nazwisk bez dopisku', () => {
+    expect(tekstDoWiadomosci(['Jan Kowalski'])).toBe('Jan Kowalski')
+    expect(tekstDoWiadomosci(['Jan Kowalski', 'Anna Nowak'])).toBe(
+      'Jan Kowalski, Anna Nowak',
+    )
+  })
+
+  it('powyzej dwoch dopisek +N', () => {
+    expect(tekstDoWiadomosci(['A', 'B', 'C', 'D', 'E'])).toBe('A, B +3')
+    expect(tekstDoWiadomosci(['A', 'B', 'C'])).toBe('A, B +1')
+  })
+})
+
+describe('filtry rol (Moje / Do mojej wiadomosci)', () => {
+  const JA = 'ja@x.pl'
+
+  it('stan z pustych filtrow', () => {
+    expect(stanRol({}, JA)).toEqual({ moje: false, dw: false })
+    expect(stanRol(undefined, JA)).toEqual({ moje: false, dw: false })
+    expect(stanRol({ assigned_to: JA }, '')).toEqual({ moje: false, dw: false })
+  })
+
+  it('stan z pojedynczych filtrow', () => {
+    expect(stanRol({ assigned_to: JA }, JA)).toEqual({ moje: true, dw: false })
+    expect(stanRol({ _dw: JA }, JA)).toEqual({ moje: false, dw: true })
+    expect(stanRol({ _dw: ['in', [JA]] }, JA).dw).toBe(true)
+    expect(stanRol({ assigned_to: 'inny@x.pl' }, JA).moje).toBe(false)
+  })
+
+  it('suma zapala oba przyciski', () => {
+    expect(stanRol({ _rola_ja: 1 }, JA)).toEqual({ moje: true, dw: true })
+  })
+
+  it('ustawia dokladnie jeden filtr serwera na kombinacje', () => {
+    expect(filtryDlaRol({}, JA, { moje: true, dw: false })).toEqual({ assigned_to: JA })
+    expect(filtryDlaRol({}, JA, { moje: false, dw: true })).toEqual({ _dw: JA })
+    expect(filtryDlaRol({}, JA, { moje: true, dw: true })).toEqual({ _rola_ja: 1 })
+    expect(filtryDlaRol({ _rola_ja: 1, _dw: JA }, JA, { moje: false, dw: false })).toEqual({})
+  })
+
+  it('zachowuje inne filtry i nie mutuje argumentu', () => {
+    const wejscie = { status: 'Done', assigned_to: JA }
+    const wynik = filtryDlaRol(wejscie, JA, { moje: false, dw: true })
+    expect(wynik).toEqual({ status: 'Done', _dw: JA })
+    expect(wejscie).toEqual({ status: 'Done', assigned_to: JA })
   })
 })
