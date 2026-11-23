@@ -10827,3 +10827,13 @@ msgstr "Grupowanie nie działa w widoku Kanban."
 # ops#413
 msgid "Brak uprawnień do grupowania po polu {0}"
 msgstr "Brak uprawnień do grupowania po polu {0}"
+
+# ops#411
+msgid "Dodaj osoby"
+msgstr "Dodaj osoby"
+
+msgid "Usuń osobę"
+msgstr "Usuń osobę"
+
+msgid "Brak wyników"
+msgstr "Brak wyników"

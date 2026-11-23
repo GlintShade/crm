@@ -175,7 +175,7 @@
             szerokość 250 px; panel przewija się w sobie tylko w bardzo niskim
             oknie). -->
             <div
-              class="mt-4 flex flex-col gap-5 self-stretch border-t border-outline-gray-2 bg-surface-gray-1 p-4 sm:mt-0 sm:min-h-0 sm:w-[250px] sm:shrink-0 sm:overflow-y-auto sm:rounded-l-lg sm:border-b sm:border-l"
+              class="mt-4 flex flex-col gap-5 self-stretch border-t border-outline-gray-2 bg-surface-gray-1 p-4 sm:mt-0 sm:min-h-0 sm:w-[250px] sm:min-w-0 sm:shrink-0 sm:overflow-y-auto sm:overflow-x-hidden sm:rounded-l-lg sm:border-b sm:border-l"
             >
               <div>
                 <div class="mb-2 text-sm text-ink-gray-5">{{ __('Status') }}</div>
@@ -255,19 +255,10 @@
                 dostepu do szansy lub leada. Serwer usuwa z listy osobe odpowiedzialna. -->
               <div data-testid="zadanie-do-wiadomosci-pole">
                 <div class="mb-2 text-sm text-ink-gray-5">{{ __('Do wiadomości') }}</div>
-                <div class="zadanie-dw relative">
-                  <TableMultiselectInput
-                    v-model="doc.custom_do_wiadomosci"
-                    doctype="Volteo Zadanie DW"
-                    @change="(v) => (doc.custom_do_wiadomosci = v)"
-                  />
-                  <span
-                    v-if="!doc.custom_do_wiadomosci?.length"
-                    class="pointer-events-none absolute left-3 top-1.5 text-base text-ink-gray-4"
-                  >
-                    {{ __('Dodaj osoby') }}
-                  </span>
-                </div>
+                <WyborOsob
+                  v-model="doc.custom_do_wiadomosci"
+                  :wykonawca="doc.assigned_to"
+                />
               </div>
 
               <div>
@@ -386,8 +377,8 @@ const show = defineModel({ type: Boolean })
 // JSON, marka ProEnergy nigdy sie nie ustawia). Patrz komentarz na koncu
 // composables/useTimelinePreferences.js.
 const ZadanieRozmowa = defineAsyncComponent(() => import('@/components/ZadanieRozmowa.vue'))
-// TableMultiselectInput laduje sie leniwie z tego samego powodu (eager graf, ops#411).
-const TableMultiselectInput = defineAsyncComponent(() => import('@/components/Controls/TableMultiselectInput.vue'))
+// WyborOsob laduje sie leniwie z tego samego powodu (eager graf, ops#411).
+const WyborOsob = defineAsyncComponent(() => import('@/components/Controls/WyborOsob.vue'))
 const HistoriaWpisuDialog = defineAsyncComponent(() => import('@/components/HistoriaWpisuDialog.vue'))
 
 const emit = defineEmits(['afterInsert', 'afterUpdate'])
@@ -659,9 +650,5 @@ onBeforeUnmount(() => {
 .zadanie-okno {
   max-height: calc(100vh - 6rem);
   max-height: calc(100dvh - 6rem);
-}
-/* ops#411: kompaktowe pole "Do wiadomosci" (wspolny komponent ma min-h-20); rosnie z osobami. */
-.zadanie-dw :deep(.min-h-20) {
-  min-height: 2rem;
 }
 </style>
