@@ -225,7 +225,7 @@
                   :value="doc.assigned_to && getUser(doc.assigned_to).full_name"
                   doctype="User"
                   :filters="przypisanyFiltry"
-                  :placeholder="__('Select {0}', [__('Osoba odpowiedzialna')])"
+                  :placeholder="__('Wybierz osobę')"
                   :hideMe="true"
                   @change="(v) => (doc.assigned_to = v)"
                 >
@@ -255,11 +255,19 @@
                 dostepu do szansy lub leada. Serwer usuwa z listy osobe odpowiedzialna. -->
               <div data-testid="zadanie-do-wiadomosci-pole">
                 <div class="mb-2 text-sm text-ink-gray-5">{{ __('Do wiadomości') }}</div>
-                <TableMultiselectInput
-                  v-model="doc.custom_do_wiadomosci"
-                  doctype="Volteo Zadanie DW"
-                  @change="(v) => (doc.custom_do_wiadomosci = v)"
-                />
+                <div class="zadanie-dw relative">
+                  <TableMultiselectInput
+                    v-model="doc.custom_do_wiadomosci"
+                    doctype="Volteo Zadanie DW"
+                    @change="(v) => (doc.custom_do_wiadomosci = v)"
+                  />
+                  <span
+                    v-if="!doc.custom_do_wiadomosci?.length"
+                    class="pointer-events-none absolute left-3 top-1.5 text-base text-ink-gray-4"
+                  >
+                    {{ __('Dodaj osoby') }}
+                  </span>
+                </div>
               </div>
 
               <div>
@@ -651,5 +659,9 @@ onBeforeUnmount(() => {
 .zadanie-okno {
   max-height: calc(100vh - 6rem);
   max-height: calc(100dvh - 6rem);
+}
+/* ops#411: kompaktowe pole "Do wiadomosci" (wspolny komponent ma min-h-20); rosnie z osobami. */
+.zadanie-dw :deep(.min-h-20) {
+  min-height: 2rem;
 }
 </style>
