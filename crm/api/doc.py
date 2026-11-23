@@ -20,6 +20,15 @@ from crm.volteo_filtry_szybkie import (
 	waliduj_liste,
 	wybierz_kolejnosc,
 )
+from crm.volteo_grupowanie import (
+	LIMIT_LEADOW,
+	czy_ponad_limit,
+	filtr_grupy,
+	lista_pol,
+	uloz_grupy,
+	zlicz,
+)
+from crm.volteo_grupowanie import pole as pole_grupowania
 from crm.volteo_grupy_filtrow import klucze_z_grup, waliduj_grupy, wydziel_grupy
 from crm.volteo_kategorie import KATEGORIE, kategorie_leadow, moze_widziec
 from crm.volteo_leady_telefon import normalizuj_filtr_telefonu
@@ -89,6 +98,8 @@ COUNT_NAME = (
 	if is_frappe_version("16", above=True)
 	else "count(name) as total_count"
 )
+
+COUNT_GRUPY = {"COUNT": "name", "as": "n"} if is_frappe_version("16", above=True) else "count(name) as n"
 
 # Standardowe/opcjonalne pola, ktore musza zostac dozwolone do filtrowania
 # niezaleznie od tego, co zwroci get_permitted_fields dla danego doctype'u —
@@ -1160,67 +1171,97 @@ def get_filterable_fields(doctype: str, scope: str = "list"):
 
 @frappe.whitelist()
 def get_group_by_fields(doctype: str):
+	"""Pola menu "Grupuj" (ops#413): krotka lista z `crm.volteo_grupowanie.POLA`
+	przycieta do pol, ktore biezacy uzytkownik moze czytac (permlevel, to samo
+	sito co filtry i `get_group_counts`)."""
 	if not frappe.has_permission(doctype, "read"):
 		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
-
-	allowed_fieldtypes = [
-		"Check",
-		"Data",
-		"Float",
-		"Int",
-		"Currency",
-		"Dynamic Link",
-		"Link",
-		"Select",
-		"Duration",
-		"Date",
-		"Datetime",
-	]
-
-	fields = frappe.get_meta(doctype).fields
-	fields = [
-		field
-		for field in fields
-		if field.fieldtype not in no_value_fields
-		and field.fieldtype in allowed_fieldtypes
-		# Pole hidden=1 (np. custom_etap_nr, ops#82 — wewnetrzne pole
-		# sortowania, nigdy nie pokazywane wprost uzytkownikowi) nie ma co
-		# robic w "Grupuj wedlug"; to samo uzasadnienie co pominiecie takich
-		# pol w allowlistach sortowania/filtrow (crm.volteo_lista_szans).
-		and not field.hidden
-	]
-	fields = [
-		{
-			"label": _(field.label),
-			"fieldname": field.fieldname,
-		}
-		for field in fields
-		if field.label and field.fieldname
-	]
-
-	standard_fields = [
-		{"label": "Name", "fieldname": "name"},
-		{"label": "Created On", "fieldname": "creation"},
-		{"label": "Last Modified", "fieldname": "modified"},
-		{"label": "Modified By", "fieldname": "modified_by"},
-		{"label": "Owner", "fieldname": "owner"},
-		{"label": "Like", "fieldname": "_liked_by"},
-		{"label": "Assigned To", "fieldname": "_assign"},
-		{"label": "Comments", "fieldname": "_comments"},
-		{"label": "Created On", "fieldname": "creation"},
-		{"label": "Modified On", "fieldname": "modified"},
-	]
-
-	for field in standard_fields:
-		field["label"] = _(field["label"])
-		fields.append(field)
-
-	# Nie oferuj grupowania po polu, po ktorym i tak nie wolno filtrowac
-	# (permlevel > 0 bez uprawnienia read) — patrz ops#79.
 	permitted = _pola_dozwolone(doctype)
-	fields = [field for field in fields if field.get("fieldname") in permitted]
+	return [field for field in lista_pol(doctype) if field["fieldname"] in permitted]
 
-	return fields
+
+def _wymagaj_pola_grupowania(doctype: str, nazwa: str | None) -> dict:
+	"""Pole musi byc na allowliscie grupowania I czytelne dla roli uzytkownika.
+	Serwer odmawia tak samo przy bezposrednim wywolaniu API (ops#79, ops#413)."""
+	opis = pole_grupowania(doctype, nazwa)
+	if opis is None or nazwa not in _pola_dozwolone(doctype):
+		frappe.throw(_("Brak uprawnień do grupowania po polu {0}").format(nazwa), frappe.PermissionError)
+	return opis
+
+
+def _zastosuj_grupe(doctype: str, filters: dict, grupa: str | dict, view_type: str | None) -> list:
+	"""Zawęza przygotowane `filters` do jednej grupy listy (ops#413). Zwraca liste
+	filtrow (nie dict), bo warunek grupy moze dotyczyc pola, po ktorym lista juz
+	filtruje; dwa warunki na tym samym polu sa wtedy po prostu ANDowane."""
+	grupa = frappe.parse_json(grupa) or {}
+	if view_type == "kanban":
+		frappe.throw(_("Grupowanie nie działa w widoku Kanban."), frappe.ValidationError)
+	nazwa = grupa.get("pole")
+	_wymagaj_pola_grupowania(doctype, nazwa)
+	try:
+		warunek = filtr_grupy(doctype, nazwa, grupa.get("klucz"))
+	except ValueError:
+		frappe.throw(_("Nieprawidłowa grupa listy."), frappe.ValidationError)
+	wynik = [*convert_filter_to_tuple(doctype, filters), [doctype, *warunek]]
+	_sprawdz_filtry(doctype, wynik)
+	return wynik
+
+
+def _opcje_grupowania(doctype: str, opis: dict, pokaz_puste: bool) -> list[str] | None:
+	"""Opcje pola Select (kolejnosc grup) albo, dla statusu-linku, nazwy statusow
+	(tylko do "Pokaz puste grupy"). `get_list` zeby nie obchodzic uprawnien."""
+	df = frappe.get_meta(doctype).get_field(opis["fieldname"])
+	if df is None:
+		return None
+	if df.fieldtype == "Select":
+		return [o for o in (df.options or "").split("\n") if o]
+	if df.fieldtype == "Link" and opis["kind"] == "status" and pokaz_puste:
+		return frappe.get_list(df.options, pluck="name", limit_page_length=0)
+	return None
+
+
+@frappe.whitelist()
+def get_group_counts(
+	doctype: str,
+	filters: dict,
+	group_field: str,
+	show_empty: bool = False,
+	default_filters: dict | None = None,
+):
+	"""Grupy listy z prawdziwymi licznikami (ops#413): jedno zapytanie `group_by`
+	po CALYM wyniku listy (filtry jak w `get_data` przez `_przygotuj_filtry`, w tym
+	grupy ALBO, pigulka kategorii i uprawnienia `frappe.get_list`). Leady: powyzej
+	`LIMIT_LEADOW` rekordow odmowa z `odmowa="limit"` zamiast grup."""
+	if not frappe.has_permission(doctype, "read"):
+		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
+	opis = _wymagaj_pola_grupowania(doctype, group_field)
+	filters, _kategorie, _wybrane = _przygotuj_filtry(doctype, frappe._dict(filters), default_filters, "list")
+
+	razem = frappe.get_list(doctype, filters=filters, fields=[COUNT_NAME])[0].total_count
+	rodzaj = opis["kind"]
+	if czy_ponad_limit(doctype, razem):
+		return {"odmowa": "limit", "limit": LIMIT_LEADOW, "razem": razem, "grupy": [], "rodzaj": rodzaj}
+
+	# shortcut: pola dat grupujemy po pelnym znaczniku czasu i sklejamy w dni/miesiace
+	# w Pythonie (funkcja SQL w `fields` get_list nie jest gwarantowana); wierszy jest
+	# tyle co roznych znacznikow, upgrade gdy lista przekroczy ~50 tys. rekordow.
+	wiersze = frappe.get_list(
+		doctype,
+		filters=filters,
+		fields=[group_field, COUNT_GRUPY],
+		group_by=group_field,
+		order_by=f"{group_field} asc",
+		limit_page_length=0,
+	)
+	liczniki = zlicz(rodzaj, [{"wartosc": w.get(group_field), "n": w.get("n")} for w in wiersze])
+	etykiety = {}
+	if rodzaj == "user":
+		for k in liczniki:
+			if k:
+				etykiety[k] = frappe.get_cached_value("User", k, "full_name") or k
+	opcje = _opcje_grupowania(doctype, opis, bool(show_empty))
+	grupy = uloz_grupy(doctype, group_field, liczniki, opcje=opcje, pokaz_puste=bool(show_empty), etykiety=etykiety)
+	return {"odmowa": None, "limit": LIMIT_LEADOW, "razem": razem, "grupy": grupy, "rodzaj": rodzaj}
 
 
 @frappe.whitelist()
@@ -1498,43 +1539,12 @@ def _dolacz_podzadania_szans(doctype: str, data: list) -> None:
 		d[KLUCZ_PODZADAN] = podsumowanie
 
 
-@frappe.whitelist()
-def get_data(
-	doctype: str,
-	filters: dict,
-	order_by: str,
-	page_length: int = 20,
-	page_length_count: int = 20,
-	column_field: str | None = None,
-	title_field: str | None = None,
-	columns: str | list | None = None,
-	rows: str | list | None = None,
-	kanban_columns: str | list | None = None,
-	kanban_fields: str | list | None = None,
-	view: str | dict | None = None,
-	default_filters: dict | None = None,
-):
-	if not frappe.has_permission(doctype, "read"):
-		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
-
-	custom_view = False
-	filters = frappe._dict(filters)
-	rows = frappe.parse_json(rows or "[]")
-	columns = frappe.parse_json(columns or "[]")
-	kanban_fields = frappe.parse_json(kanban_fields or "[]")
-	kanban_columns = frappe.parse_json(kanban_columns or "[]")
-
-	custom_view_name = view.get("custom_view_name") if view else None
-	view_type = view.get("view_type") if view else None
-	group_by_field = view.get("group_by_field") if view else None
-
-	# Blokada grupowania po polu bez uprawnien odczytu (permlevel > 0) — patrz
-	# ops#79. Walidujemy natychmiast po ekstrakcji, przed jakimkolwiek uzyciem
-	# group_by_field (dopisanie do rows nizej, potem do fields=rows w
-	# frappe.get_list).
-	if group_by_field:
-		_sprawdz_filtry(doctype, {group_by_field: None})
-
+def _przygotuj_filtry(
+	doctype: str, filters: dict, default_filters: dict | None, view_type: str | None
+) -> tuple[dict, tuple[dict, dict] | None, list[str] | None]:
+	"""Wspolny potok filtrow listy: `get_data` i `get_group_counts` (ops#413) liczą
+	WYLACZNIE przez te funkcje, wiec lista i liczniki grup nie moga sie rozjechac.
+	Zwraca `(filters, kategorie, wybrane_kategorie)`; kolejnosc krokow jak w komentarzach."""
 	filters = frappe._dict(_podstaw_me(filters))
 	filters = frappe._dict(_podstaw_dzis(filters, doctype))
 	filters = frappe._dict(_normalizuj_zakres_dnia(filters, doctype))
@@ -1592,6 +1602,50 @@ def get_data(
 	# zeby objac kazdy filtr, ktory trafi do frappe.get_list nizej (l.374/437/448/554
 	# w wersji sprzed tej zmiany) — filters jest jedynym zrodlem tych wywolan.
 	_sprawdz_filtry(doctype, filters)
+	return filters, kategorie, wybrane_kategorie
+
+
+@frappe.whitelist()
+def get_data(
+	doctype: str,
+	filters: dict,
+	order_by: str,
+	page_length: int = 20,
+	page_length_count: int = 20,
+	column_field: str | None = None,
+	title_field: str | None = None,
+	columns: str | list | None = None,
+	rows: str | list | None = None,
+	kanban_columns: str | list | None = None,
+	kanban_fields: str | list | None = None,
+	view: str | dict | None = None,
+	default_filters: dict | None = None,
+	grupa: str | dict | None = None,
+):
+	if not frappe.has_permission(doctype, "read"):
+		frappe.throw(_("Brak uprawnień"), frappe.PermissionError)
+
+	custom_view = False
+	filters = frappe._dict(filters)
+	rows = frappe.parse_json(rows or "[]")
+	columns = frappe.parse_json(columns or "[]")
+	kanban_fields = frappe.parse_json(kanban_fields or "[]")
+	kanban_columns = frappe.parse_json(kanban_columns or "[]")
+
+	custom_view_name = view.get("custom_view_name") if view else None
+	view_type = view.get("view_type") if view else None
+	group_by_field = view.get("group_by_field") if view else None
+
+	# Blokada grupowania po polu bez uprawnien odczytu (permlevel > 0) — patrz
+	# ops#79. Walidujemy natychmiast po ekstrakcji, przed jakimkolwiek uzyciem
+	# group_by_field (dopisanie do rows nizej, potem do fields=rows w
+	# frappe.get_list).
+	if group_by_field:
+		_sprawdz_filtry(doctype, {group_by_field: None})
+
+	filters, kategorie, wybrane_kategorie = _przygotuj_filtry(doctype, filters, default_filters, view_type)
+	if grupa:
+		filters = _zastosuj_grupe(doctype, filters, grupa, view_type)
 
 	is_default = True
 	data = []
