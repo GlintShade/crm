@@ -90,7 +90,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-11-16 14:00:00.000000",
+ "modified": "2026-11-23 12:00:00.000000",
  "modified_by": "shariq@frappe.io",
  "module": "FCRM",
  "name": "CRM Task",
@@ -137,5 +137,6 @@
  "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
- "states": []
+ "states": [],
+ "track_changes": 1
 }

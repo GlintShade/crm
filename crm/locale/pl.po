@@ -10740,3 +10740,6 @@ msgstr "Usuń notatkę"
 
 msgid "Usuń wpis"
 msgstr "Usuń wpis"
+
+msgid "Edytuj opis"
+msgstr "Edytuj opis"

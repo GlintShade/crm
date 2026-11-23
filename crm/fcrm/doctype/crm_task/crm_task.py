@@ -2,6 +2,7 @@
 # For license information, please see license.txt
 
 import frappe
+from frappe import _
 from frappe.desk.form.assign_to import add as assign
 from frappe.desk.form.assign_to import remove as unassign
 from frappe.model.document import Document
@@ -15,6 +16,7 @@ from crm.volteo_powiadomienia_zadan import (
 	wybierz_odbiorcow,
 	wykryj_zdarzenia,
 )
+from crm.volteo_zadania_tresc import POLA_TRESCI, czy_zmiana_tresci_dozwolona
 
 
 class CRMTask(Document):
@@ -81,12 +83,27 @@ class CRMTask(Document):
 			self.status = "Todo"
 
 	def validate(self):
+		self.pilnuj_autora_tresci()
 		if self.is_new() or not self.assigned_to:
 			return
 
 		if self.get_doc_before_save().assigned_to != self.assigned_to:
 			self.unassign_from_previous_user(self.get_doc_before_save().assigned_to)
 			self.assign_to()
+
+	def pilnuj_autora_tresci(self):
+		"""ops#412: tytul i opis istniejacego zadania zmienia tylko autor. Caly zapis
+		jest odrzucany. Kod wewnetrzny przechodzi flaga `volteo_tresc_systemowa`."""
+		przed = None if self.is_new() else self.get_doc_before_save()
+		if not przed or self.flags.get("volteo_tresc_systemowa"):
+			return
+		if not czy_zmiana_tresci_dozwolona(
+			przed.owner,
+			frappe.session.user,
+			{pole: przed.get(pole) for pole in POLA_TRESCI},
+			{pole: self.get(pole) for pole in POLA_TRESCI},
+		):
+			frappe.throw(_("Tytuł i opis zadania może zmienić tylko autor zadania."), frappe.PermissionError)
 
 	def unassign_from_previous_user(self, user: str | None):
 		if user:
