@@ -272,6 +272,23 @@ describe('mozePrzypisywacHandlowca (ta sama bramka co przekaz_handlowcowi)', () 
     expect(mozePrzypisywacHandlowca({ uzytkownik: CC, role: [ROLA_CC] })).toBe(false)
   })
 
+  it('CC z flaga "Wszystkie leady" na kazdym leadzie (ops#425)', () => {
+    for (const ccLeada of [CC, INNY_CC, '', undefined]) {
+      expect(
+        mozePrzypisywacHandlowca({ uzytkownik: CC, role: [ROLA_CC], ccLeada, wszystkieLeady: true }),
+      ).toBe(true)
+    }
+    expect(
+      mozePrzypisywacHandlowca({ uzytkownik: CC, role: [ROLA_CC], ccLeada: INNY_CC, wszystkieLeady: false }),
+    ).toBe(false)
+  })
+
+  it('flaga "Wszystkie leady" bez roli CC nic nie daje (ops#425)', () => {
+    expect(
+      mozePrzypisywacHandlowca({ uzytkownik: 'rep@volteo.pl', role: ['Volteo D2D Sales'], ccLeada: INNY_CC, wszystkieLeady: true }),
+    ).toBe(false)
+  })
+
   it('custom_cc rowny uzytkownikowi bez roli CC nie wystarcza', () => {
     expect(
       mozePrzypisywacHandlowca({ uzytkownik: CC, role: ['Volteo D2D Sales'], ccLeada: CC }),

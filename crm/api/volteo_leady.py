@@ -130,7 +130,12 @@ from crm.api.doc import (
 	rozwin_grupy,
 )
 from crm.api.komentarze import liczby_zmian_komentarzy
-from crm.permissions.org_hierarchy import BYPASS_ROLES, _ma_linie_leady, czy_autor_ma_role_cc
+from crm.permissions.org_hierarchy import (
+	BYPASS_ROLES,
+	_ma_linie_leady,
+	cc_widzi_wszystkie_leady,
+	czy_autor_ma_role_cc,
+)
 from crm.volteo_aktywnosc import czy_dokument_maskuje_cc, maskuj_autora_cc, tekst_sladu, zapisz_slad
 from crm.volteo_kategorie import moze_widziec
 from crm.volteo_leady_telefon import normalizuj_filtr_telefonu
@@ -930,8 +935,9 @@ def przydziel_cc(
 def przekaz_handlowcowi(lead: str, handlowiec: str) -> dict:
 	"""Przekazuje POJEDYNCZY lead od CC do handlowca (`lead_owner`). Dozwolone dla
 	Administratora / ról `BYPASS_ROLES`, albo dla CC (rola `Volteo Call Center`)
-	ustawionego jako `custom_cc` na TYM leadzie, w przeciwnym razie
-	`frappe.PermissionError`. `custom_cc` NIE jest zmieniane: CC zachowuje
+	ustawionego jako `custom_cc` na TYM leadzie albo z flagą "Wszystkie leady"
+	(`cc_widzi_wszystkie_leady`, ops#425; wtedy na dowolnym leadzie), w przeciwnym
+	razie `frappe.PermissionError`. `custom_cc` NIE jest zmieniane: CC zachowuje
 	widoczność leada po przekazaniu (decyzja właściciela).
 
 	Zapis idzie przez `doc.save(ignore_permissions=True)`, dokładnie jak w
@@ -948,7 +954,7 @@ def przekaz_handlowcowi(lead: str, handlowiec: str) -> dict:
 	caller = frappe.session.user
 	caller_roles = set(frappe.get_roles(caller))
 	czy_bypass = caller == "Administrator" or bool(caller_roles & BYPASS_ROLES)
-	czy_wlasny_cc = ROLA_CC in caller_roles and doc.custom_cc == caller
+	czy_wlasny_cc = ROLA_CC in caller_roles and (doc.custom_cc == caller or cc_widzi_wszystkie_leady(caller))
 
 	if not (czy_bypass or czy_wlasny_cc):
 		frappe.throw(
@@ -962,7 +968,9 @@ def przekaz_handlowcowi(lead: str, handlowiec: str) -> dict:
 	doc.lead_owner = handlowiec
 	doc.save(ignore_permissions=True)
 
-	cc_full_name = frappe.db.get_value("User", doc.custom_cc, "full_name") or doc.custom_cc or "CC"
+	# ops#425: slad niesie nazwe wywolujacego CC (to on przekazal, a custom_cc moze byc puste lub cudze).
+	autor_cc = caller if czy_wlasny_cc and not czy_bypass else doc.custom_cc
+	cc_full_name = frappe.db.get_value("User", autor_cc, "full_name") or autor_cc or "CC"
 	handlowiec_full_name = frappe.db.get_value("User", handlowiec, "full_name") or handlowiec
 	zapisz_slad(
 		lead,

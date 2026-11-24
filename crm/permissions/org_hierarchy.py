@@ -87,6 +87,21 @@ def ma_flage_zmiany_statusu_cc(user: str) -> bool:
 ROLA_CALL_CENTER = "Volteo Call Center"
 
 
+def cc_widzi_wszystkie_leady(user: str) -> bool:
+	"""True, gdy `user` ma role `Volteo Call Center` i wlaczone
+	`User.custom_cc_wszystkie_leady` (ops#425). Bez pola na witrynie (skrypt ops
+	nie byl uruchomiony) zwraca False, czyli dotychczasowe zawezenie do `custom_cc`.
+	Bramka `custom_linia_leady` (`_ma_linie_leady`) dziala przed ta flaga.
+	"""
+	if not user or user == "Administrator":
+		return False
+	if not frappe.get_meta("User").has_field("custom_cc_wszystkie_leady"):
+		return False
+	if ROLA_CALL_CENTER not in frappe.get_roles(user):
+		return False
+	return bool(cint(frappe.db.get_value("User", user, "custom_cc_wszystkie_leady")))
+
+
 def czy_autor_ma_role_cc(autor: str, cache: dict[str, bool] | None = None) -> bool:
 	"""True, gdy `autor` (nazwa `User`) ma rolę `Volteo Call Center`.
 
@@ -128,6 +143,10 @@ def _permission_query_conditions(user: str | None, doctype: str):
 
 	roles = set(frappe.get_roles(user))
 	if roles & BYPASS_ROLES:
+		return ""
+
+	# VOLTEO (ops#425): Call Center z flaga "Wszystkie leady" widzi wszystkie leady.
+	if doctype == "CRM Lead" and cc_widzi_wszystkie_leady(user):
 		return ""
 
 	in_tree = hierarchy_enabled() and _in_hierarchy(user)
@@ -211,6 +230,10 @@ def _has_permission(doc, ptype, user, doctype: str) -> bool | None:
 		return True
 
 	if ptype == "create" or not doc.name:
+		return True
+
+	# ops#425: pusty warunek nie moze trafic do .where(...) ponizej.
+	if doctype == "CRM Lead" and cc_widzi_wszystkie_leady(user):
 		return True
 
 	in_tree = hierarchy_enabled() and _in_hierarchy(user)

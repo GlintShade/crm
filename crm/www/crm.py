@@ -77,6 +77,15 @@ def get_context_for_dev():
 	return get_boot()
 
 
+def _ukryj_zakladke(pole: str) -> bool:
+	from crm.permissions.org_hierarchy import czy_admin_lub_bypass
+
+	user = frappe.session.user
+	if czy_admin_lub_bypass(user) or not frappe.get_meta("User").has_field(pole):
+		return False
+	return bool(cint(frappe.db.get_value("User", user, pole)))
+
+
 def get_boot():
 	from crm.api import volteo_ma_linie, volteo_widzi_prowizje
 	from crm.api.user import needs_password_setup
@@ -158,6 +167,11 @@ def get_boot():
 			# the client never decides how much of the commission breakdown to
 			# show, the server trims the payload per volteo_poziom_prowizji.
 			"volteo_widzi_prowizje": volteo_widzi_prowizje(frappe.session.user),
+			# VOLTEO (ops#425): ukrycie zakladek Umowy / Klienci w menu i na trasach.
+			# Menu i trasy tylko; dane zawezaja uprawnienia serwera. Zawsze False dla
+			# Administratora i BYPASS_ROLES oraz gdy pola nie ma jeszcze w meta User.
+			"volteo_ukryj_umowy": _ukryj_zakladke("custom_ukryj_umowy"),
+			"volteo_ukryj_klienci": _ukryj_zakladke("custom_ukryj_klienci"),
 			"translated_doctypes": get_translated_doctypes(),
 			"translated_messages": get_messages_for_boot(),
 			"timezone": {

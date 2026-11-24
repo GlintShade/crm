@@ -37,6 +37,15 @@ USER_FIELDS = [
 	"custom_poziom_prowizji",
 ]
 
+# ops#425: pola z ops/crm-uzytkownik-zakres-cc.py; zapytanie dostaje je tylko gdy
+# istnieja w meta User (obraz moze wyjsc przed skryptem, a nieznana kolumna
+# wywrocilaby cala liste uzytkownikow).
+USER_FIELDS_ZAKRES_CC = [
+	"custom_cc_wszystkie_leady",
+	"custom_ukryj_umowy",
+	"custom_ukryj_klienci",
+]
+
 
 @frappe.whitelist()
 def get_users(include_all: bool = False):
@@ -76,9 +85,11 @@ def get_users(include_all: bool = False):
 	if not include_all:
 		user_filters["name"] = ["in", list(crm_user_names)]
 
+	meta_user = frappe.get_meta("User")
+	user_fields = USER_FIELDS + [f for f in USER_FIELDS_ZAKRES_CC if meta_user.has_field(f)]
 	users = frappe.qb.get_query(
 		"User",
-		fields=USER_FIELDS,
+		fields=user_fields,
 		order_by="full_name asc",
 		filters=user_filters,
 	).run(as_dict=1)

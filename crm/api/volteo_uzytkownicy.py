@@ -269,7 +269,16 @@ def volteo_zmien_role(email: str, rola: str) -> dict:
 
 
 @frappe.whitelist()
-def volteo_ustaw_linie(email: str, oze: int, cp: int, leady: int = 0, status_cc: int = 0) -> dict:
+def volteo_ustaw_linie(
+	email: str,
+	oze: int,
+	cp: int,
+	leady: int = 0,
+	status_cc: int = 0,
+	wszystkie_leady: int = 0,
+	ukryj_umowy: int = 0,
+	ukryj_klienci: int = 0,
+) -> dict:
 	"""Ustawia flagi dostępu do linii produktowych (`custom_linia_oze` /
 	`custom_linia_cp`, issue #16) oraz dostępu do modułu Leady
 	(`custom_linia_leady`, issue #27) na koncie `User`.
@@ -292,6 +301,14 @@ def volteo_ustaw_linie(email: str, oze: int, cp: int, leady: int = 0, status_cc:
 	zezwolenie dla wskazanego handlowca na zmianę statusu CC leada. Domyślnie 0
 	z tego samego powodu co `leady`: stare wywołanie bez parametru nie może
 	włączyć flagi niechcący.
+
+	`wszystkie_leady` zapisuje `custom_cc_wszystkie_leady` (ops#425): konto z rolą
+	`Volteo Call Center` widzi i obsługuje wszystkie leady, nie tylko te z
+	`custom_cc` równym kontu. `ukryj_umowy` / `ukryj_klienci` zapisują
+	`custom_ukryj_umowy` / `custom_ukryj_klienci` (ops#425): chowają zakładki w
+	menu i na trasach (dane zawężają uprawnienia serwera); wartość 1 oznacza
+	ukrycie. Te trzy pola tworzy `ops/crm-uzytkownik-zakres-cc.py`; gdy ich jeszcze
+	nie ma na witrynie, zapis pomija je po cichu, więc obraz działa przed skryptem.
 	"""
 	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
 
@@ -307,25 +324,26 @@ def volteo_ustaw_linie(email: str, oze: int, cp: int, leady: int = 0, status_cc:
 	leady_flaga = 1 if cint(leady) else 0
 	status_cc_flaga = 1 if cint(status_cc) else 0
 
-	frappe.db.set_value(
-		"User",
-		email,
-		{
-			"custom_linia_oze": oze_flaga,
-			"custom_linia_cp": cp_flaga,
-			"custom_linia_leady": leady_flaga,
-			"custom_zmiana_statusu_cc": status_cc_flaga,
-		},
-		update_modified=False,
-	)
-
-	return {
-		"user": email,
+	wartosci = {
 		"custom_linia_oze": oze_flaga,
 		"custom_linia_cp": cp_flaga,
 		"custom_linia_leady": leady_flaga,
 		"custom_zmiana_statusu_cc": status_cc_flaga,
 	}
+	# ops#425: trzy nowe pola, tylko gdy skrypt ops je juz utworzyl.
+	meta_user = frappe.get_meta("User")
+	for pole, wartosc in (
+		("custom_cc_wszystkie_leady", wszystkie_leady),
+		("custom_ukryj_umowy", ukryj_umowy),
+		("custom_ukryj_klienci", ukryj_klienci),
+	):
+		wartosci[pole] = 1 if cint(wartosc) else 0
+		if not meta_user.has_field(pole):
+			wartosci.pop(pole)
+
+	frappe.db.set_value("User", email, wartosci, update_modified=False)
+
+	return {"user": email, **wartosci}
 
 
 @frappe.whitelist()

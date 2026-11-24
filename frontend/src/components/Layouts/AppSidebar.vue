@@ -249,11 +249,13 @@ const links = [
     label: __('Contacts'),
     icon: ContactsIcon,
     to: 'Contacts',
+    condition: () => !window.volteo_ukryj_klienci, // VOLTEO (ops#425)
   },
   {
     label: 'Umowy',
     icon: DealsIcon,
     to: 'Deals',
+    condition: () => !window.volteo_ukryj_umowy, // VOLTEO (ops#425)
   },
   {
     label: 'Rozliczenia prowizji', // VOLTEO (ops#283): tylko admin i core admin

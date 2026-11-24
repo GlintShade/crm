@@ -511,6 +511,7 @@ const mozeEdytowacHandlowca = computed(() => {
     uzytkownik: ja.name,
     role: ja.roles,
     ccLeada: emailUzytkownikaZKomorki(props.row.custom_cc),
+    wszystkieLeady: Boolean(ja.custom_cc_wszystkie_leady),
   })
 })
 

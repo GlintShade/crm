@@ -98,7 +98,7 @@ export const WOJEWODZTWA = [
 // crm.api.volteo_leady.przekaz_handlowcowi, przez ktore idzie zapis:
 // Administrator albo rola z BYPASS_ROLES (crm/permissions/org_hierarchy.py)
 // zawsze, CC (Volteo Call Center) tylko na leadzie, ktorego custom_cc to on
-// sam. Handlowiec D2D i wszyscy inni: komorka tylko do odczytu. Zwykly
+// sam, albo na kazdym leadzie, gdy ma flage "Wszystkie leady" (ops#425). Handlowiec D2D i wszyscy inni: komorka tylko do odczytu. Zwykly
 // set_value na lead_owner nie wchodzi w gre: pole ma permlevel 1, a D2D, CC
 // i Backend nie maja na nim write (sonda produkcji 2026-11-04). To jest
 // wylacznie decyzja UI, serwer sprawdza to samo jeszcze raz.
@@ -109,13 +109,12 @@ export const ROLE_BYPASS_HANDLOWCA = [
 ]
 export const ROLA_CC = 'Volteo Call Center'
 
-export function mozePrzypisywacHandlowca({ uzytkownik, role, ccLeada } = {}) {
+export function mozePrzypisywacHandlowca({ uzytkownik, role, ccLeada, wszystkieLeady } = {}) {
   if (uzytkownik === 'Administrator') return true
   const lista = Array.isArray(role) ? role : []
   if (ROLE_BYPASS_HANDLOWCA.some((r) => lista.includes(r))) return true
-  return Boolean(
-    uzytkownik && lista.includes(ROLA_CC) && ccLeada && ccLeada === uzytkownik,
-  )
+  if (!uzytkownik || !lista.includes(ROLA_CC)) return false
+  return Boolean(wszystkieLeady) || Boolean(ccLeada && ccLeada === uzytkownik)
 }
 
 // CC leada z wiersza listy: parseRows daje dla custom_cc ten sam ksztalt co

@@ -4,7 +4,7 @@ import { usersStore } from '@/stores/users'
 import { sessionStore } from '@/stores/session'
 import { viewsStore } from '@/stores/views'
 import { isStaleChunkError, shouldReload } from '@/utils/chunkReload'
-import { czyZablokowana } from '@/utils/strazTras'
+import { czyZablokowana, trasaStartowa } from '@/utils/strazTras'
 import { typTrasyWidoku } from '@/utils/grupowanieListy'
 
 let personaChecked = false
@@ -339,11 +339,13 @@ router.beforeEach(async (to, from, next) => {
   // /leads or /mapa-leadow directly by URL and land on a page the server returns
   // empty data for, instead of a clear "Not Permitted". Pure guard logic lives in
   // utils/strazTras.js so it is unit-testable without importing this router.
-  if (
-    isLoggedIn &&
-    czyZablokowana(to.name, { hideLeads: window.hide_leads }) &&
-    to.name !== 'Not Permitted'
-  ) {
+  // ops#425: ta sama straż chowa też Umowy i Klientów (flagi per konto z get_boot).
+  const flagiTras = {
+    hideLeads: window.hide_leads,
+    ukryjUmowy: window.volteo_ukryj_umowy,
+    ukryjKlienci: window.volteo_ukryj_klienci,
+  }
+  if (isLoggedIn && czyZablokowana(to.name, flagiTras) && to.name !== 'Not Permitted') {
     return next({ name: 'Not Permitted' })
   }
 
@@ -398,12 +400,17 @@ router.beforeEach(async (to, from, next) => {
       // VOLTEO: fallback route is always Deals — reps land on Szanse, Leads is
       // a secondary tool, not the primary landing surface (independent of
       // whether the Leads tab is currently hidden for this user).
-      next({ name: 'Deals' })
+      // ops#425: with Umowy hidden the start route is Leady, then Zadania.
+      next({ name: trasaStartowa('Deals', flagiTras) })
       return
     }
 
     let { route_name, type, name, is_standard } = defaultView
     route_name = route_name || 'Deals' // VOLTEO: same fallback as above
+    if (trasaStartowa(route_name, flagiTras) !== route_name) {
+      next({ name: trasaStartowa(route_name, flagiTras) })
+      return
+    }
 
     if (name && !is_standard) {
       next({

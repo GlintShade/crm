@@ -12,8 +12,9 @@
   hierarchii pusta liste), zapis przez `crm.api.volteo_leady.
   przekaz_handlowcowi`. Widocznosc SAMEGO przycisku w miejscu uzycia
   (Lead.vue: isCallCenter() || isVolteoAdmin()) jest tylko kosmetyczna (UX)
-  -- serwer egzekwuje uprawnienia niezaleznie (admin/BYPASS_ROLES albo CC
-  ustawiony jako custom_cc na TYM leadzie).
+  -- serwer egzekwuje uprawnienia niezaleznie (admin/BYPASS_ROLES, CC
+  ustawiony jako custom_cc na TYM leadzie albo CC z flaga "Wszystkie leady",
+  ops#425; przycisk jest widoczny dla kazdego CC, wiec flaga nie zmienia tu UI).
 -->
 <template>
   <Button

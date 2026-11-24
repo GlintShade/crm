@@ -107,7 +107,7 @@
       <p class="text-p-sm text-ink-gray-5 max-w-2xl">
         {{
           __(
-            'Wyłączenie linii ukrywa Kalkulator i Dokumenty tej linii dla wskazanego użytkownika i blokuje jej użycie po stronie serwera. Wyłączenie „Leady” ukrywa moduł Leady (listę i mapę) i blokuje przydzielanie temu użytkownikowi. Nie dotyczy kont System Manager / Volteo Core Admin / Volteo Backend, te zawsze mają pełny dostęp. Włączenie „Zmiana statusu CC” pozwala wskazanemu handlowcowi zmieniać status CC leada (domyślnie zablokowane).',
+            'Wyłączenie linii ukrywa Kalkulator i Dokumenty tej linii dla wskazanego użytkownika i blokuje jej użycie po stronie serwera. Wyłączenie „Leady” ukrywa moduł Leady (listę i mapę) i blokuje przydzielanie temu użytkownikowi. Nie dotyczy kont System Manager / Volteo Core Admin / Volteo Backend, te zawsze mają pełny dostęp. Włączenie „Zmiana statusu CC” pozwala wskazanemu handlowcowi zmieniać status CC leada (domyślnie zablokowane). „Wszystkie leady” dotyczy kont Call Center: włączone, konto widzi wszystkie leady; wyłączone, tylko leady z polem „Przypisany CC” ustawionym na to konto. Odznaczenie „Zakładka Umowy” lub „Zakładka Klienci” chowa tę zakładkę w menu i blokuje wejście z adresu (dane i tak zawęża serwer; nie dotyczy kont System Manager / Volteo Core Admin / Volteo Backend).',
           )
         }}
       </p>
@@ -147,6 +147,27 @@
             :modelValue="Boolean(linieForm.statusCc)"
             :disabled="setLinie.loading"
             @update:modelValue="(val) => (linieForm.statusCc = val ? 1 : 0)"
+          />
+          <FormControl
+            type="checkbox"
+            :label="__('Wszystkie leady')"
+            :modelValue="Boolean(linieForm.wszystkieLeady)"
+            :disabled="setLinie.loading"
+            @update:modelValue="(val) => (linieForm.wszystkieLeady = val ? 1 : 0)"
+          />
+          <FormControl
+            type="checkbox"
+            :label="__('Zakładka Umowy')"
+            :modelValue="Boolean(linieForm.zakladkaUmowy)"
+            :disabled="setLinie.loading"
+            @update:modelValue="(val) => (linieForm.zakladkaUmowy = val ? 1 : 0)"
+          />
+          <FormControl
+            type="checkbox"
+            :label="__('Zakładka Klienci')"
+            :modelValue="Boolean(linieForm.zakladkaKlienci)"
+            :disabled="setLinie.loading"
+            @update:modelValue="(val) => (linieForm.zakladkaKlienci = val ? 1 : 0)"
           />
         </div>
       </div>
@@ -416,6 +437,12 @@ function emptyLinieForm() {
     leady: 0,
     // Zmiana statusu CC przez handlowca (ops#308): domyslnie wylaczona.
     statusCc: 0,
+    // ops#425: "Wszystkie leady" (konto CC), domyslnie wylaczone. Zakladki
+    // Umowy i Klienci sa tu dodatnie (1 = widoczna), baza trzyma odwrotnosc
+    // (custom_ukryj_umowy / custom_ukryj_klienci).
+    wszystkieLeady: 0,
+    zakladkaUmowy: 1,
+    zakladkaKlienci: 1,
   }
 }
 
@@ -464,6 +491,9 @@ watch(
     linieForm.cp = cached.custom_linia_cp === undefined ? 1 : cached.custom_linia_cp ? 1 : 0
     linieForm.leady = cached.custom_linia_leady ? 1 : 0
     linieForm.statusCc = cached.custom_zmiana_statusu_cc ? 1 : 0
+    linieForm.wszystkieLeady = cached.custom_cc_wszystkie_leady ? 1 : 0
+    linieForm.zakladkaUmowy = cached.custom_ukryj_umowy ? 0 : 1
+    linieForm.zakladkaKlienci = cached.custom_ukryj_klienci ? 0 : 1
   },
 )
 
@@ -475,6 +505,9 @@ const setLinie = createResource({
     cp: linieForm.cp ? 1 : 0,
     leady: linieForm.leady ? 1 : 0,
     status_cc: linieForm.statusCc ? 1 : 0,
+    wszystkie_leady: linieForm.wszystkieLeady ? 1 : 0,
+    ukryj_umowy: linieForm.zakladkaUmowy ? 0 : 1,
+    ukryj_klienci: linieForm.zakladkaKlienci ? 0 : 1,
   }),
   onSuccess: (data) => {
     linieError.value = ''
@@ -489,6 +522,9 @@ const setLinie = createResource({
       target.custom_linia_cp = data.custom_linia_cp
       target.custom_linia_leady = data.custom_linia_leady
       target.custom_zmiana_statusu_cc = data.custom_zmiana_statusu_cc
+      target.custom_cc_wszystkie_leady = data.custom_cc_wszystkie_leady
+      target.custom_ukryj_umowy = data.custom_ukryj_umowy
+      target.custom_ukryj_klienci = data.custom_ukryj_klienci
     }
     Object.assign(linieForm, emptyLinieForm())
   },
