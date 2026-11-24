@@ -34,7 +34,7 @@ index 896d35b..3efff43 100644
  function ariaSelected(cell: CalendarPanelCell): 'true' | 'false' {
    return cell.isSelected || cell.isRangeStart || cell.isRangeEnd
 diff --git a/node_modules/frappe-ui/src/components/DatePicker/DatePicker.vue b/node_modules/frappe-ui/src/components/DatePicker/DatePicker.vue
-index 86bd7d4..cb48bf9 100644
+index 86bd7d4..04538dc 100644
 --- a/node_modules/frappe-ui/src/components/DatePicker/DatePicker.vue
 +++ b/node_modules/frappe-ui/src/components/DatePicker/DatePicker.vue
 @@ -60,7 +60,7 @@
@@ -46,6 +46,19 @@ index 86bd7d4..cb48bf9 100644
            :min="props.min"
            :max="props.max"
            v-model:focused-date="focusedDate"
+@@ -365,6 +365,12 @@ function handleDateCellClick(date: string | Date | Dayjs) {
+ }
+ 
+ function handleTodayClick() {
++  if (props.todayValue) {
++    emit('update:modelValue', props.todayValue)
++    emit('change', props.todayValue)
++    isOpen.value = false
++    return
++  }
+   handleDateCellClick(dayjsLocal())
+ }
+ 
 diff --git a/node_modules/frappe-ui/src/components/DatePicker/DateRangePicker.vue b/node_modules/frappe-ui/src/components/DatePicker/DateRangePicker.vue
 index a33cf45..ff53dce 100644
 --- a/node_modules/frappe-ui/src/components/DatePicker/DateRangePicker.vue
@@ -116,10 +129,19 @@ index 0ec591f..680ae98 100644
          </div>
        </div>
 diff --git a/node_modules/frappe-ui/src/components/DatePicker/types.ts b/node_modules/frappe-ui/src/components/DatePicker/types.ts
-index ca66aa0..d721fb3 100644
+index ca66aa0..84a7a13 100644
 --- a/node_modules/frappe-ui/src/components/DatePicker/types.ts
 +++ b/node_modules/frappe-ui/src/components/DatePicker/types.ts
-@@ -245,6 +245,18 @@ export interface DateTimePickerActionsSlotProps {
+@@ -105,6 +105,8 @@ export interface CommonDatePickerProps extends InputLabelingProps {
+ }
+ 
+ export interface DatePickerProps extends CommonDatePickerProps {
++  /** Volteo: when set, the calendar Today button emits this value instead of today's date. */
++  todayValue?: string
+   /**
+    * Uncontrolled initial value for the picker.
+    * @deprecated Use `modelValue` with `v-model` instead.
+@@ -245,6 +247,18 @@ export interface DateTimePickerActionsSlotProps {
    close: () => void
  }
  
@@ -138,7 +160,7 @@ index ca66aa0..d721fb3 100644
  export interface DatePickerSlots {
    /** Custom trigger renderer for the picker. */
    trigger?: (props: DatePickerTriggerSlotProps) => any
-@@ -301,6 +313,13 @@ export interface DateTimePickerSlots {
+@@ -301,6 +315,13 @@ export interface DateTimePickerSlots {
     * omitted, the popover shows the calendar and time picker only.
     */
    actions?: (props: DateTimePickerActionsSlotProps) => any

@@ -1007,6 +1007,7 @@ function getValueControl(f) {
       value: f.value,
       iconLeft: '',
       placeholder: __('Wybierz datę'),
+      todayValue: czyPrzyciskDzis(f) ? '@dzis' : undefined,
     })
   } else if (typeDate.includes(fieldtype) && operator == 'between') {
     return h(DateRangePicker, {
@@ -1030,6 +1031,9 @@ function getValueControl(f) {
         fieldtype == 'Date'
           ? __('Wybierz datę')
           : __('Wybierz datę i godzinę'),
+      ...(fieldtype == 'Date' && czyPrzyciskDzis(f)
+        ? { todayValue: '@dzis' }
+        : {}),
     })
   } else {
     return h(FormControl, { type: 'text' })

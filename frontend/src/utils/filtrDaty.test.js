@@ -70,7 +70,7 @@ describe('pasek szybki daty', () => {
   it('odczytuje dzien z filtra', () => {
     expect(dzienZFiltraSzybkiegoDaty(['w dniu', '2026-10-03'])).toBe('2026-10-03')
     expect(dzienZFiltraSzybkiegoDaty(['W Dniu', '2026-10-03'])).toBe('2026-10-03')
-    expect(dzienZFiltraSzybkiegoDaty(['w dniu', '@dzis'])).toBe('')
+    expect(dzienZFiltraSzybkiegoDaty(['w dniu', '@dzis'])).toBe('@dzis')
   })
   it('inne ksztalty daja null', () => {
     expect(dzienZFiltraSzybkiegoDaty('2026-10-03')).toBeNull()

@@ -25,10 +25,23 @@
     :userScope="true"
     @change="(data) => updateFilter(filter, data)"
   />
+  <div
+    v-else-if="filter.fieldtype === 'Date' && filter.value === '@dzis'"
+    class="flex h-7 w-full items-center justify-between rounded border border-outline-gray-2 px-2 text-sm text-ink-gray-8"
+  >
+    <span>{{ __('Today') }}</span>
+    <Button
+      variant="ghost"
+      size="sm"
+      icon="lucide-x"
+      @click="updateFilter(filter, '')"
+    />
+  </div>
   <DatePicker
     v-else-if="['Date', 'Datetime'].includes(filter.fieldtype)"
     class="border-none"
     :value="filter.value"
+    :today-value="filter.fieldtype === 'Date' ? '@dzis' : undefined"
     :placeholder="filter.label"
     @change="(v) => updateFilter(filter, v)"
   />
@@ -43,7 +56,7 @@
 <script setup>
 import Link from '@/components/Controls/Link.vue'
 import QuickFilterCheckList from '@/components/Controls/QuickFilterCheckList.vue'
-import { FormControl, DatePicker } from 'frappe-ui'
+import { Button, FormControl, DatePicker } from 'frappe-ui'
 import { useDebounceFn } from '@vueuse/core'
 import { etykietaMoje } from '@/utils/etykietaMoje'
 import { opcjeEtapu } from '@/utils/etapFiltr'

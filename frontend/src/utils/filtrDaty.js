@@ -57,7 +57,7 @@ export function dzienZFiltraSzybkiegoDaty(raw) {
     raw[0].toLowerCase() === OPERATOR_W_DNIU
   ) {
     const dzien = typeof raw[1] === 'string' ? raw[1] : ''
-    return dzien === '@dzis' ? '' : dzien.slice(0, 10)
+    return dzien.slice(0, 10)
   }
   return null
 }
