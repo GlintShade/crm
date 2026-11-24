@@ -12,12 +12,12 @@ prawdą. Pozostałe konta i wyłączony drugi składnik: zachowanie rdzenia.
 """
 
 import frappe
+import frappe.core.doctype.user.user as rdzen_user
+import frappe.www.login as rdzen_login
 from frappe import _
-from frappe.core.doctype.user.user import update_password as _rdzen_update_password
 from frappe.twofactor import get_default as get_2fa_default
 from frappe.twofactor import should_run_2fa
 from frappe.utils.data import sha256_hash
-from frappe.www.login import login_via_key as _rdzen_login_via_key
 
 
 def _konto_objete(user: str | None) -> bool:
@@ -50,7 +50,7 @@ def login_via_key(key: str):
 			http_status_code=403,
 			indicator_color="red",
 		)
-	return _rdzen_login_via_key(key)
+	return rdzen_login.login_via_key(key)
 
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])
@@ -58,7 +58,7 @@ def update_password(
 	new_password: str, logout_all_sessions: int = 0, key: str | None = None, old_password: str | None = None
 ):
 	pierwsze_haslo = _pierwsze_haslo_konta_objetego(key)
-	wynik = _rdzen_update_password(new_password, logout_all_sessions, key, old_password)
+	wynik = rdzen_user.update_password(new_password, logout_all_sessions, key, old_password)
 	if pierwsze_haslo and frappe.local.response.get("http_status_code") != 410:
 		# ops#422: nowe konto objete 2FA ustawilo PIERWSZE haslo: otwieramy okno rejestracji aplikacji
 		from crm.api.volteo_2fa_rejestracja import otworz_okno

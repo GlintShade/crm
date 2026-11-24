@@ -49,11 +49,9 @@ import json
 from typing import Any
 
 import frappe
-from frappe.client import get_count as _rdzen_get_count
-from frappe.client import get_list as _rdzen_get_list
-from frappe.client import get_value as _rdzen_get_value
-from frappe.desk import reportview as _rdzen_reportview
-from frappe.desk.search import search_link as _rdzen_search_link
+import frappe.client as rdzen_client
+import frappe.desk.reportview as rdzen_reportview
+import frappe.desk.search as rdzen_search
 
 from crm.api.doc import _rozwin_filtr_klienta, _sprawdz_filtry
 from crm.volteo_zadania_lista import DOCTYPE_ZADANIA, KLUCZE_PSEUDO_FILTRA
@@ -78,7 +76,7 @@ from crm.volteo_zadania_lista import DOCTYPE_ZADANIA, KLUCZE_PSEUDO_FILTRA
 # `_sprawdz_filtry` globalnie (zmiana w doc.py, poza zakresem tego agenta),
 # ten jeden klucz jest zdejmowany WYLACZNIE z kopii uzywanej do walidacji w
 # `search_link` ponizej -- oryginalny slownik `filters` (z kluczem nadal
-# obecnym) jedzie bez zmian do `_rdzen_search_link`, bo to rdzen Frappe, nie
+# obecnym) jedzie bez zmian do `rdzen_search.search_link`, bo to rdzen Frappe, nie
 # ten straznik, ma go po cichu usunac.
 KLUCZE_SPECJALNE_SEARCH_LINK = frozenset({"ignore_user_type"})
 
@@ -105,7 +103,7 @@ def _filtry_do_walidacji_search_link(filters: object) -> object:
 # inne nieznane pole (403), a gdyby jednak dotarly do rdzenia, ten dostalby
 # odwolanie do nieistniejacej kolumny w warunku SQL. Dlatego te klucze sa
 # zdejmowane CALKOWICIE, zarowno z kopii do walidacji, jak i z filtrow
-# faktycznie wysylanych do `_rdzen_search_link` -- SPA i tak sklada dropdown
+# faktycznie wysylanych do `rdzen_search.search_link` -- SPA i tak sklada dropdown
 # sam z listy zwroconej przez dedykowany endpoint (handlowcy()/osoby_cc()),
 # nie z filtra przekazanego do search_link, wiec brak tego klucza po stronie
 # rdzenia niczego nie psuje.
@@ -114,7 +112,7 @@ ZNACZNIKI_ZAKRESOW = frozenset({"volteo_scope_handlowcy", "volteo_scope_cc"})
 
 def _bez_znacznikow_zakresow(filters: object) -> object:
 	"""Zwraca kopie `filters` bez kluczy z `ZNACZNIKI_ZAKRESOW`. Wynik tej
-	funkcji jedzie DALEJ do `_rdzen_search_link` (w przeciwienstwie do
+	funkcji jedzie DALEJ do `rdzen_search.search_link` (w przeciwienstwie do
 	`_filtry_do_walidacji_search_link` powyzej, ktorej wynik sluzy WYLACZNIE
 	do walidacji) -- te klucze nie maja prawa dotrzec do rdzenia Frappe w
 	ogole, patrz komentarz przy `ZNACZNIKI_ZAKRESOW` wyzej. Dziala tylko na
@@ -267,7 +265,7 @@ def get_list(
 	sama linia byla PRZYCZYNA regresji „brak zestawu” w Zestaw)."""
 	filters = _filtry_z_rozwinietym_klientem(doctype, filters)
 	_waliduj(doctype, filters, or_filters, parenttype=parent)
-	return _rdzen_get_list(
+	return rdzen_client.get_list(
 		doctype,
 		fields=fields,
 		filters=filters,
@@ -300,7 +298,7 @@ def get_count(
 	DOZWOLONE`, ktore i tak zawiera `parent`/`parenttype`/`parentfield`)."""
 	filters = _filtry_z_rozwinietym_klientem(doctype, filters)
 	_waliduj(doctype, filters)
-	return _rdzen_get_count(doctype, filters=filters, debug=debug, cache=cache)
+	return rdzen_client.get_count(doctype, filters=filters, debug=debug, cache=cache)
 
 
 @frappe.whitelist()
@@ -319,7 +317,7 @@ def get_value(
 	jak w `get_list` powyzej (ops#80 follow-up)."""
 	filters = _filtry_z_rozwinietym_klientem(doctype, filters)
 	_waliduj(doctype, filters, parenttype=parent)
-	return _rdzen_get_value(doctype, fieldname, filters=filters, as_dict=as_dict, debug=debug, parent=parent)
+	return rdzen_client.get_value(doctype, fieldname, filters=filters, as_dict=as_dict, debug=debug, parent=parent)
 
 
 @frappe.whitelist()
@@ -329,7 +327,7 @@ def get():
 	Pythona — rdzeń czyta `doctype`/`filters`/`or_filters` z
 	`frappe.local.form_dict`."""
 	_waliduj_form_dict()
-	return _rdzen_reportview.get()
+	return rdzen_reportview.get()
 
 
 @frappe.whitelist()
@@ -341,7 +339,7 @@ def reportview_get_count() -> int:
 	funkcje żyją w tym samym module — dwie definicje `def get_count` na tym
 	samym poziomie modułu przesłoniłyby się nawzajem."""
 	_waliduj_form_dict()
-	return _rdzen_reportview.get_count()
+	return rdzen_reportview.get_count()
 
 
 @frappe.whitelist()
@@ -350,7 +348,7 @@ def export_query():
 	"""Strażnik nad `frappe.desk.reportview.export_query` (ops#80). Eksport
 	listy szans/klientów do CSV — jak wyżej, dane z `frappe.local.form_dict`."""
 	_waliduj_form_dict()
-	return _rdzen_reportview.export_query()
+	return rdzen_reportview.export_query()
 
 
 @frappe.whitelist()
@@ -370,19 +368,19 @@ def search_link(
 
 	Issue #119: `_waliduj` widzi filtry PO zdjęciu `ignore_user_type`
 	(patrz `_filtry_do_walidacji_search_link` i komentarz nad nim wyżej).
-	`_rdzen_search_link` niżej dostaje oryginalny `filters`, z tym kluczem
+	`rdzen_search.search_link` niżej dostaje oryginalny `filters`, z tym kluczem
 	nadal obecnym, bez żadnej zmiany zachowania rdzenia Frappe.
 
 	Issue #119 (uzupelnienie): `ZNACZNIKI_ZAKRESOW` (volteo_scope_cc,
 	volteo_scope_handlowcy) sa zdejmowane NAJPIERW, calkowicie, zanim
-	`filters` w ogole trafi do walidacji albo do `_rdzen_search_link` --
+	`filters` w ogole trafi do walidacji albo do `rdzen_search.search_link` --
 	patrz komentarz przy `ZNACZNIKI_ZAKRESOW`/`_bez_znacznikow_zakresow`
 	wyzej. Desk (/app) wysyla te znaczniki tak samo jak SPA forka (bo
 	`link_filters` na DocField dziala generycznie), ale rdzen Frappe ich nie
 	zna."""
 	filters = _bez_znacznikow_zakresow(filters)
 	_waliduj(doctype, _filtry_do_walidacji_search_link(filters))
-	return _rdzen_search_link(
+	return rdzen_search.search_link(
 		doctype,
 		txt,
 		query=query,

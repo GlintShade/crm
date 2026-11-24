@@ -35,12 +35,9 @@ import json
 from typing import Any
 
 import frappe
+import frappe.client as rdzen_client
+import frappe.handler as rdzen_handler
 from frappe import _
-from frappe.client import insert as _rdzen_insert
-from frappe.client import save as _rdzen_save
-from frappe.client import set_value as _rdzen_set_value
-from frappe.client import submit as _rdzen_submit
-from frappe.handler import run_doc_method as _rdzen_run_doc_method
 from frappe.model.document import Document
 
 from crm.volteo_odpowiedz_filtr import czy_filtrowac, oczysc_docinfo, odfiltruj
@@ -97,25 +94,25 @@ def set_value(
 	value: Any | None = None,
 ):
 	"""Strażnik nad `frappe.client.set_value` (ops#180)."""
-	return _odfiltruj(_rdzen_set_value(doctype, name, fieldname, value=value))
+	return _odfiltruj(rdzen_client.set_value(doctype, name, fieldname, value=value))
 
 
 @frappe.whitelist(methods=["POST", "PUT"])
 def insert(doc: str | dict[str, Any] | None = None):
 	"""Strażnik nad `frappe.client.insert` (ops#180)."""
-	return _odfiltruj(_rdzen_insert(doc=doc))
+	return _odfiltruj(rdzen_client.insert(doc=doc))
 
 
 @frappe.whitelist(methods=["POST", "PUT"])
 def save(doc: str | dict[str, Any]):
 	"""Strażnik nad `frappe.client.save` (ops#180)."""
-	return _odfiltruj(_rdzen_save(doc))
+	return _odfiltruj(rdzen_client.save(doc))
 
 
 @frappe.whitelist(methods=["POST", "PUT"])
 def submit(doc: str | dict[str, Any]):
 	"""Strażnik nad `frappe.client.submit` (ops#180)."""
-	return _odfiltruj(_rdzen_submit(doc))
+	return _odfiltruj(rdzen_client.submit(doc))
 
 
 @frappe.whitelist()
@@ -132,7 +129,7 @@ def run_doc_method(
 	celowo, żeby walidacja typów nie zmieniła zachowania Desk. Rdzeń nie ogranicza
 	metod HTTP dla `run_doc_method`, więc wrapper też nie; Guest nie ma dostępu (rdzeń
 	go dopuszczał, potem i tak wymagał odczytu dokumentu)."""
-	wynik = _rdzen_run_doc_method(method, docs=docs, dt=dt, dn=dn, arg=arg, args=args)
+	wynik = rdzen_handler.run_doc_method(method, docs=docs, dt=dt, dn=dn, arg=arg, args=args)
 	for doc in frappe.response.get("docs") or []:
 		if isinstance(doc, Document):
 			doc.apply_fieldlevel_read_permissions()
