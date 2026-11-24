@@ -10837,3 +10837,11 @@ msgstr "Usuń osobę"
 
 msgid "Brak wyników"
 msgstr "Brak wyników"
+
+msgid "Do Twojego konta przypisano aplikację z kodami"
+msgstr "Do Twojego konta przypisano aplikację z kodami"
+
+msgid ""
+"<p>Do Twojego konta {0} przypisano aplikację z kodami logowania ({1}).</p><p>Jeśli to nie Ty, natychmiast zgłoś to administratorowi.</p>"
+msgstr ""
+"<p>Do Twojego konta {0} przypisano aplikację z kodami logowania ({1}).</p><p>Jeśli to nie Ty, natychmiast zgłoś to administratorowi.</p>"

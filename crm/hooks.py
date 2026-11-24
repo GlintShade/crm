@@ -37,6 +37,11 @@ require_type_annotated_api_methods = True
 # include js, css files in header of web template
 # web_include_css = "/assets/crm/css/crm.css"
 # web_include_js = "/assets/crm/js/crm.js"
+# ops#422: QR i polskie teksty kroku kodu na stronie logowania
+web_include_js = ["/assets/crm/js/volteo_2fa_logowanie.js"]
+
+# ops#422: okno rejestracji aplikacji z kodami (podmiana twofactor, mail po rejestracji)
+on_session_creation = ["crm.api.volteo_2fa_rejestracja.po_rejestracji"]
 
 # include custom scss in every website theme (without file extension ".scss")
 # website_theme_scss = "crm/public/scss/website"
@@ -192,6 +197,8 @@ has_permission = {
 
 override_doctype_class = {
 	"Contact": "crm.overrides.contact.CustomContact",
+	# ops#422: ladowanie klasy User podczas logowania importuje modul, ktory podmienia twofactor
+	"User": "crm.overrides.user.CustomUser",
 	"Email Template": "crm.overrides.email_template.CustomEmailTemplate",
 }
 
@@ -428,6 +435,8 @@ override_whitelisted_methods = {
 	# ops#420: konta z drugim skladnikiem bez logowania linkiem i auto-logowania po resecie hasla
 	"frappe.www.login.login_via_key": "crm.api.volteo_2fa_guard.login_via_key",
 	"frappe.core.doctype.user.user.update_password": "crm.api.volteo_2fa_guard.update_password",
+	# ops#422: Reset OTP Secret otwiera okno rejestracji
+	"frappe.twofactor.reset_otp_secret": "crm.api.volteo_2fa_rejestracja.reset_otp_secret",
 }
 #
 # each overriding function accepts a `data` argument;
