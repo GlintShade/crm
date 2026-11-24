@@ -26,7 +26,7 @@
     @change="(data) => updateFilter(filter, data)"
   />
   <div
-    v-else-if="filter.fieldtype === 'Date' && filter.value === '@dzis'"
+    v-else-if="['Date', 'Datetime'].includes(filter.fieldtype) && filter.value === '@dzis'"
     class="flex h-7 w-full items-center justify-between rounded border border-outline-gray-2 px-2 text-sm text-ink-gray-8"
   >
     <span>{{ __('Today') }}</span>
@@ -41,7 +41,7 @@
     v-else-if="['Date', 'Datetime'].includes(filter.fieldtype)"
     class="border-none"
     :value="filter.value"
-    :today-value="filter.fieldtype === 'Date' ? '@dzis' : undefined"
+    today-value="@dzis"
     :placeholder="filter.label"
     @change="(v) => updateFilter(filter, v)"
   />
