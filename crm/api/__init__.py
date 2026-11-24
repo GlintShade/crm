@@ -278,7 +278,8 @@ def invite_by_email(
 	# the falsy check.
 	linia_oze = cint(linia_oze)
 	linia_cp = cint(linia_cp)
-	if not linia_oze and not linia_cp:
+	# Call Center works on leads only and has no calculators (ops#424).
+	if volteo_role != "Volteo Call Center" and not linia_oze and not linia_cp:
 		frappe.throw(_("Wybierz co najmniej jedną linię produktową"))
 
 	# Leady module access (issue #27, ops/crm-linia-leady.py): unlike

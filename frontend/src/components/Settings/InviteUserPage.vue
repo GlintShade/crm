@@ -101,7 +101,7 @@
             :disabled="inviteByEmail.loading"
             @update:modelValue="(val) => (linieCp = Boolean(val))"
           />
-          <div v-if="!linieOze && !linieCp" class="text-xs text-ink-red-6">
+          <div v-if="!linieOze && !linieCp && !jestCallCenter" class="text-xs text-ink-red-6">
             {{ __('Wybierz co najmniej jedną linię produktową') }}
           </div>
           <FormControl
@@ -226,7 +226,7 @@ import {
   FormControl,
   Badge,
 } from 'frappe-ui'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 
 const { updateOnboardingStep } = useOnboarding('frappecrm')
 const { users, isAdmin, isVolteoAdmin } = usersStore()
@@ -255,6 +255,16 @@ const linieCp = ref(true)
 // Invitation.linia_leady schema default "0"). Independent of the product
 // lines — not part of the "select at least one" requirement below.
 const linieLeady = ref(false)
+
+// Call Center works on leads only, no calculators (ops#424).
+const jestCallCenter = computed(() => volteoRole.value === 'Volteo Call Center')
+watch(volteoRole, (rola) => {
+  if (rola === 'Volteo Call Center') {
+    linieOze.value = false
+    linieCp.value = false
+    linieLeady.value = true
+  }
+})
 // Commission visibility/tier (issue #51, schema: #46/ops#46): mirrors
 // crm.api.VOLTEO_POZIOMY_PROWIZJI as a local literal (no shared import path
 // between frontend and backend). Defaults match the field schema defaults
@@ -369,7 +379,7 @@ const isSendDisabled = computed(() => {
     !lastName.value.trim() ||
     Boolean(userExistMessage.value) ||
     Boolean(inviteeExistMessage.value) ||
-    (!linieOze.value && !linieCp.value)
+    (!linieOze.value && !linieCp.value && !jestCallCenter.value)
   )
 })
 
