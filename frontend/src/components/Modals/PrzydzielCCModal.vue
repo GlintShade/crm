@@ -1,7 +1,7 @@
 <!--
   VOLTEO (issue #95): masowy przydzial leadow do osoby CC z listy leadow
-  (`ListBulkActions.vue`, galaz CRM Lead, tylko dla isVolteoAdmin()). Admin
-  wybiera osobe CC (lista z `crm.api.volteo_leady.osoby_cc`, admin-only) i
+  (`ListBulkActions.vue`, galaz CRM Lead, dla isVolteoAdmin() i backoffice, ops#426). Uzytkownik
+  wybiera osobe CC (lista z `crm.api.volteo_leady.osoby_cc`, admin + backoffice) i
   albo przydziela dokladnie zaznaczone wiersze, albo -- gdy zaznaczenie nie
   obejmuje wszystkich leadow pasujacych do biezacego filtra -- odhacza
   "Wszystkie pasujace do filtra (N)". N to `list.data.total_count`, ten sam
@@ -20,9 +20,9 @@
   ustawionym `custom_cc` (dowolnym) sa pomijane po stronie serwera i wracaja
   w `pominieto`, wiec ten modal nie probuje przewidywac wyniku z wyprzedzeniem
   -- pokazuje rozbicie `przydzielono/pominieto/nieznane` dopiero w tostie po
-  odpowiedzi. Limit jednego wywolania to `LIMIT_PRZYDZIAL_CC` (2000) --
-  ostrzegamy w tostie, gdy `N` z checkboxa przekracza limit zwrocony przez
-  API, bo wtedy serwer i tak przytnie liste do pierwszych 2000 dopasowan.
+  odpowiedzi. Limit jednego wywolania to `LIMIT_PRZYDZIAL_CC` (2000)
+  PRZYDZIELONYCH leadow (ops#426): serwer zwraca `pozostalo` (leady bez CC,
+  ktorych limit nie objal) i ostrzegamy w tostie, gdy `pozostalo > 0`.
 -->
 <template>
   <Dialog v-model:open="show" :title="__('Przypisz do CC')" size="sm">
@@ -149,10 +149,11 @@ async function przydziel() {
     }
     toast.success(czesci.join(', '))
 
-    if (wszystkiePasujace.value && totalCount.value > wynik.limit) {
+    if (wynik.pozostalo > 0) {
       toast.warning(
-        __('Osiągnięto limit {0} leadów na jedno wywołanie, pozostałe pomiń i uruchom przydział ponownie.', [
-          wynik.limit,
+        __('Przypisano pierwsze {0} leadów. Zostało {1} bez CC, uruchom przypisanie ponownie.', [
+          wynik.przydzielono,
+          wynik.pozostalo,
         ]),
       )
     }

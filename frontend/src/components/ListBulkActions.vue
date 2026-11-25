@@ -88,7 +88,7 @@ const list = defineModel({ type: Object })
 const router = useRouter()
 
 const { $dialog, $socket } = globalStore()
-const { isVolteoAdmin } = usersStore()
+const { isVolteoAdmin, isBackend } = usersStore()
 const { capture } = useTelemetry()
 
 const showEditModal = ref(false)
@@ -213,10 +213,10 @@ function bulkActions(selections, unselectAll) {
   }
 
   if (props.doctype === 'CRM Lead') {
-    // VOLTEO (issue #95): masowy przydzial do CC, tylko dla adminow -- CC i
-    // D2D nie widza tej pozycji w menu, serwer (crm.api.volteo_leady.
+    // VOLTEO (issue #95): masowy przydzial do CC, dla adminow i backoffice
+    // (ops#426) -- CC i D2D nie widza tej pozycji w menu, serwer (crm.api.volteo_leady.
     // przydziel_cc) egzekwuje to samo niezaleznie (frappe.only_for).
-    if (isVolteoAdmin()) {
+    if (isVolteoAdmin() || isBackend()) {
       actions.push({
         label: __('Przypisz do CC'),
         onClick: () => assignToCC(selections, unselectAll),

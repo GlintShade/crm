@@ -142,6 +142,8 @@ from crm.volteo_leady_telefon import normalizuj_filtr_telefonu
 from crm.volteo_przydzial import normalizuj_wartosci_geo
 
 DOPUSZCZONE_ROLE_WOLAJACEGO = ("System Manager", "Volteo Core Admin")
+# Decyzja wlasciciela 2026-11-25 (ops#426): backoffice przypisuje leady do CC z listy; custom_cc to permlevel 2 bez zapisu dla Volteo Backend, wiec ta bramka API jest kontrola.
+ROLE_PRZYDZIALU_CC = (*DOPUSZCZONE_ROLE_WOLAJACEGO, "Volteo Backend")
 ROLA_D2D = "Volteo D2D Sales"
 ROLA_CC = "Volteo Call Center"
 
@@ -791,12 +793,14 @@ def przydziel_cc(
 	ilosc: int | None = None,
 ) -> dict:
 	"""Hurtowy przydział leadów do CC (`custom_cc`, issue #88): jawna lista nazw
-	ALBO wszystkie leady pasujące do `filters`. Admin-only (`System Manager` /
-	`Volteo Core Admin`), bramkowane `frappe.only_for` jako pierwsza instrukcja.
+	ALBO wszystkie leady pasujące do `filters`. Tylko `ROLE_PRZYDZIALU_CC`
+	(`System Manager` / `Volteo Core Admin` / `Volteo Backend`), bramkowane
+	`frappe.only_for` jako pierwsza instrukcja.
 
 	`ilosc` (issue #104, opcjonalny, TYLKO ze ścieżką `filters`): ogranicza
-	liczbę leadów pobranych do przetworzenia do zapytania -- jak `ilosc` w
-	`przydziel` powyżej ogranicza paczkę handlowca. Rzutowana (`cint`) i
+	liczbę leadów PRZYDZIELONYCH jednym wywołaniem (ops#426: limit liczy
+	przydzielone, nie pobrane, więc kolejne uruchomienie przydziela następną
+	paczkę, a nie pomija te same już przydzielone). Rzutowana (`cint`) i
 	przycinana do 1..`LIMIT_PRZYDZIAL_CC`; `None`/pominięte zachowuje stare
 	zachowanie (limit = `LIMIT_PRZYDZIAL_CC`). Ignorowana ze ścieżką `leady`
 	-- tam liczba jest już jawna, podana przez wołającego.
@@ -820,7 +824,9 @@ def przydziel_cc(
 	usunięty, literówka) są pomijane i zliczane osobno w `nieznane`, zamiast
 	trafiać do `pominieto` (które oznacza konkretnie "już przydzielony") albo
 	wywoływać `DoesNotExistError` przy zapisie śladu. Zwraca
-	`{przydzielono, pominieto, nieznane, limit}`.
+	`{przydzielono, pominieto, nieznane, limit, pozostalo}`; `pozostalo` to
+	liczba pasujących leadów BEZ CC, których nie przetworzono przez limit
+	(0, gdy limit nic nie uciął i zawsze 0 dla ścieżki `leady`).
 
 	Issue #129 (grupy filtrów ORAZ/ALBO): ścieżka `filters` przechodzi
 	przez `rozwin_grupy` (ten sam helper co `get_data`/`mapa`), więc admin
@@ -837,11 +843,12 @@ def przydziel_cc(
 	{"ma": [...], "nie_ma": [...]}]`) trafiałby do `frappe.get_list`
 	niżej dosłownie -- niepoprawny operator dla `volteo_tagi`, i myląca
 	dokładna równość dla skalara/"in"/"not in" na stringu złączonym "+"."""
-	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
+	frappe.only_for(ROLE_PRZYDZIALU_CC, True)
 
 	cc = (cc or "").strip()
 	_waliduj_cc(cc)
 
+	limit = None  # ścieżka `leady`: bez limitu
 	leady = frappe.parse_json(leady) if leady else None
 	filters = frappe.parse_json(filters) if filters else None
 
@@ -883,13 +890,19 @@ def przydziel_cc(
 			elif limit > LIMIT_PRZYDZIAL_CC:
 				limit = LIMIT_PRZYDZIAL_CC
 		nazwy = frappe.get_list(
-			"CRM Lead", filters=filters, pluck="name", limit_page_length=limit
+			"CRM Lead", filters=filters, pluck="name", limit_page_length=0
 		)
 	else:
 		frappe.throw(_("Podaj listę leadów albo filtry."))
 
 	if not nazwy:
-		return {"przydzielono": 0, "pominieto": 0, "nieznane": 0, "limit": LIMIT_PRZYDZIAL_CC}
+		return {
+			"przydzielono": 0,
+			"pominieto": 0,
+			"nieznane": 0,
+			"limit": LIMIT_PRZYDZIAL_CC,
+			"pozostalo": 0,
+		}
 
 	istniejace = frappe.get_all(
 		"CRM Lead", filters={"name": ["in", nazwy]}, fields=["name", "custom_cc"]
@@ -901,7 +914,16 @@ def przydziel_cc(
 	przydzielono = 0
 	pominieto = 0
 	nieznane = 0
-	for nazwa in nazwy:
+	pozostalo = 0
+	for indeks, nazwa in enumerate(nazwy):
+		# ops#426: limit liczy PRZYDZIELONE leady. Po jego osiagnieciu reszta
+		# (tylko te bez CC) idzie do `pozostalo`; pominieto/nieznane liczą to,
+		# co petla faktycznie obejrzala.
+		if limit is not None and przydzielono >= limit:
+			pozostalo = sum(
+				1 for n in nazwy[indeks:] if n in obecny_cc_wg_nazwy and not obecny_cc_wg_nazwy[n]
+			)
+			break
 		# Nazwa spoza istniejace: lead o tej nazwie nie istnieje (usunięty, literówka,
 		# albo filtry/lista podane przez wołającego wskazują na coś nieistniejącego).
 		# db.set_value byłby cichym no-opem, a zapisz_slad rzuciłby DoesNotExistError
@@ -928,6 +950,7 @@ def przydziel_cc(
 		"pominieto": pominieto,
 		"nieznane": nieznane,
 		"limit": LIMIT_PRZYDZIAL_CC,
+		"pozostalo": pozostalo,
 	}
 
 
@@ -1039,12 +1062,12 @@ def _aktywni_cc_reprezentanci() -> list[dict]:
 def osoby_cc() -> list[dict]:
 	"""Lista aktywnych osób CC (`user`, `full_name`), posortowana po nazwisku,
 	dla selecta w modalu masowego przydziału `PrzydzielCCModal.vue` (issue #95).
-	Admin-only (`System Manager` / `Volteo Core Admin`), tak jak `przydziel_cc`,
+	Tylko `ROLE_PRZYDZIALU_CC` (admin + `Volteo Backend`), tak jak `przydziel_cc`,
 	który tej listy jest źródłem wyboru, w odróżnieniu od `handlowcy()` powyżej
 	(dostępnej też dla samego CC, żeby mógł przekazać lead handlowcowi),
 	wołający tu musi mieć uprawnienia do PRZYDZIELANIA leadów osobom CC, nie
 	tylko do przekazania pojedynczego leada dalej."""
-	frappe.only_for(DOPUSZCZONE_ROLE_WOLAJACEGO, True)
+	frappe.only_for(ROLE_PRZYDZIALU_CC, True)
 	# Ten sam ksztalt co handlowcy(): klucz "user", nie "name" (modal czyta cc.user).
 	return [
 		{"user": cc["name"], "full_name": cc["full_name"]}
