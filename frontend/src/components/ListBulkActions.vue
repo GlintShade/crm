@@ -185,6 +185,17 @@ const customBulkActions = ref([])
 const customListActions = ref([])
 
 function bulkActions(selections, unselectAll) {
+  // ops#426 (decyzja właściciela 2026-11-25): backoffice (bez roli admina) ma
+  // na leadach w menu zbiorczym wyłącznie "Przypisz do CC".
+  if (props.doctype === 'CRM Lead' && isBackend() && !isVolteoAdmin()) {
+    return [
+      {
+        label: __('Przypisz do CC'),
+        onClick: () => assignToCC(selections, unselectAll),
+      },
+    ]
+  }
+
   let actions = []
 
   if (!props.options.hideEdit) {
