@@ -10,7 +10,9 @@
   Lista handlowcow idzie z `crm.api.volteo_leady.handlowcy` (dostepna dla CC
   i adminow -- inaczej niz `widoczni_uzytkownicy`, ktora daloby CC spoza
   hierarchii pusta liste), zapis przez `crm.api.volteo_leady.
-  przekaz_handlowcowi`. Widocznosc SAMEGO przycisku w miejscu uzycia
+  przekaz_handlowcowi`; "Odepnij handlowca" (ops#427, tylko gdy lead ma
+  handlowca) wola `odepnij_handlowca` z tym samym sprawdzeniem uprawnien na
+  serwerze. Widocznosc SAMEGO przycisku w miejscu uzycia
   (Lead.vue: isCallCenter() || isVolteoAdmin()) jest tylko kosmetyczna (UX)
   -- serwer egzekwuje uprawnienia niezaleznie (admin/BYPASS_ROLES, CC
   ustawiony jako custom_cc na TYM leadzie albo CC z flaga "Wszystkie leady",
@@ -33,12 +35,29 @@
           :disabled="handlowcyResource.loading"
           :placeholder="__('Wybierz opcję')"
         />
+        <div
+          v-if="potwierdzOdpiecie"
+          class="text-p-sm text-ink-gray-7"
+          data-testid="odepnij-potwierdzenie"
+        >
+          {{ __('Odpiąć handlowca od tego leada? Lead zostanie bez handlowca.') }}
+        </div>
         <ErrorMessage :message="blad" />
       </div>
     </template>
     <template #actions>
       <div class="flex justify-end gap-2">
-        <Button :label="__('Anuluj')" @click="show = false" />
+        <Button
+          v-if="props.wlasciciel"
+          class="mr-auto"
+          theme="red"
+          data-testid="odepnij-handlowca"
+          :label="potwierdzOdpiecie ? __('Tak, odepnij') : __('Odepnij handlowca')"
+          :loading="wysylanie && potwierdzOdpiecie"
+          :disabled="wysylanie"
+          @click="odepnij"
+        />
+        <Button :label="__('Anuluj')" @click="anuluj" />
         <Button
           variant="solid"
           :label="__('Przekaż')"
@@ -80,6 +99,7 @@ const show = ref(false)
 const wybranyHandlowiec = ref('')
 const wysylanie = ref(false)
 const blad = ref('')
+const potwierdzOdpiecie = ref(false)
 
 const handlowcyResource = createResource({
   url: 'crm.api.volteo_leady.handlowcy',
@@ -96,6 +116,7 @@ const opcjeHandlowcow = computed(() => {
 
 function otworz() {
   blad.value = ''
+  potwierdzOdpiecie.value = false
   wybranyHandlowiec.value = props.wlasciciel || ''
   show.value = true
   if (!handlowcyResource.data) {
@@ -120,6 +141,31 @@ async function przekaz() {
     })
   } catch (err) {
     blad.value = err.messages?.[0] || __('Nie udało się przekazać leada handlowcowi.')
+  } finally {
+    wysylanie.value = false
+  }
+}
+
+function anuluj() {
+  potwierdzOdpiecie.value = false
+  show.value = false
+}
+
+async function odepnij() {
+  if (wysylanie.value) return
+  if (!potwierdzOdpiecie.value) {
+    potwierdzOdpiecie.value = true
+    return
+  }
+  wysylanie.value = true
+  blad.value = ''
+  try {
+    await call('crm.api.volteo_leady.odepnij_handlowca', { lead: props.docname })
+    toast.success(__('Handlowiec odpięty od leada.'))
+    show.value = false
+    emit('przekazano', { docname: props.docname, handlowiec: '' })
+  } catch (err) {
+    blad.value = err.messages?.[0] || __('Nie udało się odpiąć handlowca.')
   } finally {
     wysylanie.value = false
   }

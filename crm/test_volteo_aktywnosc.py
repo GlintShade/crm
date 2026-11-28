@@ -900,6 +900,11 @@ class TestTekstSladu(unittest.TestCase):
 		self.assertIn("Anna Nowak", text)
 		self.assertIn("Jan Kowalski", text)
 
+	def test_v_cc_odpiecie_nazywa_handlowca_bez_znacznika_cc(self: "TestTekstSladu") -> None:
+		text = tekst_sladu("cc_odpiecie", handlowiec_full_name="Jan Kowalski")
+		self.assertEqual(text, "odpięto handlowca Jan Kowalski od leada")
+		self.assertFalse(text.startswith(ZNACZNIK_CC))
+
 
 class TestEtykietaWnioskodawcy(unittest.TestCase):
 	def test_a_nazwisko_i_imiona_sklejone_spacja(self: "TestEtykietaWnioskodawcy") -> None:
