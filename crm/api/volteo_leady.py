@@ -1021,7 +1021,8 @@ def odepnij_handlowca(lead: str) -> dict:
 	`przekaz_handlowcowi` (`_uprawnienia_przekazania`). `custom_cc` i status zostają.
 	Zapis przez `doc.save(ignore_permissions=True)`: `CRMLead.on_update` zdejmuje
 	poprzedniemu handlowcowi ToDo i DocShare (b82), więc traci widoczność leada;
-	pusty `lead_owner` nikogo nie wpuszcza (warunek `lead_owner == user` jest fałszywy)."""
+	pusty `lead_owner` nikogo nie wpuszcza (warunek `lead_owner == user` jest fałszywy).
+	Decyzja właściciela 2026-11-28: odpięcie nie wysyła SMS do handlowca, odpinający informuje sam."""
 	lead = (lead or "").strip()
 	if not lead:
 		frappe.throw(_("Lead jest wymagany."))
@@ -1036,7 +1037,13 @@ def odepnij_handlowca(lead: str) -> dict:
 		frappe.throw(_("Ten lead nie ma przypisanego handlowca."))
 
 	doc.lead_owner = None
-	doc.save(ignore_permissions=True)
+	# decyzja właściciela 2026-11-28: odpięcie nie wysyła SMS do handlowca, odpinający informuje sam
+	poprzednia_flaga_sms = frappe.flags.get("volteo_bez_sms_handlowca")
+	frappe.flags.volteo_bez_sms_handlowca = True
+	try:
+		doc.save(ignore_permissions=True)
+	finally:
+		frappe.flags.volteo_bez_sms_handlowca = poprzednia_flaga_sms
 
 	stary_full_name = frappe.db.get_value("User", stary, "full_name") or stary
 	zapisz_slad(lead, tekst_sladu("cc_odpiecie", handlowiec_full_name=stary_full_name), doctype="CRM Lead")
