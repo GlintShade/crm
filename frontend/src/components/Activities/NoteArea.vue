@@ -42,27 +42,44 @@
           {{ getUser(note.owner).full_name }}
         </div>
       </div>
-      <TimelineTimestamp
-        :date="note.creation"
-        stacked
-        class-name="shrink-0 text-sm text-ink-gray-7"
-      />
+      <div class="shrink-0 text-right">
+        <TimelineTimestamp
+          :date="note.creation"
+          stacked
+          class-name="text-sm text-ink-gray-7"
+        />
+        <div
+          v-if="edytowano"
+          class="whitespace-nowrap text-xs text-ink-gray-5"
+        >
+          {{ __('edytowano') }} {{ czasEdycji }}
+        </div>
+      </div>
     </div>
   </div>
 </template>
 <script setup>
 import UserAvatar from '@/components/UserAvatar.vue'
 import TimelineTimestamp from '@/components/Activities/TimelineTimestamp.vue'
-import { Dropdown, TextEditor, call, toast } from 'frappe-ui'
+import { Dropdown, TextEditor, call, toast, dayjsLocal } from 'frappe-ui'
 import { usersStore } from '@/stores/users'
+import { dataGodzinaWarszawa, czyEdytowano } from '@/utils/dataPolska'
+import { computed } from 'vue'
 
-defineProps({
+const props = defineProps({
   note: { type: Object, default: () => ({}) },
 })
 
 const notes = defineModel({ type: Object })
 
 const { getUser } = usersStore()
+
+// ops#430: ta sama konwersja co w TimelineTimestamp.vue (surowy tekst -> chwila)
+const instant = (x) => (x ? dayjsLocal(x).toDate() : null)
+const edytowano = computed(() =>
+  czyEdytowano(instant(props.note.creation), instant(props.note.modified)),
+)
+const czasEdycji = computed(() => dataGodzinaWarszawa(instant(props.note.modified)))
 
 async function deleteNote(name) {
   await toast.promise(

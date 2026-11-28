@@ -9,6 +9,7 @@ import {
   relatywnie,
   czasWzgledny,
   dataGodzinaWarszawa,
+  czyEdytowano,
 } from '@/utils/dataPolska'
 
 describe('DNI_TYGODNIA_SKROT / MIESIACE_SKROT', () => {
@@ -265,5 +266,26 @@ describe('dataGodzinaWarszawa (ops#430)', () => {
   it('zwraca pusty napis dla pustego i niepoprawnego wejścia', () => {
     expect(dataGodzinaWarszawa(null)).toBe('')
     expect(dataGodzinaWarszawa(new Date('nie data'))).toBe('')
+  })
+})
+
+describe('czyEdytowano (ops#430)', () => {
+  const t0 = new Date('2026-11-24T10:00:00Z')
+  const plus = (s) => new Date(t0.getTime() + s * 1000)
+
+  it('ten sam moment i 59 s później to nie edycja', () => {
+    expect(czyEdytowano(t0, t0)).toBe(false)
+    expect(czyEdytowano(t0, plus(59))).toBe(false)
+  })
+
+  it('od 60 s później (także liczby ms i dzień później) to edycja', () => {
+    expect(czyEdytowano(t0, plus(60))).toBe(true)
+    expect(czyEdytowano(t0.getTime(), plus(86400).getTime())).toBe(true)
+  })
+
+  it('puste lub niepoprawne wejście to false', () => {
+    expect(czyEdytowano(null, plus(120))).toBe(false)
+    expect(czyEdytowano(t0, undefined)).toBe(false)
+    expect(czyEdytowano(t0, new Date('nie data'))).toBe(false)
   })
 })
