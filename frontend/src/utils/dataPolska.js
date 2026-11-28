@@ -305,3 +305,16 @@ export function czasWzgledny(wzgledny, chwila) {
   const dokladny = dataGodzinaWarszawa(chwila)
   return dokladny ? `${wzgledny} (${dokladny})` : wzgledny
 }
+
+/**
+ * Czy notatka została edytowana po dodaniu (ops#430): `zmieniono` jest co
+ * najmniej 60 s po `utworzono`. Zapis tuż po wstawieniu rekordu to nie edycja.
+ *
+ * @param {Date|number|null} utworzono moment dodania (instant)
+ * @param {Date|number|null} zmieniono moment ostatniej zmiany (instant)
+ * @returns {boolean} false także dla pustego lub niepoprawnego wejścia
+ */
+export function czyEdytowano(utworzono, zmieniono) {
+  const ms = (x) => (x === null || x === undefined || x === '' ? NaN : new Date(x).getTime())
+  return ms(zmieniono) - ms(utworzono) >= 60000
+}
