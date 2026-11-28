@@ -406,6 +406,9 @@ def tekst_sladu(rodzaj: str, **dane: object) -> str:
 			f"{dane['handlowiec_full_name']}"
 		)
 
+	if rodzaj == "cc_odpiecie":
+		return f"odpięto handlowca {dane['handlowiec_full_name']} od leada"
+
 	if rodzaj == "wplata_z_umowy":
 		return f"{PREFIKS_SLADU_WPLATY} z {_zl(dane['stara'])} na {_zl(dane['nowa'])}"
 

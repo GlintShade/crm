@@ -954,6 +954,20 @@ def przydziel_cc(
 	}
 
 
+def _uprawnienia_przekazania(doc, komunikat: str) -> tuple[str, bool, bool]:
+	"""Jedna bramka dla `przekaz_handlowcowi` i `odepnij_handlowca` (ops#427):
+	Administrator / `BYPASS_ROLES`, albo CC ustawiony jako `custom_cc` na tym leadzie
+	albo z flagą "Wszystkie leady". Inaczej `frappe.PermissionError`. Zwraca
+	`(caller, czy_bypass, czy_wlasny_cc)`."""
+	caller = frappe.session.user
+	caller_roles = set(frappe.get_roles(caller))
+	czy_bypass = caller == "Administrator" or bool(caller_roles & BYPASS_ROLES)
+	czy_wlasny_cc = ROLA_CC in caller_roles and (doc.custom_cc == caller or cc_widzi_wszystkie_leady(caller))
+	if not (czy_bypass or czy_wlasny_cc):
+		frappe.throw(komunikat, frappe.PermissionError)
+	return caller, czy_bypass, czy_wlasny_cc
+
+
 @frappe.whitelist()
 def przekaz_handlowcowi(lead: str, handlowiec: str) -> dict:
 	"""Przekazuje POJEDYNCZY lead od CC do handlowca (`lead_owner`). Dozwolone dla
@@ -974,16 +988,9 @@ def przekaz_handlowcowi(lead: str, handlowiec: str) -> dict:
 
 	doc = frappe.get_doc("CRM Lead", lead)
 
-	caller = frappe.session.user
-	caller_roles = set(frappe.get_roles(caller))
-	czy_bypass = caller == "Administrator" or bool(caller_roles & BYPASS_ROLES)
-	czy_wlasny_cc = ROLA_CC in caller_roles and (doc.custom_cc == caller or cc_widzi_wszystkie_leady(caller))
-
-	if not (czy_bypass or czy_wlasny_cc):
-		frappe.throw(
-			_("Nie masz uprawnień do przekazania tego leada handlowcowi."),
-			frappe.PermissionError,
-		)
+	caller, czy_bypass, czy_wlasny_cc = _uprawnienia_przekazania(
+		doc, _("Nie masz uprawnień do przekazania tego leada handlowcowi.")
+	)
 
 	handlowiec = (handlowiec or "").strip()
 	_waliduj_handlowca(handlowiec)
@@ -1006,6 +1013,35 @@ def przekaz_handlowcowi(lead: str, handlowiec: str) -> dict:
 	)
 
 	return {"lead": lead, "handlowiec": handlowiec}
+
+
+@frappe.whitelist()
+def odepnij_handlowca(lead: str) -> dict:
+	"""Odpina handlowca od leada (`lead_owner` puste), ops#427. Uprawnienia jak w
+	`przekaz_handlowcowi` (`_uprawnienia_przekazania`). `custom_cc` i status zostają.
+	Zapis przez `doc.save(ignore_permissions=True)`: `CRMLead.on_update` zdejmuje
+	poprzedniemu handlowcowi ToDo i DocShare (b82), więc traci widoczność leada;
+	pusty `lead_owner` nikogo nie wpuszcza (warunek `lead_owner == user` jest fałszywy)."""
+	lead = (lead or "").strip()
+	if not lead:
+		frappe.throw(_("Lead jest wymagany."))
+	if not frappe.db.exists("CRM Lead", lead):
+		frappe.throw(_("Lead {0} nie istnieje.").format(lead))
+
+	doc = frappe.get_doc("CRM Lead", lead)
+	_uprawnienia_przekazania(doc, _("Nie masz uprawnień do odpięcia handlowca od tego leada."))
+
+	stary = doc.lead_owner
+	if not stary:
+		frappe.throw(_("Ten lead nie ma przypisanego handlowca."))
+
+	doc.lead_owner = None
+	doc.save(ignore_permissions=True)
+
+	stary_full_name = frappe.db.get_value("User", stary, "full_name") or stary
+	zapisz_slad(lead, tekst_sladu("cc_odpiecie", handlowiec_full_name=stary_full_name), doctype="CRM Lead")
+
+	return {"lead": lead, "poprzedni_handlowiec": stary}
 
 
 @frappe.whitelist()
