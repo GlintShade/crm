@@ -278,19 +278,30 @@ const FORMAT_WARSZAWA = new Intl.DateTimeFormat('pl-PL', {
 })
 
 /**
+ * "DD.MM.RRRR HH:MM" w strefie Europe/Warsaw (z czasem letnim), niezależnie od
+ * strefy komputera i od UTC (ops#430).
+ *
+ * @param {Date|number|null} chwila moment w czasie (instant), nie surowy tekst
+ * @returns {string} np. "24.11.2026 11:42", albo '' gdy wejście puste/niepoprawne
+ */
+export function dataGodzinaWarszawa(chwila) {
+  if (chwila === null || chwila === undefined || chwila === '') return ''
+  const data = chwila instanceof Date ? chwila : new Date(chwila)
+  if (Number.isNaN(data.getTime())) return ''
+  const c = Object.fromEntries(FORMAT_WARSZAWA.formatToParts(data).map((p) => [p.type, p.value]))
+  return `${c.day}.${c.month}.${c.year} ${c.hour}:${c.minute}`
+}
+
+/**
  * Napis "<względny> (DD.MM.RRRR HH:MM)" dla znaczników czasu w notatkach i w
- * zakładce Aktywność (ops#430). Godzina zawsze w strefie Europe/Warsaw (z
- * czasem letnim), niezależnie od strefy komputera i od UTC. Gdy `chwila` jest
- * pusta albo niepoprawna, zwraca sam napis względny.
+ * zakładce Aktywność (ops#430). Gdy `chwila` jest pusta albo niepoprawna,
+ * zwraca sam napis względny.
  *
  * @param {string} wzgledny gotowy napis względny, np. "2 dni temu"
  * @param {Date|number|null} chwila moment w czasie (instant), nie surowy tekst
  * @returns {string} np. "2 dni temu (24.11.2026 11:42)"
  */
 export function czasWzgledny(wzgledny, chwila) {
-  if (chwila === null || chwila === undefined || chwila === '') return wzgledny
-  const data = chwila instanceof Date ? chwila : new Date(chwila)
-  if (Number.isNaN(data.getTime())) return wzgledny
-  const c = Object.fromEntries(FORMAT_WARSZAWA.formatToParts(data).map((p) => [p.type, p.value]))
-  return `${wzgledny} (${c.day}.${c.month}.${c.year} ${c.hour}:${c.minute})`
+  const dokladny = dataGodzinaWarszawa(chwila)
+  return dokladny ? `${wzgledny} (${dokladny})` : wzgledny
 }
