@@ -8,6 +8,7 @@ import {
   terminWzgledny,
   relatywnie,
   czasWzgledny,
+  dataGodzinaWarszawa,
 } from '@/utils/dataPolska'
 
 describe('DNI_TYGODNIA_SKROT / MIESIACE_SKROT', () => {
@@ -253,5 +254,16 @@ describe('czasWzgledny (ops#430)', () => {
     expect(czasWzgledny('wczoraj', Date.UTC(2026, 10, 27, 12, 0))).toBe('wczoraj (27.11.2026 13:00)')
     expect(czasWzgledny('wczoraj', null)).toBe('wczoraj')
     expect(czasWzgledny('wczoraj', new Date('nie data'))).toBe('wczoraj')
+  })
+})
+
+describe('dataGodzinaWarszawa (ops#430)', () => {
+  it('zwraca DD.MM.RRRR HH:MM w czasie polskim', () => {
+    expect(dataGodzinaWarszawa(new Date('2026-11-24T10:42:00Z'))).toBe('24.11.2026 11:42')
+  })
+
+  it('zwraca pusty napis dla pustego i niepoprawnego wejścia', () => {
+    expect(dataGodzinaWarszawa(null)).toBe('')
+    expect(dataGodzinaWarszawa(new Date('nie data'))).toBe('')
   })
 })

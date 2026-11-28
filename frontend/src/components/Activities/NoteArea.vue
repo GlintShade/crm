@@ -44,7 +44,8 @@
       </div>
       <TimelineTimestamp
         :date="note.creation"
-        class-name="truncate text-sm text-ink-gray-7"
+        stacked
+        class-name="shrink-0 text-sm text-ink-gray-7"
       />
     </div>
   </div>
