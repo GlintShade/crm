@@ -266,3 +266,31 @@ export function relatywnie(dataCzas, teraz = new Date()) {
 
   return `${String(dzien).padStart(2, '0')}.${String(miesiac).padStart(2, '0')}.${rok}`
 }
+
+const FORMAT_WARSZAWA = new Intl.DateTimeFormat('pl-PL', {
+  timeZone: 'Europe/Warsaw',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+})
+
+/**
+ * Napis "<względny> (DD.MM.RRRR HH:MM)" dla znaczników czasu w notatkach i w
+ * zakładce Aktywność (ops#430). Godzina zawsze w strefie Europe/Warsaw (z
+ * czasem letnim), niezależnie od strefy komputera i od UTC. Gdy `chwila` jest
+ * pusta albo niepoprawna, zwraca sam napis względny.
+ *
+ * @param {string} wzgledny gotowy napis względny, np. "2 dni temu"
+ * @param {Date|number|null} chwila moment w czasie (instant), nie surowy tekst
+ * @returns {string} np. "2 dni temu (24.11.2026 11:42)"
+ */
+export function czasWzgledny(wzgledny, chwila) {
+  if (chwila === null || chwila === undefined || chwila === '') return wzgledny
+  const data = chwila instanceof Date ? chwila : new Date(chwila)
+  if (Number.isNaN(data.getTime())) return wzgledny
+  const c = Object.fromEntries(FORMAT_WARSZAWA.formatToParts(data).map((p) => [p.type, p.value]))
+  return `${wzgledny} (${c.day}.${c.month}.${c.year} ${c.hour}:${c.minute})`
+}

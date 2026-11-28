@@ -43,7 +43,7 @@
         </div>
       </div>
       <TimelineTimestamp
-        :date="note.modified"
+        :date="note.creation"
         class-name="truncate text-sm text-ink-gray-7"
       />
     </div>
