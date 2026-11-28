@@ -49,8 +49,9 @@
 
 @layer components {
   .prose-f {
-    @apply break-all
-			max-w-none
+    /* Wyrazy lamia sie na spacjach; dlugi ciag bez spacji (URL) zawija sie w karcie (ops#429). */
+    overflow-wrap: anywhere;
+    @apply max-w-none
 			prose
 			prose-code:break-all
 			prose-code:whitespace-pre-wrap
