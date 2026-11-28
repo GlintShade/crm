@@ -7,6 +7,7 @@ import {
   formatujTerminKrotko,
   terminWzgledny,
   relatywnie,
+  czasWzgledny,
 } from '@/utils/dataPolska'
 
 describe('DNI_TYGODNIA_SKROT / MIESIACE_SKROT', () => {
@@ -220,5 +221,37 @@ describe('formatujDataGodzine', () => {
     expect(formatujDataGodzine('')).toBe('')
     expect(formatujDataGodzine(null)).toBe('')
     expect(formatujDataGodzine('abc')).toBe('')
+  })
+})
+
+describe('czasWzgledny (ops#430)', () => {
+  it('dokleja dokładną datę i godzinę w czasie polskim (zima, UTC+1)', () => {
+    expect(czasWzgledny('2 dni temu', new Date('2026-11-24T10:42:00Z'))).toBe(
+      '2 dni temu (24.11.2026 11:42)',
+    )
+  })
+
+  it('używa czasu letniego w lecie (UTC+2), niezależnie od strefy komputera', () => {
+    expect(czasWzgledny('Tydzień temu', new Date('2026-07-20T18:30:00Z'))).toBe(
+      'Tydzień temu (20.07.2026 20:30)',
+    )
+  })
+
+  it('pokazuje godzinę także dla wpisu z dziś, z zerami wiodącymi', () => {
+    expect(czasWzgledny('2 godziny temu', new Date('2026-11-28T07:05:00Z'))).toBe(
+      '2 godziny temu (28.11.2026 08:05)',
+    )
+  })
+
+  it('północ w Polsce to 00:00, nie 24:00', () => {
+    expect(czasWzgledny('wczoraj', new Date('2026-11-27T23:00:00Z'))).toBe(
+      'wczoraj (28.11.2026 00:00)',
+    )
+  })
+
+  it('przyjmuje liczbę ms, a pustą lub niepoprawną datę zostawia bez nawiasu', () => {
+    expect(czasWzgledny('wczoraj', Date.UTC(2026, 10, 27, 12, 0))).toBe('wczoraj (27.11.2026 13:00)')
+    expect(czasWzgledny('wczoraj', null)).toBe('wczoraj')
+    expect(czasWzgledny('wczoraj', new Date('nie data'))).toBe('wczoraj')
   })
 })

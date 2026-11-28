@@ -1515,7 +1515,7 @@ def get_linked_calls(name: str):
 		notes = frappe.db.get_all(
 			"FCRM Note",
 			filters={"name": ("in", notes)},
-			fields=["name", "title", "content", "owner", "modified"],
+			fields=["name", "title", "content", "owner", "modified", "creation"],
 		)
 
 	if tasks:
