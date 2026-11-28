@@ -32,28 +32,28 @@
       editor-class="prose-sm text-p-sm max-w-none text-ink-gray-5 focus:outline-none"
       class="flex-1 overflow-hidden"
     />
-    <div class="mt-1 flex items-center justify-between gap-2">
-      <div class="flex items-center gap-2 truncate">
-        <UserAvatar :user="note.owner" size="xs" />
-        <div
-          class="truncate text-sm text-ink-gray-8"
-          :title="getUser(note.owner).full_name"
-        >
-          {{ getUser(note.owner).full_name }}
+    <div class="mt-1">
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2 truncate">
+          <UserAvatar :user="note.owner" size="xs" />
+          <div
+            class="truncate text-sm text-ink-gray-8"
+            :title="getUser(note.owner).full_name"
+          >
+            {{ getUser(note.owner).full_name }}
+          </div>
         </div>
-      </div>
-      <div class="shrink-0 text-right">
         <TimelineTimestamp
           :date="note.creation"
           stacked
-          class-name="text-sm text-ink-gray-7"
+          class-name="shrink-0 text-sm text-ink-gray-7"
         />
-        <div
-          v-if="edytowano"
-          class="whitespace-nowrap text-xs text-ink-gray-5"
-        >
-          {{ __('edytowano') }} {{ czasEdycji }}
-        </div>
+      </div>
+      <div
+        v-if="edytowano"
+        class="truncate text-right text-xs text-ink-gray-5"
+      >
+        {{ __('edytowano') }} {{ czasEdycji }}
       </div>
     </div>
   </div>
